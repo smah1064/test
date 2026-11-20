@@ -1,0 +1,537 @@
+<title>Undercarriage Inspector</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: lift-bay work order. Left column = capture (vehicle, shot list, photos); right column = the inspection report. Stacks on phones. */
+:root {
+  --bg: #eef0f2;
+  --panel: #ffffff;
+  --ink: #1b2228;
+  --muted: #5d6973;
+  --line: #d5dade;
+  --steel: #2f3d48;
+  --accent: #d9731a;
+  --accent-ink: #ffffff;
+  --accent-soft: #fbeadb;
+  --sev-now: #c23b2e;
+  --sev-now-soft: #f8e1de;
+  --sev-soon: #b7791f;
+  --sev-soon-soft: #f8edd6;
+  --sev-mon: #3b6c9e;
+  --sev-mon-soft: #dfe9f3;
+  --sev-ok: #3f7d4e;
+  --sev-ok-soft: #e0efe3;
+  --shadow: 0 1px 2px rgba(20,30,40,.06), 0 4px 16px rgba(20,30,40,.05);
+  --f-display: "Barlow Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12171b; --panel: #1b2227; --ink: #e4e8eb; --muted: #94a1ab; --line: #2e383f; --steel: #c9d3da;
+    --accent: #ec8a35; --accent-ink: #1a1208; --accent-soft: #3a2614;
+    --sev-now: #ef7467; --sev-now-soft: #3d1f1c; --sev-soon: #e0a64a; --sev-soon-soft: #3a2d15;
+    --sev-mon: #7fb0e0; --sev-mon-soft: #1c2b3a; --sev-ok: #7cc28d; --sev-ok-soft: #1c3223;
+    --shadow: 0 1px 2px rgba(0,0,0,.3); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12171b; --panel: #1b2227; --ink: #e4e8eb; --muted: #94a1ab; --line: #2e383f; --steel: #c9d3da;
+  --accent: #ec8a35; --accent-ink: #1a1208; --accent-soft: #3a2614;
+  --sev-now: #ef7467; --sev-now-soft: #3d1f1c; --sev-soon: #e0a64a; --sev-soon-soft: #3a2d15;
+  --sev-mon: #7fb0e0; --sev-mon-soft: #1c2b3a; --sev-ok: #7cc28d; --sev-ok-soft: #1c3223;
+  --shadow: 0 1px 2px rgba(0,0,0,.3); color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-block: 24px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; padding-bottom: 18px; border-bottom: 2px solid var(--steel); margin-bottom: 22px; }
+.brand h1 { font-family: var(--f-display); font-weight: 700; font-size: clamp(30px, 5vw, 44px); line-height: 1; margin: 0; letter-spacing: .01em; text-transform: uppercase; text-wrap: balance; }
+.brand p { margin: 6px 0 0; color: var(--muted); max-width: 60ch; }
+.wo { font-family: var(--f-mono); font-size: 12px; color: var(--muted); text-align: right; }
+.wo b { color: var(--ink); font-weight: 500; }
+.grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 22px; align-items: start; }
+@media (max-width: 880px) { .grid { grid-template-columns: minmax(0,1fr); } .wo { text-align: left; } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); min-width: 0; }
+.sec { padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+.sec + .sec { border-top: 1px solid var(--line); }
+.label { font-family: var(--f-display); font-weight: 600; font-size: 15px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0; display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.label span { font-family: var(--f-mono); letter-spacing: 0; text-transform: none; font-weight: 400; font-size: 12px; }
+.fields { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
+.fields .full { grid-column: 1 / -1; }
+label.f { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); font-weight: 500; }
+input[type=text], input[type=number], select, textarea {
+  font: inherit; font-size: 14px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; width: 100%; min-width: 0; }
+textarea { resize: vertical; min-height: 58px; }
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, .drop:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.zones { display: flex; flex-wrap: wrap; gap: 6px; }
+.zone { font-size: 12px; padding: 4px 9px; border-radius: 999px; border: 1px dashed var(--line); color: var(--muted); display: inline-flex; gap: 5px; align-items: center; }
+.zone.on { border-style: solid; border-color: var(--accent); background: var(--accent-soft); color: var(--ink); }
+.zone i { font-style: normal; font-family: var(--f-mono); font-size: 11px; }
+.drop { border: 2px dashed var(--line); border-radius: 8px; padding: 16px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; text-align: center; transition: border-color .15s, background .15s; }
+.drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.drop p { width: 100%; margin: 0; color: var(--muted); font-size: 13px; }
+.btn { font: inherit; font-weight: 600; font-size: 14px; border-radius: 6px; padding: 9px 14px; cursor: pointer; border: 1px solid var(--line); background: var(--panel); color: var(--ink); display: inline-flex; align-items: center; gap: 7px; }
+.btn:hover { border-color: var(--steel); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover { filter: brightness(1.05); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn.big { width: 100%; justify-content: center; padding: 13px; font-family: var(--f-display); font-size: 19px; letter-spacing: .06em; text-transform: uppercase; }
+.vis { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.ph { border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--bg); display: flex; flex-direction: column; min-width: 0; }
+.ph .img { position: relative; aspect-ratio: 4/3; max-width: 100%; background: var(--line); }
+.ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ph .n { position: absolute; top: 6px; left: 6px; font-family: var(--f-mono); font-size: 11px; background: var(--steel); color: var(--panel); padding: 1px 6px; border-radius: 3px; }
+.ph .x { position: absolute; top: 4px; right: 4px; width: 26px; height: 26px; border-radius: 50%; border: 0; background: rgba(0,0,0,.55); color: #fff; cursor: pointer; font-size: 15px; line-height: 1; }
+.ph select { border: 0; border-top: 1px solid var(--line); border-radius: 0; font-size: 12px; padding: 6px 8px; background: var(--panel); }
+.hint { font-size: 12px; color: var(--muted); margin: 0; }
+.tips { margin: 0; padding-left: 18px; font-size: 13px; color: var(--muted); display: grid; gap: 3px; }
+
+/* Report */
+.rep-head { padding: 18px; display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); }
+.rep-head h2 { font-family: var(--f-display); font-size: 26px; text-transform: uppercase; letter-spacing: .03em; margin: 0; line-height: 1.05; }
+.rep-head .veh { font-size: 13px; color: var(--muted); margin-top: 2px; }
+.tag-ex { font-family: var(--f-mono); font-size: 11px; background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent); padding: 2px 7px; border-radius: 4px; text-transform: uppercase; letter-spacing: .05em; }
+.gauge { display: flex; align-items: center; gap: 12px; }
+.gauge .score { font-family: var(--f-display); font-weight: 700; font-size: 44px; line-height: 1; font-variant-numeric: tabular-nums; }
+.gauge .score small { font-size: 18px; color: var(--muted); }
+.gauge .cond { font-family: var(--f-display); font-size: 16px; text-transform: uppercase; letter-spacing: .08em; font-weight: 600; }
+.bar { height: 6px; width: 120px; border-radius: 3px; background: var(--line); overflow: hidden; margin-top: 4px; }
+.bar i { display: block; height: 100%; }
+.tally { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); border-bottom: 1px solid var(--line); }
+.tally div { padding: 12px 14px; border-right: 1px solid var(--line); min-width: 0; }
+.tally div:last-child { border-right: 0; }
+.tally b { display: block; font-family: var(--f-display); font-size: 28px; line-height: 1; font-variant-numeric: tabular-nums; }
+.tally span { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+@media (max-width: 480px) { .tally { grid-template-columns: repeat(2, minmax(0,1fr)); } .tally div:nth-child(2) { border-right: 0; } .tally div:nth-child(-n+2) { border-bottom: 1px solid var(--line); } }
+.summary { padding: 16px 18px; border-bottom: 1px solid var(--line); display: grid; gap: 8px; }
+.summary p { margin: 0; max-width: 70ch; }
+.cost { font-family: var(--f-mono); font-size: 13px; color: var(--muted); }
+.cost b { color: var(--ink); font-weight: 500; }
+.findings { display: flex; flex-direction: column; }
+.fd { display: grid; grid-template-columns: 6px minmax(0,1fr); border-bottom: 1px solid var(--line); }
+.fd .stripe { background: var(--c); }
+.fd .body { padding: 14px 16px; display: grid; gap: 6px; min-width: 0; }
+.fd .row1 { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; justify-content: space-between; }
+.fd h3 { margin: 0; font-size: 16px; font-weight: 600; }
+.pill { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; padding: 2px 8px; border-radius: 999px; background: var(--cs); color: var(--c); white-space: nowrap; }
+.fd .meta { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); font-family: var(--f-mono); }
+.fd p { margin: 0; font-size: 14px; }
+.fd .ev { color: var(--muted); font-size: 13px; }
+.thumbs { display: flex; gap: 6px; flex-wrap: wrap; }
+.thumbs img { width: 56px; height: 42px; object-fit: cover; border-radius: 3px; border: 1px solid var(--line); }
+.s-now { --c: var(--sev-now); --cs: var(--sev-now-soft); }
+.s-soon { --c: var(--sev-soon); --cs: var(--sev-soon-soft); }
+.s-mon { --c: var(--sev-mon); --cs: var(--sev-mon-soft); }
+.s-ok { --c: var(--sev-ok); --cs: var(--sev-ok-soft); }
+.extra { padding: 16px 18px; display: grid; gap: 16px; grid-template-columns: repeat(2, minmax(0,1fr)); }
+@media (max-width: 560px) { .extra { grid-template-columns: minmax(0,1fr); } }
+.extra h4 { margin: 0 0 6px; font-family: var(--f-display); text-transform: uppercase; letter-spacing: .07em; font-size: 14px; color: var(--muted); }
+.extra ul { margin: 0; padding-left: 18px; font-size: 13px; display: grid; gap: 4px; }
+.foot { padding: 14px 18px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; align-items: center; }
+.disc { font-size: 12px; color: var(--muted); margin: 0; max-width: 62ch; }
+.state { padding: 40px 24px; text-align: center; display: grid; gap: 10px; justify-items: center; }
+.state h3 { margin: 0; font-family: var(--f-display); font-size: 22px; text-transform: uppercase; letter-spacing: .04em; }
+.state p { margin: 0; color: var(--muted); max-width: 46ch; }
+.spin { width: 38px; height: 38px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--accent); animation: sp 1s linear infinite; }
+@keyframes sp { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation-duration: 3s; } }
+.notice { font-size: 13px; padding: 10px 12px; border-radius: 6px; background: var(--sev-soon-soft); color: var(--ink); border: 1px solid var(--sev-soon); }
+.notice.err { background: var(--sev-now-soft); border-color: var(--sev-now); }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <h1>Undercarriage Inspector</h1>
+      <p>Photograph the underside of a used car. Claude looks for leaks, rust, torn boots and worn parts and tells you what needs replacing before you buy.</p>
+    </div>
+    <div class="wo">INSPECTION No. <b id="woNo">—</b><br><span id="woDate"></span></div>
+  </header>
+
+  <div class="grid">
+    <!-- Capture -->
+    <section class="panel" aria-label="Capture">
+      <div class="sec">
+        <h2 class="label">1 · Vehicle</h2>
+        <div class="fields">
+          <label class="f">Year<input type="number" id="vYear" placeholder="2014" min="1950" max="2027"></label>
+          <label class="f">Mileage<input type="text" id="vMiles" placeholder="128,000 mi"></label>
+          <label class="f full">Make &amp; model<input type="text" id="vModel" placeholder="Honda Accord EX 2.4"></label>
+          <label class="f">Climate / region
+            <select id="vClimate">
+              <option value="">Not sure</option>
+              <option value="road salt / snow belt">Snow belt (salted roads)</option>
+              <option value="coastal / humid">Coastal / humid</option>
+              <option value="dry / hot">Dry / hot</option>
+              <option value="temperate">Temperate</option>
+            </select>
+          </label>
+          <label class="f">Drivetrain
+            <select id="vDrive">
+              <option value="">Not sure</option><option>FWD</option><option>RWD</option><option>AWD</option><option>4WD</option>
+            </select>
+          </label>
+          <label class="f full">Seller's notes or symptoms (optional)<textarea id="vNotes" placeholder="Clunk over bumps, drip on driveway, recent exhaust work…"></textarea></label>
+        </div>
+      </div>
+
+      <div class="sec">
+        <h2 class="label">2 · Shot list <span id="covCount">0 of 9 areas</span></h2>
+        <div class="zones" id="zones"></div>
+        <ul class="tips">
+          <li>Use a flashlight and shoot straight up at each area from about 50 cm.</li>
+          <li>Take one wide shot and one close-up of anything wet, rusty or torn.</li>
+          <li>Never get under a car held only by a jack. Use ramps or stands.</li>
+        </ul>
+      </div>
+
+      <div class="sec">
+        <h2 class="label">3 · Photos <span id="photoCount">0</span></h2>
+        <div class="drop" id="drop">
+          <input class="vis" type="file" id="camIn" accept="image/*" capture="environment">
+          <input class="vis" type="file" id="libIn" accept="image/*" multiple>
+          <button class="btn primary" type="button" id="camBtn">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+            Take photo
+          </button>
+          <button class="btn" type="button" id="libBtn">Upload photos</button>
+          <p>or drop images here. On a phone, “Take photo” opens the rear camera.</p>
+        </div>
+        <div class="photos" id="photos"></div>
+        <p class="hint" id="limitHint"></p>
+      </div>
+
+      <div class="sec">
+        <div id="capNotice" hidden></div>
+        <button class="btn primary big" type="button" id="goBtn" disabled>Analyze undercarriage</button>
+      </div>
+    </section>
+
+    <!-- Report -->
+    <section class="panel" aria-label="Inspection report" id="report" aria-live="polite"></section>
+  </div>
+</div>
+
+<script>
+const AREAS = [
+  ["front_sub", "Front subframe & control arms"],
+  ["engine", "Engine oil pan & seals"],
+  ["trans", "Transmission / transfer case"],
+  ["steer", "Steering rack & tie rods"],
+  ["axles", "CV axles / driveshaft"],
+  ["exhaust", "Exhaust & catalytic converter"],
+  ["frame", "Frame rails & rockers"],
+  ["lines", "Brake & fuel lines"],
+  ["rear", "Rear axle, shocks & springs"],
+];
+const AREA_NAME = Object.fromEntries([...AREAS, ["other", "Other / not sure"]]);
+const SEV = {
+  replace_now: { cls: "s-now", label: "Replace now" },
+  replace_soon: { cls: "s-soon", label: "Replace soon" },
+  monitor: { cls: "s-mon", label: "Monitor" },
+  ok: { cls: "s-ok", label: "OK" },
+};
+const SEV_ORDER = { replace_now: 0, replace_soon: 1, monitor: 2, ok: 3 };
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const money = (n) => "$" + Math.round(Number(n) || 0).toLocaleString("en-US");
+
+let photos = []; // {id, blob, url, area}
+let maxCount = 8;
+let sample = null;
+let ctl = null;
+let lastReport = null;
+
+/* Work order header */
+const now = new Date();
+$("woNo").textContent = "UC-" + now.toISOString().slice(2, 10).replace(/-/g, "") + "-" + String(now.getHours()).padStart(2, "0") + String(now.getMinutes()).padStart(2, "0");
+$("woDate").textContent = now.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+
+/* Remember vehicle fields per viewer */
+const FIELDS = ["vYear", "vMiles", "vModel", "vClimate", "vDrive", "vNotes"];
+try { const s = JSON.parse(localStorage.getItem("uc-vehicle") || "{}"); FIELDS.forEach((f) => { if (s[f]) $(f).value = s[f]; }); } catch {}
+FIELDS.forEach((f) => $(f).addEventListener("input", () => {
+  try { localStorage.setItem("uc-vehicle", JSON.stringify(Object.fromEntries(FIELDS.map((k) => [k, $(k).value])))); } catch {}
+}));
+
+/* Photos */
+async function normalize(file) {
+  // Convert to JPEG ≤ 2000px so phone photos (including HEIC where the browser decodes it) are accepted.
+  try {
+    const bmp = await createImageBitmap(file);
+    const scale = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement("canvas");
+    c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
+    c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+    bmp.close?.();
+    const blob = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.88));
+    return blob || file;
+  } catch { return file; }
+}
+function guessArea() {
+  const used = new Set(photos.map((p) => p.area));
+  const next = AREAS.find(([k]) => !used.has(k));
+  return next ? next[0] : "other";
+}
+async function addFiles(list) {
+  const files = [...list].filter((f) => f.type.startsWith("image/") || /\.(heic|heif)$/i.test(f.name));
+  let dropped = 0;
+  for (const f of files) {
+    if (photos.length >= maxCount) { dropped++; continue; }
+    const blob = await normalize(f);
+    photos.push({ id: Math.random().toString(36).slice(2), blob, url: URL.createObjectURL(blob), area: guessArea() });
+  }
+  renderPhotos();
+  if (dropped) showCap(`Only ${maxCount} photos fit in one analysis. ${dropped} ${dropped === 1 ? "photo was" : "photos were"} left out. Remove a photo to swap one in.`);
+}
+function renderPhotos() {
+  const box = $("photos");
+  box.innerHTML = "";
+  photos.forEach((p, i) => {
+    const el = document.createElement("div");
+    el.className = "ph";
+    el.innerHTML = `<div class="img"><img alt="Photo ${i + 1}" src="${p.url}"><span class="n">#${i + 1}</span><button class="x" type="button" aria-label="Remove photo ${i + 1}">×</button></div>
+      <select id="area-${p.id}" aria-label="Area shown in photo ${i + 1}">${[...AREAS, ["other", "Other / not sure"]].map(([k, n]) => `<option value="${k}"${k === p.area ? " selected" : ""}>${esc(n)}</option>`).join("")}</select>`;
+    el.querySelector(".x").onclick = () => { URL.revokeObjectURL(p.url); photos = photos.filter((q) => q !== p); renderPhotos(); };
+    el.querySelector("select").onchange = (e) => { p.area = e.target.value; renderZones(); };
+    box.append(el);
+  });
+  $("photoCount").textContent = `${photos.length} of ${maxCount}`;
+  renderZones();
+  updateGo();
+}
+function renderZones() {
+  const z = $("zones");
+  z.innerHTML = "";
+  let covered = 0;
+  AREAS.forEach(([k, n]) => {
+    const c = photos.filter((p) => p.area === k).length;
+    if (c) covered++;
+    const s = document.createElement("span");
+    s.className = "zone" + (c ? " on" : "");
+    s.innerHTML = `${esc(n)}${c ? ` <i>×${c}</i>` : ""}`;
+    z.append(s);
+  });
+  $("covCount").textContent = `${covered} of ${AREAS.length} areas`;
+}
+function showCap(msg, err) {
+  const n = $("capNotice");
+  n.hidden = !msg;
+  n.className = "notice" + (err ? " err" : "");
+  n.textContent = msg || "";
+}
+function updateGo() {
+  $("goBtn").disabled = !photos.length || !sample || !!ctl;
+}
+
+$("camBtn").onclick = () => $("camIn").click();
+$("libBtn").onclick = () => $("libIn").click();
+$("camIn").onchange = (e) => { addFiles(e.target.files); e.target.value = ""; };
+$("libIn").onchange = (e) => { addFiles(e.target.files); e.target.value = ""; };
+const drop = $("drop");
+["dragenter", "dragover"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", (e) => addFiles(e.dataTransfer.files));
+document.addEventListener("paste", (e) => { if (e.clipboardData?.files?.length) addFiles(e.clipboardData.files); });
+
+/* Report rendering */
+const EXAMPLE = {
+  example: true,
+  vehicle: "2012 Ford Escape XLT · 141,000 mi · AWD · snow belt",
+  overall: "fair", score: 58,
+  summary: "Typical rust-belt wear for the age. The rear sway bar links and a torn inner CV boot need attention soon, and the rear brake lines show heavy scale that should be checked by hand. The frame rails are solid apart from surface rust.",
+  findings: [
+    { part: "Rear brake hard lines", area: "lines", action: "replace_now", confidence: "medium", photos: [4], condition: "Heavy flaking corrosion along the line near the rear subframe.", evidence: "Lines appear swollen with scale where they pass over the fuel tank strap.", cost_low: 350, cost_high: 700 },
+    { part: "Front left inner CV boot", area: "axles", action: "replace_soon", confidence: "high", photos: [3], condition: "Boot is split with grease flung onto the subframe.", evidence: "Fresh dark grease spray around the inner joint.", cost_low: 180, cost_high: 420 },
+    { part: "Rear sway bar end links", area: "rear", action: "replace_soon", confidence: "medium", photos: [5], condition: "Ball-joint boots cracked, links corroded.", evidence: "Torn rubber boot visible on the driver side link.", cost_low: 120, cost_high: 260 },
+    { part: "Oil pan gasket", area: "engine", action: "monitor", confidence: "medium", photos: [1], condition: "Light seepage at the rear pan rail, no active drip.", evidence: "Damp film with dirt build-up along the gasket line.", cost_low: 0, cost_high: 0 },
+    { part: "Frame rails", area: "frame", action: "ok", confidence: "high", photos: [2], condition: "Surface rust only, no perforation or flaking.", evidence: "Even orange surface rust, pinch welds intact.", cost_low: 0, cost_high: 0 },
+  ],
+  not_assessable: ["Ball joint and wheel bearing play (needs the wheels off the ground and a pry bar)", "Exhaust leaks (listen with the engine running)"],
+  next_steps: ["Ask a shop to squeeze-test the rear brake lines before purchase", "Use the CV boot and brake line findings to negotiate about $500–$1,100 off"],
+};
+
+function renderIdle(r) { renderReport(r); }
+
+function renderReport(r) {
+  lastReport = r;
+  const findings = [...(r.findings || [])].sort((a, b) => (SEV_ORDER[a.action] ?? 9) - (SEV_ORDER[b.action] ?? 9));
+  const count = (a) => findings.filter((f) => f.action === a).length;
+  const repairs = findings.filter((f) => f.action === "replace_now" || f.action === "replace_soon");
+  const lo = repairs.reduce((s, f) => s + (Number(f.cost_low) || 0), 0);
+  const hi = repairs.reduce((s, f) => s + (Number(f.cost_high) || 0), 0);
+  const score = Math.max(0, Math.min(100, Number(r.score) || 0));
+  const sc = score >= 75 ? "s-ok" : score >= 55 ? "s-soon" : "s-now";
+  const thumb = (n) => (!r.example && photos[n - 1]) ? `<img src="${photos[n - 1].url}" alt="Photo ${n}">` : "";
+
+  $("report").innerHTML = `
+    <div class="rep-head">
+      <div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><h2>Inspection report</h2>${r.example ? '<span class="tag-ex">Example</span>' : ""}</div>
+        <div class="veh">${esc(r.vehicle || "Vehicle not specified")}</div>
+      </div>
+      <div class="gauge ${sc}">
+        <div class="score">${score}<small>/100</small></div>
+        <div><div class="cond" style="color:var(--c)">${esc(r.overall || "")}</div><div class="bar"><i style="width:${score}%;background:var(--c)"></i></div></div>
+      </div>
+    </div>
+    <div class="tally">
+      <div class="s-now"><b style="color:var(--c)">${count("replace_now")}</b><span>Replace now</span></div>
+      <div class="s-soon"><b style="color:var(--c)">${count("replace_soon")}</b><span>Replace soon</span></div>
+      <div class="s-mon"><b style="color:var(--c)">${count("monitor")}</b><span>Monitor</span></div>
+      <div class="s-ok"><b style="color:var(--c)">${count("ok")}</b><span>Looks OK</span></div>
+    </div>
+    <div class="summary">
+      <p>${esc(r.summary)}</p>
+      <div class="cost">Estimated repairs (replace now + soon): <b>${repairs.length ? `${money(lo)} – ${money(hi)}` : "none flagged"}</b> · parts &amp; labor, independent shop, USD</div>
+    </div>
+    <div class="findings">
+      ${findings.map((f) => {
+        const s = SEV[f.action] || SEV.monitor;
+        const ph = (f.photos || []).map(Number).filter(Boolean);
+        const cost = (Number(f.cost_high) > 0) ? `${money(f.cost_low)}–${money(f.cost_high)}` : "";
+        return `<article class="fd ${s.cls}"><div class="stripe"></div><div class="body">
+          <div class="row1"><h3>${esc(f.part)}</h3><span class="pill">${s.label}</span></div>
+          <div class="meta"><span>${esc(AREA_NAME[f.area] || f.area || "")}</span>${ph.length ? `<span>Photo ${ph.map((n) => "#" + n).join(", ")}</span>` : ""}<span>Confidence: ${esc(f.confidence || "—")}</span>${cost ? `<span>${cost}</span>` : ""}</div>
+          <p>${esc(f.condition)}</p>
+          ${f.evidence ? `<p class="ev">Seen: ${esc(f.evidence)}</p>` : ""}
+          ${ph.length && !r.example ? `<div class="thumbs">${ph.map(thumb).join("")}</div>` : ""}
+        </div></article>`;
+      }).join("") || `<div class="state"><p>No parts could be assessed from these photos.</p></div>`}
+    </div>
+    ${(r.not_assessable?.length || r.next_steps?.length || r.photo_notes?.length) ? `<div class="extra">
+      ${r.next_steps?.length ? `<div><h4>Before you buy</h4><ul>${r.next_steps.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}
+      ${r.not_assessable?.length ? `<div><h4>Can't judge from photos</h4><ul>${r.not_assessable.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}
+      ${r.photo_notes?.filter((p) => p.quality && p.quality !== "good").length ? `<div><h4>Retake these photos</h4><ul>${r.photo_notes.filter((p) => p.quality !== "good").map((p) => `<li>#${esc(p.photo)}: ${esc(p.note || p.quality)}</li>`).join("")}</ul></div>` : ""}
+    </div>` : ""}
+    <div class="foot">
+      <p class="disc">${r.example ? "This is an example of what you'll get. Add your own photos on the left to inspect your car." : "AI visual estimate from photos only. Have a mechanic confirm anything flagged before you buy or pay for repairs."}</p>
+      ${r.example ? "" : `<button class="btn" type="button" id="copyBtn">Copy report</button>`}
+    </div>`;
+  const cb = $("copyBtn");
+  if (cb) cb.onclick = () => copyReport(cb);
+}
+
+function reportText(r) {
+  const L = [`UNDERCARRIAGE INSPECTION ${$("woNo").textContent}`, r.vehicle || "", `Condition: ${r.overall} (${r.score}/100)`, "", r.summary, ""];
+  [...r.findings].sort((a, b) => (SEV_ORDER[a.action] ?? 9) - (SEV_ORDER[b.action] ?? 9)).forEach((f) => {
+    L.push(`[${(SEV[f.action] || SEV.monitor).label.toUpperCase()}] ${f.part}${Number(f.cost_high) > 0 ? ` (${money(f.cost_low)}–${money(f.cost_high)})` : ""}`, `  ${f.condition}`);
+  });
+  if (r.next_steps?.length) L.push("", "Before you buy:", ...r.next_steps.map((x) => "- " + x));
+  if (r.not_assessable?.length) L.push("", "Not assessable from photos:", ...r.not_assessable.map((x) => "- " + x));
+  return L.join("\n");
+}
+function copyReport(btn) {
+  const t = reportText(lastReport);
+  navigator.clipboard.writeText(t).then(() => { btn.textContent = "Copied"; setTimeout(() => (btn.textContent = "Copy report"), 1800); })
+    .catch(() => {
+      const ta = document.createElement("textarea"); ta.value = t; ta.style.width = "100%"; ta.rows = 8;
+      btn.replaceWith(ta); ta.select();
+    });
+}
+
+function renderWorking(msg) {
+  $("report").innerHTML = `<div class="state"><div class="spin" aria-hidden="true"></div><h3>Inspecting ${photos.length} photo${photos.length === 1 ? "" : "s"}</h3><p id="workMsg">${esc(msg)}</p><button class="btn" type="button" id="stopBtn">Stop</button></div>`;
+  $("stopBtn").onclick = () => ctl?.abort();
+}
+
+/* Analysis */
+function vehicleLine() {
+  return [$("vYear").value, $("vModel").value].filter(Boolean).join(" ") +
+    [$("vMiles").value, $("vDrive").value, $("vClimate").value].filter(Boolean).map((x) => " · " + x).join("");
+}
+function buildPrompt() {
+  const list = photos.map((p, i) => `Photo #${i + 1}: user says it shows "${AREA_NAME[p.area]}"`).join("\n");
+  return `You are an experienced ASE-certified automotive technician doing a pre-purchase undercarriage inspection of a used car from photos the buyer took underneath it.
+
+Vehicle: ${vehicleLine() || "not specified"}
+Seller notes / symptoms: ${$("vNotes").value.trim() || "none"}
+
+The ${photos.length} attached images are in this order:
+${list}
+(The user's area labels may be wrong; trust what you actually see.)
+
+Examine every image for: fluid leaks (oil, transmission, coolant, brake, power steering, differential), rust and corrosion (surface vs. flaking vs. perforation, especially frame rails, rockers, subframes, brake and fuel lines), torn CV/steering rack/ball joint boots, cracked or worn bushings, leaking or damaged shocks/struts, broken or sagging springs, exhaust rust holes, broken hangers, damaged heat shields, impact damage, and signs of prior repair or accident.
+
+Only report what the photos actually show. Do not invent problems. If a photo is too dark, blurry or doesn't show undercarriage, say so in photo_notes. For each part you can see, give one finding. Include parts that look fine as "ok" so the buyer knows they were checked.
+
+action must be one of: "replace_now" (safety risk or failing), "replace_soon" (worn, plan within months), "monitor" (minor, watch it), "ok".
+Costs: typical US independent-shop parts + labor in USD for the recommended repair on this vehicle; use 0 for monitor/ok.
+
+Reply with ONLY one JSON object of this shape:
+{"overall":"excellent|good|fair|poor|severe","score":0-100,"summary":"2-4 plain sentences for a non-mechanic buyer","findings":[{"part":"Front left inner CV boot","area":"one of ${[...AREAS.map(([k]) => k), "other"].join("|")}","action":"replace_now|replace_soon|monitor|ok","confidence":"high|medium|low","photos":[1],"condition":"what is wrong, one sentence","evidence":"what in the photo shows it","cost_low":180,"cost_high":420}],"photo_notes":[{"photo":1,"quality":"good|blurry|too_dark|too_far|not_undercarriage","note":"short tip"}],"not_assessable":["things a buyer should have checked in person"],"next_steps":["concrete pre-purchase advice, including negotiation"]}`;
+}
+
+const ERR = {
+  not_granted: "Claude access was declined for this page, so it can't analyze photos. You can allow it from the page's Permissions menu.",
+  sampling_disabled: "Claude isn't available on this account.",
+  images_unavailable: "This view can't send photos to Claude. Open the page in a browser on claude.ai.",
+  image_rejected: "One of the photos couldn't be read. Try a JPEG or PNG, or remove the last photo you added.",
+  rate_limited: "You've hit a usage limit. Wait a few minutes and try again.",
+  session_expired: "Your claude.ai session expired. Sign in again and retry.",
+  refused: "Claude couldn't analyze these images. Make sure they show the underside of a car.",
+  invalid_json: "The report came back in an unexpected format. Try again.",
+  prompt_too_large: "Too much to analyze at once. Remove a few photos.",
+};
+
+$("goBtn").onclick = async () => {
+  if (!sample || !photos.length) return;
+  showCap("");
+  ctl = new AbortController();
+  updateGo();
+  renderWorking("Waiting for Claude. Close-up photos take 30–90 seconds to review.");
+  try {
+    const r = await sample.json(buildPrompt(), {
+      images: photos.map((p) => p.blob),
+      modelTier: "complex",
+      signal: ctl.signal,
+      onText: () => { const m = $("workMsg"); if (m) m.textContent = "Writing the report…"; },
+    });
+    if (!r || !Array.isArray(r.findings)) throw { code: "invalid_json" };
+    r.vehicle = vehicleLine() || "Vehicle not specified";
+    renderReport(r);
+  } catch (e) {
+    if (e?.code === "cancelled") { renderIdle(lastReport || EXAMPLE); }
+    else {
+      renderIdle(lastReport || EXAMPLE);
+      showCap(ERR[e?.code] || "The analysis didn't finish because of a connection problem. Try again.", true);
+      if (e?.code === "not_granted" || e?.code === "sampling_disabled") sample = null;
+    }
+  } finally {
+    ctl = null;
+    updateGo();
+  }
+};
+
+/* Boot */
+renderZones();
+renderPhotos();
+renderReport(EXAMPLE);
+$("limitHint").textContent = "Checking how many photos Claude can take at once…";
+(async () => {
+  try { sample = window.claude ? await window.claude.use("sample") : null; } catch { sample = null; }
+  if (!sample) {
+    $("limitHint").textContent = "";
+    showCap("AI analysis isn't available here. Open this page on claude.ai while signed in to analyze photos.", true);
+    updateGo();
+    return;
+  }
+  const lim = await sample.limits().catch(() => null);
+  if (!lim?.images) {
+    $("limitHint").textContent = "";
+    showCap(ERR.images_unavailable, true);
+    sample = null;
+  } else {
+    maxCount = lim.images.maxCount || maxCount;
+    $("limitHint").textContent = `Up to ${maxCount} photos per analysis. Label each photo with the area it shows so the report can point back to it.`;
+    renderPhotos();
+  }
+  updateGo();
+})();
+</script>
