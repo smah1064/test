@@ -127,6 +127,14 @@ button.ghost:hover { color: var(--danger); border-color: transparent; }
 .actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .toast { font-size: 0.85rem; color: var(--accent); font-weight: 600; min-height: 1.3em; }
 .sample { font-size: 0.82rem; color: var(--muted); }
+.sharebar { background: var(--accent-soft); border-radius: var(--radius); padding: 14px 16px; display: grid; gap: 8px; margin-bottom: 20px; min-width: 0; }
+.sharebar input { font-family: var(--font-mono); font-size: 0.85rem; background: var(--surface); }
+.sharebar .sample { margin: 0; }
+.live { font-weight: 700; font-size: 0.9rem; display: inline-flex; align-items: center; gap: 8px; }
+.live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
+.live[data-state="loading"]::before, .live[data-state="slow"]::before, .live[data-state="offline"]::before, .live[data-state="missing"]::before { background: var(--warn); }
+.notice { background: var(--warn-soft); color: var(--warn); border-radius: 10px; padding: 10px 14px; font-weight: 600; margin-bottom: 20px; }
+input:disabled, button:disabled, select:disabled { opacity: 0.55; cursor: not-allowed; }
 @media (prefers-reduced-motion: no-preference) { .pp .bar span { transition: width .25s ease; } }
 </style>
 
@@ -141,8 +149,19 @@ button.ghost:hover { color: var(--danger); border-color: transparent; }
       <select id="currency">
         <option>SAR</option><option>AED</option><option>EGP</option><option>KWD</option><option>QAR</option><option>JOD</option><option>MAD</option><option>USD</option><option>EUR</option><option>GBP</option>
       </select>
+      <button type="button" class="primary" id="share">Share bill</button>
     </div>
   </header>
+
+  <div class="sharebar" id="sharebar" hidden>
+    <span class="live" id="share-status"></span>
+    <div class="add-row">
+      <input type="text" id="share-link" readonly aria-label="Shareable link">
+      <button type="button" class="primary" id="copy-link">Copy link</button>
+    </div>
+    <p class="sample" id="share-help"></p>
+  </div>
+  <div class="notice" id="notice" role="status" hidden></div>
 
   <div class="grid">
     <div class="stack">
@@ -208,8 +227,8 @@ button.ghost:hover { color: var(--danger); border-color: transparent; }
 
   // ---------- State ----------
   // Prices are kept as the text the user typed, and converted to whole minor units (e.g. halalas, cents) only when calculating.
-  var uid = 1;
-  function newId() { return "id" + (uid++); }
+  // Random ids, so two friends adding people at the same moment never collide.
+  function newId() { return Math.random().toString(36).slice(2, 10); }
 
   function sampleState() {
     var a = newId(), b = newId(), c = newId(), d = newId();
@@ -229,18 +248,20 @@ button.ghost:hover { color: var(--danger); border-color: transparent; }
 
   var state = load() || sampleState();
 
+  // Called after every change. A shared bill goes to the online store; otherwise the bill is kept in this browser.
   function save() {
+    if (applying) return;
+    if (shared.id) { queueRemote(); return; }
+    if (!inViewer && !$("sharebar").hidden) $("share-link").value = copyLink();
     try { localStorage.setItem("split-bill-v1", JSON.stringify(state)); } catch (e) {}
   }
   function load() {
     try {
       var s = JSON.parse(localStorage.getItem("split-bill-v1") || "null");
-      if (!s || !Array.isArray(s.people)) return null;
-      // keep generated ids unique after a reload
-      s.people.concat(s.items).forEach(function (x) { var n = parseInt(String(x.id).slice(2), 10); if (n >= uid) uid = n + 1; });
-      return s;
+      return validBill(s) ? s : null;
     } catch (e) { return null; }
   }
+  function validBill(s) { return !!s && Array.isArray(s.people) && Array.isArray(s.items); }
 
   // ---------- Money helpers ----------
   function decimals() {
@@ -411,6 +432,7 @@ button.ghost:hover { color: var(--danger); border-color: transparent; }
       }).join("");
       $("settle").innerHTML = rows || '<p class="empty">Nobody owes anything.</p>';
     }
+    applyReadOnly();
     save();
     return r;
   }
@@ -518,14 +540,202 @@ button.ghost:hover { color: var(--danger); border-color: transparent; }
 
   $("reset").addEventListener("click", function () { $("reset-confirm").hidden = false; $("reset-confirm").focus(); });
   $("reset-confirm").addEventListener("click", function () {
+    leaveShared();
     state = { currency: state.currency, mode: "items", people: [], items: [], tax: state.tax, tip: state.tip, discount: "0", payer: "", sample: false };
     $("reset-confirm").hidden = true;
     renderAll(); toast("New bill started.");
     $("new-person").focus();
   });
 
+  // ---------- Sharing ----------
+  // Inside Claude, a shared bill lives in the page's online store at bills/<id>, and the link is
+  // the page address + "#bill-<id>". Everyone who opens it watches the same document, so edits show up live.
+  // Opened as a plain file or on another website, there is no store, so the link carries a copy of the bill itself.
+  var ARTIFACT_URL = "https://claude.ai/artifact/CMhjGoJTwXoQD7cCa6WVMN";
+  var inViewer = !!(window.claude && typeof window.claude.use === "function");
+  var clientId = newId() + newId();
+  var applying = false;
+  var shared = { id: null, ref: null, unsub: null, ready: false, lastJson: "", timer: null, pending: false, writing: false, again: false, readOnly: false };
+  var dbPromise = null;
+  function getDb() {
+    if (!inViewer) return Promise.resolve(null);
+    if (!dbPromise) dbPromise = window.claude.use("db").catch(function () { return null; });
+    return dbPromise;
+  }
+
+  function cleanState() { var s = JSON.parse(JSON.stringify(state)); delete s.sample; return s; }
+  function encodeState() {
+    var b = btoa(unescape(encodeURIComponent(JSON.stringify(cleanState()))));
+    return b.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+  function decodeState(text) {
+    try {
+      var b = text.replace(/-/g, "+").replace(/_/g, "/");
+      var s = JSON.parse(decodeURIComponent(escape(atob(b))));
+      return validBill(s) ? s : null;
+    } catch (e) { return null; }
+  }
+  function copyLink() { return location.href.split("#")[0] + "#data=" + encodeState(); }
+  function liveLink() { return ARTIFACT_URL + "#bill-" + shared.id; }
+
+  function notice(msg) { $("notice").textContent = msg || ""; $("notice").hidden = !msg; }
+  var STATUS = {
+    loading: "Opening the shared bill…",
+    live: "Shared. Changes show up for everyone live.",
+    slow: "Can't reach the shared bill yet. What you see may be out of date.",
+    offline: "Connection lost. New changes may not be saved.",
+    missing: "Shared bill not found.",
+    copy: "Link with a copy of this bill"
+  };
+  function setStatus(key) { $("share-status").textContent = STATUS[key]; $("share-status").setAttribute("data-state", key); }
+
+  function showShare(mode) {
+    $("sharebar").hidden = false;
+    if (mode === "copy") {
+      $("share-link").value = copyLink();
+      setStatus("copy");
+      $("share-help").textContent = "The bill is saved inside the link itself. The link updates as you edit, so copy it again after changes.";
+    } else {
+      $("share-link").value = liveLink();
+      $("share-help").textContent = "Friends need access to this page to open the link: use the Share menu at the top. Give them Contributor access if they should be able to edit the bill too.";
+    }
+  }
+
+  function applyReadOnly() {
+    var off = shared.readOnly;
+    document.querySelectorAll(".stack input, .stack button, .stack select, #currency, #reset, #reset-confirm").forEach(function (el) { el.disabled = off; });
+    var sel = $("payer"); if (sel) sel.disabled = off;
+  }
+  function setReadOnly(on) {
+    if (shared.readOnly === on) return;
+    shared.readOnly = on;
+    notice(on ? "You can view this bill but not change it. Ask the person who shared it for Contributor access to edit." : "");
+    applyReadOnly();
+  }
+
+  function queueRemote() {
+    if (!shared.ref || !shared.ready || shared.readOnly) return;
+    shared.pending = true;
+    clearTimeout(shared.timer);
+    shared.timer = setTimeout(flushRemote, 600);   // one write per pause in typing
+  }
+  function flushRemote() {
+    shared.pending = false;
+    if (!shared.ref) return;
+    if (shared.writing) { shared.again = true; return; }
+    var body = cleanState(), json = JSON.stringify(body);
+    if (json === shared.lastJson) return;
+    shared.writing = true; shared.lastJson = json;
+    shared.ref.set({ bill: body, writer: clientId, updatedAt: new Date().toISOString() }).then(function () {
+      setStatus("live");
+    }, function (e) {
+      var code = e && e.code;
+      if (code === "invalid_argument") setReadOnly(true);
+      else if (code === "quota_exceeded") notice("This bill can't be saved because the shared storage is full.");
+      else setStatus("offline");
+    }).then(function () {
+      shared.writing = false;
+      if (shared.again) { shared.again = false; flushRemote(); }
+    });
+  }
+
+  function applyRemote(bill) {
+    var a = document.activeElement, fid = a && a.id, s1 = null, s2 = null;
+    try { s1 = a.selectionStart; s2 = a.selectionEnd; } catch (e) {}
+    state = Object.assign({}, bill, { sample: false });
+    applying = true; renderAll(); applying = false;
+    var el = fid && document.getElementById(fid);
+    if (el && el !== document.activeElement) { el.focus(); try { if (s1 !== null) el.setSelectionRange(s1, s2); } catch (e) {} }
+  }
+
+  function openShared(id) {
+    return getDb().then(function (db) {
+      if (!db) { notice("Shared bills open only inside Claude while you're signed in."); return false; }
+      if (shared.unsub) shared.unsub();
+      var ref = db.doc("bills/" + id);
+      shared.id = id; shared.ref = ref; shared.ready = false; shared.lastJson = "";
+      showShare("live"); setStatus("loading"); notice("");
+      var timer = setTimeout(function () { if (shared.ref === ref && !shared.ready) setStatus("slow"); }, 10000);
+      shared.unsub = ref.onSnapshot(function (snap) {
+        if (shared.ref !== ref) return;
+        if (!snap.metadata.fromCache) clearTimeout(timer);
+        if (!snap.exists) {
+          if (!snap.metadata.fromCache && !shared.creating) { setStatus("missing"); notice("This shared bill wasn't found. It may have been removed, or you may not have access to it."); }
+          return;
+        }
+        var d = snap.data();
+        if (!d || !validBill(d.bill)) return;
+        shared.ready = true;
+        var json = JSON.stringify(d.bill);
+        // skip echoes of our own writes, and don't overwrite edits that are about to be saved
+        if (snap.metadata.hasPendingWrites || json === shared.lastJson || shared.pending || shared.writing) { setStatus("live"); return; }
+        shared.lastJson = json;
+        applyRemote(d.bill);
+        setStatus("live");
+      }, function () { clearTimeout(timer); setStatus("offline"); });
+      if (inViewer) {
+        window.claude.use("user").then(function (u) {
+          if (u && typeof u.can === "function") return u.can("data.write").then(function (ok) { if (ok === false && shared.ref === ref) setReadOnly(true); });
+        }).catch(function () {});
+      }
+      return true;
+    });
+  }
+
+  function leaveShared() {
+    if (shared.unsub) shared.unsub();
+    clearTimeout(shared.timer);
+    shared.id = null; shared.ref = null; shared.unsub = null; shared.ready = false; shared.pending = false;
+    setReadOnly(false); notice("");
+    $("sharebar").hidden = true;
+    if (location.hash) { try { location.hash = ""; } catch (e) {} }
+  }
+
+  $("share").addEventListener("click", function () {
+    if (!inViewer) { showShare("copy"); $("share-link").select(); return; }
+    if (shared.id) { showShare("live"); return; }
+    getDb().then(function (db) {
+      if (!db) { notice("Sharing needs you to be signed in to Claude."); return; }
+      var id = "b" + newId() + newId();
+      var body = cleanState();
+      $("share").disabled = true;
+      shared.creating = true;
+      db.doc("bills/" + id).set({ bill: body, writer: clientId, updatedAt: new Date().toISOString() }).then(function () {
+        return openShared(id).then(function () {
+          shared.lastJson = JSON.stringify(body);
+          try { location.hash = "bill-" + id; } catch (e) {}
+          toast("Link created. Copy it and send it to your friends.");
+        });
+      }, function (e) {
+        notice(e && e.code === "invalid_argument"
+          ? "You can't create a shared bill on this page. Ask its owner for Contributor access."
+          : "Couldn't create the link. Check your connection and try again.");
+      }).then(function () { shared.creating = false; $("share").disabled = false; });
+    });
+  });
+
+  $("copy-link").addEventListener("click", function () {
+    var text = $("share-link").value;
+    var fallback = function () { $("share-link").focus(); $("share-link").select(); toast("Select the link and copy it."); };
+    try { navigator.clipboard.writeText(text).then(function () { toast("Link copied."); }, fallback); } catch (e) { fallback(); }
+  });
+
+  function startFromHash() {
+    var h = location.hash.replace(/^#/, "");
+    if (h.indexOf("bill-") === 0) {
+      var id = h.slice(5);
+      if (/^[a-z0-9]{4,40}$/.test(id) && id !== shared.id) openShared(id);
+    } else if (h.indexOf("data=") === 0) {
+      var s = decodeState(h.slice(5));
+      if (s) { state = Object.assign(s, { sample: false }); renderAll(); toast("Opened a shared copy of the bill."); }
+      else notice("This link is damaged, so the bill couldn't be opened.");
+    }
+  }
+  window.addEventListener("hashchange", startFromHash);
+
   renderAll();
-  if (state.sample) toast("Showing an example bill. Edit it or start a new one.");
+  if (location.hash) startFromHash();
+  else if (state.sample) toast("Showing an example bill. Edit it or start a new one.");
 })();
 </script>
 </body></html>
