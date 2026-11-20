@@ -38,6 +38,7 @@
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body {
   background: var(--bg); color: var(--ink);
   font-family: var(--font-body); font-size: 15px; line-height: 1.5;
@@ -134,6 +135,17 @@ button.ghost:hover { color: var(--danger); border-color: transparent; }
 .live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
 .live[data-state="loading"]::before, .live[data-state="slow"]::before, .live[data-state="offline"]::before, .live[data-state="missing"]::before { background: var(--warn); }
 .notice { background: var(--warn-soft); color: var(--warn); border-radius: 10px; padding: 10px 14px; font-weight: 600; margin-bottom: 20px; }
+.scan { position: relative; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; border: 1px dashed var(--accent); border-radius: 10px; padding: 12px; background: var(--accent-soft); }
+.scan .sample { flex: 1 1 200px; margin: 0; }
+.scan button svg { width: 18px; height: 18px; vertical-align: -4px; margin-right: 6px; }
+.vh { position: absolute; left: 0; top: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.scan-status { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-weight: 600; font-size: 0.9rem; }
+.scan-status[data-tone="ok"] { color: var(--accent); }
+.scan-status[data-tone="err"] { color: var(--warn); }
+.scan-status #scan-msg { flex: 1 1 220px; min-width: 0; }
+.spinner { width: 14px; height: 14px; border: 2px solid var(--accent-soft); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
 input:disabled, button:disabled, select:disabled { opacity: 0.55; cursor: not-allowed; }
 @media (prefers-reduced-motion: no-preference) { .pp .bar span { transition: width .25s ease; } }
 </style>
@@ -183,6 +195,18 @@ input:disabled, button:disabled, select:disabled { opacity: 0.55; cursor: not-al
           </div>
         </div>
         <p class="sample" id="mode-help"></p>
+        <div class="scan" id="scan-box" hidden>
+          <button type="button" class="primary" id="scan-camera"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Take photo of receipt</button>
+          <button type="button" id="scan-upload">Upload photo</button>
+          <p class="sample">Claude reads the items and prices and adds them for you.</p>
+          <input type="file" id="receipt-camera" class="vh" accept="image/*" capture="environment" tabindex="-1" aria-hidden="true">
+          <input type="file" id="receipt-file" class="vh" accept="image/*" tabindex="-1" aria-hidden="true">
+        </div>
+        <div class="scan-status" id="scan-status" role="status" hidden>
+          <span class="spinner" id="scan-spinner"></span>
+          <span id="scan-msg"></span>
+          <button type="button" class="ghost" id="scan-cancel">Cancel</button>
+        </div>
         <div class="items" id="items"></div>
         <button type="button" id="add-item">+ Add item</button>
       </section>
@@ -318,7 +342,7 @@ input:disabled, button:disabled, select:disabled { opacity: 0.55; cursor: not-al
       var parts = splitAmount(cost, sharers.map(function () { return 1; }));
       sharers.forEach(function (id, k) {
         food[idx[id]] += parts[k];
-        mine[idx[id]].push((it.name || "Item") + (sharers.length > 1 ? " ÷" + sharers.length : ""));
+        mine[idx[id]].push({ name: it.name || "Item", ways: sharers.length });
       });
     });
 
@@ -412,7 +436,7 @@ input:disabled, button:disabled, select:disabled { opacity: 0.55; cursor: not-al
       var max = Math.max.apply(null, r.totals.concat([1]));
       $("who").innerHTML = state.people.map(function (p, i) {
         var t = r.totals[i], f = r.food[i];
-        var detail = even ? "equal share" : (r.mine[i].length ? esc(r.mine[i].join(", ")) : "nothing ordered");
+        var detail = even ? "equal share" : (r.mine[i].length ? r.mine[i].map(function (m) { return "<bdi>" + esc(m.name) + "</bdi>" + (m.ways > 1 ? " ÷" + m.ways : ""); }).join(", ") : "nothing ordered");
         var ext = t - f;
         var extTxt = (!even && ext !== 0) ? " · tax & service " + (ext > 0 ? "+" : "−") + fmt(Math.abs(ext)) : "";
         return '<div class="pp"><span class="name">' + esc(p.name || "?") + '</span><span class="amt">' + fmt(t) + '</span>' +
@@ -732,6 +756,147 @@ input:disabled, button:disabled, select:disabled { opacity: 0.55; cursor: not-al
     }
   }
   window.addEventListener("hashchange", startFromHash);
+
+  // ---------- Scan a receipt ----------
+  // The photo is sent to Claude, which replies with the items as JSON. The page then turns them into bill items.
+  // This only works on the published page inside Claude; elsewhere the scan buttons stay hidden.
+  var RECEIPT_PROMPT = [
+    "You are reading a photo of a restaurant or shop receipt so a group of friends can split the bill.",
+    "Reply with only one JSON object in exactly this shape:",
+    '{"currency": "SAR", "items": [{"name": "Chicken shawarma", "qty": 2, "unit_price": 14.5}], "tax_percent": 15, "tax_amount": 4.35, "service_percent": null, "service_amount": null, "discount": null, "total": 33.35}',
+    "Rules:",
+    "- items: every ordered line item. Leave out subtotal, tax, VAT, service, tip, discount, total, payment, change and rounding lines.",
+    "- qty: how many were ordered (1 if not shown).",
+    "- unit_price: the price of ONE unit. If a line shows only the line total for several units, divide it by qty.",
+    "- name: short, as printed on the receipt. Keep Arabic names in Arabic.",
+    "- tax_percent and tax_amount: only for tax ADDED on top of the item prices. If the prices already include VAT, use null for both.",
+    "- service_percent and service_amount: a service charge or tip added on top of the items, else null.",
+    "- discount: the total discount as a positive number, else null.",
+    "- total: the final amount to pay as printed, else null.",
+    "- currency: the 3-letter ISO code if you can tell (SAR, AED, EGP, KWD, QAR, JOD, MAD, USD, EUR, GBP), else null.",
+    "- All amounts are plain numbers, with no currency signs or thousands separators.",
+    '- If the photo is not a receipt or you cannot read it, reply {"items": []}.'
+  ].join("\n");
+
+  var sampleFn = null, imgLimits = null, scanCtl = null;
+
+  function scanStatus(msg, tone) {
+    $("scan-status").hidden = !msg;
+    $("scan-msg").textContent = msg || "";
+    $("scan-status").setAttribute("data-tone", tone || "");
+    $("scan-spinner").hidden = tone !== "busy";
+    $("scan-cancel").hidden = tone !== "busy";
+  }
+  function setScanning(on) {
+    $("scan-camera").disabled = on || shared.readOnly;
+    $("scan-upload").disabled = on || shared.readOnly;
+    if (on) scanStatus("Reading the receipt… this takes a few seconds.", "busy");
+  }
+  function num(v) {
+    var n = typeof v === "number" ? v : parseFloat(String(v == null ? "" : v).replace(/[^0-9.\-]/g, ""));
+    return isFinite(n) ? n : null;
+  }
+  function trimNum(n) { return String(Math.round(n * 1000) / 1000); }
+
+  function applyScan(res) {
+    var list = res && Array.isArray(res.items) ? res.items : [];
+    var everyone = state.people.map(function (p) { return p.id; });
+    var items = list.map(function (x) {
+      if (!x) return null;
+      var price = num(x.unit_price);
+      if (price === null || price < 0) return null;
+      var qty = Math.max(1, Math.round(num(x.qty) || 1));
+      return { id: newId(), name: String(x.name || "Item").slice(0, 60), price: trimNum(price), qty: String(qty), shares: everyone.slice() };
+    }).filter(Boolean);
+    if (!items.length) {
+      scanStatus("No items found in this photo. Try a clear, straight photo of the whole receipt in good light.", "err");
+      return;
+    }
+    // Replace the example bill (or an empty one); otherwise add to what is already there.
+    var replace = state.sample || state.items.length === 0;
+    state.items = replace ? items : state.items.concat(items);
+
+    var cur = res.currency && String(res.currency).toUpperCase();
+    if (cur && Array.prototype.some.call($("currency").options, function (o) { return o.value === cur; })) state.currency = cur;
+
+    var sub = items.reduce(function (s, it) { return s + num(it.price) * Number(it.qty); }, 0);
+    var disc = num(res.discount);
+    var base = sub - (disc && disc > 0 ? disc : 0);
+    function pctFrom(p, amount) {
+      var v = num(p);
+      if (v === null && num(amount) !== null && base > 0) v = Math.round(num(amount) / base * 10000) / 100;
+      return v !== null && v >= 0 && v < 100 ? v : null;
+    }
+    var tax = pctFrom(res.tax_percent, res.tax_amount), svc = pctFrom(res.service_percent, res.service_amount);
+    if (replace) {
+      state.tax = trimNum(tax || 0); state.tip = trimNum(svc || 0); state.discount = disc && disc > 0 ? trimNum(disc) : "0";
+    } else {
+      if (tax !== null) state.tax = trimNum(tax);
+      if (svc !== null) state.tip = trimNum(svc);
+    }
+    leaveSample();
+    renderAll();
+
+    var msg = "Added " + items.length + " item" + (items.length > 1 ? "s" : "") + " from the receipt. Now tap the names under each item to choose who had it.";
+    var printed = num(res.total);
+    if (replace && printed !== null) {
+      var r = calculate(), want = toMinor(String(printed));
+      if (Math.abs(want - r.grand) <= Math.pow(10, decimals())) msg += " The total matches the receipt (" + fmt(want) + ").";
+      else msg += " The receipt says " + fmt(want) + " but the items add up to " + fmt(r.grand) + ", so check the prices, tax and service.";
+    }
+    scanStatus(msg, "ok");
+  }
+
+  var SCAN_ERRORS = {
+    rate_limited: "Too many scans right now. Wait a minute, then try again.",
+    session_expired: "Sign in to Claude again, then try once more.",
+    image_rejected: "This photo couldn't be read. Try a JPG or PNG photo that isn't too large.",
+    refused: "Claude couldn't read this photo. Try a clearer photo of the receipt.",
+    empty_completion: "No items found in this photo. Try a clear, straight photo of the whole receipt.",
+    invalid_json: "The receipt couldn't be read properly. Try again, or take a clearer photo."
+  };
+  var SCAN_OFF = ["not_granted", "sampling_disabled", "not_declared", "capability_disabled", "capability_removed", "images_unavailable"];
+
+  function scanReceipt(file) {
+    if (!file || !sampleFn || !imgLimits || scanCtl) return;
+    if (imgLimits.mediaTypes.length && imgLimits.mediaTypes.indexOf(file.type) < 0) { scanStatus("This type of photo can't be read. Use a JPG or PNG photo.", "err"); return; }
+    if (file.size > imgLimits.maxInputBytes) { scanStatus("This photo is too large. Try a smaller one.", "err"); return; }
+    scanCtl = new AbortController();
+    setScanning(true);
+    sampleFn.json(RECEIPT_PROMPT, { images: [file], signal: scanCtl.signal, modelTier: "default" })
+      .then(applyScan, function (e) {
+        var code = e && e.code;
+        if (code === "cancelled") { scanStatus(""); return; }
+        if (SCAN_OFF.indexOf(code) >= 0) { $("scan-box").hidden = true; scanStatus("Reading receipts isn't available for you on this page.", "err"); return; }
+        scanStatus(SCAN_ERRORS[code] || "Something went wrong while reading the receipt. Try again.", "err");
+      })
+      .then(function () { scanCtl = null; setScanning(false); });
+  }
+
+  $("scan-camera").addEventListener("click", function () { $("receipt-camera").click(); });
+  $("scan-upload").addEventListener("click", function () { $("receipt-file").click(); });
+  ["receipt-camera", "receipt-file"].forEach(function (id) {
+    $(id).addEventListener("change", function (e) {
+      var f = e.target.files && e.target.files[0];
+      e.target.value = "";            // so the same photo can be picked again
+      scanReceipt(f);
+    });
+  });
+  $("scan-cancel").addEventListener("click", function () { if (scanCtl) scanCtl.abort(); });
+
+  if (inViewer) {
+    window.claude.use("sample").then(function (s) {
+      if (!s) return;
+      sampleFn = s;
+      return s.limits().then(function (l) {
+        if (!l || !l.images) return;
+        imgLimits = l.images;
+        var accept = (l.images.mediaTypes || []).join(",") || "image/*";
+        $("receipt-camera").accept = accept; $("receipt-file").accept = accept;
+        $("scan-box").hidden = false;
+      });
+    }).catch(function () {});
+  }
 
   renderAll();
   if (location.hash) startFromHash();
