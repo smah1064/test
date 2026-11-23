@@ -35,6 +35,7 @@ const coupons = require('./coupons');
 const customers = require('./customers');
 const oauth = require('./oauth');
 const importer = require('./importer');
+const assets = require('./assets');
 
 // Prices the owner changed in the admin are laid over the built-in ones.
 accounting.initPricing(PRODUCTS, EXTRA_SIDE_PRICE);
@@ -632,6 +633,15 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
 
   // ---------- Illustrator (.ai) and EPS uploads ----------
   // Browsers cannot show these, so the server draws them to a transparent PNG.
+  // ---------- Editor library: icons and stickers, searchable in Arabic and English ----------
+  app.get('/api/assets/search', (req, res) => {
+    const type = ['all', 'sticker', 'icon'].includes(req.query.type) ? req.query.type : 'all';
+    const page = Math.min(200, Math.max(0, parseInt(req.query.page, 10) || 0));
+    res.set('Cache-Control', 'public, max-age=3600');
+    res.json(assets.search(String(req.query.q || '').slice(0, 80), { type, page }));
+  });
+  app.get('/api/assets/credits', (req, res) => res.json({ sets: assets.credits() }));
+
   // ---------- Import a design from a link (another shop's product page or an image link) ----------
   const importError = (e) => (e instanceof importer.ImportError ? new HttpError(['importBadUrl', 'importBlocked'].includes(e.code) ? 400 : 422, e.code) : e);
   app.post('/api/import/link', express.json({ limit: '8kb' }), async (req, res, next) => {

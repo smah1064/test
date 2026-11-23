@@ -1395,6 +1395,26 @@ test('fabric: pattern tile, repeat and size are kept, repeat preview for the pri
   assert.strictEqual((await admin(`/api/admin/files/${tee.id}/front?format=repeat`)).status, 404);
 });
 
+test('editor library: icons and stickers searchable in Arabic and English', async () => {
+  const q = async (term, type = 'all', page = 0) => (await fetch(`${base}/api/assets/search?q=${encodeURIComponent(term)}&type=${type}&page=${page}`)).json();
+  const popular = await q('');
+  assert.ok(popular.items.length >= 20, 'something to show before typing');
+  const heartAr = await q('قلب');
+  const heartEn = await q('heart');
+  assert.ok(heartAr.total > 50);
+  assert.strictEqual(heartAr.items[0].id, heartEn.items[0].id, 'Arabic finds the same as English');
+  assert.match(heartAr.items[0].body, /<path/);
+  assert.ok((await q('الكورة')).items.slice(0, 5).some((i) => /football|soccer/.test(i.id)), 'with ال, and football first');
+  const icons = await q('cat', 'icon');
+  assert.ok(icons.items.length && icons.items.every((i) => i.kind === 'icon'));
+  assert.ok((await q('cat', 'sticker')).items.every((i) => i.kind === 'sticker'));
+  const p0 = await q('star');
+  const p1 = await q('star', 'all', 1);
+  assert.ok(p0.more && p1.items.length && p1.items[0].id !== p0.items[0].id, 'pages');
+  assert.strictEqual((await q('qqqzzz')).total, 0);
+  assert.strictEqual((await q('كلمةمشموجودة')).total, 0);
+});
+
 const png4 = (w, h) => png(w, h);
 test('two copies of the app on one data folder share orders, sign-ins and edits', async () => {
   const { createApp: make } = require('../src/app');

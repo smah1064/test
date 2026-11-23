@@ -206,6 +206,12 @@ Customers can create an account at `/account` (name, mobile number, optional ema
 
 Passwords are stored as scrypt hashes. The session is a signed, httpOnly cookie (`pod_c`, 60 days) whose key comes from the shop's secret file, so every app copy accepts it (`src/customers.js`).
 
+## Editor library (search icons, stickers and templates)
+
+Editor → **Library**: one search box for about 22,000 icons and colourful stickers plus the templates and ready designs, in Arabic or English ("قلب", "كورة", "رمضان", "heart"…), with tabs (all, colour stickers, icons, templates), "show more" and recently used items. Icons come in the product's ink colour and can be recoloured like any shape.
+
+The graphics are open-licence sets installed from npm (`@iconify-json/*`), all fine to print on products for sale: Fluent Emoji Flat (Microsoft, MIT), Tabler Icons (MIT), Phosphor (MIT, regular and fill), Lucide (ISC) and Material Design Icons (Apache 2.0). They load on first use (about 50 MB of memory). Arabic search words are in `src/asset-words.js` (add more there); spelling differences (أ/إ/آ, ة/ه, ى/ي, diacritics, "ال") are ignored.
+
 ## Fabric printing (roll to roll)
 
 Category **Fabric & home textiles**: printed fabric by the metre (145 cm wide, 1–10 m), upholstery fabric by the metre (140 cm), bed sheets, duvet covers and curtains (pairs). The "colour" is the fabric type (cotton poplin, canvas, satin, velvet, blackout…).

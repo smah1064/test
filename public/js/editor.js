@@ -1128,6 +1128,121 @@
     addObject(obj);
   }));
 
+  // ---------- Library: search icons, stickers and templates (Arabic or English) ----------
+  const lib = { type: 'all', q: '', page: 0, items: [], token: 0, designs: null };
+  const libSvg = (it, color) => {
+    const body = color ? it.body.replace(/currentColor/g, color) : it.body;
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${it.w} ${it.h}" width="${it.w * 8}" height="${it.h * 8}">${body}</svg>`;
+  };
+  const libThumb = (it) => `<button type="button" class="sticker-btn lib-item" data-lib="${esc(it.id)}" title="${esc(it.id.split(':')[1].replace(/-/g, ' '))}"><img alt="" loading="lazy" src="${POD.svgDataUrl(libSvg(it, it.kind === 'icon' ? '#16181d' : null))}"></button>`;
+  const LIB_RECENT = 'pod-lib-recent';
+  const libRecent = () => { try { return JSON.parse(localStorage.getItem(LIB_RECENT) || '[]'); } catch (e) { return []; } };
+  function rememberLib(it) {
+    try { localStorage.setItem(LIB_RECENT, JSON.stringify([it, ...libRecent().filter((x) => x.id !== it.id)].slice(0, 12))); } catch (e) { /* private mode */ }
+  }
+  /** Templates and ready designs whose names match (searched here, they are few). */
+  async function libTemplates(q) {
+    if (!lib.designs) lib.designs = await POD.api('/api/library').then((r) => r.designs).catch(() => []);
+    const norm = (x) => String(x || '').toLowerCase().replace(/[ً-ٟـ]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي');
+    const words = norm(q).split(/\s+/).filter(Boolean);
+    const hit = (names) => !words.length || words.every((w) => names.some((n) => norm(n).includes(w)));
+    const tpls = D.TEMPLATES.filter((x) => hit([x.name.en, x.name.ar])).map((x) => ({ kind: 'tpl', id: 'tpl:' + x.id, tpl: x, name: x.name }));
+    const ready = lib.designs.filter((d) => hit([d.name.en, d.name.ar, d.category])).map((d) => ({ kind: 'ready', id: 'lib:' + d.id, design: d, name: d.name }));
+    return [...ready, ...tpls];
+  }
+  async function libSearch(more) {
+    const my = ++lib.token;
+    if (!more) {
+      lib.page = 0;
+      lib.items = [];
+      $('lib-grid').innerHTML = '<div class="pv-loading" style="grid-column:1/-1"><div class="spinner"></div></div>';
+    }
+    const recent = libRecent();
+    $('lib-recent-box').hidden = Boolean(lib.q) || lib.type === 'template' || !recent.length;
+    if (!$('lib-recent-box').hidden) $('lib-recent').innerHTML = recent.map(libThumb).join('');
+    try {
+      if (lib.type === 'template') {
+        const list = await libTemplates(lib.q);
+        if (my !== lib.token) return;
+        $('lib-status').textContent = list.length ? '' : t('lib.none');
+        $('lib-grid').innerHTML = list.map((x) => `<button type="button" class="sticker-btn lib-tpl" data-libtpl="${esc(x.id)}" title="${esc(tr(x.name))}"><img alt="" data-tplthumb="${esc(x.id)}"><span>${esc(tr(x.name))}</span></button>`).join('');
+        lib.tplList = list;
+        for (const x of list) {
+          const img = $('lib-grid').querySelector(`[data-tplthumb="${CSS.escape(x.id)}"]`);
+          if (!img) continue;
+          if (x.kind === 'ready' && x.design.kind !== 'template') img.src = x.design.preview;
+          else D.templateThumb(x.kind === 'tpl' ? x.tpl : { id: x.design.id, items: x.design.items, aspect: x.design.aspect }).then((u) => { img.src = u; }).catch(() => {});
+        }
+        $('lib-more').hidden = true;
+        return;
+      }
+      const r = await POD.api(`/api/assets/search?q=${encodeURIComponent(lib.q)}&type=${lib.type}&page=${lib.page}`);
+      if (my !== lib.token) return;
+      lib.items.push(...r.items);
+      $('lib-status').textContent = !lib.items.length ? t('lib.none') : lib.q ? t('lib.count', { n: POD.num(r.total) }) : t('lib.popular');
+      $('lib-grid').innerHTML = lib.items.map(libThumb).join('');
+      $('lib-more').hidden = !r.more;
+    } catch (e) {
+      if (my === lib.token) $('lib-grid').innerHTML = `<p class="small muted" style="grid-column:1/-1">${esc(e.message)}</p>`;
+    }
+  }
+  let libTimer = null;
+  $('lib-q').addEventListener('input', () => {
+    clearTimeout(libTimer);
+    libTimer = setTimeout(() => {
+      lib.q = $('lib-q').value.trim();
+      libSearch(false);
+    }, 250);
+  });
+  $('lib-types').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-ltype]');
+    if (!b || b.dataset.ltype === lib.type) return;
+    lib.type = b.dataset.ltype;
+    document.querySelectorAll('#lib-types [data-ltype]').forEach((x) => x.classList.toggle('active', x === b));
+    libSearch(false);
+  });
+  $('lib-more').addEventListener('click', () => {
+    lib.page++;
+    libSearch(true);
+  });
+  /** Put an icon (in the product's ink colour) or a colourful sticker on the design. */
+  async function addLibItem(it) {
+    const svg = libSvg(it, it.kind === 'icon' ? inkFor(surfaceHex()) : null);
+    const obj = await new Promise((resolve) => fabric.loadSVGFromString(svg, (objects, options) => resolve(fabric.util.groupSVGElements(objects, options))));
+    obj.set({ name: (it.kind === 'icon' ? 'icon:' : 'sticker:') + it.id.split(':')[1] });
+    const a = area();
+    obj.scale(Math.min((a.w * 0.4) / obj.width, (a.h * 0.4) / obj.height));
+    addObject(obj);
+    rememberLib(it);
+  }
+  const libClick = serial(async (e) => {
+    const b = e.target.closest('[data-lib]');
+    if (b) {
+      const it = lib.items.find((x) => x.id === b.dataset.lib) || libRecent().find((x) => x.id === b.dataset.lib);
+      if (it) await addLibItem(it);
+      return;
+    }
+    const tb = e.target.closest('[data-libtpl]');
+    if (!tb || !lib.tplList) return;
+    const x = lib.tplList.find((y) => y.id === tb.dataset.libtpl);
+    if (!x) return;
+    if (x.kind === 'tpl') return addTemplate(x.tpl);
+    const full = await POD.api('/api/library/' + encodeURIComponent(x.design.id));
+    if (full.kind === 'template') return addTemplate({ id: full.id, items: full.items, aspect: full.aspect });
+    await loadObjects([...serialize(), ...remap(full.objects || [], full.area || area(), area())]);
+    commit();
+  });
+  $('lib-grid').addEventListener('click', libClick);
+  $('lib-recent').addEventListener('click', libClick);
+  let libStarted = false;
+  document.querySelector('.tool[data-flyout="library"]').addEventListener('click', () => {
+    if (!libStarted) {
+      libStarted = true;
+      libSearch(false);
+    }
+    setTimeout(() => $('lib-q').focus(), 50);
+  });
+
   // ---------- Phone layout: slide-up panel ----------
   function syncSheetTitle() {
     if (st.sheet) $('sheet-title').textContent = st.sheet === 'product' ? t('sheet.product') : $('props-title').textContent;

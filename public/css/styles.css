@@ -830,3 +830,19 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 /* Fabric patterns (editor options) */
 .pat-label { margin: 8px 0 4px; }
 .pat-preview { display: block; width: 100%; max-width: 260px; height: auto; margin-top: 10px; border-radius: 10px; border: 1px solid var(--line); background: #f3f4f6; }
+
+/* Editor library (search icons, stickers, templates) */
+.flyout-lib { width: 330px; }
+.lib-q { width: 100%; margin-bottom: 8px; }
+.lib-types { margin-bottom: 8px; }
+.lib-sub { margin: 6px 0; }
+.lib-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.lib-grid .sticker-btn img { width: 100%; height: 100%; object-fit: contain; display: block; }
+#lib-grid { max-height: 360px; overflow-y: auto; }
+#lib-recent-box .lib-grid { grid-template-columns: repeat(6, 1fr); }
+.lib-tpl { aspect-ratio: auto; display: flex; flex-direction: column; gap: 4px; padding: 4px; font-size: 11px; line-height: 1.3; text-align: center; grid-column: span 1; }
+.lib-tpl img { aspect-ratio: 1; height: auto !important; background: #f6f7f9; border-radius: 6px; }
+#lib-grid:has(.lib-tpl) { grid-template-columns: repeat(3, 1fr); }
+.lib-credits { margin: 10px 0 0; line-height: 1.5; }
+#lib-more { margin-top: 8px; }
+@media (max-width: 760px) { .flyout-lib { width: auto; } .lib-grid { grid-template-columns: repeat(5, 1fr); } }

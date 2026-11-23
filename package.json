@@ -15,6 +15,11 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^1.12.0",
     "@google/genai": "^3.6.1",
+    "@iconify-json/fluent-emoji-flat": "^1.2.6",
+    "@iconify-json/lucide": "^1.2.158",
+    "@iconify-json/mdi": "^1.2.3",
+    "@iconify-json/ph": "^1.2.2",
+    "@iconify-json/tabler": "^1.2.46",
     "@okathira/ghostpdl-wasm": "^1.1.0",
     "express": "^4.21.2",
     "onnxruntime-node": "^1.31.1",
