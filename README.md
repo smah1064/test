@@ -35,13 +35,14 @@ Requires Node 18+. There is no database to set up: data is stored under `data/` 
 
 ## What's in it
 
-**Storefront (`/`)**: 47 products in seven categories:
+**Storefront (`/`)**: 49 products in eight categories:
 - **Apparel:** t-shirt, oversized t-shirt, polo, football jersey (front + back, kids and adult sizes), kids t-shirt, kids hoodie, baby onesie, hoodie, zip hoodie, sweatshirt, shorts, denim jacket (back), cap.
 - **Home:** mug, magic (colour-changing) mug, travel tumbler, coaster set, Ramadan tablecloth, cushion, framed poster, water bottle, apron.
 - **Gifts & occasions:** couple mugs (two mugs, a design on each, no extra charge for the second), Eid money envelopes (packs of 10/25/50), greeting card, personalised prayer mat, acrylic photo plaque, welcome sign on an easel.
 - **Accessories:** tote bag, phone case, mouse pad, XL desk mat, acrylic keychain (1/5/10).
 - **Stationery and back to school:** notebook, sticker sheet, school name labels (40/80), kids lunch bag, pencil case.
 - **Business:** business cards (front/back, 100–1000), flyers (A5/A4, front/back), letterhead paper, DL company envelopes, round logo stickers, roll-up banner with stand, paper shopping bags with a logo, A5 carbonless invoice books, employee ID cards with lanyard (front/back). The editor has matching templates: Arabic and English business cards, shop logo, sale flyer, letterhead and staff ID.
+- **Kids books (personalised, printed in English):** "My Space Adventure" story book (the child's face in every picture; name, gender, birthday, city, parents, best friend, favourite fruit and animal written into the story, with the fruit and animal in the pictures) and a 16-page colouring book where the child's photo becomes line art on 13 dream jobs. See *Personalised books* below.
 
 Each has colours, sizes (or pack sizes) and a mockup drawn in its colour. A product can set `extraSidePrice` to override the usual charge for a second printed side.
 
@@ -155,6 +156,15 @@ Add an entry to `PRODUCTS` in `src/products.js`. Mockups are SVGs in a 500 × 60
 - **Online card payments:** orders are cash on delivery. To also take cards, add an Egyptian gateway such as Paymob or Fawry.
 - **Storage:** the JSON store suits a single server. For scale, move metadata into a database and print files into object storage.
 - **Admin auth** is a single shared password. Use real accounts if several people run the press.
+
+## Personalised books
+
+`/book?b=space-hero` and `/book?b=dream-jobs`. The shopper answers the questions, adds a photo and fits the face into the oval guide (hairline to chin, eyes on the line), then flips through every real page before adding to the cart.
+
+- **Pages are drawn on the server** (`src/books.js`, sharp + Pango): illustration (in `src/book-assets/`, made once with Creative Claw) + the child's face + companions + text in the shop's fonts (`src/book-fonts/`, TTF). Previews are 720 px; the print PDF is 8.25 x 8.25 in (8 x 8 in trim + 1/8 in bleed) at 300 DPI.
+- **The face:** the drawn face is painted over with the drawing's own skin colour, then the photo face is laid in with soft edges and its colours nudged towards the drawing; the drawn hair and head stay. Colouring pages use line art traced from the photo (difference of Gaussians after evening out the lighting). Face positions per page are `face: [x, y, height, eye spacing]` in percent.
+- **Orders:** a book is a design of kind `book`; the admin downloads one print-ready PDF (`Book PDF`) or the cover proof.
+- **Privacy:** the photo is deleted 30 days after the book is shipped, and unordered books after 7 days.
 
 ## Security
 

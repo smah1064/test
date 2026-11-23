@@ -29,6 +29,7 @@ const CATEGORIES = [
   { id: 'occasions', name: t('Gifts & occasions', 'هدايا ومناسبات') },
   { id: 'school', name: t('Back to school', 'المدرسة') },
   { id: 'business', name: t('Business', 'للأعمال') },
+  { id: 'kids', name: t('Kids books', 'كتب أطفال') },
 ];
 
 const C = {
@@ -1070,6 +1071,47 @@ PRODUCTS.push(
   },
 );
 
+// ---------- Personalised children's books (see src/books.js) ----------
+const BOOK_SVG = (cover) => sv(
+  '<rect x="118" y="88" width="270" height="400" rx="8" fill="#000" opacity=".12"/>' +
+    '<rect x="110" y="80" width="270" height="400" rx="8" fill="#ffffff" stroke="#c9ccd2" stroke-width="2"/>' +
+    `<rect x="104" y="76" width="270" height="400" rx="8" fill="${cover}" stroke="{{L}}" stroke-width="3"/>` +
+    '<rect x="104" y="76" width="18" height="400" fill="#000" opacity=".12"/>'
+);
+const BOOK_SIDE = (cover) => ({ id: 'book', name: t('Book', 'الكتاب'), svg: BOOK_SVG(cover), printArea: { x: 104, y: 76, w: 270, h: 270 }, printWidthIn: 8 });
+PRODUCTS.push(
+  {
+    id: 'storybook',
+    kind: 'book',
+    book: 'space-hero',
+    category: 'kids',
+    name: t('Story Book: My Space Adventure', 'قصة باسم طفلك: مغامرة في الفضاء'),
+    description: t('Your child is the hero: their face in every picture, their name, family and favourites in the story. 12 pages in English, 20 × 20 cm.', 'طفلك بطل الحكاية: وشه في كل صورة، واسمه وعيلته وحاجاته المفضلة في القصة. 12 صفحة باللغة الإنجليزية، 20 × 20 سم.'),
+    basePrice: 650,
+    colors: [{ id: 'std', name: t('Full colour', 'ألوان كاملة'), hex: '#1c2a55' }],
+    sizes: [
+      { id: 'soft', label: t('Softcover', 'غلاف عادي'), surcharge: 0 },
+      { id: 'hard', label: t('Hardcover', 'غلاف مقوّى'), surcharge: 200 },
+    ],
+    sides: [BOOK_SIDE('#1c2a55')],
+  },
+  {
+    id: 'coloringbook',
+    kind: 'book',
+    book: 'dream-jobs',
+    category: 'kids',
+    name: t('Colouring Book with My Photo', 'كتاب تلوين بصورة طفلك'),
+    description: t("Your child's photo turned into drawings: 13 dream jobs to colour, from astronaut to chef. 16 pages in English, 20 × 20 cm.", 'صورة طفلك بتتحول لرسومات: 13 مهنة يحلم بيها يلوّنها، من رائد الفضاء للشيف. 16 صفحة باللغة الإنجليزية، 20 × 20 سم.'),
+    basePrice: 300,
+    colors: [{ id: 'std', name: t('Colour cover, line-art pages', 'غلاف ملون وصفحات للتلوين'), hex: '#ff8a3d' }],
+    sizes: [
+      { id: 'soft', label: t('Softcover', 'غلاف عادي'), surcharge: 0 },
+      { id: 'hard', label: t('Hardcover', 'غلاف مقوّى'), surcharge: 150 },
+    ],
+    sides: [BOOK_SIDE('#ff8a3d')],
+  },
+);
+
 /**
  * Print production details per product:
  *   process  how it is printed; decides which file the shop should use
@@ -1125,6 +1167,8 @@ const PRODUCTION = {
   paperbags: { process: 'uv', safeIn: 0.2, bleedIn: 0, model: { type: 'card', material: 'paper' } },
   invoicebook: { process: 'paper', safeIn: 0.2, bleedIn: 0, model: { type: 'block', depthIn: 0.6, radiusIn: 0.02, edge: '#eef0f2', material: 'paper' } },
   idcards: { process: 'uv', safeIn: 0.08, bleedIn: 0, model: { type: 'block', depthIn: 0.03, radiusIn: 0.12, edge: '#f4f5f7', material: 'plastic' } },
+  storybook: { process: 'paper', safeIn: 0.375, bleedIn: 0.125, model: { type: 'card', material: 'paper' } },
+  coloringbook: { process: 'paper', safeIn: 0.375, bleedIn: 0.125, model: { type: 'card', material: 'paper' } },
 };
 /** Garments can be printed either way; the shop picks per order item. */
 const GARMENT_METHODS = ['dtg', 'dtf'];

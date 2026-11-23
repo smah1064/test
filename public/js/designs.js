@@ -3,7 +3,7 @@
   const { t, tr, esc, money } = POD;
   const $ = (id) => document.getElementById(id);
   const [catalog, lib] = await Promise.all([POD.loadCatalog(), POD.api('/api/library')]);
-  const products = catalog.products;
+  const products = catalog.products.filter((p) => p.kind !== 'book');
   let cat = new URLSearchParams(location.search).get('cat') || 'all';
   if (cat !== 'all' && !lib.categories.some((c) => c.id === cat)) cat = 'all';
 

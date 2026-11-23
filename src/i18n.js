@@ -25,6 +25,7 @@ const MESSAGES = {
   aiLimit: { en: 'You\'ve used today\'s AI help. Try again tomorrow.', ar: 'استخدمت رصيد اليوم من المساعدة. جرّب غدًا.' },
   enhanceBad: { en: 'This photo couldn\'t be improved.', ar: 'تعذّر تحسين هذه الصورة.' },
   tooFast: { en: 'Too many tries. Wait a minute and try again.', ar: 'محاولات كثيرة. انتظر دقيقة وحاول مرة أخرى.' },
+  bookPhoto: { en: 'Add a clear photo of your child (JPG or PNG).', ar: 'أضف صورة واضحة لطفلك (JPG أو PNG).' },
   shareEmpty: { en: 'Add something to the design before sharing it.', ar: 'أضف شيئًا للتصميم قبل مشاركته.' },
   shareNotFound: { en: 'This shared design wasn\'t found.', ar: 'لم يتم العثور على التصميم المشارَك.' },
   feedbackEmpty: { en: 'Write what you\'d change.', ar: 'اكتب التعديل الذي تقترحه.' },

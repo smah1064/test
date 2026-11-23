@@ -671,3 +671,56 @@ test('ready-made designs: starter catalog, owner adds from a share link, hides a
   assert.strictEqual((await fetch(base + '/api/library')).status, 200);
   assert.strictEqual((await fetch(base + '/api/admin/library')).status, 401);
 });
+
+test('personalised books: create, preview pages, edit, order, print PDF', async () => {
+  const sharp = require('sharp');
+  const face = await sharp({ create: { width: 500, height: 500, channels: 3, background: '#c99' } })
+    .composite([{ input: Buffer.from('<svg width="500" height="500"><circle cx="250" cy="250" r="160" fill="#e8b996"/><circle cx="190" cy="220" r="18" fill="#222"/><circle cx="310" cy="220" r="18" fill="#222"/><path d="M180 320 Q250 380 320 320" stroke="#922" stroke-width="12" fill="none"/></svg>') }])
+    .jpeg().toBuffer();
+  const dataUrl = 'data:image/jpeg;base64,' + face.toString('base64');
+  const answers = { name: 'يوسف', gender: 'boy', birthday: '2019-03-12', city: 'القاهرة', father: 'أحمد', mother: 'منى', fruit: 'mango', animal: 'cat', friend: 'عمر' };
+
+  const list = await (await fetch(base + '/api/books')).json();
+  assert.deepStrictEqual(list.books.map((b) => b.id).sort(), ['dream-jobs', 'space-hero']);
+
+  // Missing answer and missing photo are refused.
+  const noName = await post('/api/books/space-hero/designs', { answers: { ...answers, name: '' }, face: dataUrl });
+  assert.strictEqual(noName.status, 400);
+  const noPhoto = await post('/api/books/space-hero/designs', { answers });
+  assert.strictEqual(noPhoto.status, 400);
+
+  const res = await post('/api/books/space-hero/designs', { answers, lang: 'ar', face: dataUrl, size: 'hard' });
+  assert.strictEqual(res.status, 201);
+  const d = await res.json();
+  assert.ok(d.editToken && d.pages === 14 && d.price === 850);
+  assert.strictEqual(d.answers, undefined, 'answers are not echoed');
+  const page = await fetch(`${base}/api/books/designs/${d.id}/pages/4.jpg`);
+  assert.strictEqual(page.status, 200);
+  assert.strictEqual((await sharp(Buffer.from(await page.arrayBuffer())).metadata()).width, 720);
+  assert.strictEqual((await fetch(base + d.previewUrl)).status, 200);
+
+  // Edit without the token is refused; with it the answers change.
+  const put = (body, token) => fetch(`${base}/api/books/designs/${d.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...(token ? { 'x-edit-token': token } : {}) }, body: JSON.stringify(body) });
+  assert.strictEqual((await put({ answers }, null)).status, 403);
+  const upd = await put({ answers: { ...answers, name: 'Laila', gender: 'girl' }, lang: 'en', size: 'soft' }, d.editToken);
+  assert.strictEqual(upd.status, 200);
+  assert.strictEqual((await upd.json()).price, 650);
+  const back = await (await fetch(`${base}/api/books/designs/${d.id}`, { headers: { 'x-edit-token': d.editToken } })).json();
+  assert.strictEqual(back.answers.name, 'Laila');
+
+  // Colouring book makes the line-art face too.
+  const cb = await (await post('/api/books/dream-jobs/designs', { answers: { name: 'ليلى', gender: 'girl' }, face: dataUrl })).json();
+  assert.strictEqual((await fetch(`${base}/api/books/designs/${cb.id}/pages/3.jpg`)).status, 200);
+
+  // Order both; the admin gets a print-ready PDF; the book can no longer be edited.
+  const order = await post('/api/orders', { customer: CUSTOMER, designIds: [d.id, cb.id] });
+  assert.strictEqual(order.status, 201);
+  const o = await order.json();
+  assert.ok(o.items.every((i) => i.kind === 'book'));
+  assert.strictEqual((await put({ answers }, d.editToken)).status, 403);
+  const pdf = await admin(`/api/admin/files/${d.id}/book?format=book-pdf`);
+  assert.strictEqual(pdf.status, 200);
+  const buf = Buffer.from(await pdf.arrayBuffer());
+  assert.strictEqual(buf.subarray(0, 4).toString(), '%PDF');
+  assert.strictEqual((buf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length, 14);
+});

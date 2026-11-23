@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OneOff Print</title>
+  <script>(function(){var l;try{l=localStorage.getItem('pod-lang')}catch(e){}l=l==='en'?'en':'ar';var d=document.documentElement;d.lang=l;d.dir=l==='ar'?'rtl':'ltr'})()</script>
+  <link rel="stylesheet" href="/fonts/fonts.css">
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body data-title-key="book.pageTitle">
+  <header class="site-header">
+    <div class="container inner">
+      <a class="brand" href="/"><span class="brand-mark">1</span>OneOff Print</a>
+      <nav>
+        <a href="/#products" data-i18n="nav.products"></a>
+        <a href="/designs" data-i18n="nav.designs"></a>
+        <a class="cart-link" href="/cart"><span data-i18n="nav.cart"></span> <span class="badge" data-cart-count hidden>0</span></a>
+        <button class="btn btn-sm lang-toggle" data-lang-toggle data-i18n="lang.other"></button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <div id="bk-missing" class="card empty" hidden>
+      <h2 data-i18n="book.notFound"></h2>
+      <a class="btn btn-primary" href="/#products" data-i18n="book.browse"></a>
+    </div>
+    <div class="bk-layout" id="bk" hidden>
+      <section class="card bk-stage">
+        <div class="bk-page">
+          <img id="bk-img" alt="">
+          <div class="spinner" id="bk-spin" hidden></div>
+          <button class="bk-nav bk-prev" id="bk-prev" data-i18n-aria="book.prev">‹</button>
+          <button class="bk-nav bk-next" id="bk-next" data-i18n-aria="book.next">›</button>
+        </div>
+        <div class="bk-count muted small" id="bk-count"></div>
+        <div class="bk-thumbs" id="bk-thumbs"></div>
+        <p class="bk-sample muted small" id="bk-sample" data-i18n="book.sampleNote"></p>
+      </section>
+
+      <aside class="card bk-panel">
+        <h1 id="bk-title"></h1>
+        <p class="muted small bk-blurb" id="bk-blurb"></p>
+
+        <div class="field">
+          <label data-i18n="book.photo"></label>
+          <div class="bk-photo" id="bk-photo-empty">
+            <label class="btn btn-block" for="bk-file"><span data-i18n="book.photoPick"></span></label>
+            <p class="muted small" data-i18n="book.photoHint"></p>
+          </div>
+          <div class="bk-crop" id="bk-crop" hidden>
+            <canvas id="bk-canvas" width="600" height="600"></canvas>
+            <div class="bk-crop-tools">
+              <label class="muted small" for="bk-zoom" data-i18n="book.zoom"></label>
+              <input type="range" id="bk-zoom" min="1" max="4" step="0.01" value="1">
+              <label class="btn btn-sm" for="bk-file" data-i18n="book.photoChange"></label>
+            </div>
+            <p class="muted small" data-i18n="book.cropHint"></p>
+          </div>
+          <div class="bk-photo-saved muted small" id="bk-photo-saved" hidden>✓ <span data-i18n="book.photoSaved"></span> <label class="btn btn-sm" for="bk-file" data-i18n="book.photoChange"></label></div>
+          <input type="file" id="bk-file" accept="image/jpeg,image/png,image/webp" hidden>
+        </div>
+
+        <p class="notice" data-i18n="book.englishNote" style="margin:0 0 14px"></p>
+
+        <div id="bk-questions"></div>
+
+        <div class="field"><label data-i18n="book.cover"></label><div class="chips" id="bk-sizes"></div></div>
+        <div class="dp-price"><span class="amount" id="bk-price"></span><span class="muted small" data-i18n="design.priceNote"></span></div>
+        <button class="btn btn-primary btn-lg btn-block" id="bk-make" data-i18n="book.make"></button>
+        <button class="btn btn-lg btn-block" id="bk-add" data-i18n="design.add" disabled></button>
+        <p class="muted small" style="margin:10px 0 0;line-height:1.5" data-i18n="book.privacy"></p>
+      </aside>
+    </div>
+  </main>
+
+  <footer class="site-footer"><div class="container" data-i18n="footer"></div></footer>
+  <div class="overlay-busy" id="busy" hidden><div><div class="spinner"></div><span id="busy-text"></span></div></div>
+
+  <script src="/js/i18n.js"></script>
+  <script src="/js/common.js"></script>
+  <script src="/js/book.js"></script>
+</body>
+</html>

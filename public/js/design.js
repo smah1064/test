@@ -15,7 +15,7 @@
   }
   $('dp').hidden = false;
 
-  const products = catalog.products;
+  const products = catalog.products.filter((p) => p.kind !== 'book');
   const state = { product: null, color: null, size: null };
   function choose(productId, colorId) {
     state.product = products.find((p) => p.id === productId) || products.find((p) => p.id === design.product) || products[0];

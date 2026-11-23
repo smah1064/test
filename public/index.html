@@ -76,7 +76,7 @@
 
       // Real product photos, recoloured on the server (small cached WebP);
       // the drawn mockup is the fallback if a picture can't load.
-      const thumbUrl = (p, color) => `/api/thumbs/${encodeURIComponent(p.id)}/${encodeURIComponent(color.id)}.webp`;
+      const thumbUrl = (p, color) => (p.kind === 'book' ? `/api/books/${encodeURIComponent(p.book)}/sample/0.jpg?lang=${POD.lang}` : `/api/thumbs/${encodeURIComponent(p.id)}/${encodeURIComponent(color.id)}.webp`);
       document.addEventListener('error', (e) => {
         const img = e.target;
         if (!(img instanceof HTMLImageElement) || !img.dataset.pid || img.dataset.fallback) return;
@@ -110,7 +110,7 @@
           .map((c) => `<button class="chip ${c.id === cat ? 'active' : ''}" data-cat="${c.id}">${esc(c.name ? tr(c.name) : t('cat.all'))}</button>`)
           .join('');
         grid.innerHTML = products.filter((p) => cat === 'all' || p.category === cat).map((p) => `
-          <a class="card product-card" href="/editor?product=${p.id}">
+          <a class="card product-card" href="${p.kind === 'book' ? `/book?b=${encodeURIComponent(p.book)}` : `/editor?product=${p.id}`}">
             <div class="thumb">${cardThumb(p)}</div>
             <div class="body">
               <h3>${esc(tr(p.name))}</h3>

@@ -138,6 +138,12 @@
     return (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255 < 0.5;
   };
   function printFiles(item, s) {
+    if (item.kind === 'book') {
+      return `
+        <div class="print-files-block"><div class="small muted" style="font-weight:700;margin-bottom:6px">${esc(t('admin.bookFiles'))}</div><div class="print-files">
+          ${['book-pdf', 'proof'].map((f, k) => `<button class="btn btn-sm ${k === 0 ? 'btn-primary' : ''}" data-download="${esc(s.printUrl)}?format=${f}">⬇ ${esc(t('fmt.' + f))}${k === 0 ? ` <span class="rec">· ${esc(t('admin.recommended'))}</span>` : ''}</button>`).join('')}
+        </div></div>`;
+    }
     if (item.kind === 'gangsheet') {
       return `
         <div class="print-files-block"><div class="print-files">

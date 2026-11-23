@@ -27,6 +27,9 @@ const ai = require('./ai');
 const notify = require('./notify');
 const { Library, CATEGORIES: DESIGN_CATEGORIES } = require('./library');
 const security = require('./security');
+const books = require('./books');
+let sharpModule = null;
+const sharp = () => (sharpModule ||= require('sharp'));
 let printfilesModule = null;
 const printfiles = new Proxy({}, { get: (_, key) => (printfilesModule ||= require('./printfiles'))[key] });
 
@@ -229,6 +232,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const product = getProduct(req.params.productId);
       const color = product && product.colors.find((c) => c.id === req.params.colorId);
       if (!color) throw new HttpError(404, 'notFound');
+      if (product.kind === 'book') return res.redirect(302, `/api/books/${product.book}/sample/0.jpg`);
       const img = await thumbs.cardImage(product.id, product.sides[0].id, color.hex);
       if (!img) throw new HttpError(404, 'notFound');
       res.set('Cache-Control', 'public, max-age=86400, no-transform');
@@ -626,6 +630,185 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     res.sendFile(store.designFile(id, `${side}-preview.png`));
   });
 
+  // ---------- Personalised children's books ----------
+  // A book is a design of kind "book": the answers and the child's photo are
+  // kept with it, and every page (previews and the print PDF) is drawn on the
+  // server from them. Until it is ordered the shopper can change it with the
+  // edit token. Photos are deleted 30 days after the book is shipped.
+  const bookFor = (id) => (Object.prototype.hasOwnProperty.call(books.BOOKS, id) ? books.BOOKS[id] : null);
+  const bookProduct = (book) => PRODUCTS.find((p) => p.kind === 'book' && p.book === book.id);
+  app.get('/api/books', (req, res) => res.json({ books: Object.values(books.BOOKS).map(books.publicBook) }));
+  app.get('/api/books/companion/:id.png', (req, res) => {
+    const file = books.companionPath(req.params.id);
+    if (!file) throw new HttpError(404, 'notFound');
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.type('png').sendFile(file);
+  });
+  app.get('/api/books/:id', (req, res) => {
+    const book = bookFor(req.params.id);
+    if (!book) throw new HttpError(404, 'notFound');
+    res.json(books.publicBook(book));
+  });
+  // A sample cover (no photo) for product cards and the book page before a photo is added.
+  const samples = new Map();
+  app.get('/api/books/:id/sample/:n.jpg', async (req, res, next) => {
+    try {
+      const book = bookFor(req.params.id);
+      const n = Number(req.params.n);
+      const lang = 'en';
+      if (!book || !Number.isInteger(n) || n < 0 || n >= book.pages.length) throw new HttpError(404, 'notFound');
+      const key = `${book.id}|${n}|${lang}`;
+      if (!samples.has(key)) {
+        if (samples.size > 100) samples.clear();
+        const answers = { name: 'Your child', gender: 'boy', birthday: '2020-01-01', city: 'Cairo', father: 'Ahmed', mother: 'Mona', fruit: 'mango', animal: 'cat', friend: 'Omar', dedication: '' };
+        samples.set(key, books.pageJpeg({ book, answers, lang }, n, 720).catch((e) => { samples.delete(key); throw e; }));
+      }
+      res.set('Cache-Control', 'public, max-age=86400');
+      res.type('jpeg').send(await samples.get(key));
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  const DATA_URL_RE = /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/;
+  async function readFace(dataUrl) {
+    const m = DATA_URL_RE.exec(String(dataUrl || ''));
+    if (!m) throw new HttpError(400, 'bookPhoto');
+    const buf = Buffer.from(m[2], 'base64');
+    if (buf.length < 100 || buf.length > 8e6) throw new HttpError(400, 'bookPhoto');
+    try {
+      return await sharp()(buf, { limitInputPixels: 40e6 }).rotate().resize(720, 900, { fit: 'cover' }).jpeg({ quality: 90 }).toBuffer();
+    } catch (e) {
+      throw new HttpError(400, 'bookPhoto');
+    }
+  }
+  const bookData = (design) => {
+    const face = store.designFile(design.id, 'face.jpg');
+    const line = store.designFile(design.id, 'face-line.png');
+    return {
+      book: bookFor(design.bookId),
+      answers: design.answers,
+      lang: design.lang,
+      face: fs.existsSync(face) ? fs.readFileSync(face) : null,
+      faceLine: fs.existsSync(line) ? fs.readFileSync(line) : null,
+    };
+  };
+  async function saveBook(design, { answers, lang, face, size }) {
+    const book = bookFor(design.bookId);
+    const product = bookProduct(book);
+    try {
+      design.answers = books.cleanAnswers(book, answers);
+    } catch (e) {
+      if (e.message === 'bookMissing') throw new HttpError(400, 'fieldRequired', { field: e.field });
+      throw e;
+    }
+    design.lang = 'en'; // books are printed in English
+    const sizeDef = product.sizes.find((z) => z.id === size) || product.sizes[0];
+    design.size = { id: sizeDef.id, label: sizeDef.label };
+    design.price = priceFor(product, sizeDef.id, 1);
+    if (face) {
+      const jpg = await readFace(face);
+      store.writeDesignFile(design.id, 'face.jpg', jpg);
+      if (book.kind === 'coloring') store.writeDesignFile(design.id, 'face-line.png', await books.lineArt(jpg));
+    }
+    if (!fs.existsSync(store.designFile(design.id, 'face.jpg'))) throw new HttpError(400, 'bookPhoto');
+    design.version = (design.version || 0) + 1;
+    fs.rmSync(store.designFile(design.id, 'book-print.pdf'), { force: true });
+    store.writeDesignFile(design.id, 'book-preview.png', await (await books.renderPage(bookData(design), 0, 600)).png().toBuffer());
+    store.save();
+  }
+  const bookResponse = (design, token) => {
+    const { uploadTokenHash, answers, ...pub } = design; // eslint-disable-line no-unused-vars
+    return { ...pub, ...(token ? { editToken: token } : {}), pages: bookFor(design.bookId).pages.length, previewUrl: `/files/designs/${design.id}/book-preview.png?v=${design.version}` };
+  };
+
+  app.post('/api/books/:id/designs', (req, res, next) => {
+    rateLimit(req, 'designs');
+    rateLimit(req, 'designsAll', '*');
+    next();
+  }, express.json({ limit: '10mb' }), async (req, res, next) => {
+    try {
+      const book = bookFor(req.params.id);
+      if (!book) throw new HttpError(404, 'notFound');
+      const product = bookProduct(book);
+      const token = crypto.randomBytes(24).toString('hex');
+      const side = product.sides[0];
+      const px = books.PRINT_PX;
+      const design = {
+        id: crypto.randomUUID(),
+        createdAt: new Date().toISOString(),
+        kind: 'book',
+        bookId: book.id,
+        status: 'uploading',
+        uploadTokenHash: sha(token),
+        productId: product.id,
+        productName: product.name,
+        process: 'paper',
+        color: { id: product.colors[0].id, name: product.colors[0].name, hex: product.colors[0].hex },
+        size: { id: product.sizes[0].id, label: product.sizes[0].label },
+        sides: [{ id: side.id, name: side.name, widthIn: books.TRIM_IN, heightIn: books.TRIM_IN, bleedIn: books.BLEED_IN, widthPx: px, heightPx: px, dpi: 300 }],
+        price: product.basePrice,
+        currency: CURRENCY,
+        orderId: null,
+      };
+      store.createDesign(design, {});
+      try {
+        await saveBook(design, req.body || {});
+      } catch (e) {
+        fs.rmSync(store.designDir(design.id), { recursive: true, force: true });
+        delete store.db.designs[design.id];
+        store.save();
+        throw e;
+      }
+      design.status = 'ready';
+      store.save();
+      res.status(201).json(bookResponse(design, token));
+    } catch (e) {
+      next(e);
+    }
+  });
+  const editableBook = (req) => {
+    const design = UUID_RE.test(req.params.id) && store.getDesign(req.params.id);
+    if (!design || design.kind !== 'book') throw new HttpError(404, 'designNotFound');
+    if (design.orderId || design.uploadTokenHash !== sha(req.get('x-edit-token') || '')) throw new HttpError(403, 'notFound');
+    return design;
+  };
+  app.put('/api/books/designs/:id', express.json({ limit: '10mb' }), async (req, res, next) => {
+    try {
+      const design = editableBook(req);
+      await saveBook(design, req.body || {});
+      res.json(bookResponse(design));
+    } catch (e) {
+      next(e);
+    }
+  });
+  // Re-open a book from the cart (answers come back; the photo stays on the server).
+  app.get('/api/books/designs/:id', (req, res) => {
+    const design = editableBook(req);
+    res.set('Cache-Control', 'no-store');
+    res.json({ ...bookResponse(design), answers: design.answers, lang: design.lang });
+  });
+  // Page previews (the child's photo is in them, so they are never cached by shared caches).
+  const pageCache = new Map();
+  app.get('/api/books/designs/:id/pages/:n.jpg', async (req, res, next) => {
+    try {
+      const design = UUID_RE.test(req.params.id) && store.getDesign(req.params.id);
+      if (!design || design.kind !== 'book' || design.photoRemoved) throw new HttpError(404, 'notFound');
+      const book = bookFor(design.bookId);
+      const n = Number(req.params.n);
+      if (!Number.isInteger(n) || n < 0 || n >= book.pages.length) throw new HttpError(404, 'notFound');
+      const key = `${design.id}|${design.version}|${n}`;
+      if (!pageCache.has(key)) {
+        if (pageCache.size > 120) pageCache.delete(pageCache.keys().next().value);
+        pageCache.set(key, books.pageJpeg(bookData(design), n, 720).catch((e) => { pageCache.delete(key); throw e; }));
+      }
+      res.set('Cache-Control', 'private, max-age=600');
+      res.type('jpeg').send(await pageCache.get(key));
+    } catch (e) {
+      next(e);
+    }
+  });
+
   // ---------- Orders ----------
   app.post('/api/orders', express.json({ limit: '100kb' }), (req, res) => {
     rateLimit(req, 'orders');
@@ -668,6 +851,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       return {
         id: crypto.randomUUID(),
         designId: d.id,
+        ...(d.kind === 'book' ? { kind: 'book', bookId: d.bookId } : {}),
         productId: d.productId,
         productName: product.name,
         color: d.color,
@@ -872,6 +1056,15 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const side = design && design.sides.find((s) => s.id === sideId);
       const order = design && design.orderId && store.getOrder(design.orderId);
       const base = design ? `${order ? order.number : 'design'}-${design.productId}-${sideId}` : '';
+      if (design && design.kind === 'book') {
+        const f = req.query.format || 'book-pdf';
+        const title = `${base}-${design.bookId}`;
+        if (f === 'proof') return res.download(store.designFile(designId, 'book-preview.png'), `${title}-cover.png`);
+        if (f !== 'book-pdf' || design.photoRemoved) throw new HttpError(404, 'notFound');
+        const target = store.designFile(designId, 'book-print.pdf');
+        if (!fs.existsSync(target)) store.writeDesignFile(designId, 'book-print.pdf', await books.bookPdf(bookData(design), { title }));
+        return res.download(target, `${title}.pdf`);
+      }
       if (design && design.kind === 'gangsheet') {
         const f = req.query.format || 'sheet-pdf';
         if (f === 'proof') return res.download(store.designFile(designId, 'front-preview.png'), `${base}-proof.png`);
@@ -1015,6 +1208,24 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   // the disk cannot fill up. Ordered designs are kept.
   const runCleanup = () => {
     try {
+      // Children's photos in books: removed 30 days after the book was shipped.
+      const monthAgo = Date.now() - 30 * 864e5;
+      let removed = 0;
+      for (const order of store.listOrders()) {
+        for (const item of order.items) {
+          if (item.kind !== 'book' || item.status !== 'shipped') continue;
+          const shipped = (item.history || []).find((h) => h.status === 'shipped');
+          const design = store.getDesign(item.designId);
+          if (!design || design.photoRemoved || !shipped || Date.parse(shipped.at) > monthAgo) continue;
+          for (const f of ['face.jpg', 'face-line.png', 'book-print.pdf']) fs.rmSync(store.designFile(design.id, f), { force: true });
+          design.photoRemoved = true;
+          removed++;
+        }
+      }
+      if (removed) {
+        store.save();
+        console.log(`[cleanup] removed the child's photo from ${removed} shipped book(s)`);
+      }
       return security.cleanup({ store, sharesDir });
     } catch (e) {
       console.error('[cleanup]', e.message);

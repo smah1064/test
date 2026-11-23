@@ -54,7 +54,12 @@
     toast(e.message, 'error');
     return;
   }
-  const products = catalog.products;
+  // Books are personalised on their own page, not in the editor.
+  const products = catalog.products.filter((x) => x.kind !== 'book');
+  {
+    const asked = catalog.products.find((x) => x.id === new URLSearchParams(location.search).get('product'));
+    if (asked && asked.kind === 'book') location.replace('/book?b=' + encodeURIComponent(asked.book));
+  }
   const params = new URLSearchParams(location.search);
 
   const st = {

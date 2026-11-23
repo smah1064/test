@@ -218,7 +218,9 @@ function cleanup({ store, sharesDir, designDays = 30, uploadingHours = 24, share
   for (const [id, d] of Object.entries(store.db.designs)) {
     if (d.orderId) continue;
     const age = now - Date.parse(d.createdAt || 0);
-    if ((d.status === 'uploading' && age > uploadingHours * 3600e3) || age > designDays * DAY) {
+    // Books hold a child's photo: unordered ones are kept for a week only.
+    const keepDays = d.kind === 'book' ? Math.min(7, designDays) : designDays;
+    if ((d.status === 'uploading' && age > uploadingHours * 3600e3) || age > keepDays * DAY) {
       fs.rmSync(store.designDir(id), { recursive: true, force: true });
       delete store.db.designs[id];
       designs++;
