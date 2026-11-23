@@ -289,8 +289,11 @@ function buildCard(color, tex, renderer, product) {
   bend(fg, 1);
   const bg = new THREE.PlaneGeometry(w, h, 48, 1);
   bend(bg, 1);
-  const fm = new THREE.Mesh(fg, mat('fabric', { map: texture(front, renderer), alphaTest: 0.5 }));
-  const bm = new THREE.Mesh(bg, mat('fabric', { map: texture(backCv, renderer), alphaTest: 0.5 }));
+  // The renders already carry the photo's own light and shading, so show them
+  // unlit: the front and back then look the same whichever way the panel faces.
+  const photoMat = (cv) => new THREE.MeshBasicMaterial({ map: texture(cv, renderer), alphaTest: 0.5 });
+  const fm = new THREE.Mesh(fg, photoMat(front));
+  const bm = new THREE.Mesh(bg, photoMat(backCv));
   bm.rotation.y = Math.PI;
   bm.position.z = -0.3;
   g.add(fm, bm);
@@ -331,6 +334,10 @@ export function mount(container, { product, color, textures, spin = true }) {
   const sun = new THREE.DirectionalLight(0xffffff, 1.1);
   sun.position.set(4, 7, 9);
   scene.add(sun);
+  // A softer light from behind so the back of a product isn't left in shadow as it turns.
+  const back = new THREE.DirectionalLight(0xffffff, 1.05);
+  back.position.set(-4, 5, -9);
+  scene.add(back);
 
   const m = product.model;
   const hex = color.hex;
@@ -392,6 +399,7 @@ export function mount(container, { product, color, textures, spin = true }) {
   ro.observe(container);
   resize();
 
+  container.__pod3d = { camera, controls }; // for tests and debugging
   let raf = 0;
   const loop = () => {
     raf = requestAnimationFrame(loop);
