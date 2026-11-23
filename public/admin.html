@@ -8,6 +8,51 @@
   <script>(function(){var l;try{l=localStorage.getItem('pod-lang')}catch(e){}l=l==='en'?'en':'ar';var d=document.documentElement;d.lang=l;d.dir=l==='ar'?'rtl':'ltr'})()</script>
   <link rel="stylesheet" href="/fonts/fonts.css">
   <link rel="stylesheet" href="/css/styles.css">
+  <style>
+    /* Orders: shipping, delivery and payment */
+    .pill.delivered { background: #138a4a; color: #fff; }
+    .pill.pay-paid { background: #e3f5ea; color: var(--ok); }
+    .pill.pay-pending { background: #eef1f6; color: var(--ink-2); }
+    .order-state { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; }
+    .order-state .ship-note { flex-basis: 100%; font-size: 12px; color: var(--ink-3); }
+    .ship-toggle { margin-top: 8px; white-space: nowrap; }
+    .ship-toggle[aria-expanded="true"] { border-color: var(--accent); background: var(--accent-soft); }
+    tr.ship-row > td { background: #fafbfc; padding: 12px; }
+    .ship-box { display: grid; gap: 14px; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius); background: #fff; }
+    .ship-head { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
+    .ship-head h3 { margin: 0; font-size: 16px; }
+    .ship-head .ship-links { margin-inline-start: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+    .ship-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+    .ship-steps li { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font-size: 13px; min-width: 0; }
+    .ship-steps li b { display: block; font-size: 13px; }
+    .ship-steps li span { color: var(--ink-3); font-size: 12px; }
+    .ship-steps li.done { border-color: #b7e2c8; background: #f1faf4; }
+    .ship-steps li.done span { color: var(--ok); }
+    .ship-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    .ship-fields .field { margin: 0; min-width: 0; }
+    .ship-fields input { width: 100%; }
+    .ship-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .ship-pay { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; padding-top: 12px; border-top: 1px solid var(--line); }
+    .ship-msg { font-size: 13px; font-weight: 600; }
+    .ship-msg.ok { color: var(--ok); }
+    .ship-msg.bad { color: var(--bad); }
+    @media (max-width: 960px) { .ship-fields { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 700px) {
+      #tab-orders .orders-card { overflow: visible !important; background: transparent; border: 0; box-shadow: none; }
+      #tab-orders table.orders, #tab-orders table.orders tbody, #tab-orders table.orders tr, #tab-orders table.orders td { display: block; width: 100%; }
+      #tab-orders table.orders thead { display: none; }
+      #tab-orders table.orders tr.order-row { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); margin-top: 10px; padding: 4px 0; }
+      #tab-orders table.orders tr.order-row > td { border: 0; padding: 6px 14px; }
+      #tab-orders table.orders tr.order-row > td[data-label]::before { content: attr(data-label); display: block; font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 2px; }
+      #tab-orders table.orders tr.ship-row > td { padding: 0; background: transparent; border: 0; }
+      #tab-orders table.orders tr.ship-row .ship-box { border-top: 0; border-radius: 0 0 var(--radius) var(--radius); margin-top: -8px; }
+      #tab-orders table.orders tr.order-row.open { border-radius: var(--radius) var(--radius) 0 0; }
+      .ship-steps { grid-template-columns: 1fr 1fr; }
+      .ship-fields { grid-template-columns: 1fr; }
+      .ship-actions .btn { flex: 1 1 auto; }
+      .ship-head .ship-links { margin-inline-start: 0; }
+    }
+  </style>
 </head>
 <body data-title-key="admin.pageTitle">
   <header class="site-header">
@@ -210,17 +255,19 @@
           <div class="notify-list" id="notify-status"></div>
           <p class="muted small" id="notify-msg" style="margin:6px 0 0"></p>
         </div>
-        <div class="card" style="overflow-x:auto">
+        <div class="card orders-card" style="overflow-x:auto">
           <table class="orders">
             <thead><tr><th data-i18n="admin.col.order"></th><th data-i18n="admin.col.customer"></th><th data-i18n="admin.col.items"></th><th data-i18n="admin.col.total"></th><th data-i18n="admin.col.status"></th><th data-i18n="notify.col"></th></tr></thead>
             <tbody id="orders"></tbody>
           </table>
+          <datalist id="ship-couriers"></datalist>
         </div>
       </section>
     </div>
   </main>
 
   <script src="/js/i18n.js"></script>
+  <script src="/js/i18n-admin-shipping.js"></script>
   <script src="/js/common.js"></script>
   <script src="/js/admin.js"></script>
 </body>

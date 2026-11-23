@@ -51,6 +51,11 @@ const L = {
     thanksBody: 'شكرًا لطلبك! استلمنا طلبك وهنبدأ نطبع كل قطعة مخصوص ليك. هنتواصل معاك قبل الشحن.',
     adminSubject: (n, total) => `طلب جديد ${n} · ${total}`,
     sides: ' + ', dir: 'rtl', test: 'رسالة تجريبية من متجرك: الإشعارات شغالة ✅',
+    shippedSubject: (n) => `طلبك ${n} في الطريق ليك · OneOff Print`,
+    shippedBody: 'طلبك اتشحن وفي الطريق ليك! جهّز المبلغ للمندوب عند الاستلام.',
+    shippedBodyPaid: 'طلبك اتشحن وفي الطريق ليك!',
+    courier: 'شركة الشحن', trackingNumber: 'رقم التتبع', trackingLink: 'تتبع الشحنة عند شركة الشحن', eta: 'الاستلام المتوقع',
+    invoice: 'الفاتورة', copies: (n) => `${n} نسخ`, order: 'الطلب',
   },
   en: {
     newOrder: 'New order', items: (n) => `${n} item${n === 1 ? '' : 's'}`,
@@ -62,6 +67,11 @@ const L = {
     thanksBody: 'Thank you for your order! We have received it and will print each item just for you. We will contact you before shipping.',
     adminSubject: (n, total) => `New order ${n} · ${total}`,
     sides: ' + ', dir: 'ltr', test: 'Test message from your shop: notifications are working ✅',
+    shippedSubject: (n) => `Your order ${n} is on its way · OneOff Print`,
+    shippedBody: 'Your order has shipped and is on its way to you! Please have the amount ready for the courier on delivery.',
+    shippedBodyPaid: 'Your order has shipped and is on its way to you!',
+    courier: 'Courier', trackingNumber: 'Tracking number', trackingLink: 'Track the parcel with the courier', eta: 'Expected delivery',
+    invoice: 'Invoice', copies: (n) => `${n} copies`, order: 'Order',
   },
 };
 const tr = (v, lang) => (v && typeof v === 'object' ? v[lang] || v.en || '' : String(v == null ? '' : v));
@@ -219,4 +229,98 @@ async function emailTo(to, subject, html, text, attachments) {
   await sendEmail(config(), to, subject, html, text, attachments);
 }
 
-module.exports = { status, orderPlaced, adminTest, emailReady, emailTo, shopWhatsApp: () => config().shopWhatsApp, siteUrl: () => config().siteUrl };
+// ---------- "Your order has shipped" (to the customer) ----------
+const safeLine = (it, lang) => {
+  try {
+    const parts = [tr(it.productName, lang), it.color && tr(it.color.name, lang), it.size && tr(it.size.label, lang),
+      (it.sides || []).map((s) => tr(s.name, lang)).filter(Boolean).join(L[lang].sides)].filter(Boolean);
+    const copies = Number(it.copies) > 1 ? ` · ${L[lang].copies(Number(it.copies))}` : '';
+    return parts.join(' · ') + copies;
+  } catch (e) {
+    return tr(it && it.productName, lang);
+  }
+};
+const httpUrl = (u) => (typeof u === 'string' && /^https?:\/\/[^\s"'<>]+$/i.test(u.trim()) ? u.trim() : '');
+function etaText(eta, lang) {
+  if (!eta || !/^\d{4}-\d{2}-\d{2}$/.test(eta)) return eta ? String(eta) : '';
+  try {
+    return new Date(`${eta}T12:00:00Z`).toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+  } catch (e) {
+    return eta;
+  }
+}
+
+function shippedContent(order, links, lang) {
+  const t = L[lang];
+  const c = order.customer || {};
+  const sh = order.shipment || {};
+  const paid = order.payment && order.payment.status === 'paid';
+  const body = paid ? t.shippedBodyPaid : t.shippedBody;
+  const trackingUrl = httpUrl(sh.trackingUrl);
+  const facts = [
+    sh.courier ? [t.courier, sh.courier] : null,
+    sh.trackingNumber ? [t.trackingNumber, sh.trackingNumber] : null,
+    sh.eta ? [t.eta, etaText(sh.eta, lang)] : null,
+  ].filter(Boolean);
+  const items = (order.items || []).map((it, i) => `${i + 1}. ${safeLine(it, lang)}`);
+  const end = lang === 'ar' ? 'left' : 'right';
+  const button = (href, label, primary) => `<a href="${esc(href)}" style="${primary ? 'background:#ff5a36;color:#fff;' : 'background:#fff;color:#16181d;border:1px solid #d5d8de;'}text-decoration:none;padding:11px 18px;border-radius:10px;display:inline-block;font-weight:700;margin:0 0 8px">${esc(label)}</a>`;
+  const html = `<!doctype html><html lang="${lang}" dir="${t.dir}"><body style="margin:0;background:#f4f5f7;font-family:Tahoma,Arial,sans-serif;color:#16181d">
+  <div style="max-width:560px;margin:0 auto;padding:24px 16px">
+    <div style="font-weight:800;font-size:18px;margin-bottom:16px">OneOff Print</div>
+    <div style="background:#fff;border-radius:14px;padding:20px;direction:${t.dir};text-align:${lang === 'ar' ? 'right' : 'left'}">
+      <h2 style="margin:0 0 12px">📦 ${esc(t.thanksHi(c.name || ''))}</h2>
+      <p style="margin:0 0 16px;line-height:1.6">${esc(body)}</p>
+      <p style="margin:0 0 12px;font-weight:700">${esc(t.order)} ${esc(order.number)}</p>
+      ${facts.length ? `<table style="width:100%;border-collapse:collapse;margin:0 0 12px;background:#f8f9fb;border-radius:10px">${facts.map(([k, v]) => `<tr><td style="padding:8px 12px;color:#555">${esc(k)}</td><td style="padding:8px 12px;text-align:${end};font-weight:700"><bdi>${esc(v)}</bdi></td></tr>`).join('')}</table>` : ''}
+      <table style="width:100%;border-collapse:collapse">${items.map((line) => `<tr><td style="padding:8px 0;border-bottom:1px solid #eee">${esc(line)}</td></tr>`).join('')}</table>
+      <p style="margin:12px 0 0;font-weight:700">${esc(t.total)}${paid ? '' : ` (${esc(t.cod)})`}: ${esc(money(order.total, lang))}</p>
+      <p style="margin:20px 0 0">${[
+        trackingUrl ? button(trackingUrl, t.trackingLink, true) : '',
+        links.track ? button(links.track, t.track, !trackingUrl) : '',
+        links.invoice ? button(links.invoice, t.invoice, false) : '',
+      ].filter(Boolean).join(' ')}</p>
+    </div>
+  </div></body></html>`;
+  const text = [
+    t.thanksHi(c.name || ''),
+    body,
+    `${t.order} ${order.number}`,
+    '',
+    ...facts.map(([k, v]) => `${k}: ${v}`),
+    trackingUrl ? `${t.trackingLink}: ${trackingUrl}` : '',
+    '',
+    ...items,
+    '',
+    `${t.total}${paid ? '' : ` (${t.cod})`}: ${money(order.total, lang)}`,
+    links.track ? `${t.track}: ${links.track}` : '',
+    links.invoice ? `${t.invoice}: ${links.invoice}` : '',
+  ].join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  return { subject: t.shippedSubject(order.number), html, text };
+}
+
+/**
+ * Email the customer that their order has shipped (courier, tracking and links to the
+ * order page and the invoice), in the language they ordered in. Never throws.
+ * Returns { email: 'sent' | 'skipped' | 'failed', reason? }.
+ */
+async function orderShipped(order, { siteUrl } = {}) {
+  try {
+    const cfg = config();
+    const to = order && order.customer && String(order.customer.email || '').trim();
+    if (!to) return { email: 'skipped', reason: 'noEmail' };
+    if (!emailReady()) return { email: 'skipped', reason: 'emailOff' };
+    const base = (cfg.siteUrl || String(siteUrl || '')).replace(/\/+$/, '');
+    const id = encodeURIComponent(order.id);
+    const links = { track: base ? `${base}/order?id=${id}` : '', invoice: base ? `${base}/invoice?id=${id}` : '' };
+    const lang = order.lang === 'en' ? 'en' : 'ar';
+    const { subject, html, text } = shippedContent(order, links, lang);
+    await sendEmail(cfg, to, subject, html, text);
+    return { email: 'sent' };
+  } catch (e) {
+    console.warn(`[notify] shipped email for ${order && order.number} failed: ${e.message}`);
+    return { email: 'failed', error: String(e.message || e).slice(0, 200) };
+  }
+}
+
+module.exports = { status, orderPlaced, orderShipped, adminTest, emailReady, emailTo, shopWhatsApp: () => config().shopWhatsApp, siteUrl: () => config().siteUrl };

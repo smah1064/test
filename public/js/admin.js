@@ -499,18 +499,178 @@
     if (lastQueue) renderQueue(lastQueue);
   });
 
-  function renderOrders(orders) {
-    const statusPill = (s) => `<span class="pill ${s === 'shipped' ? 'shipped' : s === 'received' ? 'queued' : 'printing'}">${esc(t('order.' + s))}</span>`;
-    $('orders').innerHTML = orders.length ? orders.map((o) => `
-      <tr>
-        <td><strong>${esc(o.number)}</strong><div class="muted small">${esc(POD.date(o.createdAt))}</div></td>
-        <td>${esc(o.customer.name)}<div class="muted small"><bdi dir="ltr">${esc(o.customer.phone || o.customer.email || '')}</bdi></div><div class="muted small">${esc(tr(o.customer.governorateName) || '')}</div></td>
-        <td><div class="mini-items">${o.items.map((i) => `<img src="${esc(i.sides[0].previewUrl)}" title="${esc(tr(i.productName))}: ${esc(t('admin.status.' + i.status))}" alt="" ${zoomAttr(i)}>`).join('')}</div></td>
-        <td>${esc(money(o.total))}</td>
-        <td>${statusPill(o.status)}</td>
-        <td>${notifyCell(o.notifications, o.createdAt)}</td>
-      </tr>`).join('') : `<tr><td colspan="6" class="muted">${esc(t('admin.noOrders'))}</td></tr>`;
+  // ---------- Orders: shipping, delivery and payment ----------
+  let notifySt = null; // which notification channels are set up
+  const shipOpen = new Set(); // order ids whose shipping box is open
+  const shipDraft = {}; // order id -> unsaved field values
+  const shipMsg = {}; // order id -> { text, ok }
+  const SHIP_FIELDS = ['courier', 'trackingNumber', 'trackingUrl', 'eta'];
+  const COURIERS = () => ['Bosta', 'Aramex', t('ship.courier.egyptPost'), 'Mylerz', 'J&T Express', 'SMSA', 'DHL', t('ship.courier.own')];
+  const isDelivered = (o) => o.status === 'delivered' || Boolean(o.shipment && o.shipment.deliveredAt);
+  const isShipped = (o) => isDelivered(o) || o.status === 'shipped' || Boolean(o.shipment && o.shipment.shippedAt);
+  const orderState = (o) => (isDelivered(o) ? 'delivered' : o.status);
+  const statusPill = (s) => `<span class="pill ${s === 'delivered' ? 'delivered' : s === 'shipped' ? 'shipped' : s === 'received' ? 'queued' : 'printing'}">${esc(t('ship.status.' + s))}</span>`;
+  const isPaid = (o) => Boolean(o.payment && o.payment.status === 'paid');
+  const payPill = (o) => `<span class="pill ${isPaid(o) ? 'pay-paid' : 'pay-pending'}">${esc(t(isPaid(o) ? 'ship.paid' : 'ship.unpaid'))}</span>`;
+  const day = (ymd) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd || '')) return ymd || '';
+    return new Date(ymd + 'T12:00:00Z').toLocaleDateString(POD.lang === 'ar' ? 'ar-EG' : 'en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+  };
+  const shipValue = (o, k) => (shipDraft[o.id] && shipDraft[o.id][k] !== undefined ? shipDraft[o.id][k] : (o.shipment && o.shipment[k]) || '');
+  const TIMELINE_STEPS = ['placed', 'production', 'printed', 'shipped', 'delivered'];
+  function timelineOf(o) {
+    if (Array.isArray(o.timeline) && o.timeline.length) return o.timeline;
+    // Older server answers without a timeline: what we know.
+    const sh = o.shipment || {};
+    return TIMELINE_STEPS.map((step) => ({ step, at: step === 'placed' ? o.createdAt : step === 'shipped' ? sh.shippedAt || null : step === 'delivered' ? sh.deliveredAt || null : null }));
   }
+  function shipNote(o) {
+    const sh = o.shipment || {};
+    const bits = [];
+    if (sh.courier || sh.trackingNumber) bits.push([sh.courier, sh.trackingNumber].filter(Boolean).join(' · '));
+    if (isDelivered(o) && sh.deliveredAt) bits.push(t('ship.deliveredOn', { date: POD.date(sh.deliveredAt) }));
+    else if (isShipped(o) && sh.eta) bits.push(t('ship.etaShort', { date: day(sh.eta) }));
+    return bits.length ? `<span class="ship-note"><bdi>${esc(bits.join(' · '))}</bdi></span>` : '';
+  }
+  function shipBox(o) {
+    const id = esc(o.id);
+    const field = (k, type, extra = '') => `<div class="field"><label for="ship-${k}-${id}">${esc(t('ship.' + k))}</label><input type="${type}" id="ship-${k}-${id}" data-ship-field="${k}" data-order="${id}" value="${esc(shipValue(o, k))}" ${extra}></div>`;
+    const steps = timelineOf(o).map((s) => `<li class="${s.at ? 'done' : ''}"><b>${esc(t('ship.step.' + s.step))}</b><span>${esc(s.at ? POD.date(s.at) : t('ship.notYet'))}</span></li>`).join('');
+    const m = shipMsg[o.id];
+    const email = o.customer && o.customer.email;
+    const hint = isShipped(o) ? '' : `<p class="muted small" style="margin:0">${esc(!email ? t('ship.noEmailHint') : notifySt && !notifySt.customerEmail ? t('ship.emailOffHint', { email }) : t('ship.emailHint', { email }))}</p>`;
+    return `<div class="ship-box" data-ship-box="${id}">
+      <div class="ship-head">
+        <h3>${esc(t('ship.title', { number: o.number }))}</h3>
+        ${statusPill(orderState(o))}
+        <div class="ship-links">
+          <a class="btn btn-sm" href="/invoice?id=${encodeURIComponent(o.id)}" target="_blank" rel="noopener">${esc(t('ship.invoice'))}</a>
+          <a class="btn btn-sm" href="/order?id=${encodeURIComponent(o.id)}" target="_blank" rel="noopener">${esc(t('ship.orderPage'))}</a>
+        </div>
+      </div>
+      <div><div class="muted small" style="margin-bottom:6px">${esc(t('ship.timeline'))}</div><ol class="ship-steps">${steps}</ol></div>
+      <div class="ship-fields">
+        ${field('courier', 'text', `list="ship-couriers" maxlength="60" autocomplete="off" placeholder="${esc(t('ship.courierPh'))}"`)}
+        ${field('trackingNumber', 'text', 'maxlength="80" dir="ltr" autocomplete="off"')}
+        ${field('trackingUrl', 'url', 'maxlength="500" dir="ltr" placeholder="https://…"')}
+        ${field('eta', 'date', 'dir="ltr"')}
+      </div>
+      ${hint}
+      <div class="ship-actions">
+        <button class="btn btn-sm" data-ship-save="${id}">${esc(t('ship.save'))}</button>
+        ${isShipped(o) ? '' : `<button class="btn btn-sm btn-primary" data-ship-shipped="${id}">${esc(t('ship.markShipped'))}</button>`}
+        ${isDelivered(o)
+          ? `<button class="btn btn-sm" data-ship-delivered="${id}" data-value="">${esc(t('ship.undoDelivered'))}</button>`
+          : `<button class="btn btn-sm ${isShipped(o) ? 'btn-primary' : ''}" data-ship-delivered="${id}" data-value="1">${esc(t('ship.markDelivered'))}</button>`}
+        <span class="ship-msg ${m ? (m.ok ? 'ok' : 'bad') : ''}" aria-live="polite">${m ? esc(m.text) : ''}</span>
+      </div>
+      <div class="ship-pay">
+        <strong>${esc(t('ship.payment'))}:</strong> <span>${esc(t('ship.cod'))}</span> ${payPill(o)}
+        <button class="btn btn-sm" data-pay="${id}" data-value="${isPaid(o) ? 'pending' : 'paid'}">${esc(t(isPaid(o) ? 'ship.markUnpaid' : 'ship.markPaid'))}</button>
+      </div>
+    </div>`;
+  }
+  function renderOrders(orders) {
+    $('ship-couriers').innerHTML = COURIERS().map((c) => `<option value="${esc(c)}"></option>`).join('');
+    const col = (k) => esc(t('admin.col.' + k));
+    $('orders').innerHTML = orders.length ? orders.map((o) => `
+      <tr class="order-row ${shipOpen.has(o.id) ? 'open' : ''}">
+        <td data-label="${col('order')}"><strong>${esc(o.number)}</strong><div class="muted small">${esc(POD.date(o.createdAt))}</div></td>
+        <td data-label="${col('customer')}">${esc(o.customer.name)}<div class="muted small"><bdi dir="ltr">${esc(o.customer.phone || o.customer.email || '')}</bdi></div><div class="muted small">${esc(tr(o.customer.governorateName) || '')}</div></td>
+        <td data-label="${col('items')}"><div class="mini-items">${o.items.map((i) => `<img src="${esc(i.sides[0].previewUrl)}" title="${esc(tr(i.productName))}: ${esc(t('admin.status.' + i.status))}" alt="" ${zoomAttr(i)}>`).join('')}</div></td>
+        <td data-label="${col('total')}">${esc(money(o.total))}</td>
+        <td data-label="${col('status')}"><div class="order-state">${statusPill(orderState(o))} ${payPill(o)}${shipNote(o)}</div>
+          <button class="btn btn-sm ship-toggle" data-ship-toggle="${esc(o.id)}" aria-expanded="${shipOpen.has(o.id)}">${esc(t('ship.manage'))} ${shipOpen.has(o.id) ? '▴' : '▾'}</button></td>
+        <td data-label="${esc(t('notify.col'))}">${notifyCell(o.notifications, o.createdAt)}</td>
+      </tr>${shipOpen.has(o.id) ? `<tr class="ship-row"><td colspan="6">${shipBox(o)}</td></tr>` : ''}`).join('') : `<tr><td colspan="6" class="muted">${esc(t('admin.noOrders'))}</td></tr>`;
+  }
+  const orderById = (id) => lastOrders && lastOrders.find((o) => o.id === id);
+  const rerenderOrders = () => lastOrders && renderOrders(lastOrders);
+  $('orders').addEventListener('input', (e) => {
+    const f = e.target.closest('[data-ship-field]');
+    if (!f) return;
+    (shipDraft[f.dataset.order] ||= {})[f.dataset.shipField] = f.value;
+    const msg = f.closest('.ship-box').querySelector('.ship-msg');
+    if (msg && shipMsg[f.dataset.order]) { delete shipMsg[f.dataset.order]; msg.textContent = ''; msg.className = 'ship-msg'; }
+  });
+  function shipFieldsOf(id) {
+    const out = {};
+    for (const k of SHIP_FIELDS) {
+      const el = document.getElementById(`ship-${k}-${id}`);
+      if (el) out[k] = el.value.trim() || null;
+    }
+    return out;
+  }
+  async function saveShipment(id, extra, doneKey, btn) {
+    const o = orderById(id);
+    if (!o) return;
+    const body = { ...shipFieldsOf(id), ...extra };
+    if (body.trackingUrl && !/^https?:\/\//i.test(body.trackingUrl)) {
+      shipMsg[id] = { text: t('ship.badUrl'), ok: false };
+      rerenderOrders();
+      return;
+    }
+    if (btn) btn.disabled = true;
+    const msgEl = document.querySelector(`[data-ship-box="${CSS.escape(id)}"] .ship-msg`);
+    if (msgEl) { msgEl.className = 'ship-msg'; msgEl.textContent = t('ship.saving'); }
+    try {
+      const r = await adminApi(`/api/admin/orders/${encodeURIComponent(id)}/shipment`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (r.shipment !== undefined) o.shipment = r.shipment;
+      if (r.status) o.status = r.status;
+      if (r.timeline) o.timeline = r.timeline;
+      if (body.shipped || body.delivered) o.items.forEach((i) => { i.status = 'shipped'; });
+      delete shipDraft[id];
+      shipMsg[id] = { text: t(doneKey), ok: true };
+    } catch (err) {
+      shipMsg[id] = { text: err.message, ok: false };
+    }
+    rerenderOrders();
+  }
+  $('orders').addEventListener('click', async (e) => {
+    const tog = e.target.closest('[data-ship-toggle]');
+    if (tog) {
+      const id = tog.dataset.shipToggle;
+      if (shipOpen.has(id)) shipOpen.delete(id);
+      else { shipOpen.add(id); delete shipMsg[id]; }
+      rerenderOrders();
+      return;
+    }
+    const save = e.target.closest('[data-ship-save]');
+    if (save) return saveShipment(save.dataset.shipSave, {}, 'ship.saved', save);
+    const shipped = e.target.closest('[data-ship-shipped]');
+    if (shipped) {
+      const o = orderById(shipped.dataset.shipShipped);
+      if (o && o.items.some((i) => i.status !== 'printed' && i.status !== 'shipped') && !confirm(t('ship.notPrinted'))) return;
+      return saveShipment(shipped.dataset.shipShipped, { shipped: true }, 'ship.shippedDone', shipped);
+    }
+    const del = e.target.closest('[data-ship-delivered]');
+    if (del) {
+      const on = Boolean(del.dataset.value);
+      return saveShipment(del.dataset.shipDelivered, { delivered: on }, on ? 'ship.deliveredDone' : 'ship.undeliveredDone', del);
+    }
+    const pay = e.target.closest('[data-pay]');
+    if (pay) {
+      const id = pay.dataset.pay;
+      const o = orderById(id);
+      pay.disabled = true;
+      try {
+        const r = await adminApi(`/api/admin/orders/${encodeURIComponent(id)}/payment`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: pay.dataset.value }),
+        });
+        if (o) o.payment = r.payment || { ...(o.payment || {}), status: pay.dataset.value };
+        shipMsg[id] = { text: t(pay.dataset.value === 'paid' ? 'ship.paidSaved' : 'ship.unpaidSaved'), ok: true };
+      } catch (err) {
+        shipMsg[id] = { text: err.message, ok: false };
+      }
+      rerenderOrders();
+    }
+  });
   // ---------- Ready-made designs ----------
   let lastLibrary = null;
   function renderLibrary(lib) {
@@ -577,11 +737,15 @@
     // Sending finishes within seconds of the order; older orders without a record predate notifications.
     if (!n) return `<span class="muted small">${Date.now() - Date.parse(createdAt) < 120000 ? '…' : '—'}</span>`;
     return `<div class="notify-cell">${NOTIFY_CHANNELS.filter(([k]) => n[k] && n[k] !== 'off').map(([k, icon]) =>
-      `<span class="nb ${n[k] === 'sent' ? 'ok' : 'bad'}" title="${esc(t('notify.' + k))}: ${esc(t('notify.' + n[k]))}">${icon}${n[k] === 'sent' ? '✓' : '✗'}</span>`).join('') || `<span class="muted small">${esc(t('notify.none'))}</span>`}</div>`;
+      `<span class="nb ${n[k] === 'sent' ? 'ok' : 'bad'}" title="${esc(t('notify.' + k))}: ${esc(t('notify.' + n[k]))}">${icon}${n[k] === 'sent' ? '✓' : '✗'}</span>`).join('') || `<span class="muted small">${esc(t('notify.none'))}</span>`}${shippedMail(n.shipped)}</div>`;
   }
+  // The "on its way" email to the customer (sent once, when the order is first marked shipped).
+  const shippedMail = (r) => (r && (r.email === 'sent' || r.email === 'failed')
+    ? `<span class="nb ${r.email === 'sent' ? 'ok' : 'bad'}" title="${esc(t('ship.mail'))}: ${esc(t('notify.' + r.email))}">📦${r.email === 'sent' ? '✓' : '✗'}</span>` : '');
   async function renderNotifyStatus() {
     try {
       const st = await adminApi('/api/admin/notifications');
+      notifySt = st;
       $('notify-status').innerHTML = ['adminWhatsApp', 'adminEmail', 'customerEmail', 'customerWhatsAppButton'].map((k) =>
         `<div class="notify-row"><span class="dot ${st[k] ? 'on' : 'off'}"></span>${esc(t('notify.' + k))}<span class="muted small">${esc(t(st[k] ? 'notify.on' : 'notify.offSetup'))}</span></div>`).join('');
       $('notify-test').disabled = !st.adminWhatsApp && !st.adminEmail;
@@ -618,7 +782,12 @@
     else if (tab === 'customers') await loadCustomers();
     else if (tab === 'film') renderFilm((lastFilm = (await adminApi('/api/admin/dtf-items')).items));
     else if (tab === 'library') renderLibrary((lastLibrary = await adminApi('/api/admin/library')));
-    else { renderOrders((lastOrders = (await adminApi('/api/admin/orders')).orders)); renderNotifyStatus(); }
+    else {
+      // Don't redraw while the admin is typing in a shipping box.
+      if (document.activeElement && document.activeElement.closest && document.activeElement.closest('.ship-box') && lastOrders) return;
+      renderOrders((lastOrders = (await adminApi('/api/admin/orders')).orders));
+      renderNotifyStatus();
+    }
     $('login').hidden = true;
     $('dash').hidden = false;
     $('logout').hidden = false;
@@ -626,7 +795,7 @@
 
   document.addEventListener('pod:langchange', () => {
     if (tab === 'queue' && lastQueue) renderQueue(lastQueue);
-    if (tab === 'orders' && lastOrders) renderOrders(lastOrders);
+    if (tab === 'orders' && lastOrders) { renderOrders(lastOrders); renderNotifyStatus(); }
     if (tab === 'film' && lastFilm) renderFilm(lastFilm);
     if (tab === 'library' && lastLibrary) renderLibrary(lastLibrary);
     if (tab === 'houses' && housesData) renderHouses(housesData);
