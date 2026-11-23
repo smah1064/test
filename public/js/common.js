@@ -194,6 +194,21 @@
   else initChrome();
   window.addEventListener('storage', (e) => e.key === CART_KEY && updateCartBadge());
 
+  // ---------- Error reports ----------
+  // Script errors are sent to the server log so problems on shoppers' phones can be fixed.
+  let reported = 0;
+  function reportError(msg, src, line, stack) {
+    if (reported++ >= 5) return;
+    const body = JSON.stringify({ page: location.pathname, msg: String(msg || ''), src: src || '', line: line || '', stack: String(stack || '').slice(0, 600) });
+    try {
+      if (!navigator.sendBeacon || !navigator.sendBeacon('/api/client-error', body)) {
+        fetch('/api/client-error', { method: 'POST', body, keepalive: true }).catch(() => {});
+      }
+    } catch (e) { /* never let reporting break the page */ }
+  }
+  window.addEventListener('error', (e) => reportError(e.message, e.filename, e.lineno, e.error && e.error.stack));
+  window.addEventListener('unhandledrejection', (e) => reportError(e.reason && e.reason.message || e.reason, '', '', e.reason && e.reason.stack));
+
   // ---------- Saved designs (drafts) ----------
   // One unfinished design per product, kept in this browser (IndexedDB, so
   // uploaded photos fit). Every call resolves, even where storage is blocked.

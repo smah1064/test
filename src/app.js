@@ -21,10 +21,24 @@ const {
 } = require('./products');
 const { GOVERNORATES, normalizeEgyptMobile } = require('./egypt');
 const { FIELDS, langOf, format } = require('./i18n');
-const { GANG, layoutSheet } = require('./gangsheet');
 // Loaded on first use: the shop keeps working even if the image library cannot load on a server.
 let printfilesModule = null;
 const printfiles = new Proxy({}, { get: (_, key) => (printfilesModule ||= require('./printfiles'))[key] });
+
+/** Short hash of every file under dir: changes whenever the site's code or assets change. */
+function siteVersion(dir) {
+  const h = crypto.createHash('sha1');
+  const walk = (d) => {
+    for (const name of fs.readdirSync(d).sort()) {
+      const f = path.join(d, name);
+      const st = fs.statSync(f);
+      if (st.isDirectory()) walk(f);
+      else if (/\.(js|css|html|json)$/.test(name)) h.update(name).update(fs.readFileSync(f));
+    }
+  };
+  walk(dir);
+  return h.digest('hex').slice(0, 10);
+}
 
 /** Production steps every single item moves through, in order. */
 const ITEM_STATUSES = ['queued', 'printing', 'printed', 'shipped'];
@@ -179,7 +193,6 @@ function createApp({ dataDir, adminPassword }) {
       mockup: { width: MOCKUP_WIDTH, height: MOCKUP_HEIGHT },
       pricing: { extraSide: EXTRA_SIDE_PRICE, shipping: SHIPPING_FLAT, freeShippingOver: FREE_SHIPPING_OVER },
       categories: CATEGORIES,
-      gangsheet: GANG,
       governorates: GOVERNORATES,
       products: PRODUCTS.map(publicProduct),
     });
@@ -241,49 +254,6 @@ function createApp({ dataDir, adminPassword }) {
     design.expectedFiles = files;
     store.createDesign(design, { 'editor.json': editorJson });
     res.status(201).json({ id: design.id, uploadToken: token, files });
-  });
-
-  // ---------- DTF gang sheets ----------
-  // Same three steps as designs: describe the sheet (server nests and prices
-  // it), upload each source image plus a preview, then complete.
-  app.post('/api/gangsheets', express.json({ limit: '200kb' }), (req, res) => {
-    const items = (req.body && req.body.items) || [];
-    let layout;
-    try {
-      layout = layoutSheet(items);
-    } catch (e) {
-      throw new HttpError(400, e.message.startsWith('gang') ? e.message : 'gangBadItem');
-    }
-    const types = items.map((it) => (['png', 'jpg', 'webp'].includes(it.type) ? it.type : null));
-    if (types.includes(null)) throw new HttpError(400, 'gangBadItem');
-    const token = crypto.randomBytes(24).toString('hex');
-    const files = [...types.map((tp, i) => `src-${i}.${tp}`), 'front-preview.png'];
-    const label = { en: `${GANG.rollWidthCm} × ${layout.lengthCm} cm`, ar: `${GANG.rollWidthCm} × ${layout.lengthCm} سم` };
-    const design = {
-      id: crypto.randomUUID(),
-      kind: 'gangsheet',
-      createdAt: new Date().toISOString(),
-      status: 'uploading',
-      uploadTokenHash: sha(token),
-      expectedFiles: files,
-      productId: 'dtfsheet',
-      productName: { en: 'DTF gang sheet', ar: 'شيت DTF' },
-      process: 'dtf',
-      color: { id: 'film', name: { en: 'Transfer film', ar: 'فيلم نقل حراري' }, hex: '#ffffff' },
-      size: { id: `${layout.lengthCm}cm`, label },
-      sheet: {
-        widthCm: GANG.rollWidthCm,
-        lengthCm: layout.lengthCm,
-        items: items.map((it, i) => ({ file: files[i], name: String(it.name || '').slice(0, 80), wCm: Number(it.wCm), hCm: Number(it.hCm), qty: Math.floor(Number(it.qty)) })),
-        placements: layout.placements,
-      },
-      sides: [{ id: 'front', name: { en: 'Sheet', ar: 'الشيت' }, widthIn: +(GANG.rollWidthCm / 2.54).toFixed(3), heightIn: +(layout.lengthCm / 2.54).toFixed(3), bleedIn: 0 }],
-      price: layout.price,
-      currency: CURRENCY,
-      orderId: null,
-    };
-    store.createDesign(design, { 'editor.json': JSON.stringify({ gangsheet: true }) });
-    res.status(201).json({ id: design.id, uploadToken: token, files, lengthCm: layout.lengthCm, price: layout.price });
   });
 
   const uploadingDesign = (req) => {
@@ -352,6 +322,26 @@ function createApp({ dataDir, adminPassword }) {
   });
 
   // "How will my colours print?" RGB -> CMYK -> RGB round trip of a small preview.
+  // Script errors from shoppers' browsers, written to the server log (no personal data).
+  const errorHits = new Map();
+  app.post('/api/client-error', express.text({ type: '*/*', limit: '4kb' }), (req, res) => {
+    const now = Date.now();
+    const hits = (errorHits.get(req.ip) || []).filter((tm) => now - tm < 60000);
+    if (errorHits.size > 5000) errorHits.clear();
+    if (hits.length < 10) {
+      errorHits.set(req.ip, [...hits, now]);
+      let e = {};
+      try {
+        e = JSON.parse(req.body || '{}');
+      } catch (err) {
+        e = { msg: String(req.body).slice(0, 300) };
+      }
+      const clip = (v, n) => String(v == null ? '' : v).replace(/[\r\n]+/g, ' ').slice(0, n);
+      console.warn(`[client-error] ${clip(e.page, 80)} | ${clip(e.msg, 300)} | ${clip(e.src, 120)}:${clip(e.line, 8)} | ${clip(e.stack, 600)} | ${clip(req.get('user-agent'), 160)}`);
+    }
+    res.status(204).end();
+  });
+
   const proofHits = new Map();
   app.post('/api/proof', express.raw({ type: 'image/png', limit: '6mb' }), async (req, res, next) => {
     try {
@@ -628,7 +618,38 @@ function createApp({ dataDir, adminPassword }) {
 
   // ---------- Static site ----------
   app.use('/fonts', express.static(path.join(__dirname, '..', 'public', 'fonts'), { maxAge: '30d', immutable: true }));
-  app.use(express.static(path.join(__dirname, '..', 'public'), { extensions: ['html'] }));
+  // Pages are served with every script and stylesheet URL stamped with a
+  // version (a hash of the site's files), so after a deploy no browser or CDN
+  // cache can mix old and new code. Pages themselves are never cached.
+  const publicDir = path.join(__dirname, '..', 'public');
+  const assetVersion = siteVersion(publicDir);
+  const pages = new Map();
+  const pageFor = (name) => {
+    if (!pages.has(name)) {
+      const file = path.join(publicDir, name + '.html');
+      const html = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null;
+      pages.set(name, html && html.replace(/((?:src|href)=")(\/(?:js|css|vendor|fonts)\/[^"?#]+\.(?:js|css))"/g, `$1$2?v=${assetVersion}"`));
+    }
+    return pages.get(name);
+  };
+  app.get(/^\/(?:([a-z0-9-]+)(?:\.html)?)?$/, (req, res, next) => {
+    const html = pageFor(req.params[0] || 'index');
+    if (!html) return next();
+    res.set('Cache-Control', 'no-cache');
+    res.type('html').send(html);
+  });
+  app.use(express.static(publicDir, {
+    extensions: ['html'],
+    setHeaders(res, file) {
+      if (/\.(js|css)$/.test(file)) {
+        // Versioned URLs never change; unversioned ones (ES module imports) revalidate.
+        res.set('Cache-Control', res.req.query.v ? 'public, max-age=31536000, immutable' : 'no-cache');
+      } else if (/[\\/]mockups[\\/]/.test(file)) {
+        // The photo and its mask must arrive exactly as stored (no CDN resizing or recompression).
+        res.set('Cache-Control', 'public, max-age=3600, no-transform');
+      }
+    },
+  }));
 
   app.use('/api', (req, res) => res.status(404).json({ error: format('notFound', {}, langOf(req)) }));
 

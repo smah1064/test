@@ -67,9 +67,10 @@
     const key = cfg.src + '|' + width;
     if (!bases.has(key)) {
       bases.set(key, Promise.all([loadImg(cfg.src), loadImg(cfg.mask)]).then(([ph, mk]) => {
-        const k = Math.min(1, width / ph.naturalWidth);
-        const W = Math.round(ph.naturalWidth * k);
-        const H = Math.round(ph.naturalHeight * k);
+        // Coordinates are pixels of a 1000-px-wide photo; CDNs may serve it resized.
+        const k = width / 1000;
+        const W = Math.round(width);
+        const H = Math.round((width * ph.naturalHeight) / ph.naturalWidth);
         const c = document.createElement('canvas');
         c.width = W;
         c.height = H;

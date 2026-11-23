@@ -309,53 +309,9 @@ test('CMYK proof returns a PNG of the same size', async () => {
   assert.deepStrictEqual([meta.width, meta.height, meta.format], [40, 30, 'png']);
 });
 
-test('DTF gang sheet: server nests, prices by length, and produces film PDFs', async () => {
-  const items = [
-    { name: 'logo', wCm: 10, hCm: 10, qty: 12, type: 'png' },
-    { name: 'back', wCm: 28, hCm: 35, qty: 2, type: 'png' },
-  ];
-  const res = await post('/api/gangsheets', { items });
-  assert.strictEqual(res.status, 201, await res.clone().text());
-  const g = await res.json();
-  assert.deepStrictEqual(g.files, ['src-0.png', 'src-1.png', 'front-preview.png']);
-  assert.ok(g.lengthCm >= 50 && g.lengthCm % 10 === 0);
-  assert.strictEqual(g.price, Math.round((g.lengthCm / 100) * 400));
-  // Same layout as the browser computes.
-  const { layoutSheet } = require('../src/gangsheet');
-  assert.strictEqual(layoutSheet(items).lengthCm, g.lengthCm);
-
-  for (const name of g.files) {
-    const body = name === 'src-1.png' ? png(3300, 4130) : name.startsWith('src') ? png(1181, 1181) : PREVIEW;
-    assert.strictEqual((await upload(g.id, g.uploadToken, name, body)).status, 204, name);
-  }
-  const done = await (await fetch(`${base}/api/designs/${g.id}/complete`, { method: 'POST', headers: { 'x-upload-token': g.uploadToken } })).json();
-  assert.strictEqual(done.status, 'ready');
-  assert.strictEqual(done.sheet.items[0].dpi, 300);
-  assert.strictEqual(done.sheet.placements.length, 14);
-
-  const order = await (await post('/api/orders', { customer: CUSTOMER, designIds: [g.id] })).json();
-  assert.strictEqual(order.items[0].price, g.price);
-  assert.strictEqual(order.items[0].kind, 'gangsheet');
-
-  const pdf = Buffer.from(await (await admin(`/api/admin/files/${g.id}/front?format=sheet-pdf`)).arrayBuffer());
-  assert.strictEqual(pdf.subarray(0, 5).toString(), '%PDF-');
-  const mb = /\/MediaBox \[0 0 ([\d.]+) ([\d.]+)\]/.exec(pdf.toString('latin1'));
-  assert.ok(Math.abs(Number(mb[1]) - (56 / 2.54) * 72) < 1, 'film is 56 cm wide');
-  assert.ok(Math.abs(Number(mb[2]) - (g.lengthCm / 2.54) * 72) < 1, 'film is as long as the priced sheet');
-});
-
-test('rejects bad gang sheets', async () => {
-  for (const [items, re] of [
-    [[], /at least one/i],
-    [[{ wCm: 60, hCm: 70, qty: 1, type: 'png' }], /wider/],
-    [[{ wCm: 10, hCm: 10, qty: 0, type: 'png' }], /sizes and quantities/],
-    [[{ wCm: 50, hCm: 50, qty: 20, type: 'png' }], /longer than 5 m/],
-    [[{ wCm: 10, hCm: 10, qty: 1, type: 'exe' }], /sizes and quantities/],
-  ]) {
-    const res = await post('/api/gangsheets', { items });
-    assert.strictEqual(res.status, 400);
-    assert.match((await res.json()).error, re);
-  }
+test('the DTF gang sheet page and its API are gone', async () => {
+  assert.strictEqual((await fetch(base + '/gangsheet')).status, 404);
+  assert.strictEqual((await post('/api/gangsheets', { items: [] })).status, 404);
 });
 
 test('items can switch between DTG and DTF; DTF/DTG files and the shared film are produced', async () => {

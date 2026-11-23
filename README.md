@@ -30,8 +30,6 @@ Product cards, the editor and the cart thumbnails all show **real product photos
 
 **Saved designs**: the editor saves the design in the shopper's browser as they work (IndexedDB, so uploaded photos fit), and the **Save** button takes them back to the products page, where the card shows their design with a "Saved design" badge. Opening the product again restores it. The draft is cleared once the design goes into the cart.
 
-**DTF gang sheet builder (`/gangsheet`)**: customers upload their own logos and artwork (PNG, JPG or WebP), set each one's size in cm and how many copies they need, and the site packs them onto a 56 cm DTF film roll (MaxRects nesting, pieces rotated when that saves film). Empty transparent edges are trimmed automatically, each design shows its DPI at the chosen size, and plain backgrounds can be removed with one click. The price is per metre of film (400 EGP/m, minimum 50 cm, in 10 cm steps). The sheet goes into the cart like any other item, and the server re-checks the layout and price.
-
 **Design editor (`/editor`)**, built on Fabric.js:
 - **16 self-hosted fonts** (8 Arabic, 8 English) with a visual font picker. Arabic text is set right-to-left with properly joined letters, and switches to an Arabic font automatically if typed into an English-only one.
 - **Templates** to start from (birthday, Ramadan Kareem, team jersey, family badge and more, in Arabic and English).
@@ -71,7 +69,7 @@ The production dashboard offers every print file in the format each print method
 
 Each product records its print method, and the dashboard highlights the recommended file.
 
-**DTF and DTG.** Garments can be printed either way, and the printer picks the method per item in the dashboard (caps are DTF only). The file list changes to match. The **DTF film** tab lists every DTF item waiting to print: tick the ones to run together and the server packs them onto one mirrored 56 cm film PDF, with a label under each piece (order, product, side), splitting pages every 5 m. Each item is marked with its film batch (F1, F2, …) so you know which film it's on. Customer gang sheets download as a mirrored film PDF, a plain PDF or a proof PNG.
+**DTF and DTG.** Garments can be printed either way, and the printer picks the method per item in the dashboard (caps are DTF only). The file list changes to match. The **DTF film** tab lists every DTF item waiting to print: tick the ones to run together and the server packs them onto one mirrored 56 cm film PDF, with a label under each piece (order, product, side), splitting pages every 5 m. Each item is marked with its film batch (F1, F2, …) so you know which film it's on. Gang sheet orders placed before the customer gang sheet page was removed can still be downloaded as a mirrored film PDF, a plain PDF or a proof PNG.
 
 **Checkout (`/cart`)** asks for name, Egyptian mobile number (any common format, including Arabic digits), governorate, city and address. Payment is **cash on delivery**. Every design is its own order line with quantity 1, so each one is a separate print job. Prices are recalculated on the server, and the client's numbers are never trusted.
 
@@ -99,9 +97,7 @@ public/js/photo-mockups.js  print area, warp type and colour rules for each prod
 public/mockups/photos/  product photos (.webp) and cut-out masks (-mask.png)
 public/js/preview3d.js  3D product models (three.js)
 src/printfiles.js       PDF / CMYK TIFF / mirrored PNG / DTF film / DTG underbase / sRGB+DPI finishing (sharp, pdfkit)
-src/gangsheet.js        gang sheet rules, layout and pricing
-public/js/nesting.js    MaxRects film packing (shared by browser and server)
-public/js/gangsheet.js  the gang sheet builder page
+public/js/nesting.js    MaxRects film packing (used by the DTF film builder)
 public/fonts/        self-hosted fonts (SIL Open Font License)
 src/store.js         JSON-file store with atomic writes
 public/              static site (index, editor, cart, order, admin)

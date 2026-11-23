@@ -263,13 +263,15 @@
 
   // ---------- Photo mockups ----------
   const photoCache = new Map();
-  function pixels(img) {
+  const PHOTO_W = 1000; // photo-mockups.js coordinates are pixels of a 1000-px-wide photo
+  /** Pixels of an image drawn at an exact size (CDNs may serve photos and masks resized). */
+  function pixels(img, w = img.naturalWidth, h = img.naturalHeight) {
     const c = document.createElement('canvas');
-    c.width = img.naturalWidth;
-    c.height = img.naturalHeight;
+    c.width = w;
+    c.height = h;
     const ctx = c.getContext('2d', { willReadFrequently: true });
-    ctx.drawImage(img, 0, 0);
-    return ctx.getImageData(0, 0, c.width, c.height).data;
+    ctx.drawImage(img, 0, 0, w, h);
+    return ctx.getImageData(0, 0, w, h).data;
   }
   function boxBlur(src, W, H, r) {
     const tmp = new Float32Array(W * H);
@@ -296,10 +298,11 @@
   function loadPhoto(cfg) {
     if (!photoCache.has(cfg.src)) {
       photoCache.set(cfg.src, Promise.all([loadImg(cfg.src), loadImg(cfg.mask)]).then(([ph, mk]) => {
-        const W = ph.naturalWidth;
-        const H = ph.naturalHeight;
-        const pd = pixels(ph);
-        const md = pixels(mk);
+        // Work in the photo coordinate space (1000 px wide) whatever size was served.
+        const W = PHOTO_W;
+        const H = Math.round((PHOTO_W * ph.naturalHeight) / ph.naturalWidth);
+        const pd = pixels(ph, W, H);
+        const md = pixels(mk, W, H);
         const lum = new Float32Array(W * H);
         for (let i = 0; i < W * H; i++) lum[i] = (0.299 * pd[i * 4] + 0.587 * pd[i * 4 + 1] + 0.114 * pd[i * 4 + 2]) / 255;
         const blur = boxBlur(boxBlur(lum, W, H, 5), W, H, 5);

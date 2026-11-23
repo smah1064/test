@@ -90,7 +90,7 @@
   }
   // Drafts: designs started from the products page are kept in this browser
   // until they go into the cart (editing a cart item never touches them).
-  const draftMode = !params.get('design');
+  const draftMode = !params.get('design') && !!(POD.drafts && window.indexedDB);
   let restoredDraft = false;
   let bootDone = false; // autosave starts once the editor has loaded
   if (draftMode) {
@@ -344,7 +344,7 @@
     const hex = color().hex;
     let bg;
     let ov;
-    const photo = window.POD_PHOTOS && window.POD_PHOTOS.forSide(st.product.id, side.id);
+    const photo = window.POD_PHOTOS && window.POD_PHOTOS.forSide ? window.POD_PHOTOS.forSide(st.product.id, side.id) : null;
     if (photo) {
       try {
         [bg, ov] = await photoMockup(photo, side, hex);
