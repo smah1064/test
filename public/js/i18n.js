@@ -129,6 +129,7 @@ window.POD_STRINGS = {
   'cart.add': ['Add to cart', 'أضف إلى السلة'],
   'cart.update': ['Update cart item', 'تحديث المنتج في السلة'],
   'draft.save': ['Save', 'حفظ'],
+  'editor.hint': ['Add text, a photo or a sticker from the tools to start designing.', 'أضف نصًا أو صورة أو ملصقًا من الأدوات لتبدأ التصميم.'],
   'draft.preview': ['Preview', 'معاينة'],
   'draft.saveTitle': ['Save this design and go back to the products. You can continue it any time.', 'احفظ التصميم وارجع إلى المنتجات. يمكنك إكماله في أي وقت.'],
   'draft.saved': ['Design saved. Tap the product to continue it.', 'تم حفظ تصميمك. اضغط على المنتج لإكماله.'],

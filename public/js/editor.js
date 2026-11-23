@@ -1729,6 +1729,8 @@
   }
   function refreshChrome() {
     if (bootDone) scheduleDraft();
+    const hint = $('stage-hint');
+    if (hint) hint.hidden = st.preview || canvas.getObjects().length > 0;
     const p = st.product;
     const size = p.sizes.find((s) => s.id === st.sizeId);
     const n = designedSides().length;

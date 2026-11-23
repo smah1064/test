@@ -134,6 +134,10 @@ body.editor-page main { display: flex; min-height: 0; }
 .tool svg { width: 22px; height: 22px; }
 .tool:hover, .tool.open { background: var(--bg); color: var(--ink); }
 .stage-wrap { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.stage-hint { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 32px); width: max-content;
+  background: rgba(22, 24, 29, .82); color: #fff; font-size: 13px; line-height: 1.5; padding: 8px 14px; border-radius: 12px; text-align: center; pointer-events: none; z-index: 3; }
+@media (max-width: 380px) { #preview-open-m span { display: none; } }
+body.sheet-product .stage-hint, body.sheet-props .stage-hint { display: none; }
 .stage-bar { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #fff; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .stage-bar .spacer { flex: 1; }
 .side-tabs { display: flex; background: var(--bg); padding: 3px; border-radius: 10px; gap: 2px; }
@@ -354,12 +358,15 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 /* ---------- Phone layout ---------- */
 @media (max-width: 820px) {
   .mobile-only { display: flex !important; }
-  body.editor-page { height: 100vh; height: 100dvh; overflow: hidden; }
+  /* The editor fills exactly the visible screen (--app-h is set from the
+     browser's real inner height), so the tool bar never falls off the bottom. */
+  body.editor-page { height: 100vh; height: 100dvh; height: var(--app-h, 100dvh); overflow: hidden; display: flex; flex-direction: column; }
+  body.editor-page .site-header { flex: none; }
   body.editor-page .site-header .inner { height: 50px; }
   body.editor-page .site-header nav a[href="/#products"] { display: none; }
-  body.editor-page main { height: calc(100dvh - 51px); display: block; }
+  body.editor-page main { flex: 1; min-height: 0; height: auto; display: block; }
   .editor { display: flex; flex-direction: column; height: 100%; }
-  .stage-wrap { order: 1; flex: 1; min-height: 0; position: static; }
+  .stage-wrap { order: 1; flex: 1; min-height: 0; position: relative; }
   .panel { order: 2; border: 0; border-top: 1px solid var(--line); }
   .tools {
     order: 3; flex-direction: row; justify-content: space-around; gap: 0;
@@ -392,7 +399,9 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
   .panel-foot .price-line > .text-end { display: none; }
   .panel-foot .amount { font-size: 18px; }
   .panel-foot .price-note { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .panel-foot #add-to-cart, .panel-foot #save-draft, .panel-foot #preview-open-m { width: auto; flex: none; padding: 11px 12px; font-size: 14px; }
+  .panel-foot #add-to-cart, .panel-foot #save-draft, .panel-foot #preview-open-m { width: auto; flex: none; padding: 10px 12px; font-size: 14px; }
+  .panel-foot .price-note { display: none; }
+  .tools { flex: none; }
   .panel-foot #preview-open-m { gap: 5px; align-items: center; }
   .foot-actions { flex: none; }
 

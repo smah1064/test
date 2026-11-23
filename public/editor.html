@@ -7,6 +7,7 @@
   <script>(function(){var l;try{l=localStorage.getItem('pod-lang')}catch(e){}l=l==='en'?'en':'ar';var d=document.documentElement;d.lang=l;d.dir=l==='ar'?'rtl':'ltr'})()</script>
   <link rel="stylesheet" href="/fonts/fonts.css">
   <link rel="stylesheet" href="/css/styles.css">
+  <script>(function(){var d=document.documentElement;function h(){d.style.setProperty('--app-h',window.innerHeight+'px')}h();window.addEventListener('resize',h);window.addEventListener('orientationchange',function(){setTimeout(h,300)})})()</script>
   <script type="importmap">{ "imports": { "three": "/vendor/three/three.module.min.js" } }</script>
 </head>
 <body class="editor-page" data-title-key="editor.pageTitle">
@@ -76,6 +77,7 @@
         <div class="stage" id="stage">
           <canvas id="design-canvas"></canvas>
         </div>
+        <div class="stage-hint" id="stage-hint" data-i18n="editor.hint" hidden></div>
 
         <div class="flyout" id="flyout-templates" hidden>
           <div class="fly-head"><h4 data-i18n="fly.templates"></h4><button class="fly-close" data-i18n-aria="bar.close">✕</button></div>
