@@ -183,7 +183,43 @@ function buildCase(color, tex, renderer, product) {
   const u = side.printArea.w / w;
   const g = new THREE.Group();
   const face = texture(faceCanvas(color, designCrop(tex[side.id]), 1000, (1000 * h) / w), renderer);
-  g.add(slab(w, h, (side.printArea.rx || 30) / u, 0.38, face, mat('plastic', { color }), 'plastic'));
+  const r = (side.printArea.rx || 30) / u;
+  const depth = 0.38;
+  const bt = Math.min(0.06, depth / 4);
+  // The case body is plain; only its back (the camera side, facing +z) is printed.
+  const body = new THREE.ExtrudeGeometry(roundedRect(w, h, r), { depth, bevelEnabled: true, bevelThickness: bt, bevelSize: Math.min(0.05, r / 3), bevelSegments: 4, curveSegments: 24 });
+  body.translate(0, 0, -depth / 2);
+  g.add(new THREE.Mesh(body, mat('plastic', { color })));
+  face.wrapS = face.wrapT = THREE.ClampToEdgeWrapping;
+  face.repeat.set(1 / w, 1 / h);
+  face.offset.set(0.5, 0.5);
+  const print = new THREE.Mesh(new THREE.ShapeGeometry(roundedRect(w, h, r), 24), mat('plastic', { map: face }));
+  print.position.z = depth / 2 + bt + 0.004;
+  g.add(print);
+  // The open front shows the phone's screen inside the case rim.
+  const sw = w * 0.9;
+  const sh = h * 0.95;
+  const scr = canvas(400, Math.round((400 * sh) / sw));
+  const sctx = scr.getContext('2d');
+  const grad = sctx.createLinearGradient(0, 0, scr.width, scr.height);
+  grad.addColorStop(0, '#1d2533');
+  grad.addColorStop(1, '#07080c');
+  sctx.fillStyle = grad;
+  sctx.fillRect(0, 0, scr.width, scr.height);
+  sctx.fillStyle = '#000000';
+  const pw = scr.width * 0.3;
+  const ph = scr.width * 0.075;
+  sctx.beginPath();
+  if (sctx.roundRect) sctx.roundRect((scr.width - pw) / 2, scr.width * 0.06, pw, ph, ph / 2); else sctx.rect((scr.width - pw) / 2, scr.width * 0.06, pw, ph);
+  sctx.fill();
+  const screenTex = texture(scr, renderer);
+  screenTex.wrapS = screenTex.wrapT = THREE.ClampToEdgeWrapping;
+  screenTex.repeat.set(1 / sw, 1 / sh);
+  screenTex.offset.set(0.5, 0.5);
+  const screen = new THREE.Mesh(new THREE.ShapeGeometry(roundedRect(sw, sh, r * 0.85), 24), new THREE.MeshStandardMaterial({ map: screenTex, roughness: 0.12, metalness: 0.2, envMapIntensity: 0.9 }));
+  screen.rotation.y = Math.PI;
+  screen.position.z = -(depth / 2 + bt + 0.004);
+  g.add(screen);
   // Camera bump, matching the 2D mockup's position.
   const bw = 76 / u;
   const bh = 86 / u;
