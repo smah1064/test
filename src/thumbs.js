@@ -124,4 +124,29 @@ async function cardImage(productId, sideId, hex, size = 640) {
   return job;
 }
 
-module.exports = { cardImage, configFor };
+/**
+ * Fabric products: the product picture (bed, curtains, roll of fabric)
+ * covered with a sample pattern, for the shop's product cards.
+ */
+const patternCache = new Map();
+async function patternImage(product, hex, size = 640) {
+  const key = [product.id, hex, size].join('|');
+  if (patternCache.has(key)) return patternCache.get(key);
+  const sc = product.pattern.scene;
+  const inner = (svg) => String(svg || '').replace(/^<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '');
+  const mix = (a, b, t) => '#' + [1, 3, 5].map((i) => Math.round(parseInt(a.slice(i, i + 2), 16) * (1 - t) + parseInt(b.slice(i, i + 2), 16) * t).toString(16).padStart(2, '0')).join('');
+  const line = mix(hex, '#000000', 0.32);
+  const fill = (t) => t.replace(/\{\{C\}\}/g, hex).replace(/\{\{S\}\}/g, mix(hex, '#000000', 0.1)).replace(/\{\{L\}\}/g, line);
+  const f = sc.fill;
+  const T = Math.round(f.w / 4.5);
+  // A friendly sample motif: leaves and dots in two colours, half-drop.
+  const motif = `<pattern id="pt" width="${T}" height="${T * 2}" patternUnits="userSpaceOnUse" x="${f.x}" y="${f.y}">
+    <g><ellipse cx="${T * 0.5}" cy="${T * 0.5}" rx="${T * 0.16}" ry="${T * 0.3}" fill="#2f9e44" transform="rotate(35 ${T * 0.5} ${T * 0.5})"/><circle cx="${T * 0.85}" cy="${T * 0.15}" r="${T * 0.07}" fill="#ff5a36"/>
+    <ellipse cx="${T * 0.5}" cy="${T * 1.5}" rx="${T * 0.16}" ry="${T * 0.3}" fill="#1c7ed6" transform="rotate(-35 ${T * 0.5} ${T * 1.5})"/><circle cx="${T * 0.15}" cy="${T * 1.1}" r="${T * 0.07}" fill="#fab005"/></g></pattern>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="500" height="600" viewBox="0 0 500 600"><defs>${motif}</defs><rect width="500" height="600" fill="#f3f4f6"/>${fill(inner(sc.svg))}<rect x="${f.x}" y="${f.y}" width="${f.w}" height="${f.h}" fill="url(#pt)"/>${fill(inner(sc.overlay))}</svg>`;
+  const job = sharp()(Buffer.from(svg)).resize({ width: size }).webp({ quality: 86 }).toBuffer();
+  patternCache.set(key, job);
+  return job;
+}
+
+module.exports = { patternImage, cardImage, configFor };

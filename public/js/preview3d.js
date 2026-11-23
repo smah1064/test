@@ -242,6 +242,42 @@ function buildBlock(color, tex, renderer, product) {
 }
 
 /**
+ * Printed fabric: a piece of cloth with soft folds, the pattern repeated at
+ * its real size (long rolls show their first 1.5 m).
+ */
+function buildCloth(color, tex, renderer, product) {
+  const side = product.sides[0];
+  const t = tex[side.id];
+  const p = t.pattern;
+  if (!p) return buildCard(color, tex, renderer, product);
+  const wCm = p.cm[0];
+  const hCm = Math.min(p.cm[1], 150);
+  const pxW = 1400;
+  const pxH = Math.round((pxW * hCm) / wCm);
+  const c = canvas(pxW, pxH);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = color;
+  ctx.fillRect(0, 0, pxW, pxH);
+  const tw = (pxW * p.tileCm) / wCm;
+  if (t.hasDesign) POD.drawPattern(ctx, p.tile, { repeat: p.repeat, tw, th: tw, x: 0, y: 0, w: pxW, h: pxH });
+  const w = wCm / 2.54;
+  const h = hCm / 2.54;
+  const geo = new THREE.PlaneGeometry(w, h, 80, 60);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    // Hanging folds that get deeper towards the bottom, plus a gentle wave.
+    const down = (h / 2 - y) / h;
+    pos.setZ(i, Math.sin((x / w) * Math.PI * 7) * w * 0.018 * (0.35 + down) + Math.sin((y / h) * Math.PI * 1.5) * w * 0.012);
+  }
+  geo.computeVertexNormals();
+  const mesh = new THREE.Mesh(geo, mat('fabric', { map: texture(c, renderer), side: THREE.DoubleSide }));
+  mesh.rotation.y = -0.3;
+  return mesh;
+}
+
+/**
  * A gallery-wrapped canvas on its wooden frame: the design on the front and,
  * on the four sides, what the edge style puts there (the artwork wrapping
  * round, the front's edges mirrored, or plain white / black).
@@ -674,6 +710,7 @@ export function mount(container, { product, color, textures, spin = true }) {
   else if (m.type === 'block') obj = buildBlock(hex, textures, renderer, product);
   else if (m.type === 'foldcard') obj = buildFoldCard(hex, textures, renderer, product);
   else if (m.type === 'canvas') obj = buildCanvas(color && color.id, textures, renderer, product);
+  else if (m.type === 'cloth') obj = buildCloth(hex, textures, renderer, product);
   else if (m.type === 'case') obj = buildCase(hex, textures, renderer, product);
   else if (m.type === 'notebook') obj = buildNotebook(hex, textures, renderer, product);
   else if (m.type === 'pillow') obj = buildPillow(m, hex, textures, renderer, product);

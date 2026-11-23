@@ -71,6 +71,7 @@
     designs: {}, // sideId -> serialized objects
     history: {}, // sideId -> { stack: [json], i }
     offsets: {}, // sideId -> { dx, dy }: where the customer moved the print area
+    pattern: null, // fabric products: { repeat, tileCm } (how the tile repeats, and its size)
     editingCartIndex: null,
     preview: false,
     exporting: false,
@@ -89,6 +90,7 @@
       for (const [sideId, data] of Object.entries(saved.editor)) {
         st.designs[sideId] = await blobifyImages(data.objects || []);
         if (data.offset) st.offsets[sideId] = data.offset;
+        if (data.pattern) st.pattern = data.pattern;
       }
       const idx = Number(params.get('cart'));
       const cart = POD.getCart();
@@ -120,6 +122,7 @@
         if (st.product.sides.some((sd) => sd.id === sideId)) {
           st.designs[sideId] = await blobifyImages(data.objects || []);
           if (data.offset) st.offsets[sideId] = data.offset;
+          if (data.pattern) st.pattern = data.pattern;
         }
       }
       fromShare = true;
@@ -139,12 +142,21 @@
         if (st.product.sides.some((s) => s.id === sideId)) st.designs[sideId] = await blobifyImages(objs || []);
       }
       for (const [sideId, o] of Object.entries(draft.offsets || {})) if (st.product.sides.some((s) => s.id === sideId)) st.offsets[sideId] = o;
+      if (draft.pattern) st.pattern = draft.pattern;
       restoredDraft = true;
     }
   }
   st.colorId = st.product.colors.some((c) => c.id === st.colorId) ? st.colorId : st.product.colors[0].id;
   st.sizeId = st.product.sizes.some((s) => s.id === st.sizeId) ? st.sizeId : st.product.sizes[0].id;
   st.side = st.product.sides.find((s) => (st.designs[s.id] || []).length)?.id || st.product.sides[0].id;
+  /** Fabric products: a valid { repeat, tileCm } for this product (or null for other products). */
+  const REPEATS = ['straight', 'halfdrop', 'halfbrick', 'mirror'];
+  function normPattern(product, p) {
+    if (!product.pattern) return null;
+    const tileCm = Number(p && p.tileCm);
+    return { repeat: REPEATS.includes(p && p.repeat) ? p.repeat : 'straight', tileCm: product.pattern.tiles.includes(tileCm) ? tileCm : product.pattern.tile };
+  }
+  st.pattern = normPattern(st.product, st.pattern);
 
   // On garments and bags the print area can be moved (st.offsets, in mockup units);
   // sideDef() gives the side with its print area where the customer put it.
@@ -165,13 +177,14 @@
     const s = baseSide(id);
     if (!s) return s;
     const o = st.offsets[s.id];
-    const key = `${st.product.id}:${s.id}:${st.sizeId}:${o ? o.dx : 0}:${o ? o.dy : 0}`;
+    const key = `${st.product.id}:${s.id}:${st.sizeId}:${o ? o.dx : 0}:${o ? o.dy : 0}:${st.pattern ? st.pattern.tileCm : ''}`;
     if (!sizedSides.has(key)) {
       const a = areaFor(st.product, s.id, st.sizeId, o);
       const same = a.x === s.printArea.x && a.y === s.printArea.y && a.w === s.printArea.w && a.h === s.printArea.h;
       // Sizes that print bigger or smaller (posters, cards, signs): same drawing area, different inches.
       const size = st.product.sizes.find((z) => z.id === st.sizeId);
-      const k = (size && size.printScale) || 1;
+      // Fabric patterns: the tile prints at the chosen size (cm).
+      const k = ((size && size.printScale) || 1) * (st.pattern ? st.pattern.tileCm / st.product.pattern.tile : 1);
       const physical = k === 1 ? {} : { printWidthIn: s.printWidthIn * k, printHeightIn: (s.printHeightIn || 0) * k };
       sizedSides.set(key, same && k === 1 ? s : { ...s, ...physical, printArea: same ? s.printArea : a });
     }
@@ -742,6 +755,7 @@
     }
     st.designs[st.side] = JSON.parse(snap).o;
     refreshChrome();
+    schedulePatternPreview();
   }
   function snapshot() {
     return JSON.stringify({ o: serialize(), a: st.offsets[st.side] || null });
@@ -2320,7 +2334,31 @@
     $('swatches').innerHTML = p.colors.map((c) => `<button class="swatch ${c.id === st.colorId ? 'active' : ''}" data-color="${c.id}" title="${esc(tr(c.name))}" aria-label="${esc(tr(c.name))}" style="background:${c.hex}"></button>`).join('');
     $('color-name').textContent = tr(color().name);
     $('sizes').innerHTML = p.sizes.map((s) => `<button class="chip ${s.id === st.sizeId ? 'active' : ''}" data-size="${s.id}">${esc(tr(s.label))}${s.surcharge ? ` <span style="opacity:.7">+${esc(money(s.surcharge))}</span>` : ''}</button>`).join('');
+    // Fabric: how the tile repeats and how big it prints.
+    $('pattern-field').hidden = !st.pattern;
+    if (st.pattern) {
+      $('pat-repeats').innerHTML = REPEATS.map((r) => `<button class="chip ${r === st.pattern.repeat ? 'active' : ''}" data-repeat="${r}">${esc(t('pat.' + r))}</button>`).join('');
+      $('pat-tiles').innerHTML = p.pattern.tiles.map((cm) => `<button class="chip ${cm === st.pattern.tileCm ? 'active' : ''}" data-tile="${cm}">${esc(POD.num(cm))} ${esc(t('pat.cm'))}</button>`).join('');
+    }
   }
+  $('pat-repeats').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-repeat]');
+    if (!b || !st.pattern || b.dataset.repeat === st.pattern.repeat) return;
+    st.pattern.repeat = b.dataset.repeat;
+    renderOptions();
+    schedulePatternPreview(0);
+    scheduleDraft();
+  });
+  $('pat-tiles').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-tile]');
+    if (!b || !st.pattern || Number(b.dataset.tile) === st.pattern.tileCm) return;
+    st.pattern.tileCm = Number(b.dataset.tile);
+    renderOptions();
+    renderCheck();
+    canvas.requestRenderAll();
+    schedulePatternPreview(0);
+    scheduleDraft();
+  });
   $('swatches').addEventListener('click', serial(async (e) => {
     const b = e.target.closest('[data-color]');
     if (!b || b.dataset.color === st.colorId) return;
@@ -2330,6 +2368,7 @@
     renderOptions();
     await applyMockup();
     if (oldInk !== newInk) swapInk(oldInk, newInk);
+    schedulePatternPreview(0);
   }));
   /** Text and shapes in the default ink colour follow the product: dark on light, white on dark. */
   function swapInk(from, to) {
@@ -2389,6 +2428,7 @@
     st.history = {};
     applyClips();
     fit(); // the garment is drawn at this size's scale
+    schedulePatternPreview(0);
   }
   $('product-select').addEventListener('change', serial(async (e) => changeProduct(e.target.value)));
 
@@ -2426,6 +2466,7 @@
     st.history = {};
     if (!next.colors.some((c) => c.id === st.colorId)) st.colorId = next.colors[0].id;
     st.sizeId = nextSize;
+    st.pattern = normPattern(next, st.pattern);
     st.side = next.sides.find((s) => s.id === st.side)?.id || next.sides[0].id;
     const url = new URL(location.href);
     url.searchParams.set('product', next.id);
@@ -2433,6 +2474,7 @@
     renderOptions();
     await Promise.all([applyMockup(), loadObjects(st.designs[st.side])]);
     fit();
+    schedulePatternPreview();
     seedHistory();
     refreshChrome();
     renderProps();
@@ -2549,7 +2591,8 @@
         continue;
       }
       const cut = r.left < edge.x - 0.5 || r.top < edge.y - 0.5 || r.left + r.width > edge.x + edge.w + 0.5 || r.top + r.height > edge.y + edge.h + 0.5;
-      if (cut && !covers) issues.push({ level: 'warn', key: 'check.cut', obj: o, params: { name } });
+      // Fabric patterns: crossing the tile edge is how a pattern joins up (it continues on the other side).
+      if (cut && !covers && !st.pattern) issues.push({ level: 'warn', key: 'check.cut', obj: o, params: { name } });
       const important = isText(o) || isSticker(o);
       const unsafe = r.left < R.safe.x || r.top < R.safe.y || r.left + r.width > R.safe.x + R.safe.w || r.top + r.height > R.safe.y + R.safe.h;
       if (!cut && important && unsafe) issues.push({ level: 'warn', key: 'check.safe', obj: o, params: { name } });
@@ -2666,13 +2709,72 @@
   function exportPrint(side) {
     const { bleed, u, b } = rects(side.id);
     const mult = Math.min(TARGET_DPI / u, Math.sqrt(MAX_PRINT_PIXELS / (bleed.w * bleed.h)), MAX_PRINT_SIDE / Math.max(bleed.w, bleed.h));
-    const el = withArtworkOnly(() => canvas.toCanvasElement(mult, { left: bleed.x, top: bleed.y, width: bleed.w, height: bleed.h }));
+    const el = st.pattern ? exportTile(mult) : withArtworkOnly(() => canvas.toCanvasElement(mult, { left: bleed.x, top: bleed.y, width: bleed.w, height: bleed.h }));
     // Canvas prints: the band round the front becomes the chosen edge (mirror, white, black).
     if (st.product.model && st.product.model.type === 'canvas') POD.canvasEdges(el, b * mult, st.colorId);
     return canvasBlob(el);
   }
+  // ---------- Fabric patterns ----------
+  /**
+   * The seamless tile: the artwork in the tile, plus what crosses its edges
+   * drawn again where the neighbouring tiles put it (for this repeat).
+   */
+  function exportTile(mult) {
+    const r = rects().trim;
+    const offs = POD.wrapOffsets(st.pattern ? st.pattern.repeat : 'mirror', r.w, r.h);
+    return withArtworkOnly(() => {
+      const base = canvas.toCanvasElement(mult, { left: r.x, top: r.y, width: r.w, height: r.h });
+      const boxes = canvas.getObjects().map((o) => o.getBoundingRect(true, true));
+      const ctx = base.getContext('2d');
+      for (const [ox, oy] of offs) {
+        const g = { x: r.x - ox, y: r.y - oy };
+        if (!boxes.some((b) => b.left < g.x + r.w && b.left + b.width > g.x && b.top < g.y + r.h && b.top + b.height > g.y)) continue;
+        ctx.drawImage(canvas.toCanvasElement(mult, { left: g.x, top: g.y, width: r.w, height: r.h }), 0, 0, base.width, base.height);
+      }
+      return base;
+    }, null);
+  }
+  /** The product picture (bed, curtains, fabric roll) covered with the repeated tile, `width` pixels wide. */
+  async function patternScene(tile, width) {
+    const sc = st.product.pattern.scene;
+    const k = width / W;
+    const out = document.createElement('canvas');
+    out.width = Math.round(W * k);
+    out.height = Math.round(H * k);
+    const ctx = out.getContext('2d');
+    const [bg, ov] = await Promise.all([loadHtmlImage(POD.mockupUrl(sc, color().hex)), sc.overlay ? loadHtmlImage(POD.mockupUrl(sc, color().hex, 'overlay')) : null]);
+    ctx.drawImage(bg, 0, 0, out.width, out.height);
+    const f = sc.fill;
+    const cm = POD.fabricCm(st.product, st.sizeId);
+    const tw = (f.w * k * st.pattern.tileCm) / cm[0];
+    POD.drawPattern(ctx, tile, { repeat: st.pattern.repeat, tw, th: tw, x: f.x * k, y: f.y * k, w: f.w * k, h: f.h * k });
+    if (ov) ctx.drawImage(ov, 0, 0, out.width, out.height);
+    return out;
+  }
+  const patternTile = (px) => exportTile(px / rects().trim.w);
+  /** The small "how it repeats" picture in the options panel. */
+  let patTimer = null;
+  let patToken = 0;
+  function schedulePatternPreview(delay = 400) {
+    if (!st.pattern) return;
+    clearTimeout(patTimer);
+    patTimer = setTimeout(async () => {
+      const my = ++patToken;
+      try {
+        const scene = await patternScene(patternTile(240), 600);
+        if (my !== patToken || !st.pattern) return;
+        const cv = $('pat-preview');
+        cv.width = scene.width;
+        cv.height = scene.height;
+        cv.getContext('2d').drawImage(scene, 0, 0);
+      } catch (e) { /* the picture is only a help */ }
+    }, delay);
+  }
+
   /** Product mockup with the trimmed design, for the cart, order page and print queue. */
   function exportPreview() {
+    // Fabric: the product covered with the pattern (not the single tile).
+    if (st.pattern) return patternScene(patternTile(360), 600).then((cv) => canvasBlob(cv));
     // The whole mockup at 1.2x, without the on-screen garment-size view.
     const z = canvas.width / W;
     const vt = canvas.viewportTransform.slice();
@@ -2969,7 +3071,7 @@
     for (const s of st.product.sides) designs[s.id] = s.id === st.side ? serialize() : (st.designs[s.id] || []);
     const empty = !Object.values(designs).some((o) => o.length);
     const productId = st.product.id;
-    const meta = { productId, colorId: st.colorId, sizeId: st.sizeId, side: st.side, offsets: { ...st.offsets } };
+    const meta = { productId, colorId: st.colorId, sizeId: st.sizeId, side: st.side, offsets: { ...st.offsets }, ...(st.pattern ? { pattern: { ...st.pattern } } : {}) };
     let preview = null;
     if (!empty) {
       try {
@@ -3031,7 +3133,7 @@
       for (const s of sides) {
         await showSide(s.id);
         checkIssues().forEach((i) => problems.push(`• ${tr(s.name)}: ${t(i.key, { ...i.params, dpi: i.params.dpi, pt: i.params.pt })}`));
-        sidesPayload[s.id] = { editor: { version: fabric.version, objects: await inlineImages(st.designs[s.id]), ...(st.offsets[s.id] ? { offset: st.offsets[s.id] } : {}) } };
+        sidesPayload[s.id] = { editor: { version: fabric.version, objects: await inlineImages(st.designs[s.id]), ...(st.offsets[s.id] ? { offset: st.offsets[s.id] } : {}), ...(st.pattern ? { pattern: { ...st.pattern } } : {}) } };
         files[`${s.id}-print.png`] = await exportPrint(s);
         files[`${s.id}-preview.png`] = await exportPreview();
         files[`${s.id}-design.svg`] = new Blob([await exportSvg(s)], { type: 'image/svg+xml' });
@@ -3105,6 +3207,29 @@
     const sides = [];
     for (const sd of st.product.sides) {
       if (sd.id !== st.side) await showSide(sd.id);
+      if (st.pattern) {
+        // Fabric: the product picture with the pattern repeated at its real size.
+        const sc = st.product.pattern.scene;
+        const f = sc.fill;
+        const cm = POD.fabricCm(st.product, st.sizeId);
+        const tile = patternTile(600);
+        const layer = document.createElement('canvas');
+        layer.width = W * 3;
+        layer.height = H * 3;
+        const tw = (f.w * 3 * st.pattern.tileCm) / cm[0];
+        POD.drawPattern(layer.getContext('2d'), tile, { repeat: st.pattern.repeat, tw, th: tw, x: f.x * 3, y: f.y * 3, w: f.w * 3, h: f.h * 3 });
+        sides.push({
+          side: sd,
+          rects: { trim: f, bleed: f, safe: f, u: f.w / (cm[0] / 2.54), b: 0, sf: 0 },
+          design: layer,
+          designScale: 3,
+          hasDesign: canvas.getObjects().length > 0,
+          base: POD.mockupUrl(sc, color().hex),
+          overlay: sc.overlay ? POD.mockupUrl(sc, color().hex, 'overlay') : null,
+          pattern: { tile, repeat: st.pattern.repeat, tileCm: st.pattern.tileCm, cm },
+        });
+        continue;
+      }
       sides.push({
         side: sd,
         rects: rects(sd.id),
@@ -3228,5 +3353,6 @@
     toast(t('design.loaded'));
     scheduleDraft();
   }
-  window.__editor = { canvas, st, rects, checkIssues, exportSvg, exportPrint }; // handy for debugging in the console
+  schedulePatternPreview(0);
+  window.__editor = { canvas, st, rects, checkIssues, exportSvg, exportPrint, exportTile, exportPreview }; // handy for debugging in the console
 })();

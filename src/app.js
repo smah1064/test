@@ -20,6 +20,7 @@ const {
   round2,
   printAreaFor,
   printWidthFor,
+  REPEATS,
 } = require('./products');
 const { GOVERNORATES, normalizeEgyptMobile } = require('./egypt');
 const { FIELDS, langOf, format } = require('./i18n');
@@ -179,6 +180,7 @@ function publicItem(item) {
     kind: item.kind || 'product',
     pieces: item.pieces,
     filmBatch: item.filmBatch || null,
+    pattern: item.pattern || null,
   };
 }
 
@@ -307,7 +309,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const color = product && product.colors.find((c) => c.id === req.params.colorId);
       if (!color) throw new HttpError(404, 'notFound');
       if (product.kind === 'book') return res.redirect(302, `/api/books/${product.book}/sample/0.jpg`);
-      const img = await thumbs.cardImage(product.id, product.sides[0].id, color.hex);
+      const img = product.pattern ? await thumbs.patternImage(product, color.hex) : await thumbs.cardImage(product.id, product.sides[0].id, color.hex);
       if (!img) throw new HttpError(404, 'notFound');
       res.set('Cache-Control', 'public, max-age=86400, no-transform');
       res.type('image/webp').send(img);
@@ -358,6 +360,18 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
 
     const editor = {};
     const storedSides = [];
+    // Fabric: how the tile repeats and how big it prints (the tile is the print file).
+    let pattern = null;
+    if (product.pattern) {
+      const asked = (Object.values(sides).find((x) => x && x.editor && x.editor.pattern) || {}).editor;
+      const p = (asked && asked.pattern) || {};
+      const tileCm = Number(p.tileCm);
+      pattern = {
+        repeat: REPEATS.includes(p.repeat) ? p.repeat : 'straight',
+        tileCm: product.pattern.tiles.includes(tileCm) ? tileCm : product.pattern.tile,
+        fabricCm: sizeDef.cm || [145, 100],
+      };
+    }
     for (const side of product.sides) {
       if (!sideIds.includes(side.id)) continue;
       const s = sides[side.id] || {};
@@ -365,7 +379,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         throw new HttpError(400, 'sideEmpty', { side: side.name });
       }
       const offset = cleanOffset(product, side, sizeDef.id, s.editor.offset);
-      editor[side.id] = { ...s.editor, offset: offset || undefined };
+      editor[side.id] = { ...s.editor, offset: offset || undefined, ...(pattern ? { pattern: { repeat: pattern.repeat, tileCm: pattern.tileCm } } : {}) };
+      if (pattern) {
+        const tileIn = round2(pattern.tileCm / 2.54);
+        storedSides.push({ id: side.id, name: side.name, widthIn: tileIn, heightIn: tileIn, bleedIn: 0 });
+        continue;
+      }
       storedSides.push({
         // The physical size for the chosen size (a 30 x 40 poster prints smaller than a 45 x 60 one).
         id: side.id, name: side.name, widthIn: printWidthFor(product, side, sizeDef.id), heightIn: round2((heightIn(side) * printWidthFor(product, side, sizeDef.id)) / side.printWidthIn), bleedIn: side.bleedIn || 0,
@@ -394,6 +413,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       currency: CURRENCY,
       orderId: null,
       ...(imported.length ? { imports: imported, rightsConfirmedAt: new Date().toISOString() } : {}),
+      ...(pattern ? { pattern } : {}),
     };
     const files = storedSides.flatMap((sd) => [`${sd.id}-print.png`, `${sd.id}-preview.png`, `${sd.id}-design.svg`]);
     design.expectedFiles = files;
@@ -1464,6 +1484,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         process: d.process || product.process,
         price: priceFor(product, d.size.id, d.sides.length),
         ...(d.imports ? { imports: d.imports, rightsConfirmedAt: d.rightsConfirmedAt } : {}),
+        ...(d.pattern ? { pattern: d.pattern } : {}),
         status: 'queued',
         history: [{ status: 'queued', at: now }],
       };
@@ -1741,6 +1762,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       }
       return { path: target, name: `${order ? order.number : 'design'}-${design.productId}-preview.pdf` };
     }
+    if (format === 'repeat') {
+      // Fabric: the whole piece with the tile repeated, to check before printing.
+      if (!design.pattern) throw new HttpError(404, 'notFound');
+      const target = store.designFile(designId, `repeat-v${design.version || 0}.jpg`);
+      if (!fs.existsSync(target)) store.writeDesignFile(designId, path.basename(target), await printfiles.repeatPreview(fs.readFileSync(store.designFile(designId, `${design.sides[0].id}-print.png`)), design.pattern));
+      const p = design.pattern;
+      return { path: target, name: `${base}-repeat-${p.repeat}-${p.tileCm}cm-${p.fabricCm[0]}x${p.fabricCm[1]}cm.jpg` };
+    }
     if (design.kind === 'book') {
       const f = format || 'book-pdf';
       const title = `${base}-${design.bookId}`;
@@ -1922,12 +1951,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   const productHouses = () => store.db.productHouses || {};
   const findHouse = (id) => houses().find((h) => h.id === id) || null;
   // Formats made once per item (not once per side).
-  const ONCE = new Set(['preview-pdf', 'book-pdf', 'proof', 'sheet-pdf', 'sheet-pdf-plain']);
+  const ONCE = new Set(['preview-pdf', 'book-pdf', 'proof', 'sheet-pdf', 'sheet-pdf-plain', 'repeat']);
   const SEND_FORMATS = new Set([...Object.keys(FORMATS), ...ONCE]);
   const FILE_LABELS = {
     pdf: 'Print PDF', 'pdf-marks': 'Print PDF with crop marks', png: 'Print PNG (transparent)', 'png-mirror': 'Print PNG (mirrored)',
     tiff: 'Print TIFF (CMYK)', svg: 'Vector SVG', 'dtf-film': 'DTF film PNG', 'dtf-pdf': 'DTF film PDF', 'dtg-white': 'DTG white underbase',
-    'preview-pdf': 'Preview PDF (customer design)', 'book-pdf': 'Book print PDF', proof: 'Preview image', 'sheet-pdf': 'Gang sheet PDF (mirrored)', 'sheet-pdf-plain': 'Gang sheet PDF',
+    'preview-pdf': 'Preview PDF (customer design)', repeat: 'Repeat preview (whole fabric piece)', 'book-pdf': 'Book print PDF', proof: 'Preview image', 'sheet-pdf': 'Gang sheet PDF (mirrored)', 'sheet-pdf-plain': 'Gang sheet PDF',
   };
 
   app.get('/api/admin/houses', requireAdmin, (req, res) => {

@@ -30,6 +30,7 @@ const CATEGORIES = [
   { id: 'school', name: t('Back to school', 'المدرسة') },
   { id: 'business', name: t('Business', 'للأعمال') },
   { id: 'kids', name: t('Kids books', 'كتب أطفال') },
+  { id: 'textiles', name: t('Fabric & home textiles', 'أقمشة ومفروشات') },
 ];
 
 const C = {
@@ -1167,6 +1168,155 @@ PRODUCTS.push(
   },
 );
 
+// ---------- Roll-to-roll fabric: patterns that repeat ----------
+// The customer designs one tile (square). It repeats across the fabric in the
+// chosen way (straight, half-drop, half-brick, mirror) at the chosen tile size
+// (cm). The print house gets the seamless tile at 300 DPI plus the repeat, the
+// fabric width and length (what step-and-repeat RIP software needs), and a
+// picture of the repeated pattern to check it.
+// pattern.scene: the product picture for the live preview; `fill` is where the
+// pattern shows, `cm(size)` its real size, so tiles appear at true scale.
+const REPEATS = ['straight', 'halfdrop', 'halfbrick', 'mirror'];
+const TILE_SIDE = { id: 'front', name: t('Pattern tile', 'وحدة النقشة'), svg: '', printArea: { x: 90, y: 130, w: 320, h: 320 }, printWidthIn: 30 / 2.54 };
+const tileSvg = () =>
+  sv(
+    '<rect x="98" y="140" width="320" height="320" fill="#000" opacity=".1"/>' +
+      '<rect x="90" y="130" width="320" height="320" fill="{{C}}" stroke="{{L}}" stroke-width="2"/>' +
+      '<g fill="none" stroke="{{L}}" stroke-width="1.5" stroke-dasharray="4 5" opacity=".7"><rect x="30" y="70" width="440" height="440"/></g>'
+  );
+const rollScene = {
+  svg: sv(
+    '<rect x="66" y="112" width="380" height="462" fill="#000" opacity=".1"/>' +
+      '<rect x="60" y="100" width="380" height="460" fill="{{C}}" stroke="{{L}}" stroke-width="2"/>'
+  ),
+  overlay: sv(
+    '<defs><linearGradient id="r" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".28"/></linearGradient></defs>' +
+      '<rect x="44" y="66" width="412" height="40" rx="20" fill="{{C}}" stroke="{{L}}" stroke-width="2"/>' +
+      '<rect x="44" y="66" width="412" height="40" rx="20" fill="url(#r)"/>' +
+      '<rect x="30" y="76" width="16" height="20" rx="4" fill="#8a8f98"/><rect x="454" y="76" width="16" height="20" rx="4" fill="#8a8f98"/>'
+  ),
+  fill: { x: 60, y: 100, w: 380, h: 460 },
+};
+const bedScene = (duvet) => ({
+  svg: sv(
+    '<rect x="50" y="48" width="400" height="130" rx="18" fill="#8b6a4f"/><rect x="50" y="48" width="400" height="130" rx="18" fill="#000" opacity=".08"/>' +
+      '<rect x="62" y="150" width="376" height="420" rx="16" fill="#f3f1ec" stroke="#d6d2c8" stroke-width="2"/>' +
+      (duvet ? '' : '<rect x="62" y="150" width="376" height="420" rx="16" fill="{{C}}" stroke="{{L}}" stroke-width="2"/>') +
+      (duvet ? '<rect x="56" y="300" width="388" height="276" rx="14" fill="{{C}}" stroke="{{L}}" stroke-width="2"/>' : '')
+  ),
+  overlay: sv(
+    '<g fill="#fbfaf7" stroke="#d9d5cc" stroke-width="2"><rect x="92" y="170" width="146" height="82" rx="26"/><rect x="262" y="170" width="146" height="82" rx="26"/></g>' +
+      '<g fill="#000" opacity=".06"><rect x="92" y="226" width="146" height="26" rx="13"/><rect x="262" y="226" width="146" height="26" rx="13"/></g>' +
+      (duvet ? '<rect x="56" y="300" width="388" height="26" rx="12" fill="#fff" opacity=".28"/><rect x="56" y="300" width="388" height="10" rx="5" fill="#000" opacity=".06"/>' : '<rect x="62" y="150" width="376" height="420" rx="16" fill="none" stroke="#000" stroke-opacity=".06" stroke-width="10"/>')
+  ),
+  fill: duvet ? { x: 56, y: 300, w: 388, h: 276 } : { x: 62, y: 150, w: 376, h: 420 },
+});
+const curtainScene = {
+  svg: sv(
+    '<rect x="150" y="96" width="200" height="430" fill="#cfe3f5"/><rect x="150" y="96" width="200" height="430" fill="none" stroke="#9aa7b4" stroke-width="10"/>' +
+      '<line x1="250" y1="96" x2="250" y2="526" stroke="#9aa7b4" stroke-width="6"/>' +
+      '<rect x="40" y="80" width="420" height="490" fill="{{C}}" stroke="{{L}}" stroke-width="2"/>'
+  ),
+  overlay: sv(
+    // The window shows between the two panels; folds; the rod and rings.
+    '<rect x="222" y="80" width="56" height="490" fill="#cfe3f5"/><line x1="250" y1="80" x2="250" y2="570" stroke="#9aa7b4" stroke-width="6"/>' +
+      '<g fill="#000" opacity=".07"><rect x="70" y="80" width="18" height="490"/><rect x="128" y="80" width="18" height="490"/><rect x="186" y="80" width="18" height="490"/><rect x="300" y="80" width="18" height="490"/><rect x="358" y="80" width="18" height="490"/><rect x="416" y="80" width="18" height="490"/></g>' +
+      '<g fill="#fff" opacity=".1"><rect x="96" y="80" width="14" height="490"/><rect x="154" y="80" width="14" height="490"/><rect x="326" y="80" width="14" height="490"/><rect x="384" y="80" width="14" height="490"/></g>' +
+      '<rect x="20" y="64" width="460" height="12" rx="6" fill="#6b7078"/><g fill="#6b7078"><circle cx="60" cy="82" r="6"/><circle cx="120" cy="82" r="6"/><circle cx="180" cy="82" r="6"/><circle cx="320" cy="82" r="6"/><circle cx="380" cy="82" r="6"/><circle cx="440" cy="82" r="6"/></g>'
+  ),
+  fill: { x: 40, y: 80, w: 420, h: 490 },
+};
+const fabricSide = () => ({ ...TILE_SIDE, svg: tileSvg() });
+const metres = (perMetre) => [1, 2, 3, 5, 10].map((m) => ({ id: `${m}m`, label: t(`${m} m`, `${m} متر`), surcharge: Math.round(perMetre * (m - 1)), cm: [145, m * 100] }));
+PRODUCTS.push(
+  {
+    id: 'fabric',
+    category: 'textiles',
+    name: t('Printed Fabric by the Metre', 'قماش مطبوع بالمتر'),
+    description: t('Your own pattern printed on fabric 145 cm wide, by the metre: for sewing, crafts, cushions and clothes.', 'نقشتك مطبوعة على قماش عرضه 145 سم، بالمتر: للخياطة والأشغال والمخدات والملابس.'),
+    basePrice: 260,
+    colors: [
+      { id: 'poplin', name: t('Cotton poplin', 'قطن بوبلين'), hex: '#ffffff' },
+      { id: 'canvas', name: t('Cotton canvas', 'قطن كانفاس'), hex: '#f6f2e9' },
+      { id: 'satin', name: t('Polyester satin', 'ساتان بوليستر'), hex: '#fbfbfb' },
+      { id: 'linen', name: t('Linen look', 'شبه الكتان'), hex: '#eee7da' },
+    ],
+    sizes: metres(260),
+    sides: [fabricSide()],
+    pattern: { tiles: [10, 20, 30, 45, 60], tile: 30, scene: rollScene },
+  },
+  {
+    id: 'upholstery',
+    category: 'textiles',
+    name: t('Upholstery Fabric by the Metre', 'قماش تنجيد بالمتر'),
+    description: t('Heavy, hard-wearing fabric 140 cm wide with your pattern: for sofas, chairs, headboards and cushions.', 'قماش تقيل ويستحمل، عرضه 140 سم، بنقشتك: للكنب والكراسي والأسرّة والمخدات.'),
+    basePrice: 380,
+    colors: [
+      { id: 'canvas', name: t('Heavy canvas', 'كانفاس تقيل'), hex: '#f2ede3' },
+      { id: 'velvet', name: t('Velvet', 'قطيفة'), hex: '#efebe6' },
+      { id: 'linen', name: t('Linen look', 'شبه الكتان'), hex: '#ece5d8' },
+    ],
+    sizes: metres(380).map((z) => ({ ...z, cm: [140, z.cm[1]] })),
+    sides: [fabricSide()],
+    pattern: { tiles: [10, 20, 30, 45, 60], tile: 30, scene: rollScene },
+  },
+  {
+    id: 'bedsheet',
+    category: 'textiles',
+    name: t('Printed Bed Sheet', 'ملاية سرير مطبوعة'),
+    description: t('A soft flat sheet printed edge to edge with your pattern.', 'ملاية ناعمة مطبوعة بنقشتك من الطرف للطرف.'),
+    basePrice: 650,
+    colors: [
+      { id: 'sateen', name: t('Cotton sateen', 'قطن ساتان'), hex: '#ffffff' },
+      { id: 'micro', name: t('Microfibre', 'مايكروفايبر'), hex: '#fbfbfa' },
+    ],
+    sizes: [
+      { id: 'single', label: t('Single · 160 × 260 cm', 'فردي · 160 × 260 سم'), surcharge: 0, cm: [160, 260] },
+      { id: 'double', label: t('Double · 240 × 260 cm', 'مزدوج · 240 × 260 سم'), surcharge: 250, cm: [240, 260] },
+      { id: 'king', label: t('King · 270 × 280 cm', 'كينج · 270 × 280 سم'), surcharge: 400, cm: [270, 280] },
+    ],
+    sides: [fabricSide()],
+    pattern: { tiles: [20, 30, 45, 60], tile: 45, scene: bedScene(false) },
+  },
+  {
+    id: 'duvetcover',
+    category: 'textiles',
+    name: t('Printed Duvet Cover', 'غطا لحاف مطبوع'),
+    description: t('Duvet cover with your pattern on the front and plain white on the back, with a zip.', 'غطا لحاف بنقشتك على الوش وأبيض سادة من ورا، بسوستة.'),
+    basePrice: 900,
+    colors: [
+      { id: 'sateen', name: t('Cotton sateen', 'قطن ساتان'), hex: '#ffffff' },
+      { id: 'micro', name: t('Microfibre', 'مايكروفايبر'), hex: '#fbfbfa' },
+    ],
+    sizes: [
+      { id: 'single', label: t('Single · 140 × 200 cm', 'فردي · 140 × 200 سم'), surcharge: 0, cm: [140, 200] },
+      { id: 'double', label: t('Double · 200 × 200 cm', 'مزدوج · 200 × 200 سم'), surcharge: 350, cm: [200, 200] },
+      { id: 'king', label: t('King · 220 × 240 cm', 'كينج · 220 × 240 سم'), surcharge: 550, cm: [220, 240] },
+    ],
+    sides: [fabricSide()],
+    pattern: { tiles: [20, 30, 45, 60], tile: 45, scene: bedScene(true) },
+  },
+  {
+    id: 'curtains',
+    category: 'textiles',
+    name: t('Printed Curtains (pair)', 'ستاير مطبوعة (جوز)'),
+    description: t('Two curtain panels printed with your pattern, with a rod pocket and hooks tape.', 'ضلفتين ستارة مطبوعين بنقشتك، بجراب للماسورة وشريط خطاطيف.'),
+    basePrice: 1400,
+    colors: [
+      { id: 'blackout', name: t('Blackout', 'بلاك أوت (معتم)'), hex: '#f4f1ea' },
+      { id: 'filter', name: t('Light-filtering', 'نصف شفاف'), hex: '#fbfbf9' },
+      { id: 'voile', name: t('Sheer voile', 'فوال شفاف'), hex: '#ffffff' },
+    ],
+    sizes: [
+      { id: '140x250', label: t('2 panels · 140 × 250 cm each', 'ضلفتين · 140 × 250 سم للواحدة'), surcharge: 0, cm: [280, 250] },
+      { id: '140x270', label: t('2 panels · 140 × 270 cm each', 'ضلفتين · 140 × 270 سم للواحدة'), surcharge: 150, cm: [280, 270] },
+      { id: '200x270', label: t('2 panels · 200 × 270 cm each', 'ضلفتين · 200 × 270 سم للواحدة'), surcharge: 700, cm: [400, 270] },
+    ],
+    sides: [fabricSide()],
+    pattern: { tiles: [20, 30, 45, 60], tile: 45, scene: curtainScene },
+  },
+);
+
 /**
  * Print production details per product:
  *   process  how it is printed; decides which file the shop should use
@@ -1183,6 +1333,11 @@ const PRODUCTION = {
   mug: { process: 'sublimation', safeIn: 0.15, bleedIn: 0, model: { type: 'mug', diameterIn: 3.25, heightIn: 3.8, material: 'ceramic' } },
   cushion: { process: 'sublimation', safeIn: 0.4, bleedIn: 0, model: { type: 'pillow', widthIn: 16, heightIn: 16, material: 'fabric' } },
   poster: { process: 'paper', safeIn: 0.25, bleedIn: 0.125, model: { type: 'frame', material: 'paper' } },
+  fabric: { process: 'textile', safeIn: 0, bleedIn: 0, model: { type: 'cloth', material: 'fabric' } },
+  upholstery: { process: 'textile', safeIn: 0, bleedIn: 0, model: { type: 'cloth', material: 'fabric' } },
+  bedsheet: { process: 'textile', safeIn: 0, bleedIn: 0, model: { type: 'cloth', material: 'fabric' } },
+  duvetcover: { process: 'textile', safeIn: 0, bleedIn: 0, model: { type: 'cloth', material: 'fabric' } },
+  curtains: { process: 'textile', safeIn: 0, bleedIn: 0, model: { type: 'cloth', material: 'fabric' } },
   canvas: { process: 'canvas', safeIn: 0.3, bleedIn: 1.75, model: { type: 'canvas', material: 'fabric', depthIn: 1.5 } },
   canvaswide: { process: 'canvas', safeIn: 0.3, bleedIn: 1.75, model: { type: 'canvas', material: 'fabric', depthIn: 1.5 } },
   bottle: { process: 'uv', safeIn: 0.15, bleedIn: 0, model: { type: 'bottle', diameterIn: 2.9, heightIn: 10.2, material: 'metal' } },
@@ -1365,6 +1520,7 @@ function shippingFor(subtotal) {
 
 module.exports = {
   PRODUCTS,
+  REPEATS,
   printAreaFor,
   printWidthFor,
   CATEGORIES,

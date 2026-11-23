@@ -826,3 +826,7 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 .rights-box h3 { margin: 0 0 8px; }
 .import-pill { background: #fff0f6; color: #a61e4d; }
 .import-info { margin: 8px 0; padding: 8px 10px; border-radius: 8px; background: #fff0f6; line-height: 1.6; word-break: break-all; }
+
+/* Fabric patterns (editor options) */
+.pat-label { margin: 8px 0 4px; }
+.pat-preview { display: block; width: 100%; max-width: 260px; height: auto; margin-top: 10px; border-radius: 10px; border: 1px solid var(--line); background: #f3f4f6; }

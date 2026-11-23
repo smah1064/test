@@ -349,6 +349,57 @@
     return cv;
   }
 
+  // ---------- Fabric patterns ----------
+  /**
+   * Fill the rectangle (x, y, w, h) of a 2D context with a tile repeated the
+   * chosen way: straight, halfdrop (every other column moved down half a
+   * tile), halfbrick (every other row moved across half a tile) or mirror
+   * (neighbours flipped, so edges always meet). tw, th: one tile's size.
+   */
+  function drawPattern(ctx, tile, { repeat = 'straight', tw, th, x = 0, y = 0, w, h }) {
+    if (!tile || !(tw > 0) || !(th > 0)) return;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.clip();
+    const cols = Math.ceil(w / tw) + 1;
+    const rows = Math.ceil(h / th) + 1;
+    for (let c = -1; c <= cols; c++) {
+      for (let r = -1; r <= rows; r++) {
+        let dx = x + c * tw;
+        let dy = y + r * th;
+        if (repeat === 'halfdrop' && c & 1) dy += th / 2;
+        if (repeat === 'halfbrick' && r & 1) dx += tw / 2;
+        if (repeat === 'mirror') {
+          const fx = c & 1 ? -1 : 1;
+          const fy = r & 1 ? -1 : 1;
+          ctx.save();
+          ctx.translate(dx + (fx < 0 ? tw : 0), dy + (fy < 0 ? th : 0));
+          ctx.scale(fx, fy);
+          ctx.drawImage(tile, 0, 0, tw, th);
+          ctx.restore();
+        } else ctx.drawImage(tile, dx, dy, tw, th);
+      }
+    }
+    ctx.restore();
+  }
+  /**
+   * Where the neighbouring copies of a tile sit (for a w x h tile). Artwork
+   * that crosses the tile's edge is drawn again at these offsets so the
+   * pattern joins up without seams (mirror repeats join by themselves).
+   */
+  function wrapOffsets(repeat, w, h) {
+    if (repeat === 'mirror') return [];
+    if (repeat === 'halfdrop') return [[0, -h], [0, h], [-w, -h / 2], [-w, h / 2], [w, -h / 2], [w, h / 2], [-w, -1.5 * h], [w, 1.5 * h]];
+    if (repeat === 'halfbrick') return [[-w, 0], [w, 0], [-w / 2, -h], [w / 2, -h], [-w / 2, h], [w / 2, h], [-1.5 * w, -h], [1.5 * w, h]];
+    return [[-w, -h], [0, -h], [w, -h], [-w, 0], [w, 0], [-w, h], [0, h], [w, h]];
+  }
+  /** The real size (cm) of a fabric product at a size: [width, height]. */
+  const fabricCm = (product, sizeId) => {
+    const z = product.sizes.find((s) => s.id === sizeId) || product.sizes[0];
+    return z.cm || [145, 100];
+  };
+
   window.POD = {
     get lang() {
       return lang;
@@ -357,6 +408,6 @@
     loadCatalog, fillMockup, mockupUrl, svgDataUrl, luminance,
     money, date, num,
     getCart, setCart, updateCartBadge, toast, esc, api, drafts,
-    sizedArea, sizeView, canvasEdges,
+    sizedArea, sizeView, canvasEdges, drawPattern, wrapOffsets, fabricCm,
   };
 })();

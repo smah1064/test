@@ -131,6 +131,7 @@
         <dt>${esc(t('admin.spec.product'))}</dt><dd>${esc(tr(item.productName))}</dd>
         <dt>${esc(t('admin.spec.colourSize'))}</dt><dd>${esc(tr(item.color.name))} <span class="dot" style="display:inline-block;vertical-align:middle;background:${esc(item.color.hex)}"></span> · ${esc(tr(item.size.label))}</dd>
         ${item.sides.map((s) => `<dt>${esc(t('admin.spec.print', { side: tr(s.name) }))}</dt><dd><bdi dir="ltr">${cm(s.widthIn)} × ${cm(s.heightIn)} cm (${s.widthIn} × ${s.heightIn} in)${s.bleedIn ? ' ' + esc(t('admin.bleed', { mm: Math.round(s.bleedIn * 25.4) })) : ''} · ${s.widthPx} × ${s.heightPx} px · ${s.dpi} DPI · sRGB</bdi>${s.offsetCm ? `<div class="placement-note">📍 ${esc(t('admin.placement', { v: placementText(s.offsetCm) }))}</div>` : ''}</dd>`).join('')}
+        ${item.pattern ? `<dt>${esc(t('admin.pattern'))}</dt><dd><strong>${esc(t('admin.patternSpec', { tile: item.pattern.tileCm, repeat: t('pat.' + item.pattern.repeat), w: item.pattern.fabricCm[0], h: item.pattern.fabricCm[1] }))}</strong></dd>` : ''}
         ${item.process ? `<dt>${esc(t('admin.method'))}</dt><dd>
           ${(item.methods || []).length > 1 ? `<div class="btn-group" style="max-width:180px;margin-bottom:6px">${item.methods.map((m) => `<button class="btn btn-sm ${m === item.process ? 'active' : ''}" data-item="${item.id}" data-method="${m}">${esc(t('method.' + m))}</button>`).join('')}</div>` : ''}
           ${esc(t('process.' + item.process))}
@@ -147,7 +148,7 @@
       </dl>`;
   }
 
-  const RECOMMENDED = { dtg: 'png', dtf: 'dtf-film', sublimation: 'png-mirror', uv: 'pdf', paper: 'pdf-marks', canvas: 'pdf' };
+  const RECOMMENDED = { dtg: 'png', dtf: 'dtf-film', sublimation: 'png-mirror', uv: 'pdf', paper: 'pdf-marks', canvas: 'pdf', textile: 'png' };
   const FORMATS_BY_METHOD = {
     dtg: ['png', 'dtg-white', 'pdf', 'tiff'],
     dtf: ['dtf-film', 'dtf-pdf', 'png', 'pdf'],
@@ -155,6 +156,7 @@
     uv: ['pdf', 'png', 'pdf-marks', 'tiff'],
     paper: ['pdf-marks', 'pdf', 'tiff', 'png'],
     canvas: ['pdf', 'tiff', 'png', 'pdf-marks'],
+    textile: ['png', 'tiff', 'pdf'],
   };
   const isDark = (hex) => {
     const n = parseInt(String(hex || '#ffffff').slice(1), 16);
@@ -194,7 +196,7 @@
     if (item.kind === 'book') return ['book-pdf', 'preview-pdf', 'proof'];
     if (item.kind === 'gangsheet') return ['sheet-pdf', 'sheet-pdf-plain', 'preview-pdf', 'proof'];
     const more = (FORMATS_BY_METHOD[item.process] || ['png', 'pdf-marks', 'png-mirror', 'tiff']).concat(item.sides.some((sd) => sd.hasSvg) ? ['svg'] : []);
-    return [...new Set(['pdf', 'preview-pdf', ...more])];
+    return [...new Set(['pdf', 'preview-pdf', ...more, ...(item.pattern ? ['repeat'] : [])])];
   }
   function sendDefaults(item) {
     const houseId = (housesData && (housesData.productHouses[item.productId] || (housesData.houses[0] && housesData.houses[0].id))) || '';
@@ -402,7 +404,7 @@
     return `
       <div class="print-files-block">
         <div class="small muted" style="font-weight:700;margin-bottom:6px">${esc(t('admin.customerPreview'))}</div>
-        <div class="print-files"><button class="btn btn-sm" data-download="${esc(s.printUrl)}?format=preview-pdf">⬇ ${esc(t('fmt.preview-pdf'))}</button></div>
+        <div class="print-files"><button class="btn btn-sm" data-download="${esc(s.printUrl)}?format=preview-pdf">⬇ ${esc(t('fmt.preview-pdf'))}</button>${item.pattern ? `<button class="btn btn-sm" data-download="${esc(s.printUrl)}?format=repeat">⬇ ${esc(t('fmt.repeat'))}</button>` : ''}</div>
       </div>`;
   }
   // Big picture when the mouse is over a thumbnail (all sides of the item).

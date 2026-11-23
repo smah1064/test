@@ -206,6 +206,14 @@ Customers can create an account at `/account` (name, mobile number, optional ema
 
 Passwords are stored as scrypt hashes. The session is a signed, httpOnly cookie (`pod_c`, 60 days) whose key comes from the shop's secret file, so every app copy accepts it (`src/customers.js`).
 
+## Fabric printing (roll to roll)
+
+Category **Fabric & home textiles**: printed fabric by the metre (145 cm wide, 1–10 m), upholstery fabric by the metre (140 cm), bed sheets, duvet covers and curtains (pairs). The "colour" is the fabric type (cotton poplin, canvas, satin, velvet, blackout…).
+
+The customer designs **one square tile** and chooses in the editor how it repeats (**straight, half-drop, half-brick, mirror**) and how big each tile prints (10–60 cm). Anything that crosses the tile's edge is drawn again on the opposite side (shifted for half-drop / half-brick), so the print tile is seamless. A small picture in the options shows the pattern on the product at its real scale; the live preview (realistic and 3D) and the cart picture show it on the bed, curtains or fabric roll.
+
+For the print house: the **tile PNG at 300 DPI** (its physical size is the chosen tile size), the item's **pattern line** (tile size, repeat type, fabric width × length) for the RIP's step-and-repeat, and a **repeat preview** JPEG of the whole piece (admin → item → "Repeat preview", also offered when sending to a printing house). Method: roll-to-roll textile (sublimation on polyester, pigment/reactive on cotton).
+
 ## Canvas prints
 
 Two products, **Canvas Print (portrait)** and **(landscape)**, in 30×45, 40×60 and 60×90 cm (one design area, the bigger sizes print larger). They are gallery-wrapped on a 1.5 in (4 cm) frame, so the print file has a **1.75 in band on every side** (frame depth + fold at the back). The "colour" is the edge style:

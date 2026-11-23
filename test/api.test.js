@@ -1372,6 +1372,29 @@ test('import a design from a link: pictures found, unsafe links refused, rights 
   }
 });
 
+test('fabric: pattern tile, repeat and size are kept, repeat preview for the print house', async () => {
+  const sharp = require('sharp');
+  // A design whose pattern settings are partly wrong: the server keeps only valid values.
+  let d = await makeDesign({ productId: 'curtains', color: 'blackout', size: '140x270', sides: { front: { ...SIDE, editor: { ...SIDE.editor, pattern: { repeat: 'halfdrop', tileCm: 999 } } } } }, { complete: false });
+  let full = await (await fetch(`${base}/api/designs/${d.id}`)).json();
+  assert.deepStrictEqual(full.editor.front.pattern, { repeat: 'halfdrop', tileCm: 45 }, 'tile size falls back to the default');
+  d = await makeDesign({ productId: 'fabric', color: 'poplin', size: '3m', sides: { front: { ...SIDE, editor: { ...SIDE.editor, pattern: { repeat: 'mirror', tileCm: 20 } } } } });
+  assert.strictEqual(d.sides[0].widthIn, Math.round((20 / 2.54) * 100) / 100, 'the tile prints at 20 cm');
+  const order = await (await post('/api/orders', { customer: CUSTOMER, designIds: [d.id] })).json();
+  const item = (await (await admin('/api/admin/orders')).json()).orders.find((o) => o.id === order.id).items[0];
+  assert.deepStrictEqual(item.pattern, { repeat: 'mirror', tileCm: 20, fabricCm: [145, 300] });
+  const r = await admin(`/api/admin/files/${d.id}/front?format=repeat`);
+  assert.strictEqual(r.status, 200);
+  assert.match(r.headers.get('content-disposition'), /repeat-mirror-20cm-145x300cm\.jpg/);
+  const meta = await sharp(Buffer.from(await r.arrayBuffer())).metadata();
+  assert.strictEqual(meta.format, 'jpeg');
+  assert.strictEqual(meta.height, 6000, 'the long side is at most 6000 px');
+  assert.strictEqual(meta.width, 2900);
+  // Not a fabric: no repeat file.
+  const tee = await makeDesign();
+  assert.strictEqual((await admin(`/api/admin/files/${tee.id}/front?format=repeat`)).status, 404);
+});
+
 const png4 = (w, h) => png(w, h);
 test('two copies of the app on one data folder share orders, sign-ins and edits', async () => {
   const { createApp: make } = require('../src/app');

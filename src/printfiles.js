@@ -229,4 +229,45 @@ function previewPdf(pages, { title = '', lines = [] } = {}) {
   });
 }
 
-module.exports = { previewPdf, enhancePhoto, finalizePrintPng, pngInfo, mirroredPng, cmykTiff, cmykProof, printPdf, hardAlpha, dtfFilmPng, dtgUnderbase, filmPdf };
+/**
+ * Fabric: the whole piece (fabricCm) covered with the tile repeated the way the
+ * customer chose, at up to 20 px per cm (6000 px on the long side), as a JPEG
+ * on white, for the print house to check the repeat before printing.
+ */
+async function repeatPreview(tilePng, { repeat, tileCm, fabricCm }) {
+  const [wCm, hCm] = fabricCm;
+  const k = Math.min(20, 6000 / Math.max(wCm, hCm));
+  const W = Math.max(1, Math.round(wCm * k));
+  const H = Math.max(1, Math.round(hCm * k));
+  const t = Math.max(2, Math.round(tileCm * k));
+  const tile = await sharp(tilePng).resize(t, t, { fit: 'fill' }).png().toBuffer();
+  const variants = { n: tile };
+  if (repeat === 'mirror') {
+    variants.x = await sharp(tile).flop().png().toBuffer();
+    variants.y = await sharp(tile).flip().png().toBuffer();
+    variants.xy = await sharp(tile).flip().flop().png().toBuffer();
+  }
+  // Placed on a bigger sheet (one tile of margin on every side), then cut out.
+  const cols = Math.ceil(W / t) + 2;
+  const rows = Math.ceil(H / t) + 2;
+  const SW = (cols + 2) * t;
+  const SH = (rows + 2) * t;
+  const parts = [];
+  for (let c = -1; c <= cols; c++) {
+    for (let r = -1; r <= rows; r++) {
+      let x = c * t;
+      let y = r * t;
+      if (repeat === 'halfdrop' && c & 1) y += Math.round(t / 2);
+      if (repeat === 'halfbrick' && r & 1) x += Math.round(t / 2);
+      const left = x + t;
+      const top = y + t;
+      if (left < 0 || top < 0 || left + t > SW || top + t > SH) continue;
+      const v = repeat === 'mirror' ? (c & 1 ? (r & 1 ? 'xy' : 'x') : r & 1 ? 'y' : 'n') : 'n';
+      parts.push({ input: variants[v], left, top });
+    }
+  }
+  const sheet = await sharp({ create: { width: SW, height: SH, channels: 3, background: '#ffffff' } }).composite(parts).png().toBuffer();
+  return sharp(sheet).extract({ left: t, top: t, width: W, height: H }).jpeg({ quality: 85 }).toBuffer();
+}
+
+module.exports = { previewPdf, repeatPreview, enhancePhoto, finalizePrintPng, pngInfo, mirroredPng, cmykTiff, cmykProof, printPdf, hardAlpha, dtfFilmPng, dtgUnderbase, filmPdf };

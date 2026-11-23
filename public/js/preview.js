@@ -116,7 +116,7 @@
       };
     }
 
-    if (type === 'card') {
+    if (type === 'card' || type === 'cloth') {
       if (product.id === 'cap') {
         const cx = 250;
         const R = 150;
@@ -594,7 +594,7 @@
         const textures = {};
         for (const s of state.sides) {
           textures[s.side.id] = {
-            design: s.design, wrap: s.wrap || null, designScale: s.designScale, rects: s.rects, hasDesign: s.hasDesign,
+            design: s.design, wrap: s.wrap || null, pattern: s.pattern || null, designScale: s.designScale, rects: s.rects, hasDesign: s.hasDesign,
             real: await realisticFor(s.side.id), plain: await plainFor(s.side.id), baseImg: await loadImg(s.base),
           };
         }
