@@ -124,10 +124,26 @@ class AdminAuth {
     let secret = crypto.randomBytes(32);
     if (dataDir) {
       const file = path.join(dataDir, '.session-secret');
-      try {
-        fs.writeFileSync(file, crypto.randomBytes(32).toString('hex'), { flag: 'wx', mode: 0o600 });
-      } catch (e) { /* already there (another copy made it) */ }
-      try { secret = Buffer.from(fs.readFileSync(file, 'utf8').trim(), 'hex'); } catch (e) { /* keep the random one */ }
+      // Made whole in a temporary file, then linked into place in one step, so another
+      // copy of the app starting at the same moment never reads a half-written secret.
+      if (!fs.existsSync(file)) {
+        const tmp = `${file}.${process.pid}.${crypto.randomBytes(4).toString('hex')}`;
+        try {
+          fs.writeFileSync(tmp, crypto.randomBytes(32).toString('hex'), { mode: 0o600 });
+          fs.linkSync(tmp, file);
+        } catch (e) { /* already there (another copy made it) */ }
+        try { fs.unlinkSync(tmp); } catch (e) { /* gone */ }
+      }
+      for (let tries = 0; tries < 50; tries++) {
+        try {
+          const hex = fs.readFileSync(file, 'utf8').trim();
+          if (/^[0-9a-f]{64}$/.test(hex)) {
+            secret = Buffer.from(hex, 'hex');
+            break;
+          }
+        } catch (e) { /* not there yet */ }
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20); // an older copy may still be writing it
+      }
     }
     this.key = crypto.createHmac('sha256', secret).update(this.hash).digest();
     // Signs download links sent to printing houses (independent of the password).

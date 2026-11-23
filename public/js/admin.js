@@ -100,7 +100,9 @@
     printed: { status: 'shipped', label: 'admin.markShipped' },
   };
   const pill = (status) => `<span class="pill ${status}">${esc(t('admin.status.' + status))}</span>`;
-  const cm = (inches) => POD.num(inches * 2.54);
+  // Production sizes in Western digits with a dot, like the inches, DPI and pixels next to them
+  // (Arabic digits and the Arabic decimal mark are easy to misread on the print floor).
+  const cm = (inches) => String(Math.round(inches * 2.54 * 10) / 10);
 
   function address(c) {
     if (c.governorate || c.address) {

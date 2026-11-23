@@ -310,21 +310,6 @@ async function textImage(text, { font = 'Cairo Bold', pt = 14, px, width, maxH, 
   return out;
 }
 
-/** Hollow outlined letters (to colour in) from a text image. */
-async function outlined(textImg, thick) {
-  const m = await sharp(textImg).metadata();
-  const pad = Math.ceil(thick * 2);
-  const alpha = await sharp(textImg).extend({ top: pad, bottom: pad, left: pad, right: pad, background: { r: 0, g: 0, b: 0, alpha: 0 } }).extractChannel('alpha').toBuffer();
-  const W = m.width + 2 * pad;
-  const H = m.height + 2 * pad;
-  const grown = await sharp(alpha).blur(thick * 1.4).threshold(8).toBuffer();
-  const inner = await sharp(alpha).threshold(110).toBuffer();
-  const black = await sharp({ create: { width: W, height: H, channels: 3, background: '#111' } }).joinChannel(grown).png().toBuffer();
-  const white = await sharp({ create: { width: W, height: H, channels: 3, background: '#fff' } }).joinChannel(inner).png().toBuffer();
-  const img = await sharp({ create: { width: W, height: H, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } }).composite([{ input: black }, { input: white }]).png().toBuffer();
-  return { img, w: W, h: H };
-}
-
 // ---------- Faces ----------
 // The photo the shopper crops is an oval around the face (hairline to chin),
 // 4:5. On each page the drawn face (eyes, nose, mouth) is painted over with
@@ -502,6 +487,17 @@ async function renderPage({ book, answers, face, faceLine, redrawn }, index, px,
   }
 
   const put = (t, cx, top) => layers.push({ input: t.img, left: Math.round(cx - t.w / 2), top: Math.round(top) });
+  /** A caption centred at height cy on a solid white rounded band (covers any lines under it). */
+  const captionBand = (t, cy) => {
+    const padX = Math.round(px * 0.03);
+    const padY = Math.round(px * 0.012);
+    const bw = Math.min(px - 4, t.w + padX * 2);
+    const bh = t.h + padY * 2;
+    const bx = Math.round(px / 2 - bw / 2);
+    const by = Math.round(Math.min(px - bh - 2, cy - bh / 2));
+    layers.push({ input: Buffer.from(`<svg width="${px}" height="${px}"><rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="${Math.round(bh / 2)}" fill="#ffffff"/></svg>`), left: 0, top: 0 });
+    put(t, px / 2, by + padY);
+  };
   if (noText) return sharp(base).composite(layers).flatten({ background: '#ffffff' });
 
   if (page.type === 'cover') {
@@ -530,13 +526,13 @@ async function renderPage({ book, answers, face, faceLine, redrawn }, index, px,
       const fw = Math.round(fh * (FACE_W / FACE_H));
       layers.push({ input: await lineFaceImage(faceLine, fw, fh, 0.05), left: Math.round(px / 2 - fw / 2), top: P(18) });
     }
-    const cap = await textImage(fill(page.caption[lang], answers, lang), { font: 'Lalezar', pt: 46, px, width: px * 0.84, maxH: px * 0.14 });
-    const o = await outlined(cap.img, Math.max(2, px * 0.006));
-    put(o, px / 2, page.type === 'draw' ? P(80) : P(78));
+    // The caption below the frame and the row of circles, on a clean white band.
+    const cap = await textImage(fill(page.caption[lang], answers, lang), { font: 'Lalezar', pt: 46, px, width: px * 0.84, maxH: px * 0.11, color: '#1b2740' });
+    captionBand(cap, P(90.5));
   } else if (coloring) {
-    const cap = await textImage(fill(page.caption[lang], answers, lang), { font: 'Lalezar', pt: 46, px, width: px * 0.86, maxH: px * 0.13 });
-    const o = await outlined(cap.img, Math.max(2, px * 0.006));
-    put(o, px / 2, px * 0.895 - o.h / 2);
+    // Captions sit on a white band, so they never run into the drawing's lines.
+    const cap = await textImage(fill(page.caption[lang], answers, lang), { font: 'Lalezar', pt: 46, px, width: px * 0.86, maxH: px * 0.11, color: '#1b2740' });
+    captionBand(cap, px * 0.905);
   } else if (page.text) {
     // Story text on a soft panel at the bottom of the picture.
     const txt = await textImage(fill(page.text[lang], answers, lang), { font: 'Cairo Bold', pt: 18, px, width: px * 0.82, maxH: px * 0.22, color: '#1b2740' });

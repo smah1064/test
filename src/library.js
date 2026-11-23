@@ -238,6 +238,32 @@ class Library {
       this.stamp = `${st.ino}:${st.size}:${st.mtimeMs}`;
     } catch (e) { /* ignore */ }
   }
+  /**
+   * Run a change with the index locked and freshly read, so two copies of the
+   * app changing the library at the same time don't undo each other.
+   */
+  withLock(fn) {
+    const lock = `${this.indexPath}.lock`;
+    let got = false;
+    for (let i = 0; i < 300 && !got; i++) {
+      try {
+        fs.writeFileSync(lock, String(process.pid), { flag: 'wx' });
+        got = true;
+      } catch (e) {
+        try {
+          if (Date.now() - fs.statSync(lock).mtimeMs > 10e3) fs.rmSync(lock, { force: true }); // left by a copy that stopped
+        } catch (err) { /* gone already */ }
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+      }
+    }
+    try {
+      this.stamp = null;
+      this.reload();
+      return fn();
+    } finally {
+      if (got) fs.rmSync(lock, { force: true });
+    }
+  }
   /** Every design, newest custom ones first, with `hidden` set. */
   all() {
     this.reload();
@@ -262,8 +288,10 @@ class Library {
   previewPath(id) {
     return path.join(this.dir, `${id}.png`);
   }
-  addCustom({ name, category, product, color, objects, area, preview }) {
-    this.reload();
+  addCustom(d) {
+    return this.withLock(() => this.addCustomNow(d));
+  }
+  addCustomNow({ name, category, product, color, objects, area, preview }) {
     const id = 'c-' + crypto.randomBytes(6).toString('hex');
     fs.writeFileSync(path.join(this.dir, `${id}.json`), JSON.stringify(objects));
     if (preview) fs.writeFileSync(this.previewPath(id), preview);
@@ -273,7 +301,9 @@ class Library {
     return meta;
   }
   setHidden(id, hidden) {
-    this.reload();
+    return this.withLock(() => this.setHiddenNow(id, hidden));
+  }
+  setHiddenNow(id, hidden) {
     if (!this.all().some((d) => d.id === id)) return false;
     this.index.hidden = this.index.hidden.filter((x) => x !== id);
     if (hidden) this.index.hidden.push(id);
@@ -281,7 +311,9 @@ class Library {
     return true;
   }
   removeCustom(id) {
-    this.reload();
+    return this.withLock(() => this.removeCustomNow(id));
+  }
+  removeCustomNow(id) {
     const before = this.index.custom.length;
     this.index.custom = this.index.custom.filter((d) => d.id !== id);
     if (this.index.custom.length === before) return false;

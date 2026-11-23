@@ -3284,6 +3284,8 @@
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden' && draftTimer) saveDraft();
   });
+  // Leaving or reloading the page right after a change: save it now, not after the short wait.
+  window.addEventListener('pagehide', () => { if (draftTimer) saveDraft(); });
 
   function busy(on, text) {
     $('busy').hidden = !on;

@@ -273,6 +273,19 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   const LIMITS = { ...DEFAULT_LIMITS, ...limits };
   const limiter = new security.RateLimiter();
   /** Throws 429 when this visitor (or everyone, for `*` keys) did `what` too often. */
+  /**
+   * Shop-wide daily budgets for paid AI (shared by every copy of the app,
+   * counted in the store under its lock): true if `n` more fit today.
+   */
+  const SHOP_DAY = new Intl.DateTimeFormat('en-CA', { timeZone: process.env.SHOP_TIMEZONE || 'Africa/Cairo' });
+  const takeShopBudget = (name, max, n = 1) => store.mutate((db) => {
+    db.usage ||= {};
+    const day = SHOP_DAY.format(new Date());
+    const u = db.usage[name] && db.usage[name].day === day ? db.usage[name] : { day, n: 0 };
+    if (u.n + n > max) return false;
+    db.usage[name] = { day, n: u.n + n };
+    return true;
+  });
   const rateLimit = (req, what, key = req.ip) => {
     const wait = limiter.hit(`${what}:${key}`, LIMITS[what]);
     if (wait) throw new HttpError(429, wait > 90 ? 'tooManyWait' : 'tooFast', { min: Math.ceil(wait / 60) });
@@ -488,6 +501,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
           throw new HttpError(400, 'imageTooLarge');
         }
         const dpi = Math.round(info.width / (side.widthIn + 2 * side.bleedIn));
+        // A print file far too small for the print (a broken upload) can't be printed or converted.
+        if (dpi < 20 || info.width < 16 || info.height < 16) throw new HttpError(400, 'printTooSmall');
         try {
           store.writeDesignFile(design.id, `${side.id}-print.png`, await printfiles.finalizePrintPng(raw, dpi));
         } catch (err) {
@@ -571,6 +586,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (aiUse.day !== day) Object.assign(aiUse, { day, total: 0, byIp: new Map() });
     const used = aiUse.byIp.get(ip) || 0;
     if (used >= AI_PER_VISITOR || aiUse.total >= AI_PER_DAY) throw new HttpError(429, 'aiLimit');
+    // The whole shop's budget is shared by every copy of the app.
+    if (!takeShopBudget('ai', AI_PER_DAY)) throw new HttpError(429, 'aiLimit');
     aiUse.byIp.set(ip, used + 1);
     aiUse.total += 1;
     return AI_PER_VISITOR - used - 1;
@@ -942,6 +959,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     };
     if (!design.aiConsent || !cartoon.enabled()) return drop('off');
     if (limiter.hit(`cartoon:${ip}`, LIMITS.cartoon) || limiter.hit('cartoonAll:*', LIMITS.cartoonAll)) return drop('limit');
+    if (!takeShopBudget('cartoon', LIMITS.cartoonAll[0].max)) return drop('limit'); // shared by every copy of the app
     try {
       const face = await cartoon.cartoonFace(photo, fs.readFileSync(cartoon.STYLE_REFS[book.kind === 'coloring' ? 'coloring' : 'story']), book.kind);
       store.writeDesignFile(design.id, 'face-cartoon.jpg', face);
@@ -1039,8 +1057,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         await saveBook(design, req.body || {}, req.ip);
       } catch (e) {
         fs.rmSync(store.designDir(design.id), { recursive: true, force: true });
-        delete store.db.designs[design.id];
-        store.save();
+        store.mutate((db) => { delete db.designs[design.id]; });
         throw e;
       }
       design.status = 'ready';
@@ -1146,7 +1163,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
           const file = store.designFile(design.id, `redraw-${i}.jpg`);
           if (fs.existsSync(file) || item.redraw.failed.includes(i)) continue;
           // Shop-wide daily budget: wait for it to free up instead of failing.
-          const wait = limiter.hit('redrawAll:*', LIMITS.redrawAll);
+          // Also the budget shared by every copy of the app: if it is used up, wait an hour.
+          const wait = limiter.hit('redrawAll:*', LIMITS.redrawAll) || (takeShopBudget('redraw', LIMITS.redrawAll[0].max) ? 0 : 3600);
           if (wait) {
             item.redraw.status = 'waiting';
             store.save();
@@ -1286,11 +1304,23 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const key = `${name}Id`;
     const cust = store.mutate((db) => {
       db.customers ||= [];
-      // The same provider account, else an account with the same (verified) email, else a new one.
+      // The same provider account; else an account whose email is proven to be
+      // the same person's (made with Google/Facebook, or its emailed reset link
+      // was used); else a new account. An account that only typed this email
+      // (never proven) is not joined, and loses the email: Google/Facebook just
+      // proved who owns it.
       let c = db.customers.find((x) => x[key] === prof.id);
-      if (!c && prof.email) c = db.customers.find((x) => x.email === prof.email);
+      if (!c && prof.email) {
+        const same = db.customers.find((x) => x.email === prof.email);
+        if (same && same.emailVerified) c = same;
+        else if (same) {
+          same.email = '';
+          same.emailRemovedAt = new Date().toISOString();
+        }
+      }
       if (c) {
         c[key] = prof.id;
+        if (prof.email && c.email === prof.email) c.emailVerified = true;
         return c;
       }
       const fallback = prof.email ? prof.email.split('@')[0] : 'Customer';
@@ -1299,6 +1329,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         name: (prof.name || fallback).replace(/\s+/g, ' ').slice(0, 120).padEnd(2, '.'),
         phone: '',
         email: prof.email,
+        ...(prof.email ? { emailVerified: true } : {}),
         [key]: prof.id,
         pv: 1,
         createdAt: new Date().toISOString(),
@@ -1367,6 +1398,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (!cust) throw new HttpError(401, 'acctSignIn');
       if (email && db.customers.some((x) => x.email === email && x.id !== cust.id)) throw new HttpError(409, 'acctEmailTaken');
       if (phone && db.customers.some((x) => x.phone === phone && x.id !== cust.id)) throw new HttpError(409, 'acctPhoneTaken');
+      // A changed email is no longer proven.
+      if (email !== cust.email) cust.emailVerified = false;
       Object.assign(cust, { name, email });
       if (phone) cust.phone = phone;
       if (address) cust.address = address;
@@ -1418,12 +1451,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   app.post('/api/account/reset', express.json({ limit: '10kb' }), (req, res) => {
     const { token, password } = req.body || {};
     rateLimit(req, 'accountLogin');
-    const cust = customers.readReset(auth.customerKey, token, findCustomer);
-    if (!cust) throw new HttpError(400, 'acctResetExpired');
+    const link = customers.readReset(auth.customerKey, token, findCustomer);
+    if (!link) throw new HttpError(400, 'acctResetExpired');
+    const cust = link.customer;
     const weak = customers.passwordProblem(String(password || ''));
     if (weak) throw new HttpError(400, weak);
     const { salt, hash } = customers.hashPassword(password);
-    const updated = store.mutate((db) => Object.assign(db.customers.find((x) => x.id === cust.id), { salt, passHash: hash, pv: (cust.pv || 1) + 1 }));
+    // An emailed link was opened: the account's email is proven to be theirs.
+    const updated = store.mutate((db) => Object.assign(db.customers.find((x) => x.id === cust.id), { salt, passHash: hash, pv: (cust.pv || 1) + 1 }, link.viaEmail && cust.email ? { emailVerified: true } : {}));
     setSession(req, res, updated);
     res.json({ customer: customers.publicCustomer(updated) });
   });
@@ -1896,7 +1931,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   app.post('/api/admin/customers/:id/reset-link', requireAdmin, (req, res) => {
     const c = findCustomer(req.params.id);
     if (!c) throw new HttpError(404, 'notFound');
-    const url = `${notify.siteUrl() || `${isHttps(req) ? 'https' : 'http'}://${req.get('host')}`}/account?reset=${encodeURIComponent(customers.resetToken(auth.customerKey, c, 24))}`;
+    const url = `${notify.siteUrl() || `${isHttps(req) ? 'https' : 'http'}://${req.get('host')}`}/account?reset=${encodeURIComponent(customers.resetToken(auth.customerKey, c, 24, 'a'))}`;
     const phone = String(c.phone || '').replace(/^0/, '20');
     res.json({ url, hours: 24, whatsapp: phone ? `https://wa.me/${phone}` : null });
   });

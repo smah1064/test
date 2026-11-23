@@ -1281,16 +1281,39 @@ test('sign in with Google: redirect, callback, account linking', async () => {
     assert.strictEqual(r.headers.get('location'), '/account');
     me = (await (await get('/api/account', cookies(r).find((c) => c.startsWith('pod_c=')))).json()).customer;
     assert.strictEqual(me.phone, '01234567890');
-    // An existing password account with the same verified email is linked, not duplicated.
-    await fetch(B + '/api/account/signup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Omar', phone: '01098765432', email: 'omar@example.com', password: 'longenough1' }) });
+    // An account that only typed an email (never proven) is NOT joined: someone
+    // could have typed another person's address. Google proves the owner, so the
+    // Google sign-in gets its own account and the typed email is taken off the other.
+    await fetch(B + '/api/account/signup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Attacker', phone: '01098765432', email: 'omar@example.com', password: 'longenough1' }) });
     r = await get('/auth/google');
-    const st3 = new URL(r.headers.get('location')).searchParams.get('state');
+    let st3 = new URL(r.headers.get('location')).searchParams.get('state');
     profileFor = { c3: { sub: 'g-2', email: 'omar@example.com', name: 'Omar G' } };
     r = await get(`/auth/google/callback?code=c3&state=${st3}`, cookies(r).find((c) => c.startsWith('pod_o=')));
     me = (await (await get('/api/account', cookies(r).find((c) => c.startsWith('pod_c=')))).json()).customer;
-    assert.strictEqual(me.phone, '01098765432');
+    assert.strictEqual(me.name, 'Omar G', 'a new account, not the one that typed the email');
+    assert.strictEqual(me.phone, '');
+    assert.strictEqual(me.email, 'omar@example.com');
+    const attacker = await fetch(B + '/api/account/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ login: '01098765432', password: 'longenough1' }) });
+    const atk = (await (await get('/api/account', cookies(attacker).find((c) => c.startsWith('pod_c=')))).json()).customer;
+    assert.strictEqual(atk.email, '', 'the unproven email was removed');
+    assert.strictEqual(atk.linked.google, false);
+    // A password account whose email is proven (its emailed reset link was used) IS joined.
+    r = await fetch(B + '/api/account/signup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Laila', phone: '01011223344', email: 'laila@example.com', password: 'longenough1' }) });
+    const lailaId = (await r.json()).customer.id;
+    // The link the shop emails (made here with the shop's own key).
+    const secret = Buffer.from(fs.readFileSync(path.join(dir, '.session-secret'), 'utf8').trim(), 'hex');
+    const ckey = require('crypto').createHmac('sha256', secret).update('customer-sessions').digest();
+    const emailed = require('../src/customers').resetToken(ckey, { id: lailaId, pv: 1 }, 1, 'e');
+    r = await fetch(B + '/api/account/reset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: emailed, password: 'newpassword9' }) });
+    assert.strictEqual(r.status, 200);
+    r = await get('/auth/google');
+    st3 = new URL(r.headers.get('location')).searchParams.get('state');
+    profileFor = { c5: { sub: 'g-9', email: 'laila@example.com', name: 'Laila G' } };
+    r = await get(`/auth/google/callback?code=c5&state=${st3}`, cookies(r).find((c) => c.startsWith('pod_o=')));
+    me = (await (await get('/api/account', cookies(r).find((c) => c.startsWith('pod_c=')))).json()).customer;
+    assert.strictEqual(me.id, lailaId, 'joined: the email was proven');
+    assert.strictEqual(me.phone, '01011223344');
     assert.strictEqual(me.linked.google, true);
-    assert.strictEqual(me.hasPassword, true);
     // An unverified email does not link to someone else's account.
     r = await get('/auth/google');
     const st4 = new URL(r.headers.get('location')).searchParams.get('state');
@@ -1485,6 +1508,18 @@ test('embroidery: DST encoding is exact, logos are digitised, orders get the DST
   assert.strictEqual(r.status, 200);
   assert.match(r.headers.get('content-disposition'), /embroidery\.dst/);
   assert.strictEqual((await admin(`/api/admin/files/${plain.id}/front?format=dst`)).status, 404);
+});
+
+test('a print file far too small for the product is refused', async () => {
+  const r = await post('/api/designs', { productId: 'tshirt', color: 'white', size: 'M', sides: { front: SIDE } });
+  const { id, uploadToken, files } = await r.json();
+  for (const name of files) {
+    const body = name.endsWith('.svg') ? SVG : name.includes('print') ? png(2, 2) : PREVIEW;
+    await upload(id, uploadToken, name, body);
+  }
+  const done = await fetch(`${base}/api/designs/${id}/complete`, { method: 'POST', headers: { 'x-upload-token': uploadToken } });
+  assert.strictEqual(done.status, 400);
+  assert.match((await done.json()).error, /too small/);
 });
 
 const png4 = (w, h) => png(w, h);

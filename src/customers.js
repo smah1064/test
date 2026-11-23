@@ -56,17 +56,22 @@ function readSession(key, token, findCustomer) {
   if (!c || String(c.pv || 1) !== pv) return null;
   return c;
 }
-function resetToken(key, customer, hours = 1) {
+/**
+ * A password-reset link. `via`: 'e' when it was emailed to the account's
+ * email (opening it proves the email is theirs), 'a' when the shop made it.
+ */
+function resetToken(key, customer, hours = 1, via = 'e') {
   const exp = Math.floor(Date.now() / 1000) + Math.round(hours * 3600);
-  return sign(key, ['reset', customer.id, exp.toString(36), String(customer.pv || 1)]);
+  return sign(key, ['reset', customer.id, exp.toString(36), String(customer.pv || 1), via === 'a' ? 'a' : 'e']);
 }
+/** { customer, viaEmail } for a genuine, unexpired, unused reset link, else null. */
 function readReset(key, token, findCustomer) {
-  const parts = verify(key, token, 4);
+  const parts = verify(key, token, 5);
   if (!parts || parts[0] !== 'reset') return null;
-  const [, id, exp, pv] = parts;
+  const [, id, exp, pv, via] = parts;
   if (parseInt(exp, 36) * 1000 < Date.now()) return null;
   const c = findCustomer(id);
-  return c && String(c.pv || 1) === pv ? c : null;
+  return c && String(c.pv || 1) === pv ? { customer: c, viaEmail: via === 'e' } : null;
 }
 
 /** The cookie header value for a session (or for signing out, with an empty token). */
