@@ -21,12 +21,16 @@ const {
 } = require('./products');
 const { GOVERNORATES, normalizeEgyptMobile } = require('./egypt');
 const { FIELDS, langOf, format } = require('./i18n');
+// Loaded on first use: the shop keeps working even if the image library cannot load on a server.
+let printfilesModule = null;
+const printfiles = new Proxy({}, { get: (_, key) => (printfilesModule ||= require('./printfiles'))[key] });
 
 /** Production steps every single item moves through, in order. */
 const ITEM_STATUSES = ['queued', 'printing', 'printed', 'shipped'];
 
-const MAX_FILE_BYTES = 25 * 1024 * 1024;
-const MAX_EDITOR_JSON_BYTES = 30 * 1024 * 1024;
+const MAX_EDITOR_JSON_BYTES = 40 * 1024 * 1024;
+const UPLOAD_LIMITS = { print: 60 * 1024 * 1024, preview: 8 * 1024 * 1024, svg: 40 * 1024 * 1024 };
+const FILE_RE = /^(front|back)-(print|preview)\.png$|^(front|back)-design\.svg$/;
 const MAX_ITEMS_PER_ORDER = 50;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -45,19 +49,20 @@ class HttpError extends Error {
 const t = (en, ar) => ({ en, ar });
 const FILE_LABELS = { print: t('print file', 'ملف الطباعة'), preview: t('preview', 'صورة المعاينة') };
 
-function decodePng(dataUrl, side, kind) {
-  const label = { en: `${side.name.en} ${FILE_LABELS[kind].en}`, ar: `${FILE_LABELS[kind].ar} (${side.name.ar})` };
-  if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/png;base64,')) throw new HttpError(400, 'notPng', { label });
-  const buf = Buffer.from(dataUrl.slice('data:image/png;base64,'.length), 'base64');
-  if (buf.length < 24 || !buf.subarray(0, 8).equals(PNG_SIGNATURE)) throw new HttpError(400, 'badPng', { label });
-  if (buf.length > MAX_FILE_BYTES) throw new HttpError(413, 'tooLarge', { label });
-  return buf;
+/** Check an uploaded file's type and size; returns its kind. */
+function checkUpload(name, buf) {
+  const kind = name.endsWith('.svg') ? 'svg' : name.includes('-print') ? 'print' : 'preview';
+  if (buf.length > UPLOAD_LIMITS[kind]) throw new HttpError(413, 'uploadTooLarge');
+  if (kind === 'svg') {
+    const head = buf.subarray(0, 512).toString('utf8');
+    if (!/<svg[\s>]/.test(head) && !/^\s*<\?xml/.test(head)) throw new HttpError(400, 'badPng', { label: name });
+  } else if (buf.length < 24 || !buf.subarray(0, 8).equals(PNG_SIGNATURE)) {
+    throw new HttpError(400, 'badPng', { label: name });
+  }
+  return kind;
 }
 
-/** Pixel size of a PNG. */
-function pngSize(buf) {
-  return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
-}
+const sha = (v) => crypto.createHash('sha256').update(String(v)).digest('hex');
 
 function cleanString(value, field, { max = 200, required = true } = {}) {
   const s = typeof value === 'string' ? value.trim() : '';
@@ -79,6 +84,8 @@ function orderStatus(order) {
   return 'in_production';
 }
 
+const pickEn = (v) => (v && typeof v === 'object' ? v.en : v);
+
 function governorate(id) {
   return GOVERNORATES.find((g) => g.id === id) || null;
 }
@@ -95,6 +102,7 @@ function publicItem(item) {
     price: item.price,
     status: item.status,
     history: item.history,
+    process: item.process || getProduct(item.productId)?.process,
   };
 }
 
@@ -165,8 +173,12 @@ function createApp({ dataDir, adminPassword }) {
 
   // ---------- Designs ----------
   // A design is one customised product, saved when the shopper adds it to
-  // the cart. It holds the editable layout plus a print-ready PNG per side.
-  app.post('/api/designs', express.json({ limit: '80mb' }), (req, res) => {
+  // the cart. It is created in three steps so large print files travel as
+  // plain binary uploads:
+  //   1. POST   /api/designs                      layout + options -> id and upload token
+  //   2. PUT    /api/designs/:id/files/:name      each PNG/SVG file
+  //   3. POST   /api/designs/:id/complete         checks files, embeds colour profile + DPI
+  app.post('/api/designs', express.json({ limit: '60mb' }), (req, res) => {
     const { productId, color, size, sides } = req.body || {};
     const product = getProduct(productId);
     if (!product) throw new HttpError(400, 'unknownProduct');
@@ -181,7 +193,6 @@ function createApp({ dataDir, adminPassword }) {
     const unknown = sideIds.filter((id) => !product.sides.some((s) => s.id === id));
     if (unknown.length) throw new HttpError(400, 'unknownSide', { side: unknown.join(', ') });
 
-    const files = {};
     const editor = {};
     const storedSides = [];
     for (const side of product.sides) {
@@ -190,32 +201,21 @@ function createApp({ dataDir, adminPassword }) {
       if (!s.editor || typeof s.editor !== 'object' || !Array.isArray(s.editor.objects) || s.editor.objects.length === 0) {
         throw new HttpError(400, 'sideEmpty', { side: side.name });
       }
-      const print = decodePng(s.print, side, 'print');
-      const preview = decodePng(s.preview, side, 'preview');
-      files[`${side.id}-print.png`] = print;
-      files[`${side.id}-preview.png`] = preview;
       editor[side.id] = s.editor;
-      const px = pngSize(print);
-      storedSides.push({
-        id: side.id,
-        name: side.name,
-        widthIn: side.printWidthIn,
-        heightIn: heightIn(side),
-        widthPx: px.width,
-        heightPx: px.height,
-        dpi: Math.round(px.width / side.printWidthIn),
-      });
+      storedSides.push({ id: side.id, name: side.name, widthIn: side.printWidthIn, heightIn: heightIn(side), bleedIn: side.bleedIn || 0 });
     }
-
     const editorJson = JSON.stringify(editor);
     if (Buffer.byteLength(editorJson) > MAX_EDITOR_JSON_BYTES) throw new HttpError(413, 'designTooLarge');
-    files['editor.json'] = editorJson;
 
+    const token = crypto.randomBytes(24).toString('hex');
     const design = {
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
+      status: 'uploading',
+      uploadTokenHash: sha(token),
       productId: product.id,
       productName: product.name,
+      process: product.process,
       color: { id: colorDef.id, name: colorDef.name, hex: colorDef.hex },
       size: { id: sizeDef.id, label: sizeDef.label },
       sides: storedSides,
@@ -223,8 +223,67 @@ function createApp({ dataDir, adminPassword }) {
       currency: CURRENCY,
       orderId: null,
     };
-    store.createDesign(design, files);
-    res.status(201).json({ ...design, previewUrl: `/files/designs/${design.id}/${storedSides[0].id}-preview.png` });
+    store.createDesign(design, { 'editor.json': editorJson });
+    const files = storedSides.flatMap((sd) => [`${sd.id}-print.png`, `${sd.id}-preview.png`, `${sd.id}-design.svg`]);
+    res.status(201).json({ id: design.id, uploadToken: token, files });
+  });
+
+  const uploadingDesign = (req) => {
+    const design = UUID_RE.test(req.params.id) && store.getDesign(req.params.id);
+    if (!design) throw new HttpError(404, 'designNotFound');
+    if (design.status !== 'uploading' || design.uploadTokenHash !== sha(req.get('x-upload-token') || '')) throw new HttpError(403, 'notFound');
+    return design;
+  };
+
+  app.put('/api/designs/:id/files/:name', express.raw({ type: () => true, limit: '60mb' }), (req, res) => {
+    const design = uploadingDesign(req);
+    const { name } = req.params;
+    if (!FILE_RE.test(name) || !design.sides.some((s) => name.startsWith(s.id + '-'))) throw new HttpError(400, 'notFound');
+    const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+    checkUpload(name, buf);
+    store.writeDesignFile(design.id, name, buf);
+    res.status(204).end();
+  });
+
+  app.post('/api/designs/:id/complete', async (req, res, next) => {
+    try {
+      const design = uploadingDesign(req);
+      for (const side of design.sides) {
+        for (const name of [`${side.id}-print.png`, `${side.id}-preview.png`]) {
+          if (!fs.existsSync(store.designFile(design.id, name))) throw new HttpError(400, 'sideEmpty', { side: side.name });
+        }
+        const file = store.designFile(design.id, `${side.id}-print.png`);
+        const raw = fs.readFileSync(file);
+        const info = await printfiles.pngInfo(raw);
+        const dpi = Math.round(info.width / (side.widthIn + 2 * side.bleedIn));
+        store.writeDesignFile(design.id, `${side.id}-print.png`, await printfiles.finalizePrintPng(raw, dpi));
+        Object.assign(side, { widthPx: info.width, heightPx: info.height, dpi, hasSvg: fs.existsSync(store.designFile(design.id, `${side.id}-design.svg`)) });
+      }
+      design.status = 'ready';
+      delete design.uploadTokenHash;
+      store.save();
+      const { uploadTokenHash, ...pub } = design; // eslint-disable-line no-unused-vars
+      res.json({ ...pub, previewUrl: `/files/designs/${design.id}/${design.sides[0].id}-preview.png` });
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  // "How will my colours print?" RGB -> CMYK -> RGB round trip of a small preview.
+  const proofHits = new Map();
+  app.post('/api/proof', express.raw({ type: 'image/png', limit: '6mb' }), async (req, res, next) => {
+    try {
+      const now = Date.now();
+      const hits = (proofHits.get(req.ip) || []).filter((tm) => now - tm < 60000);
+      if (hits.length >= 30) throw new HttpError(429, 'serverError');
+      proofHits.set(req.ip, [...hits, now]);
+      if (proofHits.size > 5000) proofHits.clear();
+      const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+      if (buf.length < 24 || !buf.subarray(0, 8).equals(PNG_SIGNATURE)) throw new HttpError(400, 'badPng', { label: 'preview' });
+      res.type('png').send(await printfiles.cmykProof(buf));
+    } catch (e) {
+      next(e);
+    }
   });
 
   // Re-open a saved design in the editor.
@@ -232,7 +291,8 @@ function createApp({ dataDir, adminPassword }) {
     const design = UUID_RE.test(req.params.id) && store.getDesign(req.params.id);
     if (!design) throw new HttpError(404, 'designNotFound');
     const editor = JSON.parse(fs.readFileSync(store.designFile(design.id, 'editor.json'), 'utf8'));
-    res.json({ ...design, editor });
+    const { uploadTokenHash, ...pub } = design; // eslint-disable-line no-unused-vars
+    res.json({ ...pub, editor });
   });
 
   // Mockup previews are public (design ids are unguessable); print files are admin-only.
@@ -266,7 +326,7 @@ function createApp({ dataDir, adminPassword }) {
 
     const designs = designIds.map((id) => {
       const d = typeof id === 'string' && UUID_RE.test(id) && store.getDesign(id);
-      if (!d) throw new HttpError(400, 'designGone');
+      if (!d || (d.status && d.status !== 'ready')) throw new HttpError(400, 'designGone');
       if (d.orderId) throw new HttpError(409, 'designOrdered');
       return d;
     });
@@ -283,6 +343,7 @@ function createApp({ dataDir, adminPassword }) {
         color: d.color,
         size: d.size,
         sides: d.sides,
+        process: d.process || product.process,
         price: priceFor(product, d.size.id, d.sides.length),
         status: 'queued',
         history: [{ status: 'queued', at: now }],
@@ -364,13 +425,41 @@ function createApp({ dataDir, adminPassword }) {
     res.json(adminItem(order, item, order.items.indexOf(item)));
   });
 
-  app.get('/api/admin/files/:designId/:side', requireAdmin, (req, res) => {
-    const { designId, side } = req.params;
-    const design = UUID_RE.test(designId) && store.getDesign(designId);
-    if (!design || !design.sides.some((s) => s.id === side)) throw new HttpError(404, 'notFound');
-    const order = design.orderId && store.getOrder(design.orderId);
-    const name = `${order ? order.number : 'design'}-${design.productId}-${side}.png`;
-    res.download(store.designFile(designId, `${side}-print.png`), name);
+  // Print files in every format the shop may need. Derived files are made on
+  // first request and cached next to the original.
+  const FORMATS = {
+    png: { file: (sd) => `${sd}-print.png`, ext: 'png', type: 'image/png' },
+    'png-mirror': { file: (sd) => `${sd}-print-mirrored.png`, ext: 'png', type: 'image/png', make: (buf, side) => printfiles.mirroredPng(buf, side.dpi) },
+    svg: { file: (sd) => `${sd}-design.svg`, ext: 'svg', type: 'image/svg+xml' },
+    pdf: { file: (sd) => `${sd}-print.pdf`, ext: 'pdf', type: 'application/pdf' },
+    'pdf-marks': { file: (sd) => `${sd}-print-marks.pdf`, ext: 'pdf', type: 'application/pdf' },
+    tiff: { file: (sd) => `${sd}-print-cmyk.tif`, ext: 'tif', type: 'image/tiff', make: (buf, side) => printfiles.cmykTiff(buf, side.dpi) },
+  };
+  app.get('/api/admin/files/:designId/:side', requireAdmin, async (req, res, next) => {
+    try {
+      const { designId, side: sideId } = req.params;
+      const design = UUID_RE.test(designId) && store.getDesign(designId);
+      const side = design && design.sides.find((s) => s.id === sideId);
+      const fmt = FORMATS[req.query.format || 'png'];
+      if (!side || !fmt) throw new HttpError(404, 'notFound');
+      const order = design.orderId && store.getOrder(design.orderId);
+      const base = `${order ? order.number : 'design'}-${design.productId}-${sideId}`;
+      const target = store.designFile(designId, fmt.file(sideId));
+      if (!fs.existsSync(target)) {
+        const png = fs.readFileSync(store.designFile(designId, `${sideId}-print.png`));
+        let out;
+        if (fmt.make) out = await fmt.make(png, side);
+        else if (fmt.ext === 'pdf') {
+          const product = getProduct(design.productId);
+          const label = `${order ? order.number + ' · ' : ''}${pickEn(design.productName)} · ${pickEn(design.size.label)} · ${pickEn(design.color.name)} · ${pickEn(side.name)} · trim ${side.widthIn} x ${side.heightIn} in${side.bleedIn ? ` + ${side.bleedIn} in bleed` : ''} · ${side.dpi} DPI · ${product ? product.process.toUpperCase() : ''}`;
+          out = await printfiles.printPdf(png, side, { marks: req.query.format === 'pdf-marks', title: base, slug: label });
+        } else throw new HttpError(404, 'notFound');
+        store.writeDesignFile(designId, fmt.file(sideId), out);
+      }
+      res.download(target, `${base}${req.query.format === 'png-mirror' ? '-mirrored' : ''}${req.query.format === 'pdf-marks' ? '-cropmarks' : ''}${req.query.format === 'tiff' ? '-cmyk' : ''}.${fmt.ext}`);
+    } catch (e) {
+      next(e);
+    }
   });
 
   // ---------- Static site ----------

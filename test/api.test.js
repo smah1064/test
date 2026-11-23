@@ -40,10 +40,14 @@ function png(width, height) {
     chunk('IDAT', zlib.deflateSync(raw)),
     chunk('IEND', Buffer.alloc(0)),
   ]);
-  return 'data:image/png;base64,' + out.toString('base64');
+  return out;
 }
 
-const SIDE = { editor: { objects: [{ type: 'i-text', text: 'hi' }] }, print: png(1800, 2400), preview: png(60, 72) };
+const EDITOR = { objects: [{ type: 'i-text', text: 'hi' }] };
+const SIDE = { editor: EDITOR };
+const PRINT = png(3600, 4800);
+const PREVIEW = png(60, 72);
+const SVG = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10"/></svg>');
 
 let server;
 let base;
@@ -70,10 +74,24 @@ const admin = (url, options = {}) =>
 
 const CUSTOMER = { name: 'سارة أحمد', phone: '٠١٠ ١٢٣٤ ٥٦٧٨', governorate: 'giza', city: 'الدقي', address: '12 شارع التحرير، الدور 3' };
 
-async function makeDesign(overrides = {}) {
+async function upload(id, token, name, body) {
+  return fetch(`${base}/api/designs/${id}/files/${name}`, { method: 'PUT', headers: { 'x-upload-token': token, 'Content-Type': 'application/octet-stream' }, body });
+}
+
+/** Create a design the way the editor does: layout, then files, then complete. */
+async function makeDesign(overrides = {}, { complete = true } = {}) {
   const res = await post('/api/designs', { productId: 'tshirt', color: 'black', size: 'M', sides: { front: SIDE }, ...overrides });
   assert.strictEqual(res.status, 201, await res.clone().text());
-  return res.json();
+  const { id, uploadToken, files } = await res.json();
+  for (const name of files) {
+    const body = name.endsWith('.svg') ? SVG : name.includes('print') ? PRINT : PREVIEW;
+    const up = await upload(id, uploadToken, name, body);
+    assert.strictEqual(up.status, 204, name);
+  }
+  if (!complete) return { id, uploadToken };
+  const done = await fetch(`${base}/api/designs/${id}/complete`, { method: 'POST', headers: { 'x-upload-token': uploadToken } });
+  assert.strictEqual(done.status, 200, await done.clone().text());
+  return done.json();
 }
 
 test('lists products with print areas', async () => {
@@ -95,14 +113,18 @@ test('lists products with print areas', async () => {
 test('saves a design, prices it on the server and records print specs', async () => {
   const d = await makeDesign({ size: '2XL', sides: { front: SIDE, back: SIDE } });
   assert.strictEqual(d.price, 450 + 50 + 100);
+  assert.strictEqual(d.status, 'ready');
+  assert.strictEqual(d.uploadTokenHash, undefined);
   assert.strictEqual(d.sides.length, 2);
-  assert.strictEqual(d.sides[0].widthPx, 1800);
-  assert.strictEqual(d.sides[0].dpi, 150);
+  assert.strictEqual(d.sides[0].widthPx, 3600);
+  assert.strictEqual(d.sides[0].dpi, 300);
+  assert.strictEqual(d.sides[0].hasSvg, true);
   const preview = await fetch(base + d.previewUrl);
   assert.strictEqual(preview.status, 200);
   assert.strictEqual(preview.headers.get('content-type'), 'image/png');
   const reopened = await (await fetch(`${base}/api/designs/${d.id}`)).json();
-  assert.deepStrictEqual(reopened.editor.front, SIDE.editor);
+  assert.deepStrictEqual(reopened.editor.front, EDITOR);
+  assert.strictEqual(reopened.uploadTokenHash, undefined);
 });
 
 test('rejects invalid designs', async () => {
@@ -111,7 +133,6 @@ test('rejects invalid designs', async () => {
     [{ productId: 'tshirt', color: 'purple', size: 'M', sides: { front: SIDE } }, /colour/],
     [{ productId: 'mug', color: 'white', size: '11oz', sides: { back: SIDE } }, /Unknown side/],
     [{ productId: 'tshirt', color: 'black', size: 'M', sides: {} }, /at least one side/],
-    [{ productId: 'tshirt', color: 'black', size: 'M', sides: { front: { ...SIDE, print: 'data:image/png;base64,AAAA' } } }, /not a valid PNG/],
     [{ productId: 'tshirt', color: 'black', size: 'M', sides: { front: { ...SIDE, editor: { objects: [] } } } }, /no design/],
   ];
   for (const [body, re] of cases) {
@@ -226,4 +247,64 @@ test('error messages follow the shopper language', async () => {
   assert.strictEqual((await en.json()).error, 'Unknown product');
   const ar = await post('/api/designs', { productId: 'nope' }, { 'x-lang': 'ar' });
   assert.strictEqual((await ar.json()).error, 'منتج غير معروف');
+});
+
+test('uploads need the token, the right file type and every file before completing', async () => {
+  const { id, uploadToken } = await makeDesign({}, { complete: false });
+  assert.strictEqual((await upload(id, 'wrong', 'front-print.png', PRINT)).status, 403);
+  assert.strictEqual((await upload(id, uploadToken, 'front-print.png', Buffer.from('not a png at all, just text'))).status, 400);
+  assert.strictEqual((await upload(id, uploadToken, 'back-print.png', PRINT)).status, 400, 'side not in design');
+  assert.strictEqual((await upload(id, uploadToken, '../db.json', PRINT)).status, 404);
+  // Not completed yet: cannot be ordered.
+  const early = await post('/api/orders', { customer: CUSTOMER, designIds: [id] });
+  assert.strictEqual(early.status, 400);
+
+  const fresh = await (await post('/api/designs', { productId: 'tshirt', color: 'black', size: 'M', sides: { front: SIDE } })).json();
+  const incomplete = await fetch(`${base}/api/designs/${fresh.id}/complete`, { method: 'POST', headers: { 'x-upload-token': fresh.uploadToken } });
+  assert.strictEqual(incomplete.status, 400, 'missing files');
+});
+
+test('admin can download PNG, mirrored PNG, SVG, PDF, PDF with crop marks and CMYK TIFF', async () => {
+  const d = await makeDesign({ productId: 'poster', color: 'black', size: '30x40' });
+  const get = (format) => admin(`/api/admin/files/${d.id}/front?format=${format}`);
+  const sharp = require('sharp');
+
+  const pngRes = await get('png');
+  const meta = await sharp(Buffer.from(await pngRes.arrayBuffer())).metadata();
+  assert.strictEqual(meta.density, Math.round(3600 / (17.7 + 0.25)), 'DPI embedded');
+  assert.ok(meta.icc, 'sRGB profile embedded');
+
+  const mir = await get('png-mirror');
+  assert.strictEqual(mir.status, 200);
+  assert.match(mir.headers.get('content-disposition'), /mirrored\.png/);
+
+  const svg = await get('svg');
+  assert.match(await svg.text(), /<svg/);
+
+  const pdf = Buffer.from(await (await get('pdf')).arrayBuffer());
+  assert.strictEqual(pdf.subarray(0, 5).toString(), '%PDF-');
+  const pdfText = pdf.toString('latin1');
+  assert.match(pdfText, /\/TrimBox/);
+  assert.match(pdfText, /\/BleedBox/);
+  // Page = trim + bleed: 17.7 x 23.6 in + 2 x 0.125 in.
+  const mb = /\/MediaBox \[0 0 ([\d.]+) ([\d.]+)\]/.exec(pdfText);
+  assert.ok(Math.abs(Number(mb[1]) - (17.7 + 0.25) * 72) < 0.5, 'page width ' + mb[1]);
+
+  const marks = Buffer.from(await (await get('pdf-marks')).arrayBuffer()).toString('latin1');
+  const mb2 = /\/MediaBox \[0 0 ([\d.]+) ([\d.]+)\]/.exec(marks);
+  assert.ok(Number(mb2[1]) > Number(mb[1]), 'crop-mark margin added');
+
+  const tif = await sharp(Buffer.from(await (await get('tiff')).arrayBuffer())).metadata();
+  assert.strictEqual(tif.space, 'cmyk');
+  assert.strictEqual(tif.channels, 4);
+
+  assert.strictEqual((await get('exe')).status, 404);
+  assert.strictEqual((await fetch(`${base}/api/admin/files/${d.id}/front?format=pdf`)).status, 401);
+});
+
+test('CMYK proof returns a PNG of the same size', async () => {
+  const res = await fetch(base + '/api/proof', { method: 'POST', headers: { 'Content-Type': 'image/png' }, body: png(40, 30) });
+  assert.strictEqual(res.status, 200);
+  const meta = await require('sharp')(Buffer.from(await res.arrayBuffer())).metadata();
+  assert.deepStrictEqual([meta.width, meta.height, meta.format], [40, 30, 'png']);
 });

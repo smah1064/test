@@ -266,5 +266,142 @@
     return new Promise((resolve) => c.toBlob(resolve, 'image/png'));
   }
 
-  window.POD_FX = { maskPath, roundRectPath, removeBackground };
+  // ---------- SVG export ----------
+  /** SVG markup for a photo shape, in the image's own coordinates. */
+  function maskShapeSvg(kind, w, h, attrs) {
+    const x = -w / 2;
+    const y = -h / 2;
+    const n = (v) => +v.toFixed(3);
+    const poly = (count, inner, rot) => {
+      const steps = inner ? count * 2 : count;
+      const pts = [];
+      for (let i = 0; i < steps; i++) {
+        const r = inner && i % 2 ? inner : 1;
+        const ang = rot + (i * Math.PI * 2) / steps;
+        pts.push(`${n((Math.cos(ang) * r * w) / 2)},${n((Math.sin(ang) * r * h) / 2)}`);
+      }
+      return `<polygon points="${pts.join(' ')}" ${attrs}/>`;
+    };
+    switch (kind) {
+      case 'circle': return `<ellipse cx="0" cy="0" rx="${n(w / 2)}" ry="${n(h / 2)}" ${attrs}/>`;
+      case 'rounded': return `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" rx="${n(Math.min(w, h) * 0.14)}" ${attrs}/>`;
+      case 'heart': {
+        const sx = w / 100;
+        const sy = h / 88;
+        const P = (px, py) => `${n(x + px * sx)},${n(y + py * sy)}`;
+        const d = `M${P(HEART[0][0], HEART[0][1])} ` + HEART.slice(1).map((c) => `C${P(c[1], c[2])} ${P(c[3], c[4])} ${P(c[5], c[6])}`).join(' ') + ' Z';
+        return `<path d="${d}" ${attrs}/>`;
+      }
+      case 'star': return poly(5, 0.45, -Math.PI / 2);
+      case 'hexagon': return poly(6, 0, 0);
+      case 'arch': {
+        const rr = Math.min(w / 2, h / 2);
+        return `<path d="M${n(x)},${n(y + h)} L${n(x)},${n(y + rr)} A${n(w / 2)},${n(rr)} 0 0 1 ${n(x + w)},${n(y + rr)} L${n(x + w)},${n(y + h)} Z" ${attrs}/>`;
+      }
+      default: return `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" ${attrs}/>`;
+    }
+  }
+  // Photo shapes become real SVG clip paths, so the photo stays editable in vector software.
+  const origImgSvg = IP._toSVG;
+  IP._toSVG = function () {
+    const markup = origImgSvg.call(this);
+    if (!this.mask) return markup;
+    const id = 'photoShape_' + fabric.Object.__uid++;
+    const shape = (attrs) => maskShapeSvg(this.mask, this.width, this.height, attrs);
+    const out = [`<clipPath id="${id}">${shape('')}</clipPath>\n`, `<g clip-path="url(#${id})">\n`, ...markup, '</g>\n'];
+    if (this.maskBorder > 0) {
+      const bw = (this.maskBorder / 100) * Math.min(this.width, this.height) * 2;
+      out.push(`<g clip-path="url(#${id})">${shape(`fill="none" stroke="${this.maskBorderColor}" stroke-width="${bw.toFixed(3)}"`)}</g>\n`);
+    }
+    return out;
+  };
+  // Curved text and text with a background box are drawn by custom code, so
+  // they go into the SVG as a 300 DPI picture of exactly what is on screen.
+  const origTextSvg = TP.toSVG;
+  TP.toSVG = function (reviver) {
+    if (!this.curve && !this.backgroundColor) return origTextSvg.call(this, reviver);
+    const r = this.getBoundingRect(true, true);
+    const mult = Math.min(24, Math.max(2, 300 / (TP.svgUnitsPerInch || 50))); // 300 DPI at the product's real size
+    const url = this.toDataURL({ multiplier: mult, format: 'png' });
+    let ex = 0;
+    let ey = 0;
+    if (this.shadow) {
+      const sc = this.getObjectScaling();
+      ex = Math.round(Math.abs(this.shadow.offsetX) + this.shadow.blur) * Math.abs(sc.scaleX);
+      ey = Math.round(Math.abs(this.shadow.offsetY) + this.shadow.blur) * Math.abs(sc.scaleY);
+    }
+    const f = (v) => +v.toFixed(3);
+    return `<image x="${f(r.left - ex)}" y="${f(r.top - ey)}" width="${f(r.width + 2 * ex)}" height="${f(r.height + 2 * ey)}" xlink:href="${url}" href="${url}"></image>\n`;
+  };
+
+  // Right-to-left (Arabic) text: lay each line out ourselves with direction="rtl"
+  // so the SVG matches the canvas exactly. The text stays real, editable text.
+  const origTextInnerSvg = TP._toSVG;
+  TP._toSVG = function () {
+    if (this.direction !== 'rtl' || this.charSpacing) return origTextInnerSvg.call(this);
+    const n = (v) => +v.toFixed(3);
+    const offsets = this._getSVGLeftTopOffsets();
+    const spans = [];
+    let top = offsets.textTop;
+    for (let i = 0; i < this._textLines.length; i++) {
+      const lh = this.getHeightOfLine(i);
+      const lw = this.getLineWidth(i);
+      const align = this.textAlign.replace('justify-', '').replace('justify', 'left');
+      const left = -this.width / 2 + (align === 'center' ? (this.width - lw) / 2 : align === 'right' ? this.width - lw : 0);
+      const baseline = top + (lh * (1 - this._fontSizeFraction)) / this.lineHeight;
+      const text = fabric.util.string.escapeXml(this._textLines[i].join(''));
+      if (text) spans.push(`<tspan x="${n(left + lw)}" y="${n(baseline)}">${text}</tspan>`);
+      top += lh;
+    }
+    const out = this._wrapSVGTextAndBg({ textSpans: spans, textBgRects: [] });
+    return out.map((part) => (typeof part === 'string' ? part.replace('<text ', '<text direction="rtl" text-anchor="start" ') : part));
+  };
+
+  // Embed the fonts a design uses, so the SVG looks the same on any computer.
+  let fontIndex = null;
+  async function loadFontIndex() {
+    if (!fontIndex) {
+      fontIndex = fetch('/fonts/fonts.css').then((r) => r.text()).then((css) => {
+        const faces = [];
+        for (const m of css.matchAll(/@font-face\s*\{([^}]*)\}/g)) {
+          const body = m[1];
+          const get = (k) => (new RegExp(k + ':\\s*([^;]+);').exec(body) || [])[1];
+          faces.push({
+            family: (get('font-family') || '').replace(/['"]/g, '').trim(),
+            weight: Number(get('font-weight')) || 400,
+            url: (/url\(([^)]+)\)/.exec(body) || [])[1],
+            range: get('unicode-range'),
+          });
+        }
+        return faces;
+      });
+    }
+    return fontIndex;
+  }
+  const blobToDataUrl = (blob) => new Promise((resolve) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.readAsDataURL(blob); });
+  async function fontFaceCss(objects) {
+    const used = new Map();
+    const walk = (o) => {
+      if (o.type === 'group' && o._objects) o._objects.forEach(walk);
+      if (o.fontFamily && !o.curve && !o.backgroundColor) {
+        const w = o.fontWeight === 'bold' || Number(o.fontWeight) >= 600 ? 700 : 400;
+        used.set(`${o.fontFamily}|${w}`, { family: o.fontFamily, weight: w });
+      }
+    };
+    objects.forEach(walk);
+    if (!used.size) return '';
+    const faces = await loadFontIndex();
+    const css = [];
+    for (const { family, weight } of used.values()) {
+      let matches = faces.filter((f) => f.family === family && f.weight === weight);
+      if (!matches.length) matches = faces.filter((f) => f.family === family);
+      for (const f of matches) {
+        const data = await blobToDataUrl(await (await fetch(f.url)).blob());
+        css.push(`@font-face{font-family:'${family}';font-weight:${f.weight};src:url(${data.replace('application/octet-stream', 'font/woff2')}) format('woff2');${f.range ? `unicode-range:${f.range};` : ''}}`);
+      }
+    }
+    return css.join('');
+  }
+
+  window.POD_FX = { maskPath, roundRectPath, removeBackground, fontFaceCss };
 })();

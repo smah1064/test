@@ -441,6 +441,38 @@ const PRODUCTS = [
   },
 ];
 
+/**
+ * Print production details per product:
+ *   process  how it is printed; decides which file the shop should use
+ *   safeIn   keep important text/graphics at least this far inside the edge
+ *   bleedIn  extra artwork beyond the edge that is trimmed off (edge-to-edge products)
+ *   model    shape used by the 3D preview, with real-world size in inches
+ */
+const PRODUCTION = {
+  tshirt: { process: 'dtg', safeIn: 0.25, bleedIn: 0, model: { type: 'card', material: 'fabric' } },
+  kidstee: { process: 'dtg', safeIn: 0.25, bleedIn: 0, model: { type: 'card', material: 'fabric' } },
+  hoodie: { process: 'dtg', safeIn: 0.25, bleedIn: 0, model: { type: 'card', material: 'fabric' } },
+  sweatshirt: { process: 'dtg', safeIn: 0.25, bleedIn: 0, model: { type: 'card', material: 'fabric' } },
+  cap: { process: 'dtf', safeIn: 0.12, bleedIn: 0, model: { type: 'card', material: 'fabric' } },
+  mug: { process: 'sublimation', safeIn: 0.15, bleedIn: 0, model: { type: 'mug', diameterIn: 3.25, heightIn: 3.8, material: 'ceramic' } },
+  cushion: { process: 'sublimation', safeIn: 0.4, bleedIn: 0, model: { type: 'pillow', widthIn: 16, heightIn: 16, material: 'fabric' } },
+  poster: { process: 'paper', safeIn: 0.25, bleedIn: 0.125, model: { type: 'frame', material: 'paper' } },
+  bottle: { process: 'uv', safeIn: 0.15, bleedIn: 0, model: { type: 'bottle', diameterIn: 2.9, heightIn: 10.2, material: 'metal' } },
+  tote: { process: 'dtg', safeIn: 0.25, bleedIn: 0, model: { type: 'card', material: 'fabric' } },
+  phonecase: { process: 'uv', safeIn: 0.12, bleedIn: 0.08, model: { type: 'case', material: 'plastic' } },
+  mousepad: { process: 'sublimation', safeIn: 0.2, bleedIn: 0.125, model: { type: 'pad', material: 'fabric' } },
+  notebook: { process: 'paper', safeIn: 0.25, bleedIn: 0.125, model: { type: 'notebook', material: 'paper' } },
+};
+for (const p of PRODUCTS) {
+  const spec = PRODUCTION[p.id];
+  p.process = spec.process;
+  p.model = spec.model;
+  for (const side of p.sides) {
+    side.safeIn = spec.safeIn;
+    side.bleedIn = spec.bleedIn;
+  }
+}
+
 /** Extra charge for every printed side beyond the first. */
 const EXTRA_SIDE_PRICE = 100;
 const SHIPPING_FLAT = 75;

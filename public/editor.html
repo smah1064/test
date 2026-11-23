@@ -7,6 +7,7 @@
   <script>(function(){var l;try{l=localStorage.getItem('pod-lang')}catch(e){}l=l==='en'?'en':'ar';var d=document.documentElement;d.lang=l;d.dir=l==='ar'?'rtl':'ltr'})()</script>
   <link rel="stylesheet" href="/fonts/fonts.css">
   <link rel="stylesheet" href="/css/styles.css">
+  <script type="importmap">{ "imports": { "three": "/vendor/three/three.module.min.js" } }</script>
 </head>
 <body class="editor-page" data-title-key="editor.pageTitle">
   <header class="site-header">
@@ -48,6 +49,7 @@
       <section class="stage-wrap">
         <div class="stage-bar">
           <div class="side-tabs" id="side-tabs" role="tablist"></div>
+          <button class="check-chip ok" id="check-chip"></button>
           <div class="spacer"></div>
           <div class="zoom-group">
             <button id="zoom-out" data-i18n-title="bar.zoomOut" data-i18n-aria="bar.zoomOut">−</button>
@@ -60,6 +62,9 @@
           </button>
           <button class="btn btn-sm btn-icon" id="redo" data-i18n-title="bar.redo" data-i18n-aria="bar.redo">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/></svg>
+          </button>
+          <button class="btn btn-sm btn-dark" id="preview-open" data-i18n-title="pv.open">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2 3 7v10l9 5 9-5V7z"/><path d="M3 7l9 5 9-5M12 12v10"/></svg><span class="btn-label" data-i18n="pv.open"></span>
           </button>
           <button class="btn btn-sm" id="preview-toggle" data-i18n-title="bar.preview.title">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span class="btn-label" data-i18n="bar.preview"></span>
@@ -121,6 +126,12 @@
             </div>
           </section>
 
+          <section class="panel-section" id="sec-check">
+            <h3 data-i18n="check.title"></h3>
+            <ul class="check-legend" id="check-legend"></ul>
+            <ul class="check-list" id="check-list"></ul>
+          </section>
+
           <section class="panel-section" id="sec-props">
             <h3 id="props-title"></h3>
             <div id="props"></div>
@@ -145,6 +156,27 @@
     </div>
   </main>
 
+  <div class="pv-modal" id="pv" hidden>
+    <div class="pv-box" role="dialog" aria-modal="true" aria-labelledby="pv-title">
+      <div class="pv-head">
+        <h3 id="pv-title" data-i18n="pv.title"></h3>
+        <div class="side-tabs pv-tabs">
+          <button class="side-tab" data-pv-tab="real" data-i18n="pv.realistic"></button>
+          <button class="side-tab" data-pv-tab="3d" data-i18n="pv.3d"></button>
+          <button class="side-tab" data-pv-tab="proof" data-i18n="pv.proof"></button>
+        </div>
+        <button class="fly-close" id="pv-close" data-i18n-aria="bar.close">✕</button>
+      </div>
+      <div class="side-tabs pv-sides" id="pv-sides" hidden></div>
+      <div class="pv-body" id="pv-body"></div>
+      <div class="pv-foot">
+        <span class="muted small" id="pv-hint"></span>
+        <label class="check" id="pv-spin-wrap"><input type="checkbox" id="pv-spin" checked> <span data-i18n="pv.spin"></span></label>
+        <button class="btn btn-sm" id="pv-download" data-i18n="pv.download"></button>
+      </div>
+    </div>
+  </div>
+
   <div class="overlay-busy" id="busy" hidden><div><div class="spinner"></div><span id="busy-text"></span></div></div>
 
   <script src="/vendor/fabric-5.3.0.min.js"></script>
@@ -153,6 +185,7 @@
   <script src="/js/fabric-ext.js"></script>
   <script src="/js/templates.js"></script>
   <script src="/js/stickers.js"></script>
+  <script src="/js/preview.js"></script>
   <script src="/js/editor.js"></script>
 </body>
 </html>

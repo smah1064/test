@@ -11,8 +11,9 @@
 
   const W = 500;
   const H = 600;
-  const TARGET_DPI = 150;
-  const MAX_PRINT_PX = 4000;
+  const TARGET_DPI = 300;
+  const MAX_PRINT_PIXELS = 16e6; // iPhone Safari's canvas limit is 16.7 million pixels
+  const MAX_PRINT_SIDE = 8000;
   const MAX_UPLOAD_PX = 3000;
   const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
   const HISTORY_LIMIT = 60;
@@ -142,6 +143,32 @@
     });
   }
 
+  /** Trim (the print edge), bleed (artwork that gets trimmed off) and safe zone, in mockup units. */
+  function rects(sideId) {
+    const sd = sideDef(sideId);
+    const a = sd.printArea;
+    const u = a.w / sd.printWidthIn; // units per inch
+    const b = (sd.bleedIn || 0) * u;
+    const sf = (sd.safeIn || 0) * u;
+    return {
+      u, b, sf,
+      trim: a,
+      bleed: { x: a.x - b, y: a.y - b, w: a.w + 2 * b, h: a.h + 2 * b, rx: a.rx ? a.rx + b : 0 },
+      safe: { x: a.x + sf, y: a.y + sf, w: a.w - 2 * sf, h: a.h - 2 * sf, rx: a.rx ? Math.max(0, a.rx - sf) : 0 },
+    };
+  }
+  // While editing, artwork shows into the bleed; the preview shows the trimmed result.
+  const currentClip = () => (st.preview ? rects().trim : rects().bleed);
+  function applyClips(r = currentClip()) {
+    canvas.getObjects().forEach((o) => { if (o.name !== '__cropper') { o.clipPath = clipRect(r); o.dirty = true; } });
+    canvas.requestRenderAll();
+  }
+  function pathRect(ctx, r) {
+    ctx.beginPath();
+    if (ctx.roundRect && r.rx) ctx.roundRect(r.x, r.y, r.w, r.h, r.rx);
+    else ctx.rect(r.x, r.y, r.w, r.h);
+  }
+
   // Print-area guide and snap lines, drawn on top while editing.
   canvas.on('after:render', (opt) => {
     if (st.preview || st.exporting) return;
@@ -160,13 +187,57 @@
       ctx.rect(r.x, r.y, r.w, r.h);
       ctx.fill('evenodd');
     }
+    const R = rects();
+    // Bleed: solid blue line outside the print edge.
+    if (R.b) {
+      ctx.setLineDash([]);
+      ctx.lineWidth = 1 * px;
+      ctx.strokeStyle = 'rgba(28, 126, 214, .85)';
+      pathRect(ctx, R.bleed);
+      ctx.stroke();
+    }
+    // Safe zone: green dashed line inside the print edge.
+    ctx.setLineDash([3 * px, 3 * px]);
+    ctx.lineWidth = 1 * px;
+    ctx.strokeStyle = 'rgba(47, 158, 68, .9)';
+    pathRect(ctx, R.safe);
+    ctx.stroke();
+    // Print edge.
     ctx.setLineDash([6 * px, 4 * px]);
     ctx.lineWidth = 1.5 * px;
     ctx.strokeStyle = 'rgba(255, 90, 54, .9)';
-    ctx.beginPath();
-    if (ctx.roundRect && a.rx) ctx.roundRect(a.x, a.y, a.w, a.h, a.rx);
-    else ctx.rect(a.x, a.y, a.w, a.h);
+    pathRect(ctx, a);
     ctx.stroke();
+    // Elements with print problems get a red outline.
+    if (st.issueObjs && st.issueObjs.size) {
+      ctx.setLineDash([4 * px, 3 * px]);
+      ctx.lineWidth = 2 * px;
+      ctx.strokeStyle = 'rgba(224, 49, 49, .95)';
+      for (const o of st.issueObjs) {
+        if (!canvas.contains(o)) continue;
+        const r = absRect(o);
+        ctx.strokeRect(r.left - 3 * px, r.top - 3 * px, r.width + 6 * px, r.height + 6 * px);
+      }
+    }
+    // DPI badge on the selected photo.
+    const sel = canvas.getActiveObject();
+    if (sel && sel.type === 'image' && !crop) {
+      const dpi = imageDpi(sel);
+      const r = sel.getBoundingRect(true, true);
+      const txt = `${dpi} DPI`;
+      ctx.setLineDash([]);
+      ctx.font = `700 ${10 * px}px system-ui, sans-serif`;
+      const tw = ctx.measureText(txt).width + 10 * px;
+      const bx = r.left;
+      const by = Math.max(r.top - 22 * px, 2 * px);
+      ctx.fillStyle = dpi >= 150 ? '#2f9e44' : dpi >= 100 ? '#e67700' : '#e03131';
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(bx, by, tw, 16 * px, 8 * px); else ctx.rect(bx, by, tw, 16 * px);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'left';
+      ctx.fillText(txt, bx + 5 * px, by + 11.5 * px);
+    }
     const s = sideDef();
     ctx.font = `600 ${11 * px}px Cairo, system-ui, sans-serif`;
     ctx.fillStyle = 'rgba(255, 90, 54, .95)';
@@ -272,7 +343,7 @@
   }
 
   canvas.on('object:added', (e) => {
-    e.target.clipPath = clipRect(area());
+    e.target.clipPath = clipRect(currentClip());
     if (!st.silent) commit();
   });
   canvas.on('object:removed', () => !st.silent && commit());
@@ -296,6 +367,7 @@
   ['selection:created', 'selection:updated'].forEach((ev) => canvas.on(ev, () => {
     renderProps();
     renderLayers();
+    scheduleCheck();
     if (MOBILE.matches) setSheet('props');
   }));
   let lastCleared = null;
@@ -307,9 +379,11 @@
     }
     renderProps();
     renderLayers();
+    scheduleCheck();
     if (st.sheet === 'props') setSheet(null);
   });
   canvas.on('object:scaling', updateQuality);
+  ['object:moving', 'object:scaling', 'object:rotating'].forEach((ev) => canvas.on(ev, () => scheduleCheck()));
   canvas.on('object:rotating', (e) => { const r = $('p-angle'); if (r) r.value = Math.round(e.target.angle); });
 
   // ---------- History (per side) ----------
@@ -447,7 +521,7 @@
     addObject(obj);
   });
   $('fill-area').addEventListener('click', () => {
-    const a = area();
+    const a = rects().bleed; // fill into the bleed so no white edge is left after trimming
     const r = new fabric.Rect({ name: 'Background', width: a.w, height: a.h, rx: a.rx || 0, ry: a.rx || 0, fill: '#ffd84d' });
     st.silent = true;
     addObject(r, { shrinkToFit: false });
@@ -1458,6 +1532,7 @@
     st.side = id;
     await Promise.all([applyMockup(id), loadObjects(st.designs[id])]);
     if (MOBILE.matches && st.sheet) fit();
+    renderCheck();
   }
   $('side-tabs').addEventListener('click', serial(async (e) => {
     const b = e.target.closest('[data-side]');
@@ -1475,7 +1550,7 @@
     st.preview = !st.preview;
     $('preview-toggle').classList.toggle('active', st.preview);
     if (st.preview) canvas.discardActiveObject();
-    canvas.requestRenderAll();
+    applyClips();
   }
   $('preview-toggle').addEventListener('click', togglePreview);
   $('undo').addEventListener('click', serial(() => stepHistory(-1)));
@@ -1518,6 +1593,90 @@
     }
   });
 
+  // ---------- Print check ----------
+  /** Bounding box on the canvas, also correct for objects inside a multi-selection. */
+  function absRect(o) {
+    const m = o.calcTransformMatrix();
+    const d = o._getNonTransformedDimensions();
+    const pts = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => fabric.util.transformPoint({ x: (sx * d.x) / 2, y: (sy * d.y) / 2 }, m));
+    const xs = pts.map((p) => p.x);
+    const ys = pts.map((p) => p.y);
+    return { left: Math.min(...xs), top: Math.min(...ys), width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys) };
+  }
+  /** Problems that would make the print blurry, cut off or hard to read. */
+  function checkIssues() {
+    const R = rects();
+    const sd = sideDef();
+    const edge = R.b ? R.bleed : R.trim;
+    const issues = [];
+    for (const o of canvas.getObjects()) {
+      if (o.name === '__cropper' || o.visible === false) continue;
+      const r = absRect(o);
+      const name = layerName(o);
+      const covers = r.left <= R.trim.x + 1 && r.top <= R.trim.y + 1 && r.left + r.width >= R.trim.x + R.trim.w - 1 && r.top + r.height >= R.trim.y + R.trim.h - 1;
+      const outside = r.left > edge.x + edge.w || r.left + r.width < edge.x || r.top > edge.y + edge.h || r.top + r.height < edge.y;
+      if (outside) {
+        issues.push({ level: 'error', key: 'check.outside', obj: o, params: { name } });
+        continue;
+      }
+      const cut = r.left < edge.x - 0.5 || r.top < edge.y - 0.5 || r.left + r.width > edge.x + edge.w + 0.5 || r.top + r.height > edge.y + edge.h + 0.5;
+      if (cut && !covers) issues.push({ level: 'warn', key: 'check.cut', obj: o, params: { name } });
+      const important = isText(o) || isSticker(o);
+      const unsafe = r.left < R.safe.x || r.top < R.safe.y || r.left + r.width > R.safe.x + R.safe.w || r.top + r.height > R.safe.y + R.safe.h;
+      if (!cut && important && unsafe) issues.push({ level: 'warn', key: 'check.safe', obj: o, params: { name } });
+      if (o.type === 'image') {
+        const dpi = imageDpi(o);
+        if (dpi < 100) issues.push({ level: 'error', key: 'check.lowres', obj: o, params: { name, dpi } });
+        else if (dpi < 150) issues.push({ level: 'warn', key: 'check.okres', obj: o, params: { name, dpi } });
+      }
+      if (isText(o)) {
+        const pt = Math.round(((o.fontSize * Math.abs(o.scaleY)) / R.u) * 72 * 0.7); // cap height ≈ 70% of font size
+        if (pt < 6) issues.push({ level: 'warn', key: 'check.tiny', obj: o, params: { name, pt } });
+      }
+    }
+    issues.sort((x, y) => (x.level === y.level ? 0 : x.level === 'error' ? -1 : 1));
+    return issues.map((i) => ({ ...i, side: sd }));
+  }
+  let checkFrame = 0;
+  function scheduleCheck() {
+    if (checkFrame) return;
+    checkFrame = requestAnimationFrame(() => { checkFrame = 0; renderCheck(); });
+  }
+  function renderCheck() {
+    if (crop) return;
+    const issues = checkIssues();
+    st.issues = issues;
+    st.issueObjs = new Set(issues.map((i) => i.obj));
+    const chip = $('check-chip');
+    chip.className = 'check-chip ' + (issues.length ? (issues.some((i) => i.level === 'error') ? 'bad' : 'warn') : 'ok');
+    chip.innerHTML = issues.length ? `⚠ <span>${esc(t('check.issues', { n: POD.num(issues.length) }))}</span>` : `✓ <span>${esc(t('check.ok'))}</span>`;
+    const R = rects();
+    $('check-legend').innerHTML = `
+      <li><i class="lg lg-trim"></i>${esc(t('check.legendTrim'))}</li>
+      <li><i class="lg lg-safe"></i>${esc(t('check.legendSafe'))}</li>
+      ${R.b ? `<li><i class="lg lg-bleed"></i>${esc(t('check.legendBleed'))}</li>` : ''}`;
+    $('check-list').innerHTML = issues.length
+      ? issues.map((i, k) => `<li class="${i.level}" data-issue="${k}"><span>${i.level === 'error' ? '⛔' : '⚠'}</span><span>${esc(t(i.key, { ...i.params, dpi: POD.num(i.params.dpi ?? 0), pt: POD.num(i.params.pt ?? 0) }))}</span></li>`).join('')
+      : `<li class="ok"><span>✓</span><span>${esc(t('check.allGood'))}</span></li>`;
+    canvas.requestRenderAll();
+  }
+  $('check-list').addEventListener('click', (e) => {
+    const li = e.target.closest('[data-issue]');
+    const issue = li && st.issues[Number(li.dataset.issue)];
+    if (!issue || !canvas.contains(issue.obj) || issue.obj.selectable === false) return;
+    canvas.setActiveObject(issue.obj);
+    canvas.requestRenderAll();
+  });
+  $('check-chip').addEventListener('click', () => {
+    if (MOBILE.matches) {
+      canvas.discardActiveObject();
+      setSheet('product');
+      requestAnimationFrame(() => $('sec-check').scrollIntoView({ block: 'start' }));
+    } else {
+      $('sec-check').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  });
+
   // ---------- Price & chrome ----------
   function designedSides() {
     return st.product.sides.filter((s) => (s.id === st.side ? canvas.getObjects().length : (st.designs[s.id] || []).length) > 0);
@@ -1537,13 +1696,12 @@
     $('add-to-cart').textContent = t(st.editingCartIndex !== null ? 'cart.update' : 'cart.add');
     renderSideTabs();
     renderLayers();
+    renderCheck();
   }
 
   // ---------- Export & add to cart ----------
-  function exportPrint(side) {
-    const a = side.printArea;
-    const z = canvas.getZoom();
-    const mult = Math.min((TARGET_DPI * side.printWidthIn) / a.w, MAX_PRINT_PX / Math.max(a.w, a.h));
+  /** Run fn with the canvas showing only the artwork (no product, guides or on-screen clipping). */
+  function withArtworkOnly(fn, clip = null) {
     const objs = canvas.getObjects();
     const clips = objs.map((o) => o.clipPath);
     const bg = canvas.backgroundImage;
@@ -1555,12 +1713,12 @@
     st.exporting = true;
     canvas.backgroundImage = null;
     canvas.overlayImage = null;
-    canvas.setViewportTransform([z, 0, 0, z, 0, 0]); // ignore scroll offsets
-    objs.forEach((o) => (o.clipPath = null)); // the crop below does the clipping at full resolution
+    canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
+    objs.forEach((o) => { o.clipPath = clip ? clipRect(clip) : null; o.dirty = true; });
     try {
-      return canvas.toDataURL({ format: 'png', left: a.x * z, top: a.y * z, width: a.w * z, height: a.h * z, multiplier: mult / z });
+      return fn();
     } finally {
-      objs.forEach((o, i) => (o.clipPath = clips[i]));
+      objs.forEach((o, i) => { o.clipPath = clips[i]; o.dirty = true; });
       canvas.backgroundImage = bg;
       canvas.overlayImage = ov;
       canvas.setViewportTransform(vt);
@@ -1568,15 +1726,45 @@
       st.exporting = false;
     }
   }
+  const canvasBlob = (el, type = 'image/png') => new Promise((resolve, reject) => el.toBlob((b) => (b ? resolve(b) : reject(new Error('Export failed'))), type));
+
+  /** Transparent print file: artwork + bleed at up to 300 DPI. */
+  function exportPrint(side) {
+    const { bleed, u } = rects(side.id);
+    const mult = Math.min(TARGET_DPI / u, Math.sqrt(MAX_PRINT_PIXELS / (bleed.w * bleed.h)), MAX_PRINT_SIDE / Math.max(bleed.w, bleed.h));
+    return canvasBlob(withArtworkOnly(() => canvas.toCanvasElement(mult, { left: bleed.x, top: bleed.y, width: bleed.w, height: bleed.h })));
+  }
+  /** Product mockup with the trimmed design, for the cart, order page and print queue. */
   function exportPreview() {
     const z = canvas.getZoom();
     st.exporting = true;
+    const r = rects().trim;
+    const objs = canvas.getObjects();
+    const clips = objs.map((o) => o.clipPath);
+    objs.forEach((o) => { o.clipPath = clipRect(r); o.dirty = true; });
     try {
-      return canvas.toDataURL({ format: 'png', multiplier: 1.2 / z });
+      return canvasBlob(canvas.toCanvasElement(1.2 / z));
     } finally {
+      objs.forEach((o, i) => { o.clipPath = clips[i]; o.dirty = true; });
       st.exporting = false;
     }
   }
+  /** Vector SVG of the artwork at its physical size, with the fonts embedded. */
+  async function exportSvg(side) {
+    const { bleed, b, u } = rects(side.id);
+    const wIn = +(bleed.w / u).toFixed(4);
+    const hIn = +(bleed.h / u).toFixed(4);
+    fabric.Text.prototype.svgUnitsPerInch = u;
+    const svg = withArtworkOnly(() => canvas.toSVG({ viewBox: { x: bleed.x, y: bleed.y, width: bleed.w, height: bleed.h }, width: `${wIn}in`, height: `${hIn}in` }));
+    const fonts = await window.POD_FX.fontFaceCss(canvas.getObjects());
+    const note = `<!-- OneOff Print artwork: ${side.printWidthIn} x ${side.printHeightIn} in${b ? ` + ${side.bleedIn} in bleed each side` : ''}. sRGB. -->`;
+    return svg.replace(/<defs>/, `${note}<defs><style>${fonts}</style>`);
+  }
+  /** Design layer only, in mockup coordinates, for the live previews. */
+  function exportDesignLayer(scale) {
+    return withArtworkOnly(() => canvas.toCanvasElement(scale, { left: 0, top: 0, width: W, height: H }), rects().trim);
+  }
+
   function busy(on, text) {
     $('busy').hidden = !on;
     if (text) $('busy-text').textContent = text;
@@ -1591,35 +1779,54 @@
       toast(t('msg.addFirst'), 'error');
       return;
     }
-    const lowRes = [];
-    for (const s of sides) {
-      for (const o of st.designs[s.id]) {
-        if (o.type === 'image' && imageDpi(o, s.id) < 100) lowRes.push(`${o.name || t('panel.image')} (${tr(s.name)}, ${imageDpi(o, s.id)} DPI)`);
-      }
-    }
-    if (lowRes.length && !confirm(t('msg.lowResConfirm', { list: lowRes.join('\n') }))) return;
 
     const prevZoom = st.zoom;
     if (st.zoom !== 1) setZoom(1);
+    const wasPreview = st.preview;
+    if (wasPreview) togglePreview();
     busy(true, t('busy.preparing'));
     const original = st.side;
     try {
-      const payload = { productId: st.product.id, color: st.colorId, size: st.sizeId, sides: {} };
+      // 1. Render every designed side and collect print problems.
+      const sidesPayload = {};
+      const files = {};
+      const problems = [];
       for (const s of sides) {
         await showSide(s.id);
-        payload.sides[s.id] = {
-          editor: { version: fabric.version, objects: await inlineImages(st.designs[s.id]) },
-          print: exportPrint(s),
-          preview: exportPreview(),
-        };
+        checkIssues().forEach((i) => problems.push(`• ${tr(s.name)}: ${t(i.key, { ...i.params, dpi: i.params.dpi, pt: i.params.pt })}`));
+        sidesPayload[s.id] = { editor: { version: fabric.version, objects: await inlineImages(st.designs[s.id]) } };
+        files[`${s.id}-print.png`] = await exportPrint(s);
+        files[`${s.id}-preview.png`] = await exportPreview();
+        files[`${s.id}-design.svg`] = new Blob([await exportSvg(s)], { type: 'image/svg+xml' });
       }
       await showSide(original);
+      if (problems.length) {
+        busy(false);
+        if (!confirm(t('check.confirm', { list: problems.join('\n') }))) return;
+        busy(true, t('busy.saving'));
+      }
+
+      // 2. Save the layout, 3. upload the files, 4. let the server check and finish them.
       busy(true, t('busy.saving'));
-      const design = await POD.api('/api/designs', {
+      const created = await POD.api('/api/designs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ productId: st.product.id, color: st.colorId, size: st.sizeId, sides: sidesPayload }),
       });
+      let done = 0;
+      busy(true, t('busy.uploading', { n: 0, total: created.files.length }));
+      await Promise.all(created.files.map(async (name) => {
+        const res = await fetch(`/api/designs/${created.id}/files/${encodeURIComponent(name)}`, {
+          method: 'PUT',
+          headers: { 'x-upload-token': created.uploadToken, 'x-lang': POD.lang, 'Content-Type': 'application/octet-stream' },
+          body: files[name],
+        });
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Upload failed (${res.status})`);
+        busy(true, t('busy.uploading', { n: ++done, total: created.files.length }));
+      }));
+      busy(true, t('busy.finishing'));
+      const design = await POD.api(`/api/designs/${created.id}/complete`, { method: 'POST', headers: { 'x-upload-token': created.uploadToken } });
+
       const entry = {
         designId: design.id,
         productId: design.productId,
@@ -1645,6 +1852,29 @@
       busy(false);
       canvas.requestRenderAll();
     }
+  }));
+
+  // ---------- Live preview (realistic, 3D, print colours) ----------
+  $('preview-open').addEventListener('click', serial(async () => {
+    cancelCrop();
+    commit();
+    canvas.discardActiveObject();
+    const original = st.side;
+    const sides = [];
+    for (const sd of st.product.sides) {
+      if (sd.id !== st.side) await showSide(sd.id);
+      sides.push({
+        side: sd,
+        rects: rects(sd.id),
+        design: exportDesignLayer(2),
+        hasDesign: canvas.getObjects().length > 0,
+        base: POD.mockupUrl(sd, color().hex),
+        overlay: sd.overlay ? POD.mockupUrl(sd, color().hex, 'overlay') : null,
+      });
+    }
+    if (st.side !== original) await showSide(original);
+    canvas.requestRenderAll();
+    window.POD_PREVIEW.open({ product: st.product, color: color(), sides, startSide: original });
   }));
 
   window.addEventListener('beforeunload', (e) => {
@@ -1677,5 +1907,6 @@
   seedHistory();
   refreshChrome();
   renderProps();
-  window.__editor = { canvas, st }; // handy for debugging in the console
+  renderCheck();
+  window.__editor = { canvas, st, rects, checkIssues, exportSvg, exportPrint }; // handy for debugging in the console
 })();

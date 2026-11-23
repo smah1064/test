@@ -45,6 +45,10 @@ class Store {
     return design;
   }
 
+  writeDesignFile(designId, name, data) {
+    writeAtomic(this.designFile(designId, name), data);
+  }
+
   getDesign(id) {
     return Object.prototype.hasOwnProperty.call(this.db.designs, id) ? this.db.designs[id] : null;
   }

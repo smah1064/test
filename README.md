@@ -36,6 +36,8 @@ Requires Node 18+. There is no database to set up: data is stored under `data/` 
 - **Sticker library**: 36 original vector stickers in six categories (Egypt, Ramadan, football, love, birthday, fun).
 - **Photo tools**: crop (free or square), shape a photo into a circle, heart, star, hexagon, arch or rounded frame with an optional border, brightness/contrast/saturation, and smart **background removal** for photos on a plain background.
 - **Phone-first layout** on small screens: bottom toolbar, settings in a slide-up panel that zooms the view to the print area, pinch to zoom, bigger touch targets.
+- **Print guides**: the print edge (red), a **safe zone** (green, keep text inside) and a **bleed** line (blue) for edge-to-edge products. A live **print check** flags low-resolution images, anything that will be cut off or isn't printed, text too close to the edge and text too small to read, and outlines the problem elements. Selected photos show a **DPI badge**. Shoppers are asked to confirm before ordering a design with problems.
+- **Live preview**: a *realistic* view that bends the artwork over fabric folds, wraps it around mugs and bottles, puffs it on cushions and adds lighting and fabric texture; a rotatable **3D** view (three.js) at real-world size; and a **print colours** view showing an RGB → CMYK estimate. Each view can be saved as an image.
 - When the product colour changes between light and dark, text and shapes in the default colour switch automatically (dark ↔ white) so they stay visible.
 - Image upload (click or drag and drop) with a live **print-quality / DPI indicator** and a warning before you order a blurry image.
 - Shapes, plus a one-click "fill print area" background.
@@ -45,11 +47,20 @@ Requires Node 18+. There is no database to set up: data is stored under `data/` 
 - Preview mode hides the guides. Keyboard shortcuts: Ctrl/⌘+Z, Ctrl/⌘+Shift+Z / Ctrl+Y, Ctrl/⌘+D, Delete, arrows (Shift = 10px).
 - Live price: base price, plus a size surcharge, plus a fee for each extra printed side.
 
-**Add to cart** exports two files for each designed side:
-- a **print-ready PNG**: transparent, cropped to the print area, at 150 DPI of the real print size (for example 1800 × 2400 px for a 12 × 16 in shirt print)
-- a **mockup preview** for the cart, order page and production queue
+**Add to cart** exports, for each designed side, a **transparent RGB print PNG at 300 DPI** (artwork plus bleed, capped at 16 megapixels so it works on iPhones), an **SVG** with the fonts embedded, and a mockup preview. They are uploaded as binary files in three steps (create → upload → complete). On completion the server embeds the **sRGB colour profile and DPI** in the PNG.
 
-The editable layout is also saved, so customers can re-open and edit or duplicate a design from the cart.
+The production dashboard offers every print file in the format each print method needs, made on first download:
+
+| Format | Use |
+| --- | --- |
+| PNG · RGB · transparent | DTG / DTF clothing printing |
+| PNG · mirrored | Sublimation transfer paper (mugs, cushions, mouse pads) |
+| PDF · print-ready | Exact physical size, with TrimBox and BleedBox set |
+| PDF · crop marks | Paper printing, with crop marks and a job slug |
+| TIFF · CMYK | Offset or paper print shops that want CMYK (converted with an embedded CMYK profile) |
+| SVG · vector | Vector workflows, cutting plotters |
+
+Each product records its print method, and the dashboard highlights the recommended file.
 
 **Checkout (`/cart`)** asks for name, Egyptian mobile number (any common format, including Arabic digits), governorate, city and address. Payment is **cash on delivery**. Every design is its own order line with quantity 1, so each one is a separate print job. Prices are recalculated on the server, and the client's numbers are never trusted.
 
@@ -71,12 +82,15 @@ src/i18n.js          server messages in English and Arabic
 public/js/i18n.js    all interface text in English and Arabic
 public/js/templates.js  fonts, shapes, text presets, templates
 public/js/stickers.js   sticker library (original SVG artwork)
-public/js/fabric-ext.js curved text, text boxes, photo shapes, background removal
+public/js/fabric-ext.js curved text, text boxes, photo shapes, background removal, SVG export
+public/js/preview.js    realistic mockup renderer, preview window, CMYK proof
+public/js/preview3d.js  3D product models (three.js)
+src/printfiles.js       PDF / CMYK TIFF / mirrored PNG / sRGB+DPI finishing (sharp, pdfkit)
 public/fonts/        self-hosted fonts (SIL Open Font License)
 src/store.js         JSON-file store with atomic writes
 public/              static site (index, editor, cart, order, admin)
 public/js/editor.js  the design editor
-public/vendor/       Fabric.js 5.3.0 (MIT)
+public/vendor/       Fabric.js 5.3.0 and three.js r160 (MIT)
 test/api.test.js     API tests (npm test)
 ```
 

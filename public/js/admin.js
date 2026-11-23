@@ -71,12 +71,26 @@
         <dt>${esc(t('admin.spec.order'))}</dt><dd>${esc(item.orderNumber)} · ${esc(t('admin.spec.itemOf', { i: item.position, n: item.of }))}</dd>
         <dt>${esc(t('admin.spec.product'))}</dt><dd>${esc(tr(item.productName))}</dd>
         <dt>${esc(t('admin.spec.colourSize'))}</dt><dd>${esc(tr(item.color.name))} <span class="dot" style="display:inline-block;vertical-align:middle;background:${esc(item.color.hex)}"></span> · ${esc(tr(item.size.label))}</dd>
-        ${item.sides.map((s) => `<dt>${esc(t('admin.spec.print', { side: tr(s.name) }))}</dt><dd><bdi dir="ltr">${cm(s.widthIn)} × ${cm(s.heightIn)} cm (${s.widthIn} × ${s.heightIn} in) · ${s.widthPx} × ${s.heightPx} px · ${s.dpi} DPI</bdi></dd>`).join('')}
+        ${item.sides.map((s) => `<dt>${esc(t('admin.spec.print', { side: tr(s.name) }))}</dt><dd><bdi dir="ltr">${cm(s.widthIn)} × ${cm(s.heightIn)} cm (${s.widthIn} × ${s.heightIn} in)${s.bleedIn ? ' ' + esc(t('admin.bleed', { mm: Math.round(s.bleedIn * 25.4) })) : ''} · ${s.widthPx} × ${s.heightPx} px · ${s.dpi} DPI · sRGB</bdi></dd>`).join('')}
+        ${item.process ? `<dt>${esc(t('admin.method'))}</dt><dd>${esc(t('process.' + item.process))}</dd>` : ''}
         <dt>${esc(t('admin.spec.shipTo'))}</dt><dd>${address(c)}</dd>
         ${c.phone ? `<dt>${esc(t('admin.spec.phone'))}</dt><dd><a href="tel:${esc(c.phone)}" dir="ltr">${esc(c.phone)}</a></dd>` : ''}
         ${c.email ? `<dt>${esc(t('admin.spec.email'))}</dt><dd>${esc(c.email)}</dd>` : ''}
         ${item.payment && item.payment.method === 'cod' ? `<dt>${esc(t('admin.spec.payment'))}</dt><dd>${esc(t('admin.collect', { amount: money(item.orderTotal) }))}</dd>` : ''}
       </dl>`;
+  }
+
+  const RECOMMENDED = { dtg: 'png', dtf: 'png', sublimation: 'png-mirror', uv: 'pdf', paper: 'pdf-marks' };
+  function printFiles(item, s) {
+    const rec = RECOMMENDED[item.process] || 'png';
+    const formats = ['png', 'pdf', 'pdf-marks', 'png-mirror', 'tiff'].concat(s.hasSvg ? ['svg'] : []);
+    return `
+      <div class="print-files-block">
+        <div class="small muted" style="font-weight:700;margin-bottom:6px">${esc(t('admin.files', { side: tr(s.name) }))}</div>
+        <div class="print-files">
+          ${formats.map((f) => `<button class="btn btn-sm ${f === rec ? 'btn-primary' : ''}" data-download="${esc(s.printUrl)}?format=${f}">⬇ ${esc(t('fmt.' + f))}${f === rec ? ` <span class="rec">· ${esc(t('admin.recommended'))}</span>` : ''}</button>`).join('')}
+        </div>
+      </div>`;
   }
 
   function renderCurrent(item) {
@@ -91,9 +105,7 @@
         <div>
           ${pill(item.status)}
           ${spec(item)}
-          <div class="print-files">
-            ${item.sides.map((s) => `<button class="btn" data-download="${esc(s.printUrl)}">⬇ ${esc(t('admin.download', { side: tr(s.name) }))}</button>`).join('')}
-          </div>
+          ${item.sides.map((s) => printFiles(item, s)).join('')}
           <div class="row" style="max-width:440px">
             <button class="btn btn-primary btn-lg" data-item="${item.id}" data-status="${next.status}">${esc(t(next.label))}</button>
             ${item.status === 'printing' ? `<button class="btn btn-lg shrink" data-item="${item.id}" data-status="queued" title="${esc(t('admin.backToQueue.title'))}">${esc(t('admin.backToQueue'))}</button>` : ''}
