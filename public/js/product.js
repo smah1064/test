@@ -64,6 +64,12 @@
     $('pp-color-name').textContent = tr(color.name);
     $('pp-swatches').innerHTML = product.colors.map((c) => `<button type="button" class="swatch ${c.id === color.id ? 'active' : ''}" data-color="${esc(c.id)}" title="${esc(tr(c.name))}" aria-label="${esc(tr(c.name))}" style="background:${esc(c.hex)}"></button>`).join('');
     $('pp-scratch').href = `/editor?${q()}`;
+    // Embroidery on garments, caps, totes and aprons.
+    $('pp-emb').hidden = !product.embroidery;
+    if (product.embroidery) {
+      $('pp-emb').href = `/editor?${q()}&method=embroidery`;
+      $('pp-emb-text').textContent = t('pp.embText', { price: money(product.embroidery.surcharge) });
+    }
     $('pp-scratch-title').textContent = t(hasDraft ? 'pp.continue' : 'pp.scratch');
   }
 

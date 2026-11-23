@@ -1023,7 +1023,8 @@ test('accounts: change prices, set costs, profit per order, expenses, CSV', asyn
     const d = await makeDesign({ size: '2XL', sides: { front: SIDE, back: SIDE } });
     const order = await (await post('/api/orders', { customer: CUSTOMER, designIds: [d.id] })).json();
     assert.strictEqual(order.items[0].price, 500 + 70 + 120);
-    const today = order.createdAt.slice(0, 10);
+    // The report counts Cairo days (just after midnight in Cairo it is still yesterday in UTC).
+    const today = require('../src/accounting').localDay(order.createdAt);
 
     // Later cost changes don't rewrite this order.
     await put({ basePrice: 500, extraSidePrice: 120, sizes: { '2XL': 70 }, costs: { blank: 999 } });
@@ -1432,6 +1433,58 @@ test('admin customers: search and a 24-hour password reset link', async () => {
   assert.strictEqual(r.status, 200, await r.clone().text());
   assert.strictEqual((await post('/api/account/reset', { token, password: 'thirdpass33' })).status, 400, 'works once');
   assert.strictEqual((await post('/api/account/login', { login: '01155566677', password: 'secondpass2' })).status, 200);
+});
+
+test('embroidery: DST encoding is exact, logos are digitised, orders get the DST', async () => {
+  const E = require('../src/embroidery');
+  const sharp = require('sharp');
+  for (let dx = -121; dx <= 121; dx += 3) {
+    for (let dy = -121; dy <= 121; dy += 5) {
+      const r = E.readRecord(...E.record(dx, dy, 'stitch'));
+      assert.deepStrictEqual([r.dx, r.dy, r.kind], [dx, dy, 'stitch']);
+    }
+  }
+  assert.strictEqual(E.readRecord(...E.record(10, -20, 'jump')).kind, 'jump');
+  assert.strictEqual(E.readRecord(...E.record(0, 0, 'color')).kind, 'color');
+  // A two-colour logo, 90 x 90 mm.
+  const logo = await sharp(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="900" height="900"><circle cx="450" cy="380" r="300" fill="#d0202a"/><rect x="100" y="740" width="700" height="120" fill="#1b2550"/></svg>')).png().toBuffer();
+  const d = await E.digitize(logo, 90, 90);
+  assert.deepStrictEqual(d.colors.map((c) => c.name), ['Red', 'Navy']);
+  assert.ok(d.stitches > 1000 && d.trims < 10, `${d.stitches} stitches, ${d.trims} trims`);
+  const dst = E.toDst(d, 'TEST');
+  assert.strictEqual(dst.buffer.length % 3, 512 % 3);
+  assert.match(dst.buffer.slice(0, 20).toString('latin1'), /^LA:TEST/);
+  // Every record read back lands inside the design, ends with the end mark.
+  let x = 0;
+  let y = 0;
+  let colors = 0;
+  let end = false;
+  for (let i = 512; i < dst.buffer.length; i += 3) {
+    const r = E.readRecord(dst.buffer[i], dst.buffer[i + 1], dst.buffer[i + 2]);
+    if (r.kind === 'end') { end = true; break; }
+    if (r.kind === 'color') colors++;
+    x += r.dx;
+    y += r.dy;
+    assert.ok(Math.abs(x) <= 460 && Math.abs(y) <= 460, 'inside 92 x 92 mm');
+  }
+  assert.ok(end);
+  assert.strictEqual(colors, 1);
+  // Through the shop: an embroidered polo costs more and its order has the DST.
+  const plain = await makeDesign({ productId: 'polo', color: 'white', size: 'M' });
+  const emb = await makeDesign({ productId: 'polo', color: 'white', size: 'M', method: 'embroidery' });
+  assert.strictEqual(emb.price, plain.price + 150);
+  assert.strictEqual(emb.method, 'embroidery');
+  assert.ok(emb.emb && Array.isArray(emb.emb.colors), 'digitised when the design was saved');
+  assert.ok(emb.emb.warnings.includes('empty'), 'the blank test print has nothing to stitch');
+  assert.strictEqual((await post('/api/designs', { productId: 'tshirt', color: 'white', size: 'M', method: 'embroidery', sides: { back: SIDE } })).status, 400, 'front only');
+  const order = await (await post('/api/orders', { customer: CUSTOMER, designIds: [emb.id] })).json();
+  const item = (await (await admin('/api/admin/orders')).json()).orders.find((o) => o.id === order.id).items[0];
+  assert.strictEqual(item.process, 'embroidery');
+  assert.ok(item.emb, 'the item carries the thread list');
+  const r = await admin(`/api/admin/files/${emb.id}/front?format=dst`);
+  assert.strictEqual(r.status, 200);
+  assert.match(r.headers.get('content-disposition'), /embroidery\.dst/);
+  assert.strictEqual((await admin(`/api/admin/files/${plain.id}/front?format=dst`)).status, 404);
 });
 
 const png4 = (w, h) => png(w, h);

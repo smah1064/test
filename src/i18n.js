@@ -103,6 +103,7 @@ const MESSAGES = {
   importNotImage: { en: "That link isn't a picture we can use", ar: 'الرابط ده مش صورة نقدر نستخدمها' },
   rightsRequired: { en: 'Please confirm you own the imported design or have permission to print it', ar: 'من فضلك أكّد إن التصميم المستورد ملكك أو معاك إذن بطباعته' },
   takedownMissing: { en: 'Please fill in your name, how to reach you and the details', ar: 'من فضلك اكتب اسمك وطريقة التواصل والتفاصيل' },
+  embOneSide: { en: 'Embroidery is on the front only', ar: 'التطريز على الوش بس' },
   badProcess: { en: 'This product can be printed with: {list}', ar: 'المنتج ده بيتطبع بـ: {list}' },
   itemNotFound: { en: 'Item not found', ar: 'المنتج غير موجود' },
   pressBusy: { en: '{order} item {n} is already printing. Finish it first.', ar: 'المنتج {n} من الطلب {order} قيد الطباعة الآن. أنهِه أولًا.' },

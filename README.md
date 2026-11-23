@@ -208,6 +208,12 @@ Customers can create an account at `/account` (name, mobile number, optional ema
 
 Passwords are stored as scrypt hashes. The session is a signed, httpOnly cookie (`pod_c`, 60 days) whose key comes from the shop's secret file, so every app copy accepts it (`src/customers.js`).
 
+## Embroidery (DST files)
+
+T-shirts, oversized tees, polos, hoodies, sweatshirts, zip hoodies, kids tees and hoodies, caps, totes and aprons can be **embroidered** instead of printed: in the editor (or "Embroider it" on the product page) the customer switches **Print / Embroidery**. The design then goes in the embroidery area (left chest 9 × 9 cm, cap front 10 × 5.5 cm, tote 15 × 15 cm…, front only) and the embroidery charge is added (100–180 EGP, set in `EMBROIDERY` in `src/products.js`). The editor warns about photos, gradients, more than 6 colours and text under 5 mm.
+
+When the design is saved, the server digitises it automatically (`src/embroidery.js`): up to 6 thread colours matched to common thread shades, each colour area cut into strips and filled with tatami stitches (0.4 mm rows, stitches up to 3.5 mm, staggered), background colours sewn under the details, jumps and trims between parts, colour changes between colours. The admin shows the stitch count, size and the **thread colours in sewing order**, with downloads of the **DST** (Tajima, read by almost every machine) and a **stitch preview** picture; both are also offered when sending to a printing house. Automatic digitising suits bold text and simple logos; the admin warns when a design has photos/soft edges or many very thin parts, which should be re-digitised by hand.
+
 ## Editor library (search icons, stickers and templates)
 
 Editor → **Library**: one search box for about 22,000 icons and colourful stickers plus the templates and ready designs, in Arabic or English ("قلب", "كورة", "رمضان", "heart"…), with tabs (all, colour stickers, icons, templates), "show more" and recently used items. Icons come in the product's ink colour and can be recoloured like any shape.

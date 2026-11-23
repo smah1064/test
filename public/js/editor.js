@@ -72,6 +72,7 @@
     history: {}, // sideId -> { stack: [json], i }
     offsets: {}, // sideId -> { dx, dy }: where the customer moved the print area
     pattern: null, // fabric products: { repeat, tileCm } (how the tile repeats, and its size)
+    method: 'print', // 'embroidery' on products that can be embroidered
     editingCartIndex: null,
     preview: false,
     exporting: false,
@@ -87,6 +88,7 @@
       st.product = products.find((p) => p.id === saved.productId) || st.product;
       st.colorId = saved.color.id;
       st.sizeId = saved.size.id;
+      if (saved.method === 'embroidery') st.method = 'embroidery';
       for (const [sideId, data] of Object.entries(saved.editor)) {
         st.designs[sideId] = await blobifyImages(data.objects || []);
         if (data.offset) st.offsets[sideId] = data.offset;
@@ -143,6 +145,7 @@
       }
       for (const [sideId, o] of Object.entries(draft.offsets || {})) if (st.product.sides.some((s) => s.id === sideId)) st.offsets[sideId] = o;
       if (draft.pattern) st.pattern = draft.pattern;
+      if (draft.method === 'embroidery') st.method = 'embroidery';
       restoredDraft = true;
     }
   }
@@ -157,6 +160,12 @@
     return { repeat: REPEATS.includes(p && p.repeat) ? p.repeat : 'straight', tileCm: product.pattern.tiles.includes(tileCm) ? tileCm : product.pattern.tile };
   }
   st.pattern = normPattern(st.product, st.pattern);
+  if (params.get('method') === 'embroidery') st.method = 'embroidery';
+  if (!st.product.embroidery) st.method = 'print';
+  const emb = () => (st.method === 'embroidery' && st.product.embroidery) || null;
+  /** The sides that can carry a design now (embroidery: the front only). */
+  const activeSides = () => (emb() ? st.product.sides.filter((x) => x.id === emb().side) : st.product.sides);
+  if (emb() && !activeSides().some((x) => x.id === st.side)) st.side = emb().side;
 
   // On garments and bags the print area can be moved (st.offsets, in mockup units);
   // sideDef() gives the side with its print area where the customer put it.
@@ -176,6 +185,13 @@
   const sideDef = (id = st.side) => {
     const s = baseSide(id);
     if (!s) return s;
+    // Embroidery: its own smaller area (left chest, cap front...), not movable.
+    const e = emb();
+    if (e && e.side === s.id) {
+      const key = `emb:${st.product.id}:${s.id}`;
+      if (!sizedSides.has(key)) sizedSides.set(key, { ...s, printArea: e.area, printWidthIn: e.widthIn, printHeightIn: e.heightIn, bleedIn: 0, safeIn: 0.06, moveZone: null });
+      return sizedSides.get(key);
+    }
     const o = st.offsets[s.id];
     const key = `${st.product.id}:${s.id}:${st.sizeId}:${o ? o.dx : 0}:${o ? o.dy : 0}:${st.pattern ? st.pattern.tileCm : ''}`;
     if (!sizedSides.has(key)) {
@@ -416,6 +432,7 @@
 
   // ---------- Moving the print area (garments and bags) ----------
   function zoneOf(id = st.side) {
+    if (emb()) return null;
     return (baseSide(id) && baseSide(id).moveZone) || null;
   }
   const areaUnitsPerCm = (id = st.side) => areaFor(st.product, id, st.sizeId, null).w / (sideDef(id).printWidthIn * 2.54);
@@ -2449,6 +2466,12 @@
     $('swatches').innerHTML = p.colors.map((c) => `<button class="swatch ${c.id === st.colorId ? 'active' : ''}" data-color="${c.id}" title="${esc(tr(c.name))}" aria-label="${esc(tr(c.name))}" style="background:${c.hex}"></button>`).join('');
     $('color-name').textContent = tr(color().name);
     $('sizes').innerHTML = p.sizes.map((s) => `<button class="chip ${s.id === st.sizeId ? 'active' : ''}" data-size="${s.id}">${esc(tr(s.label))}${s.surcharge ? ` <span style="opacity:.7">+${esc(money(s.surcharge))}</span>` : ''}</button>`).join('');
+    // Print or embroidery (garments, caps, totes, aprons).
+    $('method-field').hidden = !p.embroidery;
+    if (p.embroidery) {
+      $('method-chips').innerHTML = ['print', 'embroidery'].map((m) => `<button class="chip ${m === st.method ? 'active' : ''}" data-method="${m}">${esc(t('emb.' + m))}${m === 'embroidery' ? ` <span style="opacity:.7">+${esc(money(p.embroidery.surcharge))}</span>` : ''}</button>`).join('');
+      $('method-note').textContent = st.method === 'embroidery' ? t('emb.note', { w: POD.num(Math.round(p.embroidery.widthIn * 25.4) / 10), h: POD.num(Math.round(p.embroidery.heightIn * 25.4) / 10), n: p.embroidery.maxColors }) : '';
+    }
     // Fabric: how the tile repeats and how big it prints.
     $('pattern-field').hidden = !st.pattern;
     if (st.pattern) {
@@ -2456,6 +2479,30 @@
       $('pat-tiles').innerHTML = p.pattern.tiles.map((cm) => `<button class="chip ${cm === st.pattern.tileCm ? 'active' : ''}" data-tile="${cm}">${esc(POD.num(cm))} ${esc(t('pat.cm'))}</button>`).join('');
     }
   }
+  $('method-chips').addEventListener('click', serial(async (e) => {
+    const b = e.target.closest('[data-method]');
+    if (!b || b.dataset.method === st.method || !st.product.embroidery) return;
+    cancelCrop();
+    commit();
+    canvas.discardActiveObject();
+    const side = st.product.embroidery.side;
+    if (st.side !== side) await showSide(side);
+    const from = area();
+    st.method = b.dataset.method;
+    const to = area();
+    // The design follows into the new area (scaled to fit).
+    const objs = remap(serialize(), from, to);
+    st.designs[side] = objs;
+    await loadObjects(objs);
+    applyClips();
+    seedHistory();
+    commit();
+    renderOptions();
+    renderCheck();
+    fit();
+    const back = st.product.sides.some((x) => x.id !== side && (st.designs[x.id] || []).length);
+    if (st.method === 'embroidery' && back) toast(t('emb.frontOnly'));
+  }));
   $('pat-repeats').addEventListener('click', (e) => {
     const b = e.target.closest('[data-repeat]');
     if (!b || !st.pattern || b.dataset.repeat === st.pattern.repeat) return;
@@ -2582,6 +2629,7 @@
     if (!next.colors.some((c) => c.id === st.colorId)) st.colorId = next.colors[0].id;
     st.sizeId = nextSize;
     st.pattern = normPattern(next, st.pattern);
+    if (!next.embroidery) st.method = 'print';
     st.side = next.sides.find((s) => s.id === st.side)?.id || next.sides[0].id;
     const url = new URL(location.href);
     url.searchParams.set('product', next.id);
@@ -2609,7 +2657,7 @@
 
   // ---------- Sides ----------
   function renderSideTabs() {
-    $('side-tabs').innerHTML = st.product.sides.map((s) => {
+    $('side-tabs').innerHTML = activeSides().map((s) => {
       const count = s.id === st.side ? canvas.getObjects().length : (st.designs[s.id] || []).length;
       return `<button class="side-tab ${s.id === st.side ? 'active' : ''}" data-side="${s.id}" role="tab" aria-selected="${s.id === st.side}">${esc(tr(s.name))}${count ? '<span class="has"></span>' : ''}</button>`;
     }).join('');
@@ -2721,6 +2769,25 @@
         if (pt < 6) issues.push({ level: 'warn', key: 'check.tiny', obj: o, params: { name, pt } });
       }
     }
+    // Embroidery: no photos or gradients, at most 6 thread colours, text big enough to stitch.
+    if (emb()) {
+      const colours = new Set();
+      const ppmm = R.u / 25.4; // mockup units per mm
+      for (const o of canvas.getObjects()) {
+        if (o.name === '__cropper' || o.visible === false) continue;
+        const name = layerName(o);
+        if (o.type === 'image') issues.push({ level: 'warn', key: 'check.embPhoto', obj: o, params: { name } });
+        const paint = (o.type === 'group' ? o.getObjects() : [o]);
+        for (const x of paint) {
+          for (const c of [x.fill, x.strokeWidth ? x.stroke : null]) {
+            if (c && typeof c === 'object' && c.colorStops) issues.push({ level: 'warn', key: 'check.embGradient', obj: o, params: { name } });
+            else if (typeof c === 'string' && c && c !== 'transparent' && !/^rgba?\([^)]*,\s*0\s*\)$/.test(c)) colours.add(new fabric.Color(c).toHex());
+          }
+        }
+        if (isText(o) && o.fontSize * Math.abs(o.scaleY || 1) * 0.7 < 5 * ppmm) issues.push({ level: 'warn', key: 'check.embSmallText', obj: o, params: { name } });
+      }
+      if (colours.size > emb().maxColors) issues.push({ level: 'warn', key: 'check.embColors', obj: null, params: { n: colours.size, max: emb().maxColors } });
+    }
     issues.sort((x, y) => (x.level === y.level ? 0 : x.level === 'error' ? -1 : 1));
     return issues.map((i) => ({ ...i, side: sd }));
   }
@@ -2766,7 +2833,7 @@
 
   // ---------- Price & chrome ----------
   function designedSides() {
-    return st.product.sides.filter((s) => (s.id === st.side ? canvas.getObjects().length : (st.designs[s.id] || []).length) > 0);
+    return activeSides().filter((s) => (s.id === st.side ? canvas.getObjects().length : (st.designs[s.id] || []).length) > 0);
   }
   function refreshChrome() {
     if (bootDone) scheduleDraft();
@@ -2777,9 +2844,11 @@
     const size = p.sizes.find((s) => s.id === st.sizeId);
     const n = designedSides().length;
     const perSide = p.extraSidePrice != null ? p.extraSidePrice : catalog.pricing.extraSide;
-    $('price').textContent = money(p.basePrice + size.surcharge + Math.max(0, n - 1) * perSide);
+    const embFee = emb() ? emb().surcharge : 0;
+    $('price').textContent = money(p.basePrice + size.surcharge + Math.max(0, n - 1) * perSide + embFee);
     const notes = [];
-    if (p.sides.length > 1 && perSide > 0) notes.push(n > 1 ? t('price.bothSides') : t('price.addSide', { price: money(perSide) }));
+    if (embFee) notes.push(t('emb.fee', { price: money(embFee) }));
+    if (activeSides().length > 1 && perSide > 0) notes.push(n > 1 ? t('price.bothSides') : t('price.addSide', { price: money(perSide) }));
     if (size.surcharge) notes.push(`${tr(size.label)} +${money(size.surcharge)}`);
     $('price-note').textContent = notes.join(' · ');
     const h = hist();
@@ -3186,7 +3255,7 @@
     for (const s of st.product.sides) designs[s.id] = s.id === st.side ? serialize() : (st.designs[s.id] || []);
     const empty = !Object.values(designs).some((o) => o.length);
     const productId = st.product.id;
-    const meta = { productId, colorId: st.colorId, sizeId: st.sizeId, side: st.side, offsets: { ...st.offsets }, ...(st.pattern ? { pattern: { ...st.pattern } } : {}) };
+    const meta = { productId, colorId: st.colorId, sizeId: st.sizeId, side: st.side, offsets: { ...st.offsets }, ...(st.pattern ? { pattern: { ...st.pattern } } : {}), method: st.method };
     let preview = null;
     if (!empty) {
       try {
@@ -3265,7 +3334,7 @@
       const created = await POD.api('/api/designs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productId: st.product.id, color: st.colorId, size: st.sizeId, sides: sidesPayload, ...(imported ? { rightsConfirmed: true } : {}) }),
+        body: JSON.stringify({ productId: st.product.id, color: st.colorId, size: st.sizeId, sides: sidesPayload, ...(imported ? { rightsConfirmed: true } : {}), ...(emb() ? { method: 'embroidery' } : {}) }),
       });
       let done = 0;
       busy(true, t('busy.uploading', { n: 0, total: created.files.length }));

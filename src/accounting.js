@@ -233,6 +233,6 @@ function cleanExpense(body) {
 }
 
 module.exports = {
-  round2, money, initPricing, applyPricing, cleanPricing, cleanCosts, itemCostFrom, itemCost, report, reportCsv, cleanExpense, EXPENSE_CATEGORIES,
+  round2, money, localDay, initPricing, applyPricing, cleanPricing, cleanCosts, itemCostFrom, itemCost, report, reportCsv, cleanExpense, EXPENSE_CATEGORIES,
   defaultsFor: (id) => defaults && defaults[id],
 };

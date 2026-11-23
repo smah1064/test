@@ -36,6 +36,7 @@ const customers = require('./customers');
 const oauth = require('./oauth');
 const importer = require('./importer');
 const assets = require('./assets');
+const embroidery = require('./embroidery');
 
 // Prices the owner changed in the admin are laid over the built-in ones.
 accounting.initPricing(PRODUCTS, EXTRA_SIDE_PRICE);
@@ -177,11 +178,13 @@ function publicItem(item) {
     status: item.status,
     history: item.history,
     process: item.process || getProduct(item.productId)?.process,
-    methods: getProduct(item.productId)?.methods || [item.process || 'dtf'],
+    methods: item.method === 'embroidery' ? ['embroidery'] : getProduct(item.productId)?.methods || [item.process || 'dtf'],
     kind: item.kind || 'product',
     pieces: item.pieces,
     filmBatch: item.filmBatch || null,
     pattern: item.pattern || null,
+    method: item.method || null,
+    emb: item.emb || null,
   };
 }
 
@@ -359,6 +362,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const unknown = sideIds.filter((id) => !product.sides.some((s) => s.id === id));
     if (unknown.length) throw new HttpError(400, 'unknownSide', { side: unknown.join(', ') });
 
+    // Embroidery instead of print: one area (left chest, cap front...), stitched from the print file.
+    const emb = (req.body || {}).method === 'embroidery' && product.embroidery ? product.embroidery : null;
+    if (emb && sideIds.some((id) => id !== emb.side)) throw new HttpError(400, 'embOneSide');
     const editor = {};
     const storedSides = [];
     // Fabric: how the tile repeats and how big it prints (the tile is the print file).
@@ -381,6 +387,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       }
       const offset = cleanOffset(product, side, sizeDef.id, s.editor.offset);
       editor[side.id] = { ...s.editor, offset: offset || undefined, ...(pattern ? { pattern: { repeat: pattern.repeat, tileCm: pattern.tileCm } } : {}) };
+      if (emb) {
+        editor[side.id] = { ...s.editor, offset: undefined };
+        storedSides.push({ id: side.id, name: side.name, widthIn: emb.widthIn, heightIn: emb.heightIn, bleedIn: 0 });
+        continue;
+      }
       if (pattern) {
         const tileIn = round2(pattern.tileCm / 2.54);
         storedSides.push({ id: side.id, name: side.name, widthIn: tileIn, heightIn: tileIn, bleedIn: 0 });
@@ -406,11 +417,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       uploadTokenHash: sha(token),
       productId: product.id,
       productName: product.name,
-      process: product.process,
+      process: emb ? 'embroidery' : product.process,
+      ...(emb ? { method: 'embroidery' } : {}),
       color: { id: colorDef.id, name: colorDef.name, hex: colorDef.hex },
       size: { id: sizeDef.id, label: sizeDef.label },
       sides: storedSides,
-      price: priceFor(product, sizeDef.id, storedSides.length),
+      price: priceFor(product, sizeDef.id, storedSides.length) + (emb ? emb.surcharge : 0),
       currency: CURRENCY,
       orderId: null,
       ...(imported.length ? { imports: imported, rightsConfirmedAt: new Date().toISOString() } : {}),
@@ -484,6 +496,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         }
         Object.assign(side, { widthPx: info.width, heightPx: info.height, dpi, hasSvg: fs.existsSync(store.designFile(design.id, `${side.id}-design.svg`)) });
       }
+      if (design.method === 'embroidery') await makeEmbroidery(design);
       design.status = 'ready';
       delete design.uploadTokenHash;
       store.save();
@@ -1201,8 +1214,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (!d || (d.status && d.status !== 'ready') || d.orderId) return null;
     if (d.kind === 'gangsheet') return d.price;
     const product = getProduct(d.productId);
-    return product ? priceFor(product, d.size.id, d.sides.length) : null;
+    return product ? priceFor(product, d.size.id, d.sides.length) + embExtra(product, d) : null;
   };
+  /** The embroidery charge on top of the product price. */
+  const embExtra = (product, d) => (d.method === 'embroidery' && product.embroidery ? product.embroidery.surcharge : 0);
   // ---------- Customer accounts ----------
   const customerList = () => store.db.customers || [];
   const findCustomer = (id) => customerList().find((x) => x.id === id) || null;
@@ -1492,7 +1507,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         size: d.size,
         sides: d.sides,
         process: d.process || product.process,
-        price: priceFor(product, d.size.id, d.sides.length),
+        price: priceFor(product, d.size.id, d.sides.length) + embExtra(product, d),
+        ...(d.method === 'embroidery' ? { method: 'embroidery', emb: d.emb || null } : {}),
         ...(d.imports ? { imports: d.imports, rightsConfirmedAt: d.rightsConfirmedAt } : {}),
         ...(d.pattern ? { pattern: d.pattern } : {}),
         status: 'queued',
@@ -1738,6 +1754,21 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
    * side, the book or gang-sheet PDF, or the customer-design preview PDF.
    * Returns { path, name } or throws an HttpError.
    */
+  /** Embroidery: the stitches (DST), a picture of them and the thread list, from the print file. */
+  async function makeEmbroidery(design) {
+    const sd = design.sides[0];
+    try {
+      const d = await embroidery.digitize(fs.readFileSync(store.designFile(design.id, `${sd.id}-print.png`)), sd.widthIn * 25.4, sd.heightIn * 25.4);
+      const dst = embroidery.toDst(d, `ONEOFF ${design.id.slice(0, 6)}`);
+      store.writeDesignFile(design.id, `${sd.id}-stitches.dst`, dst.buffer);
+      store.writeDesignFile(design.id, `${sd.id}-stitches.png`, await embroidery.stitchPreview(d, { pxPerMm: 8, background: (design.color && design.color.hex) || '#ffffff' }));
+      design.emb = { colors: d.colors.map((c) => ({ name: c.name, hex: c.hex, stitches: c.stitches })), stitches: dst.stitches, trims: d.trims, warnings: d.warnings, widthMm: Math.round(d.widthMm), heightMm: Math.round(d.heightMm) };
+    } catch (e) {
+      console.warn('[embroidery] digitising failed:', e.message);
+      design.emb = { colors: [], stitches: 0, trims: 0, warnings: ['failed'] };
+    }
+    return design.emb;
+  }
   async function makeFile(design, sideId, format, { now = false } = {}) {
     // Only finished designs (their files were checked when they were completed).
     if (design.status && design.status !== 'ready') throw new HttpError(404, 'notFound');
@@ -1771,6 +1802,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         store.writeDesignFile(designId, path.basename(target), await printfiles.previewPdf(pages, { title, lines }));
       }
       return { path: target, name: `${order ? order.number : 'design'}-${design.productId}-preview.pdf` };
+    }
+    if (format === 'dst' || format === 'stitches') {
+      if (design.method !== 'embroidery') throw new HttpError(404, 'notFound');
+      const sd = design.sides[0];
+      const file = store.designFile(designId, `${sd.id}-stitches.${format === 'dst' ? 'dst' : 'png'}`);
+      if (!fs.existsSync(file)) await makeEmbroidery(design);
+      if (!fs.existsSync(file)) throw new HttpError(404, 'notFound');
+      return { path: file, name: `${base}-embroidery${format === 'dst' ? '.dst' : '-stitches.png'}` };
     }
     if (format === 'repeat') {
       // Fabric: the whole piece with the tile repeated, to check before printing.
@@ -1992,12 +2031,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   const productHouses = () => store.db.productHouses || {};
   const findHouse = (id) => houses().find((h) => h.id === id) || null;
   // Formats made once per item (not once per side).
-  const ONCE = new Set(['preview-pdf', 'book-pdf', 'proof', 'sheet-pdf', 'sheet-pdf-plain', 'repeat']);
+  const ONCE = new Set(['preview-pdf', 'book-pdf', 'proof', 'sheet-pdf', 'sheet-pdf-plain', 'repeat', 'dst', 'stitches']);
   const SEND_FORMATS = new Set([...Object.keys(FORMATS), ...ONCE]);
   const FILE_LABELS = {
     pdf: 'Print PDF', 'pdf-marks': 'Print PDF with crop marks', png: 'Print PNG (transparent)', 'png-mirror': 'Print PNG (mirrored)',
     tiff: 'Print TIFF (CMYK)', svg: 'Vector SVG', 'dtf-film': 'DTF film PNG', 'dtf-pdf': 'DTF film PDF', 'dtg-white': 'DTG white underbase',
-    'preview-pdf': 'Preview PDF (customer design)', repeat: 'Repeat preview (whole fabric piece)', 'book-pdf': 'Book print PDF', proof: 'Preview image', 'sheet-pdf': 'Gang sheet PDF (mirrored)', 'sheet-pdf-plain': 'Gang sheet PDF',
+    'preview-pdf': 'Preview PDF (customer design)', repeat: 'Repeat preview (whole fabric piece)', dst: 'Embroidery file (DST)', stitches: 'Stitch preview', 'book-pdf': 'Book print PDF', proof: 'Preview image', 'sheet-pdf': 'Gang sheet PDF (mirrored)', 'sheet-pdf-plain': 'Gang sheet PDF',
   };
 
   app.get('/api/admin/houses', requireAdmin, (req, res) => {

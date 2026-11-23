@@ -855,3 +855,5 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 .cu-link { margin-top: 8px; padding: 10px; border-radius: 10px; background: #f8f9fb; border: 1px solid var(--line); max-width: 560px; }
 .cu-link input { width: 100%; font-size: 12px; margin-top: 4px; }
 #cu-q { width: 100%; max-width: 360px; }
+
+.emb-threads { margin: 6px 0; padding-inline-start: 20px; line-height: 1.8; }

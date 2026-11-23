@@ -1402,6 +1402,50 @@ for (const p of PRODUCTS) {
   }
 }
 
+// ---------- Embroidery ----------
+// Garments, caps, totes and aprons can be embroidered instead of printed: a
+// smaller area (left chest, cap front...), up to 6 thread colours, made into
+// a DST stitch file on the server. at: 'chest' (wearer's left chest),
+// 'center', 'same' (the print box is already the right size).
+const EMBROIDERY = {
+  tshirt: { cm: [9, 9], at: 'chest', surcharge: 150 },
+  oversized: { cm: [9, 9], at: 'chest', surcharge: 150 },
+  polo: { at: 'same', surcharge: 150 },
+  hoodie: { cm: [9, 9], at: 'chest', surcharge: 150 },
+  sweatshirt: { cm: [9, 9], at: 'chest', surcharge: 150 },
+  ziphoodie: { at: 'same', surcharge: 150 },
+  kidstee: { cm: [7, 7], at: 'chest', surcharge: 120 },
+  kidshoodie: { cm: [7, 7], at: 'chest', surcharge: 120 },
+  cap: { cm: [10, 5.5], at: 'center', surcharge: 100 },
+  tote: { cm: [15, 15], at: 'center', surcharge: 180 },
+  apron: { cm: [10, 10], at: 'top', surcharge: 150 },
+};
+for (const [pid, e] of Object.entries(EMBROIDERY)) {
+  const p = PRODUCTS.find((x) => x.id === pid);
+  if (!p) continue;
+  const side = p.sides[0];
+  const a = side.printArea;
+  const upc = a.w / (side.printWidthIn * 2.54); // mockup units per cm
+  let w = e.at === 'same' ? a.w : (e.cm[0] * upc);
+  let h = e.at === 'same' ? a.h : (e.cm[1] * upc);
+  w = Math.min(w, a.w);
+  h = Math.min(h, a.h);
+  let x = a.x + (a.w - w) / 2;
+  let y = a.y + (a.h - h) * 0.4;
+  if (e.at === 'same') [x, y] = [a.x, a.y];
+  if (e.at === 'chest') [x, y] = [a.x + a.w * 0.78 - w / 2, a.y + a.h * 0.03];
+  if (e.at === 'top') y = a.y + a.h * 0.05;
+  const r1 = (v) => Math.round(v * 10) / 10;
+  p.embroidery = {
+    side: side.id,
+    area: { x: r1(x), y: r1(y), w: r1(w), h: r1(h) },
+    widthIn: Math.round((w / upc / 2.54) * 100) / 100,
+    heightIn: Math.round((h / upc / 2.54) * 100) / 100,
+    surcharge: e.surcharge,
+    maxColors: 6,
+  };
+}
+
 /** Extra charge for every printed side beyond the first. */
 const EXTRA_SIDE_PRICE = 100;
 const SHIPPING_FLAT = 75;

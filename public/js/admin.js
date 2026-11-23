@@ -132,6 +132,11 @@
         <dt>${esc(t('admin.spec.product'))}</dt><dd>${esc(tr(item.productName))}</dd>
         <dt>${esc(t('admin.spec.colourSize'))}</dt><dd>${esc(tr(item.color.name))} <span class="dot" style="display:inline-block;vertical-align:middle;background:${esc(item.color.hex)}"></span> · ${esc(tr(item.size.label))}</dd>
         ${item.sides.map((s) => `<dt>${esc(t('admin.spec.print', { side: tr(s.name) }))}</dt><dd><bdi dir="ltr">${cm(s.widthIn)} × ${cm(s.heightIn)} cm (${s.widthIn} × ${s.heightIn} in)${s.bleedIn ? ' ' + esc(t('admin.bleed', { mm: Math.round(s.bleedIn * 25.4) })) : ''} · ${s.widthPx} × ${s.heightPx} px · ${s.dpi} DPI · sRGB</bdi>${s.offsetCm ? `<div class="placement-note">📍 ${esc(t('admin.placement', { v: placementText(s.offsetCm) }))}</div>` : ''}</dd>`).join('')}
+        ${item.emb ? `<dt>${esc(t('admin.emb'))}</dt><dd>
+          <div><strong>${esc(t('admin.embSummary', { n: POD.num(item.emb.stitches), c: item.emb.colors.length, w: item.emb.widthMm, h: item.emb.heightMm }))}</strong></div>
+          <ol class="emb-threads">${item.emb.colors.map((c) => `<li><span class="dot" style="display:inline-block;vertical-align:middle;background:${esc(c.hex)}"></span> ${esc(c.name)} <span class="muted">(${esc(c.hex)} · ${esc(POD.num(c.stitches))})</span></li>`).join('')}</ol>
+          ${(item.emb.warnings || []).filter((w) => w !== 'empty').map((w) => `<div class="small" style="color:var(--warn)">⚠ ${esc(t('admin.embWarn.' + w))}</div>`).join('')}
+        </dd>` : ''}
         ${item.pattern ? `<dt>${esc(t('admin.pattern'))}</dt><dd><strong>${esc(t('admin.patternSpec', { tile: item.pattern.tileCm, repeat: t('pat.' + item.pattern.repeat), w: item.pattern.fabricCm[0], h: item.pattern.fabricCm[1] }))}</strong></dd>` : ''}
         ${item.process ? `<dt>${esc(t('admin.method'))}</dt><dd>
           ${(item.methods || []).length > 1 ? `<div class="btn-group" style="max-width:180px;margin-bottom:6px">${item.methods.map((m) => `<button class="btn btn-sm ${m === item.process ? 'active' : ''}" data-item="${item.id}" data-method="${m}">${esc(t('method.' + m))}</button>`).join('')}</div>` : ''}
@@ -149,7 +154,7 @@
       </dl>`;
   }
 
-  const RECOMMENDED = { dtg: 'png', dtf: 'dtf-film', sublimation: 'png-mirror', uv: 'pdf', paper: 'pdf-marks', canvas: 'pdf', textile: 'png' };
+  const RECOMMENDED = { dtg: 'png', dtf: 'dtf-film', sublimation: 'png-mirror', uv: 'pdf', paper: 'pdf-marks', canvas: 'pdf', textile: 'png', embroidery: 'dst' };
   const FORMATS_BY_METHOD = {
     dtg: ['png', 'dtg-white', 'pdf', 'tiff'],
     dtf: ['dtf-film', 'dtf-pdf', 'png', 'pdf'],
@@ -158,6 +163,7 @@
     paper: ['pdf-marks', 'pdf', 'tiff', 'png'],
     canvas: ['pdf', 'tiff', 'png', 'pdf-marks'],
     textile: ['png', 'tiff', 'pdf'],
+    embroidery: ['dst', 'stitches', 'png', 'pdf'],
   };
   const isDark = (hex) => {
     const n = parseInt(String(hex || '#ffffff').slice(1), 16);
