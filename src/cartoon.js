@@ -18,19 +18,36 @@ const sharp = require('sharp');
 const MODEL = () => process.env.GEMINI_IMAGE_MODEL || 'gemini-3.1-flash-image';
 const enabled = () => Boolean(process.env.GEMINI_API_KEY);
 
+// Keys from Google AI Studio ("AIza...") call the Gemini API. Some Google keys
+// ("AQ....", e.g. Vertex AI express-mode keys) only work on Vertex AI, so a key
+// the Gemini API rejects is tried once on Vertex AI and the one that works is
+// remembered. GEMINI_VERTEX=1 / 0 forces one or the other.
 let client = null;
-let clientKey = null;
+let clientSig = null;
+let useVertex = null; // null = not known yet
+function vertexWanted() {
+  if (process.env.GEMINI_VERTEX === '1') return true;
+  if (process.env.GEMINI_VERTEX === '0') return false;
+  return useVertex === true;
+}
 function ai() {
-  if (!client || clientKey !== process.env.GEMINI_API_KEY) {
+  const vertex = vertexWanted();
+  const sig = `${process.env.GEMINI_API_KEY}|${vertex}`;
+  if (!client || clientSig !== sig) {
     const { GoogleGenAI } = require('@google/genai');
-    clientKey = process.env.GEMINI_API_KEY;
+    clientSig = sig;
     client = new GoogleGenAI({
-      apiKey: clientKey,
+      apiKey: process.env.GEMINI_API_KEY,
+      ...(vertex ? { vertexai: true } : {}),
       ...(process.env.GEMINI_API_BASE ? { httpOptions: { baseUrl: process.env.GEMINI_API_BASE } } : {}),
     });
   }
   return client;
 }
+const keyRejected = (e) => {
+  const status = e.status || e.code;
+  return status === 401 || status === 403 || /api[_ ]?key|API_KEY_INVALID|UNAUTHENTICATED|PERMISSION_DENIED/i.test(String(e.message || ''));
+};
 
 class CartoonError extends Error {
   constructor(reason, message) {
@@ -46,16 +63,32 @@ async function generate({ prompt, images, aspectRatio = '1:1', imageSize = '1K',
   if (!enabled()) throw new CartoonError('off', 'AI illustration is not set up');
   const parts = [{ text: prompt }];
   for (const img of images) parts.push({ inlineData: { mimeType: 'image/jpeg', data: (await jpeg(img)).toString('base64') } });
+  const request = {
+    model: MODEL(),
+    contents: [{ role: 'user', parts }],
+    config: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio, imageSize }, httpOptions: { timeout } },
+  };
   let res;
   try {
-    res = await ai().models.generateContent({
-      model: MODEL(),
-      contents: [{ role: 'user', parts }],
-      config: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio, imageSize }, httpOptions: { timeout } },
-    });
+    try {
+      res = await ai().models.generateContent(request);
+      if (useVertex === null) useVertex = vertexWanted();
+    } catch (e) {
+      const canSwitch = !process.env.GEMINI_VERTEX && useVertex === null && keyRejected(e);
+      if (!canSwitch) throw e;
+      useVertex = true; // try the same key on Vertex AI
+      try {
+        res = await ai().models.generateContent(request);
+        console.log('[cartoon] GEMINI_API_KEY works on Vertex AI; using it from now on');
+      } catch (e2) {
+        useVertex = null; // neither worked; try both again next time
+        if (keyRejected(e2)) console.warn(`[cartoon] key rejected by Gemini API (${e.message}) and Vertex AI (${e2.message})`);
+        throw keyRejected(e2) ? e : e2;
+      }
+    }
   } catch (e) {
     const status = e.status || e.code;
-    throw new CartoonError(status === 429 ? 'busy' : status === 401 || status === 403 ? 'key' : 'failed', e.message);
+    throw new CartoonError(status === 429 ? 'busy' : keyRejected(e) ? 'key' : 'failed', e.message);
   }
   const cand = res && res.candidates && res.candidates[0];
   const part = cand && cand.content && (cand.content.parts || []).find((p) => p.inlineData && p.inlineData.data);

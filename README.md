@@ -34,6 +34,7 @@ Requires Node 18+. There is no database to set up: data is stored under `data/` 
 | `SITE_URL` | (from request) | Public address used in links inside messages |
 | `GEMINI_API_KEY` | (none) | Turns on AI drawing for the children's books (Google Gemini API, paid key from Google AI Studio) |
 | `GEMINI_IMAGE_MODEL` | `gemini-3.1-flash-image` | Image model used for the cartoon face and the page redraws |
+| `GEMINI_VERTEX` | auto | `1` sends the key to Vertex AI, `0` to the Gemini API. Left unset, a key the Gemini API rejects (e.g. an `AQ.` key) is tried on Vertex AI automatically |
 | `CARTOON_DAILY_LIMIT` / `CARTOON_GLOBAL_DAILY_LIMIT` | `4` / `150` | Cartoon-face previews per visitor / for the whole shop per day |
 | `REDRAW_DAILY_PAGES` | `450` | Pages the AI may redraw per day (about 30 books); more wait until the next day |
 

@@ -793,6 +793,46 @@ test('AI books: one cartoon face for the preview, every page redrawn after the o
   }
 });
 
+test('AI books: an AQ. key the Gemini API rejects is used on Vertex AI', async () => {
+  const http = require('http');
+  const sharp = require('sharp');
+  const urls = [];
+  const mock = http.createServer((req, res) => {
+    req.resume();
+    req.on('end', async () => {
+      urls.push(req.url);
+      res.setHeader('Content-Type', 'application/json');
+      if (!/publishers\/google/.test(req.url)) {
+        res.statusCode = 400;
+        return res.end(JSON.stringify({ error: { code: 400, message: 'API key not valid. Please pass a valid API key.', status: 'INVALID_ARGUMENT', details: [{ reason: 'API_KEY_INVALID' }] } }));
+      }
+      const img = await sharp({ create: { width: 768, height: 1024, channels: 3, background: '#ff8800' } }).png().toBuffer();
+      res.end(JSON.stringify({ candidates: [{ content: { role: 'model', parts: [{ inlineData: { mimeType: 'image/png', data: img.toString('base64') } }] }, finishReason: 'STOP' }] }));
+    });
+  });
+  await new Promise((r) => mock.listen(0, r));
+  process.env.GEMINI_API_KEY = 'AQ.test-key';
+  process.env.GEMINI_API_BASE = `http://127.0.0.1:${mock.address().port}`;
+  const file = require.resolve('../src/cartoon');
+  const cached = require.cache[file];
+  delete require.cache[file];
+  try {
+    const cartoon = require('../src/cartoon');
+    const face = await sharp({ create: { width: 400, height: 500, channels: 3, background: '#d9a27e' } }).jpeg().toBuffer();
+    const out = await cartoon.cartoonFace(face, face, 'story');
+    assert.ok(out.length > 0);
+    assert.strictEqual(urls.length, 2, 'Gemini API first, then Vertex AI');
+    await cartoon.cartoonFace(face, face, 'story');
+    assert.strictEqual(urls.length, 3, 'remembers Vertex AI');
+    assert.ok(/publishers\/google/.test(urls[2]));
+  } finally {
+    require.cache[file] = cached;
+    delete process.env.GEMINI_API_KEY;
+    delete process.env.GEMINI_API_BASE;
+    mock.close();
+  }
+});
+
 const png4 = (w, h) => png(w, h);
 test('two copies of the app on one data folder share orders, sign-ins and edits', async () => {
   const { createApp: make } = require('../src/app');
