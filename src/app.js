@@ -21,6 +21,7 @@ const {
 } = require('./products');
 const { GOVERNORATES, normalizeEgyptMobile } = require('./egypt');
 const { FIELDS, langOf, format } = require('./i18n');
+const { GANG, layoutSheet } = require('./gangsheet');
 // Loaded on first use: the shop keeps working even if the image library cannot load on a server.
 let printfilesModule = null;
 const printfiles = new Proxy({}, { get: (_, key) => (printfilesModule ||= require('./printfiles'))[key] });
@@ -29,8 +30,13 @@ const printfiles = new Proxy({}, { get: (_, key) => (printfilesModule ||= requir
 const ITEM_STATUSES = ['queued', 'printing', 'printed', 'shipped'];
 
 const MAX_EDITOR_JSON_BYTES = 40 * 1024 * 1024;
-const UPLOAD_LIMITS = { print: 60 * 1024 * 1024, preview: 8 * 1024 * 1024, svg: 40 * 1024 * 1024 };
-const FILE_RE = /^(front|back)-(print|preview)\.png$|^(front|back)-design\.svg$/;
+const UPLOAD_LIMITS = { print: 60 * 1024 * 1024, preview: 8 * 1024 * 1024, svg: 40 * 1024 * 1024, source: 60 * 1024 * 1024 };
+const FILE_RE = /^(front|back)-(print|preview)\.png$|^(front|back)-design\.svg$|^src-\d{1,2}\.(png|jpg|webp)$/;
+const SIGNATURES = {
+  png: (b) => b.subarray(0, 8).equals(PNG_SIGNATURE),
+  jpg: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
+  webp: (b) => b.subarray(0, 4).toString() === 'RIFF' && b.subarray(8, 12).toString() === 'WEBP',
+};
 const MAX_ITEMS_PER_ORDER = 50;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -51,9 +57,12 @@ const FILE_LABELS = { print: t('print file', 'ملف الطباعة'), preview: 
 
 /** Check an uploaded file's type and size; returns its kind. */
 function checkUpload(name, buf) {
-  const kind = name.endsWith('.svg') ? 'svg' : name.includes('-print') ? 'print' : 'preview';
+  const kind = name.startsWith('src-') ? 'source' : name.endsWith('.svg') ? 'svg' : name.includes('-print') ? 'print' : 'preview';
   if (buf.length > UPLOAD_LIMITS[kind]) throw new HttpError(413, 'uploadTooLarge');
-  if (kind === 'svg') {
+  if (kind === 'source') {
+    const ext = name.split('.').pop();
+    if (buf.length < 16 || !SIGNATURES[ext](buf)) throw new HttpError(400, 'badPng', { label: name });
+  } else if (kind === 'svg') {
     const head = buf.subarray(0, 512).toString('utf8');
     if (!/<svg[\s>]/.test(head) && !/^\s*<\?xml/.test(head)) throw new HttpError(400, 'badPng', { label: name });
   } else if (buf.length < 24 || !buf.subarray(0, 8).equals(PNG_SIGNATURE)) {
@@ -103,6 +112,10 @@ function publicItem(item) {
     status: item.status,
     history: item.history,
     process: item.process || getProduct(item.productId)?.process,
+    methods: getProduct(item.productId)?.methods || [item.process || 'dtf'],
+    kind: item.kind || 'product',
+    pieces: item.pieces,
+    filmBatch: item.filmBatch || null,
   };
 }
 
@@ -166,6 +179,7 @@ function createApp({ dataDir, adminPassword }) {
       mockup: { width: MOCKUP_WIDTH, height: MOCKUP_HEIGHT },
       pricing: { extraSide: EXTRA_SIDE_PRICE, shipping: SHIPPING_FLAT, freeShippingOver: FREE_SHIPPING_OVER },
       categories: CATEGORIES,
+      gangsheet: GANG,
       governorates: GOVERNORATES,
       products: PRODUCTS.map(publicProduct),
     });
@@ -223,9 +237,53 @@ function createApp({ dataDir, adminPassword }) {
       currency: CURRENCY,
       orderId: null,
     };
-    store.createDesign(design, { 'editor.json': editorJson });
     const files = storedSides.flatMap((sd) => [`${sd.id}-print.png`, `${sd.id}-preview.png`, `${sd.id}-design.svg`]);
+    design.expectedFiles = files;
+    store.createDesign(design, { 'editor.json': editorJson });
     res.status(201).json({ id: design.id, uploadToken: token, files });
+  });
+
+  // ---------- DTF gang sheets ----------
+  // Same three steps as designs: describe the sheet (server nests and prices
+  // it), upload each source image plus a preview, then complete.
+  app.post('/api/gangsheets', express.json({ limit: '200kb' }), (req, res) => {
+    const items = (req.body && req.body.items) || [];
+    let layout;
+    try {
+      layout = layoutSheet(items);
+    } catch (e) {
+      throw new HttpError(400, e.message.startsWith('gang') ? e.message : 'gangBadItem');
+    }
+    const types = items.map((it) => (['png', 'jpg', 'webp'].includes(it.type) ? it.type : null));
+    if (types.includes(null)) throw new HttpError(400, 'gangBadItem');
+    const token = crypto.randomBytes(24).toString('hex');
+    const files = [...types.map((tp, i) => `src-${i}.${tp}`), 'front-preview.png'];
+    const label = { en: `${GANG.rollWidthCm} × ${layout.lengthCm} cm`, ar: `${GANG.rollWidthCm} × ${layout.lengthCm} سم` };
+    const design = {
+      id: crypto.randomUUID(),
+      kind: 'gangsheet',
+      createdAt: new Date().toISOString(),
+      status: 'uploading',
+      uploadTokenHash: sha(token),
+      expectedFiles: files,
+      productId: 'dtfsheet',
+      productName: { en: 'DTF gang sheet', ar: 'شيت DTF' },
+      process: 'dtf',
+      color: { id: 'film', name: { en: 'Transfer film', ar: 'فيلم نقل حراري' }, hex: '#ffffff' },
+      size: { id: `${layout.lengthCm}cm`, label },
+      sheet: {
+        widthCm: GANG.rollWidthCm,
+        lengthCm: layout.lengthCm,
+        items: items.map((it, i) => ({ file: files[i], name: String(it.name || '').slice(0, 80), wCm: Number(it.wCm), hCm: Number(it.hCm), qty: Math.floor(Number(it.qty)) })),
+        placements: layout.placements,
+      },
+      sides: [{ id: 'front', name: { en: 'Sheet', ar: 'الشيت' }, widthIn: +(GANG.rollWidthCm / 2.54).toFixed(3), heightIn: +(layout.lengthCm / 2.54).toFixed(3), bleedIn: 0 }],
+      price: layout.price,
+      currency: CURRENCY,
+      orderId: null,
+    };
+    store.createDesign(design, { 'editor.json': JSON.stringify({ gangsheet: true }) });
+    res.status(201).json({ id: design.id, uploadToken: token, files, lengthCm: layout.lengthCm, price: layout.price });
   });
 
   const uploadingDesign = (req) => {
@@ -238,7 +296,7 @@ function createApp({ dataDir, adminPassword }) {
   app.put('/api/designs/:id/files/:name', express.raw({ type: () => true, limit: '60mb' }), (req, res) => {
     const design = uploadingDesign(req);
     const { name } = req.params;
-    if (!FILE_RE.test(name) || !design.sides.some((s) => name.startsWith(s.id + '-'))) throw new HttpError(400, 'notFound');
+    if (!FILE_RE.test(name) || !(design.expectedFiles || []).includes(name)) throw new HttpError(400, 'notFound');
     const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
     checkUpload(name, buf);
     store.writeDesignFile(design.id, name, buf);
@@ -248,6 +306,24 @@ function createApp({ dataDir, adminPassword }) {
   app.post('/api/designs/:id/complete', async (req, res, next) => {
     try {
       const design = uploadingDesign(req);
+      if (design.kind === 'gangsheet') {
+        for (const name of design.expectedFiles) {
+          if (!fs.existsSync(store.designFile(design.id, name))) throw new HttpError(400, 'gangMissingFile');
+        }
+        let minDpi = Infinity;
+        for (const it of design.sheet.items) {
+          const info = await printfiles.pngInfo(fs.readFileSync(store.designFile(design.id, it.file)));
+          it.px = [info.width, info.height];
+          it.dpi = Math.round(Math.min(info.width / (it.wCm / 2.54), info.height / (it.hCm / 2.54)));
+          minDpi = Math.min(minDpi, it.dpi);
+        }
+        design.sides[0].dpi = minDpi;
+        design.status = 'ready';
+        delete design.uploadTokenHash;
+        store.save();
+        const { uploadTokenHash, ...pub } = design; // eslint-disable-line no-unused-vars
+        return res.json({ ...pub, previewUrl: `/files/designs/${design.id}/front-preview.png` });
+      }
       for (const side of design.sides) {
         for (const name of [`${side.id}-print.png`, `${side.id}-preview.png`]) {
           if (!fs.existsSync(store.designFile(design.id, name))) throw new HttpError(400, 'sideEmpty', { side: side.name });
@@ -340,6 +416,13 @@ function createApp({ dataDir, adminPassword }) {
     const now = new Date().toISOString();
     // One order line per design, always quantity 1: every item is its own print job.
     const items = designs.map((d) => {
+      if (d.kind === 'gangsheet') {
+        return {
+          id: crypto.randomUUID(), designId: d.id, kind: 'gangsheet', productId: d.productId, productName: d.productName,
+          color: d.color, size: d.size, sides: d.sides, process: 'dtf', price: d.price, pieces: d.sheet.placements.length,
+          status: 'queued', history: [{ status: 'queued', at: now }],
+        };
+      }
       const product = getProduct(d.productId);
       return {
         id: crypto.randomUUID(),
@@ -411,11 +494,19 @@ function createApp({ dataDir, adminPassword }) {
   });
 
   app.patch('/api/admin/items/:itemId', requireAdmin, express.json(), (req, res) => {
-    const { status } = req.body || {};
-    if (!ITEM_STATUSES.includes(status)) throw new HttpError(400, 'badStatus', { list: ITEM_STATUSES.join(', ') });
+    const { status, process: method } = req.body || {};
     const found = store.findItem(req.params.itemId);
     if (!found) throw new HttpError(404, 'itemNotFound');
     const { order, item } = found;
+    if (method !== undefined) {
+      // Switch an item between DTG and DTF (for products that allow both).
+      const allowed = getProduct(item.productId)?.methods || [];
+      if (!allowed.includes(method)) throw new HttpError(400, 'badStatus', { list: allowed.join(', ') });
+      item.process = method;
+      store.save();
+      if (status === undefined) return res.json(adminItem(order, item, order.items.indexOf(item)));
+    }
+    if (!ITEM_STATUSES.includes(status)) throw new HttpError(400, 'badStatus', { list: ITEM_STATUSES.join(', ') });
     if (status === 'printing') {
       // One at a time: the press holds a single job.
       for (const o of store.listOrders()) {
@@ -440,16 +531,38 @@ function createApp({ dataDir, adminPassword }) {
     pdf: { file: (sd) => `${sd}-print.pdf`, ext: 'pdf', type: 'application/pdf' },
     'pdf-marks': { file: (sd) => `${sd}-print-marks.pdf`, ext: 'pdf', type: 'application/pdf' },
     tiff: { file: (sd) => `${sd}-print-cmyk.tif`, ext: 'tif', type: 'image/tiff', make: (buf, side) => printfiles.cmykTiff(buf, side.dpi) },
+    'dtf-film': { file: (sd) => `${sd}-dtf-film.png`, ext: 'png', type: 'image/png', make: (buf, side) => printfiles.dtfFilmPng(buf, side.dpi) },
+    'dtf-pdf': { file: (sd) => `${sd}-dtf-film.pdf`, ext: 'pdf', type: 'application/pdf', make: async (buf, side) => printfiles.printPdf(await printfiles.dtfFilmPng(buf, side.dpi), side, { title: 'DTF film' }) },
+    'dtg-white': { file: (sd) => `${sd}-dtg-white.png`, ext: 'png', type: 'image/png', make: (buf, side) => printfiles.dtgUnderbase(buf, side.dpi, Math.max(1, Math.round(side.dpi / 150))) },
   };
+  const SUFFIX = { 'png-mirror': '-mirrored', 'pdf-marks': '-cropmarks', tiff: '-cmyk', 'dtf-film': '-dtf-film', 'dtf-pdf': '-dtf-film', 'dtg-white': '-dtg-white-underbase', 'sheet-pdf': '-film-mirrored', 'sheet-pdf-plain': '', proof: '-proof' };
+
+  /** Pieces of a customer's gang sheet, laid out exactly as they saw it. */
+  async function gangSheetPdf(design, mirror) {
+    const sheet = design.sheet;
+    const sources = await Promise.all(sheet.items.map((it) => printfiles.hardAlpha(fs.readFileSync(store.designFile(design.id, it.file)))));
+    const pieces = sheet.placements.map((pl) => ({ png: sources[pl.item], widthIn: sheet.items[pl.item].wCm / 2.54, heightIn: sheet.items[pl.item].hCm / 2.54 }));
+    const placements = sheet.placements.map((pl, i) => ({ id: i, x: pl.x / 2.54, y: pl.y / 2.54, w: pl.w / 2.54, h: pl.h / 2.54, rotated: pl.rotated }));
+    return printfiles.filmPdf(pieces, { rollWidthIn: sheet.widthCm / 2.54, mirror, labels: false, margin: 0, placements, lengthIn: sheet.lengthCm / 2.54, title: `DTF gang sheet ${sheet.widthCm}x${sheet.lengthCm}cm` });
+  }
   app.get('/api/admin/files/:designId/:side', requireAdmin, async (req, res, next) => {
     try {
       const { designId, side: sideId } = req.params;
       const design = UUID_RE.test(designId) && store.getDesign(designId);
       const side = design && design.sides.find((s) => s.id === sideId);
+      const order = design && design.orderId && store.getOrder(design.orderId);
+      const base = design ? `${order ? order.number : 'design'}-${design.productId}-${sideId}` : '';
+      if (design && design.kind === 'gangsheet') {
+        const f = req.query.format || 'sheet-pdf';
+        if (f === 'proof') return res.download(store.designFile(designId, 'front-preview.png'), `${base}-proof.png`);
+        if (f !== 'sheet-pdf' && f !== 'sheet-pdf-plain') throw new HttpError(404, 'notFound');
+        const name = f === 'sheet-pdf' ? 'sheet-film-mirrored.pdf' : 'sheet-film.pdf';
+        const target = store.designFile(designId, name);
+        if (!fs.existsSync(target)) store.writeDesignFile(designId, name, (await gangSheetPdf(design, f === 'sheet-pdf')).pdf);
+        return res.download(target, `${base}${SUFFIX[f]}.pdf`);
+      }
       const fmt = FORMATS[req.query.format || 'png'];
       if (!side || !fmt) throw new HttpError(404, 'notFound');
-      const order = design.orderId && store.getOrder(design.orderId);
-      const base = `${order ? order.number : 'design'}-${design.productId}-${sideId}`;
       const target = store.designFile(designId, fmt.file(sideId));
       if (!fs.existsSync(target)) {
         const png = fs.readFileSync(store.designFile(designId, `${sideId}-print.png`));
@@ -462,7 +575,52 @@ function createApp({ dataDir, adminPassword }) {
         } else throw new HttpError(404, 'notFound');
         store.writeDesignFile(designId, fmt.file(sideId), out);
       }
-      res.download(target, `${base}${req.query.format === 'png-mirror' ? '-mirrored' : ''}${req.query.format === 'pdf-marks' ? '-cropmarks' : ''}${req.query.format === 'tiff' ? '-cmyk' : ''}.${fmt.ext}`);
+      res.download(target, `${base}${SUFFIX[req.query.format] || ''}.${fmt.ext}`);
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  // ---------- DTF film: nest several orders onto one roll ----------
+  const dtfOpen = () => {
+    const list = [];
+    for (const order of store.listOrders()) {
+      order.items.forEach((item, i) => {
+        const method = item.process || getProduct(item.productId)?.process;
+        if (item.kind !== 'gangsheet' && method === 'dtf' && (item.status === 'queued' || item.status === 'printing')) list.push(adminItem(order, item, i));
+      });
+    }
+    return list.sort((a, b) => a.orderedAt.localeCompare(b.orderedAt));
+  };
+  app.get('/api/admin/dtf-items', requireAdmin, (req, res) => res.json({ items: dtfOpen(), rollWidthIn: 22 }));
+  app.post('/api/admin/dtf-film', requireAdmin, express.json(), async (req, res, next) => {
+    try {
+      const ids = Array.isArray(req.body && req.body.itemIds) ? req.body.itemIds : [];
+      const chosen = dtfOpen().filter((i) => ids.includes(i.id));
+      if (!chosen.length) throw new HttpError(400, 'itemNotFound');
+      const pieces = [];
+      for (const it of chosen) {
+        for (const sd of it.sides) {
+          pieces.push({
+            png: fs.readFileSync(store.designFile(it.designId, `${sd.id}-print.png`)),
+            widthIn: sd.widthIn + 2 * (sd.bleedIn || 0),
+            heightIn: sd.heightIn + 2 * (sd.bleedIn || 0),
+            label: `${it.orderNumber} #${it.position} · ${pickEn(it.productName)} · ${pickEn(sd.name)} · ${pickEn(it.size.label)}`,
+          });
+        }
+      }
+      const film = await printfiles.filmPdf(pieces, { title: 'DTF film' });
+      const batchId = `F${(store.db.nextFilmNumber = (store.db.nextFilmNumber || 0) + 1)}`;
+      const at = new Date().toISOString();
+      for (const it of chosen) {
+        const found = store.findItem(it.id);
+        if (found) found.item.filmBatch = { id: batchId, at };
+      }
+      store.save();
+      res.set('X-Film-Length-In', film.lengthIn.toFixed(2));
+      res.set('X-Film-Batch', batchId);
+      res.set('Access-Control-Expose-Headers', 'X-Film-Length-In, X-Film-Batch');
+      res.type('pdf').attachment(`dtf-film-${batchId}.pdf`).send(film.pdf);
     } catch (e) {
       next(e);
     }

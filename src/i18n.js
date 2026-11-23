@@ -32,6 +32,12 @@ const MESSAGES = {
   itemNotFound: { en: 'Item not found', ar: 'المنتج غير موجود' },
   pressBusy: { en: '{order} item {n} is already printing. Finish it first.', ar: 'المنتج {n} من الطلب {order} قيد الطباعة الآن. أنهِه أولًا.' },
   serverError: { en: 'Something went wrong', ar: 'حدث خطأ ما' },
+  gangEmpty: { en: 'Add at least one design to the sheet', ar: 'أضف تصميمًا واحدًا على الأقل إلى الشيت' },
+  gangTooMany: { en: 'Too many designs for one sheet', ar: 'عدد التصميمات كبير جدًا على شيت واحد' },
+  gangBadItem: { en: 'Check the sizes and quantities of your designs', ar: 'راجع مقاسات وكميات التصميمات' },
+  gangTooWide: { en: 'A design is wider than the 56 cm film', ar: 'أحد التصميمات أعرض من الفيلم (56 سم)' },
+  gangTooLong: { en: 'The sheet would be longer than 5 m. Split it into two orders.', ar: 'الشيت سيصبح أطول من 5 متر. قسّمه على طلبين.' },
+  gangMissingFile: { en: 'A design file did not finish uploading', ar: 'لم يكتمل رفع أحد ملفات التصميم' },
 };
 
 const FIELDS = {

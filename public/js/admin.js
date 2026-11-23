@@ -9,6 +9,27 @@
   let tab = 'queue';
   let lastQueue = null;
   let lastOrders = null;
+  let lastFilm = null;
+  const filmPicked = new Set();
+  let filmMsg = '';
+
+  function renderFilm(items) {
+    for (const id of [...filmPicked]) if (!items.some((i) => i.id === id)) filmPicked.delete(id);
+    $('film-list').innerHTML = items.length
+      ? items.map((it) => `
+        <label class="card queue-row film-row">
+          <input type="checkbox" data-film="${it.id}" ${filmPicked.has(it.id) || !it.filmBatch ? 'checked' : ''}>
+          <img src="${esc(it.sides[0].previewUrl)}" alt="">
+          <div>
+            <strong>${esc(tr(it.productName))}</strong> ${pill(it.status)} ${it.filmBatch ? `<span class="pill printed">${esc(t('admin.onFilm', { id: it.filmBatch.id }))}</span>` : ''}
+            <div class="muted small">${esc(it.orderNumber)} · ${esc(t('admin.spec.itemOf', { i: it.position, n: it.of }))} · ${esc(tr(it.color.name))} · ${esc(tr(it.size.label))} · ${esc(it.sides.map((sd) => `${tr(sd.name)} ${POD.num(sd.widthIn * 2.54)}×${POD.num(sd.heightIn * 2.54)} cm`).join(' + '))}</div>
+          </div>
+        </label>`).join('')
+      : `<p class="muted">${esc(t('admin.filmNone'))}</p>`;
+    items.forEach((it) => { if (!it.filmBatch) filmPicked.add(it.id); });
+    $('film-build').disabled = !items.length;
+    $('film-msg').textContent = filmMsg;
+  }
 
   async function adminApi(url, options = {}) {
     try {
@@ -45,6 +66,7 @@
     document.querySelectorAll('[data-tab]').forEach((x) => x.classList.toggle('active', x === b));
     $('tab-queue').hidden = tab !== 'queue';
     $('tab-orders').hidden = tab !== 'orders';
+    $('tab-film').hidden = tab !== 'film';
     refresh();
   }));
 
@@ -72,7 +94,13 @@
         <dt>${esc(t('admin.spec.product'))}</dt><dd>${esc(tr(item.productName))}</dd>
         <dt>${esc(t('admin.spec.colourSize'))}</dt><dd>${esc(tr(item.color.name))} <span class="dot" style="display:inline-block;vertical-align:middle;background:${esc(item.color.hex)}"></span> · ${esc(tr(item.size.label))}</dd>
         ${item.sides.map((s) => `<dt>${esc(t('admin.spec.print', { side: tr(s.name) }))}</dt><dd><bdi dir="ltr">${cm(s.widthIn)} × ${cm(s.heightIn)} cm (${s.widthIn} × ${s.heightIn} in)${s.bleedIn ? ' ' + esc(t('admin.bleed', { mm: Math.round(s.bleedIn * 25.4) })) : ''} · ${s.widthPx} × ${s.heightPx} px · ${s.dpi} DPI · sRGB</bdi></dd>`).join('')}
-        ${item.process ? `<dt>${esc(t('admin.method'))}</dt><dd>${esc(t('process.' + item.process))}</dd>` : ''}
+        ${item.process ? `<dt>${esc(t('admin.method'))}</dt><dd>
+          ${(item.methods || []).length > 1 ? `<div class="btn-group" style="max-width:180px;margin-bottom:6px">${item.methods.map((m) => `<button class="btn btn-sm ${m === item.process ? 'active' : ''}" data-item="${item.id}" data-method="${m}">${esc(t('method.' + m))}</button>`).join('')}</div>` : ''}
+          ${esc(t('process.' + item.process))}
+          ${item.process === 'dtg' && isDark(item.color.hex) ? `<div class="small" style="color:var(--warn);margin-top:4px">${esc(t('admin.darkHint'))}</div>` : ''}
+          ${item.filmBatch ? `<div><span class="pill printed">${esc(t('admin.onFilm', { id: item.filmBatch.id }))}</span></div>` : ''}
+        </dd>` : ''}
+        ${item.kind === 'gangsheet' && item.sides[0] ? `<dt>${esc(t('admin.spec.print', { side: tr(item.sides[0].name) }))}</dt><dd>${esc(t('admin.sheetInfo', { w: POD.num(item.sides[0].widthIn * 2.54), l: POD.num(Math.round(item.sides[0].heightIn * 2.54)), n: POD.num(item.pieces || 0), dpi: item.sides[0].dpi || '?' }))}</dd>` : ''}
         <dt>${esc(t('admin.spec.shipTo'))}</dt><dd>${address(c)}</dd>
         ${c.phone ? `<dt>${esc(t('admin.spec.phone'))}</dt><dd><a href="tel:${esc(c.phone)}" dir="ltr">${esc(c.phone)}</a></dd>` : ''}
         ${c.email ? `<dt>${esc(t('admin.spec.email'))}</dt><dd>${esc(c.email)}</dd>` : ''}
@@ -80,10 +108,27 @@
       </dl>`;
   }
 
-  const RECOMMENDED = { dtg: 'png', dtf: 'png', sublimation: 'png-mirror', uv: 'pdf', paper: 'pdf-marks' };
+  const RECOMMENDED = { dtg: 'png', dtf: 'dtf-film', sublimation: 'png-mirror', uv: 'pdf', paper: 'pdf-marks' };
+  const FORMATS_BY_METHOD = {
+    dtg: ['png', 'dtg-white', 'pdf', 'tiff'],
+    dtf: ['dtf-film', 'dtf-pdf', 'png', 'pdf'],
+    sublimation: ['png-mirror', 'png', 'pdf', 'tiff'],
+    uv: ['pdf', 'png', 'pdf-marks', 'tiff'],
+    paper: ['pdf-marks', 'pdf', 'tiff', 'png'],
+  };
+  const isDark = (hex) => {
+    const n = parseInt(String(hex || '#ffffff').slice(1), 16);
+    return (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255 < 0.5;
+  };
   function printFiles(item, s) {
+    if (item.kind === 'gangsheet') {
+      return `
+        <div class="print-files-block"><div class="print-files">
+          ${['sheet-pdf', 'sheet-pdf-plain', 'proof'].map((f, k) => `<button class="btn btn-sm ${k === 0 ? 'btn-primary' : ''}" data-download="${esc(s.printUrl)}?format=${f}">⬇ ${esc(t('fmt.' + f))}${k === 0 ? ` <span class="rec">· ${esc(t('admin.recommended'))}</span>` : ''}</button>`).join('')}
+        </div></div>`;
+    }
     const rec = RECOMMENDED[item.process] || 'png';
-    const formats = ['png', 'pdf', 'pdf-marks', 'png-mirror', 'tiff'].concat(s.hasSvg ? ['svg'] : []);
+    const formats = (FORMATS_BY_METHOD[item.process] || ['png', 'pdf', 'pdf-marks', 'png-mirror', 'tiff']).concat(s.hasSvg ? ['svg'] : []);
     return `
       <div class="print-files-block">
         <div class="small muted" style="font-weight:700;margin-bottom:6px">${esc(t('admin.files', { side: tr(s.name) }))}</div>
@@ -153,6 +198,7 @@
       return;
     }
     if (tab === 'queue') renderQueue((lastQueue = await adminApi('/api/admin/queue')));
+    else if (tab === 'film') renderFilm((lastFilm = (await adminApi('/api/admin/dtf-items')).items));
     else renderOrders((lastOrders = (await adminApi('/api/admin/orders')).orders));
     $('login').hidden = true;
     $('dash').hidden = false;
@@ -162,6 +208,45 @@
   document.addEventListener('pod:langchange', () => {
     if (tab === 'queue' && lastQueue) renderQueue(lastQueue);
     if (tab === 'orders' && lastOrders) renderOrders(lastOrders);
+    if (tab === 'film' && lastFilm) renderFilm(lastFilm);
+  });
+
+  $('film-list').addEventListener('change', (e) => {
+    const id = e.target.dataset.film;
+    if (!id) return;
+    if (e.target.checked) filmPicked.add(id);
+    else filmPicked.delete(id);
+  });
+  $('film-build').addEventListener('click', async () => {
+    const ids = [...document.querySelectorAll('[data-film]:checked')].map((c) => c.dataset.film);
+    if (!ids.length) return;
+    const btn = $('film-build');
+    btn.disabled = true;
+    btn.textContent = t('admin.filmBuilding');
+    try {
+      const res = await fetch('/api/admin/dtf-film', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': password, 'x-lang': POD.lang },
+        body: JSON.stringify({ itemIds: ids }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Film failed');
+      const batch = res.headers.get('x-film-batch');
+      const len = Number(res.headers.get('x-film-length-in')) * 2.54;
+      const url = URL.createObjectURL(await res.blob());
+      const a = Object.assign(document.createElement('a'), { href: url, download: `dtf-film-${batch}.pdf` });
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      filmMsg = t('admin.filmDone', { id: batch, len: POD.num(Math.round(len)) });
+      filmPicked.clear();
+      await refresh();
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = t('admin.filmBuild');
+    }
   });
 
   document.addEventListener('click', async (e) => {
@@ -177,6 +262,20 @@
         a.click();
         a.remove();
         setTimeout(() => URL.revokeObjectURL(url), 10000);
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+      return;
+    }
+    const mbtn = e.target.closest('[data-item][data-method]');
+    if (mbtn) {
+      try {
+        await adminApi('/api/admin/items/' + encodeURIComponent(mbtn.dataset.item), {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ process: mbtn.dataset.method }),
+        });
+        await refresh();
       } catch (err) {
         toast(err.message, 'error');
       }

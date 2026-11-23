@@ -24,7 +24,9 @@ Requires Node 18+. There is no database to set up: data is stored under `data/` 
 
 ## What's in it
 
-**Storefront (`/`)**: 13 products in four categories: t-shirt, kids t-shirt, hoodie, sweatshirt, cap, mug, cushion, framed poster, water bottle, tote bag, phone case, mouse pad and notebook. Each has colours, sizes and a mockup drawn in its colour.
+**Storefront (`/`)**: 21 products in four categories: t-shirt, oversized t-shirt, polo, kids t-shirt, kids hoodie, baby onesie, hoodie, zip hoodie, sweatshirt, shorts, denim jacket (back), apron, cap, mug, cushion, framed poster, water bottle, tote bag, phone case, mouse pad and notebook. Each has colours, sizes and a mockup drawn in its colour.
+
+**DTF gang sheet builder (`/gangsheet`)**: customers upload their own logos and artwork (PNG, JPG or WebP), set each one's size in cm and how many copies they need, and the site packs them onto a 56 cm DTF film roll (MaxRects nesting, pieces rotated when that saves film). Empty transparent edges are trimmed automatically, each design shows its DPI at the chosen size, and plain backgrounds can be removed with one click. The price is per metre of film (400 EGP/m, minimum 50 cm, in 10 cm steps). The sheet goes into the cart like any other item, and the server re-checks the layout and price.
 
 **Design editor (`/editor`)**, built on Fabric.js:
 - **16 self-hosted fonts** (8 Arabic, 8 English) with a visual font picker. Arabic text is set right-to-left with properly joined letters, and switches to an Arabic font automatically if typed into an English-only one.
@@ -59,8 +61,13 @@ The production dashboard offers every print file in the format each print method
 | PDF · crop marks | Paper printing, with crop marks and a job slug |
 | TIFF · CMYK | Offset or paper print shops that want CMYK (converted with an embedded CMYK profile) |
 | SVG · vector | Vector workflows, cutting plotters |
+| PNG · DTF film | Mirrored, with hard alpha edges (no semi-transparent pixels that print as a white halo) |
+| PDF · DTF film | The same film piece at exact size, with a cutting gap and a label |
+| PNG · DTG white underbase | The white layer for dark garments, choked slightly so it doesn't show at the edges |
 
 Each product records its print method, and the dashboard highlights the recommended file.
+
+**DTF and DTG.** Garments can be printed either way, and the printer picks the method per item in the dashboard (caps are DTF only). The file list changes to match. The **DTF film** tab lists every DTF item waiting to print: tick the ones to run together and the server packs them onto one mirrored 56 cm film PDF, with a label under each piece (order, product, side), splitting pages every 5 m. Each item is marked with its film batch (F1, F2, …) so you know which film it's on. Customer gang sheets download as a mirrored film PDF, a plain PDF or a proof PNG.
 
 **Checkout (`/cart`)** asks for name, Egyptian mobile number (any common format, including Arabic digits), governorate, city and address. Payment is **cash on delivery**. Every design is its own order line with quantity 1, so each one is a separate print job. Prices are recalculated on the server, and the client's numbers are never trusted.
 
@@ -87,7 +94,10 @@ public/js/preview.js    photo + drawn mockup renderers, preview window, CMYK pro
 public/js/photo-mockups.js  print area, warp type and colour rules for each product photo
 public/mockups/photos/  product photos (.webp) and cut-out masks (-mask.png)
 public/js/preview3d.js  3D product models (three.js)
-src/printfiles.js       PDF / CMYK TIFF / mirrored PNG / sRGB+DPI finishing (sharp, pdfkit)
+src/printfiles.js       PDF / CMYK TIFF / mirrored PNG / DTF film / DTG underbase / sRGB+DPI finishing (sharp, pdfkit)
+src/gangsheet.js        gang sheet rules, layout and pricing
+public/js/nesting.js    MaxRects film packing (shared by browser and server)
+public/js/gangsheet.js  the gang sheet builder page
 public/fonts/        self-hosted fonts (SIL Open Font License)
 src/store.js         JSON-file store with atomic writes
 public/              static site (index, editor, cart, order, admin)
@@ -98,7 +108,7 @@ test/api.test.js     API tests (npm test)
 
 ## Adding a product
 
-Add an entry to `PRODUCTS` in `src/products.js`. Mockups are SVGs in a 500 × 600 space using `{{C}}` (product colour), `{{S}}` (shade) and `{{L}}` (outline). Each side defines a `printArea` rectangle in that space and its physical `printWidthIn`. An optional `overlay` SVG is drawn on top of the design (for example a phone camera or a mug's highlight).
+Add an entry to `PRODUCTS` in `src/products.js`. Mockups are SVGs in a 500 × 600 space using `{{C}}` (product colour), `{{S}}` (shade) and `{{L}}` (outline). Each side defines a `printArea` rectangle in that space and its physical `printWidthIn`. Set its print method, safe zone and bleed in the `PRODUCTION` map, and for garments the allowed methods in `METHODS`. An optional `overlay` SVG is drawn on top of the design (for example a phone camera or a mug's highlight).
 
 ## Before going live
 

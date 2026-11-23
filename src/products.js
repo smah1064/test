@@ -441,6 +441,222 @@ const PRODUCTS = [
   },
 ];
 
+// ---------- Products added for DTF / DTG ----------
+const POLO_COLLAR =
+  '<path d="M205 66 L250 112 L232 122 L192 80 Z M295 66 L250 112 L268 122 L308 80 Z" fill="{{C}}" stroke="{{L}}" stroke-width="2.5" stroke-linejoin="round"/>' +
+  '<rect x="241" y="108" width="18" height="70" rx="2" fill="{{S}}" stroke="{{L}}" stroke-width="2"/>' +
+  '<circle cx="250" cy="128" r="3.5" fill="{{L}}"/><circle cx="250" cy="152" r="3.5" fill="{{L}}"/>';
+const OVERSIZED_BODY =
+  '<path d="M140 92 L205 70 Q250 98 295 70 L360 92 L462 178 L420 266 L380 240 L384 560 Q250 574 116 560 L120 240 L80 266 L38 178 Z" fill="{{C}}" stroke="{{L}}" stroke-width="3" stroke-linejoin="round"/>' +
+  '<path d="M140 92 Q128 170 120 240 M360 92 Q372 170 380 240" fill="none" stroke="{{L}}" stroke-width="2" opacity=".55"/>' +
+  '<path d="M130 532 Q250 546 370 532" fill="none" stroke="{{S}}" stroke-width="5" opacity=".5"/>';
+const DENIM_BODY =
+  '<path d="M150 95 L205 75 L250 120 L295 75 L350 95 L440 335 L400 350 L360 255 L360 520 L140 520 L140 255 L100 350 L60 335 Z" fill="{{C}}" stroke="{{L}}" stroke-width="3" stroke-linejoin="round"/>' +
+  '<rect x="140" y="494" width="220" height="26" fill="{{S}}" stroke="{{L}}" stroke-width="2"/>' +
+  '<path d="M56 323 L104 342 L98 358 L50 339 Z M444 323 L396 342 L402 358 L450 339 Z" fill="{{S}}" stroke="{{L}}" stroke-width="2"/>' +
+  '<path d="M150 95 Q146 180 140 255 M350 95 Q354 180 360 255" fill="none" stroke="#e8b04b" stroke-width="1.6" stroke-dasharray="4 3" opacity=".8"/>';
+
+PRODUCTS.push(
+  {
+    id: 'polo',
+    category: 'apparel',
+    name: t('Polo Shirt', 'تيشيرت بولو'),
+    description: t('Piqué cotton polo with a button placket. Logo on the chest, big print on the back.', 'بولو قطن بيكيه بأزرار. شعار على الصدر وطباعة كبيرة على الظهر.'),
+    basePrice: 550,
+    colors: [C.white, C.black, C.navy, C.red, C.forest, C.heather],
+    sizes: APPAREL_SIZES,
+    sides: [
+      { id: 'front', name: FRONT, svg: sv(TEE_BODY + POLO_COLLAR), printArea: { x: 296, y: 150, w: 57, h: 57 }, printWidthIn: 4 },
+      { id: 'back', name: BACK, svg: sv(TEE_BODY + '<path d="M205 66 Q250 78 295 66 L295 76 Q250 90 205 76 Z" fill="{{C}}" stroke="{{L}}" stroke-width="2.5"/>'), printArea: { x: 165, y: 125, w: 171, h: 200 }, printWidthIn: 12 },
+    ],
+  },
+  {
+    id: 'oversized',
+    category: 'apparel',
+    name: t('Oversized T-Shirt', 'تيشيرت أوفر سايز'),
+    description: t('Heavyweight cotton with dropped shoulders and a relaxed fit. Extra-large print area.', 'قطن ثقيل بأكتاف منسدلة وقصة واسعة، ومساحة طباعة أكبر.'),
+    basePrice: 550,
+    colors: [C.black, C.white, C.sand, C.heather, C.olive, C.navy],
+    sizes: APPAREL_SIZES,
+    sides: [
+      { id: 'front', name: FRONT, svg: sv(OVERSIZED_BODY + '<path d="M205 70 Q250 124 295 70 Q250 90 205 70 Z" fill="{{S}}" stroke="{{L}}" stroke-width="3" stroke-linejoin="round"/>'), printArea: { x: 152, y: 140, w: 196, h: 252 }, printWidthIn: 14 },
+      { id: 'back', name: BACK, svg: sv(OVERSIZED_BODY + '<path d="M205 70 Q250 88 295 70" fill="none" stroke="{{L}}" stroke-width="3"/>'), printArea: { x: 152, y: 120, w: 196, h: 252 }, printWidthIn: 14 },
+    ],
+  },
+  {
+    id: 'ziphoodie',
+    category: 'apparel',
+    name: t('Zip Hoodie', 'هودي بسوستة'),
+    description: t('Full-zip fleece hoodie. Small logo on the chest, large print on the back.', 'هودي ميلتون بسوستة كاملة. شعار صغير على الصدر وطباعة كبيرة على الظهر.'),
+    basePrice: 1100,
+    colors: [C.black, { ...C.heather, hex: '#a9adb4' }, { ...C.navy, hex: '#22304f' }, C.maroon, C.cream],
+    sizes: APPAREL_SIZES,
+    sides: [
+      {
+        id: 'front',
+        name: FRONT,
+        svg: sv(
+          '<path d="M175 112 Q170 30 250 28 Q330 30 325 112 Z" fill="{{S}}" stroke="{{L}}" stroke-width="3"/>' +
+            HOODIE_BODY +
+            '<path d="M198 96 Q250 152 302 96 Q290 58 250 54 Q210 58 198 96 Z" fill="{{S}}" stroke="{{L}}" stroke-width="3"/>' +
+            '<path d="M250 140 L250 548" stroke="{{L}}" stroke-width="4"/><path d="M250 140 L250 548" stroke="#c9ccd2" stroke-width="2" stroke-dasharray="2 3"/>' +
+            '<path d="M232 128 L226 200 M268 128 L274 200" stroke="{{L}}" stroke-width="3" stroke-linecap="round"/>' +
+            '<path d="M170 420 L212 470 M330 420 L288 470" stroke="{{L}}" stroke-width="2.5" stroke-linecap="round"/>'
+        ),
+        printArea: { x: 282, y: 175, w: 60, h: 60 },
+        printWidthIn: 4,
+      },
+      {
+        id: 'back',
+        name: BACK,
+        svg: sv(HOODIE_BODY + '<path d="M178 104 Q250 182 322 104 Q250 54 178 104 Z" fill="{{S}}" stroke="{{L}}" stroke-width="3" stroke-linejoin="round"/>'),
+        printArea: { x: 165, y: 195, w: 171, h: 228 },
+        printWidthIn: 12,
+      },
+    ],
+  },
+  {
+    id: 'denim',
+    category: 'apparel',
+    name: t('Denim Jacket', 'جاكيت جينز'),
+    description: t('Classic trucker jacket in sturdy denim, with a custom print across the back.', 'جاكيت جينز كلاسيك متين بطباعة مخصصة على الظهر.'),
+    basePrice: 1600,
+    colors: [
+      { id: 'mid', name: t('Mid blue', 'أزرق متوسط'), hex: '#4a6fa5' },
+      { id: 'light', name: t('Light wash', 'أزرق فاتح'), hex: '#8fb0d6' },
+      { id: 'dark', name: t('Dark indigo', 'أزرق غامق'), hex: '#26385c' },
+      { id: 'black', name: t('Black', 'أسود'), hex: '#2b2d31' },
+    ],
+    sizes: APPAREL_SIZES,
+    sides: [
+      {
+        id: 'back',
+        name: BACK,
+        svg: sv(
+          DENIM_BODY +
+            '<path d="M205 75 Q250 92 295 75 L295 88 Q250 104 205 88 Z" fill="{{S}}" stroke="{{L}}" stroke-width="2"/>' +
+            '<path d="M140 205 Q250 232 360 205" fill="none" stroke="{{L}}" stroke-width="2"/>' +
+            '<path d="M140 211 Q250 238 360 211" fill="none" stroke="#e8b04b" stroke-width="1.4" stroke-dasharray="4 3" opacity=".8"/>' +
+            '<path d="M200 230 L200 494 M300 230 L300 494" stroke="#e8b04b" stroke-width="1.4" stroke-dasharray="4 3" opacity=".7"/>'
+        ),
+        printArea: { x: 168, y: 250, w: 165, h: 165 },
+        printWidthIn: 11,
+      },
+    ],
+  },
+  {
+    id: 'apron',
+    category: 'home',
+    name: t('Kitchen Apron', 'مريلة مطبخ'),
+    description: t('Durable cotton-poly apron with a front pocket and long waist ties.', 'مريلة قطن وبوليستر متينة بجيب أمامي ورباط طويل.'),
+    basePrice: 350,
+    colors: [C.black, C.white, C.navy, C.red, { id: 'khaki', name: t('Khaki', 'كاكي'), hex: '#b9a37e' }],
+    sizes: [{ id: 'one', label: t('One size', 'مقاس واحد'), surcharge: 0 }],
+    sides: [
+      {
+        id: 'front',
+        name: FRONT,
+        svg: sv(
+          '<path d="M200 62 Q250 14 300 62" fill="none" stroke="{{L}}" stroke-width="11" stroke-linecap="round"/>' +
+            '<path d="M200 62 Q250 14 300 62" fill="none" stroke="{{S}}" stroke-width="7" stroke-linecap="round"/>' +
+            '<path d="M120 236 Q80 252 58 304 M380 236 Q420 252 442 304" fill="none" stroke="{{S}}" stroke-width="9" stroke-linecap="round"/>' +
+            '<path d="M195 60 L305 60 L310 200 Q362 210 380 232 L390 542 Q250 554 110 542 L120 232 Q138 210 190 200 Z" fill="{{C}}" stroke="{{L}}" stroke-width="3" stroke-linejoin="round"/>' +
+            '<path d="M175 384 L325 384 L325 470 L175 470 Z M250 384 L250 470" fill="none" stroke="{{L}}" stroke-width="2.5"/>'
+        ),
+        printArea: { x: 175, y: 140, w: 150, h: 180 },
+        printWidthIn: 10,
+      },
+    ],
+  },
+  {
+    id: 'onesie',
+    category: 'apparel',
+    name: t('Baby Onesie', 'بادي بيبي'),
+    description: t('Soft cotton bodysuit with envelope neckline and snap closure.', 'بادي قطن ناعم بفتحة رقبة واسعة وكبسون.'),
+    basePrice: 300,
+    colors: [C.white, C.blush, C.sky, C.yellow, C.lightgrey],
+    sizes: [
+      { id: '0-3', label: t('0–3 months', '0–3 شهور'), surcharge: 0 },
+      { id: '3-6', label: t('3–6 months', '3–6 شهور'), surcharge: 0 },
+      { id: '6-12', label: t('6–12 months', '6–12 شهر'), surcharge: 0 },
+      { id: '12-18', label: t('12–18 months', '12–18 شهر'), surcharge: 0 },
+    ],
+    sides: [
+      {
+        id: 'front',
+        name: FRONT,
+        svg: sv(
+          '<path d="M185 120 L215 105 Q250 126 285 105 L315 120 L372 162 L346 214 L320 200 L322 400 Q322 472 286 502 L276 542 L224 542 L214 502 Q178 472 178 400 L180 200 L154 214 L128 162 Z" fill="{{C}}" stroke="{{L}}" stroke-width="3" stroke-linejoin="round"/>' +
+            '<path d="M215 105 Q250 142 285 105 Q250 120 215 105 Z" fill="{{S}}" stroke="{{L}}" stroke-width="2.5"/>' +
+            '<circle cx="235" cy="530" r="4" fill="{{L}}"/><circle cx="250" cy="530" r="4" fill="{{L}}"/><circle cx="265" cy="530" r="4" fill="{{L}}"/>'
+        ),
+        printArea: { x: 199, y: 200, w: 102, h: 102 },
+        printWidthIn: 6,
+      },
+    ],
+  },
+  {
+    id: 'kidshoodie',
+    category: 'apparel',
+    name: t('Kids Hoodie', 'هودي أطفال'),
+    description: t('Warm fleece hoodie in kids sizes, printed front and back.', 'هودي ميلتون دافئ بمقاسات أطفال، طباعة أمام وخلف.'),
+    basePrice: 700,
+    colors: [C.black, C.heather, C.sky, C.blush, C.yellow],
+    sizes: [
+      { id: '4-6', label: t('4–6 yrs', '4–6 سنوات'), surcharge: 0 },
+      { id: '6-8', label: t('6–8 yrs', '6–8 سنوات'), surcharge: 0 },
+      { id: '8-10', label: t('8–10 yrs', '8–10 سنوات'), surcharge: 0 },
+      { id: '10-12', label: t('10–12 yrs', '10–12 سنة'), surcharge: 0 },
+    ],
+    sides: [
+      {
+        id: 'front',
+        name: FRONT,
+        svg: KIDS(
+          '<path d="M175 112 Q170 30 250 28 Q330 30 325 112 Z" fill="{{S}}" stroke="{{L}}" stroke-width="3"/>' +
+            HOODIE_BODY +
+            '<path d="M198 96 Q250 152 302 96 Q290 58 250 54 Q210 58 198 96 Z" fill="{{S}}" stroke="{{L}}" stroke-width="3"/>' +
+            '<path d="M232 128 L228 205 M268 128 L272 205" stroke="{{L}}" stroke-width="3" stroke-linecap="round"/>' +
+            '<path d="M178 425 L322 425 L344 515 L156 515 Z" fill="none" stroke="{{L}}" stroke-width="2.5" stroke-linejoin="round"/>'
+        ),
+        printArea: { x: 190, y: 200, w: 120, h: 160 },
+        printWidthIn: 8,
+      },
+      {
+        id: 'back',
+        name: BACK,
+        svg: KIDS(HOODIE_BODY + '<path d="M178 104 Q250 182 322 104 Q250 54 178 104 Z" fill="{{S}}" stroke="{{L}}" stroke-width="3" stroke-linejoin="round"/>'),
+        printArea: { x: 182, y: 216, w: 137, h: 182 },
+        printWidthIn: 9,
+      },
+    ],
+  },
+  {
+    id: 'shorts',
+    category: 'apparel',
+    name: t('Jogger Shorts', 'شورت'),
+    description: t('Fleece shorts with a drawstring waist. Small print on the leg.', 'شورت ميلتون برباط على الوسط. طباعة صغيرة على الرِّجل.'),
+    basePrice: 450,
+    colors: [C.black, C.heather, C.navy, C.olive],
+    sizes: APPAREL_SIZES,
+    sides: [
+      {
+        id: 'front',
+        name: FRONT,
+        svg: sv(
+          '<path d="M130 182 L370 182 L388 440 L262 452 L250 262 L238 452 L112 440 Z" fill="{{C}}" stroke="{{L}}" stroke-width="3" stroke-linejoin="round"/>' +
+            '<rect x="128" y="150" width="244" height="34" rx="4" fill="{{S}}" stroke="{{L}}" stroke-width="2.5"/>' +
+            '<path d="M240 184 Q236 214 228 230 M260 184 Q264 214 272 230" fill="none" stroke="{{L}}" stroke-width="2.5" stroke-linecap="round"/>' +
+            '<path d="M140 200 Q160 240 190 250 M360 200 Q340 240 310 250" fill="none" stroke="{{L}}" stroke-width="2" opacity=".6"/>' +
+            '<path d="M114 420 L238 432 M262 432 L386 420" stroke="{{S}}" stroke-width="6" opacity=".7"/>'
+        ),
+        printArea: { x: 290, y: 320, w: 60, h: 60 },
+        printWidthIn: 4,
+      },
+    ],
+  },
+);
+
 /**
  * Print production details per product:
  *   process  how it is printed; decides which file the shop should use
@@ -462,10 +678,26 @@ const PRODUCTION = {
   phonecase: { process: 'uv', safeIn: 0.12, bleedIn: 0.08, model: { type: 'case', material: 'plastic' } },
   mousepad: { process: 'sublimation', safeIn: 0.2, bleedIn: 0.125, model: { type: 'pad', material: 'fabric' } },
   notebook: { process: 'paper', safeIn: 0.25, bleedIn: 0.125, model: { type: 'notebook', material: 'paper' } },
+  polo: { process: 'dtf', safeIn: 0.2, bleedIn: 0, model: { type: 'card', material: 'fabric' } },
+  oversized: { process: 'dtg', safeIn: 0.25, bleedIn: 0, model: { type: 'card', material: 'fabric' } },
+  ziphoodie: { process: 'dtf', safeIn: 0.2, bleedIn: 0, model: { type: 'card', material: 'fabric' } },
+  denim: { process: 'dtf', safeIn: 0.25, bleedIn: 0, model: { type: 'card', material: 'fabric' } },
+  apron: { process: 'dtf', safeIn: 0.25, bleedIn: 0, model: { type: 'card', material: 'fabric' } },
+  onesie: { process: 'dtg', safeIn: 0.15, bleedIn: 0, model: { type: 'card', material: 'fabric' } },
+  kidshoodie: { process: 'dtf', safeIn: 0.25, bleedIn: 0, model: { type: 'card', material: 'fabric' } },
+  shorts: { process: 'dtf', safeIn: 0.15, bleedIn: 0, model: { type: 'card', material: 'fabric' } },
+};
+/** Garments can be printed either way; the shop picks per order item. */
+const GARMENT_METHODS = ['dtg', 'dtf'];
+const METHODS = {
+  tshirt: GARMENT_METHODS, kidstee: GARMENT_METHODS, hoodie: GARMENT_METHODS, sweatshirt: GARMENT_METHODS, tote: GARMENT_METHODS,
+  polo: GARMENT_METHODS, oversized: GARMENT_METHODS, ziphoodie: GARMENT_METHODS, denim: GARMENT_METHODS, apron: GARMENT_METHODS,
+  onesie: GARMENT_METHODS, kidshoodie: GARMENT_METHODS, shorts: GARMENT_METHODS, cap: ['dtf'],
 };
 for (const p of PRODUCTS) {
   const spec = PRODUCTION[p.id];
   p.process = spec.process;
+  p.methods = METHODS[p.id] || [spec.process];
   p.model = spec.model;
   for (const side of p.sides) {
     side.safeIn = spec.safeIn;

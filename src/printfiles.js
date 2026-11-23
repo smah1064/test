@@ -99,4 +99,86 @@ function printPdf(pngBuf, spec, { marks = false, title = '', slug = '' } = {}) {
   });
 }
 
-module.exports = { finalizePrintPng, pngInfo, mirroredPng, cmykTiff, cmykProof, printPdf };
+// ---------- DTG & DTF ----------
+// Note: sharp's morphology is named for dark shapes on light backgrounds, so on
+// an alpha mask (light shape) `dilate` shrinks the shape and `erode` grows it.
+
+/** Edges soft enough to leave half-transparent pixels print badly on film: make the alpha crisp. */
+async function hardAlpha(buf, cutoff = 128) {
+  const { data, info } = await sharp(buf, { limitInputPixels: 80e6 }).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  for (let i = 3; i < data.length; i += 4) data[i] = data[i] >= cutoff ? 255 : 0;
+  return sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } }).png().toBuffer();
+}
+
+/**
+ * DTF film file: crisp alpha (the RIP builds the white layer from it) and
+ * mirrored, because the film is pressed print-side down.
+ */
+async function dtfFilmPng(buf, dpi, { mirror = true } = {}) {
+  let out = sharp(await hardAlpha(buf), { limitInputPixels: 80e6 });
+  if (mirror) out = out.flop();
+  return out.withIccProfile('srgb').withDensity(dpi).png().toBuffer();
+}
+
+/**
+ * DTG white underbase for dark garments: white wherever the design has ink,
+ * choked (pulled in) by a couple of pixels so no white peeks out at the edges.
+ */
+async function dtgUnderbase(buf, dpi, chokePx = 2) {
+  const { data: mask, info } = await sharp(buf, { limitInputPixels: 80e6 }).ensureAlpha().extractChannel('alpha')
+    .threshold(40).dilate(chokePx).raw().toBuffer({ resolveWithObject: true });
+  const out = Buffer.alloc(info.width * info.height * 4, 255);
+  for (let i = 0; i < info.width * info.height; i++) out[i * 4 + 3] = mask[i * info.channels];
+  return sharp(out, { raw: { width: info.width, height: info.height, channels: 4 } }).withDensity(dpi).png().toBuffer();
+}
+
+/**
+ * Lay several pieces of artwork out on one roll of DTF film and return a PDF.
+ * pieces: [{ png, widthIn, heightIn, label }]. Pieces are nested with the
+ * shared packer, made crisp and mirrored; each gets a small label for sorting.
+ */
+async function filmPdf(pieces, { rollWidthIn = 22, gapIn = 0.25, mirror = true, title = 'DTF film', labels = true, margin = 0.25, placements = null, lengthIn: fixedLength = null } = {}) {
+  const { pack } = require('../public/js/nesting');
+  const labelH = labels ? 0.14 : 0;
+  const usable = rollWidthIn - 2 * margin;
+  // A ready-made layout (customer gang sheets) is used as is; otherwise nest the pieces.
+  const layout = placements ? { placements, length: fixedLength - 2 * margin } : pack(pieces.map((p, i) => ({ id: i, w: p.widthIn, h: p.heightIn + labelH })), usable, gapIn);
+  const lengthIn = fixedLength || layout.length + 2 * margin;
+  const pt = 72;
+  const maxPageIn = 196; // PDF readers cap pages at 200 in; longer films continue on the next page
+  const pages = Math.max(1, Math.ceil(lengthIn / maxPageIn));
+  const prepared = await Promise.all(layout.placements.map(async (pl) => {
+    const piece = pieces[pl.id];
+    let img = sharp(await hardAlpha(piece.png), { limitInputPixels: 80e6 });
+    if (pl.rotated) img = img.rotate(90);
+    if (mirror) img = img.flop();
+    return { pl, piece, png: await img.png().toBuffer() };
+  }));
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ autoFirstPage: false, margin: 0, info: { Title: title, Creator: 'OneOff Print' } });
+    const chunks = [];
+    doc.on('data', (c) => chunks.push(c));
+    doc.on('end', () => resolve({ pdf: Buffer.concat(chunks), lengthIn, pieces: layout.placements.length }));
+    doc.on('error', reject);
+    for (let pg = 0; pg < pages; pg++) {
+      const top = pg * maxPageIn;
+      const h = Math.min(maxPageIn, lengthIn - top);
+      doc.addPage({ size: [rollWidthIn * pt, h * pt], margin: 0 });
+      for (const { pl, piece, png } of prepared) {
+        const y = margin + pl.y;
+        if (y + pl.h <= top || y >= top + h) continue;
+        const w = pl.rotated ? piece.heightIn : piece.widthIn;
+        const ih = pl.rotated ? piece.widthIn : piece.heightIn;
+        // On mirrored film, positions are mirrored too so the whole sheet reads correctly after pressing.
+        const x = mirror ? rollWidthIn - margin - pl.x - w : margin + pl.x;
+        doc.image(png, x * pt, (y - top) * pt, { width: w * pt, height: ih * pt });
+        if (labels && piece.label) {
+          doc.font('Helvetica').fontSize(6).fillColor('#9aa0a6').text(piece.label, x * pt, (y - top + ih + 0.02) * pt, { lineBreak: false });
+        }
+      }
+    }
+    doc.end();
+  });
+}
+
+module.exports = { finalizePrintPng, pngInfo, mirroredPng, cmykTiff, cmykProof, printPdf, hardAlpha, dtfFilmPng, dtgUnderbase, filmPdf };

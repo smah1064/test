@@ -35,6 +35,7 @@
         <div class="tabs" style="margin:0;margin-inline-start:auto">
           <button class="btn btn-sm active" data-tab="queue" data-i18n="admin.tabQueue"></button>
           <button class="btn btn-sm" data-tab="orders" data-i18n="admin.tabOrders"></button>
+          <button class="btn btn-sm" data-tab="film" data-i18n="admin.tabFilm"></button>
         </div>
       </div>
 
@@ -46,6 +47,18 @@
         <div class="queue-list" id="up-next"></div>
         <h2 style="font-size:18px;margin-top:28px" data-i18n="admin.toShip"></h2>
         <div class="queue-list" id="to-ship"></div>
+      </section>
+
+      <section id="tab-film" hidden>
+        <div class="card" style="padding:18px;margin-bottom:14px">
+          <h2 style="font-size:18px;margin-bottom:6px" data-i18n="admin.filmTitle"></h2>
+          <p class="muted small" style="margin:0 0 12px;line-height:1.6" data-i18n="admin.filmText"></p>
+          <div class="row" style="flex-wrap:wrap">
+            <button class="btn btn-primary shrink" id="film-build" data-i18n="admin.filmBuild"></button>
+            <span class="small" id="film-msg" style="color:var(--ok);font-weight:600"></span>
+          </div>
+        </div>
+        <div class="queue-list" id="film-list"></div>
       </section>
 
       <section id="tab-orders" hidden>
