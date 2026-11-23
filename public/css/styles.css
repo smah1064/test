@@ -680,3 +680,10 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 @media (max-width: 640px) { .queue-actions { grid-column: 1 / -1; justify-content: stretch; } .queue-actions .btn { flex: 1; } }
 .queue-row.is-open { box-shadow: 0 0 0 2px var(--accent-soft); }
 #current { display: grid; gap: 14px; }
+
+/* Admin: large preview when the mouse is over a thumbnail */
+[data-zoom] { cursor: zoom-in; }
+.zoom-pop { position: fixed; z-index: 1000; pointer-events: none; display: flex; gap: 8px; padding: 8px; background: #fff; border: 1px solid #e5e5e5; border-radius: 14px; box-shadow: 0 18px 50px rgba(0, 0, 0, 0.22); }
+.zoom-pop img { display: block; width: min(460px, 42vw); height: auto; max-height: 78vh; object-fit: contain; border-radius: 8px; background: #f4f4f4; }
+.zoom-pop.two img { width: min(340px, 30vw); }
+.zoom-pop[hidden] { display: none; }

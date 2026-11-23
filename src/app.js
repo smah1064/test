@@ -783,6 +783,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (face || consentChanged || (consent && cartoon.enabled() && !(design.cartoon && design.cartoon.status === 'ready'))) await makeCartoon(design, ip);
     design.version = (design.version || 0) + 1;
     fs.rmSync(store.designFile(design.id, 'book-print.pdf'), { force: true });
+    fs.rmSync(store.designFile(design.id, 'book-preview.pdf'), { force: true });
     store.writeDesignFile(design.id, 'book-preview.png', await (await books.renderPage(bookData(design), 0, 600)).png().toBuffer());
     store.save();
   }
@@ -952,6 +953,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
           item.redraw.claim = { pid: process.pid, at: Date.now() };
           item.redraw.done = pages.filter((p) => fs.existsSync(store.designFile(design.id, `redraw-${p}.jpg`))).length;
           fs.rmSync(store.designFile(design.id, 'book-print.pdf'), { force: true });
+          fs.rmSync(store.designFile(design.id, 'book-preview.pdf'), { force: true });
           store.save();
         }
         if (waited) continue;
@@ -1228,6 +1230,33 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const side = design && design.sides.find((s) => s.id === sideId);
       const order = design && design.orderId && store.getOrder(design.orderId);
       const base = design ? `${order ? order.number : 'design'}-${design.productId}-${sideId}` : '';
+      if (design && req.query.format === 'preview-pdf') {
+        // What the customer designed (all sides, or every book page), as one PDF.
+        const target = store.designFile(designId, design.kind === 'book' ? 'book-preview.pdf' : `preview-v${design.version || 0}.pdf`);
+        if (!fs.existsSync(target)) {
+          const title = `${order ? order.number + ' · ' : ''}${pickEn(design.productName) || ''}`;
+          const lines = [
+            [design.color && pickEn(design.color.name), design.size && pickEn(design.size.label)].filter(Boolean).join(' · '),
+            order ? `Ordered ${order.createdAt.slice(0, 10)}` : '',
+          ].filter(Boolean);
+          let pages;
+          if (design.kind === 'book') {
+            if (design.photoRemoved) throw new HttpError(404, 'notFound');
+            const book = bookFor(design.bookId);
+            const data = bookData(design);
+            pages = [];
+            for (let i = 0; i < book.pages.length; i++) pages.push({ img: await books.pageJpeg(data, i, 900, 85), label: `Page ${i + 1}` });
+          } else {
+            pages = design.sides
+              .map((sd) => ({ file: store.designFile(designId, `${sd.id}-preview.png`), label: pickEn(sd.name) || sd.id }))
+              .filter((pg) => fs.existsSync(pg.file))
+              .map((pg) => ({ img: fs.readFileSync(pg.file), label: pg.label }));
+          }
+          if (!pages.length) throw new HttpError(404, 'notFound');
+          store.writeDesignFile(designId, path.basename(target), await printfiles.previewPdf(pages, { title, lines }));
+        }
+        return res.download(target, `${order ? order.number : 'design'}-${design.productId}-preview.pdf`);
+      }
       if (design && design.kind === 'book') {
         const f = req.query.format || 'book-pdf';
         const title = `${base}-${design.bookId}`;
@@ -1393,7 +1422,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
           const shipped = (item.history || []).find((h) => h.status === 'shipped');
           const design = store.getDesign(item.designId);
           if (!design || design.photoRemoved || !shipped || Date.parse(shipped.at) > monthAgo) continue;
-          for (const f of ['face.jpg', 'face-line.png', 'book-print.pdf']) fs.rmSync(store.designFile(design.id, f), { force: true });
+          for (const f of ['face.jpg', 'face-line.png', 'book-print.pdf', 'book-preview.pdf']) fs.rmSync(store.designFile(design.id, f), { force: true });
           design.photoRemoved = true;
           removed++;
         }

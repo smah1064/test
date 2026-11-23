@@ -201,4 +201,32 @@ async function enhancePhoto(buf, scale) {
   return { data, format: alpha ? 'png' : 'jpeg', scale: +(w / meta.width).toFixed(3), width: w, height: h };
 }
 
-module.exports = { enhancePhoto, finalizePrintPng, pngInfo, mirroredPng, cmykTiff, cmykProof, printPdf, hardAlpha, dtfFilmPng, dtgUnderbase, filmPdf };
+
+/**
+ * A PDF of what the customer designed, to show or send them: one A4 page per
+ * picture, with the order details at the top. `pages` = [{ img, label }].
+ */
+function previewPdf(pages, { title = '', lines = [] } = {}) {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: 'A4', margin: 36, autoFirstPage: false, info: { Title: title, Creator: 'OneOff Print' } });
+    const chunks = [];
+    doc.on('data', (c) => chunks.push(c));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+    pages.forEach((pg, i) => {
+      doc.addPage();
+      const W = doc.page.width - 72;
+      doc.fillColor('#111111').font('Helvetica-Bold').fontSize(15).text(title, 36, 36, { width: W });
+      doc.font('Helvetica').fontSize(9.5).fillColor('#555555');
+      for (const l of lines) doc.text(l, { width: W });
+      doc.moveDown(0.4).font('Helvetica-Bold').fontSize(11).fillColor('#111111').text(`${pg.label}${pages.length > 1 ? `   (${i + 1}/${pages.length})` : ''}`, { width: W });
+      const top = doc.y + 10;
+      const H = doc.page.height - 36 - top - 14;
+      doc.image(pg.img, 36, top, { fit: [W, H], align: 'center', valign: 'center' });
+      doc.font('Helvetica').fontSize(7.5).fillColor('#999999').text('Preview only: colours on screen and paper may differ slightly from the printed product.', 36, doc.page.height - 36 - 9, { width: W, align: 'center', lineBreak: false });
+    });
+    doc.end();
+  });
+}
+
+module.exports = { previewPdf, enhancePhoto, finalizePrintPng, pngInfo, mirroredPng, cmykTiff, cmykProof, printPdf, hardAlpha, dtfFilmPng, dtgUnderbase, filmPdf };

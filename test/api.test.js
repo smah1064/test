@@ -446,6 +446,14 @@ test('items can switch between DTG and DTF; DTF/DTG files and the shared film ar
   assert.strictEqual(white.channels, 4);
   const film = await admin(`/api/admin/files/${d.id}/back?format=dtf-film`);
   assert.match(film.headers.get('content-disposition'), /dtf-film\.png/);
+  // The customer's design as a PDF: one page per side.
+  const prev = await admin(`/api/admin/files/${d.id}/front?format=preview-pdf`);
+  assert.strictEqual(prev.status, 200);
+  assert.match(prev.headers.get('content-disposition'), /-preview\.pdf/);
+  const prevBuf = Buffer.from(await prev.arrayBuffer());
+  assert.strictEqual(prevBuf.subarray(0, 4).toString(), '%PDF');
+  assert.strictEqual((prevBuf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length, 2, 'front and back');
+  assert.strictEqual((await fetch(`${base}/api/admin/files/${d.id}/front?format=preview-pdf`)).status, 401);
 
   r = await admin(`/api/admin/items/${itemId}`, { method: 'PATCH', body: JSON.stringify({ process: 'dtf' }) });
   assert.strictEqual((await r.json()).process, 'dtf');
@@ -721,6 +729,8 @@ test('personalised books: create, preview pages, edit, order, print PDF', async 
   const pdf = await admin(`/api/admin/files/${d.id}/book?format=book-pdf`);
   assert.strictEqual(pdf.status, 200);
   const buf = Buffer.from(await pdf.arrayBuffer());
+  const bprev = Buffer.from(await (await admin(`/api/admin/files/${d.id}/book?format=preview-pdf`)).arrayBuffer());
+  assert.strictEqual((bprev.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length, 14, 'every book page');
   assert.strictEqual(buf.subarray(0, 4).toString(), '%PDF');
   assert.strictEqual((buf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length, 14);
 });

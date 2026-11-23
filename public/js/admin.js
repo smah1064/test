@@ -22,7 +22,7 @@
       ? items.map((it) => `
         <label class="card queue-row film-row">
           <input type="checkbox" data-film="${it.id}" ${filmPicked.has(it.id) || !it.filmBatch ? 'checked' : ''}>
-          <img src="${esc(it.sides[0].previewUrl)}" alt="">
+          <img src="${esc(it.sides[0].previewUrl)}" alt="" ${zoomAttr(it)}>
           <div>
             <strong>${esc(tr(it.productName))}</strong> ${pill(it.status)} ${it.filmBatch ? `<span class="pill printed">${esc(t('admin.onFilm', { id: it.filmBatch.id }))}</span>` : ''}
             <div class="muted small">${esc(it.orderNumber)} · ${esc(t('admin.spec.itemOf', { i: it.position, n: it.of }))} · ${esc(tr(it.color.name))} · ${esc(tr(it.size.label))} · ${esc(it.sides.map((sd) => `${tr(sd.name)} ${POD.num(sd.widthIn * 2.54)}×${POD.num(sd.heightIn * 2.54)} cm`).join(' + '))}</div>
@@ -170,17 +170,33 @@
       </div>`;
   }
 
+  /** The customer's design (all sides / book pages) as one PDF, to check or send them. */
+  function previewFile(item) {
+    const s = item.sides[0];
+    if (!s || !s.printUrl) return '';
+    return `
+      <div class="print-files-block">
+        <div class="small muted" style="font-weight:700;margin-bottom:6px">${esc(t('admin.customerPreview'))}</div>
+        <div class="print-files"><button class="btn btn-sm" data-download="${esc(s.printUrl)}?format=preview-pdf">⬇ ${esc(t('fmt.preview-pdf'))}</button></div>
+      </div>`;
+  }
+  // Big picture when the mouse is over a thumbnail (all sides of the item).
+  function zoomAttr(item) {
+    return `data-zoom="${esc(JSON.stringify(item.sides.map((s) => s.previewUrl)))}"`;
+  }
+
   // Items whose details are open in the waiting list (kept across refreshes).
   const open = new Set();
   function card(item) {
     const next = NEXT[item.status];
     return `
       <div class="card now-printing">
-        <div class="previews">${item.sides.map((s) => `<img src="${esc(s.previewUrl)}" alt="${esc(tr(s.name))}">`).join('')}</div>
+        <div class="previews">${item.sides.map((s) => `<img src="${esc(s.previewUrl)}" alt="${esc(tr(s.name))}" data-zoom="${esc(JSON.stringify([s.previewUrl]))}">`).join('')}</div>
         <div>
           ${pill(item.status)}
           ${spec(item)}
           ${item.sides.map((s) => printFiles(item, s)).join('')}
+          ${previewFile(item)}
           <div class="row" style="max-width:440px">
             <button class="btn btn-primary btn-lg" data-item="${item.id}" data-status="${next.status}">${esc(t(next.label))}</button>
             ${item.status === 'printing' ? `<button class="btn btn-lg shrink" data-item="${item.id}" data-status="queued" title="${esc(t('admin.backToQueue.title'))}">${esc(t('admin.backToQueue'))}</button>` : ''}
@@ -194,7 +210,7 @@
     const isOpen = open.has(item.id);
     return `
       <div class="card queue-row ${isOpen ? 'is-open' : ''}">
-        <img src="${esc(item.sides[0].previewUrl)}" alt="">
+        <img src="${esc(item.sides[0].previewUrl)}" alt="" ${zoomAttr(item)}>
         <div>
           <strong>${esc(tr(item.productName))}</strong> ${pill(item.status)}
           <div class="muted small">${esc(item.orderNumber)} · ${esc(t('admin.spec.itemOf', { i: item.position, n: item.of }))} · ${esc(tr(item.color.name))} · ${esc(tr(item.size.label))} · ${esc(item.sides.map((s) => tr(s.name)).join(' + '))}</div>
@@ -203,7 +219,7 @@
           <button class="btn btn-sm" data-toggle-item="${item.id}">${esc(t(isOpen ? 'admin.hideDetails' : 'admin.details'))}</button>
           <button class="btn btn-sm ${item.status === 'queued' ? 'btn-primary' : ''}" data-item="${item.id}" data-status="${next.status}">${esc(t(next.label))}</button>
         </div>
-        ${isOpen ? `<div class="queue-details">${spec(item)}${item.sides.map((s) => printFiles(item, s)).join('')}</div>` : ''}
+        ${isOpen ? `<div class="queue-details">${spec(item)}${item.sides.map((s) => printFiles(item, s)).join('')}${previewFile(item)}</div>` : ''}
       </div>`;
   }
 
@@ -232,7 +248,7 @@
       <tr>
         <td><strong>${esc(o.number)}</strong><div class="muted small">${esc(POD.date(o.createdAt))}</div></td>
         <td>${esc(o.customer.name)}<div class="muted small"><bdi dir="ltr">${esc(o.customer.phone || o.customer.email || '')}</bdi></div><div class="muted small">${esc(tr(o.customer.governorateName) || '')}</div></td>
-        <td><div class="mini-items">${o.items.map((i) => `<img src="${esc(i.sides[0].previewUrl)}" title="${esc(tr(i.productName))}: ${esc(t('admin.status.' + i.status))}" alt="">`).join('')}</div></td>
+        <td><div class="mini-items">${o.items.map((i) => `<img src="${esc(i.sides[0].previewUrl)}" title="${esc(tr(i.productName))}: ${esc(t('admin.status.' + i.status))}" alt="" ${zoomAttr(i)}>`).join('')}</div></td>
         <td>${esc(money(o.total))}</td>
         <td>${statusPill(o.status)}</td>
         <td>${notifyCell(o.notifications, o.createdAt)}</td>
@@ -248,7 +264,7 @@
     const catName = (id) => tr((lib.categories.find((c) => c.id === id) || {}).name || id);
     $('lib-list').innerHTML = lib.designs.map((d) => `
       <div class="queue-row lib-row ${d.hidden ? 'is-hidden' : ''}">
-        <div class="lib-thumb">${d.preview ? `<img src="${esc(d.preview)}" alt="">` : '<span>Aa</span>'}</div>
+        <div class="lib-thumb">${d.preview ? `<img src="${esc(d.preview)}" alt="" data-zoom="${esc(JSON.stringify([d.preview]))}">` : '<span>Aa</span>'}</div>
         <div class="lib-info">
           <strong dir="auto">${esc(tr(d.name))}</strong>
           <div class="muted small">${esc(catName(d.category))} · ${esc(t(d.custom ? 'lib.yours' : 'lib.starter'))}${d.hidden ? ' · ' + esc(t('lib.hiddenNote')) : ''}</div>
@@ -387,6 +403,38 @@
       btn.textContent = t('admin.filmBuild');
     }
   });
+
+  // ---------- Large preview on hover ----------
+  const zoom = document.createElement('div');
+  zoom.className = 'zoom-pop';
+  zoom.hidden = true;
+  document.body.appendChild(zoom);
+  let zoomFor = null;
+  function placeZoom(x, y) {
+    const r = zoom.getBoundingClientRect();
+    const pad = 16;
+    let left = x + 24;
+    if (left + r.width > innerWidth - pad) left = x - 24 - r.width;
+    left = Math.max(pad, left);
+    const top = Math.min(Math.max(pad, y - r.height / 2), innerHeight - r.height - pad);
+    zoom.style.left = `${left}px`;
+    zoom.style.top = `${Math.max(pad, top)}px`;
+  }
+  document.addEventListener('mouseover', (e) => {
+    const img = e.target.closest && e.target.closest('[data-zoom]');
+    if (img === zoomFor) return;
+    zoomFor = img;
+    if (!img || !matchMedia('(hover: hover)').matches) { zoom.hidden = true; return; }
+    let urls = [];
+    try { urls = JSON.parse(img.dataset.zoom); } catch (err) { urls = [img.src]; }
+    zoom.classList.toggle('two', urls.length > 1);
+    zoom.innerHTML = urls.map((u) => `<img src="${esc(u)}" alt="">`).join('');
+    zoom.hidden = false;
+    placeZoom(e.clientX, e.clientY);
+    zoom.querySelectorAll('img').forEach((im) => im.addEventListener('load', () => zoomFor === img && placeZoom(e.clientX, e.clientY), { once: true }));
+  });
+  document.addEventListener('mousemove', (e) => { if (!zoom.hidden && zoomFor) placeZoom(e.clientX, e.clientY); });
+  document.addEventListener('scroll', () => { zoom.hidden = true; zoomFor = null; }, { passive: true, capture: true });
 
   document.addEventListener('click', async (e) => {
     const dl = e.target.closest('[data-download]');

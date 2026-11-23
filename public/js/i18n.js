@@ -482,6 +482,8 @@ window.POD_STRINGS = {
   'admin.tabOrders': ['All orders', 'كل الطلبات'],
   'admin.onPress': ['Printing now', 'قيد الطباعة الآن'],
   'admin.upNext': ['Waiting to print (start any item, in any order)', 'في انتظار الطباعة (ابدأ أي منتج بأي ترتيب)'],
+  'admin.customerPreview': ['Customer design', 'تصميم العميل'],
+  'fmt.preview-pdf': ['PDF preview · customer design', 'PDF معاينة · تصميم العميل'],
   'admin.pressIdle': ['Nothing is printing right now', 'مفيش حاجة بتتطبع دلوقتي'],
   'admin.pressIdleText': ['Press "Start printing" on any waiting item below. Several items can print at the same time.', 'دوس «ابدأ الطباعة» على أي منتج في القائمة تحت. ممكن أكتر من منتج يتطبع في نفس الوقت.'],
   'admin.details': ['Details & files', 'التفاصيل والملفات'],
