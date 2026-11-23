@@ -37,7 +37,7 @@ Requires Node 18+. There is no database to set up: data is stored under `data/` 
 - **Photo tools**: crop (free or square), shape a photo into a circle, heart, star, hexagon, arch or rounded frame with an optional border, brightness/contrast/saturation, and smart **background removal** for photos on a plain background.
 - **Phone-first layout** on small screens: bottom toolbar, settings in a slide-up panel that zooms the view to the print area, pinch to zoom, bigger touch targets.
 - **Print guides**: the print edge (red), a **safe zone** (green, keep text inside) and a **bleed** line (blue) for edge-to-edge products. A live **print check** flags low-resolution images, anything that will be cut off or isn't printed, text too close to the edge and text too small to read, and outlines the problem elements. Selected photos show a **DPI badge**. Shoppers are asked to confirm before ordering a design with problems.
-- **Live preview**: a *realistic* view that bends the artwork over fabric folds, wraps it around mugs and bottles, puffs it on cushions and adds lighting and fabric texture; a rotatable **3D** view (three.js) at real-world size; and a **print colours** view showing an RGB → CMYK estimate. Each view can be saved as an image.
+- **Live preview**: a *realistic* view built on **real product photos** (in `public/mockups/photos/`, generated with Creative Claw). The product is recoloured to the chosen colour from the photo's own shading, and the artwork is warped into the measured print area: it follows the fabric folds, wraps around mugs, bottles and caps, and is lit by the photo, with the fabric texture showing through. Products without a photo fall back to a drawn mockup. Also included: a rotatable **3D** view (three.js) at real-world size, and a **print colours** view showing an RGB → CMYK estimate. Each view can be saved as an image.
 - When the product colour changes between light and dark, text and shapes in the default colour switch automatically (dark ↔ white) so they stay visible.
 - Image upload (click or drag and drop) with a live **print-quality / DPI indicator** and a warning before you order a blurry image.
 - Shapes, plus a one-click "fill print area" background.
@@ -83,7 +83,9 @@ public/js/i18n.js    all interface text in English and Arabic
 public/js/templates.js  fonts, shapes, text presets, templates
 public/js/stickers.js   sticker library (original SVG artwork)
 public/js/fabric-ext.js curved text, text boxes, photo shapes, background removal, SVG export
-public/js/preview.js    realistic mockup renderer, preview window, CMYK proof
+public/js/preview.js    photo + drawn mockup renderers, preview window, CMYK proof
+public/js/photo-mockups.js  print area, warp type and colour rules for each product photo
+public/mockups/photos/  product photos (.webp) and cut-out masks (-mask.png)
 public/js/preview3d.js  3D product models (three.js)
 src/printfiles.js       PDF / CMYK TIFF / mirrored PNG / sRGB+DPI finishing (sharp, pdfkit)
 public/fonts/        self-hosted fonts (SIL Open Font License)
@@ -104,3 +106,10 @@ Add an entry to `PRODUCTS` in `src/products.js`. Mockups are SVGs in a 500 × 60
 - **Online card payments:** orders are cash on delivery. To also take cards, add an Egyptian gateway such as Paymob or Fawry.
 - **Storage:** the JSON store suits a single server. For scale, move metadata into a database and print files into object storage.
 - **Admin auth** is a single shared password sent in a header. Use real accounts if several people run the press.
+
+## Photo mockups
+
+Each photo is a white (or natural) product on a light background, plus a mask from background removal. To add or replace one:
+
+1. Save the photo as `public/mockups/photos/<name>.webp`, 1000 px wide, and its mask as `<name>-mask.png` (white = product).
+2. Add an entry to `public/js/photo-mockups.js` with the print rectangle in photo pixels and the warp type. Set `base` if the product in the photo isn't white.

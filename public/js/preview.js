@@ -177,8 +177,14 @@
     ctx.drawImage(baseImg, 0, 0, Wd, Hd);
     const base = ctx.getImageData(0, 0, Wd, Hd);
     const bd = base.data;
-    const dctx = entry.design.getContext('2d', { willReadFrequently: true });
-    const dd = dctx.getImageData(0, 0, Wd, Hd).data;
+    let designCv = entry.design;
+    if (designCv.width !== Wd) {
+      designCv = document.createElement('canvas');
+      designCv.width = Wd;
+      designCv.height = Hd;
+      designCv.getContext('2d').drawImage(entry.design, 0, 0, Wd, Hd);
+    }
+    const dd = designCv.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, Wd, Hd).data;
 
     const surf = surfaceFor(product, entry.rects);
     const fabric = product.model.material === 'fabric';
@@ -251,8 +257,251 @@
     }
     ctx.putImageData(base, 0, 0);
     if (overImg) ctx.drawImage(overImg, 0, 0, Wd, Hd);
+    out.pxPerIn = (entry.rects.u || 1) * S;
     return out;
   }
+
+  // ---------- Photo mockups ----------
+  const photoCache = new Map();
+  function pixels(img) {
+    const c = document.createElement('canvas');
+    c.width = img.naturalWidth;
+    c.height = img.naturalHeight;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0);
+    return ctx.getImageData(0, 0, c.width, c.height).data;
+  }
+  function boxBlur(src, W, H, r) {
+    const tmp = new Float32Array(W * H);
+    const out = new Float32Array(W * H);
+    for (let y = 0; y < H; y++) {
+      let acc = 0;
+      for (let x = -r; x <= r; x++) acc += src[y * W + Math.min(W - 1, Math.max(0, x))];
+      for (let x = 0; x < W; x++) {
+        tmp[y * W + x] = acc / (2 * r + 1);
+        acc += src[y * W + Math.min(W - 1, x + r + 1)] - src[y * W + Math.max(0, x - r)];
+      }
+    }
+    for (let x = 0; x < W; x++) {
+      let acc = 0;
+      for (let y = -r; y <= r; y++) acc += tmp[Math.min(H - 1, Math.max(0, y)) * W + x];
+      for (let y = 0; y < H; y++) {
+        out[y * W + x] = acc / (2 * r + 1);
+        acc += tmp[Math.min(H - 1, y + r + 1) * W + x] - tmp[Math.max(0, y - r) * W + x];
+      }
+    }
+    return out;
+  }
+  /** Decode a photo + mask once: pixels, brightness, smoothed brightness (for folds) and the white point. */
+  function loadPhoto(cfg) {
+    if (!photoCache.has(cfg.src)) {
+      photoCache.set(cfg.src, Promise.all([loadImg(cfg.src), loadImg(cfg.mask)]).then(([ph, mk]) => {
+        const W = ph.naturalWidth;
+        const H = ph.naturalHeight;
+        const pd = pixels(ph);
+        const md = pixels(mk);
+        const lum = new Float32Array(W * H);
+        for (let i = 0; i < W * H; i++) lum[i] = (0.299 * pd[i * 4] + 0.587 * pd[i * 4 + 1] + 0.114 * pd[i * 4 + 2]) / 255;
+        const blur = boxBlur(boxBlur(lum, W, H, 5), W, H, 5);
+        const samples = [];
+        for (let i = 0; i < W * H; i += 7) if (md[i * 4] > 200) samples.push(lum[i]);
+        samples.sort((a, b) => a - b);
+        const white = samples.length ? samples[Math.floor(samples.length * 0.95)] : 1;
+        // Bounding box of the product, so the 3D cut-out has no empty margins.
+        let bx0 = W;
+        let by0 = H;
+        let bx1 = 0;
+        let by1 = 0;
+        for (let y = 0; y < H; y++) {
+          for (let x = 0; x < W; x++) {
+            if (md[(y * W + x) * 4] > 20) {
+              if (x < bx0) bx0 = x;
+              if (x > bx1) bx1 = x;
+              if (y < by0) by0 = y;
+              if (y > by1) by1 = y;
+            }
+          }
+        }
+        const bbox = { x: bx0, y: by0, w: Math.max(1, bx1 - bx0 + 1), h: Math.max(1, by1 - by0 + 1) };
+        return { W, H, pd, md, lum, blur, white, bbox };
+      }));
+    }
+    return photoCache.get(cfg.src);
+  }
+  const hexRgb = (hex) => {
+    const n = parseInt(hex.replace('#', ''), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  };
+
+  /**
+   * Put the design on a real product photo. The product is recoloured from
+   * the photo's own brightness (so folds, stitching and shadows stay), the
+   * design is warped into the measured print area and lit by the photo.
+   */
+  async function renderPhoto(product, entry, cfg, colorHex, withDesign = true) {
+    const ph = await loadPhoto(cfg);
+    const { W, H, pd, md, lum, blur, white, bbox } = ph;
+    const out = document.createElement('canvas');
+    out.width = W;
+    out.height = H;
+    const ctx = out.getContext('2d');
+    const img = ctx.createImageData(W, H);
+    const od = img.data;
+    od.set(pd);
+
+    // 1. Recolour the product (unless it is the colour that was photographed).
+    const base = hexRgb(cfg.base || '#ffffff');
+    const target = hexRgb(colorHex);
+    const recolour = target.some((v, i) => Math.abs(v - base[i]) > 6);
+    const dark = (0.299 * target[0] + 0.587 * target[1] + 0.114 * target[2]) / 255 < 0.35;
+    const paper = cfg.paper;
+    if (recolour) {
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const i = y * W + x;
+          const m = md[i * 4] / 255;
+          if (m === 0) continue;
+          if (paper && x >= paper.x && x < paper.x + paper.w && y >= paper.y && y < paper.y + paper.h) continue;
+          const sh = lum[i] / white;
+          for (let c = 0; c < 3; c++) {
+            const base0 = base[c] / 255;
+            let v = target[c] * Math.min(sh, 1) / Math.max(0.2, base0) * base0;
+            if (sh > 1) v += (255 - v) * (sh - 1) * 2;
+            if (dark) v += (sh - 1) * 70; // keep folds visible on dark colours
+            od[i * 4 + c] = pd[i * 4 + c] * (1 - m) + v * m;
+          }
+        }
+      }
+    }
+
+    // 2. Warp the design into the print area.
+    if (withDesign && entry.hasDesign) {
+      const side = entry.side;
+      const trim = entry.rects.trim;
+      const aspect = trim.w / trim.h;
+      const r = window.POD_PHOTOS.rectFor(cfg, aspect);
+      const ds = entry.designScale || S;
+      const DW = entry.design.width;
+      const dd = entry.design.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, DW, entry.design.height).data;
+      const tx = trim.x * ds;
+      const ty = trim.y * ds;
+      const tw = trim.w * ds;
+      const th = trim.h * ds;
+      // Map a point in the print box to 0..1 of the design (cover-fit crops the overflow).
+      let mapU;
+      let mapV;
+      if (cfg.fit === 'cover' && r.w / r.h > aspect) {
+        const sh = r.w / aspect;
+        mapU = (x) => (x - r.x) / r.w;
+        mapV = (y) => (y - r.y + (sh - r.h) / 2) / sh;
+      } else if (cfg.fit === 'cover') {
+        const sw = r.h * aspect;
+        mapU = (x) => (x - r.x + (sw - r.w) / 2) / sw;
+        mapV = (y) => (y - r.y) / r.h;
+      } else {
+        mapU = (x) => (x - r.x) / r.w;
+        mapV = (y) => (y - r.y) / r.h;
+      }
+      const cyl = cfg.warp === 'cylinder' ? cfg.cyl : null;
+      const fabric = cfg.warp === 'fabric';
+      const pillow = cfg.warp === 'pillow';
+      const keepDark = cfg.keepDark || 0;
+      const pad = 12;
+      const x0 = Math.max(1, Math.floor((cyl ? cyl.cx - cyl.R : r.x) - pad));
+      const x1 = Math.min(W - 2, Math.ceil((cyl ? cyl.cx + cyl.R : r.x + r.w) + pad));
+      const y0 = Math.max(1, Math.floor(r.y - pad));
+      const y1 = Math.min(H - 2, Math.ceil(r.y + r.h + pad));
+      const px = [0, 0, 0, 0];
+      const sample = (fx, fy) => {
+        const xa = Math.floor(fx);
+        const ya = Math.floor(fy);
+        if (xa < 0 || ya < 0 || xa >= DW - 1 || ya >= entry.design.height - 1) return false;
+        const ax = fx - xa;
+        const ay = fy - ya;
+        const i00 = (ya * DW + xa) * 4;
+        const i10 = i00 + 4;
+        const i01 = i00 + DW * 4;
+        const i11 = i01 + 4;
+        const w00 = (1 - ax) * (1 - ay);
+        const w10 = ax * (1 - ay);
+        const w01 = (1 - ax) * ay;
+        const w11 = ax * ay;
+        const a00 = dd[i00 + 3];
+        const a10 = dd[i10 + 3];
+        const a01 = dd[i01 + 3];
+        const a11 = dd[i11 + 3];
+        for (let c = 0; c < 3; c++) px[c] = (dd[i00 + c] * a00 * w00 + dd[i10 + c] * a10 * w10 + dd[i01 + c] * a01 * w01 + dd[i11 + c] * a11 * w11) / 255;
+        px[3] = a00 * w00 + a10 * w10 + a01 * w01 + a11 * w11;
+        return true;
+      };
+      const D = 260; // fold displacement strength (pixels per unit of brightness slope)
+      for (let y = y0; y < y1; y++) {
+        for (let x = x0; x < x1; x++) {
+          const i = y * W + x;
+          const m = md[i * 4] / 255;
+          if (m === 0 || lum[i] < keepDark) continue;
+          let fx = x;
+          let fy = y;
+          if (cyl) {
+            const t = (x - cyl.cx) / cyl.R;
+            if (Math.abs(t) >= 0.999) continue;
+            fx = cyl.cx + Math.asin(t) * cyl.R;
+          } else if (fabric) {
+            const gx = (blur[i + 2] - blur[i - 2]) / 4;
+            const gy = (blur[i + 2 * W] - blur[i - 2 * W]) / 4;
+            fx = x + Math.max(-7, Math.min(7, gx * D));
+            fy = y + Math.max(-7, Math.min(7, gy * D));
+          } else if (pillow) {
+            const nx = (x - (r.x + r.w / 2)) / (r.w / 2);
+            const ny = (y - (r.y + r.h / 2)) / (r.h / 2);
+            const puff = Math.max(0, (1 - nx * nx) * (1 - ny * ny));
+            const k = 1 - 0.05 * puff;
+            fx = r.x + r.w / 2 + (x - (r.x + r.w / 2)) * k;
+            fy = r.y + r.h / 2 + (y - (r.y + r.h / 2)) * k;
+          }
+          const u = mapU(fx);
+          const v = mapV(fy);
+          if (u < 0 || u > 1 || v < 0 || v > 1) continue;
+          if (!sample(tx + u * tw, ty + v * th) || px[3] < 1) continue;
+          const al = (px[3] / 255) * m;
+          // Light the ink with the photo; let the fabric texture show through.
+          const shade = Math.max(0.35, Math.min(1.06, lum[i] / white));
+          const tex = fabric ? 1 + (lum[i] - blur[i]) * 1.6 : 1;
+          for (let c = 0; c < 3; c++) {
+            const ink = (px[c] / (px[3] / 255)) * shade * tex;
+            od[i * 4 + c] = od[i * 4 + c] * (1 - al) + ink * al;
+          }
+        }
+      }
+      out.pxPerIn = r.w / entry.side.printWidthIn;
+    }
+    ctx.putImageData(img, 0, 0);
+
+    // A cut-out copy (transparent background, cropped to the product) for the 3D view.
+    const cut = document.createElement('canvas');
+    cut.width = bbox.w;
+    cut.height = bbox.h;
+    const cctx = cut.getContext('2d');
+    const cimg = cctx.createImageData(bbox.w, bbox.h);
+    for (let y = 0; y < bbox.h; y++) {
+      for (let x = 0; x < bbox.w; x++) {
+        const si = ((y + bbox.y) * W + (x + bbox.x)) * 4;
+        const di = (y * bbox.w + x) * 4;
+        cimg.data[di] = od[si];
+        cimg.data[di + 1] = od[si + 1];
+        cimg.data[di + 2] = od[si + 2];
+        cimg.data[di + 3] = md[si];
+      }
+    }
+    cctx.putImageData(cimg, 0, 0);
+    out.cutout = cut;
+    if (!out.pxPerIn) {
+      const aspect = entry.rects.trim.w / entry.rects.trim.h;
+      out.pxPerIn = window.POD_PHOTOS.rectFor(cfg, aspect).w / entry.side.printWidthIn;
+    }
+    return out;
+  }
+  const photoFor = (product, sideId) => (window.POD_PHOTOS ? window.POD_PHOTOS[`${product.id}:${sideId}`] : null);
 
   // ---------- Modal ----------
   const $ = (id) => document.getElementById(id);
@@ -271,9 +520,18 @@
   async function realisticFor(sideId) {
     if (!state.real[sideId]) {
       const entry = state.sides.find((s) => s.side.id === sideId);
-      state.real[sideId] = renderRealistic(state.product, entry);
+      const cfg = photoFor(state.product, sideId);
+      // Real photo when there is one; the drawn mockup otherwise (or if the photo fails to load).
+      state.real[sideId] = cfg
+        ? renderPhoto(state.product, entry, cfg, state.color.hex).catch(() => renderRealistic(state.product, entry))
+        : renderRealistic(state.product, entry);
     }
     return state.real[sideId];
+  }
+  async function plainFor(sideId) {
+    const entry = state.sides.find((s) => s.side.id === sideId);
+    const cfg = photoFor(state.product, sideId);
+    return cfg ? renderPhoto(state.product, entry, cfg, state.color.hex, false) : null;
   }
 
   function setBody(html) {
@@ -319,7 +577,12 @@
         </div>`);
       } else {
         const textures = {};
-        for (const s of state.sides) textures[s.side.id] = { design: s.design, real: await realisticFor(s.side.id), rects: s.rects, hasDesign: s.hasDesign, baseImg: await loadImg(s.base) };
+        for (const s of state.sides) {
+          textures[s.side.id] = {
+            design: s.design, designScale: s.designScale, rects: s.rects, hasDesign: s.hasDesign,
+            real: await realisticFor(s.side.id), plain: await plainFor(s.side.id), baseImg: await loadImg(s.base),
+          };
+        }
         if (token !== state.token) return;
         let mod;
         try {

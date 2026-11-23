@@ -1866,7 +1866,8 @@
       sides.push({
         side: sd,
         rects: rects(sd.id),
-        design: exportDesignLayer(2),
+        design: exportDesignLayer(3),
+        designScale: 3,
         hasDesign: canvas.getObjects().length > 0,
         base: POD.mockupUrl(sd, color().hex),
         overlay: sd.overlay ? POD.mockupUrl(sd, color().hex, 'overlay') : null,

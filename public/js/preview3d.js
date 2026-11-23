@@ -33,8 +33,9 @@ function texture(cv, renderer) {
 function designCrop(tex) {
   if (!tex || !tex.hasDesign) return null;
   const r = tex.rects.trim;
-  const c = canvas(r.w * S, r.h * S);
-  c.getContext('2d').drawImage(tex.design, r.x * S, r.y * S, r.w * S, r.h * S, 0, 0, c.width, c.height);
+  const sc = tex.designScale || S;
+  const c = canvas(r.w * sc, r.h * sc);
+  c.getContext('2d').drawImage(tex.design, r.x * sc, r.y * sc, r.w * sc, r.h * sc, 0, 0, c.width, c.height);
   return c;
 }
 /** A face: base colour with the design laid over it (optionally inset). */
@@ -252,21 +253,31 @@ function buildPillow(m, color, tex, renderer, product) {
 
 /** Clothing, caps, totes: a gently curved panel with the realistic front and back renders. */
 function buildCard(color, tex, renderer, product) {
-  const side = product.sides[0];
-  const u = side.printArea.w / side.printWidthIn;
-  const w = 500 / u;
-  const h = 600 / u;
+  const first = tex[product.sides[0].id].real;
+  const firstImg = first.cutout || first;
+  // Real-world size from the render's pixels-per-inch, so photos and drawings both come out right.
+  const w = firstImg.width / first.pxPerIn;
+  const h = firstImg.height / first.pxPerIn;
   const g = new THREE.Group();
   const bend = (geo, dir) => {
     const p = geo.attributes.position;
     for (let i = 0; i < p.count; i++) p.setZ(i, dir * (0.25 - 0.9 * ((p.getX(i) / (w / 2)) ** 2)));
     geo.computeVertexNormals();
   };
-  const front = tex[product.sides[0].id].real;
+  const pick = (t) => t.real.cutout || t.real;
+  const front = pick(tex[product.sides[0].id]);
   const backSide = product.sides[1];
   let backCv;
-  if (backSide) backCv = tex[backSide.id].real;
-  else {
+  if (backSide) backCv = pick(tex[backSide.id]);
+  else if (tex[product.sides[0].id].plain) {
+    // Single-sided photo products: the plain product, mirrored, seen from behind.
+    const plain = tex[product.sides[0].id].plain.cutout;
+    backCv = canvas(plain.width, plain.height);
+    const bctx = backCv.getContext('2d');
+    bctx.translate(backCv.width, 0);
+    bctx.scale(-1, 1);
+    bctx.drawImage(plain, 0, 0);
+  } else {
     // Single-sided products: the plain product seen from behind.
     backCv = canvas(front.width, front.height);
     const bctx = backCv.getContext('2d');
