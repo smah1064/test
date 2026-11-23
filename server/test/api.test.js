@@ -241,3 +241,107 @@ test('employee-facing messages follow Accept-Language, admin log stays English',
   const log = (await api('GET', '/api/admin/rejected', { token: admin })).data;
   assert.match(log[0].reason, /^You are \d+ m from HQ\. You must be within 100 m\.$/);
 });
+
+test('web page: office Wi-Fi check, browser cookie binding', async () => {
+  const admin = (await api('POST', '/api/auth/login', { body: { emp_code: 'admin', password: 'admin123' } })).data.token;
+  const OFFICE = { lat: 21.5433, lng: 39.1728 };
+
+  // Invalid office network entries are refused
+  let r = await api('POST', '/api/admin/sites', { token: admin, body: { name: 'Bad', ...OFFICE, radius_m: 100, office_ips: '203.0.113.7, nope' } });
+  assert.equal(r.status, 400);
+  assert.match(r.data.error, /nope/);
+
+  r = await api('POST', '/api/admin/sites', {
+    token: admin,
+    body: { name: 'Jeddah Office', ...OFFICE, radius_m: 100, office_ips: '203.0.113.7 2001:db8:5::/48' },
+  });
+  assert.equal(r.status, 201);
+  assert.equal(r.data.office_ips, '203.0.113.7, 2001:db8:5::/48');
+  await api('POST', '/api/admin/employees', { token: admin, body: { emp_code: 'W1', name: 'Huda', password: 'secret3', site_id: r.data.id } });
+
+  // "Use this network" reports the caller's address (via the trusted local proxy header)
+  const ipRes = await fetch(base + '/api/admin/my-ip', { headers: { authorization: `Bearer ${admin}`, 'x-forwarded-for': '2001:db8:5:7:1:2:3:4' } });
+  assert.deepEqual(await ipRes.json(), { ip: '2001:db8:5:7:1:2:3:4', suggestion: '2001:db8:5:7::/64', private: false });
+
+  // Web login: the server issues an HttpOnly device cookie
+  let res = await fetch(base + '/api/auth/login', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ emp_code: 'W1', password: 'secret3', portal: 'web' }),
+  });
+  assert.equal(res.status, 200);
+  const setCookie = res.headers.get('set-cookie');
+  assert.match(setCookie, /att_device=web%3A[0-9a-f-]{36}/);
+  assert.match(setCookie, /HttpOnly/);
+  assert.match(setCookie, /SameSite=Strict/);
+  const cookie = setCookie.split(';')[0];
+  const token = (await res.json()).token;
+
+  const call = (method, url, { ip, body, withCookie = true, lang } = {}) =>
+    fetch(base + url, {
+      method,
+      headers: {
+        authorization: `Bearer ${token}`,
+        ...(withCookie ? { cookie } : {}),
+        ...(ip ? { 'x-forwarded-for': ip } : {}),
+        ...(lang ? { 'accept-language': lang } : {}),
+      },
+      body,
+    }).then(async (x) => ({ status: x.status, data: await x.json() }));
+
+  // Status shown before the selfie
+  assert.equal((await call('GET', '/api/attendance/me', { ip: '198.51.100.1' })).data.office_network, 'off');
+  assert.equal((await call('GET', '/api/attendance/me', { ip: '203.0.113.7' })).data.office_network, 'ok');
+
+  // Mobile data → blocked (and logged), with the message in Arabic
+  const webForm = (extra) => punchForm('in', { ...OFFICE, source: 'web', ...extra });
+  r = await call('POST', '/api/attendance', { ip: '198.51.100.1', body: webForm(), lang: 'ar' });
+  assert.equal(r.status, 403);
+  assert.equal(r.data.code, 'NOT_OFFICE_NETWORK');
+  assert.match(r.data.error, /Wi-Fi الخاصة بالمكتب/);
+
+  // Without the browser cookie → treated as another device
+  r = await call('POST', '/api/attendance', { ip: '203.0.113.7', body: webForm(), withCookie: false });
+  assert.equal(r.data.code, 'DEVICE_MISMATCH');
+
+  // On office Wi-Fi a vague indoor fix (±300 m, 250 m off-centre) is accepted
+  r = await call('POST', '/api/attendance', { ip: '203.0.113.7', body: webForm({ lat: OFFICE.lat + 0.00225, accuracy: 300 }) });
+  assert.equal(r.status, 201, JSON.stringify(r.data));
+  assert.equal(r.data.via_network, true);
+  assert.equal(r.data.site, 'Jeddah Office');
+
+  // IPv6 office range works too
+  r = await call('POST', '/api/attendance', { ip: '2001:db8:5:9::42', body: punchForm('out', { ...OFFICE, source: 'web' }) });
+  assert.equal(r.status, 201, JSON.stringify(r.data));
+
+  // On office Wi-Fi but GPS clearly in another city → still rejected
+  r = await call('POST', '/api/attendance', { ip: '203.0.113.7', body: webForm({ lat: 24.7, lng: 46.7 }) });
+  assert.equal(r.data.code, 'OUT_OF_RANGE');
+
+  // The app can't skip the Wi-Fi rule either: it's per location, not per client
+  r = await call('POST', '/api/attendance', { ip: '198.51.100.1', body: punchForm('in', { ...OFFICE, source: 'app' }) });
+  assert.equal(r.data.code, 'NOT_OFFICE_NETWORK');
+
+  // A second browser (no cookie) can't log in to the bound account
+  res = await fetch(base + '/api/auth/login', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ emp_code: 'W1', password: 'secret3', portal: 'web' }),
+  });
+  assert.equal(res.status, 403);
+
+  // Dashboard shows how each check-in was verified
+  const day = (await api('GET', '/api/admin/attendance', { token: admin })).data.records.filter((x) => x.emp_code === 'W1');
+  assert.equal(day.length, 2);
+  assert.ok(day.every((x) => x.via_network === 1 && x.source === 'web'));
+  const alerts = (await api('GET', '/api/admin/rejected', { token: admin })).data;
+  assert.ok(alerts.some((a) => a.emp_code === 'W1' && a.code === 'NOT_OFFICE_NETWORK'));
+});
+
+test('pages are served: check-in at /, dashboard at /admin/', async () => {
+  const home = await (await fetch(base + '/')).text();
+  assert.match(home, /checkin\.js/);
+  const admin = await fetch(base + '/admin');
+  assert.equal(admin.status, 200); // redirected to /admin/
+  assert.match(await admin.text(), /Attendance Admin/);
+});

@@ -1,7 +1,8 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const { db } = require('../db');
-const { signToken, requireAuth } = require('../auth');
+const crypto = require('crypto');
+const { signToken, requireAuth, readCookie, DEVICE_COOKIE } = require('../auth');
 const { t } = require('../i18n');
 
 const router = express.Router();
@@ -42,17 +43,34 @@ router.post('/login', (req, res) => {
     return res.status(403).json({ error: 'This account is not an admin' });
   }
 
+  let deviceId = device_id;
+  if (portal === 'web' && user.role === 'employee') {
+    // Browsers are identified by a long-lived cookie set by the server
+    // (HttpOnly, so page scripts can't read or copy it, and Safari doesn't
+    // expire it after 7 days the way it does with localStorage).
+    deviceId = readCookie(req, DEVICE_COOKIE);
+    if (!deviceId || !/^web:[0-9a-f-]{36}$/.test(deviceId)) deviceId = `web:${crypto.randomUUID()}`;
+    res.cookie(DEVICE_COOKIE, deviceId, {
+      httpOnly: true,
+      secure: req.secure,
+      sameSite: 'strict',
+      maxAge: 400 * 24 * 3600 * 1000,
+      path: '/',
+    });
+  }
+
   if (user.role === 'employee') {
-    if (!device_id) return res.status(400).json({ error: t(req, 'USE_MOBILE_APP') });
+    if (!deviceId) return res.status(400).json({ error: t(req, 'USE_MOBILE_APP') });
     if (!user.device_id) {
       // First login: bind the account to this phone.
+      const model = portal === 'web' ? `Browser: ${String(req.get('user-agent') || '').slice(0, 100)}` : device_model;
       db.prepare('UPDATE users SET device_id = ?, device_model = ? WHERE id = ?').run(
-        String(device_id),
-        device_model ? String(device_model).slice(0, 120) : null,
+        String(deviceId),
+        model ? String(model).slice(0, 120) : null,
         user.id
       );
-      user.device_id = device_id;
-    } else if (user.device_id !== device_id) {
+      user.device_id = deviceId;
+    } else if (user.device_id !== deviceId) {
       return res.status(403).json({
         error: t(req, 'DEVICE_MISMATCH'),
         code: 'DEVICE_MISMATCH',

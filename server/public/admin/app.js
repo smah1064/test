@@ -139,7 +139,7 @@
       [s.total_employees, 'Active employees'],
     ]);
     const t = $('#day-table');
-    t.innerHTML = `<thead><tr><th>Selfie</th><th>Time</th><th>Employee</th><th>Type</th><th>Location</th><th class="num">Distance</th><th class="num">GPS ±</th><th>Map</th></tr></thead><tbody>${
+    t.innerHTML = `<thead><tr><th>Selfie</th><th>Time</th><th>Employee</th><th>Type</th><th>Location</th><th>Verified by</th><th class="num">Distance</th><th class="num">GPS ±</th><th>Map</th></tr></thead><tbody>${
       data.records.length
         ? data.records.map((r) => `<tr>
           <td><img class="thumb" data-photo="${r.id}" alt="Selfie of ${esc(r.name)}"></td>
@@ -147,10 +147,12 @@
           <td><strong>${esc(r.name)}</strong><br><span class="muted">${esc(r.emp_code)}</span></td>
           <td>${r.type === 'in' ? '<span class="badge ok">Check in</span>' : '<span class="badge info">Check out</span>'}</td>
           <td>${esc(r.site_name || '—')}</td>
+          <td>${r.via_network ? '<span class="badge ok">Office Wi-Fi</span>' : '<span class="badge info">GPS</span>'}
+            <br><span class="muted">${r.source === 'web' ? 'Web page' : 'App'}</span></td>
           <td class="num">${r.distance_m ?? '—'} m</td>
           <td class="num">${r.accuracy_m ? Math.round(r.accuracy_m) + ' m' : '—'}</td>
           <td><a target="_blank" rel="noopener" href="https://maps.google.com/?q=${r.lat},${r.lng}">Open</a></td></tr>`).join('')
-        : '<tr><td colspan="8" class="empty">No check-ins on this day.</td></tr>'
+        : '<tr><td colspan="9" class="empty">No check-ins on this day.</td></tr>'
     }</tbody>`;
     $$('img[data-photo]', t).forEach(async (img) => {
       img.src = await photoUrl(img.dataset.photo);
@@ -260,11 +262,12 @@
   loaders.sites = async () => {
     sitesCache = await api('GET', '/admin/sites');
     const t = $('#site-table');
-    t.innerHTML = `<thead><tr><th>Name</th><th>Coordinates</th><th class="num">Radius</th><th>Map</th><th>Actions</th></tr></thead><tbody>${
+    t.innerHTML = `<thead><tr><th>Name</th><th>Coordinates</th><th class="num">Radius</th><th>Check-in requires</th><th>Map</th><th>Actions</th></tr></thead><tbody>${
       sitesCache.length ? sitesCache.map((s) => `<tr><td><strong>${esc(s.name)}</strong></td><td>${s.lat.toFixed(6)}, ${s.lng.toFixed(6)}</td>
-        <td class="num">${s.radius_m} m</td><td><a target="_blank" rel="noopener" href="https://maps.google.com/?q=${s.lat},${s.lng}">Open</a></td>
+        <td class="num">${s.radius_m} m</td>
+        <td>${s.office_ips ? `<span class="badge ok">Office Wi-Fi</span> <span class="muted">${esc(s.office_ips)}</span>` : '<span class="badge warn">GPS only</span>'}</td><td><a target="_blank" rel="noopener" href="https://maps.google.com/?q=${s.lat},${s.lng}">Open</a></td>
         <td><div class="actions"><button class="btn small" data-edit="${s.id}">Edit</button><button class="btn small danger" data-del="${s.id}">Delete</button></div></td></tr>`).join('')
-      : '<tr><td colspan="5" class="empty">No locations yet. Add your office so employees can check in.</td></tr>'}</tbody>`;
+      : '<tr><td colspan="6" class="empty">No locations yet. Add your office so employees can check in.</td></tr>'}</tbody>`;
     $$('[data-edit]', t).forEach((b) => b.addEventListener('click', () => siteForm(sitesCache.find((s) => String(s.id) === b.dataset.edit))));
     $$('[data-del]', t).forEach((b) => b.addEventListener('click', async () => {
       if (!confirm('Delete this location? Employees assigned to it will be able to check in at any location.')) return;
@@ -280,8 +283,27 @@
       <label>Allowed radius (metres)<input name="radius_m" type="number" min="10" max="5000" value="${s.radius_m ?? 150}" required></label>
       <p class="muted">Tip: in Google Maps, right-click the building and click the coordinates to copy them. Or stand at the site and use your location.</p>
       <button type="button" class="btn" id="use-loc">Use my current location</button>
+      <label>Office Wi-Fi (public internet address)
+        <textarea name="office_ips" rows="2" placeholder="e.g. 203.0.113.7">${esc(s.office_ips || '')}</textarea></label>
+      <p class="muted">When filled in, check-ins at this location are only accepted from this network. Stand in the office, connect to its Wi-Fi and click
+        the button below. Add several separated by commas if the office has more than one internet line. Leave empty for GPS-only sites.</p>
+      <button type="button" class="btn" id="use-net">Use this network</button>
+      <p class="muted" id="net-note"></p>
       <p class="error"></p><div class="modal-actions"><button type="button" class="btn ghost" data-close>Cancel</button><button class="btn primary">Save</button></div></form>`,
     async (v) => { await api(s.id ? 'PUT' : 'POST', s.id ? `/admin/sites/${s.id}` : '/admin/sites', v); loaders.sites(); });
+    $('#use-net').addEventListener('click', async () => {
+      const r = await api('GET', '/admin/my-ip');
+      if (r.private) {
+        // Never add a private address: employees' requests would never match it.
+        $('#net-note').textContent = `Not added: ${r.ip} is a private address, not the office's internet address. Either you are on the same network as the server, or the server is behind a proxy it doesn't trust (see TRUST_PROXY in the README).`;
+        return;
+      }
+      const box = $('[name=office_ips]', modal);
+      const list = box.value.split(/[\s,;]+/).filter(Boolean);
+      if (!list.includes(r.suggestion)) list.push(r.suggestion);
+      box.value = list.join(', ');
+      $('#net-note').textContent = `Added ${r.suggestion}. Make sure you are on the office Wi-Fi (not mobile data or a VPN).`;
+    });
     $('#use-loc').addEventListener('click', () => {
       if (!navigator.geolocation) return toast('Location not available in this browser');
       navigator.geolocation.getCurrentPosition(
@@ -294,7 +316,7 @@
   // ---------- Alerts ----------
   const CODE_LABEL = {
     DEV_MODE: ['Developer mode on', 'bad'], MOCK_LOCATION: ['Fake GPS', 'bad'], ROOTED: ['Rooted / jailbroken', 'bad'],
-    OUT_OF_RANGE: ['Outside location', 'warn'], LOW_ACCURACY: ['Weak GPS', 'info'], STALE: ['Old selfie', 'info'],
+    OUT_OF_RANGE: ['Outside location', 'warn'], NOT_OFFICE_NETWORK: ['Not on office Wi-Fi', 'warn'], LOW_ACCURACY: ['Weak GPS', 'info'], STALE: ['Old selfie', 'info'],
   };
   loaders.alerts = async () => {
     const rows = await api('GET', '/admin/rejected');

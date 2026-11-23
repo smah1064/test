@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Attendance Admin</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Login -->
+  <section id="login-view" class="login hidden">
+    <form id="login-form" class="card login-card">
+      <h1>Attendance Admin</h1>
+      <label>Admin code<input name="emp_code" autocomplete="username" required /></label>
+      <label>Password<input name="password" type="password" autocomplete="current-password" required /></label>
+      <button class="btn primary" type="submit">Log in</button>
+      <p class="error" id="login-error"></p>
+    </form>
+  </section>
+
+  <!-- App -->
+  <div id="app-view" class="hidden">
+    <header class="topbar">
+      <div class="brand" id="brand">Attendance</div>
+      <nav id="nav">
+        <a data-tab="today" class="active">Today</a>
+        <a data-tab="report">Monthly report</a>
+        <a data-tab="employees">Employees</a>
+        <a data-tab="sites">Locations</a>
+        <a data-tab="alerts">Security alerts</a>
+        <a data-tab="settings">Settings</a>
+      </nav>
+      <div class="me">
+        <button class="btn ghost" id="pw-btn">Change password</button>
+        <button class="btn ghost" id="logout-btn">Log out</button>
+      </div>
+    </header>
+
+    <main>
+      <!-- Today -->
+      <section data-view="today">
+        <div class="toolbar">
+          <h2>Attendance log</h2>
+          <input type="date" id="day-input" />
+        </div>
+        <div class="tiles" id="day-tiles"></div>
+        <div class="card table-wrap"><table id="day-table"></table></div>
+      </section>
+
+      <!-- Report -->
+      <section data-view="report" class="hidden">
+        <div class="toolbar">
+          <h2>Monthly report</h2>
+          <input type="month" id="month-input" />
+          <button class="btn" id="dl-xlsx">Download Excel</button>
+          <button class="btn ghost" id="dl-csv">Summary CSV</button>
+          <button class="btn ghost" id="dl-csv-daily">Daily CSV</button>
+        </div>
+        <p class="muted" id="report-note"></p>
+        <div class="tiles" id="report-tiles"></div>
+        <div class="card table-wrap"><table id="report-table"></table></div>
+        <h3>Automatic reports</h3>
+        <p class="muted">A report for the previous month is generated on the 1st of each month (and emailed if SMTP is configured).</p>
+        <div class="card table-wrap"><table id="archive-table"></table></div>
+      </section>
+
+      <!-- Employees -->
+      <section data-view="employees" class="hidden">
+        <div class="toolbar">
+          <h2>Employees</h2>
+          <button class="btn primary" id="add-emp">Add employee</button>
+        </div>
+        <div class="card table-wrap"><table id="emp-table"></table></div>
+      </section>
+
+      <!-- Sites -->
+      <section data-view="sites" class="hidden">
+        <div class="toolbar">
+          <h2>Work locations</h2>
+          <button class="btn primary" id="add-site">Add location</button>
+        </div>
+        <p class="muted">Employees can only check in inside the radius of their assigned location (or any location if none is assigned).
+          If you add the location's <strong>office Wi-Fi</strong>, check-ins there are only accepted from that Wi-Fi — the strongest protection against fake GPS.</p>
+        <div class="card table-wrap"><table id="site-table"></table></div>
+      </section>
+
+      <!-- Alerts -->
+      <section data-view="alerts" class="hidden">
+        <div class="toolbar"><h2>Blocked punches</h2></div>
+        <p class="muted">Every check-in that was blocked — not on the office Wi-Fi, developer mode on, fake GPS, rooted phone, outside the location, weak GPS or an old selfie.</p>
+        <div class="card table-wrap"><table id="alert-table"></table></div>
+      </section>
+
+      <!-- Settings -->
+      <section data-view="settings" class="hidden">
+        <div class="toolbar"><h2>Settings</h2></div>
+        <form id="settings-form" class="card form-grid">
+          <label>Company name<input name="company_name" required /></label>
+          <label>Work starts<input name="work_start" type="time" required /></label>
+          <label>Work ends<input name="work_end" type="time" required /></label>
+          <label>Grace period (minutes)<input name="grace_minutes" type="number" min="0" max="240" required /></label>
+          <fieldset class="span2">
+            <legend>Weekend days</legend>
+            <div class="days" id="weekend-days"></div>
+          </fieldset>
+          <label class="span2">Public holidays (YYYY-MM-DD, one per line)<textarea name="holidays" rows="4"></textarea></label>
+          <div class="span2"><button class="btn primary" type="submit">Save settings</button> <span id="settings-msg" class="muted"></span></div>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="modal"><div id="modal-body"></div></dialog>
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

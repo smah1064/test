@@ -1,30 +1,37 @@
-# Employee Attendance — selfie + GPS
+# Employee Attendance — selfie + office Wi-Fi
 
-A mobile app for employees to check in and out, and a web dashboard for admins.
+A check-in web page for employees, an admin dashboard, and a monthly report. There is also an optional mobile app for staff who don't work in an office.
 
-- **Selfie on every check-in/out.** The app takes the photo itself with the front camera. There is no gallery picker and the phone's own camera app (and its beauty filters) is never used.
-- **GPS geofence.** A check-in is only accepted inside the radius of the employee's work location. Weak GPS fixes are rejected.
-- **Developer mode must be off.** On Android, fake-GPS apps only work after Developer options are turned on, so the app refuses to work while they are on. It also blocks mocked GPS fixes, rooted or jailbroken phones, and emulators.
-- **One phone per employee.** An account is locked to the first phone it logs in on, so a colleague can't check in for someone else. An admin can reset it.
-- **Monthly report.** On the 1st of each month the server builds an Excel report for the previous month and can email it to admins. Admins can also download any month from the dashboard at any time.
-- **Security alerts.** Every blocked attempt is logged with the employee, the reason and the map location, and shows up in the report.
-- **Arabic and English.** The app follows the phone's language and has a switch to change it. In Arabic the whole app is right-to-left, and the server's messages (wrong password, "you are 300 m from Head Office", …) come back in Arabic. The admin dashboard and reports stay in English.
+- **Check in from a web page.** Employees open the company's attendance address on their phone. There's nothing to install, and it works on Android and iPhone. They can also add it to the home screen so it opens like an app.
+- **Office Wi-Fi required.** Each office location can list its Wi-Fi's internet address. Check-ins there are only accepted from that network. A fake-GPS app can't change which network a phone is on, so this is the main protection against cheating.
+- **Live selfie on every check-in and check-out.** The page captures the photo from the live front camera. There is no upload button, so gallery photos and filtered or edited pictures can't be used.
+- **GPS is checked too.** The location is recorded with every check-in and must be at the office.
+- **One phone per employee.** An account is locked to the first browser or phone it logs in on, so a colleague can't check in for someone else. An admin can reset it.
+- **Monthly report.** On the 1st of each month the server builds an Excel report for the previous month and can email it to admins. Any month can also be downloaded from the dashboard.
+- **Security alerts.** Every blocked attempt is logged with the employee and the reason, for example "not on office Wi-Fi" or "outside location".
+- **Arabic and English.** The check-in page and the app follow the phone's language and have a switch to change it, with a full right-to-left layout in Arabic. The admin dashboard and reports are in English.
 
 ```
-mobile/   Flutter app (Android + iOS) for employees
-server/   Node.js API + admin web dashboard + monthly report job
+server/   Node.js server: employee check-in page (/), admin dashboard (/admin), API, monthly report job
+mobile/   Optional Flutter app (Android + iOS) for staff at sites without office Wi-Fi
 ```
 
 ---
 
-## How check-in works
+## How a check-in is verified
 
-1. The employee taps **Check in**.
-2. The app checks the phone: Developer options and USB debugging are off, the phone is not rooted or jailbroken, and it is not an emulator. If a check fails, a screen explains how to fix it (with a button to open Developer options), and the attempt is reported to admins.
-3. The app reads live GPS (never a cached position) and waits for a fix accurate to about 30 m. A fix marked as mocked is blocked and reported.
-4. The front camera opens inside the app and the employee takes a selfie.
-5. The phone is checked again, then the selfie, location and flags are uploaded.
-6. **The server checks everything again.** It recomputes the distance to the site, rejects weak GPS and selfies older than 5 minutes, checks that the file is a real JPEG, checks the phone binding, and rejects a check-in while already checked in. The server's own clock sets the time of the punch, so changing the phone's clock has no effect.
+1. The employee taps **Check in**. If the phone isn't on the office Wi-Fi, the page says so immediately: "turn off mobile data and connect to the office Wi-Fi".
+2. The page reads the phone's location, then opens the front camera, and the employee takes a selfie.
+3. **The server decides.** It accepts the check-in only if all of these are true:
+   - The request comes from the office's internet address.
+   - The location is at the office. On office Wi-Fi this check is lenient, because indoor GPS can be a few hundred metres off and the Wi-Fi already proves the employee is there. A location in another part of town is still rejected.
+   - The selfie is a real photo taken less than 5 minutes ago.
+   - The request comes from the employee's registered browser or phone.
+   - The employee isn't already checked in (for a check-in) or already checked out (for a check-out).
+
+   The server's clock sets the time of the check-in, so changing the phone's clock has no effect.
+
+**The Wi-Fi rule belongs to the location, not to the app or the page.** If a location has office Wi-Fi addresses, every check-in there must come from that Wi-Fi, from the web page or the app. Nobody can skip the check by using a different client. Locations without Wi-Fi addresses use GPS only. These suit field sites, where employees should use the mobile app, which can detect fake GPS.
 
 ## Monthly report contents
 
@@ -34,11 +41,9 @@ For each employee:
 - late arrivals and total late minutes, using the work start time plus a grace period
 - days they left early and days with no check-out
 - total hours, average hours per day and days worked on weekends
-- number of blocked punches (developer mode, fake GPS, root or outside the location)
+- blocked check-ins: not on office Wi-Fi, outside the location, developer mode, fake GPS or a rooted phone
 
 The Excel file has three sheets: **Summary**, **Daily detail** (one row per employee per day, with absent rows in red and late rows in yellow) and **Blocked punches**. CSV export is also available.
-
-Set the working hours, grace minutes, weekend days (for example Fri/Sat) and public holidays in **Settings** on the dashboard.
 
 ---
 
@@ -46,11 +51,11 @@ Set the working hours, grace minutes, weekend days (for example Fri/Sat) and pub
 
 ### 1. Run the server
 
-You need a machine with Node.js 18+ (or Docker) and an **HTTPS** address, such as `https://attendance.yourcompany.com`. Release builds of the app only talk to HTTPS. Any VPS works if you put Caddy or nginx in front of it. Railway, Render and Fly.io also work if you give them a persistent volume for `data/`.
+You need a machine with Node.js 18+ (or Docker) and an **HTTPS** address, such as `https://attendance.yourcompany.com`. Browsers only allow the camera and location on HTTPS pages.
 
 ```bash
 cd server
-cp .env.example .env        # then edit it: JWT_SECRET, COMPANY_TZ, ADMIN_PASSWORD, SMTP…
+cp .env.example .env        # then edit it: JWT_SECRET, COMPANY_TZ, ADMIN_PASSWORD, TRUST_PROXY, SMTP…
 npm install
 npm start                   # http://localhost:3000
 ```
@@ -63,58 +68,75 @@ docker build -t attendance .
 docker run -d -p 3000:3000 --env-file .env -v $(pwd)/data:/app/data --restart unless-stopped attendance
 ```
 
-Everything is stored in `server/data/`: the SQLite database, the selfies and the generated reports. **Back up this folder.**
+Everything is stored in `server/data/`: the database, the selfies and the generated reports. **Back up this folder.**
+
+#### Important: `TRUST_PROXY`
+
+The Wi-Fi check depends on the server seeing each phone's real internet address. HTTPS is normally provided by a proxy in front of the server (Caddy, nginx, or the hosting platform). That proxy passes the real address on, and the server must be told to trust it, but only it:
+
+| How the server is run | Set |
+|---|---|
+| Caddy or nginx **on the same machine** (recommended) | nothing (the default `loopback` is right) |
+| Render, Railway, Fly.io, Heroku or behind a single load balancer | `TRUST_PROXY=1` |
+| Behind Cloudflare **and** a host proxy | `TRUST_PROXY=2` |
+
+**Check that it's right:** on the dashboard, open **Locations → Edit → Use this network**. It should show your office's public address. If it says *private address*, the setting is wrong. Never trust more proxies than you really have: anyone could then fake their address.
+
+The simplest HTTPS setup on your own server is Caddy with this one-line `Caddyfile`. It gets the certificate automatically:
+
+```
+attendance.yourcompany.com {
+    reverse_proxy localhost:3000
+}
+```
 
 ### 2. Set up the dashboard
 
-Open the server address in a browser and log in with `ADMIN_CODE` / `ADMIN_PASSWORD`. Then:
+Open `https://<your-address>/admin` and log in with `ADMIN_CODE` / `ADMIN_PASSWORD`. Then:
 
 1. **Change password** (top right).
 2. **Settings:** company name, work hours, grace period, weekend days and holidays.
-3. **Locations:** add each office or site with its coordinates and an allowed radius. 100–200 m is typical, because indoor GPS can be 20–50 m off. To get coordinates, right-click the building in Google Maps and copy them, or stand there and click **Use my current location**.
-4. **Employees:** add each employee with a code, name, password and work location. Choose "Any location" for people who move between sites.
+3. **Locations:** add each office with its coordinates and a radius. 100–200 m is typical. Then set up its Wi-Fi:
+   1. Go to the office and connect your phone or laptop to the **office Wi-Fi**, with mobile data and any VPN off.
+   2. Open the dashboard there, edit the location and click **Use this network**. The office's internet address is filled in.
+   3. If the office has a second internet line or a backup connection, connect to it and click the button again. All the addresses are kept.
 
-### 3. Build and install the app
+   If the office's internet provider changes the address (some home-style connections do), check-ins will be rejected as "not on office Wi-Fi". Repeat these steps, or ask the provider for a **static IP**, which is the usual choice for offices.
+4. **Employees:** add each employee with a code, name, password and work location.
 
-**Option A: let GitHub build the APK.** This repo has a workflow at `.github/workflows/build.yml`. In the repo, go to **Settings → Secrets and variables → Actions → Variables** and add `API_URL` = your server address. Then open **Actions → Build → Run workflow**. Download `attendance-apk` from the finished run and send the APK to employees.
+### 3. Employees
 
-**Option B: build locally** with [Flutter](https://docs.flutter.dev/get-started/install):
+Send employees the address, for example `https://attendance.yourcompany.com`. Each employee:
 
-```bash
-cd mobile
-flutter pub get
-flutter build apk --release --dart-define=API_URL=https://attendance.yourcompany.com
-# → build/app/outputs/flutter-apk/app-release.apk
-```
+1. Opens it on their phone **in their normal browser**, not a private or incognito window. Their account is linked to that browser at first login.
+2. Logs in, then allows **camera** and **location** when asked.
+3. Optionally adds the page to the home screen: Safari → Share → **Add to Home Screen**, or Chrome → ⋮ → **Add to Home screen**.
 
-For iOS, build on a Mac with Xcode: `flutter build ipa --release --dart-define=API_URL=…`, then distribute through TestFlight or Apple Business Manager.
+If an employee gets a new phone, clears their browser data, or switches browser, they will see "registered to another phone". The admin clicks **Reset phone** on the Employees page, and the employee logs in again.
 
-Before a Play Store or App Store release:
+### 4. Optional: the mobile app (staff outside the office)
 
-- Change the app ID `com.yourcompany.attendance_app` in `mobile/android/app/build.gradle.kts` and in Xcode.
-- Create a release signing key ([Flutter guide](https://docs.flutter.dev/deployment/android#sign-the-app)). The default release build uses the debug key. That is fine for sending the APK directly, but not for the Play Store.
+For staff at sites with no office Wi-Fi, use the Flutter app in `mobile/`. It adds the protections a web page can't have: it blocks Android Developer options, fake-GPS apps, rooted or jailbroken phones and emulators. Assign these employees to locations that have **no** Wi-Fi addresses.
 
-### 4. Employees
+- **Build with GitHub:** in the repo go to **Settings → Secrets and variables → Actions → Variables** and add `API_URL` = your server address. Then open **Actions → Build → Run workflow** and download `attendance-apk` from the finished run.
+- **Build locally** with [Flutter](https://docs.flutter.dev/get-started/install): `cd mobile && flutter build apk --release --dart-define=API_URL=https://attendance.yourcompany.com`.
+- **iOS:** build on a Mac with Xcode (`flutter build ipa …`) and distribute through TestFlight.
 
-The employee installs the app, logs in with their code and password, and allows camera and location access. The phone is now registered to them. If they get a new phone, an admin clicks **Reset phone** on the Employees page.
-
-Developer options must be off. On most Android phones: **Settings → System → Developer options → turn off the switch at the top** (on Samsung: **Settings → Developer options**). The app shows these steps and a button that opens the screen.
+Before a Play Store release, change the app ID `com.yourcompany.attendance_app` and create a release signing key ([guide](https://docs.flutter.dev/deployment/android#sign-the-app)).
 
 ---
 
 ## Developing
 
-- **Translations:** all app text is in `mobile/lib/l10n/strings.dart` (`SEn` and `SAr`). Each language must define every string, so a missing translation won't compile. Server messages for employees are in `server/src/i18n.js`.
-
-- **Server:** `cd server && npm run dev`; tests: `npm test`.
-- **App:** you need USB debugging to run the app from your computer, and the app normally blocks that. Run debug builds with `flutter run --dart-define=ALLOW_DEV_MODE=true --dart-define=API_URL=http://<your-pc-ip>:3000` to skip the developer-mode and emulator checks. The flag is ignored in release builds. Debug builds may use plain `http://`; release builds need HTTPS.
+- **Server:** `cd server && npm run dev`; tests: `npm test`. The check-in page is `server/public/index.html` + `checkin.js`; the dashboard is `server/public/admin/`.
+- **Testing the Wi-Fi check locally:** requests from your own machine come from `127.0.0.1`. Put `127.0.0.1` in a location's office Wi-Fi list to test, and remove it afterwards.
+- **Translations:** check-in page text is at the top of `server/public/checkin.js`, app text is in `mobile/lib/l10n/strings.dart`, and server messages are in `server/src/i18n.js`.
+- **App development:** run debug builds with `flutter run --dart-define=ALLOW_DEV_MODE=true --dart-define=API_URL=http://<your-pc-ip>:3000` to skip the developer-mode check, which USB debugging needs. The flag has no effect in release builds.
 - **Monthly report by hand:** `node src/index.js report 2026-10` writes `data/reports/attendance-2026-10.xlsx` and emails it if SMTP is set.
 
-## Limits and further hardening
+## Limits
 
-These measures stop the usual cheats: fake-GPS apps, buddy punching from another phone, photos from the gallery and old selfies. Be aware of these limits:
-
-- **The device checks run in the app.** Someone with root access, or a modified copy of the APK, could fake those results. The server still enforces the geofence, the selfie, freshness and the phone binding. For stronger proof that the request comes from your unmodified app on a genuine phone, add the [Google Play Integrity API](https://developer.android.com/google/play/integrity) and Apple [App Attest](https://developer.apple.com/documentation/devicecheck/establishing-your-app-s-integrity) and verify their tokens on the server.
-- **iOS has no Developer-mode switch that apps can read.** On iOS 15+ the app instead detects simulated locations, which is the only way to fake GPS without jailbreaking, and it blocks jailbroken phones.
-- **Selfies are not matched to a face.** Admins can review every photo on the dashboard. A good next step is automatic face checking: on-device face detection to reject photos with no face, or server-side face matching against a reference photo.
-- **Filters:** the app uses the camera directly, with no gallery and no hand-off to the camera app, so apps like Snapchat or the stock beauty mode can't be applied. A few phone makers process front-camera images inside the camera hardware itself, and no app can turn that off.
+- **Someone inside the office building can check in for a colleague who isn't there,** if they know the colleague's password and have the colleague's registered phone or browser. The selfie is the defence here: admins can see every photo on the dashboard. A good next step is automatic face matching against a reference photo.
+- **A VPN into the office network** would make a remote phone look like it is in the office. Most small offices don't run one. If yours does, don't use the VPN's exit address as an office Wi-Fi entry.
+- **The web page can't see phone settings,** so on GPS-only locations a fake-GPS app could fool it. That's why GPS-only locations should be used with the mobile app.
+- **Filters:** the photo comes from the live camera stream, with no upload and no camera app, so filter and beauty apps can't be applied. A few phone makers process front-camera images inside the camera hardware itself, and no app or page can turn that off.

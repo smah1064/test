@@ -31,7 +31,7 @@ function buildMonthlyReport(ym) {
   const blocked = db
     .prepare(
       `SELECT r.user_id, COUNT(*) AS n FROM rejected_attempts r
-        WHERE substr(r.ts, 1, 10) BETWEEN ? AND ? AND r.code IN ('DEV_MODE','MOCK_LOCATION','ROOTED','OUT_OF_RANGE')
+        WHERE substr(r.ts, 1, 10) BETWEEN ? AND ? AND r.code IN ('DEV_MODE','MOCK_LOCATION','ROOTED','OUT_OF_RANGE','NOT_OFFICE_NETWORK')
         GROUP BY r.user_id`
     )
     .all(first, last);

@@ -8,6 +8,7 @@ const { db, getSettings, setSettings } = require('../db');
 const { requireAuth } = require('../auth');
 const { localDate, monthDays, parseHHMM } = require('../util');
 const { buildMonthlyReport, reportToXlsx, reportToCsv } = require('../report');
+const { clientIp, parseIpList, formatIpList, suggestEntry, isPrivate } = require('../network');
 
 const router = express.Router();
 router.use(requireAuth('admin'));
@@ -21,8 +22,18 @@ function validSite(b) {
   if (!Number.isFinite(lat) || Math.abs(lat) > 90) return 'Latitude is invalid';
   if (!Number.isFinite(lng) || Math.abs(lng) > 180) return 'Longitude is invalid';
   if (!Number.isFinite(radius) || radius < 10 || radius > 5000) return 'Radius must be 10–5000 m';
+  const { error } = parseIpList(b.office_ips);
+  if (error) return `Office Wi-Fi: ${error}`;
   return null;
 }
+const officeIps = (b) => formatIpList(parseIpList(b.office_ips).entries);
+
+// The address this admin's request comes from — used by "Use this network"
+// when an admin sets up a location while standing in the office.
+router.get('/my-ip', (req, res) => {
+  const ip = clientIp(req);
+  res.json({ ip, suggestion: suggestEntry(ip), private: isPrivate(ip) });
+});
 
 router.get('/sites', (req, res) => {
   res.json(db.prepare('SELECT * FROM sites ORDER BY name').all());
@@ -31,14 +42,18 @@ router.post('/sites', (req, res) => {
   const err = validSite(req.body || {});
   if (err) return bad(res, err);
   const { name, lat, lng, radius_m } = req.body;
-  const info = db.prepare('INSERT INTO sites (name, lat, lng, radius_m) VALUES (?, ?, ?, ?)').run(String(name).trim(), +lat, +lng, +radius_m);
+  const info = db
+    .prepare('INSERT INTO sites (name, lat, lng, radius_m, office_ips) VALUES (?, ?, ?, ?, ?)')
+    .run(String(name).trim(), +lat, +lng, +radius_m, officeIps(req.body));
   res.status(201).json(db.prepare('SELECT * FROM sites WHERE id = ?').get(info.lastInsertRowid));
 });
 router.put('/sites/:id', (req, res) => {
   const err = validSite(req.body || {});
   if (err) return bad(res, err);
   const { name, lat, lng, radius_m } = req.body;
-  db.prepare('UPDATE sites SET name = ?, lat = ?, lng = ?, radius_m = ? WHERE id = ?').run(String(name).trim(), +lat, +lng, +radius_m, req.params.id);
+  db.prepare('UPDATE sites SET name = ?, lat = ?, lng = ?, radius_m = ?, office_ips = ? WHERE id = ?').run(
+    String(name).trim(), +lat, +lng, +radius_m, officeIps(req.body), req.params.id
+  );
   res.json(db.prepare('SELECT * FROM sites WHERE id = ?').get(req.params.id));
 });
 router.delete('/sites/:id', (req, res) => {
@@ -97,7 +112,8 @@ router.get('/attendance', (req, res) => {
   }
   const rows = db
     .prepare(
-      `SELECT a.id, a.type, a.ts, a.lat, a.lng, a.accuracy_m, a.distance_m, u.emp_code, u.name, s.name AS site_name
+      `SELECT a.id, a.type, a.ts, a.lat, a.lng, a.accuracy_m, a.distance_m, a.via_network, a.source, a.ip,
+              u.emp_code, u.name, s.name AS site_name
          FROM attendance a JOIN users u ON u.id = a.user_id LEFT JOIN sites s ON s.id = a.site_id
         WHERE ${where} ORDER BY a.ts DESC`
     )

@@ -1,117 +1,118 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" dir="ltr">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Attendance Admin</title>
-  <link rel="stylesheet" href="style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#1f5fbf" />
+  <title>Attendance</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icon-180.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <link rel="stylesheet" href="checkin.css" />
 </head>
 <body>
+  <header class="bar">
+    <div class="brand" id="brand" data-t="appTitle">Attendance</div>
+    <div class="bar-actions">
+      <button class="link" id="lang-btn" type="button">العربية</button>
+      <button class="link hidden" id="logout-btn" type="button" data-t="logOut">Log out</button>
+    </div>
+  </header>
+
   <!-- Login -->
-  <section id="login-view" class="login hidden">
-    <form id="login-form" class="card login-card">
-      <h1>Attendance Admin</h1>
-      <label>Admin code<input name="emp_code" autocomplete="username" required /></label>
-      <label>Password<input name="password" type="password" autocomplete="current-password" required /></label>
-      <button class="btn primary" type="submit">Log in</button>
-      <p class="error" id="login-error"></p>
-    </form>
-  </section>
-
-  <!-- App -->
-  <div id="app-view" class="hidden">
-    <header class="topbar">
-      <div class="brand" id="brand">Attendance</div>
-      <nav id="nav">
-        <a data-tab="today" class="active">Today</a>
-        <a data-tab="report">Monthly report</a>
-        <a data-tab="employees">Employees</a>
-        <a data-tab="sites">Locations</a>
-        <a data-tab="alerts">Security alerts</a>
-        <a data-tab="settings">Settings</a>
-      </nav>
-      <div class="me">
-        <button class="btn ghost" id="pw-btn">Change password</button>
-        <button class="btn ghost" id="logout-btn">Log out</button>
+  <main id="login-view" class="view hidden">
+    <form id="login-form" class="card stack" novalidate>
+      <div class="hero-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="40" height="40"><path fill="currentColor" d="M19 3h-4.18C14.4 1.84 13.3 1 12 1s-2.4.84-2.82 2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm-7 0a1 1 0 1 1 0 2 1 1 0 0 1 0-2Zm-2 14-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8Z"/></svg>
       </div>
-    </header>
+      <h1 data-t="appTitle">Attendance</h1>
+      <p class="muted center" data-t="loginSubtitle">Log in with the code your admin gave you</p>
+      <label><span data-t="employeeCode">Employee code</span>
+        <input name="emp_code" autocomplete="username" autocapitalize="none" required /></label>
+      <label><span data-t="password">Password</span>
+        <input name="password" type="password" autocomplete="current-password" required /></label>
+      <p class="error" id="login-error" role="alert"></p>
+      <button class="btn primary big" type="submit" data-t="logIn">Log in</button>
+      <p class="muted small center" data-t="browserLinkNote">Your account will be linked to this browser the first time you log in. Don't use a private / incognito window.</p>
+    </form>
+  </main>
 
-    <main>
-      <!-- Today -->
-      <section data-view="today">
-        <div class="toolbar">
-          <h2>Attendance log</h2>
-          <input type="date" id="day-input" />
-        </div>
-        <div class="tiles" id="day-tiles"></div>
-        <div class="card table-wrap"><table id="day-table"></table></div>
-      </section>
+  <!-- Home -->
+  <main id="home-view" class="view hidden">
+    <section class="stack">
+      <div>
+        <h2 id="hello"></h2>
+        <p class="muted" id="site-line"></p>
+      </div>
+      <div id="net-banner" class="banner hidden" role="status"></div>
+      <div class="clock">
+        <div class="time" id="clock-time"></div>
+        <div class="muted" id="clock-date"></div>
+      </div>
+      <div class="center"><span class="chip" id="status-chip"></span></div>
+      <button class="btn primary huge" id="punch-btn" type="button" disabled></button>
+      <p class="muted small center hidden" id="step-line" aria-live="polite"></p>
+    </section>
 
-      <!-- Report -->
-      <section data-view="report" class="hidden">
-        <div class="toolbar">
-          <h2>Monthly report</h2>
-          <input type="month" id="month-input" />
-          <button class="btn" id="dl-xlsx">Download Excel</button>
-          <button class="btn ghost" id="dl-csv">Summary CSV</button>
-          <button class="btn ghost" id="dl-csv-daily">Daily CSV</button>
-        </div>
-        <p class="muted" id="report-note"></p>
-        <div class="tiles" id="report-tiles"></div>
-        <div class="card table-wrap"><table id="report-table"></table></div>
-        <h3>Automatic reports</h3>
-        <p class="muted">A report for the previous month is generated on the 1st of each month (and emailed if SMTP is configured).</p>
-        <div class="card table-wrap"><table id="archive-table"></table></div>
-      </section>
+    <section class="stack">
+      <div class="row-between">
+        <h3 data-t="today">Today</h3>
+        <button class="link" id="history-btn" type="button" data-t="myHistory">My history</button>
+      </div>
+      <ul class="list card" id="today-list"></ul>
+    </section>
+  </main>
 
-      <!-- Employees -->
-      <section data-view="employees" class="hidden">
-        <div class="toolbar">
-          <h2>Employees</h2>
-          <button class="btn primary" id="add-emp">Add employee</button>
-        </div>
-        <div class="card table-wrap"><table id="emp-table"></table></div>
-      </section>
+  <!-- History -->
+  <main id="history-view" class="view hidden">
+    <section class="stack">
+      <div class="row-between">
+        <button class="link" id="back-btn" type="button" data-t="back">← Back</button>
+      </div>
+      <div class="month-nav">
+        <button class="icon-btn" id="prev-month" type="button" aria-label="Previous month">‹</button>
+        <h3 id="month-title"></h3>
+        <button class="icon-btn" id="next-month" type="button" aria-label="Next month">›</button>
+      </div>
+      <p class="muted center" id="month-count"></p>
+      <ul class="list card" id="history-list"></ul>
+    </section>
+  </main>
 
-      <!-- Sites -->
-      <section data-view="sites" class="hidden">
-        <div class="toolbar">
-          <h2>Work locations</h2>
-          <button class="btn primary" id="add-site">Add location</button>
-        </div>
-        <p class="muted">Employees can only check in when their GPS is inside the radius of their assigned location (or any location if none is assigned).</p>
-        <div class="card table-wrap"><table id="site-table"></table></div>
-      </section>
-
-      <!-- Alerts -->
-      <section data-view="alerts" class="hidden">
-        <div class="toolbar"><h2>Blocked punches</h2></div>
-        <p class="muted">Every check-in that was blocked — developer mode on, fake GPS, rooted phone, outside the location, weak GPS or an old selfie.</p>
-        <div class="card table-wrap"><table id="alert-table"></table></div>
-      </section>
-
-      <!-- Settings -->
-      <section data-view="settings" class="hidden">
-        <div class="toolbar"><h2>Settings</h2></div>
-        <form id="settings-form" class="card form-grid">
-          <label>Company name<input name="company_name" required /></label>
-          <label>Work starts<input name="work_start" type="time" required /></label>
-          <label>Work ends<input name="work_end" type="time" required /></label>
-          <label>Grace period (minutes)<input name="grace_minutes" type="number" min="0" max="240" required /></label>
-          <fieldset class="span2">
-            <legend>Weekend days</legend>
-            <div class="days" id="weekend-days"></div>
-          </fieldset>
-          <label class="span2">Public holidays (YYYY-MM-DD, one per line)<textarea name="holidays" rows="4"></textarea></label>
-          <div class="span2"><button class="btn primary" type="submit">Save settings</button> <span id="settings-msg" class="muted"></span></div>
-        </form>
-      </section>
-    </main>
+  <!-- Camera -->
+  <div id="camera" class="camera hidden" role="dialog" aria-modal="true">
+    <div class="camera-top">
+      <button class="link light" id="cam-cancel" type="button" data-t="cancel">Cancel</button>
+      <span id="cam-title"></span>
+      <span></span>
+    </div>
+    <div class="camera-stage">
+      <video id="cam-video" playsinline autoplay muted></video>
+      <img id="cam-photo" class="hidden" alt="" />
+      <div class="face-guide" aria-hidden="true"></div>
+      <p class="cam-error hidden" id="cam-error"></p>
+    </div>
+    <div class="camera-bottom">
+      <p class="cam-hint" id="cam-hint" data-t="lookAtCamera">Look at the camera. Your face must be clearly visible.</p>
+      <button class="shutter" id="cam-shutter" type="button" aria-label="Take photo"></button>
+      <div class="cam-review hidden" id="cam-review">
+        <button class="btn ghost-light" id="cam-retake" type="button" data-t="retake">Retake</button>
+        <button class="btn primary" id="cam-use" type="button" data-t="usePhoto">Use photo</button>
+      </div>
+    </div>
+    <canvas id="cam-canvas" class="hidden"></canvas>
   </div>
 
-  <dialog id="modal"><div id="modal-body"></div></dialog>
-  <div id="toast" class="toast hidden"></div>
+  <dialog id="dialog">
+    <div class="dialog-body">
+      <div class="dialog-icon" id="dialog-icon"></div>
+      <h3 id="dialog-title"></h3>
+      <p id="dialog-text"></p>
+      <button class="btn primary" id="dialog-ok" type="button" data-t="ok">OK</button>
+    </div>
+  </dialog>
 
-  <script src="app.js"></script>
+  <script src="checkin.js"></script>
 </body>
 </html>

@@ -69,6 +69,16 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 `);
 
+// Columns added after the first release
+function addColumn(table, column, type) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+  if (!cols.includes(column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+}
+addColumn('sites', 'office_ips', "TEXT NOT NULL DEFAULT ''"); // office Wi-Fi public IPs / ranges
+addColumn('attendance', 'ip', 'TEXT');
+addColumn('attendance', 'via_network', 'INTEGER NOT NULL DEFAULT 0'); // 1 = verified on office Wi-Fi
+addColumn('attendance', 'source', "TEXT NOT NULL DEFAULT 'app'"); // 'app' or 'web'
+
 const DEFAULT_SETTINGS = {
   company_name: 'My Company',
   work_start: '09:00',

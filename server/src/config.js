@@ -10,8 +10,22 @@ const num = (v, d) => (v === undefined || v === '' || isNaN(Number(v)) ? d : Num
 
 const dataDir = path.resolve(process.env.DATA_DIR || path.join(__dirname, '..', 'data'));
 
+// Which proxies may tell us the visitor's real address (X-Forwarded-For).
+// This matters for the office Wi-Fi check: trusting the header from anyone
+// would let a visitor claim any address. Default: only a proxy running on the
+// same machine (Caddy/nginx in front of the server). On hosts like Render,
+// Railway or Fly.io set TRUST_PROXY=1 (one proxy hop).
+function parseTrustProxy(v) {
+  if (v === undefined || v === '') return 'loopback';
+  if (v === 'false' || v === '0') return false;
+  if (v === 'true') return true;
+  if (/^\d+$/.test(v)) return Number(v);
+  return v;
+}
+
 const config = {
   port: num(process.env.PORT, 3000),
+  trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
   jwtSecret: process.env.JWT_SECRET || '',
   dataDir,
   dbFile: path.join(dataDir, 'attendance.db'),

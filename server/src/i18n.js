@@ -63,6 +63,10 @@ const MESSAGES = {
     en: 'You are {distance} m from {site}. You must be within {radius} m.',
     ar: 'أنت على بُعد {distance} م من {site}. يجب أن تكون ضمن {radius} م.',
   },
+  NOT_OFFICE_NETWORK: {
+    en: 'You must be connected to the office Wi-Fi to check in. Turn off mobile data and connect to the office Wi-Fi, then try again.',
+    ar: 'يجب أن تكون متصلًا بشبكة Wi-Fi الخاصة بالمكتب لتسجيل الحضور. أوقف بيانات الجوال واتصل بشبكة المكتب ثم حاول مرة أخرى.',
+  },
   ALREADY_IN: { en: 'You are already checked in', ar: 'لقد سجّلت حضورك بالفعل' },
   NOT_IN: { en: 'You are not checked in', ar: 'لم تسجّل حضورك بعد' },
   UPLOAD_ERROR: { en: 'Upload error: {detail}', ar: 'خطأ في رفع الملف: {detail}' },
