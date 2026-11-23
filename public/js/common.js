@@ -267,11 +267,72 @@
         tx.onabort = () => reject(tx.error);
       });
     };
-    return {
+    const local = {
       get: (productId) => run('readonly', (s) => s.get(productId)).catch(() => null),
       set: (productId, draft) => run('readwrite', (s) => s.put(draft, productId)).then(() => true).catch(() => false),
       remove: (productId) => run('readwrite', (s) => s.delete(productId)).catch(() => null),
       all: () => run('readonly', (s) => s.getAll()).catch(() => []),
+    };
+    // Signed-in customers: every draft is also kept on their account, so a
+    // design started on the phone opens on the laptop (the newest copy wins).
+    let signedOut = false; // learnt from a 401; checked again on the next page load
+    const url = (productId) => `/api/account/drafts/${encodeURIComponent(productId)}`;
+    const withTimeout = (ms) => {
+      const c = new AbortController();
+      setTimeout(() => c.abort(), ms);
+      return c.signal;
+    };
+    const blobToDataUrl = (blob) => new Promise((resolve) => {
+      if (!blob) return resolve(null);
+      const fr = new FileReader();
+      fr.onload = () => resolve(fr.result);
+      fr.onerror = () => resolve(null);
+      fr.readAsDataURL(blob);
+    });
+    async function fromAccount(productId) {
+      if (signedOut) return null;
+      try {
+        const res = await fetch(url(productId), { credentials: 'same-origin', signal: withTimeout(5000) });
+        if (res.status === 401) signedOut = true;
+        return res.ok ? await res.json() : null;
+      } catch (e) {
+        return null;
+      }
+    }
+    const timers = new Map();
+    function toAccount(productId, draft) {
+      if (signedOut) return;
+      clearTimeout(timers.get(productId));
+      timers.set(productId, setTimeout(async () => {
+        timers.delete(productId);
+        try {
+          const { preview, ...rest } = draft;
+          const body = JSON.stringify({ ...rest, previewDataUrl: await blobToDataUrl(preview) });
+          const res = await fetch(url(productId), { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body, keepalive: body.length < 60000 });
+          if (res.status === 401) signedOut = true;
+        } catch (e) { /* offline: the copy in this browser is kept */ }
+      }, 2500));
+    }
+    return {
+      async get(productId) {
+        const [mine, acct] = await Promise.all([local.get(productId), fromAccount(productId)]);
+        if (acct && acct.designs && (!mine || String(acct.savedAt || '') > String(mine.savedAt || ''))) {
+          const { previewDataUrl, ...draft } = acct; // eslint-disable-line no-unused-vars
+          return draft;
+        }
+        return mine;
+      },
+      async set(productId, draft) {
+        const ok = await local.set(productId, draft);
+        toAccount(productId, draft);
+        return ok;
+      },
+      async remove(productId) {
+        clearTimeout(timers.get(productId));
+        await local.remove(productId);
+        if (!signedOut) fetch(url(productId), { method: 'DELETE', credentials: 'same-origin' }).then((r) => { if (r.status === 401) signedOut = true; }).catch(() => {});
+      },
+      all: local.all,
     };
   })();
 

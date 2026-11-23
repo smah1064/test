@@ -162,6 +162,14 @@ Add an entry to `PRODUCTS` in `src/products.js`. Mockups are SVGs in a 500 × 60
 - **Storage:** the JSON store suits a single server. For scale, move metadata into a database and print files into object storage.
 - **Admin auth** is a single shared password. Use real accounts if several people run the press.
 
+## After the order: history, order again, invoices, drafts, tracking
+
+- **Order history:** signed-in customers see every order in their account (`GET /api/account/orders`), with Track, Invoice and Order again.
+- **Order again (exact):** `POST /api/orders/:id/reorder` copies every item's design with all its files (same print files, same name list, same book) into new designs at today's prices and returns cart entries; items whose product, colour or size no longer exists, or whose book photo was already deleted, are listed as skipped.
+- **Invoices:** `/invoice?id=<order id>`: a printable A4 invoice (Print / Save as PDF), number `INV-<order number>`, unit prices, copies, discount, shipping, payment method and status.
+- **Drafts on every device:** while signed in, each editor draft is also saved to the account (`/api/account/drafts`, kept in `DATA_DIR/accounts/<customer>/drafts/`, newest 40); the editor opens the newest of this browser's copy and the account's. The account page lists them.
+- **Tracking:** `/order?id=` shows the timeline (placed, in production, printed, shipped, delivered) with dates, and the courier, tracking number, tracking link and expected date. The admin sets these per order (`PATCH /api/admin/orders/:id/shipment`, also "Mark shipped" / "Mark delivered") and the payment status (`PATCH /api/admin/orders/:id/payment`). When an order ships (all items shipped, or "Mark shipped") the customer gets a "your order is on its way" email once, with the tracking details and links to track and to the invoice.
+
 ## Name lists (variable data printing)
 
 For invitations, certificates, greeting cards, ID cards, name labels and sticker sheets, the editor has **Print a list of names**:

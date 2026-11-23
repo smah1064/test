@@ -105,6 +105,8 @@ const MESSAGES = {
   takedownMissing: { en: 'Please fill in your name, how to reach you and the details', ar: 'من فضلك اكتب اسمك وطريقة التواصل والتفاصيل' },
   printTooSmall: { en: 'The print file is far too small for this product. Please try again.', ar: 'ملف الطباعة صغير جدًا على المنتج ده. جرّب تاني.' },
   embOneSide: { en: 'Embroidery is on the front only', ar: 'التطريز على الوش بس' },
+  badTrackingUrl: { en: 'The tracking link must start with http:// or https://', ar: 'رابط التتبع لازم يبدأ بـ http:// أو https://' },
+  badDate: { en: 'Use a date like 2026-12-31.', ar: 'اكتب التاريخ بالشكل ده 2026-12-31.' },
   mergeNotAllowed: { en: 'Name lists are not available for this product.', ar: 'قوائم الأسماء مش متاحة للمنتج ده.' },
   mergeBad: { en: 'The name list could not be read. Please upload it again.', ar: 'معرفناش نقرا قائمة الأسماء. ارفعها تاني.' },
   mergeEmpty: { en: 'The list has no names. The first row should be the column titles (for example Name), then one row per copy.', ar: 'القائمة مفيهاش أسماء. أول صف يكون عناوين الأعمدة (مثلًا الاسم)، وبعده صف لكل نسخة.' },

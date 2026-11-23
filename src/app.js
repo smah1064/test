@@ -161,6 +161,7 @@ function publicProduct(p) {
 
 function orderStatus(order) {
   const statuses = order.items.map((i) => i.status);
+  if (order.shipment && order.shipment.deliveredAt) return 'delivered';
   if (statuses.every((s) => s === 'shipped')) return 'shipped';
   if (statuses.every((s) => s === 'queued')) return 'received';
   return 'in_production';
@@ -193,6 +194,7 @@ function publicItem(item) {
     method: item.method || null,
     emb: item.emb || null,
     copies: item.copies || 1,
+    unitPrice: item.unitPrice != null ? item.unitPrice : round2(item.price / (item.copies || 1)),
     merge: item.merge ? { count: item.merge.count, columns: item.merge.columns } : null,
   };
 }
@@ -213,6 +215,50 @@ function publicOrder(order) {
     shipping: order.shipping,
     total: order.total,
     payment: order.payment,
+    shipment: publicShipment(order),
+    timeline: orderTimeline(order),
+    shop: shopInfo(),
+    invoice: { number: `INV-${order.number}`, issuedAt: order.createdAt },
+  };
+}
+
+const SHIPMENT_FIELDS = ['courier', 'trackingNumber', 'trackingUrl', 'eta', 'shippedAt', 'deliveredAt'];
+function publicShipment(order) {
+  const s = order.shipment;
+  if (!s) return null;
+  return Object.fromEntries(SHIPMENT_FIELDS.map((k) => [k, s[k] || null]));
+}
+/**
+ * The order's steps for the tracking page: placed, in production (the first
+ * item started), printed (every item printed), shipped, delivered; `at` is
+ * null for steps not reached yet.
+ */
+function orderTimeline(order) {
+  const firstAt = (item, statuses) => ((item.history || []).find((h) => statuses.includes(h.status)) || {}).at || null;
+  const allAt = (statuses) => {
+    const times = order.items.map((it) => (statuses.includes(it.status) ? firstAt(it, statuses) || order.createdAt : null));
+    return times.every(Boolean) ? times.sort().pop() : null;
+  };
+  const started = order.items.map((it) => firstAt(it, ['printing', 'printed', 'shipped'])).filter(Boolean).sort()[0] || null;
+  const s = order.shipment || {};
+  const shipped = s.shippedAt || allAt(['shipped']);
+  const delivered = s.deliveredAt || null;
+  const printed = allAt(['printed', 'shipped']) || (shipped ? shipped : null);
+  return [
+    { step: 'placed', at: order.createdAt },
+    { step: 'production', at: started || printed || shipped || delivered },
+    { step: 'printed', at: printed || delivered },
+    { step: 'shipped', at: shipped || delivered },
+    { step: 'delivered', at: delivered },
+  ];
+}
+/** The shop's own details, for invoices and the tracking page. */
+function shopInfo() {
+  return {
+    name: { en: 'OneOff Print', ar: 'ون أوف برنت' },
+    url: notify.siteUrl() || null,
+    whatsapp: notify.shopWhatsApp() || null,
+    email: process.env.MAIL_FROM || null,
   };
 }
 
@@ -283,6 +329,8 @@ const DEFAULT_LIMITS = {
   // Illustrator / EPS files turned into pictures for the editor.
   artwork: [{ max: 15, ms: 10 * 60e3 }, { max: 60, ms: 24 * 3600e3 }],
   mergeParse: [{ max: 30, ms: 10 * 60e3 }, { max: 150, ms: 24 * 3600e3 }],
+  reorder: [{ max: 20, ms: 10 * 60e3 }, { max: 100, ms: 24 * 3600e3 }],
+  draftSave: [{ max: 200, ms: 10 * 60e3 }],
   // AI background removal (about 2 s of server time each).
   removeBg: [{ max: 20, ms: 10 * 60e3 }, { max: 80, ms: 24 * 3600e3 }],
   importLink: [{ max: 20, ms: 10 * 60e3 }, { max: 100, ms: 24 * 3600e3 }],
@@ -1791,6 +1839,226 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     res.json(publicOrder(order));
   });
 
+  // ---------- After the order: order again, drafts on the account, shipping ----------
+  // Derived files that carry the old order's number or are cheap to make again.
+  const STALE_COPY = /^(book-print\.pdf|book-preview\.pdf|preview-v\d+\.pdf|merge-print(-marks)?\.pdf|merge-copies\.zip)$/;
+  /** An exact copy of a saved design (files included), not ordered yet. Returns { design, token }. */
+  function copyDesign(src) {
+    const token = crypto.randomBytes(24).toString('hex');
+    const copy = JSON.parse(JSON.stringify(src));
+    Object.assign(copy, { id: crypto.randomUUID(), createdAt: new Date().toISOString(), status: 'ready', orderId: null, reorderOf: src.id });
+    delete copy.uploadTokenHash;
+    delete copy.orderedAt;
+    if (copy.kind === 'book') copy.uploadTokenHash = sha(token); // the book page edits with this token
+    fs.cpSync(store.designDir(src.id), store.designDir(copy.id), { recursive: true, filter: (from) => !STALE_COPY.test(path.basename(from)) });
+    store.createDesign(copy, {});
+    return { design: copy, token };
+  }
+  /** What the cart keeps for a design (the same as the editor and book page put there). */
+  const cartEntry = (d, token) => ({
+    designId: d.id,
+    ...(d.kind === 'book' ? { bookId: d.bookId, editToken: token } : {}),
+    productId: d.productId,
+    productName: d.productName,
+    colorName: d.color.name,
+    sizeLabel: d.size.label,
+    sides: d.sides.map((sd) => sd.name),
+    price: d.price,
+    ...(d.merge ? { copies: d.merge.count } : {}),
+    previewUrl: d.kind === 'book' ? `/files/designs/${d.id}/book-preview.png?v=${d.version || 0}` : `/files/designs/${d.id}/${d.sides[0].id}-preview.png`,
+    addedAt: new Date().toISOString(),
+  });
+
+  // Order again: an exact copy of every item, at today's prices, ready for the cart.
+  app.post('/api/orders/:id/reorder', (req, res) => {
+    const order = UUID_RE.test(req.params.id) && store.getOrder(req.params.id);
+    if (!order) throw new HttpError(404, 'orderNotFound');
+    rateLimit(req, 'reorder');
+    const items = [];
+    const skipped = [];
+    order.items.forEach((it, i) => {
+      const d = store.getDesign(it.designId);
+      const product = getProduct(it.productId);
+      let reason = null;
+      if (!d || !fs.existsSync(store.designDir(d.id))) reason = 'filesGone';
+      else if (d.kind !== 'gangsheet' && (!product || !product.colors.some((c) => c.id === d.color.id) || !product.sizes.some((z) => z.id === d.size.id))) reason = 'productGone';
+      else if (d.photoRemoved) reason = 'photoGone';
+      if (reason) {
+        skipped.push({ position: i + 1, productName: it.productName, reason });
+        return;
+      }
+      const { design, token } = copyDesign(d);
+      const price = d.kind === 'gangsheet' ? d.price : designPrice({ ...design, orderId: null, status: 'ready' });
+      if (price == null) {
+        skipped.push({ position: i + 1, productName: it.productName, reason: 'productGone' });
+        return;
+      }
+      design.price = price;
+      if (design.merge) design.unitPrice = priceFor(product, design.size.id, design.sides.length);
+      store.save();
+      items.push(cartEntry(design, token));
+    });
+    res.json({ items, skipped });
+  });
+
+  // Drafts saved to the customer's account, so a design started on the phone opens on the laptop.
+  const draftDir = (cust) => path.join(store.dataDir, 'accounts', cust.id, 'drafts');
+  const MAX_DRAFTS = 40;
+  const writeFileAtomic = (file, data) => {
+    const tmp = `${file}.tmp-${process.pid}-${crypto.randomBytes(4).toString('hex')}`;
+    fs.writeFileSync(tmp, data);
+    fs.renameSync(tmp, file);
+  };
+  function draftIndex(cust) {
+    try {
+      return JSON.parse(fs.readFileSync(path.join(draftDir(cust), 'index.json'), 'utf8'));
+    } catch (e) {
+      return {};
+    }
+  }
+  const draftProduct = (req) => {
+    const product = getProduct(req.params.productId);
+    if (!product || product.kind === 'book') throw new HttpError(404, 'notFound');
+    return product;
+  };
+  app.get('/api/account/drafts', (req, res) => {
+    const me = signedIn(req);
+    const idx = draftIndex(me);
+    res.set('Cache-Control', 'private, no-store');
+    const drafts = Object.entries(idx)
+      .filter(([pid]) => getProduct(pid))
+      .sort((a, b) => String(b[1].savedAt).localeCompare(String(a[1].savedAt)))
+      .map(([pid, m]) => ({ productId: pid, productName: getProduct(pid).name, colorId: m.colorId, sizeId: m.sizeId, savedAt: m.savedAt, previewUrl: m.preview ? `/api/account/drafts/${pid}/preview.png?v=${encodeURIComponent(m.savedAt)}` : null }));
+    res.json({ drafts });
+  });
+  app.get('/api/account/drafts/:productId', (req, res) => {
+    const me = signedIn(req);
+    const product = draftProduct(req);
+    const file = path.join(draftDir(me), `${product.id}.json`);
+    res.set('Cache-Control', 'private, no-store');
+    if (!fs.existsSync(file)) throw new HttpError(404, 'notFound');
+    res.type('application/json').send(fs.readFileSync(file));
+  });
+  app.get('/api/account/drafts/:productId/preview.png', (req, res) => {
+    const me = signedIn(req);
+    const product = draftProduct(req);
+    const file = path.join(draftDir(me), `${product.id}.png`);
+    if (!fs.existsSync(file)) throw new HttpError(404, 'notFound');
+    res.set('Cache-Control', 'private, max-age=60');
+    res.type('png').send(fs.readFileSync(file));
+  });
+  app.put('/api/account/drafts/:productId', (req, res, next) => {
+    rateLimit(req, 'draftSave');
+    next();
+  }, express.json({ limit: '25mb' }), (req, res) => {
+    const me = signedIn(req);
+    const product = draftProduct(req);
+    const b = req.body;
+    if (!b || typeof b !== 'object' || !b.designs || typeof b.designs !== 'object' || Array.isArray(b.designs)) throw new HttpError(400, 'notFound');
+    const savedAt = new Date().toISOString();
+    const dir = draftDir(me);
+    fs.mkdirSync(dir, { recursive: true });
+    // The small picture is kept as its own file; the rest as sent (the editor checks it when loading).
+    let preview = null;
+    const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(typeof b.previewDataUrl === 'string' ? b.previewDataUrl : '');
+    if (m) {
+      const png = Buffer.from(m[1], 'base64');
+      if (png.length < 3 * 1024 * 1024 && png.subarray(0, 8).equals(PNG_SIGNATURE)) preview = png;
+    }
+    const draft = { ...b, productId: product.id, savedAt };
+    delete draft.previewDataUrl;
+    writeFileAtomic(path.join(dir, `${product.id}.json`), JSON.stringify(draft));
+    if (preview) writeFileAtomic(path.join(dir, `${product.id}.png`), preview);
+    else fs.rmSync(path.join(dir, `${product.id}.png`), { force: true });
+    const idx = draftIndex(me);
+    idx[product.id] = { savedAt, colorId: String(b.colorId || '').slice(0, 40), sizeId: String(b.sizeId || '').slice(0, 40), preview: Boolean(preview) };
+    // Keep the newest drafts only.
+    const old = Object.entries(idx).sort((x, y) => String(y[1].savedAt).localeCompare(String(x[1].savedAt))).slice(MAX_DRAFTS);
+    for (const [pid] of old) {
+      delete idx[pid];
+      for (const ext of ['json', 'png']) fs.rmSync(path.join(dir, `${pid}.${ext}`), { force: true });
+    }
+    writeFileAtomic(path.join(dir, 'index.json'), JSON.stringify(idx));
+    res.json({ savedAt });
+  });
+  app.delete('/api/account/drafts/:productId', (req, res) => {
+    const me = signedIn(req);
+    const product = draftProduct(req);
+    const dir = draftDir(me);
+    const idx = draftIndex(me);
+    if (idx[product.id]) {
+      delete idx[product.id];
+      fs.mkdirSync(dir, { recursive: true });
+      writeFileAtomic(path.join(dir, 'index.json'), JSON.stringify(idx));
+    }
+    for (const ext of ['json', 'png']) fs.rmSync(path.join(dir, `${product.id}.${ext}`), { force: true });
+    res.status(204).end();
+  });
+
+  /** Tell the customer their order is on its way (once), without holding up the request. */
+  function sendShipped(order, req) {
+    if (typeof notify.orderShipped !== 'function') return;
+    const siteUrl = notify.siteUrl() || `${isHttps(req) ? 'https' : 'http'}://${req.get('host')}`;
+    Promise.resolve()
+      .then(() => notify.orderShipped(order, { siteUrl }))
+      .then((result) => {
+        order.notifications = { ...(order.notifications || {}), shipped: { ...(result || {}), at: new Date().toISOString() } };
+        store.save();
+      })
+      .catch((e) => console.warn('[notify] shipped email failed:', e.message));
+  }
+  /** Every item shipped: the shipment date is set and the customer told (the first time only). */
+  function markShipped(order, req) {
+    const now = new Date().toISOString();
+    for (const it of order.items) {
+      if (it.status !== 'shipped') {
+        it.status = 'shipped';
+        it.history.push({ status: 'shipped', at: now });
+      }
+    }
+    const first = !(order.shipment && order.shipment.shippedAt);
+    order.shipment = { ...(order.shipment || {}), shippedAt: (order.shipment && order.shipment.shippedAt) || now };
+    return first;
+  }
+
+  // Shipping details and delivery, set by the shop.
+  app.patch('/api/admin/orders/:orderId/shipment', (req, res, next) => requireAdmin(req, res, next), express.json({ limit: '4kb' }), (req, res) => {
+    const order = UUID_RE.test(req.params.orderId) && store.getOrder(req.params.orderId);
+    if (!order) throw new HttpError(404, 'orderNotFound');
+    const b = req.body || {};
+    const text = (v, max) => (v == null ? null : String(v).replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max) || null);
+    const s = { ...(order.shipment || {}) };
+    if ('courier' in b) s.courier = text(b.courier, 60);
+    if ('trackingNumber' in b) s.trackingNumber = text(b.trackingNumber, 80);
+    if ('trackingUrl' in b) {
+      const u = text(b.trackingUrl, 500);
+      if (u && !/^https?:\/\/[^\s]+$/i.test(u)) throw new HttpError(400, 'badTrackingUrl');
+      s.trackingUrl = u;
+    }
+    if ('eta' in b) {
+      const d = text(b.eta, 10);
+      if (d && !/^\d{4}-\d{2}-\d{2}$/.test(d)) throw new HttpError(400, 'badDate');
+      s.eta = d;
+    }
+    order.shipment = s;
+    let first = false;
+    if (b.shipped === true || b.delivered === true) first = markShipped(order, req);
+    if (b.delivered === true) order.shipment.deliveredAt = order.shipment.deliveredAt || new Date().toISOString();
+    if (b.delivered === false) order.shipment.deliveredAt = null;
+    store.save();
+    if (first) sendShipped(order, req);
+    res.json({ shipment: publicShipment(order), status: orderStatus(order), timeline: orderTimeline(order) });
+  });
+  app.patch('/api/admin/orders/:orderId/payment', (req, res, next) => requireAdmin(req, res, next), express.json({ limit: '1kb' }), (req, res) => {
+    const order = UUID_RE.test(req.params.orderId) && store.getOrder(req.params.orderId);
+    if (!order) throw new HttpError(404, 'orderNotFound');
+    const status = (req.body || {}).status;
+    if (!['paid', 'pending'].includes(status)) throw new HttpError(400, 'badStatus', { list: 'paid, pending' });
+    order.payment = { ...(order.payment || { method: 'cod' }), status, ...(status === 'paid' ? { paidAt: new Date().toISOString() } : { paidAt: null }) };
+    store.save();
+    res.json({ payment: order.payment });
+  });
+
   // ---------- Production (admin) ----------
   // Sign in once with the password; every other admin request carries the
   // session token (Authorization: Bearer). 5 wrong passwords lock that
@@ -1914,7 +2182,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (item.status !== status) {
       item.status = status;
       item.history.push({ status, at: new Date().toISOString() });
+      // The last item shipped: the order is on its way (the customer is told once).
+      const first = order.items.every((it) => it.status === 'shipped') && markShipped(order, req);
       store.save();
+      if (first) sendShipped(order, req);
     }
     res.json(adminItem(order, item, order.items.indexOf(item)));
   });
