@@ -189,8 +189,39 @@
         <td><div class="mini-items">${o.items.map((i) => `<img src="${esc(i.sides[0].previewUrl)}" title="${esc(tr(i.productName))}: ${esc(t('admin.status.' + i.status))}" alt="">`).join('')}</div></td>
         <td>${esc(money(o.total))}</td>
         <td>${statusPill(o.status)}</td>
-      </tr>`).join('') : `<tr><td colspan="5" class="muted">${esc(t('admin.noOrders'))}</td></tr>`;
+        <td>${notifyCell(o.notifications, o.createdAt)}</td>
+      </tr>`).join('') : `<tr><td colspan="6" class="muted">${esc(t('admin.noOrders'))}</td></tr>`;
   }
+  // ---------- Order notifications ----------
+  const NOTIFY_CHANNELS = [['adminWhatsApp', '📱'], ['adminEmail', '✉️'], ['customerEmail', '👤']];
+  function notifyCell(n, createdAt) {
+    // Sending finishes within seconds of the order; older orders without a record predate notifications.
+    if (!n) return `<span class="muted small">${Date.now() - Date.parse(createdAt) < 120000 ? '…' : '—'}</span>`;
+    return `<div class="notify-cell">${NOTIFY_CHANNELS.filter(([k]) => n[k] && n[k] !== 'off').map(([k, icon]) =>
+      `<span class="nb ${n[k] === 'sent' ? 'ok' : 'bad'}" title="${esc(t('notify.' + k))}: ${esc(t('notify.' + n[k]))}">${icon}${n[k] === 'sent' ? '✓' : '✗'}</span>`).join('') || `<span class="muted small">${esc(t('notify.none'))}</span>`}</div>`;
+  }
+  async function renderNotifyStatus() {
+    try {
+      const st = await adminApi('/api/admin/notifications');
+      $('notify-status').innerHTML = ['adminWhatsApp', 'adminEmail', 'customerEmail', 'customerWhatsAppButton'].map((k) =>
+        `<div class="notify-row"><span class="dot ${st[k] ? 'on' : 'off'}"></span>${esc(t('notify.' + k))}<span class="muted small">${esc(t(st[k] ? 'notify.on' : 'notify.offSetup'))}</span></div>`).join('');
+      $('notify-test').disabled = !st.adminWhatsApp && !st.adminEmail;
+    } catch (e) { /* signed out */ }
+  }
+  $('notify-test').addEventListener('click', async () => {
+    const btn = $('notify-test');
+    btn.disabled = true;
+    $('notify-msg').textContent = t('notify.sending');
+    try {
+      const r = await adminApi('/api/admin/notifications/test', { method: 'POST' });
+      $('notify-msg').textContent = ['adminWhatsApp', 'adminEmail'].filter((k) => r[k] !== 'off')
+        .map((k) => `${t('notify.' + k)}: ${t('notify.' + r[k])}${r[k + 'Error'] ? ` (${r[k + 'Error']})` : ''}`).join(' · ');
+    } catch (e) {
+      $('notify-msg').textContent = e.message;
+    } finally {
+      btn.disabled = false;
+    }
+  });
 
   async function refresh() {
     if (!password) {
@@ -199,7 +230,7 @@
     }
     if (tab === 'queue') renderQueue((lastQueue = await adminApi('/api/admin/queue')));
     else if (tab === 'film') renderFilm((lastFilm = (await adminApi('/api/admin/dtf-items')).items));
-    else renderOrders((lastOrders = (await adminApi('/api/admin/orders')).orders));
+    else { renderOrders((lastOrders = (await adminApi('/api/admin/orders')).orders)); renderNotifyStatus(); }
     $('login').hidden = true;
     $('dash').hidden = false;
     $('logout').hidden = false;

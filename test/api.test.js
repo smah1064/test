@@ -449,3 +449,72 @@ test('AI help is off without a key, and returns cleaned, structured results with
     mock.close();
   }
 });
+
+test('new orders notify the shop on WhatsApp and email, and email the customer', async () => {
+  const http = require('http');
+  const got = { email: [], whatsapp: [] };
+  let failWhatsApp = false;
+  const mock = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', (c) => (body += c));
+    req.on('end', () => {
+      if (req.url.startsWith('/email')) {
+        got.email.push({ key: req.headers['api-key'], ...JSON.parse(body) });
+        res.writeHead(201, { 'content-type': 'application/json' });
+        return res.end('{"messageId":"x"}');
+      }
+      const u = new URL(req.url, 'http://x');
+      got.whatsapp.push(Object.fromEntries(u.searchParams));
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(failWhatsApp ? '<p>APIKey is invalid</p>' : '<p>Message queued. You will receive it in a few seconds.</p>');
+    });
+  });
+  await new Promise((r) => mock.listen(0, r));
+  const m = `http://127.0.0.1:${mock.address().port}`;
+  Object.assign(process.env, {
+    BREVO_API_KEY: 'brevo-test', BREVO_API_URL: `${m}/email`, MAIL_FROM: 'shop@example.com', ADMIN_EMAIL: 'owner@example.com',
+    CALLMEBOT_PHONE: '+201000000000', CALLMEBOT_APIKEY: '123456', CALLMEBOT_URL: `${m}/wa`, SHOP_WHATSAPP: '+20 100 000 0000',
+  });
+  const waitFor = async (fn) => { for (let i = 0; i < 100 && !fn(); i++) await new Promise((r) => setTimeout(r, 30)); };
+  try {
+    assert.strictEqual((await (await fetch(base + '/api/products')).json()).contact.whatsapp, '201000000000');
+    assert.deepStrictEqual(await (await admin('/api/admin/notifications')).json(), { adminWhatsApp: true, adminEmail: true, customerEmail: true, customerWhatsAppButton: true });
+
+    const d = await makeDesign({ productId: 'mug', color: 'white', size: '11oz', sides: { front: SIDE } });
+    const res = await post('/api/orders', { customer: { ...CUSTOMER, email: 'sara@example.com', notes: 'Ring <twice>' }, designIds: [d.id] }, { 'x-lang': 'en' });
+    assert.strictEqual(res.status, 201);
+    const order = await res.json();
+    await waitFor(() => got.email.length === 2 && got.whatsapp.length === 1);
+
+    const wa = got.whatsapp[0];
+    assert.strictEqual(wa.phone, '+201000000000');
+    assert.strictEqual(wa.apikey, '123456');
+    assert.match(wa.text, new RegExp(`طلب جديد ${order.number}`));
+    assert.match(wa.text, /01012345678/);
+    assert.match(wa.text, /\/admin$/);
+
+    const toAdmin = got.email.find((e) => e.to[0].email === 'owner@example.com');
+    const toCustomer = got.email.find((e) => e.to[0].email === 'sara@example.com');
+    assert.strictEqual(toAdmin.key, 'brevo-test');
+    assert.deepStrictEqual(toAdmin.sender, { email: 'shop@example.com', name: 'OneOff Print' });
+    assert.match(toAdmin.subject, new RegExp(order.number));
+    assert.match(toAdmin.htmlContent, /Ring &lt;twice&gt;/); // customer text is escaped
+    assert.match(toCustomer.subject, /We received your order/); // the customer ordered in English
+    assert.match(toCustomer.htmlContent, new RegExp(`/order\\?id=${order.id}`));
+    assert.doesNotMatch(toCustomer.htmlContent, /01012345678/); // no phone number in the customer email
+
+    await new Promise((r) => setTimeout(r, 100)); // the result is saved right after sending
+    const again = (await (await admin('/api/admin/orders')).json()).orders.find((o) => o.id === order.id);
+    assert.deepStrictEqual([again.notifications.adminWhatsApp, again.notifications.adminEmail, again.notifications.customerEmail], ['sent', 'sent', 'sent']);
+
+    // A failing channel is recorded but never blocks the order.
+    failWhatsApp = true;
+    const t = await (await admin('/api/admin/notifications/test', { method: 'POST' })).json();
+    assert.strictEqual(t.adminWhatsApp, 'failed');
+    assert.match(t.adminWhatsAppError, /invalid/i);
+    assert.strictEqual(t.adminEmail, 'sent');
+  } finally {
+    for (const k of ['BREVO_API_KEY', 'BREVO_API_URL', 'MAIL_FROM', 'ADMIN_EMAIL', 'CALLMEBOT_PHONE', 'CALLMEBOT_APIKEY', 'CALLMEBOT_URL', 'SHOP_WHATSAPP']) delete process.env[k];
+    mock.close();
+  }
+});

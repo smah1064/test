@@ -24,6 +24,7 @@ const { FIELDS, langOf, format } = require('./i18n');
 // Loaded on first use: the shop keeps working even if the image library cannot load on a server.
 const thumbs = require('./thumbs');
 const ai = require('./ai');
+const notify = require('./notify');
 let printfilesModule = null;
 const printfiles = new Proxy({}, { get: (_, key) => (printfilesModule ||= require('./printfiles'))[key] });
 
@@ -215,6 +216,7 @@ function createApp({ dataDir, adminPassword }) {
       pricing: { extraSide: EXTRA_SIDE_PRICE, shipping: SHIPPING_FLAT, freeShippingOver: FREE_SHIPPING_OVER },
       categories: CATEGORIES,
       governorates: GOVERNORATES,
+      contact: { whatsapp: notify.shopWhatsApp() || null },
       products: PRODUCTS.map(publicProduct),
     });
   });
@@ -630,8 +632,17 @@ function createApp({ dataDir, adminPassword }) {
       total: round2(subtotal + shipping),
       // Cash on delivery: collected by the courier.
       payment: { method: 'cod', status: 'pending' },
+      lang: langOf(req),
     });
     res.status(201).json(publicOrder(order));
+    // Tell the shop and the customer, after answering: sending never holds up or fails an order.
+    const proto = String(req.get('x-forwarded-proto') || req.protocol).split(',')[0].trim();
+    notify.orderPlaced(order, { origin: `${proto}://${req.get('host')}`, lang: order.lang })
+      .then((result) => {
+        order.notifications = { ...result, at: new Date().toISOString() };
+        store.save();
+      })
+      .catch((e) => console.warn('[notify]', e.message));
   });
 
   app.get('/api/orders/:id', (req, res) => {
@@ -647,6 +658,18 @@ function createApp({ dataDir, adminPassword }) {
     next();
   };
 
+  app.get('/api/admin/notifications', requireAdmin, (req, res) => {
+    res.json(notify.status());
+  });
+  const testHits = new Map();
+  app.post('/api/admin/notifications/test', requireAdmin, async (req, res, next) => {
+    try {
+      limitHits(testHits, req.ip, 5);
+      res.json(await notify.adminTest());
+    } catch (e) {
+      next(e);
+    }
+  });
   app.get('/api/admin/queue', requireAdmin, (req, res) => {
     const all = [];
     for (const order of store.listOrders()) {
@@ -668,6 +691,7 @@ function createApp({ dataDir, adminPassword }) {
       ...publicOrder(o),
       customer: adminCustomer(o.customer),
       items: o.items.map((item, i) => adminItem(o, item, i)),
+      notifications: o.notifications || null,
     }));
     res.json({ orders });
   });

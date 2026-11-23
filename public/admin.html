@@ -62,9 +62,17 @@
       </section>
 
       <section id="tab-orders" hidden>
+        <div class="card notify-card">
+          <div class="notify-head">
+            <h2 style="font-size:16px;margin:0" data-i18n="notify.title"></h2>
+            <button class="btn btn-sm" id="notify-test" data-i18n="notify.test"></button>
+          </div>
+          <div class="notify-list" id="notify-status"></div>
+          <p class="muted small" id="notify-msg" style="margin:6px 0 0"></p>
+        </div>
         <div class="card" style="overflow-x:auto">
           <table class="orders">
-            <thead><tr><th data-i18n="admin.col.order"></th><th data-i18n="admin.col.customer"></th><th data-i18n="admin.col.items"></th><th data-i18n="admin.col.total"></th><th data-i18n="admin.col.status"></th></tr></thead>
+            <thead><tr><th data-i18n="admin.col.order"></th><th data-i18n="admin.col.customer"></th><th data-i18n="admin.col.items"></th><th data-i18n="admin.col.total"></th><th data-i18n="admin.col.status"></th><th data-i18n="notify.col"></th></tr></thead>
             <tbody id="orders"></tbody>
           </table>
         </div>

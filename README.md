@@ -25,6 +25,13 @@ Requires Node 18+. There is no database to set up: data is stored under `data/` 
 | `AI_DAILY_LIMIT` | `15` | AI requests per visitor per day |
 | `AI_GLOBAL_DAILY_LIMIT` | `300` | AI requests for the whole shop per day |
 | `TRUST_PROXY` | `true` | Use the visitor IP from the proxy (set `false` if not behind one) |
+| `CALLMEBOT_PHONE`, `CALLMEBOT_APIKEY` | (none) | WhatsApp alert to the shop owner for each new order ([CallMeBot](https://www.callmebot.com), free, own number only) |
+| `BREVO_API_KEY`, `MAIL_FROM` | (none) | Email via [Brevo](https://www.brevo.com) (free plan); `MAIL_FROM` must be a verified sender |
+| `MAIL_FROM_NAME` | `OneOff Print` | Sender name on emails |
+| `ADMIN_EMAIL` | (none) | Where new-order emails go |
+| `ADMIN_LANG` | `ar` | Language of the owner's alerts (`ar` or `en`) |
+| `SHOP_WHATSAPP` | (none) | Shop number for the customer's "Confirm on WhatsApp" button (e.g. `201012345678`) |
+| `SITE_URL` | (from request) | Public address used in links inside messages |
 
 ## What's in it
 
@@ -37,6 +44,8 @@ Product cards, the editor and the cart thumbnails all show **real product photos
 **Photo quality boost**: a low-resolution photo can be enlarged (Lanczos, up to 4× or 4000 px) and sharpened on the server (`/api/enhance`). It keeps its size on the product, crop, shape and filters, and the DPI badge updates.
 
 **Share for approval**: the Share button makes a link (`/s/<id>`) with a picture of the design (WhatsApp shows it as a link preview). Friends tap "Looks great" or suggest a change; replies show on that page and in the editor's share window. "Open a copy in the editor" loads the design as a new draft. Shared designs are stored under `DATA_DIR/shares/`.
+
+**Order notifications**: for every new order the owner gets a WhatsApp message (CallMeBot) and an email (Brevo) with the items, total, customer and address, and the customer gets a confirmation email in the language they ordered in (when they gave an email). The order page has a "Confirm on WhatsApp" button that opens a chat with the shop's number with the order details filled in. Each channel switches on when its variables are set (see the table above). Sending happens after the order is saved and never blocks it; the result is shown per order in the dashboard's orders tab, which also lists which channels are set up and has a "Send me a test" button (`src/notify.js`).
 
 **Saved designs**: the editor saves the design in the shopper's browser as they work (IndexedDB, so uploaded photos fit), and the **Save** button takes them back to the products page, where the card shows their design with a "Saved design" badge. Opening the product again restores it. The draft is cleared once the design goes into the cart.
 

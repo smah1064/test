@@ -36,6 +36,14 @@
       const STEPS = ['queued', 'printing', 'printed', 'shipped'];
       let order = null;
       let error = null;
+      const catalog = await POD.loadCatalog().catch(() => null);
+      const shopWa = catalog && catalog.contact && catalog.contact.whatsapp;
+      /** A WhatsApp chat with the shop, the order details already typed. */
+      function whatsappLink(o) {
+        const items = o.items.map((it, i) => `${POD.num(i + 1)}. ${tr(it.productName)} · ${tr(it.color.name)} · ${tr(it.size.label)}`).join('\n');
+        const text = t('order.waMessage', { n: o.number, items, total: money(o.total), name: o.customer.name });
+        return `https://wa.me/${shopWa}?text=${encodeURIComponent(text)}`;
+      }
 
       function render() {
         if (error) {
@@ -72,7 +80,8 @@
             <div class="line total"><span>${esc(t('checkout.total'))}</span><span>${esc(money(o.total))}</span></div>
             ${o.payment && o.payment.method === 'cod' ? `<div class="pay-box"><strong>${esc(t('order.payCod', { amount: money(o.total) }))}</strong><span>${esc(t('checkout.codText'))}</span></div>` : ''}
             <p class="muted small" style="margin-bottom:0">${esc(t('order.deliverTo', { name: o.customer.name, place }))}</p>
-          </div>`;
+          </div>
+          ${shopWa ? `<div class="order-wa"><p>${esc(t('order.waText'))}</p><a class="btn btn-whatsapp" id="order-wa" target="_blank" rel="noopener" href="${esc(whatsappLink(o))}">${esc(t('order.waButton'))}</a></div>` : ''}`;
       }
 
       async function load() {
