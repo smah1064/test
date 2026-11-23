@@ -164,7 +164,9 @@ Add an entry to `PRODUCTS` in `src/products.js`. Mockups are SVGs in a 500 × 60
 
 ## On a model (clothing previews)
 
-The preview window has an **On a model** tab for clothing: photos of people wearing the blank white garment (`public/mockups/models/`, made with Creative Claw), each with a garment-only mask. The same engine as the product photos recolours the garment from the photo's own shading and warps the design into the print area, shown at its real size on a size M (kids: age 8). Skin, hair and backdrop are never touched. The photos and print rectangles are listed in `POD_MODELS` (`public/js/photo-mockups.js`); with several models per side the customer picks one with chips.
+The preview window has an **On a model** tab for clothing: photos of people wearing the blank white garment (`public/mockups/models/`, made with Creative Claw), each with a garment-only mask. The same engine as the product photos recolours the garment from the photo's own shading and warps the design into the print area, shown at about its real size. Skin, hair and backdrop are never touched. The photos and print rectangles are listed in `POD_MODELS` (`public/js/photo-mockups.js`); with several models per side the customer picks one with chips.
+
+Models: T-shirt, oversized tee, hoodie and sweatshirt (man and woman, front; man back; woman back for the T-shirt), zip hoodie, polo and football jersey (man), kids tee and kids hoodie (boy and girl). The garment masks were made from a background-removed cut-out of each photo plus the garment's colour (neutral white, not skin or hair); print rectangles from the garment's measured width and the collar, then checked by eye.
 
 ## Personalised books
 

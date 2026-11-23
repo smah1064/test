@@ -89,7 +89,23 @@
    */
   const M = (name, who, rect) => ({ src: `/mockups/models/${name}.webp`, mask: `/mockups/models/${name}-mask.png`, who, rect, warp: 'fabric' });
   window.POD_MODELS = {
-    'tshirt:front': [M('tshirt-man-front', 'man', { cx: 507, top: 434, w: 218 })],
+    'tshirt:front': [M('tshirt-man-front', 'man', { cx: 507, top: 433, w: 218 }), M('tshirt-woman-front', 'woman', { cx: 501, top: 459, w: 216 })],
+    'tshirt:back': [M('tshirt-man-back', 'man', { cx: 504, top: 363, w: 196 }), M('tshirt-woman-back', 'woman', { cx: 505, top: 396, w: 198 })],
+    'oversized:front': [M('oversized-man-front', 'man', { cx: 510, top: 422, w: 214 }), M('oversized-woman-front', 'woman', { cx: 504, top: 448, w: 246 })],
+    'oversized:back': [M('oversized-man-back', 'man', { cx: 503, top: 354, w: 223 })],
+    'kidstee:front': [M('kidstee-boy-front', 'boy', { cx: 505, top: 467, w: 190 }), M('kidstee-girl-front', 'girl', { cx: 507, top: 471, w: 199 })],
+    'kidstee:back': [M('kidstee-boy-back', 'boy', { cx: 506, top: 411, w: 170 })],
+    'hoodie:front': [M('hoodie-man-front', 'man', { cx: 503, top: 412, w: 191 }), M('hoodie-woman-front', 'woman', { cx: 502, top: 435, w: 189 })],
+    'hoodie:back': [M('hoodie-man-back', 'man', { cx: 504, top: 495, w: 196 })],
+    'kidshoodie:front': [M('kidshoodie-boy-front', 'boy', { cx: 504, top: 459, w: 168 }), M('kidshoodie-girl-front', 'girl', { cx: 507, top: 461, w: 176 })],
+    'ziphoodie:front': [M('ziphoodie-man-front', 'man', { cx: 580, top: 443, w: 73 })],
+    'sweatshirt:front': [M('sweatshirt-man-front', 'man', { cx: 503, top: 439, w: 218 }), M('sweatshirt-woman-front', 'woman', { cx: 501, top: 457, w: 216 })],
+    'sweatshirt:back': [M('sweatshirt-man-back', 'man', { cx: 504, top: 355, w: 196 })],
+    'polo:front': [M('polo-man-front', 'man', { cx: 584, top: 452, w: 63 })],
+    'polo:back': [M('polo-man-back', 'man', { cx: 509, top: 326, w: 193 })],
+    'jersey:front': [M('jersey-man-front', 'man', { cx: 509, top: 420, w: 178 })],
+    'jersey:back': [M('jersey-man-back', 'man', { cx: 508, top: 342, w: 185 })],
+    'ziphoodie:back': [M('hoodie-man-back', 'man', { cx: 504, top: 495, w: 196 })],
   };
 
   // ---------- Recoloured product photos (cards, editor, thumbnails) ----------

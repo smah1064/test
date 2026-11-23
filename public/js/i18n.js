@@ -589,7 +589,7 @@ window.POD_STRINGS = {
   'pv.realistic': ['Realistic', 'واقعية'],
   'pv.3d': ['3D', 'ثلاثي الأبعاد'],
   'pv.model': ['On a model', 'على موديل'],
-  'pv.modelNote': ['Photo for illustration: the print is shown at its real size on a size M (kids: age 8).', 'صورة للتوضيح: الطباعة معروضة بمقاسها الحقيقي على مقاس M (الأطفال: سن 8).'],
+  'pv.modelNote': ['Photo for illustration: the print is shown at about its real size.', 'صورة للتوضيح: الطباعة معروضة بمقاسها الحقيقي تقريبًا.'],
   'pv.who.man': ['Man', 'رجالي'],
   'pv.who.woman': ['Woman', 'حريمي'],
   'pv.who.hijab': ['Woman (hijab)', 'حريمي (محجبة)'],
