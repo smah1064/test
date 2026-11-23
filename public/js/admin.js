@@ -67,6 +67,7 @@
     $('tab-queue').hidden = tab !== 'queue';
     $('tab-orders').hidden = tab !== 'orders';
     $('tab-film').hidden = tab !== 'film';
+    $('tab-library').hidden = tab !== 'library';
     refresh();
   }));
 
@@ -192,6 +193,66 @@
         <td>${notifyCell(o.notifications, o.createdAt)}</td>
       </tr>`).join('') : `<tr><td colspan="6" class="muted">${esc(t('admin.noOrders'))}</td></tr>`;
   }
+  // ---------- Ready-made designs ----------
+  let lastLibrary = null;
+  function renderLibrary(lib) {
+    const sel = $('lib-cat');
+    const keep = sel.value;
+    sel.innerHTML = lib.categories.map((c) => `<option value="${esc(c.id)}">${esc(tr(c.name))}</option>`).join('');
+    if (keep) sel.value = keep;
+    const catName = (id) => tr((lib.categories.find((c) => c.id === id) || {}).name || id);
+    $('lib-list').innerHTML = lib.designs.map((d) => `
+      <div class="queue-row lib-row ${d.hidden ? 'is-hidden' : ''}">
+        <div class="lib-thumb">${d.preview ? `<img src="${esc(d.preview)}" alt="">` : '<span>Aa</span>'}</div>
+        <div class="lib-info">
+          <strong dir="auto">${esc(tr(d.name))}</strong>
+          <div class="muted small">${esc(catName(d.category))} · ${esc(t(d.custom ? 'lib.yours' : 'lib.starter'))}${d.hidden ? ' · ' + esc(t('lib.hiddenNote')) : ''}</div>
+        </div>
+        <div class="lib-actions">
+          <a class="btn btn-sm" href="/design?id=${encodeURIComponent(d.id)}" target="_blank" rel="noopener">${esc(t('lib.open'))}</a>
+          <button class="btn btn-sm" data-lib-toggle="${esc(d.id)}" data-hidden="${d.hidden ? '1' : ''}">${esc(t(d.hidden ? 'lib.show' : 'lib.hide'))}</button>
+          ${d.custom ? `<button class="btn btn-sm btn-danger" data-lib-del="${esc(d.id)}">${esc(t('lib.delete'))}</button>` : ''}
+        </div>
+      </div>`).join('');
+  }
+  $('lib-list').addEventListener('click', async (e) => {
+    const tog = e.target.closest('[data-lib-toggle]');
+    const del = e.target.closest('[data-lib-del]');
+    try {
+      if (tog) {
+        await adminApi('/api/admin/library/' + encodeURIComponent(tog.dataset.libToggle), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hidden: !tog.dataset.hidden }) });
+      } else if (del) {
+        if (!confirm(t('lib.confirmDelete'))) return;
+        await adminApi('/api/admin/library/' + encodeURIComponent(del.dataset.libDel), { method: 'DELETE' });
+      } else return;
+      renderLibrary((lastLibrary = await adminApi('/api/admin/library')));
+    } catch (err) {
+      POD.toast(err.message, 'error');
+    }
+  });
+  $('lib-add').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const msg = $('lib-msg');
+    msg.style.color = '';
+    msg.textContent = t('notify.sending');
+    try {
+      const d = await adminApi('/api/admin/library', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ share: $('lib-share').value, nameAr: $('lib-name-ar').value, nameEn: $('lib-name-en').value, category: $('lib-cat').value }),
+      });
+      msg.style.color = 'var(--ok)';
+      msg.textContent = t('lib.added', { name: tr(d.name) });
+      $('lib-share').value = '';
+      $('lib-name-ar').value = '';
+      $('lib-name-en').value = '';
+      renderLibrary((lastLibrary = await adminApi('/api/admin/library')));
+    } catch (err) {
+      msg.style.color = '#c92a2a';
+      msg.textContent = err.message;
+    }
+  });
+
   // ---------- Order notifications ----------
   const NOTIFY_CHANNELS = [['adminWhatsApp', '📱'], ['adminEmail', '✉️'], ['customerEmail', '👤']];
   function notifyCell(n, createdAt) {
@@ -230,6 +291,7 @@
     }
     if (tab === 'queue') renderQueue((lastQueue = await adminApi('/api/admin/queue')));
     else if (tab === 'film') renderFilm((lastFilm = (await adminApi('/api/admin/dtf-items')).items));
+    else if (tab === 'library') renderLibrary((lastLibrary = await adminApi('/api/admin/library')));
     else { renderOrders((lastOrders = (await adminApi('/api/admin/orders')).orders)); renderNotifyStatus(); }
     $('login').hidden = true;
     $('dash').hidden = false;
@@ -240,6 +302,7 @@
     if (tab === 'queue' && lastQueue) renderQueue(lastQueue);
     if (tab === 'orders' && lastOrders) renderOrders(lastOrders);
     if (tab === 'film' && lastFilm) renderFilm(lastFilm);
+    if (tab === 'library' && lastLibrary) renderLibrary(lastLibrary);
   });
 
   $('film-list').addEventListener('change', (e) => {

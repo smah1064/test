@@ -45,6 +45,8 @@ Product cards, the editor and the cart thumbnails all show **real product photos
 
 **Share for approval**: the Share button makes a link (`/s/<id>`) with a picture of the design (WhatsApp shows it as a link preview). Friends tap "Looks great" or suggest a change; replies show on that page and in the editor's share window. "Open a copy in the editor" loads the design as a new draft. Shared designs are stored under `DATA_DIR/shares/`.
 
+**Ready-made designs shop (`/designs`)**: 29 starter designs (funny Egyptian phrases, Ramadan, football, Eid, love, birthday, family, Egypt, motivation) that customers buy without designing. They pick a design, then any product, colour and size, see it on the real product photo (plus the 3D and print-colour previews), and add it to the cart. "Change the words in the editor" opens it in the editor as a new draft. Starter designs are layouts in `src/library.js` that fit any product and switch to light or dark ink to suit the garment colour. `public/js/design-render.js` places a design on a product and makes the same print PNG, preview and SVG the editor does, so ready designs print exactly like custom ones. The owner adds their own designs in the dashboard's **Ready designs** tab by pasting a share link from the editor, and can hide starter designs or delete their own (stored in `DATA_DIR/library/`).
+
 **Order notifications**: for every new order the owner gets a WhatsApp message (CallMeBot) and an email (Brevo) with the items, total, customer and address, and the customer gets a confirmation email in the language they ordered in (when they gave an email). The order page has a "Confirm on WhatsApp" button that opens a chat with the shop's number with the order details filled in. Each channel switches on when its variables are set (see the table above). Sending happens after the order is saved and never blocks it; the result is shown per order in the dashboard's orders tab, which also lists which channels are set up and has a "Send me a test" button (`src/notify.js`).
 
 **Saved designs**: the editor saves the design in the shopper's browser as they work (IndexedDB, so uploaded photos fit), and the **Save** button takes them back to the products page, where the card shows their design with a "Saved design" badge. Opening the product again restores it. The draft is cleared once the design goes into the cart.
@@ -111,6 +113,9 @@ src/products.js      catalog, mockup SVGs, print areas, EGP pricing
 src/egypt.js         governorates, mobile number validation
 src/thumbs.js        recoloured product-photo card pictures (sharp)
 src/ai.js            AI slogans and logos (Claude Haiku 5.5, structured output)
+src/library.js       ready-made designs: starter designs and the owner's own
+public/js/design-render.js  places a design on any product; print/preview/SVG without the editor
+public/designs.html, design.html  the ready-made designs shop
 public/share.html    shared-design page (approve / suggest a change)
 src/i18n.js          server messages in English and Arabic
 public/js/i18n.js    all interface text in English and Arabic

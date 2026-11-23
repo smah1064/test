@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OneOff Print</title>
+  <script>(function(){var l;try{l=localStorage.getItem('pod-lang')}catch(e){}l=l==='en'?'en':'ar';var d=document.documentElement;d.lang=l;d.dir=l==='ar'?'rtl':'ltr'})()</script>
+  <link rel="stylesheet" href="/fonts/fonts.css">
+  <link rel="stylesheet" href="/css/styles.css">
+  <script type="importmap">{ "imports": { "three": "/vendor/three/three.module.min.js" } }</script>
+</head>
+<body data-title-key="design.pageTitle">
+  <header class="site-header">
+    <div class="container inner">
+      <a class="brand" href="/"><span class="brand-mark">1</span>OneOff Print</a>
+      <nav>
+        <a href="/#products" data-i18n="nav.products"></a>
+        <a href="/designs" data-i18n="nav.designs"></a>
+        <a class="cart-link" href="/cart"><span data-i18n="nav.cart"></span> <span class="badge" data-cart-count hidden>0</span></a>
+        <button class="btn btn-sm lang-toggle" data-lang-toggle data-i18n="lang.other"></button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <div id="dp-missing" class="card empty" hidden>
+      <h2 data-i18n="design.notFound"></h2>
+      <a class="btn btn-primary" href="/designs" data-i18n="design.browse"></a>
+    </div>
+    <div class="dp-layout" id="dp" hidden>
+      <section class="card dp-stage">
+        <div class="dp-picture"><img id="dp-img" alt=""><div class="spinner" id="dp-spin"></div></div>
+        <button class="btn btn-sm dp-3d" id="dp-preview">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2 3 7v10l9 5 9-5V7z"/><path d="M3 7l9 5 9-5M12 12v10"/></svg><span data-i18n="design.preview3d"></span>
+        </button>
+      </section>
+      <aside class="card dp-panel">
+        <a class="muted small" href="/designs" id="dp-cat"></a>
+        <h1 id="dp-name" dir="auto"></h1>
+        <div class="field"><label data-i18n="design.product"></label><div class="dp-products" id="dp-products"></div></div>
+        <div class="field"><label><span data-i18n="design.color"></span>: <span id="dp-color-name" class="muted"></span></label><div class="swatches" id="dp-colors"></div></div>
+        <div class="field"><label data-i18n="design.size"></label><div class="chips" id="dp-sizes"></div></div>
+        <div class="dp-price"><span class="amount" id="dp-price"></span><span class="muted small" data-i18n="design.priceNote"></span></div>
+        <button class="btn btn-primary btn-lg btn-block" id="dp-add" data-i18n="design.add"></button>
+        <a class="btn btn-block" id="dp-edit" data-i18n="design.customize"></a>
+        <p class="muted small" style="margin:10px 0 0;line-height:1.5" data-i18n="design.note"></p>
+      </aside>
+    </div>
+  </main>
+
+  <div class="pv-modal" id="pv" hidden>
+    <div class="pv-box" role="dialog" aria-modal="true" aria-labelledby="pv-title">
+      <div class="pv-head">
+        <h3 id="pv-title" data-i18n="pv.title"></h3>
+        <div class="side-tabs pv-tabs">
+          <button class="side-tab" data-pv-tab="real" data-i18n="pv.realistic"></button>
+          <button class="side-tab" data-pv-tab="3d" data-i18n="pv.3d"></button>
+          <button class="side-tab" data-pv-tab="proof" data-i18n="pv.proof"></button>
+        </div>
+        <button class="fly-close" id="pv-close" data-i18n-aria="bar.close">✕</button>
+      </div>
+      <div class="side-tabs pv-sides" id="pv-sides" hidden></div>
+      <div class="pv-body" id="pv-body"></div>
+      <div class="pv-foot">
+        <span class="muted small" id="pv-hint"></span>
+        <label class="check" id="pv-spin-wrap"><input type="checkbox" id="pv-spin" checked> <span data-i18n="pv.spin"></span></label>
+        <button class="btn btn-sm" id="pv-download" data-i18n="pv.download"></button>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer"><div class="container" data-i18n="footer"></div></footer>
+  <div class="overlay-busy" id="busy" hidden><div><div class="spinner"></div><span id="busy-text"></span></div></div>
+
+  <script src="/vendor/fabric-5.3.0.min.js"></script>
+  <script src="/js/i18n.js"></script>
+  <script src="/js/common.js"></script>
+  <script src="/js/fabric-ext.js"></script>
+  <script src="/js/templates.js"></script>
+  <script src="/js/stickers.js"></script>
+  <script src="/js/photo-mockups.js"></script>
+  <script src="/js/preview.js"></script>
+  <script src="/js/design-render.js"></script>
+  <script src="/js/design.js"></script>
+</body>
+</html>

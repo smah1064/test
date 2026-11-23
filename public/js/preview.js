@@ -625,6 +625,7 @@
   }
 
   document.addEventListener('DOMContentLoaded', () => {
+    if (!$('pv')) return; // pages without the preview window only use the renderers
     $('pv-close').addEventListener('click', close);
     $('pv').addEventListener('click', (e) => { if (e.target.id === 'pv') close(); });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && state) close(); });
@@ -649,5 +650,5 @@
     });
   });
 
-  window.POD_PREVIEW = { open, renderRealistic };
+  window.POD_PREVIEW = { open, renderRealistic, renderPhoto, photoFor };
 })();

@@ -518,3 +518,39 @@ test('new orders notify the shop on WhatsApp and email, and email the customer',
     mock.close();
   }
 });
+
+test('ready-made designs: starter catalog, owner adds from a share link, hides and deletes', async () => {
+  const lib = await (await fetch(base + '/api/library')).json();
+  assert.ok(lib.designs.length >= 25, 'starter designs');
+  const cats = new Set(lib.designs.map((d) => d.category));
+  for (const c of ['funny', 'ramadan', 'football']) assert.ok(cats.has(c), c);
+  const one = await (await fetch(base + '/api/library/' + lib.designs[0].id)).json();
+  assert.strictEqual(one.kind, 'template');
+  assert.ok(one.items.length > 0);
+  assert.strictEqual((await fetch(base + '/api/library/nope')).status, 404);
+
+  // The owner shares a design from the editor, then adds it to the shop.
+  const preview = 'data:image/png;base64,' + png(60, 72).toString('base64');
+  const sh = await (await post('/api/shares', { productId: 'hoodie', color: 'black', size: 'L', sides: { front: { objects: [{ type: 'i-text', text: 'Shop design', left: 250, top: 300 }] } }, previews: { front: preview } })).json();
+  assert.strictEqual((await admin('/api/admin/library', { method: 'POST', body: JSON.stringify({ share: `http://x/s/${sh.id}` }) })).status, 400); // a name is required
+  const added = await (await admin('/api/admin/library', { method: 'POST', body: JSON.stringify({ share: `https://shop.example/s/${sh.id}`, nameAr: 'تصميم المحل', category: 'funny' }) })).json();
+  assert.match(added.id, /^c-[0-9a-f]{12}$/);
+  assert.strictEqual(added.product, 'hoodie');
+  const full = await (await fetch(base + '/api/library/' + added.id)).json();
+  assert.strictEqual(full.objects[0].text, 'Shop design');
+  assert.ok(full.area && full.area.w > 0);
+  assert.strictEqual((await fetch(base + added.preview)).headers.get('content-type'), 'image/png');
+  assert.strictEqual((await (await fetch(base + '/api/library')).json()).designs[0].id, added.id); // newest first
+
+  // Hide a starter design, delete the owner's one.
+  assert.strictEqual((await admin(`/api/admin/library/${one.id}`, { method: 'PATCH', body: JSON.stringify({ hidden: true }) })).status, 200);
+  assert.ok(!(await (await fetch(base + '/api/library')).json()).designs.some((d) => d.id === one.id));
+  assert.strictEqual((await fetch(base + '/api/library/' + one.id)).status, 404);
+  assert.ok((await (await admin('/api/admin/library')).json()).designs.find((d) => d.id === one.id).hidden);
+  await admin(`/api/admin/library/${one.id}`, { method: 'PATCH', body: JSON.stringify({ hidden: false }) });
+  assert.strictEqual((await admin(`/api/admin/library/${one.id}`, { method: 'DELETE' })).status, 404); // starter designs can only be hidden
+  assert.strictEqual((await admin(`/api/admin/library/${added.id}`, { method: 'DELETE' })).status, 200);
+  assert.strictEqual((await fetch(base + '/api/library/' + added.id)).status, 404);
+  assert.strictEqual((await fetch(base + '/api/library')).status, 200);
+  assert.strictEqual((await fetch(base + '/api/admin/library')).status, 401);
+});

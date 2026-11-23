@@ -312,9 +312,21 @@
    */
   async function buildTemplate(tpl, area, ink) {
     await Promise.all(tpl.items.filter((i) => i.kind === 'text').map((i) => ensureFont(i.font, i.weight || 'normal', 'normal')));
-    const objs = tpl.items.map((i) => {
+    // Stickers load from SVG, so build them first.
+    const SK = window.POD_STICKERS;
+    const stickerObjs = await Promise.all(tpl.items.map((i) => {
+      if (i.kind !== 'sticker' || !SK) return null;
+      const def = SK.STICKERS.find((x) => x.id === i.sticker);
+      return def ? SK.makeSticker(def) : null;
+    }));
+    const objs = tpl.items.map((i, idx) => {
       let o;
-      if (i.kind === 'text') {
+      if (i.kind === 'sticker') {
+        o = stickerObjs[idx];
+        if (!o) return null;
+        o.scaleToWidth(area.w * i.w);
+        o.set({ angle: i.angle || 0 });
+      } else if (i.kind === 'text') {
         const fill = i.fill || ink;
         o = new fabric.IText(i.text, {
           name: 'Text',
@@ -346,7 +358,7 @@
       o.set({ originX: 'center', originY: 'center', left: area.x + area.w * i.x, top: area.y + area.h * i.y });
       o.setCoords();
       return o;
-    });
+    }).filter(Boolean);
     // Squeeze vertically for wide, short print areas so nothing spills out.
     const tops = objs.map((o) => o.getBoundingRect(true, true));
     const minY = Math.min(...tops.map((r) => r.top));

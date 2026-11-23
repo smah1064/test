@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OneOff Print</title>
+  <script>(function(){var l;try{l=localStorage.getItem('pod-lang')}catch(e){}l=l==='en'?'en':'ar';var d=document.documentElement;d.lang=l;d.dir=l==='ar'?'rtl':'ltr'})()</script>
+  <link rel="stylesheet" href="/fonts/fonts.css">
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body data-title-key="designs.pageTitle">
+  <header class="site-header">
+    <div class="container inner">
+      <a class="brand" href="/"><span class="brand-mark">1</span>OneOff Print</a>
+      <nav>
+        <a href="/#products" data-i18n="nav.products"></a>
+        <a href="/designs" data-i18n="nav.designs"></a>
+        <a class="cart-link" href="/cart"><span data-i18n="nav.cart"></span> <span class="badge" data-cart-count hidden>0</span></a>
+        <button class="btn btn-sm lang-toggle" data-lang-toggle data-i18n="lang.other"></button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="page-head">
+      <h1 data-i18n="designs.title"></h1>
+      <p class="muted" data-i18n="designs.lead" style="max-width:720px;line-height:1.6"></p>
+    </div>
+    <div class="cat-chips" id="design-cats"></div>
+    <div class="product-grid design-grid" id="design-grid"></div>
+  </main>
+
+  <footer class="site-footer"><div class="container" data-i18n="footer"></div></footer>
+
+  <script src="/vendor/fabric-5.3.0.min.js"></script>
+  <script src="/js/i18n.js"></script>
+  <script src="/js/common.js"></script>
+  <script src="/js/fabric-ext.js"></script>
+  <script src="/js/templates.js"></script>
+  <script src="/js/stickers.js"></script>
+  <script src="/js/photo-mockups.js"></script>
+  <script src="/js/design-render.js"></script>
+  <script src="/js/designs.js"></script>
+</body>
+</html>

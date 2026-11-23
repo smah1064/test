@@ -25,6 +25,7 @@ const { FIELDS, langOf, format } = require('./i18n');
 const thumbs = require('./thumbs');
 const ai = require('./ai');
 const notify = require('./notify');
+const { Library, CATEGORIES: DESIGN_CATEGORIES } = require('./library');
 let printfilesModule = null;
 const printfiles = new Proxy({}, { get: (_, key) => (printfilesModule ||= require('./printfiles'))[key] });
 
@@ -375,6 +376,29 @@ function createApp({ dataDir, adminPassword }) {
     res.status(204).end();
   });
 
+  // ---------- Ready-made designs shop ----------
+  const library = new Library(dataDir);
+  const libraryCard = (d) => ({
+    id: d.id, name: d.name, category: d.category, kind: d.kind, product: d.product, color: d.color,
+    ...(d.kind === 'template' ? { items: d.items } : { preview: `/api/library/${d.id}/preview.png` }),
+  });
+  app.get('/api/library', (req, res) => {
+    res.set('Cache-Control', 'no-cache');
+    res.json({ categories: DESIGN_CATEGORIES, designs: library.visible().map(libraryCard) });
+  });
+  app.get('/api/library/:id', (req, res) => {
+    const d = library.get(req.params.id);
+    if (!d || d.hidden) throw new HttpError(404, 'notFound');
+    const { hidden, ...pub } = d; // eslint-disable-line no-unused-vars
+    res.json(pub);
+  });
+  app.get('/api/library/:id/preview.png', (req, res) => {
+    const d = library.get(req.params.id);
+    if (!d || d.kind !== 'objects' || !fs.existsSync(library.previewPath(d.id))) throw new HttpError(404, 'notFound');
+    res.set('Cache-Control', 'public, max-age=86400, no-transform');
+    res.type('png').send(fs.readFileSync(library.previewPath(d.id)));
+  });
+
   // ---------- AI help (slogans, logos) ----------
   // Per-visitor and whole-shop daily limits keep the AI bill predictable.
   const AI_PER_VISITOR = Math.max(1, Number(process.env.AI_DAILY_LIMIT) || 15);
@@ -669,6 +693,42 @@ function createApp({ dataDir, adminPassword }) {
     } catch (e) {
       next(e);
     }
+  });
+  app.get('/api/admin/library', requireAdmin, (req, res) => {
+    res.json({ categories: DESIGN_CATEGORIES, designs: library.all().map((d) => ({ ...libraryCard(d), hidden: d.hidden, custom: d.kind === 'objects', createdAt: d.createdAt || null })) });
+  });
+  // Publish a design made in the editor: the owner shares it, then pastes the link here.
+  app.post('/api/admin/library', requireAdmin, express.json({ limit: '8kb' }), (req, res) => {
+    const b = req.body || {};
+    const id = (String(b.share || '').match(/([A-Za-z0-9_-]{12})\/?(?:[?#].*)?$/) || [])[1];
+    const sh = readShare(id);
+    if (!sh) throw new HttpError(400, 'shareNotFound');
+    const nameAr = String(b.nameAr || '').trim().slice(0, 60);
+    const nameEn = String(b.nameEn || '').trim().slice(0, 60);
+    if (!nameAr && !nameEn) throw new HttpError(400, 'fieldRequired', { field: { en: 'Name', ar: 'الاسم' } });
+    const category = DESIGN_CATEGORIES.some((c) => c.id === b.category) ? b.category : DESIGN_CATEGORIES[0].id;
+    const product = getProduct(sh.productId);
+    const side = sh.sides[0];
+    const sideDef = product.sides.find((x) => x.id === side.id);
+    const editor = JSON.parse(fs.readFileSync(shareFile(sh.id, 'editor.json'), 'utf8'));
+    const meta = library.addCustom({
+      name: { ar: nameAr || nameEn, en: nameEn || nameAr },
+      category,
+      product: product.id,
+      color: sh.color.id,
+      objects: editor[side.id].objects,
+      area: sideDef.printArea,
+      preview: fs.readFileSync(shareFile(sh.id, `${side.id}.png`)),
+    });
+    res.status(201).json(libraryCard(meta));
+  });
+  app.patch('/api/admin/library/:id', requireAdmin, express.json({ limit: '1kb' }), (req, res) => {
+    if (!library.setHidden(req.params.id, Boolean((req.body || {}).hidden))) throw new HttpError(404, 'notFound');
+    res.json({ ok: true });
+  });
+  app.delete('/api/admin/library/:id', requireAdmin, (req, res) => {
+    if (!library.removeCustom(req.params.id)) throw new HttpError(404, 'notFound');
+    res.json({ ok: true });
   });
   app.get('/api/admin/queue', requireAdmin, (req, res) => {
     const all = [];

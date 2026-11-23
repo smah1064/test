@@ -36,6 +36,7 @@
           <button class="btn btn-sm active" data-tab="queue" data-i18n="admin.tabQueue"></button>
           <button class="btn btn-sm" data-tab="orders" data-i18n="admin.tabOrders"></button>
           <button class="btn btn-sm" data-tab="film" data-i18n="admin.tabFilm"></button>
+          <button class="btn btn-sm" data-tab="library" data-i18n="lib.tab"></button>
         </div>
       </div>
 
@@ -59,6 +60,25 @@
           </div>
         </div>
         <div class="queue-list" id="film-list"></div>
+      </section>
+
+      <section id="tab-library" hidden>
+        <form class="card lib-add" id="lib-add">
+          <h2 style="font-size:16px;margin:0 0 4px" data-i18n="lib.addTitle"></h2>
+          <p class="muted small" style="margin:0 0 10px;line-height:1.6" data-i18n="lib.addHelp"></p>
+          <div class="lib-form">
+            <div class="field"><label for="lib-share" data-i18n="lib.share"></label><input type="url" id="lib-share" dir="ltr" placeholder="https://…/s/…" required></div>
+            <div class="field"><label for="lib-name-ar" data-i18n="lib.nameAr"></label><input type="text" id="lib-name-ar" maxlength="60" dir="rtl"></div>
+            <div class="field"><label for="lib-name-en" data-i18n="lib.nameEn"></label><input type="text" id="lib-name-en" maxlength="60" dir="ltr"></div>
+            <div class="field"><label for="lib-cat" data-i18n="lib.category"></label><select id="lib-cat"></select></div>
+          </div>
+          <div class="row" style="flex-wrap:wrap;gap:10px;align-items:center">
+            <button class="btn btn-primary shrink" type="submit" data-i18n="lib.add"></button>
+            <a class="btn shrink" href="/designs" target="_blank" rel="noopener" data-i18n="lib.viewShop"></a>
+            <span class="small" id="lib-msg"></span>
+          </div>
+        </form>
+        <div class="queue-list" id="lib-list"></div>
       </section>
 
       <section id="tab-orders" hidden>

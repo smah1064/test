@@ -91,6 +91,16 @@
   }
   // Drafts: designs started from the products page are kept in this browser
   // until they go into the cart (editing a cart item never touches them).
+  // Opened from the ready-made designs shop: load that design (and colour) as a new draft.
+  let libraryDesign = null;
+  if (!params.get('design') && params.get('library')) {
+    try {
+      libraryDesign = await POD.api('/api/library/' + encodeURIComponent(params.get('library')));
+      if (params.get('color')) st.colorId = params.get('color');
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  }
   let fromShare = false;
   if (!params.get('design') && /^[A-Za-z0-9_-]{12}$/.test(params.get('share') || '')) {
     try {
@@ -109,7 +119,7 @@
   const draftMode = !params.get('design') && !!(POD.drafts && window.indexedDB);
   let restoredDraft = false;
   let bootDone = false; // autosave starts once the editor has loaded
-  if (draftMode && !fromShare) {
+  if (draftMode && !fromShare && !libraryDesign) {
     const draft = await POD.drafts.get(st.product.id);
     if (draft && draft.designs && Object.values(draft.designs).some((o) => o && o.length)) {
       st.colorId = draft.colorId;
@@ -2802,5 +2812,17 @@
   }
   if (restoredDraft) toast(t('draft.restored'));
   if (fromShare) { toast(t('share.loaded')); scheduleDraft(); }
+  if (libraryDesign) {
+    if (libraryDesign.kind === 'template') {
+      await addTemplate({ id: libraryDesign.id, items: libraryDesign.items });
+      canvas.discardActiveObject();
+    } else {
+      await loadObjects(remap(libraryDesign.objects || [], libraryDesign.area || area(), area()));
+      commit();
+    }
+    canvas.requestRenderAll();
+    toast(t('design.loaded'));
+    scheduleDraft();
+  }
   window.__editor = { canvas, st, rects, checkIssues, exportSvg, exportPrint }; // handy for debugging in the console
 })();
