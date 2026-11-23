@@ -172,7 +172,7 @@ For invitations, certificates, greeting cards, ID cards, name labels and sticker
 4. On save the browser draws, with the same fonts and effects as the editor, the side's background without the field texts (`<side>-merge-base.png`) and one small transparent picture of the field area per row (`<side>-merge.bin`, PNGs back to back), plus the usual files showing row 1. The server checks every picture's size and count.
 5. Admin downloads (`src/merge.js`): **All names · PDF with crop marks** (recommended) or without; the background is stored once in the PDF and every page only adds its name, so even 1,000 copies make a small file (300 A4 certificates ≈ 12 MB, built in about 10 s). Also **one PDF per name (ZIP)**, named `0001-Ahmed-Ali.pdf`…, and the **list as CSV** (opens in Excel with Arabic).
 
-New products for this: **Invitation Cards** (13 × 18 cm, 350 gsm, with envelope, front/back) and **Certificates** (A4 or A3 landscape, 300 gsm). Until they have product photos, their product cards show the drawn product.
+New products for this: **Invitation Cards** (13 × 18 cm, 350 gsm, with envelope, front/back) and **Certificates** (A4 or A3 landscape, 300 gsm), with product photos like the rest. A product without a photo shows its drawing on the product cards.
 
 ## On a model (clothing previews)
 

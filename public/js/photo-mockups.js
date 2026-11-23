@@ -79,6 +79,12 @@
     'invoicebook:front': { ...P('invoicebook-front'), rect: { cx: 498, top: 252, w: 523 }, warp: 'flat' },
     'idcards:front': { ...P('idcard-front'), box: { x: 335, y: 482, w: 330, h: 520 }, fit: 'cover', warp: 'flat' },
     'idcards:back': { ...P('idcard-front'), box: { x: 335, y: 482, w: 330, h: 520 }, fit: 'cover', warp: 'flat' },
+    'invitations:front': { ...P('invitation-front'), box: { x: 219, y: 227, w: 563, h: 790 }, fit: 'cover', warp: 'flat' },
+    'invitations:back': { ...P('invitation-front'), box: { x: 219, y: 227, w: 563, h: 790 }, fit: 'cover', warp: 'flat' },
+    'certificates:front': { ...P('certificate-front'), box: { x: 85, y: 326, w: 832, h: 587 }, fit: 'cover', warp: 'flat' },
+    // Canvas prints: the front stays white under the print; the visible edge takes the edge colour.
+    'canvas:front': { ...P('canvas-front'), box: { x: 221, y: 202, w: 559, h: 837 }, fit: 'cover', warp: 'flat', paper: { x: 221, y: 202, w: 559, h: 837 } },
+    'canvaswide:front': { ...P('canvaswide-front'), box: { x: 100, y: 354, w: 801, h: 534 }, fit: 'cover', warp: 'flat', paper: { x: 100, y: 354, w: 801, h: 534 } },
   };
 
   /*
