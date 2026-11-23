@@ -5,6 +5,7 @@
  */
 (function () {
   'use strict';
+  fabric.Object.NUM_FRACTION_DIGITS = 8; // exact sizes, like the editor
 
   const W = 500;
   const H = 600;

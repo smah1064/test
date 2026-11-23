@@ -649,7 +649,6 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 .bk-nav:disabled { opacity: .35; cursor: default; }
 .bk-prev { inset-inline-start: 8px; }
 .bk-next { inset-inline-end: 8px; }
-[dir="rtl"] .bk-nav { transform: translateY(-50%) scaleX(-1); }
 .bk-count { text-align: center; margin: 10px 0 6px; }
 .bk-thumbs { display: flex; gap: 6px; overflow-x: auto; padding: 4px 2px 6px; scroll-snap-type: x proximity; }
 .bk-thumbs button { flex: none; width: 58px; height: 58px; padding: 0; border: 2px solid transparent; border-radius: 6px; background: #fff; cursor: pointer; scroll-snap-align: center; overflow: hidden; }

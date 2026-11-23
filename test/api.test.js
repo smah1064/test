@@ -695,7 +695,12 @@ test('personalised books: create, preview pages, edit, order, print PDF', async 
     .composite([{ input: Buffer.from('<svg width="500" height="500"><circle cx="250" cy="250" r="160" fill="#e8b996"/><circle cx="190" cy="220" r="18" fill="#222"/><circle cx="310" cy="220" r="18" fill="#222"/><path d="M180 320 Q250 380 320 320" stroke="#922" stroke-width="12" fill="none"/></svg>') }])
     .jpeg().toBuffer();
   const dataUrl = 'data:image/jpeg;base64,' + face.toString('base64');
-  const answers = { name: 'يوسف', gender: 'boy', birthday: '2019-03-12', city: 'القاهرة', father: 'أحمد', mother: 'منى', fruit: 'mango', animal: 'cat', friend: 'عمر' };
+  const answers = { name: 'Yousef', gender: 'boy', birthday: '2019-03-12', city: 'Cairo', father: 'Ahmed', mother: 'Mona', fruit: 'mango', animal: 'cat', friend: 'Omar' };
+
+  // The books are printed in English: Arabic letters would scramble the sentences.
+  const arabic = await post('/api/books/space-hero/designs', { answers: { ...answers, name: 'يوسف' }, face: dataUrl });
+  assert.strictEqual(arabic.status, 400);
+  assert.match((await arabic.json()).error, /English letters/);
 
   const list = await (await fetch(base + '/api/books')).json();
   assert.deepStrictEqual(list.books.map((b) => b.id).sort(), ['dream-jobs', 'space-hero']);
@@ -726,7 +731,7 @@ test('personalised books: create, preview pages, edit, order, print PDF', async 
   assert.strictEqual(back.answers.name, 'Laila');
 
   // Colouring book makes the line-art face too.
-  const cb = await (await post('/api/books/dream-jobs/designs', { answers: { name: 'ليلى', gender: 'girl' }, face: dataUrl })).json();
+  const cb = await (await post('/api/books/dream-jobs/designs', { answers: { name: 'Laila', gender: 'girl' }, face: dataUrl })).json();
   assert.strictEqual((await fetch(`${base}/api/books/designs/${cb.id}/pages/3.jpg`)).status, 200);
 
   // Order both; the admin gets a print-ready PDF; the book can no longer be edited.

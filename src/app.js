@@ -422,6 +422,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         const raw = fs.readFileSync(file);
         // Size straight from the PNG header, so this works even without the image library.
         const info = { width: raw.readUInt32BE(16), height: raw.readUInt32BE(20) };
+        // A small file that claims a huge picture would use gigabytes when made into a PDF.
+        const pv = fs.readFileSync(store.designFile(design.id, `${side.id}-preview.png`));
+        const pvW = pv.readUInt32BE(16);
+        const pvH = pv.readUInt32BE(20);
+        if (!info.width || !info.height || info.width > 20000 || info.height > 20000 || info.width * info.height > 120e6 || pvW > 4000 || pvH > 4000) {
+          throw new HttpError(400, 'imageTooLarge');
+        }
         const dpi = Math.round(info.width / (side.widthIn + 2 * side.bleedIn));
         try {
           store.writeDesignFile(design.id, `${side.id}-print.png`, await printfiles.finalizePrintPng(raw, dpi));
@@ -565,7 +572,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       } catch (e) {
         if (!(e instanceof artwork.ArtworkError)) throw e;
         if (e.reason === 'busy') throw new HttpError(429, 'tooFast');
-        if (e.detail) console.warn('[artwork]', e.reason, String(e.detail).slice(0, 300));
+        console.warn('[artwork] could not convert a', artwork.sniff(buf).kind, 'file of', buf.length, 'bytes:', e.reason, String(e.detail || '').slice(0, 400));
         throw new HttpError(400, e.reason === 'empty' ? 'artworkEmpty' : 'artworkBad');
       }
       res.type('image/png').send(out.png);
@@ -807,13 +814,31 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       await drop('failed', e.reason || 'failed');
     }
   }
-  async function saveBook(design, { answers, face, size, aiConsent }, ip) {
+  async function saveBook(design, body, ip) {
+    // All or nothing: if anything fails (a page that can't be drawn, a bad photo),
+    // the book stays exactly as it was, so a half-saved book can't be ordered.
+    const before = JSON.parse(JSON.stringify(design));
+    const faceFile = store.designFile(design.id, 'face.jpg');
+    const oldFace = fs.existsSync(faceFile) ? fs.readFileSync(faceFile) : null;
+    try {
+      await saveBookNow(design, body, ip);
+    } catch (e) {
+      for (const k of Object.keys(design)) delete design[k];
+      Object.assign(design, before);
+      if (oldFace) store.writeDesignFile(design.id, 'face.jpg', oldFace);
+      throw e;
+    }
+  }
+  async function saveBookNow(design, body, ip) {
+    const { answers, face, size, aiConsent } = body && typeof body === 'object' ? body : {};
     const book = bookFor(design.bookId);
     const product = bookProduct(book);
     try {
       design.answers = books.cleanAnswers(book, answers);
     } catch (e) {
       if (e.message === 'bookMissing') throw new HttpError(400, 'fieldRequired', { field: e.field });
+      if (e.message === 'bookLatin') throw new HttpError(400, 'bookLatin', { field: e.field });
+      if (e.message === 'bookBadDate') throw new HttpError(400, 'bookBadDate', { field: e.field });
       throw e;
     }
     design.lang = 'en'; // books are printed in English
@@ -1333,6 +1358,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
    * Returns { path, name } or throws an HttpError.
    */
   async function makeFile(design, sideId, format, { now = false } = {}) {
+    // Only finished designs (their files were checked when they were completed).
+    if (design.status && design.status !== 'ready') throw new HttpError(404, 'notFound');
     const designId = design.id;
     const side = design.sides.find((s) => s.id === sideId);
     const order = design.orderId && store.getOrder(design.orderId);

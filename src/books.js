@@ -225,16 +225,28 @@ function formatDate(iso, lang, withYear = true) {
 const clean = (v, max) => String(v == null ? '' : v).replace(/[\u0000-\u001f\u007f<>{}\[\]|]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
 
 /** Checks and tidies a customer's answers; throws a {field} error for anything missing. */
-function cleanAnswers(book, input = {}) {
+function cleanAnswers(book, input) {
+  if (!input || typeof input !== 'object') input = {};
   const out = {};
   for (const q of book.questions) {
     let v = input[q.id];
     if (q.type === 'choice') v = q.options.some((o) => o.id === v) ? v : '';
     else if (q.type === 'date') {
-      v = /^\d{4}-\d{2}-\d{2}$/.test(v || '') && !Number.isNaN(Date.parse(v)) ? v : '';
-      if (v && (v < '1990-01-01' || v > new Date().toISOString().slice(0, 10))) v = '';
+      v = typeof v === 'string' ? v : '';
+      const real = /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v)) && new Date(`${v}T00:00:00Z`).toISOString().slice(0, 10) === v;
+      if (v && (!real || v < '1990-01-01' || v > new Date().toISOString().slice(0, 10))) {
+        const err = new Error('bookBadDate');
+        err.field = q.label;
+        throw err;
+      }
     } else if (q.type === 'textarea') v = String(v || '').replace(/[\u0000-\u0009\u000b-\u001f\u007f<>{}\[\]|]/g, ' ').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim().slice(0, q.max);
     else v = clean(v, q.max || 40);
+    // The books are printed in English: Arabic letters would scramble the sentences.
+    if (typeof v === 'string' && /[\u0600-\u06ff\u0750-\u077f\ufb50-\ufdff\ufe70-\ufeff]/.test(v)) {
+      const err = new Error('bookLatin');
+      err.field = q.label;
+      throw err;
+    }
     if (q.required && !v) {
       const err = new Error('bookMissing');
       err.field = q.label;
@@ -278,14 +290,24 @@ function loadFonts() {
 async function textImage(text, { font = 'Cairo Bold', pt = 14, px, width, maxH, color = '#1b2740', align = 'centre' }) {
   await loadFonts();
   const dpi = px / PAGE_IN; // points stay the same physical size at any render size
-  for (let size = pt; size >= 6; size -= 0.75) {
+  // Shrink until the text fits the width (a long single word can't wrap) and the height.
+  let out = null;
+  for (let size = pt; ; size = Math.max(6, size - 0.75)) {
     const img = await sharp({
       text: { text: `<span foreground="${color}">${escapeMarkup(text)}</span>`, font: `${font} ${size}`, width: Math.round(width), align, rgba: true, wrap: 'word', dpi: Math.round(dpi), spacing: Math.round(size * dpi / 72 * 0.25) },
     }).png().toBuffer();
     const m = await sharp(img).metadata();
-    if (!maxH || m.height <= maxH || size <= 6) return { img, w: m.width, h: m.height };
+    out = { img, w: m.width, h: m.height };
+    if ((m.width <= width && (!maxH || m.height <= maxH)) || size <= 6) break;
   }
-  return null;
+  // Still too big at the smallest size: scale the picture down so it always fits the page.
+  const k = Math.min(1, width / out.w, maxH ? maxH / out.h : 1);
+  if (k < 1) {
+    const w = Math.max(1, Math.floor(out.w * k));
+    const h = Math.max(1, Math.floor(out.h * k));
+    out = { img: await sharp(out.img).resize(w, h, { fit: 'fill' }).png().toBuffer(), w, h };
+  }
+  return out;
 }
 
 /** Hollow outlined letters (to colour in) from a text image. */

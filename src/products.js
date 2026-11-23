@@ -1086,7 +1086,7 @@ PRODUCTS.push(
     book: 'space-hero',
     category: 'kids',
     name: t('Story Book: My Space Adventure', 'قصة باسم طفلك: مغامرة في الفضاء'),
-    description: t('Your child is the hero: their face in every picture, their name, family and favourites in the story. 12 pages in English, 20 × 20 cm.', 'طفلك بطل الحكاية: وشه في كل صورة، واسمه وعيلته وحاجاته المفضلة في القصة. 12 صفحة باللغة الإنجليزية، 20 × 20 سم.'),
+    description: t('Your child is the hero: their face in every picture, their name, family and favourites in the story. 14 pages in English, 20 × 20 cm.', 'طفلك بطل الحكاية: وشه في كل صورة، واسمه وعيلته وحاجاته المفضلة في القصة. 14 صفحة باللغة الإنجليزية، 20 × 20 سم.'),
     basePrice: 650,
     colors: [{ id: 'std', name: t('Full colour', 'ألوان كاملة'), hex: '#1c2a55' }],
     sizes: [
@@ -1101,7 +1101,7 @@ PRODUCTS.push(
     book: 'dream-jobs',
     category: 'kids',
     name: t('Colouring Book with My Photo', 'كتاب تلوين بصورة طفلك'),
-    description: t("Your child's photo turned into drawings: 13 dream jobs to colour, from astronaut to chef. 16 pages in English, 20 × 20 cm.", 'صورة طفلك بتتحول لرسومات: 13 مهنة يحلم بيها يلوّنها، من رائد الفضاء للشيف. 16 صفحة باللغة الإنجليزية، 20 × 20 سم.'),
+    description: t("Your child's photo turned into drawings: 13 dream jobs to colour, from astronaut to chef. 17 pages in English, 20 × 20 cm.", 'صورة طفلك بتتحول لرسومات: 13 مهنة يحلم بيها يلوّنها، من رائد الفضاء للشيف. 17 صفحة باللغة الإنجليزية، 20 × 20 سم.'),
     basePrice: 300,
     colors: [{ id: 'std', name: t('Colour cover, line-art pages', 'غلاف ملون وصفحات للتلوين'), hex: '#ff8a3d' }],
     sizes: [

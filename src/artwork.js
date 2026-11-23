@@ -9,14 +9,18 @@
  *  - .eps files are PostScript; "DOS EPS" files wrap the PostScript in a
  *    small binary header, which is unwrapped here.
  *
- * Ghostscript (WebAssembly) does the drawing in a worker thread that is
- * stopped after `timeoutMs`; only `MAX_JOBS` run at once.
+ * Ghostscript (WebAssembly) does the drawing in a separate small process that
+ * is stopped after `timeoutMs` or if it uses too much memory; only `MAX_JOBS`
+ * run at once.
  */
 const path = require('path');
-const { Worker } = require('worker_threads');
+const fs = require('fs');
+const { fork } = require('child_process');
 const sharp = require('sharp');
 
-const MAX_JOBS = 2;
+const MAX_JOBS = 1;
+// Ghostscript's WebAssembly memory isn't capped by worker limits: watch the process and stop a job that grows too big.
+const MAX_EXTRA_MB = Number(process.env.ARTWORK_MAX_MB) || 700;
 let running = 0;
 
 class ArtworkError extends Error {
@@ -43,24 +47,57 @@ function sniff(buf) {
   return null;
 }
 
+// Node flags for the converter process: no 10 GB WebAssembly memory reservation
+// (shared hosting limits virtual memory), a small JavaScript heap.
+let FLAGS = ['--disable-wasm-trap-handler', '--max-old-space-size=192'];
+const memMb = (pid) => {
+  try {
+    const m = /VmRSS:\s+(\d+) kB/.exec(fs.readFileSync(`/proc/${pid}/status`, 'utf8'));
+    return m ? Number(m[1]) / 1024 : 0;
+  } catch (e) {
+    return 0;
+  }
+};
+
 function runWorker(data, kind, px, timeoutMs) {
   return new Promise((resolve, reject) => {
-    const worker = new Worker(path.join(__dirname, 'artwork-worker.mjs'), {
-      workerData: { data, kind, px },
-      resourceLimits: { maxOldGenerationSizeMb: 256 },
+    const child = fork(path.join(__dirname, 'artwork-worker.mjs'), [], {
+      execArgv: FLAGS,
+      serialization: 'advanced',
+      stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
     });
+    let stderr = '';
+    child.stderr.on('data', (c) => { stderr = (stderr + c).slice(-2000); });
     let done = false;
     const finish = (fn, v) => {
       if (done) return;
       done = true;
       clearTimeout(timer);
-      worker.terminate().catch(() => {});
+      clearInterval(watch);
+      if (child.exitCode === null) child.kill('SIGKILL');
       fn(v);
     };
-    const timer = setTimeout(() => finish(reject, new ArtworkError('timeout')), timeoutMs);
-    worker.once('message', (m) => finish(resolve, m));
-    worker.once('error', (e) => finish(reject, Object.assign(new ArtworkError('failed'), { detail: e.message })));
-    worker.once('exit', () => finish(reject, new ArtworkError('failed')));
+    const fail = (reason, detail) => Object.assign(new ArtworkError(reason), { detail });
+    const timer = setTimeout(() => finish(reject, fail('timeout', `no answer after ${timeoutMs} ms`)), timeoutMs);
+    const watch = setInterval(() => {
+      const mb = memMb(child.pid);
+      if (mb > MAX_EXTRA_MB) finish(reject, fail('failed', `used ${Math.round(mb)} MB`));
+    }, 150);
+    child.once('message', (m) => finish(resolve, m));
+    child.once('error', (e) => finish(reject, fail('failed', e.message)));
+    child.once('exit', (code, signal) => {
+      // An older Node that doesn't know a flag: try again without it.
+      if (!done && /bad option/i.test(stderr) && FLAGS.length) {
+        FLAGS = FLAGS.filter((f) => !stderr.includes(f));
+        done = true;
+        clearTimeout(timer);
+        clearInterval(watch);
+        runWorker(data, kind, px, timeoutMs).then(resolve, reject);
+        return;
+      }
+      finish(reject, fail('failed', `converter stopped (code ${code}, ${signal || 'no signal'}): ${stderr.trim().slice(-400)}`));
+    });
+    child.send({ data, kind, px });
   });
 }
 
@@ -68,7 +105,7 @@ function runWorker(data, kind, px, timeoutMs) {
  * Converts an AI/EPS file to a trimmed, transparent PNG whose longest side is
  * at most `px` pixels. Returns { png, width, height }.
  */
-async function convertArtwork(buf, { px = 4000, timeoutMs = 45000 } = {}) {
+async function convertArtwork(buf, { px = 4000, timeoutMs = 25000 } = {}) {
   const found = sniff(buf);
   if (!found) throw new ArtworkError('type');
   if (running >= MAX_JOBS) throw new ArtworkError('busy');

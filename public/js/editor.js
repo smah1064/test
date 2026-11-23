@@ -183,6 +183,9 @@
   const inkFor = (hex) => (POD.luminance(hex) < 0.45 ? '#ffffff' : '#16181d');
 
   // ---------- Canvas ----------
+  // Keep exact sizes when the design is saved (Fabric rounds to 2 decimals by default, which
+  // shrinks or grows small-scaled photos by up to 15-30% between screen and print).
+  fabric.Object.NUM_FRACTION_DIGITS = 8;
   const canvas = new fabric.Canvas('design-canvas', {
     width: W,
     height: H,
@@ -199,7 +202,7 @@
     const focus = MOBILE.matches && st.sheet;
     const a = area();
     const base = focus
-      ? Math.min((stage.clientWidth - 16) / (a.w + 48), (stage.clientHeight - 16) / (a.h + 48))
+      ? Math.min((stage.clientWidth - 16) / (a.w + 48), (stage.clientHeight - 16) / (a.h + 48 + (zoneOf() ? 40 : 0)))
       : Math.min((stage.clientWidth - 32) / W, (stage.clientHeight - 32) / H, 1.6);
     const z = Math.max(0.15, base) * st.zoom;
     canvas.setDimensions({ width: Math.round(W * z), height: Math.round(H * z) });
@@ -207,7 +210,7 @@
     requestAnimationFrame(() => typeof positionFloatBar === 'function' && positionFloatBar());
     if (focus) {
       stage.scrollLeft = (a.x + a.w / 2) * z - stage.clientWidth / 2;
-      stage.scrollTop = (a.y + a.h / 2) * z - stage.clientHeight / 2;
+      stage.scrollTop = (a.y + a.h / 2 + (zoneOf() ? 20 : 0)) * z - stage.clientHeight / 2;
     }
     $('zoom-label').textContent = Math.round(st.zoom * 100) + '%';
     canvas.requestRenderAll();
@@ -469,6 +472,7 @@
   }
   document.addEventListener('click', (e) => {
     const n = e.target.closest('[data-nudge]');
+    if (n || e.target.closest('#place-reset')) cancelCrop();
     if (n) {
       const [sx, sy] = n.dataset.nudge.split(',').map(Number);
       const o = st.offsets[st.side] || { dx: 0, dy: 0 };
@@ -2239,11 +2243,13 @@
       if (sd.id === st.side) {
         const objs = remap(serialize(), from, to);
         st.designs[sd.id] = objs;
-        loadObjects(objs).then(() => { applyClips(); commit(); renderCheck(); });
+        loadObjects(objs).then(() => { applyClips(); seedHistory(); commit(); renderCheck(); });
       } else if ((st.designs[sd.id] || []).length) {
         st.designs[sd.id] = remap(st.designs[sd.id], from, to);
       }
     }
+    // Undo works within one size: the history starts again at the new size.
+    st.history = {};
     applyClips();
   }
   $('product-select').addEventListener('change', serial(async (e) => changeProduct(e.target.value)));

@@ -56,7 +56,7 @@
   // ---------- Form ----------
   const today = new Date().toISOString().slice(0, 10);
   function renderForm() {
-    $('bk-title').textContent = book.title.en.replace('{name}', state.answers.name || 'Your child');
+    $('bk-title').textContent = tr(book.title).replace('{name}', state.answers.name || t('book.yourChild'));
     $('bk-blurb').textContent = tr(book.blurb);
     $('bk-questions').innerHTML = book.questions.map((q) => {
       const v = state.answers[q.id] || '';
@@ -89,7 +89,7 @@
     state.dirty = true;
     remember();
     renderButtons();
-    $('bk-title').textContent = book.title.en.replace('{name}', state.answers.name || 'Your child');
+    $('bk-title').textContent = tr(book.title).replace('{name}', state.answers.name || t('book.yourChild'));
   };
 
   $('bk-questions').addEventListener('input', (e) => {
@@ -303,13 +303,20 @@
       state.face = null;
       state.hasPhoto = true;
       state.dirty = false;
+      // Opened from the cart: the saved book changed, so the cart line follows (cover, price, picture).
+      const cart = POD.getCart();
+      const line = state.cartIndex !== null ? cart[state.cartIndex] : cart.find((c) => c.designId === d.id);
+      if (line && line.designId === d.id) {
+        Object.assign(line, { sizeLabel: d.size.label, price: d.price, previewUrl: d.previewUrl });
+        POD.setCart(cart);
+      }
       if (book.ai && state.aiConsent && d.cartoon === 'failed') POD.toast(t('book.cartoonFailed'));
       if (book.ai && state.aiConsent && d.cartoon === 'limit') POD.toast(t('book.cartoonLimit'));
       $('bk-crop').hidden = true;
       renderButtons();
       renderThumbs();
       showPage(state.page);
-      if (matchMedia('(max-width: 900px)').matches) $('bk-img').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (matchMedia('(max-width: 900px)').matches) window.scrollTo({ top: $('bk-img').getBoundingClientRect().top + window.scrollY - 80, behavior: 'smooth' });
       return true;
     } catch (e) {
       POD.toast(e.message, 'error');
