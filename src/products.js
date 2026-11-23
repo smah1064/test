@@ -26,6 +26,8 @@ const CATEGORIES = [
   { id: 'home', name: t('Home & living', 'المنزل') },
   { id: 'accessories', name: t('Accessories', 'إكسسوارات') },
   { id: 'stationery', name: t('Stationery', 'أدوات مكتبية') },
+  { id: 'occasions', name: t('Gifts & occasions', 'هدايا ومناسبات') },
+  { id: 'school', name: t('Back to school', 'المدرسة') },
 ];
 
 const C = {
@@ -657,6 +659,285 @@ PRODUCTS.push(
   },
 );
 
+// ---------- Gifts, occasions, school and more ----------
+const ONE = [{ id: 'one', label: t('One size', 'مقاس واحد'), surcharge: 0 }];
+const FULL = { id: 'white', name: t('Full print', 'طباعة كاملة'), hex: '#ffffff' };
+const shadowRect = (x, y, w, h, rx = 0) => `<rect x="${x + 6}" y="${y + 8}" width="${w}" height="${h}" rx="${rx}" fill="#000" opacity=".12"/>`;
+const flat = (x, y, w, h, rx = 0) => sv(shadowRect(x, y, w, h, rx) + `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="{{C}}" stroke="{{L}}" stroke-width="3"/>`);
+const JERSEY_BODY =
+  '<path d="M150 92 L205 70 L250 84 L295 70 L350 92 L440 160 L404 236 L362 214 L364 540 Q250 552 136 540 L138 214 L96 236 L60 160 Z" fill="{{C}}" stroke="{{L}}" stroke-width="3" stroke-linejoin="round"/>' +
+  '<path d="M150 92 L118 200 M350 92 L382 200" fill="none" stroke="{{L}}" stroke-width="2" opacity=".45"/>';
+const MUG_SVG = sv(
+  '<ellipse cx="236" cy="482" rx="140" ry="18" fill="#000" opacity=".08"/>' +
+    '<path d="M340 205 Q428 205 428 300 Q428 395 340 395 L340 360 Q394 360 394 300 Q394 240 340 240 Z" fill="{{C}}" stroke="{{L}}" stroke-width="3" stroke-linejoin="round"/>' +
+    '<path d="M120 150 L340 150 L340 468 Q230 490 120 468 Z" fill="{{C}}" stroke="{{L}}" stroke-width="3" stroke-linejoin="round"/>' +
+    '<ellipse cx="230" cy="150" rx="110" ry="18" fill="{{S}}" stroke="{{L}}" stroke-width="3"/>'
+);
+const MUG_AREA = { x: 146, y: 225, w: 168, h: 147 };
+
+PRODUCTS.push(
+  {
+    id: 'jersey',
+    category: 'apparel',
+    name: t('Football Jersey', 'تيشيرت كورة'),
+    description: t('Breathable sports jersey. Your team logo on the front, name and number on the back.', 'تيشيرت رياضي خفيف. شعار الفريق على الصدر، والاسم والرقم على الظهر.'),
+    basePrice: 400,
+    colors: [C.white, C.black, C.red, { ...C.navy, hex: '#1d2c5e' }, { id: 'royal', name: t('Royal Blue', 'أزرق ملكي'), hex: '#2353b8' }, C.yellow, { ...C.forest, hex: '#1f7a45', name: t('Green', 'أخضر') }],
+    sizes: [
+      { id: 'kids', label: t('Kids 8–12', 'أطفال 8–12'), surcharge: 0 },
+      ...APPAREL_SIZES.map((z) => ({ ...z, surcharge: z.surcharge + 50 })),
+    ],
+    sides: [
+      { id: 'front', name: FRONT, svg: sv(JERSEY_BODY + '<path d="M215 74 L250 120 L285 74" fill="none" stroke="{{S}}" stroke-width="10" stroke-linejoin="round"/>'), printArea: { x: 172, y: 150, w: 156, h: 190 }, printWidthIn: 11 },
+      { id: 'back', name: BACK, svg: sv(JERSEY_BODY + '<path d="M205 70 Q250 92 295 70" fill="none" stroke="{{S}}" stroke-width="8"/>'), printArea: { x: 158, y: 120, w: 184, h: 260 }, printWidthIn: 12 },
+    ],
+  },
+  {
+    id: 'magicmug',
+    category: 'home',
+    name: t('Magic Mug', 'مج سحري'),
+    description: t('Black when cold; your design appears when you pour in a hot drink.', 'أسود وهو بارد، وتظهر الطباعة لما تصب مشروب سخن.'),
+    basePrice: 350,
+    colors: [{ ...C.black, hex: '#1c1d20', name: t('Black (turns white when hot)', 'أسود (يتحول أبيض مع السخونة)') }],
+    sizes: [{ id: '11oz', label: t('11 oz (325 ml)', '325 مل'), surcharge: 0 }],
+    sides: [{ id: 'front', name: FRONT, svg: MUG_SVG, printArea: { ...MUG_AREA }, printWidthIn: 4 }],
+  },
+  {
+    id: 'couplemugs',
+    category: 'occasions',
+    name: t('Couple Mugs (pair)', 'مجين للكابلز'),
+    description: t('Two matching mugs, a different design on each. Perfect for engagements and weddings.', 'مجين متطابقين بتصميم مختلف لكل واحد. مثالي للخطوبة والفرح.'),
+    basePrice: 450,
+    extraSidePrice: 0,
+    colors: [{ ...C.white }, { ...C.black, hex: '#202124' }, C.blush],
+    sizes: [{ id: '11oz', label: t('2 × 11 oz (325 ml)', '2 × 325 مل'), surcharge: 0 }],
+    sides: [
+      { id: 'mug1', name: t('Mug 1', 'المج الأول'), svg: MUG_SVG, printArea: { ...MUG_AREA }, printWidthIn: 4 },
+      { id: 'mug2', name: t('Mug 2', 'المج الثاني'), svg: MUG_SVG, printArea: { ...MUG_AREA }, printWidthIn: 4 },
+    ],
+  },
+  {
+    id: 'tumbler',
+    category: 'home',
+    name: t('Travel Tumbler', 'تمبلر للسفر'),
+    description: t('Double-wall stainless steel with a sip lid. Keeps coffee hot for hours.', 'ستانلس ستيل بجدارين وغطاء للشرب. يحافظ على القهوة سخنة لساعات.'),
+    basePrice: 500,
+    colors: [C.white, { ...C.black, hex: '#222326' }, C.blush, C.sky, { ...C.forest, hex: '#5e7a64', name: t('Sage', 'أخضر هادي') }],
+    sizes: [{ id: '20oz', label: t('20 oz (590 ml)', '590 مل'), surcharge: 0 }],
+    sides: [
+      {
+        id: 'front',
+        name: FRONT,
+        svg: sv(
+          '<ellipse cx="250" cy="560" rx="96" ry="12" fill="#000" opacity=".08"/>' +
+            '<rect x="168" y="56" width="164" height="40" rx="10" fill="#e8eaed" stroke="{{L}}" stroke-width="2"/>' +
+            '<path d="M170 96 L330 96 L330 540 Q250 556 170 540 Z" fill="{{C}}" stroke="{{L}}" stroke-width="3" stroke-linejoin="round"/>'
+        ),
+        overlay: sv('<rect x="180" y="110" width="10" height="420" rx="5" fill="#fff" opacity=".3"/>'),
+        printArea: { x: 182, y: 150, w: 136, h: 212 },
+        printWidthIn: 3.6,
+      },
+    ],
+  },
+  {
+    id: 'coasters',
+    category: 'home',
+    name: t('Coaster Set (4)', 'طقم كوستر (4)'),
+    description: t('Four glossy ceramic coasters with cork backs, all with your design.', '4 كوستر سيراميك لامع بقاعدة فلين، كلها بتصميمك.'),
+    basePrice: 300,
+    colors: [FULL],
+    sizes: [
+      { id: 'set4', label: t('Set of 4', 'طقم 4 قطع'), surcharge: 0 },
+      { id: 'set6', label: t('Set of 6', 'طقم 6 قطع'), surcharge: 120 },
+    ],
+    sides: [{ id: 'front', name: t('Top', 'الوجه'), svg: flat(100, 150, 300, 300, 26), printArea: { x: 100, y: 150, w: 300, h: 300, rx: 26 }, printWidthIn: 3.94 }],
+  },
+  {
+    id: 'tablecloth',
+    category: 'home',
+    name: t('Ramadan Tablecloth', 'مفرش سفرة رمضان'),
+    description: t('Washable printed tablecloth for iftar gatherings, 140 × 180 cm.', 'مفرش سفرة مطبوع قابل للغسيل لعزومات الفطار، 140 × 180 سم.'),
+    basePrice: 650,
+    colors: [FULL],
+    sizes: [{ id: '140x180', label: t('140 × 180 cm', '140 × 180 سم'), surcharge: 0 }],
+    sides: [{ id: 'front', name: t('Top', 'الوجه'), svg: flat(110, 60, 280, 360), printArea: { x: 110, y: 60, w: 280, h: 360 }, printWidthIn: 55.1 }],
+  },
+  {
+    id: 'prayermat',
+    category: 'occasions',
+    name: t('Personalised Prayer Mat', 'سجادة صلاة باسمك'),
+    description: t('Soft velvet prayer mat, 65 × 115 cm, printed with a name or design. A lovely gift.', 'سجادة صلاة قطيفة ناعمة 65 × 115 سم مطبوعة بالاسم أو تصميمك. هدية جميلة.'),
+    basePrice: 550,
+    colors: [FULL],
+    sizes: [{ id: '65x115', label: t('65 × 115 cm', '65 × 115 سم'), surcharge: 0 }],
+    sides: [
+      {
+        id: 'front',
+        name: t('Top', 'الوجه'),
+        svg: sv(shadowRect(160, 50, 180, 318) + '<rect x="160" y="50" width="180" height="318" fill="{{C}}" stroke="{{L}}" stroke-width="3"/>' +
+          Array.from({ length: 18 }, (_, i) => `<path d="M${165 + i * 10} 50 l0 -16 M${165 + i * 10} 368 l0 16" stroke="#e6dccb" stroke-width="2"/>`).join('')),
+        printArea: { x: 160, y: 50, w: 180, h: 318 },
+        printWidthIn: 25.6,
+      },
+    ],
+  },
+  {
+    id: 'eidenvelopes',
+    category: 'occasions',
+    name: t('Eid Money Envelopes', 'ظروف عيدية'),
+    description: t('Pack of printed envelopes for Eidiya, 9 × 16.5 cm.', 'باكت ظروف عيدية مطبوعة، 9 × 16.5 سم.'),
+    basePrice: 150,
+    colors: [C.white, C.kraft, { id: 'gold', name: t('Gold', 'دهبي'), hex: '#d9b866' }, { id: 'green', name: t('Green', 'أخضر'), hex: '#2f6b4f' }, { ...C.red, hex: '#b8292f' }],
+    sizes: [
+      { id: '10', label: t('10 envelopes', '10 ظروف'), surcharge: 0 },
+      { id: '25', label: t('25 envelopes', '25 ظرف'), surcharge: 175 },
+      { id: '50', label: t('50 envelopes', '50 ظرف'), surcharge: 400 },
+    ],
+    sides: [{ id: 'front', name: FRONT, svg: flat(170, 90, 160, 293), printArea: { x: 170, y: 90, w: 160, h: 293 }, printWidthIn: 3.54 }],
+  },
+  {
+    id: 'greetingcard',
+    category: 'occasions',
+    name: t('Greeting Card', 'كارت تهنئة'),
+    description: t('Folded card on thick matte card stock, blank inside, with a white envelope.', 'كارت مطوي على ورق مقوّى مطفي، من الداخل فاضي، ومعاه ظرف أبيض.'),
+    basePrice: 60,
+    colors: [C.white, C.cream, C.kraft],
+    sizes: [
+      { id: 'A6', label: t('A6 (10.5 × 14.8 cm)', 'A6 (10.5 × 14.8 سم)'), surcharge: 0 },
+      { id: 'A5', label: t('A5 (14.8 × 21 cm)', 'A5 (14.8 × 21 سم)'), surcharge: 30 },
+    ],
+    sides: [{ id: 'front', name: t('Cover', 'الغلاف'), svg: flat(140, 80, 220, 311), printArea: { x: 140, y: 80, w: 220, h: 311 }, printWidthIn: 4.13 }],
+  },
+  {
+    id: 'plaque',
+    category: 'occasions',
+    name: t('Acrylic Photo Plaque', 'بلاك أكريليك للصور'),
+    description: t('Thick crystal-clear acrylic block that stands on its own. For weddings, graduation and memories.', 'بلوك أكريليك شفاف وسميك بيقف لوحده. للأفراح والتخرج والذكريات.'),
+    basePrice: 450,
+    colors: [{ id: 'clear', name: t('Crystal clear', 'شفاف كريستال'), hex: '#ffffff' }],
+    sizes: [
+      { id: '13x18', label: t('13 × 18 cm', '13 × 18 سم'), surcharge: 0 },
+      { id: '18x25', label: t('18 × 25 cm', '18 × 25 سم'), surcharge: 250 },
+    ],
+    sides: [{ id: 'front', name: FRONT, svg: flat(140, 90, 220, 305, 4), printArea: { x: 140, y: 90, w: 220, h: 305 }, printWidthIn: 5.12 }],
+  },
+  {
+    id: 'sign',
+    category: 'occasions',
+    name: t('Welcome Sign', 'لوحة ترحيب'),
+    description: t('Rigid foam board sign for weddings, engagements, birthdays and Ramadan, with an easel.', 'لوحة فوم بورد مقوّاة للأفراح والخطوبة وأعياد الميلاد ورمضان، ومعاها حامل.'),
+    basePrice: 550,
+    colors: [C.white],
+    sizes: [
+      { id: 'A2', label: t('A2 (42 × 59.4 cm)', 'A2 (42 × 59.4 سم)'), surcharge: 0 },
+      { id: 'A1', label: t('A1 (59.4 × 84 cm)', 'A1 (59.4 × 84 سم)'), surcharge: 300 },
+    ],
+    sides: [
+      {
+        id: 'front',
+        name: FRONT,
+        svg: sv('<path d="M210 420 L170 580 M290 420 L330 580 M250 420 L250 560" stroke="#c9a77a" stroke-width="10" stroke-linecap="round"/>' + shadowRect(150, 50, 200, 283) + '<rect x="150" y="50" width="200" height="283" fill="{{C}}" stroke="{{L}}" stroke-width="3"/>'),
+        printArea: { x: 150, y: 50, w: 200, h: 283 },
+        printWidthIn: 16.54,
+      },
+    ],
+  },
+  {
+    id: 'deskmat',
+    category: 'accessories',
+    name: t('Desk Mat XL', 'ماوس باد كبير (ديسك مات)'),
+    description: t('80 × 35 cm stitched-edge desk mat for keyboard and mouse.', 'ديسك مات 80 × 35 سم بحواف مخيطة للكيبورد والماوس.'),
+    basePrice: 450,
+    colors: [FULL],
+    sizes: [{ id: '80x35', label: t('80 × 35 cm', '80 × 35 سم'), surcharge: 0 }],
+    sides: [{ id: 'front', name: t('Top', 'الوجه'), svg: flat(30, 230, 440, 193, 14), printArea: { x: 30, y: 230, w: 440, h: 193, rx: 14 }, printWidthIn: 31.5 }],
+  },
+  {
+    id: 'keychain',
+    category: 'accessories',
+    name: t('Acrylic Keychain', 'ميدالية أكريليك'),
+    description: t('Glossy acrylic tag with a metal ring, printed on both sides with the same design.', 'ميدالية أكريليك لامعة بحلقة معدن، مطبوعة بنفس التصميم.'),
+    basePrice: 90,
+    colors: [C.white],
+    sizes: [
+      { id: '1', label: t('1 keychain', 'ميدالية واحدة'), surcharge: 0 },
+      { id: '5', label: t('5 keychains', '5 ميداليات'), surcharge: 260 },
+      { id: '10', label: t('10 keychains', '10 ميداليات'), surcharge: 560 },
+    ],
+    sides: [
+      {
+        id: 'front',
+        name: FRONT,
+        svg: sv('<circle cx="250" cy="105" r="42" fill="none" stroke="#a7abb2" stroke-width="9"/>' + shadowRect(170, 150, 160, 240, 22) + '<rect x="170" y="150" width="160" height="240" rx="22" fill="{{C}}" stroke="{{L}}" stroke-width="3"/><circle cx="250" cy="172" r="9" fill="#e6e8eb" stroke="{{L}}" stroke-width="2"/>'),
+        printArea: { x: 178, y: 192, w: 144, h: 190, rx: 14 },
+        printWidthIn: 1.42,
+      },
+    ],
+  },
+  {
+    id: 'stickersheet',
+    category: 'school',
+    name: t('Sticker Sheet', 'شيت ستيكرز'),
+    description: t('Glossy waterproof vinyl sticker sheet, kiss-cut around your shapes.', 'شيت ستيكرز فينيل لامع ضد المياه، مقصوص حوالين الأشكال.'),
+    basePrice: 90,
+    colors: [C.white],
+    sizes: [
+      { id: 'A5', label: t('A5 sheet', 'شيت A5'), surcharge: 0 },
+      { id: 'A4', label: t('A4 sheet', 'شيت A4'), surcharge: 60 },
+    ],
+    sides: [{ id: 'front', name: t('Sheet', 'الشيت'), svg: flat(140, 80, 220, 311), printArea: { x: 140, y: 80, w: 220, h: 311 }, printWidthIn: 5.83 }],
+  },
+  {
+    id: 'namelabels',
+    category: 'school',
+    name: t('School Name Labels', 'ستيكرات أسماء للمدرسة'),
+    description: t('Waterproof name stickers for books, bottles and lunch boxes. One design, many labels.', 'ستيكرات أسماء ضد المياه للكتب والزمزمية واللانش بوكس. تصميم واحد على كل الستيكرات.'),
+    basePrice: 120,
+    colors: [C.white],
+    sizes: [
+      { id: '40', label: t('40 labels (5.5 × 4 cm)', '40 ستيكر (5.5 × 4 سم)'), surcharge: 0 },
+      { id: '80', label: t('80 labels (5.5 × 4 cm)', '80 ستيكر (5.5 × 4 سم)'), surcharge: 90 },
+    ],
+    sides: [{ id: 'front', name: t('Label', 'الستيكر'), svg: flat(70, 170, 360, 262, 26), printArea: { x: 70, y: 170, w: 360, h: 262, rx: 26 }, printWidthIn: 2.17 }],
+  },
+  {
+    id: 'lunchbag',
+    category: 'school',
+    name: t('Kids Lunch Bag', 'شنطة لانش بوكس'),
+    description: t('Insulated zip-top lunch bag with a carry handle. Printed with a name or design.', 'شنطة لانش بوكس معزولة بسوستة ومقبض، مطبوعة بالاسم أو تصميمك.'),
+    basePrice: 350,
+    colors: [C.white, { ...C.navy, hex: '#263a66' }, C.blush, C.sky],
+    sizes: ONE,
+    sides: [
+      {
+        id: 'front',
+        name: FRONT,
+        svg: sv('<path d="M200 150 Q200 92 250 92 Q300 92 300 150" fill="none" stroke="{{L}}" stroke-width="10"/>' + shadowRect(110, 150, 280, 380, 18) + '<rect x="110" y="150" width="280" height="380" rx="18" fill="{{C}}" stroke="{{L}}" stroke-width="3"/><path d="M110 210 L390 210" stroke="{{S}}" stroke-width="6"/>'),
+        printArea: { x: 140, y: 240, w: 220, h: 226 },
+        printWidthIn: 8,
+      },
+    ],
+  },
+  {
+    id: 'pencilcase',
+    category: 'school',
+    name: t('Pencil Case', 'مقلمة'),
+    description: t('Canvas zip pouch for pens and pencils, 22 × 14 cm.', 'مقلمة قماش كانفاس بسوستة، 22 × 14 سم.'),
+    basePrice: 180,
+    colors: [C.natural, C.black, { ...C.navy, hex: '#263a66' }],
+    sizes: ONE,
+    sides: [
+      {
+        id: 'front',
+        name: FRONT,
+        svg: sv(shadowRect(60, 170, 380, 250, 10) + '<rect x="60" y="170" width="380" height="250" rx="10" fill="{{C}}" stroke="{{L}}" stroke-width="3"/><path d="M60 190 L440 190" stroke="{{L}}" stroke-width="4" stroke-dasharray="3 3"/>'),
+        printArea: { x: 85, y: 210, w: 330, h: 199 },
+        printWidthIn: 7.87,
+      },
+    ],
+  },
+);
+
 /**
  * Print production details per product:
  *   process  how it is printed; decides which file the shop should use
@@ -686,6 +967,23 @@ const PRODUCTION = {
   onesie: { process: 'dtg', safeIn: 0.15, bleedIn: 0, model: { type: 'card', material: 'fabric' } },
   kidshoodie: { process: 'dtf', safeIn: 0.25, bleedIn: 0, model: { type: 'card', material: 'fabric' } },
   shorts: { process: 'dtf', safeIn: 0.15, bleedIn: 0, model: { type: 'card', material: 'fabric' } },
+  jersey: { process: 'dtf', safeIn: 0.25, bleedIn: 0, model: { type: 'card', material: 'fabric' } },
+  magicmug: { process: 'sublimation', safeIn: 0.15, bleedIn: 0, model: { type: 'mug', diameterIn: 3.25, heightIn: 3.8, material: 'ceramic' } },
+  couplemugs: { process: 'sublimation', safeIn: 0.15, bleedIn: 0, model: { type: 'mug', diameterIn: 3.25, heightIn: 3.8, material: 'ceramic' } },
+  tumbler: { process: 'uv', safeIn: 0.15, bleedIn: 0, model: { type: 'mug', diameterIn: 2.9, heightIn: 7.6, material: 'metal', handle: false, lid: true } },
+  coasters: { process: 'sublimation', safeIn: 0.15, bleedIn: 0.08, model: { type: 'pad', depthIn: 0.25, radiusIn: 0.3, edge: '#b98d5e', material: 'ceramic' } },
+  tablecloth: { process: 'sublimation', safeIn: 1, bleedIn: 0, model: { type: 'card', material: 'fabric' } },
+  prayermat: { process: 'sublimation', safeIn: 0.5, bleedIn: 0, model: { type: 'pad', depthIn: 0.3, radiusIn: 0.2, edge: '#efe9df', material: 'fabric' } },
+  eidenvelopes: { process: 'paper', safeIn: 0.15, bleedIn: 0.08, model: { type: 'card', material: 'paper' } },
+  greetingcard: { process: 'paper', safeIn: 0.15, bleedIn: 0.08, model: { type: 'card', material: 'paper' } },
+  plaque: { process: 'uv', safeIn: 0.15, bleedIn: 0, model: { type: 'block', depthIn: 0.8, radiusIn: 0.05, material: 'plastic', clear: true } },
+  sign: { process: 'uv', safeIn: 0.5, bleedIn: 0, model: { type: 'block', depthIn: 0.2, radiusIn: 0.02, edge: '#f4f4f2', material: 'paper' } },
+  deskmat: { process: 'sublimation', safeIn: 0.4, bleedIn: 0.125, model: { type: 'pad', depthIn: 0.12, radiusIn: 0.5, material: 'fabric' } },
+  keychain: { process: 'uv', safeIn: 0.08, bleedIn: 0, model: { type: 'block', depthIn: 0.2, radiusIn: 0.2, material: 'plastic', clear: true } },
+  stickersheet: { process: 'paper', safeIn: 0.15, bleedIn: 0.08, model: { type: 'pad', depthIn: 0.03, radiusIn: 0.05, edge: '#f2f3f5', material: 'paper' } },
+  namelabels: { process: 'paper', safeIn: 0.08, bleedIn: 0.04, model: { type: 'pad', depthIn: 0.03, radiusIn: 0.3, edge: '#f2f3f5', material: 'paper' } },
+  lunchbag: { process: 'dtf', safeIn: 0.25, bleedIn: 0, model: { type: 'card', material: 'fabric' } },
+  pencilcase: { process: 'dtf', safeIn: 0.2, bleedIn: 0, model: { type: 'card', material: 'fabric' } },
 };
 /** Garments can be printed either way; the shop picks per order item. */
 const GARMENT_METHODS = ['dtg', 'dtf'];
@@ -693,6 +991,7 @@ const METHODS = {
   tshirt: GARMENT_METHODS, kidstee: GARMENT_METHODS, hoodie: GARMENT_METHODS, sweatshirt: GARMENT_METHODS, tote: GARMENT_METHODS,
   polo: GARMENT_METHODS, oversized: GARMENT_METHODS, ziphoodie: GARMENT_METHODS, denim: GARMENT_METHODS, apron: GARMENT_METHODS,
   onesie: GARMENT_METHODS, kidshoodie: GARMENT_METHODS, shorts: GARMENT_METHODS, cap: ['dtf'],
+  jersey: ['dtf'], lunchbag: ['dtf'], pencilcase: ['dtf'],
 };
 for (const p of PRODUCTS) {
   const spec = PRODUCTION[p.id];
@@ -726,7 +1025,8 @@ function priceFor(product, sizeId, sideCount) {
   const size = product.sizes.find((s) => s.id === sizeId);
   if (!size) return null;
   const extraSides = Math.max(0, sideCount - 1);
-  return round2(product.basePrice + size.surcharge + extraSides * EXTRA_SIDE_PRICE);
+  const perSide = product.extraSidePrice != null ? product.extraSidePrice : EXTRA_SIDE_PRICE;
+  return round2(product.basePrice + size.surcharge + extraSides * perSide);
 }
 
 function shippingFor(subtotal) {

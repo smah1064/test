@@ -16,7 +16,7 @@
         const color = product.colors.find((c) => c.id === d.color) || product.colors[0];
         const st = await POD_RENDER.stage(d, product, product.sides[0], color);
         // Square picture around the print area, so the words read clearly on a small card.
-        const zoom = ['mug', 'bottle', 'phonecase', 'notebook', 'poster', 'mousepad', 'cushion'].includes(product.id) ? 1.25 : 1.75;
+        const zoom = ['mug', 'bottle', 'phonecase', 'notebook', 'poster', 'mousepad', 'cushion', 'magicmug', 'couplemugs', 'tumbler', 'coasters', 'tablecloth', 'prayermat', 'eidenvelopes', 'greetingcard', 'plaque', 'sign', 'deskmat', 'keychain', 'stickersheet', 'namelabels', 'lunchbag', 'pencilcase'].includes(product.id) ? 1.25 : 1.75;
         const cv = POD_RENDER.picture(st, 1.2, zoom);
         const blob = await new Promise((r) => cv.toBlob(r, 'image/webp', 0.88));
         return URL.createObjectURL(blob);

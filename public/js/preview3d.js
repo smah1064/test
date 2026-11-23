@@ -75,11 +75,10 @@ function slab(w, h, r, depth, frontTex, sideMat, kind) {
   return new THREE.Mesh(geo, [mat(kind, { map: frontTex }), sideMat]);
 }
 
-function buildMug(m, color, tex, renderer, product) {
+function buildMug(m, color, tex, renderer, product, side = product.sides[0]) {
   const g = new THREE.Group();
   const r = m.diameterIn / 2;
   const h = m.heightIn;
-  const side = product.sides[0];
   const C = Math.PI * m.diameterIn;
   const wrap = canvas(2048, (2048 * h) / C);
   const ctx = wrap.getContext('2d');
@@ -91,8 +90,9 @@ function buildMug(m, color, tex, renderer, product) {
     const ph = (side.printHeightIn / h) * wrap.height;
     ctx.drawImage(crop, (wrap.width - pw) / 2, (wrap.height - ph) / 2 - wrap.height * 0.03, pw, ph);
   }
-  const body = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 128, 1, true, Math.PI, Math.PI * 2), mat('ceramic', { map: texture(wrap, renderer) }));
-  const plain = mat('ceramic', { color });
+  const kind = m.material === 'metal' ? 'plastic' : 'ceramic';
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 128, 1, true, Math.PI, Math.PI * 2), mat(kind, { map: texture(wrap, renderer) }));
+  const plain = mat(kind, { color });
   const inner = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.92, r * 0.92, h * 0.98, 96, 1, true), mat('ceramic', { color, side: THREE.BackSide }));
   const innerBottom = new THREE.Mesh(new THREE.CircleGeometry(r * 0.92, 64), plain);
   innerBottom.rotation.x = -Math.PI / 2;
@@ -106,7 +106,16 @@ function buildMug(m, color, tex, renderer, product) {
   const handle = new THREE.Mesh(new THREE.TorusGeometry(h * 0.27, 0.17, 24, 64, Math.PI), plain);
   handle.rotation.z = -Math.PI / 2;
   handle.position.set(r - 0.05, 0.05, 0);
-  g.add(body, inner, innerBottom, base, rim, handle);
+  g.add(body, inner, innerBottom, base, rim);
+  if (m.handle !== false) g.add(handle);
+  if (m.lid) {
+    // Travel lid: a white cap with a steel band.
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.005, r * 1.005, 0.18, 96), mat('metal', { color: '#c9ccd1' }));
+    band.position.y = h / 2 + 0.09;
+    const lid = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.97, r * 1.0, 0.55, 96), mat('plastic', { color: '#f4f5f7' }));
+    lid.position.y = h / 2 + 0.18 + 0.27;
+    g.add(band, lid);
+  }
   g.rotation.y = -0.35;
   return g;
 }
@@ -168,11 +177,29 @@ function buildFrame(color, tex, renderer, product) {
 
 function buildPad(color, tex, renderer, product) {
   const side = product.sides[0];
+  const m = product.model || {};
   const w = side.printWidthIn;
   const h = side.printHeightIn;
+  const r = Math.min(m.radiusIn != null ? m.radiusIn : 0.35, w / 4, h / 4);
   const face = texture(faceCanvas(color, designCrop(tex[side.id]), 1600, (1600 * h) / w), renderer);
-  const mesh = slab(w, h, 0.35, 0.12, face, mat('plastic', { color: '#2a2b30', roughness: 0.8 }), 'fabric');
+  const mesh = slab(w, h, r, m.depthIn || 0.12, face, mat('plastic', { color: m.edge || '#2a2b30', roughness: 0.8 }), m.material || 'fabric');
   mesh.rotation.x = -1.05;
+  return mesh;
+}
+
+/** An upright block: acrylic photo blocks and keychains (clear edges) or foam-board signs. */
+function buildBlock(color, tex, renderer, product) {
+  const side = product.sides[0];
+  const m = product.model || {};
+  const w = side.printWidthIn;
+  const h = side.printHeightIn;
+  const r = Math.min(m.radiusIn != null ? m.radiusIn : 0.1, w / 4, h / 4);
+  const face = texture(faceCanvas(m.clear ? '#f7f9fb' : color, designCrop(tex[side.id]), 1600, (1600 * h) / w), renderer);
+  const edge = m.clear
+    ? new THREE.MeshPhysicalMaterial({ color: '#dfeaf0', roughness: 0.05, metalness: 0, transmission: 0.6, transparent: true, opacity: 0.55, thickness: 0.5 })
+    : mat('paper', { color: m.edge || '#f4f4f2' });
+  const mesh = slab(w, h, r, m.depthIn || 0.5, face, edge, m.material || 'plastic');
+  mesh.rotation.y = -0.3;
   return mesh;
 }
 
@@ -378,10 +405,20 @@ export function mount(container, { product, color, textures, spin = true }) {
   const m = product.model;
   const hex = color.hex;
   let obj;
-  if (m.type === 'mug') obj = buildMug(m, hex, textures, renderer, product);
+  if (m.type === 'mug' && product.sides.length > 1) {
+    // A set of mugs (couple mugs): one per side, side by side.
+    obj = new THREE.Group();
+    product.sides.forEach((sd, i) => {
+      const mug = buildMug(m, hex, textures, renderer, product, sd);
+      mug.position.x = (i - (product.sides.length - 1) / 2) * m.diameterIn * 1.9;
+      mug.rotation.y = i ? -0.6 : -0.1;
+      obj.add(mug);
+    });
+  } else if (m.type === 'mug') obj = buildMug(m, hex, textures, renderer, product);
   else if (m.type === 'bottle') obj = buildBottle(m, hex, textures, renderer, product);
   else if (m.type === 'frame') obj = buildFrame(hex, textures, renderer, product);
   else if (m.type === 'pad') obj = buildPad(hex, textures, renderer, product);
+  else if (m.type === 'block') obj = buildBlock(hex, textures, renderer, product);
   else if (m.type === 'case') obj = buildCase(hex, textures, renderer, product);
   else if (m.type === 'notebook') obj = buildNotebook(hex, textures, renderer, product);
   else if (m.type === 'pillow') obj = buildPillow(m, hex, textures, renderer, product);

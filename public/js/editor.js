@@ -2234,9 +2234,10 @@
     const p = st.product;
     const size = p.sizes.find((s) => s.id === st.sizeId);
     const n = designedSides().length;
-    $('price').textContent = money(p.basePrice + size.surcharge + Math.max(0, n - 1) * catalog.pricing.extraSide);
+    const perSide = p.extraSidePrice != null ? p.extraSidePrice : catalog.pricing.extraSide;
+    $('price').textContent = money(p.basePrice + size.surcharge + Math.max(0, n - 1) * perSide);
     const notes = [];
-    if (p.sides.length > 1) notes.push(n > 1 ? t('price.bothSides') : t('price.addSide', { price: money(catalog.pricing.extraSide) }));
+    if (p.sides.length > 1 && perSide > 0) notes.push(n > 1 ? t('price.bothSides') : t('price.addSide', { price: money(perSide) }));
     if (size.surcharge) notes.push(`${tr(size.label)} +${money(size.surcharge)}`);
     $('price-note').textContent = notes.join(' · ');
     const h = hist();

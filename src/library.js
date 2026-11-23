@@ -186,6 +186,24 @@ const SEED = [
   ], 'black'),
 ];
 
+// Designs that look best on one of the newer products open on it by default
+// (customers can still switch to any product on the design page).
+const DEFAULT_PRODUCT = {
+  'number-10': ['jersey', 'white'],
+  captain: ['jersey', 'white'],
+  'eid-mubarak': ['eidenvelopes', 'gold'],
+  'eid-sheep': ['eidenvelopes', 'white'],
+  ba7ebak: ['couplemugs', 'white'],
+  wanasy: ['couplemugs', 'white'],
+  'ramadan-fanous': ['tablecloth', 'white'],
+  '3eed-milad': ['greetingcard', 'white'],
+  'set-el-7abayeb': ['prayermat', 'white'],
+  kammel: ['tumbler', 'white'],
+};
+for (const d of SEED) {
+  if (DEFAULT_PRODUCT[d.id]) [d.product, d.color] = DEFAULT_PRODUCT[d.id];
+}
+
 // ---------- Custom designs (added by the shop owner) ----------
 class Library {
   constructor(dataDir) {
