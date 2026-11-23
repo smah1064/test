@@ -170,13 +170,11 @@
       </div>`;
   }
 
-  function renderCurrent(item) {
-    if (!item) {
-      $('current').innerHTML = `<div class="card empty"><h3>${esc(t('admin.clearTitle'))}</h3><p class="muted">${esc(t('admin.clearText'))}</p></div>`;
-      return;
-    }
+  // Items whose details are open in the waiting list (kept across refreshes).
+  const open = new Set();
+  function card(item) {
     const next = NEXT[item.status];
-    $('current').innerHTML = `
+    return `
       <div class="card now-printing">
         <div class="previews">${item.sides.map((s) => `<img src="${esc(s.previewUrl)}" alt="${esc(tr(s.name))}">`).join('')}</div>
         <div>
@@ -193,24 +191,40 @@
 
   function row(item) {
     const next = NEXT[item.status];
+    const isOpen = open.has(item.id);
     return `
-      <div class="card queue-row">
+      <div class="card queue-row ${isOpen ? 'is-open' : ''}">
         <img src="${esc(item.sides[0].previewUrl)}" alt="">
         <div>
           <strong>${esc(tr(item.productName))}</strong> ${pill(item.status)}
           <div class="muted small">${esc(item.orderNumber)} · ${esc(t('admin.spec.itemOf', { i: item.position, n: item.of }))} · ${esc(tr(item.color.name))} · ${esc(tr(item.size.label))} · ${esc(item.sides.map((s) => tr(s.name)).join(' + '))}</div>
         </div>
-        ${item.status === 'printed' ? `<button class="btn btn-sm" data-item="${item.id}" data-status="${next.status}">${esc(t(next.label))}</button>` : ''}
+        <div class="queue-actions">
+          <button class="btn btn-sm" data-toggle-item="${item.id}">${esc(t(isOpen ? 'admin.hideDetails' : 'admin.details'))}</button>
+          <button class="btn btn-sm ${item.status === 'queued' ? 'btn-primary' : ''}" data-item="${item.id}" data-status="${next.status}">${esc(t(next.label))}</button>
+        </div>
+        ${isOpen ? `<div class="queue-details">${spec(item)}${item.sides.map((s) => printFiles(item, s)).join('')}</div>` : ''}
       </div>`;
   }
 
   function renderQueue(q) {
     $('stats').innerHTML = ['queued', 'printing', 'printed', 'shipped']
       .map((k) => `<div class="card stat"><b>${POD.num(q.counts[k])}</b><span>${esc(t('admin.stat.' + k))}</span></div>`).join('');
-    renderCurrent(q.current);
-    $('up-next').innerHTML = q.upNext.length ? q.upNext.map(row).join('') : `<p class="muted">${esc(t('admin.nothingWaiting'))}</p>`;
+    const nothing = !q.printing.length && !q.waiting.length;
+    $('current').innerHTML = q.printing.length
+      ? q.printing.map(card).join('')
+      : `<div class="card empty"><h3>${esc(t(nothing ? 'admin.clearTitle' : 'admin.pressIdle'))}</h3><p class="muted">${esc(t(nothing ? 'admin.clearText' : 'admin.pressIdleText'))}</p></div>`;
+    $('up-next').innerHTML = q.waiting.length ? q.waiting.map(row).join('') : `<p class="muted">${esc(t('admin.nothingWaiting'))}</p>`;
     $('to-ship').innerHTML = q.toShip.length ? q.toShip.map(row).join('') : `<p class="muted">${esc(t('admin.nothingToShip'))}</p>`;
   }
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-toggle-item]');
+    if (!b) return;
+    const id = b.dataset.toggleItem;
+    if (open.has(id)) open.delete(id);
+    else open.add(id);
+    if (lastQueue) renderQueue(lastQueue);
+  });
 
   function renderOrders(orders) {
     const statusPill = (s) => `<span class="pill ${s === 'shipped' ? 'shipped' : s === 'received' ? 'queued' : 'printing'}">${esc(t('order.' + s))}</span>`;

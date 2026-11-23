@@ -181,19 +181,19 @@ test('places an order with one print job per design and works through the queue 
   assert.strictEqual(again.status, 409);
 
   let q = await (await admin('/api/admin/queue')).json();
-  assert.strictEqual(q.current.designId, a.id);
-  assert.strictEqual(q.upNext[0].designId, b.id);
-
-  const [first, second] = [q.current, q.upNext[0]];
+  const first = q.waiting.find((i) => i.designId === a.id);
+  const second = q.waiting.find((i) => i.designId === b.id);
+  assert.ok(first && second);
+  // Several items can be printing at once, started in any order.
+  assert.strictEqual((await admin(`/api/admin/items/${second.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'printing' }) })).status, 200);
   assert.strictEqual((await admin(`/api/admin/items/${first.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'printing' }) })).status, 200);
-  // Only one item on the press at a time.
-  const busy = await admin(`/api/admin/items/${second.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'printing' }) });
-  assert.strictEqual(busy.status, 409);
+  q = await (await admin('/api/admin/queue')).json();
+  assert.ok([first.id, second.id].every((id) => q.printing.some((i) => i.id === id)));
 
   await admin(`/api/admin/items/${first.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'printed' }) });
   q = await (await admin('/api/admin/queue')).json();
-  assert.strictEqual(q.current.id, second.id);
-  assert.strictEqual(q.toShip[0].id, first.id);
+  assert.ok(q.printing.some((i) => i.id === second.id));
+  assert.ok(q.toShip.some((i) => i.id === first.id));
 
   const pub = await (await fetch(`${base}/api/orders/${order.id}`)).json();
   assert.strictEqual(pub.status, 'in_production');

@@ -1123,15 +1123,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     for (const order of store.listOrders()) {
       order.items.forEach((item, i) => all.push(adminItem(order, item, i)));
     }
-    // Oldest first; an item already on the press always comes first.
-    const open = all.filter((i) => i.status !== 'shipped');
-    const rank = { printing: 0, queued: 1, printed: 2 };
-    const queue = open
-      .filter((i) => i.status !== 'printed')
-      .sort((a, b) => rank[a.status] - rank[b.status] || a.orderedAt.localeCompare(b.orderedAt) || a.position - b.position);
-    const toShip = open.filter((i) => i.status === 'printed').sort((a, b) => a.orderedAt.localeCompare(b.orderedAt));
+    // Oldest first. Several items can be on the presses at once, in any order.
+    const byAge = (a, b) => a.orderedAt.localeCompare(b.orderedAt) || a.position - b.position;
+    const printing = all.filter((i) => i.status === 'printing').sort(byAge);
+    const waiting = all.filter((i) => i.status === 'queued').sort(byAge);
+    const toShip = all.filter((i) => i.status === 'printed').sort(byAge);
     const counts = Object.fromEntries(ITEM_STATUSES.map((s) => [s, all.filter((i) => i.status === s).length]));
-    res.json({ current: queue[0] || null, upNext: queue.slice(1), toShip, counts });
+    res.json({ printing, waiting, toShip, counts });
   });
 
   app.get('/api/admin/orders', requireAdmin, (req, res) => {
@@ -1166,13 +1164,6 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (status === undefined) return res.json(adminItem(order, item, order.items.indexOf(item)));
     }
     if (!ITEM_STATUSES.includes(status)) throw new HttpError(400, 'badStatus', { list: ITEM_STATUSES.join(', ') });
-    if (status === 'printing') {
-      // One at a time: the press holds a single job.
-      for (const o of store.listOrders()) {
-        const busy = o.items.find((i) => i.status === 'printing' && i.id !== item.id);
-        if (busy) throw new HttpError(409, 'pressBusy', { order: o.number, n: o.items.indexOf(busy) + 1 });
-      }
-    }
     if (item.status !== status) {
       item.status = status;
       item.history.push({ status, at: new Date().toISOString() });
