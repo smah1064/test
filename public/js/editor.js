@@ -346,6 +346,21 @@
         ctx.lineWidth = 1 * px;
         ctx.strokeStyle = 'rgba(255, 90, 54, .55)';
         ctx.strokeRect(zone.x, zone.y, zone.w, zone.h);
+        // Centre guides: the middle of the garment (up and down) and of the
+        // zone (across); solid pink when the print box is snapped to them.
+        const g = areaGuides();
+        const snap = st.areaSnap || {};
+        const guide = (on, x1, y1, x2, y2) => {
+          ctx.setLineDash(on ? [] : [5 * px, 4 * px]);
+          ctx.lineWidth = (on ? 1.5 : 1) * px;
+          ctx.strokeStyle = on ? '#e64980' : 'rgba(230, 73, 128, .45)';
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.stroke();
+        };
+        guide(snap.x, g.x, zone.y, g.x, zone.y + zone.h);
+        guide(snap.y, zone.x, g.y, zone.x + zone.w, g.y);
       }
       const label = '✥ ' + t('area.drag');
       ctx.setLineDash([]);
@@ -398,6 +413,22 @@
     const a = areaFor(st.product, id, st.sizeId, null);
     const clamp = (v, lo, hi) => Math.round(Math.min(Math.max(v, Math.min(lo, 0)), Math.max(hi, 0)));
     return { dx: clamp(dx, z.x - a.x, z.x + z.w - a.w - a.x), dy: clamp(dy, z.y - a.y, z.y + z.h - a.h - a.y) };
+  }
+  /** Where the centre guides are while dragging the print area. */
+  function areaGuides(id = st.side) {
+    const z = zoneOf(id);
+    return { x: z.x + z.w / 2, y: z.y + z.h / 2 };
+  }
+  /** Snap a dragged offset so the print box's centre sits on a guide when it is close. */
+  function snapOffset(dx, dy) {
+    const a = areaFor(st.product, st.side, st.sizeId, null);
+    const g = areaGuides();
+    const th = SNAP_PX / canvas.getZoom();
+    const cx = a.x + a.w / 2 + dx;
+    const cy = a.y + a.h / 2 + dy;
+    const snap = { x: Math.abs(cx - g.x) < th, y: Math.abs(cy - g.y) < th };
+    st.areaSnap = snap;
+    return { dx: snap.x ? g.x - a.x - a.w / 2 : dx, dy: snap.y ? g.y - a.y - a.h / 2 : dy };
   }
   /** Put the print area at this offset; the design moves with it. */
   function moveArea(dx, dy) {
@@ -459,12 +490,14 @@
       if (!drag) return;
       if (e.cancelable) e.preventDefault();
       const p = canvas.getPointer(e);
-      if (!moveArea(drag.dx + p.x - drag.x, drag.dy + p.y - drag.y)) canvas.requestRenderAll();
+      const to = snapOffset(drag.dx + p.x - drag.x, drag.dy + p.y - drag.y);
+      if (!moveArea(to.dx, to.dy)) canvas.requestRenderAll();
     };
     const end = () => {
       if (!drag) return;
       drag = null;
       st.movingArea = false;
+      st.areaSnap = null;
       commit();
       canvas.requestRenderAll();
     };
