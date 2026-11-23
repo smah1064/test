@@ -81,6 +81,17 @@
     'idcards:back': { ...P('idcard-front'), box: { x: 335, y: 482, w: 330, h: 520 }, fit: 'cover', warp: 'flat' },
   };
 
+  /*
+   * Model photos (the "On a model" view): people wearing the blank white
+   * garment, with a mask of the garment only (skin, hair and backdrop are
+   * never recoloured or printed on). Same coordinates as above: pixels of the
+   * 1000-px-wide photo. `who` names the model for the chips (pv.who.*).
+   */
+  const M = (name, who, rect) => ({ src: `/mockups/models/${name}.webp`, mask: `/mockups/models/${name}-mask.png`, who, rect, warp: 'fabric' });
+  window.POD_MODELS = {
+    'tshirt:front': [M('tshirt-man-front', 'man', { cx: 507, top: 434, w: 218 })],
+  };
+
   // ---------- Recoloured product photos (cards, editor, thumbnails) ----------
   const loadImg = (src) => new Promise((resolve, reject) => {
     const im = new Image();

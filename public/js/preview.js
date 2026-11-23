@@ -515,6 +515,8 @@
     return out;
   }
   const photoFor = (product, sideId) => (window.POD_PHOTOS ? window.POD_PHOTOS[`${product.id}:${sideId}`] : null);
+  /** Model photos for a product side ("On a model" view); [] if none. */
+  const modelsFor = (product, sideId) => (window.POD_MODELS && window.POD_MODELS[`${product.id}:${sideId}`]) || [];
 
   // ---------- Modal ----------
   const $ = (id) => document.getElementById(id);
@@ -547,18 +549,38 @@
     return cfg ? renderPhoto(state.product, entry, cfg, state.color.hex, false) : null;
   }
 
+  /** The design on model photo number `n` of a side (cached per side and model). */
+  function modelPicture(sideId, n) {
+    const key = `${sideId}:${n}`;
+    if (!state.models[key]) {
+      const entry = state.sides.find((s) => s.side.id === sideId);
+      state.models[key] = renderPhoto(state.product, entry, modelsFor(state.product, sideId)[n], state.color.hex);
+    }
+    return state.models[key];
+  }
+
   function setBody(html) {
     $('pv-body').innerHTML = html;
   }
 
   async function show() {
-    const { tab, sideId } = state;
+    const { tab } = state;
     document.querySelectorAll('[data-pv-tab]').forEach((b) => b.classList.toggle('active', b.dataset.pvTab === tab));
-    const multi = state.sides.length > 1 && tab !== '3d';
+    // On a model: only the sides that have model photos.
+    const sides = tab === 'model' ? state.sides.filter((s) => modelsFor(state.product, s.side.id).length) : state.sides;
+    if (!sides.find((s) => s.side.id === state.sideId)) state.sideId = (sides.find((s) => s.hasDesign) || sides[0]).side.id;
+    const { sideId } = state;
+    const multi = sides.length > 1 && tab !== '3d';
     $('pv-sides').hidden = !multi;
-    $('pv-sides').innerHTML = state.sides.map((s) => `<button class="side-tab ${s.side.id === sideId ? 'active' : ''}" data-pv-side="${s.side.id}">${esc(tr(s.side.name))}</button>`).join('');
+    $('pv-sides').innerHTML = sides.map((s) => `<button class="side-tab ${s.side.id === sideId ? 'active' : ''}" data-pv-side="${s.side.id}">${esc(tr(s.side.name))}</button>`).join('');
+    const models = tab === 'model' ? modelsFor(state.product, sideId) : [];
+    if (state.model >= models.length) state.model = 0;
+    if ($('pv-models')) {
+      $('pv-models').hidden = models.length < 2;
+      $('pv-models').innerHTML = models.map((m, i) => `<button class="side-tab ${i === state.model ? 'active' : ''}" data-pv-model="${i}">${esc(t('pv.who.' + m.who))}</button>`).join('');
+    }
     $('pv-spin-wrap').hidden = tab !== '3d';
-    $('pv-hint').textContent = tab === '3d' ? t('pv.drag') : tab === 'proof' ? t('pv.proofNote') : '';
+    $('pv-hint').textContent = tab === '3d' ? t('pv.drag') : tab === 'proof' ? t('pv.proofNote') : tab === 'model' ? t('pv.modelNote') : '';
     if (three && tab !== '3d') {
       three.dispose();
       three = null;
@@ -574,6 +596,12 @@
         const shown = sizedPicture(cv, state.viewScale);
         shown.className = 'pv-canvas';
         $('pv-body').appendChild(shown);
+      } else if (tab === 'model') {
+        const cv = await modelPicture(sideId, state.model);
+        if (token !== state.token) return;
+        setBody('');
+        cv.className = 'pv-canvas';
+        $('pv-body').appendChild(cv);
       } else if (tab === 'proof') {
         const cv = await realisticFor(sideId);
         const small = document.createElement('canvas');
@@ -623,6 +651,7 @@
       a.remove();
     };
     if (state.tab === '3d' && three) three.snapshot().then(save);
+    else if (state.tab === 'model') modelPicture(state.sideId, state.model).then((cv) => cv.toBlob(save, 'image/png'));
     else realisticFor(state.sideId).then((cv) => cv.toBlob(save, 'image/png'));
   }
 
@@ -744,7 +773,10 @@
   }
 
   function open(data) {
-    state = { ...data, tab: 'real', sideId: data.startSide, real: {} };
+    state = { ...data, tab: 'real', sideId: data.startSide, real: {}, models: {}, model: 0 };
+    // The "On a model" tab only for clothing that has model photos.
+    const withModels = data.sides.some((s) => modelsFor(data.product, s.side.id).length);
+    document.querySelectorAll('[data-pv-tab="model"]').forEach((b) => { b.hidden = !withModels; });
     if (!data.sides.find((s) => s.side.id === state.sideId && s.hasDesign)) {
       const withDesign = data.sides.find((s) => s.hasDesign);
       if (withDesign) state.sideId = withDesign.side.id;
@@ -769,6 +801,14 @@
       state.sideId = b.dataset.pvSide;
       show();
     });
+    if ($('pv-models')) {
+      $('pv-models').addEventListener('click', (e) => {
+        const b = e.target.closest('[data-pv-model]');
+        if (!b || !state) return;
+        state.model = +b.dataset.pvModel;
+        show();
+      });
+    }
     $('pv-spin').addEventListener('change', (e) => three && three.setSpin(e.target.checked));
     $('pv-download').addEventListener('click', () => {
       try {
@@ -779,5 +819,5 @@
     });
   });
 
-  window.POD_PREVIEW = { open, renderRealistic, renderPhoto, photoFor, sizedPicture };
+  window.POD_PREVIEW = { open, renderRealistic, renderPhoto, photoFor, modelsFor, sizedPicture };
 })();
