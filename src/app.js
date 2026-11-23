@@ -184,6 +184,8 @@ const DEFAULT_LIMITS = {
   designsAll: [{ max: 3000, ms: 24 * 3600e3 }],
   orders: [{ max: 5, ms: 10 * 60e3 }, { max: 20, ms: 24 * 3600e3 }],
   shares: [{ max: 10, ms: 60e3 }, { max: 60, ms: 24 * 3600e3 }],
+  // WhatsApp/email alerts for the whole shop, so fake orders cannot flood the owner's phone.
+  notify: [{ max: 30, ms: 3600e3 }, { max: 200, ms: 24 * 3600e3 }],
 };
 
 function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 3600e3 }) {
@@ -206,11 +208,15 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   app.set('trust proxy', tp === 'false' ? false : /^\d+$/.test(tp) ? Number(tp) : true);
   app.use(security.securityHeaders);
 
-  // TEMPORARY: shows how the hosting proxy passes the visitor's address (removed after checking).
-  app.get('/api/ip-check', (req, res) => {
-    res.set('Cache-Control', 'no-store');
-    res.json({ ip: req.ip, ips: req.ips, xff: req.get('x-forwarded-for') || null, xri: req.get('x-real-ip') || null, socket: req.socket.remoteAddress,
-      other: Object.keys(req.headers).filter((h) => /ip|forward|client|cdn|via/i.test(h)) });
+  // How the hosting proxy passes the visitor's address, logged for the first
+  // few page visits after a restart (to set TRUST_PROXY to the right hop count).
+  let proxyLogs = 0;
+  app.use((req, res, next) => {
+    if (proxyLogs < 8 && req.method === 'GET' && !req.path.includes('.') && !req.path.startsWith('/api')) {
+      proxyLogs++;
+      console.log(`[proxy] xff="${String(req.get('x-forwarded-for') || '').slice(0, 200)}" real="${String(req.get('x-real-ip') || '').slice(0, 60)}" socket=${req.socket.remoteAddress} ip=${req.ip}`);
+    }
+    next();
   });
 
   // ---------- Product card pictures ----------
@@ -687,6 +693,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     });
     res.status(201).json(publicOrder(order));
     // Tell the shop and the customer, after answering: sending never holds up or fails an order.
+    if (limiter.hit('notify:*', LIMITS.notify)) {
+      console.warn(`[notify] skipped alerts for ${order.number}: too many orders this hour`);
+      order.notifications = { skipped: 'too many orders this hour', at: new Date().toISOString() };
+      store.save();
+      return;
+    }
     const proto = String(req.get('x-forwarded-proto') || req.protocol).split(',')[0].trim();
     notify.orderPlaced(order, { origin: `${proto}://${req.get('host')}`, lang: order.lang })
       .then((result) => {
