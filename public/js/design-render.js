@@ -80,13 +80,18 @@
     return { bg: clone(bg), overlay: clone(overlay) };
   }
 
-  /** A canvas holding the design on one side of a product, ready to export. */
-  async function stage(design, product, side, color) {
+  /**
+   * A canvas holding the design on one side of a product, ready to export.
+   * With a garment size, the design goes in that size's print box (the same
+   * print in cm, so smaller on the photo of a bigger size), as in the editor.
+   */
+  async function stage(design, product, side, color, sizeId) {
+    const sized = sizeId ? { ...side, printArea: POD.sizedArea(product, side, sizeId) } : side;
     const canvas = new fabric.StaticCanvas(null, { width: W, height: H, enableRetinaScaling: false, renderOnAddRemove: false });
-    const objects = await placeDesign(design, product, side, color.hex);
+    const objects = await placeDesign(design, product, sized, color.hex);
     objects.forEach((o) => canvas.add(o));
-    const pics = await background(product, side, color.hex);
-    return { canvas, product, side, color, objects, pics, R: rects(side) };
+    const pics = await background(product, side, color.hex); // the photo sits on the standard print area
+    return { canvas, product, side: sized, color, objects, pics, R: rects(sized) };
   }
   /** Draw with or without the product picture, each object clipped to `clip`. */
   function withMode(st, { pictures, clip }, fn) {
@@ -154,7 +159,7 @@
   /** Add a ready-made design on a product to the cart: same upload steps as the editor. */
   async function addToCart({ design, product, color, size, onProgress = () => {} }) {
     const side = product.sides[0];
-    const st = await stage(design, product, side, color);
+    const st = await stage(design, product, side, color, size.id);
     onProgress('render');
     const files = {
       [`${side.id}-print.png`]: await printBlob(st),

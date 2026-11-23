@@ -260,6 +260,31 @@
     };
   })();
 
+  // ---------- Garment sizes ----------
+  // The print is the same size in cm on every garment size, so on a bigger
+  // garment the print box covers less of the photo (scaled from just below the
+  // collar, like src/products.js printAreaFor).
+  function sizedArea(product, side, sizeId) {
+    const a = side.printArea;
+    const size = product.sizes.find((z) => z.id === sizeId);
+    const f = product.photoChestCm && size && size.chestCm ? product.photoChestCm / size.chestCm : 1;
+    if (f === 1) return a;
+    const w = Math.round(a.w * f * 10) / 10;
+    const h = Math.round(a.h * f * 10) / 10;
+    return { ...a, x: Math.round((a.x + a.w / 2 - w / 2) * 10) / 10, w, h, ...(a.rx ? { rx: a.rx * f } : {}) };
+  }
+  /**
+   * How big this size's garment is drawn (1 = the biggest size fills the
+   * picture): smaller sizes show a smaller garment, so the print looks the
+   * same size on screen and the garment grows or shrinks around it.
+   */
+  function sizeView(product, sizeId) {
+    const size = product.sizes.find((z) => z.id === sizeId);
+    if (!product.photoChestCm || !size || !size.chestCm) return 1;
+    const max = Math.max(...product.sizes.map((z) => z.chestCm || 0));
+    return max > 0 ? Math.min(1, size.chestCm / max) : 1;
+  }
+
   window.POD = {
     get lang() {
       return lang;
@@ -268,5 +293,6 @@
     loadCatalog, fillMockup, mockupUrl, svgDataUrl, luminance,
     money, date, num,
     getCart, setCart, updateCartBadge, toast, esc, api, drafts,
+    sizedArea, sizeView,
   };
 })();

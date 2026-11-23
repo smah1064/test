@@ -507,6 +507,7 @@
     }
     cctx.putImageData(cimg, 0, 0);
     out.cutout = cut;
+    out.productMask = md; // for sizedPicture (garment sizes)
     if (!out.pxPerIn) {
       const aspect = entry.rects.trim.w / entry.rects.trim.h;
       out.pxPerIn = window.POD_PHOTOS.rectFor(cfg, aspect).w / entry.side.printWidthIn;
@@ -569,8 +570,10 @@
         const cv = await realisticFor(sideId);
         if (token !== state.token) return;
         setBody('');
-        cv.className = 'pv-canvas';
-        $('pv-body').appendChild(cv);
+        // Garment sizes: smaller sizes are shown smaller, like in the editor.
+        const shown = sizedPicture(cv, state.viewScale);
+        shown.className = 'pv-canvas';
+        $('pv-body').appendChild(shown);
       } else if (tab === 'proof') {
         const cv = await realisticFor(sideId);
         const small = document.createElement('canvas');
@@ -623,6 +626,123 @@
     else realisticFor(state.sideId).then((cv) => cv.toBlob(save, 'image/png'));
   }
 
+  /**
+   * Garment sizes: the product picture with the garment drawn smaller (k < 1)
+   * in a frame of the same size, so a smaller size shows a smaller garment
+   * rather than a smaller photo. The garment is cut out with the photo's mask,
+   * the hole (and its old shadow) is filled from the backdrop around it, and
+   * the garment goes back at its size with a soft shadow.
+   */
+  function sizedPicture(cv, k) {
+    if (!k || k >= 1) return cv;
+    const W0 = cv.width;
+    const H0 = cv.height;
+    const N = W0 * H0;
+    const src = cv.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, W0, H0);
+    const sd = src.data;
+    const md = cv.productMask && cv.productMask.length === N * 4 ? cv.productMask : null;
+    const canvasOf = (data) => {
+      const c = document.createElement('canvas');
+      c.width = W0;
+      c.height = H0;
+      if (data) c.getContext('2d').putImageData(data, 0, 0);
+      return c;
+    };
+    // Backdrop colour: the average along the picture's edges.
+    const sum = [0, 0, 0];
+    let n = 0;
+    for (let x = 0; x < W0; x += 3) for (const y of [0, H0 - 1]) { const i = (y * W0 + x) * 4; sum[0] += sd[i]; sum[1] += sd[i + 1]; sum[2] += sd[i + 2]; n++; }
+    for (let y = 0; y < H0; y += 3) for (const x of [0, W0 - 1]) { const i = (y * W0 + x) * 4; sum[0] += sd[i]; sum[1] += sd[i + 1]; sum[2] += sd[i + 2]; n++; }
+    const fill = sum.map((v) => Math.round(v / n));
+    const out = canvasOf(null);
+    const ctx = out.getContext('2d');
+    if (!md) {
+      // No mask (drawn mockups): the picture smaller, on its backdrop colour.
+      ctx.fillStyle = `rgb(${fill.join(',')})`;
+      ctx.fillRect(0, 0, W0, H0);
+      ctx.drawImage(cv, (W0 - W0 * k) / 2, (H0 - H0 * k) / 2, W0 * k, H0 * k);
+      return out;
+    }
+    // 1. The hole: the garment plus a margin for its shadow.
+    const holeImg = new ImageData(W0, H0);
+    for (let i = 0; i < N; i++) holeImg.data[i * 4 + 3] = md[i * 4];
+    const grow = canvasOf(null);
+    const gctx = grow.getContext('2d', { willReadFrequently: true });
+    gctx.filter = `blur(${Math.round(W0 * 0.035)}px)`;
+    gctx.drawImage(canvasOf(holeImg), 0, 0);
+    const ga = gctx.getImageData(0, 0, W0, H0).data;
+    const hole = new Float32Array(N);
+    for (let i = 0; i < N; i++) hole[i] = Math.max(md[i * 4] / 255, Math.min(1, (ga[i * 4 + 3] / 255) * 6));
+    // 2. The backdrop with the hole filled, from what is left around it: a
+    //    normalised blur on a coarse grid (in floating point, so no banding),
+    //    stretched back up smoothly.
+    const G = 8;
+    const gw = Math.ceil(W0 / G);
+    const gh = Math.ceil(H0 / G);
+    const acc = [new Float32Array(gw * gh), new Float32Array(gw * gh), new Float32Array(gw * gh)];
+    let wsum = new Float32Array(gw * gh);
+    for (let y = 0; y < H0; y++) {
+      for (let x = 0; x < W0; x++) {
+        const i = y * W0 + x;
+        const g = ((y / G) | 0) * gw + ((x / G) | 0);
+        const wgt = 1 - hole[i];
+        wsum[g] += wgt;
+        for (let c = 0; c < 3; c++) acc[c][g] += sd[i * 4 + c] * wgt;
+      }
+    }
+    let ch = acc;
+    for (let pass = 0; pass < 3; pass++) {
+      const r = Math.max(2, Math.round(gw * 0.08));
+      ch = ch.map((a) => boxBlur(a, gw, gh, r));
+      wsum = boxBlur(wsum, gw, gh, r);
+    }
+    const cell = (c, gx, gy) => {
+      const g = Math.min(gh - 1, Math.max(0, gy)) * gw + Math.min(gw - 1, Math.max(0, gx));
+      return wsum[g] > 1e-3 ? ch[c][g] / wsum[g] : fill[c];
+    };
+    const plate = new ImageData(W0, H0);
+    const pd2 = plate.data;
+    for (let y = 0; y < H0; y++) {
+      const fy = y / G - 0.5;
+      const gy = Math.floor(fy);
+      const ty = fy - gy;
+      for (let x = 0; x < W0; x++) {
+        const i = y * W0 + x;
+        const t = hole[i];
+        if (t > 0) {
+          const fx = x / G - 0.5;
+          const gx = Math.floor(fx);
+          const tx = fx - gx;
+          for (let c = 0; c < 3; c++) {
+            const v = (cell(c, gx, gy) * (1 - tx) + cell(c, gx + 1, gy) * tx) * (1 - ty) + (cell(c, gx, gy + 1) * (1 - tx) + cell(c, gx + 1, gy + 1) * tx) * ty;
+            pd2[i * 4 + c] = sd[i * 4 + c] * (1 - t) + v * t;
+          }
+        } else {
+          pd2[i * 4] = sd[i * 4];
+          pd2[i * 4 + 1] = sd[i * 4 + 1];
+          pd2[i * 4 + 2] = sd[i * 4 + 2];
+        }
+        pd2[i * 4 + 3] = 255;
+      }
+    }
+    ctx.putImageData(plate, 0, 0);
+    // 3. The garment, smaller, around the middle, with a soft shadow.
+    const cutImg = new ImageData(W0, H0);
+    for (let i = 0; i < N; i++) {
+      cutImg.data[i * 4] = sd[i * 4];
+      cutImg.data[i * 4 + 1] = sd[i * 4 + 1];
+      cutImg.data[i * 4 + 2] = sd[i * 4 + 2];
+      cutImg.data[i * 4 + 3] = md[i * 4];
+    }
+    ctx.save();
+    ctx.shadowColor = 'rgba(0, 0, 0, .22)';
+    ctx.shadowBlur = W0 * 0.025 * k;
+    ctx.shadowOffsetY = W0 * 0.01 * k;
+    ctx.drawImage(canvasOf(cutImg), (W0 - W0 * k) / 2, (H0 - H0 * k) / 2, W0 * k, H0 * k);
+    ctx.restore();
+    return out;
+  }
+
   function open(data) {
     state = { ...data, tab: 'real', sideId: data.startSide, real: {} };
     if (!data.sides.find((s) => s.side.id === state.sideId && s.hasDesign)) {
@@ -659,5 +779,5 @@
     });
   });
 
-  window.POD_PREVIEW = { open, renderRealistic, renderPhoto, photoFor };
+  window.POD_PREVIEW = { open, renderRealistic, renderPhoto, photoFor, sizedPicture };
 })();

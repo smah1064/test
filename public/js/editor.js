@@ -201,16 +201,21 @@
     // With the phone panel open there is little room: zoom in on the print area instead of the whole product.
     const focus = MOBILE.matches && st.sheet;
     const a = area();
+    // Garment sizes: the biggest size fills the picture and smaller ones are
+    // drawn smaller around the middle (k), so the garment grows or shrinks
+    // with the size while the print keeps its size on screen.
+    const k = POD.sizeView(st.product, st.sizeId);
     const base = focus
-      ? Math.min((stage.clientWidth - 16) / (a.w + 48), (stage.clientHeight - 16) / (a.h + 48 + (zoneOf() ? 40 : 0)))
+      ? Math.min((stage.clientWidth - 16) / (a.w + 48), (stage.clientHeight - 16) / (a.h + 48 + (zoneOf() ? 40 : 0))) / k
       : Math.min((stage.clientWidth - 32) / W, (stage.clientHeight - 32) / H, 1.6);
     const z = Math.max(0.15, base) * st.zoom;
     canvas.setDimensions({ width: Math.round(W * z), height: Math.round(H * z) });
-    canvas.setZoom(z);
+    canvas.setViewportTransform([z * k, 0, 0, z * k, (W * z * (1 - k)) / 2, (H * z * (1 - k)) / 2]);
     requestAnimationFrame(() => typeof positionFloatBar === 'function' && positionFloatBar());
     if (focus) {
-      stage.scrollLeft = (a.x + a.w / 2) * z - stage.clientWidth / 2;
-      stage.scrollTop = (a.y + a.h / 2 + (zoneOf() ? 20 : 0)) * z - stage.clientHeight / 2;
+      const vt = canvas.viewportTransform;
+      stage.scrollLeft = (a.x + a.w / 2) * vt[0] + vt[4] - stage.clientWidth / 2;
+      stage.scrollTop = (a.y + a.h / 2 + (zoneOf() ? 20 : 0)) * vt[3] + vt[5] - stage.clientHeight / 2;
     }
     $('zoom-label').textContent = Math.round(st.zoom * 100) + '%';
     canvas.requestRenderAll();
@@ -2294,6 +2299,7 @@
     // Undo works within one size: the history starts again at the new size.
     st.history = {};
     applyClips();
+    fit(); // the garment is drawn at this size's scale
   }
   $('product-select').addEventListener('change', serial(async (e) => changeProduct(e.target.value)));
 
@@ -2337,6 +2343,7 @@
     history.replaceState(null, '', url);
     renderOptions();
     await Promise.all([applyMockup(), loadObjects(st.designs[st.side])]);
+    fit();
     seedHistory();
     refreshChrome();
     renderProps();
@@ -2574,15 +2581,19 @@
   }
   /** Product mockup with the trimmed design, for the cart, order page and print queue. */
   function exportPreview() {
-    const z = canvas.getZoom();
+    // The whole mockup at 1.2x, without the on-screen garment-size view.
+    const z = canvas.width / W;
+    const vt = canvas.viewportTransform.slice();
     st.exporting = true;
     const r = rects().trim;
     const objs = canvas.getObjects();
     const clips = objs.map((o) => o.clipPath);
     objs.forEach((o) => { o.clipPath = clipRect(r); o.dirty = true; });
+    canvas.setViewportTransform([z, 0, 0, z, 0, 0]);
     try {
       return canvasBlob(canvas.toCanvasElement(1.2 / z));
     } finally {
+      canvas.setViewportTransform(vt);
       objs.forEach((o, i) => { o.clipPath = clips[i]; o.dirty = true; });
       st.exporting = false;
     }
@@ -3011,7 +3022,7 @@
     }
     if (st.side !== original) await showSide(original);
     canvas.requestRenderAll();
-    window.POD_PREVIEW.open({ product: st.product, color: color(), sides, startSide: original });
+    window.POD_PREVIEW.open({ product: st.product, color: color(), sides, startSide: original, viewScale: POD.sizeView(st.product, st.sizeId) });
   }));
 
   $('preview-open-m').addEventListener('click', () => $('preview-open').click());

@@ -31,10 +31,10 @@
     const my = ++token;
     $('dp-spin').hidden = false;
     $('dp-img').style.opacity = '.35';
-    const { product, color } = state;
+    const { product, color, size } = state;
     const side = product.sides[0];
     try {
-      const st = await POD_RENDER.stage(design, product, side, color);
+      const st = await POD_RENDER.stage(design, product, side, color, size.id);
       const entry = {
         side,
         rects: st.R,
@@ -52,9 +52,12 @@
         cv = POD_RENDER.picture(st, 1.6);
       }
       if (my !== token) return;
+      // Garment sizes: smaller sizes show a smaller garment, like in the editor.
+      cv = window.POD_PREVIEW.sizedPicture(cv, POD.sizeView(product, size.id));
       const blob = await new Promise((r) => cv.toBlob(r, 'image/webp', 0.9));
       const old = $('dp-img').src;
       $('dp-img').src = URL.createObjectURL(blob);
+
       if (old.startsWith('blob:')) URL.revokeObjectURL(old);
       current = { st, entry };
     } finally {
@@ -107,14 +110,16 @@
   $('dp-sizes').addEventListener('click', (e) => {
     const b = e.target.closest('[data-size]');
     if (!b) return;
+    if (b.dataset.size === state.size.id) return;
     state.size = state.product.sizes.find((s) => s.id === b.dataset.size);
     renderOptions();
+    draw();
   });
   $('dp-preview').addEventListener('click', () => {
     if (!current) return;
     // The previews need every side of the product; the others are blank.
     const sides = state.product.sides.map((sd) => (sd.id === current.entry.side.id ? current.entry : POD_RENDER.emptyEntry(state.product, sd, state.color)));
-    window.POD_PREVIEW.open({ product: state.product, color: state.color, sides, startSide: current.entry.side.id });
+    window.POD_PREVIEW.open({ product: state.product, color: state.color, sides, startSide: current.entry.side.id, viewScale: POD.sizeView(state.product, state.size.id) });
   });
 
   const busy = (on, text) => {
