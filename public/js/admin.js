@@ -89,6 +89,7 @@
     $('tab-library').hidden = tab !== 'library';
     $('tab-houses').hidden = tab !== 'houses';
     $('tab-accounts').hidden = tab !== 'accounts';
+    $('tab-coupons').hidden = tab !== 'coupons';
     refresh();
   }));
 
@@ -142,6 +143,7 @@
         ${c.phone ? `<dt>${esc(t('admin.spec.phone'))}</dt><dd><a href="tel:${esc(c.phone)}" dir="ltr">${esc(c.phone)}</a></dd>` : ''}
         ${c.email ? `<dt>${esc(t('admin.spec.email'))}</dt><dd>${esc(c.email)}</dd>` : ''}
         ${item.payment && item.payment.method === 'cod' ? `<dt>${esc(t('admin.spec.payment'))}</dt><dd>${esc(t('admin.collect', { amount: money(item.orderTotal) }))}</dd>` : ''}
+        ${item.coupon ? `<dt>${esc(t('coupon.discount'))}</dt><dd><bdi dir="ltr">${esc(item.coupon.code)}</bdi> · -${esc(money(item.coupon.discount))}</dd>` : ''}
       </dl>`;
   }
 
@@ -584,6 +586,7 @@
       renderQueue((lastQueue = await adminApi('/api/admin/queue')));
     } else if (tab === 'houses') renderHouses((housesData = await adminApi('/api/admin/houses')));
     else if (tab === 'accounts') await refreshAccounts({ auto: true });
+    else if (tab === 'coupons') renderCoupons((couponData = await adminApi('/api/admin/coupons')));
     else if (tab === 'film') renderFilm((lastFilm = (await adminApi('/api/admin/dtf-items')).items));
     else if (tab === 'library') renderLibrary((lastLibrary = await adminApi('/api/admin/library')));
     else { renderOrders((lastOrders = (await adminApi('/api/admin/orders')).orders)); renderNotifyStatus(); }
@@ -599,6 +602,7 @@
     if (tab === 'library' && lastLibrary) renderLibrary(lastLibrary);
     if (tab === 'houses' && housesData) renderHouses(housesData);
     if (tab === 'accounts') renderAccounts();
+    if (tab === 'coupons' && couponData) renderCoupons(couponData);
   });
 
   $('film-list').addEventListener('change', (e) => {
@@ -901,6 +905,123 @@
       await refreshAccounts();
     } catch (err) {
       $('exp-msg').textContent = err.message;
+    }
+  });
+
+  // ---------- Coupons ----------
+  let couponData = null;
+  const cpPicked = new Set();
+  function couponSummary(c) {
+    const parts = [c.type === 'percent' ? t('cp.sumPercent', { v: POD.num(c.value) }) : c.type === 'fixed' ? t('cp.sumFixed', { v: money(c.value) }) : t('cp.freeship')];
+    if (c.maxDiscount) parts.push(t('cp.sumMax', { v: money(c.maxDiscount) }));
+    if (c.minOrder) parts.push(t('cp.sumMin', { v: money(c.minOrder) }));
+    if (c.startsOn || c.endsOn) parts.push(`${c.startsOn || '…'} → ${c.endsOn || '…'}`);
+    if (c.perCustomer) parts.push(t('cp.sumPer', { n: POD.num(c.perCustomer) }));
+    if (c.categories.length) parts.push(c.categories.map((id) => tr((couponData.categories.find((x) => x.id === id) || {}).name || id)).join('، '));
+    return parts.join(' · ');
+  }
+  function renderCoupons(d) {
+    if (!$('cp-cats').dataset.ready || $('cp-cats').dataset.lang !== POD.lang) {
+      $('cp-cats').innerHTML = d.categories.map((c) => `<label class="check-chip"><input type="checkbox" value="${esc(c.id)}" data-cp-cat ${cpPicked.has(c.id) ? 'checked' : ''}> ${esc(tr(c.name))}</label>`).join('');
+      $('cp-cats').dataset.ready = '1';
+      $('cp-cats').dataset.lang = POD.lang;
+    }
+    const today = ymd(new Date());
+    $('cp-list').innerHTML = d.coupons.length ? d.coupons.slice().reverse().map((c) => {
+      const expired = c.endsOn && c.endsOn < today;
+      const usedUp = c.maxUses && c.uses >= c.maxUses;
+      const state = !c.active ? 'paused' : expired ? 'expired' : usedUp ? 'usedUp' : 'live';
+      return `<div class="card house-row">
+        <div>
+          <strong dir="ltr" style="font-size:16px">${esc(c.code)}</strong> <span class="pill ${state === 'live' ? 'printed' : 'queued'}">${esc(t('cp.state.' + state))}</span>
+          <div class="muted small">${esc(couponSummary(c))}</div>
+          <div class="small">${esc(t('cp.usage', { n: POD.num(c.uses), max: c.maxUses ? POD.num(c.maxUses) : '∞', v: money(c.discountGiven) }))}</div>
+          ${c.note ? `<div class="muted small">${esc(c.note)}</div>` : ''}
+        </div>
+        <div class="row" style="gap:8px;flex:0 0 auto">
+          <button class="btn btn-sm" type="button" data-cp-toggle="${esc(c.id)}">${esc(t(c.active ? 'cp.pause' : 'cp.resume'))}</button>
+          <button class="btn btn-sm" type="button" data-cp-edit="${esc(c.id)}">${esc(t('houses.edit'))}</button>
+          <button class="btn btn-sm" type="button" data-cp-del="${esc(c.id)}">${esc(t('houses.delete'))}</button>
+        </div>
+      </div>`;
+    }).join('') : `<p class="muted">${esc(t('cp.empty'))}</p>`;
+    cpTypeChanged();
+  }
+  function cpTypeChanged() {
+    const type = $('cp-type').value;
+    $('cp-value-f').hidden = type === 'freeship';
+    $('cp-max-f').hidden = type !== 'percent';
+    const lab = $('cp-value-f').querySelector('label');
+    lab.textContent = t(type === 'percent' ? 'cp.valuePercent' : 'cp.valueFixed');
+  }
+  $('cp-type').addEventListener('change', cpTypeChanged);
+  function resetCouponForm() {
+    $('cp-form').reset();
+    $('cp-id').value = '';
+    $('cp-active').checked = true;
+    cpPicked.clear();
+    $('cp-cats').querySelectorAll('input').forEach((i) => { i.checked = false; });
+    $('cp-cancel').hidden = true;
+    $('cp-form-title').textContent = t('cp.addTitle');
+    cpTypeChanged();
+  }
+  $('cp-cancel').addEventListener('click', resetCouponForm);
+  $('cp-cats').addEventListener('change', (e) => { if (e.target.dataset.cpCat !== undefined) { if (e.target.checked) cpPicked.add(e.target.value); else cpPicked.delete(e.target.value); } });
+  $('cp-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const id = $('cp-id').value;
+    const body = {
+      code: $('cp-code').value, type: $('cp-type').value, value: $('cp-value').value, maxDiscount: $('cp-max').value, minOrder: $('cp-min').value,
+      maxUses: $('cp-uses').value, perCustomer: $('cp-per').value, startsOn: $('cp-start').value, endsOn: $('cp-end').value,
+      categories: [...cpPicked], active: $('cp-active').checked, note: $('cp-note').value,
+    };
+    try {
+      await adminApi(id ? `/api/admin/coupons/${encodeURIComponent(id)}` : '/api/admin/coupons', { method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang }, body: JSON.stringify(body) });
+      resetCouponForm();
+      $('cp-msg').textContent = t('houses.saved');
+      setTimeout(() => { $('cp-msg').textContent = ''; }, 2500);
+      renderCoupons((couponData = await adminApi('/api/admin/coupons')));
+    } catch (err) {
+      $('cp-msg').textContent = err.message;
+    }
+  });
+  $('cp-list').addEventListener('click', async (e) => {
+    const find = (id) => couponData.coupons.find((c) => c.id === id);
+    const ed = e.target.closest('[data-cp-edit]');
+    const del = e.target.closest('[data-cp-del]');
+    const tog = e.target.closest('[data-cp-toggle]');
+    try {
+      if (ed) {
+        const c = find(ed.dataset.cpEdit);
+        $('cp-id').value = c.id;
+        $('cp-code').value = c.code;
+        $('cp-type').value = c.type;
+        $('cp-value').value = c.type === 'freeship' ? '' : c.value;
+        $('cp-max').value = c.maxDiscount || '';
+        $('cp-min').value = c.minOrder || '';
+        $('cp-uses').value = c.maxUses || '';
+        $('cp-per').value = c.perCustomer || '';
+        $('cp-start').value = c.startsOn || '';
+        $('cp-end').value = c.endsOn || '';
+        $('cp-note').value = c.note || '';
+        $('cp-active').checked = c.active;
+        cpPicked.clear();
+        c.categories.forEach((x) => cpPicked.add(x));
+        $('cp-cats').querySelectorAll('input').forEach((i) => { i.checked = cpPicked.has(i.value); });
+        $('cp-cancel').hidden = false;
+        $('cp-form-title').textContent = t('cp.editTitle');
+        cpTypeChanged();
+        $('cp-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else if (tog) {
+        const c = find(tog.dataset.cpToggle);
+        await adminApi(`/api/admin/coupons/${encodeURIComponent(c.id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang }, body: JSON.stringify({ ...c, active: !c.active }) });
+        renderCoupons((couponData = await adminApi('/api/admin/coupons')));
+      } else if (del && confirm(t('cp.confirmDelete', { code: find(del.dataset.cpDel).code }))) {
+        await adminApi(`/api/admin/coupons/${encodeURIComponent(del.dataset.cpDel)}`, { method: 'DELETE' });
+        renderCoupons((couponData = await adminApi('/api/admin/coupons')));
+      }
+    } catch (err) {
+      toast(err.message, 'error');
     }
   });
 

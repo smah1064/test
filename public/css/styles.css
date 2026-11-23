@@ -778,3 +778,11 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 /* Admin tabs: wrap instead of scrolling the whole page sideways on phones. */
 .tabs { flex-wrap: wrap; }
 .auto-bg { margin: 12px 0 4px; align-items: flex-start; gap: 8px; }
+
+/* Checkout coupon */
+.coupon-box { margin: 4px 0 10px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.coupon-row { display: flex; gap: 8px; margin-top: 4px; }
+.coupon-row input { flex: 1; min-width: 0; text-transform: uppercase; }
+.coupon-msg { margin: 6px 0 0; color: var(--ok, #2b8a3e); min-height: 1em; }
+.coupon-msg.bad { color: var(--danger, #c0392b); }
+.discount-line { color: var(--ok, #2b8a3e); font-weight: 600; }

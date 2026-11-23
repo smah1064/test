@@ -30,6 +30,7 @@ const notify = require('./notify');
 const dispatch = require('./dispatch');
 const accounting = require('./accounting');
 const bgremove = require('./bgremove');
+const coupons = require('./coupons');
 
 // Prices the owner changed in the admin are laid over the built-in ones.
 accounting.initPricing(PRODUCTS, EXTRA_SIDE_PRICE);
@@ -189,6 +190,8 @@ function publicOrder(order) {
     customer: { name: c.name, city: c.city, governorate: governorate(c.governorate)?.name || c.country || null },
     items: order.items.map(publicItem),
     subtotal: order.subtotal,
+    discount: order.discount || 0,
+    coupon: order.coupon ? order.coupon.code : null,
     shipping: order.shipping,
     total: order.total,
     payment: order.payment,
@@ -215,6 +218,7 @@ function adminItem(order, item, index) {
     customer: adminCustomer(order.customer),
     payment: order.payment,
     orderTotal: order.total,
+    coupon: order.coupon ? { code: order.coupon.code, discount: order.discount || 0 } : null,
     redraw: item.redraw || null,
     sends: item.sends || [],
   };
@@ -1109,6 +1113,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const product = getProduct(d.productId);
     return product ? priceFor(product, d.size.id, d.sides.length) : null;
   };
+  // ---------- Coupons ----------
+  const findCoupon = (code) => (store.db.coupons || []).find((c) => c.code === coupons.normCode(code)) || null;
+  const couponLine = (design, price) => {
+    const product = design && getProduct(design.productId);
+    return { productId: design ? design.productId : '', category: product ? product.category : '', price: price || 0 };
+  };
+
   // The cart asks for today's prices before the customer orders.
   app.post('/api/cart/quote', express.json({ limit: '20kb' }), (req, res) => {
     const ids = Array.isArray((req.body || {}).designIds) ? req.body.designIds.slice(0, MAX_ITEMS_PER_ORDER) : [];
@@ -1118,8 +1129,18 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       return { designId: String(id).slice(0, 40), price, gone: price === null };
     });
     const subtotal = round2(items.reduce((n, i) => n + (i.price || 0), 0));
-    const shipping = items.some((i) => !i.gone) ? shippingFor(subtotal) : 0;
-    res.json({ items, subtotal, shipping, total: round2(subtotal + shipping), freeShippingOver: FREE_SHIPPING_OVER, shippingFlat: SHIPPING_FLAT });
+    const lines = items.filter((i) => !i.gone).map((i) => couponLine(store.getDesign(i.designId), i.price));
+    const code = coupons.normCode((req.body || {}).couponCode);
+    let coupon = null;
+    let couponError = null;
+    if (code) {
+      const r = coupons.apply(findCoupon(code), { lines, orders: store.listOrders() });
+      if (r.ok) coupon = { code, discount: r.discount, freeShipping: r.freeShipping };
+      else couponError = format(r.reason, r.params || {}, langOf(req));
+    }
+    const discount = coupon ? coupon.discount : 0;
+    const shipping = !lines.length || (coupon && coupon.freeShipping) ? 0 : shippingFor(round2(subtotal - discount));
+    res.json({ items, subtotal, discount, coupon, couponError, shipping, total: round2(subtotal - discount + shipping), freeShippingOver: FREE_SHIPPING_OVER, shippingFlat: SHIPPING_FLAT });
   });
 
   app.post('/api/orders', express.json({ limit: '100kb' }), (req, res) => {
@@ -1182,10 +1203,21 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const costs = store.db.costs || {};
     for (const it of items) if (costs[it.productId]) it.costAtOrder = accounting.itemCostFrom(costs, it);
     const subtotal = round2(items.reduce((sum, i) => sum + i.price, 0));
-    const shipping = shippingFor(subtotal);
+    // A coupon code typed at checkout (checked again under the lock below, where uses are counted).
+    const code = coupons.normCode(body.couponCode);
+    const lines = designs.map((d, i) => couponLine(d, items[i].price));
+    let applied = null;
+    if (code) {
+      const r = coupons.apply(findCoupon(code), { lines, orders: store.listOrders(), phone: c.phone });
+      if (!r.ok) throw new HttpError(409, r.reason, r.params || {});
+      applied = { code, type: findCoupon(code).type, discount: r.discount, freeShipping: r.freeShipping };
+    }
+    const discount = applied ? applied.discount : 0;
+    const shipping = applied && applied.freeShipping ? 0 : shippingFor(round2(subtotal - discount));
+    const total = round2(subtotal - discount + shipping);
     // The customer must have seen this total: if a price changed since, show them the new one first.
-    if (expectedTotal !== undefined && !(Math.abs(Number(expectedTotal) - round2(subtotal + shipping)) <= 0.009)) {
-      throw new HttpError(409, 'priceChanged', { total: round2(subtotal + shipping) });
+    if (expectedTotal !== undefined && !(Math.abs(Number(expectedTotal) - total) <= 0.009)) {
+      throw new HttpError(409, 'priceChanged', { total });
     }
     const order = store.createOrder({
       id: crypto.randomUUID(),
@@ -1194,8 +1226,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       customer: c,
       items,
       subtotal,
+      ...(applied ? { discount, coupon: applied } : {}),
       shipping,
-      total: round2(subtotal + shipping),
+      total,
       // Cash on delivery: collected by the courier.
       payment: { method: 'cod', status: 'pending' },
       lang: langOf(req),
@@ -1205,6 +1238,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         const cur = db.designs[d.id];
         if (!cur || (cur.status && cur.status !== 'ready')) throw new HttpError(400, 'designGone');
         if (cur.orderId) throw new HttpError(409, 'designOrdered');
+      }
+      // The coupon's limits, with every order saved so far (by any copy of the app).
+      if (applied) {
+        const r = coupons.apply((db.coupons || []).find((x) => x.code === applied.code), { lines, orders: db.orders, phone: c.phone });
+        if (!r.ok) throw new HttpError(409, r.reason, r.params || {});
       }
     });
     res.status(201).json(publicOrder(order));
@@ -1471,6 +1509,36 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     } catch (e) {
       next(e);
     }
+  });
+
+  // ---------- Coupons (admin) ----------
+  const couponRow = (c) => ({ ...c, uses: coupons.usesOf(store.listOrders(), c.code), discountGiven: accounting.round2(store.listOrders().filter((o) => o.coupon && o.coupon.code === c.code).reduce((n, o) => n + (o.discount || 0), 0)) });
+  app.get('/api/admin/coupons', requireAdmin, (req, res) => {
+    res.json({ coupons: (store.db.coupons || []).map(couponRow), products: PRODUCTS.map((p) => ({ id: p.id, name: p.name, category: p.category })), categories: CATEGORIES });
+  });
+  const saveCoupon = (req, id) => {
+    const { coupon, error } = coupons.cleanCoupon(req.body, { products: PRODUCTS, categories: CATEGORIES });
+    if (error) throw new HttpError(400, error);
+    return store.mutate((db) => {
+      db.coupons ||= [];
+      if (db.coupons.some((c) => c.code === coupon.code && c.id !== id)) throw new HttpError(409, 'couponExists');
+      if (id) {
+        const cur = db.coupons.find((c) => c.id === id);
+        if (!cur) throw new HttpError(404, 'couponNotFound');
+        for (const k of Object.keys(cur)) if (!['id', 'createdAt'].includes(k)) delete cur[k];
+        return Object.assign(cur, coupon, { updatedAt: new Date().toISOString() });
+      }
+      if (db.coupons.length >= 500) throw new HttpError(400, 'couponValueBad');
+      const c = { id: crypto.randomUUID(), ...coupon, createdAt: new Date().toISOString() };
+      db.coupons.push(c);
+      return c;
+    });
+  };
+  app.post('/api/admin/coupons', requireAdmin, express.json(), (req, res) => res.status(201).json(couponRow(saveCoupon(req))));
+  app.put('/api/admin/coupons/:id', requireAdmin, express.json(), (req, res) => res.json(couponRow(saveCoupon(req, req.params.id))));
+  app.delete('/api/admin/coupons/:id', requireAdmin, (req, res) => {
+    store.mutate((db) => { db.coupons = (db.coupons || []).filter((c) => c.id !== req.params.id); });
+    res.json({ ok: true });
   });
 
   // ---------- Accounts: prices, costs, profit, expenses ----------

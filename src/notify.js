@@ -43,7 +43,7 @@ function status() {
 const L = {
   ar: {
     newOrder: 'طلب جديد', items: (n) => `${n} ${n === 1 ? 'منتج' : n === 2 ? 'منتجان' : n <= 10 ? 'منتجات' : 'منتج'}`,
-    total: 'الإجمالي', subtotal: 'المنتجات', shipping: 'الشحن', free: 'مجاني', cod: 'الدفع عند الاستلام',
+    total: 'الإجمالي', subtotal: 'المنتجات', discount: 'الخصم', shipping: 'الشحن', free: 'مجاني', cod: 'الدفع عند الاستلام',
     customer: 'العميل', phone: 'الموبايل', email: 'البريد', address: 'العنوان', notes: 'ملاحظات',
     openAdmin: 'افتح لوحة الإنتاج', track: 'تابع طلبك',
     thanksSubject: (n) => `تم استلام طلبك ${n} · OneOff Print`,
@@ -54,7 +54,7 @@ const L = {
   },
   en: {
     newOrder: 'New order', items: (n) => `${n} item${n === 1 ? '' : 's'}`,
-    total: 'Total', subtotal: 'Items', shipping: 'Shipping', free: 'Free', cod: 'Cash on delivery',
+    total: 'Total', subtotal: 'Items', discount: 'Discount', shipping: 'Shipping', free: 'Free', cod: 'Cash on delivery',
     customer: 'Customer', phone: 'Mobile', email: 'Email', address: 'Address', notes: 'Notes',
     openAdmin: 'Open the production dashboard', track: 'Track your order',
     thanksSubject: (n) => `We received your order ${n} · OneOff Print`,
@@ -121,6 +121,7 @@ function emailHtml(order, links, lang, forAdmin) {
       <table style="width:100%;border-collapse:collapse">${rows}</table>
       <table style="width:100%;margin-top:12px;border-collapse:collapse">
         ${sum(t.subtotal, money(order.subtotal, lang))}
+        ${order.discount ? sum(`${t.discount} (${order.coupon ? order.coupon.code : ''})`, `-${money(order.discount, lang)}`) : ''}
         ${sum(t.shipping, order.shipping ? money(order.shipping, lang) : t.free)}
         ${sum(`${t.total} (${t.cod})`, money(order.total, lang), true)}
       </table>

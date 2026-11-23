@@ -40,6 +40,7 @@
           <button class="btn btn-sm" data-tab="library" data-i18n="lib.tab"></button>
           <button class="btn btn-sm" data-tab="houses" data-i18n="houses.tab"></button>
           <button class="btn btn-sm" data-tab="accounts" data-i18n="acc.tab"></button>
+          <button class="btn btn-sm" data-tab="coupons" data-i18n="cp.tab"></button>
         </div>
       </div>
 
@@ -159,6 +160,34 @@
           <p class="muted small" id="acc-exp-period" style="margin:14px 0 8px"></p>
           <div class="card" style="overflow-x:auto"><table class="orders acc-table" id="acc-exp-list"></table></div>
         </div>
+      </section>
+
+      <section id="tab-coupons" hidden>
+        <form class="card house-form" id="cp-form">
+          <h2 style="font-size:16px;margin:0 0 4px" id="cp-form-title" data-i18n="cp.addTitle"></h2>
+          <p class="muted small" style="margin:0 0 10px;line-height:1.6" data-i18n="cp.help"></p>
+          <input type="hidden" id="cp-id">
+          <div class="lib-form">
+            <div class="field"><label for="cp-code" data-i18n="cp.code"></label><input type="text" id="cp-code" maxlength="24" dir="ltr" required style="text-transform:uppercase" placeholder="EID20"></div>
+            <div class="field"><label for="cp-type" data-i18n="cp.type"></label><select id="cp-type"><option value="percent" data-i18n="cp.percent"></option><option value="fixed" data-i18n="cp.fixed"></option><option value="freeship" data-i18n="cp.freeship"></option></select></div>
+            <div class="field" id="cp-value-f"><label for="cp-value" data-i18n="cp.value"></label><input type="number" id="cp-value" min="0.01" step="0.01" dir="ltr"></div>
+            <div class="field" id="cp-max-f"><label for="cp-max" data-i18n="cp.maxDiscount"></label><input type="number" id="cp-max" min="0" step="0.01" dir="ltr"></div>
+            <div class="field"><label for="cp-min" data-i18n="cp.minOrder"></label><input type="number" id="cp-min" min="0" step="0.01" dir="ltr"></div>
+            <div class="field"><label for="cp-uses" data-i18n="cp.maxUses"></label><input type="number" id="cp-uses" min="1" step="1" dir="ltr"></div>
+            <div class="field"><label for="cp-per" data-i18n="cp.perCustomer"></label><input type="number" id="cp-per" min="1" step="1" dir="ltr"></div>
+            <div class="field"><label for="cp-start" data-i18n="cp.startsOn"></label><input type="date" id="cp-start"></div>
+            <div class="field"><label for="cp-end" data-i18n="cp.endsOn"></label><input type="date" id="cp-end"></div>
+          </div>
+          <div class="field"><label data-i18n="cp.appliesTo"></label><div class="chip-row" id="cp-cats"></div><p class="muted small" style="margin:6px 0 0" data-i18n="cp.appliesHelp"></p></div>
+          <div class="field"><label for="cp-note" data-i18n="cp.note"></label><input type="text" id="cp-note" maxlength="200"></div>
+          <label class="check" style="margin-bottom:10px"><input type="checkbox" id="cp-active" checked> <span data-i18n="cp.active"></span></label>
+          <div class="row" style="flex-wrap:wrap;gap:10px;align-items:center">
+            <button class="btn btn-primary shrink" type="submit" data-i18n="houses.save"></button>
+            <button class="btn shrink" type="button" id="cp-cancel" hidden data-i18n="houses.cancel"></button>
+            <span class="small" id="cp-msg"></span>
+          </div>
+        </form>
+        <div class="queue-list" id="cp-list"></div>
       </section>
 
       <section id="tab-orders" hidden>

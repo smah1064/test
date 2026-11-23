@@ -77,6 +77,7 @@
           </div>
           <div class="card summary" style="margin-top:16px;position:static">
             <div class="line"><span>${esc(t('checkout.subtotal'))}</span><span>${esc(money(o.subtotal))}</span></div>
+            ${o.discount ? `<div class="line discount-line"><span>${esc(t('coupon.discount'))} <bdi dir="ltr">${esc(o.coupon || '')}</bdi></span><span>-${esc(money(o.discount))}</span></div>` : ''}
             <div class="line"><span>${esc(t('checkout.shipping'))}</span><span>${o.shipping ? esc(money(o.shipping)) : esc(t('free'))}</span></div>
             <div class="line total"><span>${esc(t('checkout.total'))}</span><span>${esc(money(o.total))}</span></div>
             ${o.payment && o.payment.method === 'cod' ? `<div class="pay-box"><strong>${esc(t('order.payCod', { amount: money(o.total) }))}</strong><span>${esc(t('checkout.codText'))}</span></div>` : ''}

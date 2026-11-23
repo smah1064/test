@@ -134,7 +134,7 @@ function report({ orders, costs, expenses, settings, from, to }) {
   const defShip = (settings && settings.shippingCost) || 0;
   const rows = [];
   const byProduct = new Map();
-  const t = { orders: 0, items: 0, sales: 0, shippingCharged: 0, revenue: 0, itemCost: 0, shippingCost: 0, grossProfit: 0, collected: 0, pending: 0, missingCosts: 0 };
+  const t = { orders: 0, items: 0, sales: 0, discounts: 0, shippingCharged: 0, revenue: 0, itemCost: 0, shippingCost: 0, grossProfit: 0, collected: 0, pending: 0, missingCosts: 0 };
   for (const o of orders) {
     if (!inRange(o.createdAt)) continue;
     let cost = 0;
@@ -155,11 +155,12 @@ function report({ orders, costs, expenses, settings, from, to }) {
     const profit = round2(o.total - cost - shipCost);
     rows.push({
       id: o.id, number: o.number, createdAt: o.createdAt, customer: o.customer.name, status: shipped ? 'shipped' : 'open',
-      subtotal: o.subtotal, shipping: o.shipping, total: o.total, itemCost: round2(cost), shippingCost: shipCost, shippingCostSet: o.actualShipping != null, profit, items,
+      subtotal: o.subtotal, discount: o.discount || 0, coupon: o.coupon ? o.coupon.code : null, shipping: o.shipping, total: o.total, itemCost: round2(cost), shippingCost: shipCost, shippingCostSet: o.actualShipping != null, profit, items,
     });
     t.orders++;
     t.items += o.items.length;
     t.sales += o.subtotal;
+    t.discounts += o.discount || 0;
     t.shippingCharged += o.shipping;
     t.revenue += o.total;
     t.itemCost += cost;
@@ -188,16 +189,16 @@ function reportCsv(r, nameOf) {
     if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
     return /[",\r\n]/.test(s) || s.startsWith("'") ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const lines = [['Order', 'Date', 'Customer', 'Status', 'Items', 'Products', 'Sales', 'Shipping charged', 'Total', 'Item cost', 'Shipping cost', 'Profit'].join(',')];
+  const lines = [['Order', 'Date', 'Customer', 'Status', 'Items', 'Products', 'Sales', 'Discount', 'Coupon', 'Shipping charged', 'Total', 'Item cost', 'Shipping cost', 'Profit'].join(',')];
   for (const o of r.orders) {
-    lines.push([o.number, localDay(o.createdAt), o.customer, o.status, o.items.length, o.items.map((i) => nameOf(i.productName)).join(' + '), o.subtotal, o.shipping, o.total, o.itemCost, o.shippingCost, o.profit].map(q).join(','));
+    lines.push([o.number, localDay(o.createdAt), o.customer, o.status, o.items.length, o.items.map((i) => nameOf(i.productName)).join(' + '), o.subtotal, o.discount, o.coupon || '', o.shipping, o.total, o.itemCost, o.shippingCost, o.profit].map(q).join(','));
   }
   lines.push('');
   lines.push(['Expenses', 'Date', 'Category', 'Description', 'Amount'].join(','));
   for (const e of r.expenses) lines.push(['', e.date, e.category, e.description, e.amount].map(q).join(','));
   lines.push('');
   const t = r.totals;
-  for (const [k, v] of [['Revenue', t.revenue], ['Item cost', t.itemCost], ['Shipping cost', t.shippingCost], ['Gross profit', t.grossProfit], ['Expenses', t.expenses], ['Net profit', t.netProfit]]) lines.push([k, v].map(q).join(','));
+  for (const [k, v] of [['Discounts', t.discounts], ['Revenue', t.revenue], ['Item cost', t.itemCost], ['Shipping cost', t.shippingCost], ['Gross profit', t.grossProfit], ['Expenses', t.expenses], ['Net profit', t.netProfit]]) lines.push([k, v].map(q).join(','));
   return '﻿' + lines.join('\r\n');
 }
 

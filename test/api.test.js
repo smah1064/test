@@ -1086,6 +1086,55 @@ test('AI background removal: route answers clearly when the model is not availab
   }
 });
 
+test('coupons: admin creates them, checkout applies them, limits hold', async () => {
+  const mk = (body) => admin('/api/admin/coupons', { method: 'POST', body: JSON.stringify(body) });
+  assert.strictEqual((await fetch(base + '/api/admin/coupons')).status, 401);
+  assert.strictEqual((await mk({ code: 'a', type: 'percent', value: 10 })).status, 400, 'code too short');
+  let r = await mk({ code: 'eid 20', type: 'percent', value: 20, maxDiscount: 100, perCustomer: 1 });
+  assert.strictEqual(r.status, 201);
+  const eid = await r.json();
+  assert.strictEqual(eid.code, 'EID20');
+  assert.strictEqual((await mk({ code: 'EID20', type: 'fixed', value: 5 })).status, 409, 'unique code');
+  await mk({ code: 'SHIPFREE', type: 'freeship', minOrder: 100 });
+  await mk({ code: 'HOMEONLY', type: 'fixed', value: 50, categories: ['home'] });
+  await mk({ code: 'OLD', type: 'fixed', value: 50, endsOn: '2001-01-31' });
+
+  const d = await makeDesign({ size: 'M' });
+  const quote = (couponCode) => post('/api/cart/quote', { designIds: [d.id], couponCode }).then((x) => x.json());
+  let q = await quote('eid20');
+  assert.strictEqual(q.coupon.discount, Math.min(100, Math.round(d.price * 20) / 100));
+  assert.strictEqual(q.total, Math.round((d.price - q.discount + q.shipping) * 100) / 100);
+  q = await quote('SHIPFREE');
+  assert.strictEqual(q.shipping, 0);
+  q = await quote('HOMEONLY');
+  assert.match(q.couponError, /does not apply/);
+  q = await quote('OLD');
+  assert.match(q.couponError, /expired/);
+  q = await quote('NOPE');
+  assert.match(q.couponError, /not valid/);
+
+  // Order with the coupon: the discount is on the order, and the same phone can't use it twice.
+  q = await quote('EID20');
+  r = await post('/api/orders', { customer: CUSTOMER, designIds: [d.id], couponCode: 'EID20', expectedTotal: q.total });
+  assert.strictEqual(r.status, 201, await r.clone().text());
+  const order = await r.json();
+  assert.strictEqual(order.discount, q.discount);
+  assert.strictEqual(order.coupon, 'EID20');
+  assert.strictEqual(order.total, q.total);
+  const d2 = await makeDesign({ size: 'M' });
+  r = await post('/api/orders', { customer: CUSTOMER, designIds: [d2.id], couponCode: 'EID20' });
+  assert.strictEqual(r.status, 409);
+  assert.match((await r.json()).error, /already used/);
+  // Admin sees the use and the discount given.
+  const list = await (await admin('/api/admin/coupons')).json();
+  const row = list.coupons.find((c) => c.code === 'EID20');
+  assert.strictEqual(row.uses, 1);
+  assert.strictEqual(row.discountGiven, order.discount);
+  // Pausing it stops it.
+  await admin(`/api/admin/coupons/${eid.id}`, { method: 'PUT', body: JSON.stringify({ ...row, active: false }) });
+  assert.match((await post('/api/cart/quote', { designIds: [d2.id], couponCode: 'EID20' }).then((x) => x.json())).couponError, /not valid/);
+});
+
 const png4 = (w, h) => png(w, h);
 test('two copies of the app on one data folder share orders, sign-ins and edits', async () => {
   const { createApp: make } = require('../src/app');
