@@ -147,13 +147,14 @@
       </dl>`;
   }
 
-  const RECOMMENDED = { dtg: 'png', dtf: 'dtf-film', sublimation: 'png-mirror', uv: 'pdf', paper: 'pdf-marks' };
+  const RECOMMENDED = { dtg: 'png', dtf: 'dtf-film', sublimation: 'png-mirror', uv: 'pdf', paper: 'pdf-marks', canvas: 'pdf' };
   const FORMATS_BY_METHOD = {
     dtg: ['png', 'dtg-white', 'pdf', 'tiff'],
     dtf: ['dtf-film', 'dtf-pdf', 'png', 'pdf'],
     sublimation: ['png-mirror', 'png', 'pdf', 'tiff'],
     uv: ['pdf', 'png', 'pdf-marks', 'tiff'],
     paper: ['pdf-marks', 'pdf', 'tiff', 'png'],
+    canvas: ['pdf', 'tiff', 'png', 'pdf-marks'],
   };
   const isDark = (hex) => {
     const n = parseInt(String(hex || '#ffffff').slice(1), 16);

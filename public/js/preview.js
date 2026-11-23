@@ -594,7 +594,7 @@
         const textures = {};
         for (const s of state.sides) {
           textures[s.side.id] = {
-            design: s.design, designScale: s.designScale, rects: s.rects, hasDesign: s.hasDesign,
+            design: s.design, wrap: s.wrap || null, designScale: s.designScale, rects: s.rects, hasDesign: s.hasDesign,
             real: await realisticFor(s.side.id), plain: await plainFor(s.side.id), baseImg: await loadImg(s.base),
           };
         }

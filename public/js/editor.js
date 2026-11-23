@@ -2664,9 +2664,12 @@
 
   /** Transparent print file: artwork + bleed at up to 300 DPI. */
   function exportPrint(side) {
-    const { bleed, u } = rects(side.id);
+    const { bleed, u, b } = rects(side.id);
     const mult = Math.min(TARGET_DPI / u, Math.sqrt(MAX_PRINT_PIXELS / (bleed.w * bleed.h)), MAX_PRINT_SIDE / Math.max(bleed.w, bleed.h));
-    return canvasBlob(withArtworkOnly(() => canvas.toCanvasElement(mult, { left: bleed.x, top: bleed.y, width: bleed.w, height: bleed.h })));
+    const el = withArtworkOnly(() => canvas.toCanvasElement(mult, { left: bleed.x, top: bleed.y, width: bleed.w, height: bleed.h }));
+    // Canvas prints: the band round the front becomes the chosen edge (mirror, white, black).
+    if (st.product.model && st.product.model.type === 'canvas') POD.canvasEdges(el, b * mult, st.colorId);
+    return canvasBlob(el);
   }
   /** Product mockup with the trimmed design, for the cart, order page and print queue. */
   function exportPreview() {
@@ -2706,8 +2709,8 @@
     return svg.replace(/<defs>/, `${note}<defs><style>${fonts}</style>`);
   }
   /** Design layer only, in mockup coordinates, for the live previews. */
-  function exportDesignLayer(scale) {
-    return withArtworkOnly(() => canvas.toCanvasElement(scale, { left: 0, top: 0, width: W, height: H }), rects().trim);
+  function exportDesignLayer(scale, clip = rects().trim) {
+    return withArtworkOnly(() => canvas.toCanvasElement(scale, { left: 0, top: 0, width: W, height: H }), clip);
   }
 
   // ---------- Photo quality boost ----------
@@ -3106,6 +3109,8 @@
         side: sd,
         rects: rects(sd.id),
         design: exportDesignLayer(3),
+        // Canvas prints: the artwork that wraps round the frame, for the 3D sides.
+        wrap: st.product.model && st.product.model.type === 'canvas' ? exportDesignLayer(3, rects(sd.id).bleed) : null,
         designScale: 3,
         hasDesign: canvas.getObjects().length > 0,
         base: POD.mockupUrl(sd, color().hex),

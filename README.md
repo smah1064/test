@@ -199,12 +199,22 @@ Customers can create an account at `/account` (name, mobile number, optional ema
 - **Password**: change it (this signs out every other device). **Forgot password** sends a link valid for 1 hour by email (when the account has an email and Brevo is set up); otherwise it offers to ask the shop on WhatsApp.
 - Accounts are optional: guests can still order without one.
 
-**Sign in with Google / Facebook** (optional; the buttons appear once set up). New accounts made this way add their mobile number on the account page (checkout asks for it anyway) and can set a password later. An account with the same verified email is linked, not duplicated (`src/oauth.js`).
+**Sign in with Google / Facebook** (optional; the buttons appear once set up). Privacy policy for the provider forms: `https://ebda3.me/privacy` (also the data-deletion instructions Facebook asks for). New accounts made this way add their mobile number on the account page (checkout asks for it anyway) and can set a password later. An account with the same verified email is linked, not duplicated (`src/oauth.js`).
 
 - Google: [Google Cloud console](https://console.cloud.google.com/apis/credentials) → Create credentials → OAuth client ID → Web application. Authorised redirect URIs: `https://ebda3.me/auth/google/callback` and `https://www.ebda3.me/auth/google/callback`. Put the client ID and secret in the hosting panel as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (OAuth consent screen: app name, support email, then Publish).
 - Facebook: [Meta for Developers](https://developers.facebook.com/apps) → Create app → Facebook Login → Valid OAuth redirect URIs `https://ebda3.me/auth/facebook/callback` (and www). Set `FACEBOOK_APP_ID` and `FACEBOOK_APP_SECRET`.
 
 Passwords are stored as scrypt hashes. The session is a signed, httpOnly cookie (`pod_c`, 60 days) whose key comes from the shop's secret file, so every app copy accepts it (`src/customers.js`).
+
+## Canvas prints
+
+Two products, **Canvas Print (portrait)** and **(landscape)**, in 30×45, 40×60 and 60×90 cm (one design area, the bigger sizes print larger). They are gallery-wrapped on a 1.5 in (4 cm) frame, so the print file has a **1.75 in band on every side** (frame depth + fold at the back). The "colour" is the edge style:
+
+- **Image wrap**: the design continues round the edges (the editor shows the band; keep faces and text inside the front).
+- **Mirror wrap**: the band repeats the front's edges flipped, so the whole front stays visible.
+- **White / black edges**: plain band.
+
+The editor and the ready-design page make the band when they make the print file (`POD.canvasEdges`), so the PDF/TIFF/PNG are ready to stretch; the admin recommends the PDF. The 3D preview shows the canvas with its real depth and edges.
 
 ## Import a design from a link
 

@@ -1112,6 +1112,61 @@ PRODUCTS.push(
   },
 );
 
+// ---------- Canvas prints (gallery-wrapped on a 1.5 in wooden frame) ----------
+// The print file includes a 1.75 in band round the front (the frame's depth
+// plus the fold at the back). The edge style decides what goes on that band:
+// the design itself (wrap), the design mirrored, or plain white / black. The
+// editor and the shop make the band when they make the print file.
+const CANVAS_EDGES = [
+  { id: 'wrap', name: t('Image wrap: the design continues round the edges', 'لفّ الصورة: التصميم يكمّل على الجوانب'), hex: '#c4cad3' },
+  { id: 'mirror', name: t('Mirror wrap: edges mirror the design (keeps the whole front)', 'جوانب معكوسة: الجوانب انعكاس للتصميم (الواجهة كاملة)'), hex: '#aeb6c2' },
+  { id: 'white', name: t('White edges', 'جوانب بيضاء'), hex: '#f7f7f5' },
+  { id: 'black', name: t('Black edges', 'جوانب سوداء'), hex: '#1d1d1f' },
+];
+const canvasSvg = (x, y, w, h) => {
+  const d = 14;
+  return sv(
+    `<rect x="${x + 12}" y="${y + 18}" width="${w + d}" height="${h + d}" fill="#000" opacity=".13"/>` +
+      `<polygon points="${x + w},${y} ${x + w + d},${y + d * 0.7} ${x + w + d},${y + h + d * 0.7} ${x + w},${y + h}" fill="{{C}}" stroke="{{L}}" stroke-width="1.5"/>` +
+      `<polygon points="${x + w},${y} ${x + w + d},${y + d * 0.7} ${x + w + d},${y + h + d * 0.7} ${x + w},${y + h}" fill="#000" opacity=".16"/>` +
+      `<polygon points="${x},${y + h} ${x + w},${y + h} ${x + w + d},${y + h + d * 0.7} ${x + d},${y + h + d * 0.7}" fill="{{C}}" stroke="{{L}}" stroke-width="1.5"/>` +
+      `<polygon points="${x},${y + h} ${x + w},${y + h} ${x + w + d},${y + h + d * 0.7} ${x + d},${y + h + d * 0.7}" fill="#000" opacity=".26"/>` +
+      `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#ffffff" stroke="{{S}}" stroke-width="1.5"/>`
+  );
+};
+PRODUCTS.push(
+  {
+    id: 'canvas',
+    category: 'home',
+    name: t('Canvas Print (portrait)', 'لوحة كانفاس (طولية)'),
+    description: t('Gallery-wrapped artist canvas on a 4 cm wooden frame, ready to hang.', 'قماش كانفاس مشدود على إطار خشب 4 سم، جاهز للتعليق.'),
+    basePrice: 850,
+    surface: '#ffffff',
+    colors: CANVAS_EDGES,
+    sizes: [
+      { id: '30x45', label: t('30 × 45 cm', '30 × 45 سم'), surcharge: 0 },
+      { id: '40x60', label: t('40 × 60 cm', '40 × 60 سم'), surcharge: 300 },
+      { id: '60x90', label: t('60 × 90 cm', '60 × 90 سم'), surcharge: 900 },
+    ],
+    sides: [{ id: 'front', name: FRONT, svg: canvasSvg(118, 100, 264, 396), printArea: { x: 118, y: 100, w: 264, h: 396 }, printWidthIn: 11.81 }],
+  },
+  {
+    id: 'canvaswide',
+    category: 'home',
+    name: t('Canvas Print (landscape)', 'لوحة كانفاس (عرضية)'),
+    description: t('Gallery-wrapped artist canvas on a 4 cm wooden frame, ready to hang.', 'قماش كانفاس مشدود على إطار خشب 4 سم، جاهز للتعليق.'),
+    basePrice: 850,
+    surface: '#ffffff',
+    colors: CANVAS_EDGES,
+    sizes: [
+      { id: '30x45', label: t('45 × 30 cm', '45 × 30 سم'), surcharge: 0 },
+      { id: '40x60', label: t('60 × 40 cm', '60 × 40 سم'), surcharge: 300 },
+      { id: '60x90', label: t('90 × 60 cm', '90 × 60 سم'), surcharge: 900 },
+    ],
+    sides: [{ id: 'front', name: FRONT, svg: canvasSvg(52, 160, 396, 264), printArea: { x: 52, y: 160, w: 396, h: 264 }, printWidthIn: 17.72 }],
+  },
+);
+
 /**
  * Print production details per product:
  *   process  how it is printed; decides which file the shop should use
@@ -1128,6 +1183,8 @@ const PRODUCTION = {
   mug: { process: 'sublimation', safeIn: 0.15, bleedIn: 0, model: { type: 'mug', diameterIn: 3.25, heightIn: 3.8, material: 'ceramic' } },
   cushion: { process: 'sublimation', safeIn: 0.4, bleedIn: 0, model: { type: 'pillow', widthIn: 16, heightIn: 16, material: 'fabric' } },
   poster: { process: 'paper', safeIn: 0.25, bleedIn: 0.125, model: { type: 'frame', material: 'paper' } },
+  canvas: { process: 'canvas', safeIn: 0.3, bleedIn: 1.75, model: { type: 'canvas', material: 'fabric', depthIn: 1.5 } },
+  canvaswide: { process: 'canvas', safeIn: 0.3, bleedIn: 1.75, model: { type: 'canvas', material: 'fabric', depthIn: 1.5 } },
   bottle: { process: 'uv', safeIn: 0.15, bleedIn: 0, model: { type: 'bottle', diameterIn: 2.9, heightIn: 10.2, material: 'metal' } },
   tote: { process: 'dtg', safeIn: 0.25, bleedIn: 0, model: { type: 'card', material: 'fabric' } },
   phonecase: { process: 'uv', safeIn: 0.12, bleedIn: 0.08, model: { type: 'case', material: 'plastic' } },
@@ -1229,6 +1286,8 @@ for (const p of PRODUCTS) {
 // printScale multiplies the side's printWidthIn (and height) for that size.
 const SIZE_PRINT_SCALE = {
   poster: { '30x40': 30 / 45 },
+  canvas: { '40x60': 4 / 3, '60x90': 2 },
+  canvaswide: { '40x60': 4 / 3, '60x90': 2 },
   cushion: { 50: 50 / 40 },
   greetingcard: { A5: 14.8 / 10.5 },
   plaque: { '18x25': 18 / 13 },

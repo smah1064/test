@@ -215,7 +215,7 @@
       f.textContent = '';
       f.append(span);
     }
-    f.insertAdjacentHTML('beforeend', ' · <a href="/rights" data-rights-link data-i18n="rights.policy" style="color:inherit"></a>');
+    f.insertAdjacentHTML('beforeend', ' · <a href="/privacy" data-i18n="pp2.link" style="color:inherit"></a> · <a href="/rights" data-rights-link data-i18n="rights.policy" style="color:inherit"></a>');
   }
   function initChrome() {
     addAccountLink();
@@ -300,6 +300,55 @@
     return max > 0 ? Math.min(1, size.chestCm / max) : 1;
   }
 
+  // ---------- Canvas prints: the band that wraps round the frame ----------
+  /**
+   * The print file of a canvas covers the front plus a band of `band` pixels
+   * on every side (the frame's depth and the fold at the back). Depending on
+   * the edge style the band keeps the design (wrap), mirrors the front's edges
+   * (mirror) or is plain white / black. Changes the canvas element in place.
+   */
+  function canvasEdges(cv, band, mode) {
+    if (!band || !mode || mode === 'wrap') return cv;
+    const ctx = cv.getContext('2d');
+    const W = cv.width;
+    const H = cv.height;
+    const b = Math.round(band);
+    if (mode === 'white' || mode === 'black') {
+      ctx.save();
+      ctx.fillStyle = mode === 'white' ? '#ffffff' : '#111111';
+      ctx.fillRect(0, 0, W, b);
+      ctx.fillRect(0, H - b, W, b);
+      ctx.fillRect(0, 0, b, H);
+      ctx.fillRect(W - b, 0, b, H);
+      ctx.restore();
+      return cv;
+    }
+    // Mirror: each band is the front's edge strip flipped outwards (corners flipped both ways).
+    const src = document.createElement('canvas');
+    src.width = W;
+    src.height = H;
+    src.getContext('2d').drawImage(cv, 0, 0);
+    const iw = W - 2 * b;
+    const ih = H - 2 * b;
+    const strip = (sx, sy, sw, sh, dx, dy, fx, fy) => {
+      ctx.save();
+      ctx.translate(dx + (fx < 0 ? sw : 0), dy + (fy < 0 ? sh : 0));
+      ctx.scale(fx, fy);
+      ctx.clearRect(0, 0, sw, sh);
+      ctx.drawImage(src, sx, sy, sw, sh, 0, 0, sw, sh);
+      ctx.restore();
+    };
+    strip(b, b, iw, b, b, 0, 1, -1); // top
+    strip(b, H - 2 * b, iw, b, b, H - b, 1, -1); // bottom
+    strip(b, b, b, ih, 0, b, -1, 1); // left
+    strip(W - 2 * b, b, b, ih, W - b, b, -1, 1); // right
+    strip(b, b, b, b, 0, 0, -1, -1); // corners
+    strip(W - 2 * b, b, b, b, W - b, 0, -1, -1);
+    strip(b, H - 2 * b, b, b, 0, H - b, -1, -1);
+    strip(W - 2 * b, H - 2 * b, b, b, W - b, H - b, -1, -1);
+    return cv;
+  }
+
   window.POD = {
     get lang() {
       return lang;
@@ -308,6 +357,6 @@
     loadCatalog, fillMockup, mockupUrl, svgDataUrl, luminance,
     money, date, num,
     getCart, setCart, updateCartBadge, toast, esc, api, drafts,
-    sizedArea, sizeView,
+    sizedArea, sizeView, canvasEdges,
   };
 })();

@@ -242,6 +242,88 @@ function buildBlock(color, tex, renderer, product) {
 }
 
 /**
+ * A gallery-wrapped canvas on its wooden frame: the design on the front and,
+ * on the four sides, what the edge style puts there (the artwork wrapping
+ * round, the front's edges mirrored, or plain white / black).
+ */
+function buildCanvas(colorId, tex, renderer, product) {
+  const side = product.sides[0];
+  const t = tex[side.id];
+  const m = product.model || {};
+  const r = t.rects.trim;
+  const U = t.rects.u || r.w / side.printWidthIn; // mockup units per inch at this size
+  const w = r.w / U;
+  const h = r.h / U;
+  const d = m.depthIn || 1.5;
+  const sc = t.designScale || S;
+  const dp = Math.max(2, Math.round(d * U * sc)); // the depth in design-layer pixels
+  const X = r.x * sc;
+  const Y = r.y * sc;
+  const RW = Math.round(r.w * sc);
+  const RH = Math.round(r.h * sc);
+  const base = (cw, ch) => {
+    const c = canvas(cw, ch);
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = colorId === 'black' ? '#141414' : '#ffffff';
+    ctx.fillRect(0, 0, c.width, c.height);
+    return [c, ctx];
+  };
+  // The front.
+  const [frontCv, fctx] = base(RW, RH);
+  if (t.hasDesign) fctx.drawImage(t.design, X, Y, RW, RH, 0, 0, RW, RH);
+  // One side: the strip of artwork next to that edge (outside it for a wrap,
+  // inside it flipped for a mirror), or plain for white / black edges.
+  const sideCv = (edge) => {
+    const vertical = edge === 'left' || edge === 'right';
+    const [c, ctx] = base(vertical ? dp : RW, vertical ? RH : dp);
+    if (!t.hasDesign || colorId === 'white' || colorId === 'black') return c;
+    const src = colorId === 'mirror' ? t.design : t.wrap || t.design;
+    const out = { left: [X - dp, Y], right: [X + RW, Y], top: [X, Y - dp], bottom: [X, Y + RH] }[edge];
+    const inn = { left: [X, Y], right: [X + RW - dp, Y], top: [X, Y], bottom: [X, Y + RH - dp] }[edge];
+    const [sx, sy] = colorId === 'mirror' ? inn : out;
+    ctx.save();
+    if (colorId === 'mirror') {
+      ctx.translate(vertical ? c.width : 0, vertical ? 0 : c.height);
+      ctx.scale(vertical ? -1 : 1, vertical ? 1 : -1);
+    }
+    ctx.drawImage(src, sx, sy, c.width, c.height, 0, 0, c.width, c.height);
+    ctx.restore();
+    return c;
+  };
+  const face = (cv, pw, ph) => new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), mat('fabric', { map: texture(cv, renderer) }));
+  const g = new THREE.Group();
+  const front = face(frontCv, w, h);
+  front.position.z = d / 2;
+  const right = face(sideCv('right'), d, h);
+  right.rotation.y = Math.PI / 2;
+  right.position.x = w / 2;
+  const left = face(sideCv('left'), d, h);
+  left.rotation.y = -Math.PI / 2;
+  left.position.x = -w / 2;
+  const top = face(sideCv('top'), w, d);
+  top.rotation.x = -Math.PI / 2;
+  top.position.y = h / 2;
+  const bottom = face(sideCv('bottom'), w, d);
+  bottom.rotation.x = Math.PI / 2;
+  bottom.position.y = -h / 2;
+  // The back: raw canvas stapled over the wooden stretcher bars.
+  const back = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat('fabric', { color: '#e8dcc4' }));
+  back.rotation.y = Math.PI;
+  back.position.z = -d / 2;
+  const bar = Math.min(2, w * 0.12);
+  for (const [bw, bh, bx, by] of [[w, bar, 0, h / 2 - bar / 2], [w, bar, 0, -h / 2 + bar / 2], [bar, h, w / 2 - bar / 2, 0], [bar, h, -w / 2 + bar / 2, 0]]) {
+    const wood = new THREE.Mesh(new THREE.PlaneGeometry(bw, bh), mat('paper', { color: '#c9a26b' }));
+    wood.rotation.y = Math.PI;
+    wood.position.set(bx, by, -d / 2 - 0.01);
+    g.add(wood);
+  }
+  g.add(front, right, left, top, bottom, back);
+  g.rotation.y = -0.62;
+  g.rotation.x = 0.12;
+  return g;
+}
+
+/**
  * A folded greeting card standing slightly open: the printed cover in front,
  * hinged at its left edge (the fold) to the plain back panel behind it.
  */
@@ -591,6 +673,7 @@ export function mount(container, { product, color, textures, spin = true }) {
   else if (m.type === 'pad') obj = buildPad(hex, textures, renderer, product);
   else if (m.type === 'block') obj = buildBlock(hex, textures, renderer, product);
   else if (m.type === 'foldcard') obj = buildFoldCard(hex, textures, renderer, product);
+  else if (m.type === 'canvas') obj = buildCanvas(color && color.id, textures, renderer, product);
   else if (m.type === 'case') obj = buildCase(hex, textures, renderer, product);
   else if (m.type === 'notebook') obj = buildNotebook(hex, textures, renderer, product);
   else if (m.type === 'pillow') obj = buildPillow(m, hex, textures, renderer, product);

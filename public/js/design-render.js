@@ -86,7 +86,10 @@
    * print in cm, so smaller on the photo of a bigger size), as in the editor.
    */
   async function stage(design, product, side, color, sizeId) {
-    const sized = sizeId ? { ...side, printArea: POD.sizedArea(product, side, sizeId) } : side;
+    // The size's print box (garments) and physical inches (posters, canvases: same shape, bigger print).
+    const size = sizeId ? product.sizes.find((z) => z.id === sizeId) : null;
+    const k = (size && size.printScale) || 1;
+    const sized = sizeId ? { ...side, printArea: POD.sizedArea(product, side, sizeId), printWidthIn: side.printWidthIn * k, ...(side.printHeightIn ? { printHeightIn: side.printHeightIn * k } : {}) } : side;
     const canvas = new fabric.StaticCanvas(null, { width: W, height: H, enableRetinaScaling: false, renderOnAddRemove: false });
     const objects = await placeDesign(design, product, sized, color.hex);
     objects.forEach((o) => canvas.add(o));
@@ -112,7 +115,10 @@
   function printBlob(st) {
     const { bleed, u } = st.R;
     const mult = Math.min(TARGET_DPI / u, Math.sqrt(MAX_PRINT_PIXELS / (bleed.w * bleed.h)), MAX_PRINT_SIDE / Math.max(bleed.w, bleed.h));
-    return toBlob(withMode(st, { pictures: false, clip: bleed }, (c) => c.toCanvasElement(mult, { left: bleed.x, top: bleed.y, width: bleed.w, height: bleed.h })));
+    const el = withMode(st, { pictures: false, clip: bleed }, (c) => c.toCanvasElement(mult, { left: bleed.x, top: bleed.y, width: bleed.w, height: bleed.h }));
+    // Canvas prints: the band round the front becomes the chosen edge (mirror, white, black).
+    if (st.product.model && st.product.model.type === 'canvas') POD.canvasEdges(el, st.R.b * mult, st.color.id);
+    return toBlob(el);
   }
   /** The product with the design, as the cart and production queue show it. */
   function previewBlob(st, mult = 1.2) {
@@ -148,8 +154,8 @@
     return svg.replace(/<defs>/, `${note}<defs><style>${fonts}</style>`);
   }
   /** Design layer only, in mockup coordinates, for the realistic and 3D previews. */
-  function designLayer(st, scale = 3) {
-    return withMode(st, { pictures: false, clip: st.R.trim }, (c) => c.toCanvasElement(scale, { left: 0, top: 0, width: W, height: H }));
+  function designLayer(st, scale = 3, clip = st.R.trim) {
+    return withMode(st, { pictures: false, clip }, (c) => c.toCanvasElement(scale, { left: 0, top: 0, width: W, height: H }));
   }
   /** The objects as the editor saves them. */
   function serialize(st) {

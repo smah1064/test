@@ -39,6 +39,7 @@
         side,
         rects: st.R,
         design: POD_RENDER.designLayer(st, 3),
+        wrap: product.model && product.model.type === 'canvas' ? POD_RENDER.designLayer(st, 3, st.R.bleed) : null,
         designScale: 3,
         hasDesign: true,
         base: POD.mockupUrl(side, color.hex),
