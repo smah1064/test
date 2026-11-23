@@ -20,6 +20,8 @@ process.once('message', async ({ data, kind, px }) => {
     const args = [
       '-dSAFER', '-dBATCH', '-dNOPAUSE', '-dQUIET', '-dNOINTERPOLATE',
       '-sDEVICE=pngalpha', '-dTextAlphaBits=4', '-dGraphicsAlphaBits=4',
+      // Draw the whole page in one piece: the banded mode (used for big pages) crashes in this WebAssembly build.
+      '-dMaxBitmap=200000000',
       // Fit the artwork into a px x px box, keeping its proportions.
       `-g${px}x${px}`, '-dFIXEDMEDIA',
       ...(kind === 'pdf' ? ['-dPDFFitPage', '-dFirstPage=1', '-dLastPage=1'] : ['-dEPSFitPage']),

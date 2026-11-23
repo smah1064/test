@@ -875,6 +875,13 @@ test('AI and EPS files are drawn to a transparent PNG for the editor', async () 
   assert.strictEqual(r.status, 200);
   const m2 = await sharp(Buffer.from(await r.arrayBuffer())).metadata();
   assert.ok(m2.width > m2.height * 1.8, 'the rectangle, 2:1');
+  // A real-size file with a photo in it, drawn at full size (3000 px): Ghostscript's
+  // banded mode crashed here ("memory access out of bounds") before -dMaxBitmap.
+  const photo = await sharp({ create: { width: 1600, height: 1000, channels: 3, noise: { type: 'gaussian', mean: 128, sigma: 60 } } }).jpeg().toBuffer();
+  const big = await new Promise((resolve) => { const d = new PDF({ size: [600, 400] }); const b = []; d.on('data', (c) => b.push(c)); d.on('end', () => resolve(Buffer.concat(b))); d.image(photo, 40, 40, { width: 400 }); d.fontSize(40).text('Logo', 450, 100); d.end(); });
+  r = await fetch(base + '/api/artwork', { method: 'POST', headers: { 'Content-Type': 'application/octet-stream', 'x-max-px': '3000' }, body: big });
+  assert.strictEqual(r.status, 200, await r.clone().text());
+  assert.ok((await sharp(Buffer.from(await r.arrayBuffer())).metadata()).width > 2000);
   // Not a design file / nothing drawn.
   assert.strictEqual((await send(Buffer.from('just text'))).status, 400);
   assert.strictEqual((await send(Buffer.from('%!PS\nshowpage\n'))).status, 400);
