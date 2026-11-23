@@ -332,7 +332,7 @@
       cfg.keepDark ? P.darkOverlay(cfg, 1000) : null,
     ]);
     const image = (el) => new fabric.Image(el, {
-      originX: 'left', originY: 'top', left: at.x, top: at.y, scaleX: at.k / el.scale, scaleY: at.k / el.scale,
+      originX: 'left', originY: 'top', left: at.x, top: at.y, scaleX: at.kx / el.scale, scaleY: at.ky / el.scale,
     });
     return [image(cv), dark ? image(dark) : null];
   }

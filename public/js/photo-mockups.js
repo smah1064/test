@@ -192,18 +192,24 @@
   /**
    * Where the photo goes in the editor's 500 x 600 mockup space so that its
    * measured print area lands exactly on the side's printArea:
-   * { k (mockup units per photo px), x, y } for the photo's top-left corner.
+   * { kx, ky (mockup units per photo px), x, y } for the photo's top-left corner.
    */
   function placement(cfg, printArea) {
     const aspect = printArea.w / printArea.h;
     const r = window.POD_PHOTOS.rectFor(cfg, aspect);
-    // Curved products: the flat print width shows as a narrower arc on the
-    // photo. Boxes and curves balance width and height so neither is far off.
+    if (cfg.box) {
+      // Flat products: the photographed surface fills the print area exactly
+      // (its shape can differ a little from the print size).
+      const kx = printArea.w / r.w;
+      const ky = printArea.h / r.h;
+      return { k: kx, kx, ky, x: printArea.x - r.x * kx, y: printArea.y - r.y * ky };
+    }
+    // Curved products: the flat print width shows as a narrower arc on the photo.
     const rw = cfg.cyl ? 2 * cfg.cyl.R * Math.sin(Math.min(Math.PI / 2, r.w / 2 / cfg.cyl.R)) : r.w;
-    const k = cfg.box || cfg.cyl ? Math.sqrt((printArea.w / rw) * (printArea.h / r.h)) : printArea.w / r.w;
+    const k = cfg.cyl ? Math.sqrt((printArea.w / rw) * (printArea.h / r.h)) : printArea.w / r.w;
     const cx = printArea.x + printArea.w / 2;
     const cy = printArea.y + printArea.h / 2;
-    return { k, x: cx - (r.x + r.w / 2) * k, y: cy - (r.y + r.h / 2) * k };
+    return { k, kx: k, ky: k, x: cx - (r.x + r.w / 2) * k, y: cy - (r.y + r.h / 2) * k };
   }
 
   /** Photo config for a product side, or null if it only has a drawn mockup. */
