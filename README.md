@@ -35,12 +35,13 @@ Requires Node 18+. There is no database to set up: data is stored under `data/` 
 
 ## What's in it
 
-**Storefront (`/`)**: 38 products in six categories:
+**Storefront (`/`)**: 47 products in seven categories:
 - **Apparel:** t-shirt, oversized t-shirt, polo, football jersey (front + back, kids and adult sizes), kids t-shirt, kids hoodie, baby onesie, hoodie, zip hoodie, sweatshirt, shorts, denim jacket (back), cap.
 - **Home:** mug, magic (colour-changing) mug, travel tumbler, coaster set, Ramadan tablecloth, cushion, framed poster, water bottle, apron.
 - **Gifts & occasions:** couple mugs (two mugs, a design on each, no extra charge for the second), Eid money envelopes (packs of 10/25/50), greeting card, personalised prayer mat, acrylic photo plaque, welcome sign on an easel.
 - **Accessories:** tote bag, phone case, mouse pad, XL desk mat, acrylic keychain (1/5/10).
 - **Stationery and back to school:** notebook, sticker sheet, school name labels (40/80), kids lunch bag, pencil case.
+- **Business:** business cards (front/back, 100–1000), flyers (A5/A4, front/back), letterhead paper, DL company envelopes, round logo stickers, roll-up banner with stand, paper shopping bags with a logo, A5 carbonless invoice books, employee ID cards with lanyard (front/back). The editor has matching templates: Arabic and English business cards, shop logo, sale flyer, letterhead and staff ID.
 
 Each has colours, sizes (or pack sizes) and a mockup drawn in its colour. A product can set `extraSidePrice` to override the usual charge for a second printed side.
 

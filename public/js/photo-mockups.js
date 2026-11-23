@@ -67,6 +67,18 @@
     'namelabels:front': { ...P('labels-front'), box: { x: 178, y: 385, w: 643, h: 468 }, fit: 'cover', warp: 'flat' },
     'lunchbag:front': { ...P('lunchbag-front'), rect: { cx: 502, top: 500, w: 470 }, warp: 'fabric' },
     'pencilcase:front': { ...P('pencilcase-front'), rect: { cx: 500, top: 450, w: 640 }, warp: 'fabric', base: '#efe4cc' },
+    'bizcards:front': { ...P('bizcard-front'), box: { x: 185, y: 422, w: 630, h: 392 }, fit: 'cover', warp: 'flat' },
+    'bizcards:back': { ...P('bizcard-front'), box: { x: 185, y: 422, w: 630, h: 392 }, fit: 'cover', warp: 'flat' },
+    'flyers:front': { ...P('flyer-front'), box: { x: 222, y: 245, w: 545, h: 760 }, fit: 'cover', warp: 'flat' },
+    'flyers:back': { ...P('flyer-front'), box: { x: 222, y: 245, w: 545, h: 760 }, fit: 'cover', warp: 'flat' },
+    'letterhead:front': { ...P('letterhead-front'), box: { x: 187, y: 168, w: 627, h: 906 }, fit: 'cover', warp: 'flat' },
+    'dlenvelopes:front': { ...P('dlenvelope-front'), rect: { cx: 500, top: 433, w: 748 }, warp: 'flat' },
+    'logostickers:front': { ...P('roundsticker-front'), box: { x: 202, y: 324, w: 592, h: 592 }, fit: 'cover', warp: 'flat' },
+    'rollup:front': { ...P('rollup-front'), box: { x: 306, y: 158, w: 388, h: 912 }, fit: 'cover', warp: 'flat' },
+    'paperbags:front': { ...P('paperbag-front'), rect: { cx: 499, top: 520, w: 380 }, warp: 'flat' },
+    'invoicebook:front': { ...P('invoicebook-front'), rect: { cx: 498, top: 252, w: 523 }, warp: 'flat' },
+    'idcards:front': { ...P('idcard-front'), box: { x: 335, y: 482, w: 330, h: 520 }, fit: 'cover', warp: 'flat' },
+    'idcards:back': { ...P('idcard-front'), box: { x: 335, y: 482, w: 330, h: 520 }, fit: 'cover', warp: 'flat' },
   };
 
   // ---------- Recoloured product photos (cards, editor, thumbnails) ----------

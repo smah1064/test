@@ -304,6 +304,72 @@
         T('صغير', 'Marhey', 0.12, 0.5, 0.82, { weight: 'bold', curve: -30 }),
       ],
     },
+    // ---------- Business ----------
+    {
+      id: 'bizcard-ar',
+      name: { en: 'Business card (Arabic)', ar: 'كارت شخصي' },
+      items: [
+        T('محمد أحمد', 'Cairo', 0.085, 0.5, 0.28, { weight: 'bold' }),
+        T('مدير المبيعات', 'Tajawal', 0.05, 0.5, 0.42, { fill: ACCENT, weight: 'bold' }),
+        S('line', 0.3, 0.5, 0.53, { fill: ACCENT }),
+        T('0100 123 4567', 'Montserrat', 0.045, 0.5, 0.66),
+        T('القاهرة، مصر', 'Tajawal', 0.045, 0.5, 0.79),
+      ],
+    },
+    {
+      id: 'bizcard-en',
+      name: { en: 'Business card', ar: 'كارت شخصي (إنجليزي)' },
+      items: [
+        S('circle', 0.22, 0.2, 0.5, { fill: ACCENT }),
+        T('A', 'Bebas Neue', 0.15, 0.2, 0.52, { fill: '#ffffff' }),
+        T('Ahmed Hassan', 'Montserrat', 0.07, 0.64, 0.3, { weight: 'bold' }),
+        T('Graphic Designer', 'Montserrat', 0.042, 0.64, 0.44, { fill: ACCENT }),
+        T('0100 123 4567', 'Montserrat', 0.04, 0.64, 0.62),
+        T('ahmed@company.com', 'Montserrat', 0.04, 0.64, 0.74),
+      ],
+    },
+    {
+      id: 'shop-logo',
+      name: { en: 'Shop logo', ar: 'لوجو محل' },
+      items: [
+        S('circle', 0.94, 0.5, 0.5, { fill: ACCENT }),
+        T('متجري', 'Lalezar', 0.22, 0.5, 0.44, { fill: '#ffffff' }),
+        T('SINCE 2026', 'Montserrat', 0.06, 0.5, 0.66, { fill: '#ffffff', spacing: 200, weight: 'bold' }),
+      ],
+    },
+    {
+      id: 'sale-flyer',
+      name: { en: 'Sale flyer', ar: 'فلاير عروض' },
+      items: [
+        T('عرض خاص', 'Lalezar', 0.2, 0.5, 0.16, { fill: ACCENT }),
+        T('50%', 'Anton', 0.42, 0.5, 0.42),
+        T('خصم على كل المنتجات', 'Cairo', 0.085, 0.5, 0.64, { weight: 'bold' }),
+        S('line', 0.5, 0.5, 0.74, { fill: ACCENT }),
+        T('لفترة محدودة · 0100 123 4567', 'Tajawal', 0.055, 0.5, 0.84, { weight: 'bold' }),
+      ],
+    },
+    {
+      id: 'letterhead',
+      name: { en: 'Letterhead', ar: 'ورق مراسلات' },
+      items: [
+        T('اسم الشركة', 'Cairo', 0.07, 0.5, 0.06, { weight: 'bold' }),
+        T('COMPANY NAME', 'Montserrat', 0.035, 0.5, 0.1, { fill: ACCENT, spacing: 300, weight: 'bold' }),
+        S('line', 0.9, 0.5, 0.13, { fill: ACCENT }),
+        S('line', 0.9, 0.5, 0.93, { fill: ACCENT }),
+        T('القاهرة، مصر · 0100 123 4567 · info@company.com', 'Tajawal', 0.028, 0.5, 0.96),
+      ],
+    },
+    {
+      id: 'staff-id',
+      name: { en: 'Staff ID', ar: 'كارنيه موظف' },
+      items: [
+        T('COMPANY', 'Bebas Neue', 0.17, 0.5, 0.12, { fill: ACCENT, spacing: 100 }),
+        S('circle', 0.46, 0.5, 0.4, { fill: '#d9dde3' }),
+        T('أحمد حسن', 'Cairo', 0.11, 0.5, 0.68, { weight: 'bold' }),
+        T('قسم المبيعات', 'Tajawal', 0.075, 0.5, 0.79, { fill: ACCENT, weight: 'bold' }),
+        T('ID 1024', 'Montserrat', 0.06, 0.5, 0.9),
+      ],
+    },
   ];
 
   /**

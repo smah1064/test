@@ -180,7 +180,7 @@ function buildPad(color, tex, renderer, product) {
   const m = product.model || {};
   const w = side.printWidthIn;
   const h = side.printHeightIn;
-  const r = Math.min(m.radiusIn != null ? m.radiusIn : 0.35, w / 4, h / 4);
+  const r = Math.min(m.radiusIn != null ? m.radiusIn : 0.35, w / 2 - 0.001, h / 2 - 0.001);
   const face = texture(faceCanvas(color, designCrop(tex[side.id]), 1600, (1600 * h) / w), renderer);
   const mesh = slab(w, h, r, m.depthIn || 0.12, face, mat('plastic', { color: m.edge || '#2a2b30', roughness: 0.8 }), m.material || 'fabric');
   mesh.rotation.x = -1.05;
@@ -193,14 +193,30 @@ function buildBlock(color, tex, renderer, product) {
   const m = product.model || {};
   const w = side.printWidthIn;
   const h = side.printHeightIn;
-  const r = Math.min(m.radiusIn != null ? m.radiusIn : 0.1, w / 4, h / 4);
+  const r = Math.min(m.radiusIn != null ? m.radiusIn : 0.1, w / 2 - 0.001, h / 2 - 0.001);
   const face = texture(faceCanvas(m.clear ? '#f7f9fb' : color, designCrop(tex[side.id]), 1600, (1600 * h) / w), renderer);
   const edge = m.clear
     ? new THREE.MeshPhysicalMaterial({ color: '#dfeaf0', roughness: 0.05, metalness: 0, transmission: 0.6, transparent: true, opacity: 0.55, thickness: 0.5 })
     : mat('paper', { color: m.edge || '#f4f4f2' });
   const mesh = slab(w, h, r, m.depthIn || 0.5, face, edge, m.material || 'plastic');
-  mesh.rotation.y = -0.3;
-  return mesh;
+  const back = product.sides[1];
+  if (!back) {
+    mesh.rotation.y = -0.3;
+    return mesh;
+  }
+  // Two-sided items (business cards, ID cards, flyers): the back design on the reverse face.
+  const g = new THREE.Group();
+  const bf = texture(faceCanvas(color, designCrop(tex[back.id]), 1600, (1600 * h) / w), renderer);
+  const backFace = new THREE.Mesh(new THREE.ShapeGeometry(roundedRect(w, h, r), 24), mat(m.material || 'plastic', { map: bf }));
+  const uv = backFace.geometry.attributes.uv;
+  const pos = backFace.geometry.attributes.position;
+  // Seen from behind, so mirror u to read the right way round.
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, 1 - (pos.getX(i) / w + 0.5), pos.getY(i) / h + 0.5);
+  backFace.rotation.y = Math.PI;
+  backFace.position.z = -(m.depthIn || 0.5) / 2 - Math.min(0.06, (m.depthIn || 0.5) / 4) - 0.002;
+  g.add(mesh, backFace);
+  g.rotation.y = -0.3;
+  return g;
 }
 
 function buildCase(color, tex, renderer, product) {

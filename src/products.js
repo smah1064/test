@@ -28,6 +28,7 @@ const CATEGORIES = [
   { id: 'stationery', name: t('Stationery', 'أدوات مكتبية') },
   { id: 'occasions', name: t('Gifts & occasions', 'هدايا ومناسبات') },
   { id: 'school', name: t('Back to school', 'المدرسة') },
+  { id: 'business', name: t('Business', 'للأعمال') },
 ];
 
 const C = {
@@ -938,6 +939,137 @@ PRODUCTS.push(
   },
 );
 
+// ---------- Business ----------
+const qty = (rows) => rows.map(([id, en, ar, surcharge]) => ({ id, label: t(en, ar), surcharge }));
+const PAPER_FINISH = [
+  { id: 'matte', name: t('Matte white', 'أبيض مطفي'), hex: '#ffffff' },
+  { id: 'gloss', name: t('Glossy white', 'أبيض لامع'), hex: '#ffffff' },
+  { id: 'kraft', name: t('Kraft', 'كرافت'), hex: '#c8a77a' },
+];
+
+PRODUCTS.push(
+  {
+    id: 'bizcards',
+    category: 'business',
+    name: t('Business Cards', 'كروت شخصية'),
+    description: t('Thick 350 gsm cards, 9 × 5.5 cm, printed on one or both sides.', 'كروت 350 جرام سميكة، 9 × 5.5 سم، طباعة وجه أو وجهين.'),
+    basePrice: 150,
+    extraSidePrice: 50,
+    colors: PAPER_FINISH,
+    sizes: qty([['100', '100 cards', '100 كارت', 0], ['250', '250 cards', '250 كارت', 120], ['500', '500 cards', '500 كارت', 250], ['1000', '1000 cards', '1000 كارت', 450]]),
+    sides: [
+      { id: 'front', name: FRONT, svg: flat(70, 220, 360, 220, 4), printArea: { x: 70, y: 220, w: 360, h: 220 }, printWidthIn: 3.54 },
+      { id: 'back', name: BACK, svg: flat(70, 220, 360, 220, 4), printArea: { x: 70, y: 220, w: 360, h: 220 }, printWidthIn: 3.54 },
+    ],
+  },
+  {
+    id: 'flyers',
+    category: 'business',
+    name: t('Flyers', 'فلايرز'),
+    description: t('Full-colour flyers on 150 gsm satin paper, one or both sides.', 'فلايرز ألوان كاملة على ورق 150 جرام ساتان، وجه أو وجهين.'),
+    basePrice: 250,
+    colors: [{ id: 'satin', name: t('Satin white', 'أبيض ساتان'), hex: '#ffffff' }, { id: 'gloss', name: t('Glossy white', 'أبيض لامع'), hex: '#ffffff' }],
+    sizes: qty([['A5-100', 'A5 × 100', 'A5 × 100', 0], ['A5-500', 'A5 × 500', 'A5 × 500', 450], ['A5-1000', 'A5 × 1000', 'A5 × 1000', 750], ['A4-100', 'A4 × 100', 'A4 × 100', 150], ['A4-500', 'A4 × 500', 'A4 × 500', 900]]),
+    sides: [
+      { id: 'front', name: FRONT, svg: flat(130, 70, 240, 339), printArea: { x: 130, y: 70, w: 240, h: 339 }, printWidthIn: 8.27 },
+      { id: 'back', name: BACK, svg: flat(130, 70, 240, 339), printArea: { x: 130, y: 70, w: 240, h: 339 }, printWidthIn: 8.27 },
+    ],
+  },
+  {
+    id: 'letterhead',
+    category: 'business',
+    name: t('Letterhead Paper', 'ورق مراسلات (ليترهيد)'),
+    description: t('A4 100 gsm paper with your logo and details; works in any office printer.', 'ورق A4 وزن 100 جرام بشعارك وبياناتك، يشتغل في أي طابعة مكتب.'),
+    basePrice: 300,
+    colors: [C.white, C.cream],
+    sizes: qty([['100', '100 sheets', '100 ورقة', 0], ['250', '250 sheets', '250 ورقة', 300], ['500', '500 sheets', '500 ورقة', 550]]),
+    sides: [{ id: 'front', name: FRONT, svg: flat(130, 70, 240, 339), printArea: { x: 130, y: 70, w: 240, h: 339 }, printWidthIn: 8.27 }],
+  },
+  {
+    id: 'dlenvelopes',
+    category: 'business',
+    name: t('Company Envelopes (DL)', 'ظروف شركات DL'),
+    description: t('11 × 22 cm envelopes that fit an A4 letter folded in three, printed with your logo.', 'ظروف 11 × 22 سم تناسب ورقة A4 مطوية 3 مرات، مطبوعة بشعارك.'),
+    basePrice: 350,
+    colors: [C.white, C.kraft],
+    sizes: qty([['100', '100 envelopes', '100 ظرف', 0], ['250', '250 envelopes', '250 ظرف', 400], ['500', '500 envelopes', '500 ظرف', 700]]),
+    sides: [{ id: 'front', name: FRONT, svg: flat(30, 200, 440, 220), printArea: { x: 30, y: 200, w: 440, h: 220 }, printWidthIn: 8.66 }],
+  },
+  {
+    id: 'logostickers',
+    category: 'business',
+    name: t('Round Logo Stickers', 'ستيكرات لوجو دائرية'),
+    description: t('Glossy waterproof 5 cm stickers for packaging, bags and boxes.', 'ستيكرات لامعة ضد المياه مقاس 5 سم للتغليف والأكياس والعلب.'),
+    basePrice: 200,
+    colors: [C.white, { id: 'clear', name: t('Clear', 'شفاف'), hex: '#f3f5f7' }, C.kraft],
+    sizes: qty([['100', '100 stickers', '100 ستيكر', 0], ['250', '250 stickers', '250 ستيكر', 180], ['500', '500 stickers', '500 ستيكر', 380], ['1000', '1000 stickers', '1000 ستيكر', 650]]),
+    sides: [{ id: 'front', name: t('Sticker', 'الستيكر'), svg: sv('<circle cx="256" cy="308" r="160" fill="#000" opacity=".1"/><circle cx="250" cy="300" r="160" fill="{{C}}" stroke="{{L}}" stroke-width="3"/>'), printArea: { x: 90, y: 140, w: 320, h: 320, rx: 160 }, printWidthIn: 1.97 }],
+  },
+  {
+    id: 'rollup',
+    category: 'business',
+    name: t('Roll-up Banner', 'رول أب بانر'),
+    description: t('85 × 200 cm banner on an aluminium stand with a carry bag. For shops, events and exhibitions.', 'بانر 85 × 200 سم على ستاند ألومنيوم مع شنطة. للمحلات والمعارض والإيفنتات.'),
+    basePrice: 1200,
+    colors: [C.white],
+    sizes: qty([['85x200', '85 × 200 cm + stand', '85 × 200 سم + ستاند', 0]]),
+    sides: [
+      {
+        id: 'front',
+        name: FRONT,
+        svg: sv('<rect x="150" y="430" width="200" height="14" rx="4" fill="#b9bdc4"/><rect x="160" y="22" width="180" height="8" rx="3" fill="#b9bdc4"/>' + shadowRect(165, 30, 170, 400) + '<rect x="165" y="30" width="170" height="400" fill="{{C}}" stroke="{{L}}" stroke-width="3"/>'),
+        printArea: { x: 165, y: 30, w: 170, h: 400 },
+        printWidthIn: 33.46,
+      },
+    ],
+  },
+  {
+    id: 'paperbags',
+    category: 'business',
+    name: t('Paper Shopping Bags', 'شنط ورق بلوجو'),
+    description: t('Sturdy paper bags with twisted handles, 25 × 32 cm, printed with your logo.', 'شنط ورق متينة بيد مبرومة، 25 × 32 سم، مطبوعة بشعارك.'),
+    basePrice: 500,
+    colors: [C.white, C.kraft, { ...C.black, hex: '#26272a' }],
+    sizes: qty([['50', '50 bags', '50 شنطة', 0], ['100', '100 bags', '100 شنطة', 400], ['250', '250 bags', '250 شنطة', 1100]]),
+    sides: [
+      {
+        id: 'front',
+        name: FRONT,
+        svg: sv('<path d="M205 170 Q205 90 250 90 Q295 90 295 170" fill="none" stroke="{{L}}" stroke-width="6"/>' + shadowRect(120, 160, 260, 380) + '<rect x="120" y="160" width="260" height="380" fill="{{C}}" stroke="{{L}}" stroke-width="3"/>'),
+        printArea: { x: 150, y: 230, w: 200, h: 222 },
+        printWidthIn: 7.5,
+      },
+    ],
+  },
+  {
+    id: 'invoicebook',
+    category: 'business',
+    name: t('Invoice / Receipt Book', 'دفتر فواتير'),
+    description: t('A5 carbonless books, 50 numbered sets each, with your logo and details printed on every page.', 'دفاتر A5 كربونية، كل دفتر 50 نسخة مرقّمة، بشعارك وبياناتك على كل ورقة.'),
+    basePrice: 180,
+    colors: [
+      { id: 'two', name: t('2 copies (white + pink)', 'نسختين (أبيض + بمبي)'), hex: '#ffffff' },
+      { id: 'three', name: t('3 copies (white + pink + yellow)', '3 نسخ (أبيض + بمبي + أصفر)'), hex: '#ffffff' },
+    ],
+    sizes: qty([['1', '1 book', 'دفتر واحد', 0], ['5', '5 books', '5 دفاتر', 600], ['10', '10 books', '10 دفاتر', 1250]]),
+    sides: [{ id: 'front', name: t('Page', 'الصفحة'), svg: flat(140, 80, 220, 311), printArea: { x: 140, y: 80, w: 220, h: 311 }, printWidthIn: 5.83 }],
+  },
+  {
+    id: 'idcards',
+    category: 'business',
+    name: t('Employee ID Cards', 'كارنيهات موظفين'),
+    description: t('Glossy PVC cards (8.5 × 5.4 cm) with a lanyard, printed on one or both sides.', 'كارنيهات PVC لامعة (8.5 × 5.4 سم) مع شريط تعليق، طباعة وجه أو وجهين.'),
+    basePrice: 60,
+    extraSidePrice: 20,
+    colors: [C.white],
+    sizes: qty([['1', '1 card', 'كارنيه واحد', 0], ['10', '10 cards', '10 كارنيهات', 390], ['25', '25 cards', '25 كارنيه', 990]]),
+    sides: [
+      { id: 'front', name: FRONT, svg: flat(160, 130, 180, 285, 10), printArea: { x: 160, y: 130, w: 180, h: 285, rx: 10 }, printWidthIn: 2.13 },
+      { id: 'back', name: BACK, svg: flat(160, 130, 180, 285, 10), printArea: { x: 160, y: 130, w: 180, h: 285, rx: 10 }, printWidthIn: 2.13 },
+    ],
+  },
+);
+
 /**
  * Print production details per product:
  *   process  how it is printed; decides which file the shop should use
@@ -984,6 +1116,15 @@ const PRODUCTION = {
   namelabels: { process: 'paper', safeIn: 0.08, bleedIn: 0.04, model: { type: 'pad', depthIn: 0.03, radiusIn: 0.3, edge: '#f2f3f5', material: 'paper' } },
   lunchbag: { process: 'dtf', safeIn: 0.25, bleedIn: 0, model: { type: 'card', material: 'fabric' } },
   pencilcase: { process: 'dtf', safeIn: 0.2, bleedIn: 0, model: { type: 'card', material: 'fabric' } },
+  bizcards: { process: 'paper', safeIn: 0.12, bleedIn: 0.08, model: { type: 'block', depthIn: 0.03, radiusIn: 0.02, edge: '#f6f6f4', material: 'paper' } },
+  flyers: { process: 'paper', safeIn: 0.15, bleedIn: 0.08, model: { type: 'block', depthIn: 0.02, radiusIn: 0.02, edge: '#f6f6f4', material: 'paper' } },
+  letterhead: { process: 'paper', safeIn: 0.25, bleedIn: 0, model: { type: 'pad', depthIn: 0.02, radiusIn: 0.02, edge: '#f6f6f4', material: 'paper' } },
+  dlenvelopes: { process: 'paper', safeIn: 0.2, bleedIn: 0, model: { type: 'card', material: 'paper' } },
+  logostickers: { process: 'paper', safeIn: 0.08, bleedIn: 0.04, model: { type: 'pad', depthIn: 0.02, radiusIn: 99, edge: '#f2f3f5', material: 'paper' } },
+  rollup: { process: 'uv', safeIn: 1, bleedIn: 0, model: { type: 'card', material: 'paper' } },
+  paperbags: { process: 'uv', safeIn: 0.2, bleedIn: 0, model: { type: 'card', material: 'paper' } },
+  invoicebook: { process: 'paper', safeIn: 0.2, bleedIn: 0, model: { type: 'block', depthIn: 0.6, radiusIn: 0.02, edge: '#eef0f2', material: 'paper' } },
+  idcards: { process: 'uv', safeIn: 0.08, bleedIn: 0, model: { type: 'block', depthIn: 0.03, radiusIn: 0.12, edge: '#f4f5f7', material: 'plastic' } },
 };
 /** Garments can be printed either way; the shop picks per order item. */
 const GARMENT_METHODS = ['dtg', 'dtf'];
