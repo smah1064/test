@@ -777,3 +777,4 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 @media (max-width: 640px) { .cart-item { grid-template-columns: 80px minmax(0, 1fr); } }
 /* Admin tabs: wrap instead of scrolling the whole page sideways on phones. */
 .tabs { flex-wrap: wrap; }
+.auto-bg { margin: 12px 0 4px; align-items: flex-start; gap: 8px; }

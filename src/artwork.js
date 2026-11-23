@@ -102,6 +102,53 @@ function runWorker(data, kind, px, timeoutMs) {
 }
 
 /**
+ * EPS has no transparency, so Illustrator often saves the artboard as a white
+ * rectangle behind the design. When the picture's edges are (almost) all
+ * opaque white, the white connected to the edges becomes transparent; white
+ * shapes inside the design (white letters on a dark badge) stay. Soft edges
+ * keep a little transparency so the outline stays smooth. Returns a new PNG,
+ * or null when there is no white background.
+ */
+async function clearWhiteBackground(png) {
+  const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const W = info.width;
+  const H = info.height;
+  // White, at any opacity (the page's edge rows are drawn half-transparent).
+  const isWhite = (i) => data[i * 4] > 245 && data[i * 4 + 1] > 245 && data[i * 4 + 2] > 245;
+  // Only when the frame of the picture is white (not when the design itself touches the edge).
+  let edge = 0;
+  let white = 0;
+  for (let x = 0; x < W; x++) for (const y of [0, H - 1]) { edge++; if (isWhite(y * W + x)) white++; }
+  for (let y = 0; y < H; y++) for (const x of [0, W - 1]) { edge++; if (isWhite(y * W + x)) white++; }
+  if (white / edge < 0.9) return null;
+  const seen = new Uint8Array(W * H);
+  const stack = new Int32Array(W * H);
+  let top = 0;
+  const push = (i) => { if (!seen[i] && isWhite(i)) { seen[i] = 1; stack[top++] = i; } };
+  for (let x = 0; x < W; x++) { push(x); push((H - 1) * W + x); }
+  for (let y = 0; y < H; y++) { push(y * W); push(y * W + W - 1); }
+  while (top) {
+    const i = stack[--top];
+    data[i * 4 + 3] = 0;
+    const x = i % W;
+    if (x > 0) push(i - 1);
+    if (x < W - 1) push(i + 1);
+    if (i >= W) push(i - W);
+    if (i < W * (H - 1)) push(i + W);
+  }
+  // Anti-aliased rim next to the removed white: fade it by how white it is.
+  for (let i = 0; i < W * H; i++) {
+    if (seen[i] || data[i * 4 + 3] === 0) continue;
+    const x = i % W;
+    const nearCleared = (x > 0 && seen[i - 1]) || (x < W - 1 && seen[i + 1]) || (i >= W && seen[i - W]) || (i < W * (H - 1) && seen[i + W]);
+    if (!nearCleared) continue;
+    const lightness = Math.min(data[i * 4], data[i * 4 + 1], data[i * 4 + 2]);
+    if (lightness > 180) data[i * 4 + 3] = Math.round(data[i * 4 + 3] * (255 - lightness) / 75);
+  }
+  return sharp(data, { raw: info }).png().toBuffer();
+}
+
+/**
  * Converts an AI/EPS file to a trimmed, transparent PNG whose longest side is
  * at most `px` pixels. Returns { png, width, height }.
  */
@@ -122,7 +169,14 @@ async function convertArtwork(buf, { px = 4000, timeoutMs = 25000 } = {}) {
     throw err;
   }
   // Cut away the empty margin around the artwork.
-  const png = Buffer.from(out.png.buffer, out.png.byteOffset, out.png.byteLength);
+  let png = Buffer.from(out.png.buffer, out.png.byteOffset, out.png.byteLength);
+  // The page area first (Ghostscript leaves an empty margin around it), then its white artboard.
+  try {
+    const page = await sharp(png).trim({ threshold: 1 }).png().toBuffer();
+    png = (await clearWhiteBackground(page)) || page;
+  } catch (e) {
+    throw new ArtworkError('empty'); // nothing visible was drawn
+  }
   let trimmed;
   try {
     trimmed = await sharp(png).trim({ threshold: 1 }).png({ compressionLevel: 6 }).toBuffer({ resolveWithObject: true });

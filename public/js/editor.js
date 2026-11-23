@@ -914,12 +914,17 @@
       addObject(fimg);
       const dpi = imageDpi(fimg);
       if (dpi < 100) toast(t('msg.lowResToast', { dpi }), 'error');
+      // "Remove the background of my photos" is ticked in the upload panel.
+      if ($('auto-bg') && $('auto-bg').checked && !/\.png$/i.test(file.name || '')) await removeImageBackground(fimg);
     } catch (e) {
       toast(e.message, 'error');
     } finally {
       URL.revokeObjectURL(srcUrl);
     }
   }
+  // Remembered in this browser.
+  try { $('auto-bg').checked = localStorage.getItem('pod-auto-bg') === '1'; } catch (e) { /* private mode */ }
+  $('auto-bg').addEventListener('change', (e) => { try { localStorage.setItem('pod-auto-bg', e.target.checked ? '1' : '0'); } catch (err) { /* private mode */ } });
   $('file-input').addEventListener('change', (e) => {
     addImageFile(e.target.files[0]);
     e.target.value = '';
@@ -1745,11 +1750,44 @@
     now ? run() : (filterTimer = setTimeout(run, 120));
   }
 
+  /** The AI on the server cuts out the subject (people, pets, products) from any background. */
+  async function aiRemoveBackground(el) {
+    const w = el.naturalWidth || el.width;
+    const h = el.naturalHeight || el.height;
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(el, 0, 0, w, h);
+    const jpg = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.93));
+    const res = await fetch('/api/remove-bg', { method: 'POST', headers: { 'Content-Type': 'image/jpeg', 'x-lang': POD.lang, 'x-max-px': String(Math.max(w, h)) }, body: jpg });
+    if (!res.ok) {
+      const body = res.headers.get('content-type')?.includes('json') ? await res.json().catch(() => null) : null;
+      const err = new Error((body && body.error) || t('msg.removeBgNone'));
+      err.status = res.status;
+      throw err;
+    }
+    return res.blob();
+  }
   async function removeImageBackground(o) {
-    busy(true, t('busy.removingBg'));
+    busy(true, t('busy.removingBgAi'));
     try {
       await new Promise((r) => setTimeout(r, 40)); // let the overlay paint first
-      const blob = await window.POD_FX.removeBackground(o._originalElement || o.getElement());
+      const el = o._originalElement || o.getElement();
+      let blob = null;
+      try {
+        blob = await aiRemoveBackground(el);
+      } catch (e) {
+        // AI not available (or the server is busy): the quick plain-background method still helps logos on white.
+        if (e.status && e.status !== 503) throw e;
+        blob = await window.POD_FX.removeBackground(el);
+        if (!blob) {
+          toast(e.message || t('msg.removeBgNone'), 'error');
+          return;
+        }
+      }
       if (!blob) {
         toast(t('msg.removeBgNone'), 'error');
         return;
@@ -1761,6 +1799,8 @@
       canvas.requestRenderAll();
       commit();
       renderProps();
+    } catch (e) {
+      toast(e.message, 'error');
     } finally {
       busy(false);
     }

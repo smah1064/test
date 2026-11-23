@@ -29,6 +29,7 @@ const ai = require('./ai');
 const notify = require('./notify');
 const dispatch = require('./dispatch');
 const accounting = require('./accounting');
+const bgremove = require('./bgremove');
 
 // Prices the owner changed in the admin are laid over the built-in ones.
 accounting.initPricing(PRODUCTS, EXTRA_SIDE_PRICE);
@@ -234,6 +235,9 @@ const DEFAULT_LIMITS = {
   notify: [{ max: 30, ms: 3600e3 }, { max: 200, ms: 24 * 3600e3 }],
   // Illustrator / EPS files turned into pictures for the editor.
   artwork: [{ max: 15, ms: 10 * 60e3 }, { max: 60, ms: 24 * 3600e3 }],
+  // AI background removal (about 2 s of server time each).
+  removeBg: [{ max: 20, ms: 10 * 60e3 }, { max: 80, ms: 24 * 3600e3 }],
+  removeBgAll: [{ max: 1500, ms: 24 * 3600e3 }],
   // Printing houses downloading their files.
   downloads: [{ max: 200, ms: 3600e3 }],
 };
@@ -557,6 +561,33 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       next(e);
     }
   });
+
+  // ---------- AI background removal for customers' photos ----------
+  app.get('/api/remove-bg', (req, res) => res.json({ ai: bgremove.available() }));
+  app.post('/api/remove-bg', express.raw({ type: ['image/png', 'image/jpeg', 'image/webp'], limit: '15mb' }), async (req, res, next) => {
+    try {
+      const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+      if (buf.length < 32) throw new HttpError(400, 'enhanceBad');
+      rateLimit(req, 'removeBg');
+      rateLimit(req, 'removeBgAll', '*');
+      const t0 = Date.now();
+      let png;
+      try {
+        png = await bgremove.removeBackground(buf, { dataDir, maxPx: Math.min(4000, Math.max(300, Number(req.get('x-max-px')) || 3000)) });
+      } catch (e) {
+        if (!(e instanceof bgremove.BgError)) throw e;
+        if (e.reason !== 'busy' && e.reason !== 'off') console.warn('[bg] could not remove a background:', e.reason, String(e.detail || '').slice(0, 300));
+        if (e.reason === 'bad') throw new HttpError(400, 'enhanceBad');
+        throw new HttpError(503, e.reason === 'busy' ? 'bgBusy' : e.reason === 'loading' ? 'bgLoading' : 'bgFailed');
+      }
+      res.set('X-Took-Ms', String(Date.now() - t0));
+      res.type('image/png').send(png);
+    } catch (e) {
+      next(e);
+    }
+  });
+  // Get the model ready in the background, so the first customer doesn't wait for the download.
+  if (cleanupEvery) setTimeout(() => bgremove.prepare(dataDir), 20e3).unref();
 
   // ---------- Illustrator (.ai) and EPS uploads ----------
   // Browsers cannot show these, so the server draws them to a transparent PNG.

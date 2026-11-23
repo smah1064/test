@@ -180,6 +180,10 @@ On garments and bags (`moveZone` on a side in `src/products.js`, measured from t
 
 Each apparel size has a half-chest width (`chestCm` in `src/products.js`) and each garment the size its photo shows (`photoChestCm`). The print is the same size in cm on every size, so the editor and the realistic preview draw the print box (and the design) smaller on a 3XL and bigger on an S, kept just below the collar (`printAreaFor`). Kids sizes (2–4 … 10–12 yrs), baby onesies and kids hoodies have their own widths. Print files are unchanged.
 
+## AI background removal
+
+In the editor, "Remove background (AI)" on a selected photo, or "Remove the background of my photos" in the upload panel, cuts people, pets and products out of any background. The server runs ISNet (general use, Apache-2.0, the model the free rembg tool uses) with `onnxruntime-node`, one photo at a time in a short-lived process (`src/bgremove.js`, ~2-3 s and ~650 MB per photo). The 178 MB model is downloaded once into `DATA_DIR/models` (checked against its SHA-256) a little after start-up. If the AI isn't available, the editor falls back to the quick plain-background remover. `.npmrc` skips onnxruntime's GPU downloads. Set `BG_REMOVAL=off` to turn it off; `BG_MODEL_PATH` / `BG_MODEL_URL` point to another copy of the model.
+
 ## Printing houses
 
 Admin → **Printing houses** tab: save each printing house (name, email and/or WhatsApp number, how you usually send), and pick which one prints each product.

@@ -882,6 +882,17 @@ test('AI and EPS files are drawn to a transparent PNG for the editor', async () 
   r = await fetch(base + '/api/artwork', { method: 'POST', headers: { 'Content-Type': 'application/octet-stream', 'x-max-px': '3000' }, body: big });
   assert.strictEqual(r.status, 200, await r.clone().text());
   assert.ok((await sharp(Buffer.from(await r.arrayBuffer())).metadata()).width > 2000);
+  // Illustrator EPS files often have a white artboard behind the design: it becomes transparent,
+  // white parts inside the design stay.
+  const boxed = Buffer.from('%!PS-Adobe-3.0 EPSF-3.0\n%%BoundingBox: 0 0 300 200\n%%EndComments\n1 1 1 setrgbcolor 0 0 300 200 rectfill\n0.1 0.2 0.6 setrgbcolor newpath 150 100 70 0 360 arc fill\n1 1 1 setrgbcolor 135 85 30 30 rectfill\nshowpage\n%%EOF\n');
+  r = await send(boxed);
+  assert.strictEqual(r.status, 200);
+  const cut = Buffer.from(await r.arrayBuffer());
+  const cm = await sharp(cut).metadata();
+  assert.ok(Math.abs(cm.width - cm.height) <= 2, 'trimmed to the circle, not the white page');
+  const at = async (fx, fy) => [...(await sharp(cut).extract({ left: Math.floor(cm.width * fx), top: Math.floor(cm.height * fy), width: 1, height: 1 }).raw().toBuffer())];
+  assert.strictEqual((await at(0.02, 0.02))[3], 0, 'white artboard removed');
+  assert.deepStrictEqual((await at(0.5, 0.5)).slice(0, 4), [255, 255, 255, 255], 'white inside the design kept');
   // Not a design file / nothing drawn.
   assert.strictEqual((await send(Buffer.from('just text'))).status, 400);
   assert.strictEqual((await send(Buffer.from('%!PS\nshowpage\n'))).status, 400);
@@ -1058,6 +1069,21 @@ test('moved print area: kept inside the garment zone, shown to the printer in cm
   const q = await (await admin('/api/admin/queue')).json();
   const it = q.waiting.find((i) => i.orderId === order.id);
   assert.deepStrictEqual(it.sides[0].offsetCm, saved.sides[0].offsetCm);
+});
+
+test('AI background removal: route answers clearly when the model is not available', async () => {
+  const before = process.env.BG_MODEL_PATH;
+  process.env.BG_MODEL_PATH = path.join(os.tmpdir(), 'no-such-model.onnx');
+  try {
+    assert.deepStrictEqual(await (await fetch(base + '/api/remove-bg')).json(), { ai: true });
+    const img = await require('sharp')({ create: { width: 64, height: 64, channels: 3, background: '#3a6' } }).jpeg().toBuffer();
+    const r = await fetch(base + '/api/remove-bg', { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: img });
+    assert.strictEqual(r.status, 503, 'the editor then uses the quick plain-background method');
+    assert.strictEqual((await fetch(base + '/api/remove-bg', { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: Buffer.from('x') })).status, 400);
+  } finally {
+    if (before === undefined) delete process.env.BG_MODEL_PATH;
+    else process.env.BG_MODEL_PATH = before;
+  }
 });
 
 const png4 = (w, h) => png(w, h);

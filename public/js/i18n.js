@@ -405,8 +405,11 @@ window.POD_STRINGS = {
   'props.contrast': ['Contrast', 'التباين'],
   'props.saturation': ['Saturation', 'تشبّع الألوان'],
   'props.reset': ['Reset', 'إعادة ضبط'],
-  'props.removeBg': ['Remove background', 'إزالة الخلفية'],
-  'props.removeBgHint': ['Works best on plain backgrounds. Use Undo to bring it back.', 'تعمل بشكل أفضل مع الخلفيات السادة. استخدم "تراجع" لاستعادتها.'],
+  'busy.removingBgAi': ['Removing the background… (a few seconds)', 'جارٍ إزالة الخلفية… (ثواني قليلة)'],
+  'fly.upload.autoBg': ['Remove the background of my photos', 'شيل خلفية صوري'],
+  'fly.upload.autoBgHint': ['The AI cuts out people, pets and products as you upload.', 'الذكاء الاصطناعي بيقص الأشخاص والحيوانات والمنتجات أول ما ترفع الصورة.'],
+  'props.removeBg': ['Remove background (AI)', 'إزالة الخلفية (ذكاء اصطناعي)'],
+  'props.removeBgHint': ['Cuts out people, pets and products from any background. Use Undo to bring it back.', 'بتقص الأشخاص والحيوانات والمنتجات من أي خلفية. استخدم "تراجع" لاستعادتها.'],
   'busy.removingBg': ['Removing background…', 'جاري إزالة الخلفية…'],
   'msg.removeBgNone': ['No plain background found around the edges of this picture.', 'لم يتم العثور على خلفية سادة حول حواف هذه الصورة.'],
 
