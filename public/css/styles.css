@@ -126,7 +126,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .dot { width: 14px; height: 14px; border-radius: 50%; border: 1px solid rgba(0,0,0,.18); }
 
 /* ---------- Editor ---------- */
-body.editor-page { height: 100vh; overflow: hidden; }
+body.editor-page { height: 100vh; height: 100dvh; min-height: 0; overflow: hidden; }
 body.editor-page main { display: flex; min-height: 0; }
 .editor { display: grid; grid-template-columns: 76px minmax(0, 1fr) 320px; flex: 1; min-height: 0; width: 100%; }
 .tools { background: #fff; border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 10px 8px; gap: 4px; overflow-y: auto; }
@@ -360,7 +360,9 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
   .mobile-only { display: flex !important; }
   /* The editor fills exactly the visible screen (--app-h is set from the
      browser's real inner height), so the tool bar never falls off the bottom. */
-  body.editor-page { height: 100vh; height: 100dvh; height: min(100svh, 100dvh, var(--app-h, 100dvh)); overflow: hidden; display: flex; flex-direction: column; }
+  /* min-height: 0 undoes the site-wide body min-height of 100vh, which on
+     phones is the full screen including the address bar area. */
+  body.editor-page { height: 100vh; height: 100dvh; height: min(100svh, 100dvh, var(--app-h, 100dvh)); min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
   body.editor-page .site-header { flex: none; }
   body.editor-page .site-header .inner { height: 50px; }
   body.editor-page .site-header nav a[href="/#products"] { display: none; }
