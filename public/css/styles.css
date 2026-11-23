@@ -377,7 +377,7 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
     border: 0; border-bottom: 1px solid var(--line); padding: 2px;
     overflow-x: auto; flex: none;
   }
-  .tool { min-width: 56px; padding: 6px 2px; font-size: 10.5px; }
+  .tool { min-width: 48px; flex: 1 1 0; padding: 6px 1px; font-size: 10.5px; }
   .tool.open { background: var(--accent-soft); color: var(--accent); }
   .stage { padding: 8px; min-height: 0; }
   .stage-bar { padding: 6px 8px; gap: 4px; flex-wrap: nowrap; overflow-x: auto; }
@@ -525,3 +525,54 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 .bgs-pill { border-radius: 6px; }
 .bgs-banner { clip-path: polygon(0 0, 100% 0, 80% 50%, 100% 100%, 0 100%, 20% 50%); }
 .bgs-ticket { -webkit-mask: radial-gradient(circle at 0 50%, transparent 3px, #000 3.5px) left / 51% 100% no-repeat, radial-gradient(circle at 100% 50%, transparent 3px, #000 3.5px) right / 51% 100% no-repeat; mask: radial-gradient(circle at 0 50%, transparent 3px, #000 3.5px) left / 51% 100% no-repeat, radial-gradient(circle at 100% 50%, transparent 3px, #000 3.5px) right / 51% 100% no-repeat; }
+
+/* ---------- Shared design page ---------- */
+.share-layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 20px; align-items: start; }
+.share-previews { padding: 14px; display: flex; flex-direction: column; align-items: center; gap: 12px; background: linear-gradient(180deg, #f1f3f6, #e8ebf0); }
+.share-tabs:empty { display: none; }
+.share-previews img { width: 100%; max-width: 560px; height: auto; display: block; }
+.share-panel { padding: 18px; position: sticky; top: 80px; }
+.share-votes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0; }
+.share-thanks { background: var(--ok-soft, #e6f6ec); color: var(--ok); font-weight: 600; padding: 10px 12px; border-radius: 10px; }
+.share-replies-title { font-size: 15px; margin: 18px 0 8px; }
+.share-replies { list-style: none; padding: 0; margin: 0 0 14px; display: flex; flex-direction: column; gap: 8px; max-height: 340px; overflow: auto; }
+.share-replies li { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+.share-replies li.up { border-color: #b7e4c7; background: #f3fbf6; }
+.share-replies li.change { border-color: #ffd8a8; background: #fff9f0; }
+.share-replies p { margin: 4px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 860px) { .share-layout { grid-template-columns: 1fr; } .share-panel { position: static; } }
+
+/* ---------- Share sheet in the editor ---------- */
+.share-dialog { position: fixed; inset: 0; z-index: 70; background: rgba(15, 17, 22, .5); display: grid; place-items: center; padding: 16px; }
+.share-dialog[hidden] { display: none; }
+.share-dialog .box { background: #fff; border-radius: 16px; width: min(460px, 100%); max-height: calc(100% - 20px); overflow: auto; padding: 18px; box-shadow: 0 20px 60px rgba(0,0,0,.3); }
+.share-dialog .head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+.share-dialog .head h3 { margin: 0; font-size: 18px; }
+.share-link-row { display: flex; gap: 6px; margin: 12px 0; }
+.share-link-row input { flex: 1; min-width: 0; direction: ltr; font-size: 13px; }
+.share-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.btn-whatsapp { background: #25d366; color: #fff; border-color: #25d366; }
+.btn-whatsapp:hover { background: #1ebe5b; }
+.share-dialog .share-replies { max-height: 220px; }
+
+/* ---------- AI help ---------- */
+.ai-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: var(--bg); padding: 3px; border-radius: 10px; margin-bottom: 12px; }
+.ai-tabs button { border: 0; background: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--ink-2); padding: 7px; border-radius: 8px; cursor: pointer; }
+.ai-tabs button.active { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.ai-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.ai-chips .chip { padding: 5px 10px; font-size: 12.5px; }
+.ai-results { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+.ai-slogan { text-align: start; border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 9px 11px; cursor: pointer; font-size: 17px; line-height: 1.35; color: var(--ink); }
+.ai-slogan:hover { border-color: var(--accent); }
+.ai-logos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+.ai-logo { border: 1px solid var(--line); border-radius: 10px; background: #fff; padding: 4px; cursor: pointer; display: flex; flex-direction: column; gap: 3px; align-items: center; font: inherit; color: var(--ink); }
+.ai-logo:hover { border-color: var(--accent); }
+.ai-logo img { width: 100%; aspect-ratio: 1; object-fit: contain; border-radius: 6px; }
+.ai-logo small { font-size: 11px; color: var(--muted); text-align: center; }
+.ai-note { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
+.ai-spinner { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; margin-top: 12px; }
+.ai-spinner .spinner { width: 18px; height: 18px; border-width: 2px; }
+
+/* ---------- Photo quality boost ---------- */
+.boost-box { border: 1px dashed var(--line); border-radius: 10px; padding: 10px; margin-top: 8px; }
+.boost-box p { margin: 0 0 8px; font-size: 12.5px; color: var(--ink-2); line-height: 1.5; }

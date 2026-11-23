@@ -351,3 +351,101 @@ test('product card pictures are recoloured photos', async () => {
   assert.strictEqual((await fetch(base + '/api/thumbs/hoodie/purple.webp')).status, 404);
   assert.strictEqual((await fetch(base + '/api/thumbs/nope/black.webp')).status, 404);
 });
+
+test('photo quality boost enlarges and keeps transparency', async () => {
+  const sharp = require('sharp');
+  const res = await fetch(base + '/api/enhance', { method: 'POST', headers: { 'Content-Type': 'image/png', 'x-scale': '2.5' }, body: png(200, 100) });
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(res.headers.get('x-scale'), '2.5');
+  const meta = await sharp(Buffer.from(await res.arrayBuffer())).metadata();
+  assert.deepStrictEqual([meta.format, meta.width, meta.height, meta.hasAlpha], ['png', 500, 250, true]);
+  const jpg = await sharp({ create: { width: 300, height: 200, channels: 3, background: '#c33' } }).jpeg().toBuffer();
+  const r2 = await fetch(base + '/api/enhance', { method: 'POST', headers: { 'Content-Type': 'image/jpeg', 'x-scale': '9' }, body: jpg });
+  assert.strictEqual(r2.headers.get('content-type'), 'image/jpeg');
+  assert.strictEqual(r2.headers.get('x-scale'), '4'); // capped at 4x
+  const bad = await fetch(base + '/api/enhance', { method: 'POST', headers: { 'Content-Type': 'image/png' }, body: Buffer.from('not an image at all, just some text here') });
+  assert.strictEqual(bad.status, 400);
+});
+
+test('shared designs: create, view, reply, open a copy, link preview', async () => {
+  const preview = 'data:image/png;base64,' + png(60, 72).toString('base64');
+  const bad = await post('/api/shares', { productId: 'tshirt', sides: {} });
+  assert.strictEqual(bad.status, 400);
+  const res = await post('/api/shares', { productId: 'tshirt', color: 'navy', size: 'L', sides: { front: { objects: [{ type: 'i-text', text: 'hi' }] } }, previews: { front: preview } });
+  assert.strictEqual(res.status, 201, await res.clone().text());
+  const sh = await res.json();
+  assert.match(sh.id, /^[A-Za-z0-9_-]{12}$/);
+  assert.strictEqual(sh.color.id, 'navy');
+  assert.deepStrictEqual(sh.sides.map((s) => s.id), ['front']);
+  const img = await fetch(base + sh.sides[0].preview);
+  assert.strictEqual(img.headers.get('content-type'), 'image/png');
+
+  const up = await post(`/api/shares/${sh.id}/feedback`, { vote: 'up', name: 'Mona' });
+  assert.strictEqual(up.status, 201);
+  assert.strictEqual((await post(`/api/shares/${sh.id}/feedback`, { vote: 'change', comment: '' })).status, 400);
+  const ch = await (await post(`/api/shares/${sh.id}/feedback`, { vote: 'change', comment: 'Bigger name <b>please</b>' })).json();
+  assert.deepStrictEqual(ch.feedback.map((f) => f.vote), ['up', 'change']);
+  assert.strictEqual(ch.feedback[1].comment, 'Bigger name <b>please</b>'); // stored as text; pages escape it
+
+  const copy = await (await fetch(`${base}/api/shares/${sh.id}/design`)).json();
+  assert.strictEqual(copy.productId, 'tshirt');
+  assert.strictEqual(copy.editor.front.objects[0].text, 'hi');
+
+  const page = await (await fetch(`${base}/s/${sh.id}`)).text();
+  assert.match(page, new RegExp(`og:image" content="http://[^"]+/api/shares/${sh.id}/preview/front.png"`));
+  assert.strictEqual((await fetch(`${base}/s/AAAAAAAAAAAA`)).status, 404);
+  assert.strictEqual((await fetch(`${base}/api/shares/../../etc`)).status, 404);
+});
+
+test('AI help is off without a key, and returns cleaned, structured results with one', async () => {
+  delete process.env.ANTHROPIC_API_KEY;
+  assert.deepStrictEqual(await (await fetch(base + '/api/ai/status')).json(), { enabled: false, perDay: 15 });
+  assert.strictEqual((await post('/api/ai/slogans', { about: 'x' })).status, 503);
+
+  // A stand-in for the Claude API that answers with fixed structured output.
+  const http = require('http');
+  const seen = [];
+  const answers = {
+    slogans: { slogans: [{ text: 'أحلى أخ في الدنيا', font: 'Lalezar' }, { text: 'Best Bro Ever', font: 'Lalezar' }, { text: '   ', font: 'Anton' }] },
+    logos: { logos: [{ title: 'Bold', items: [
+      { kind: 'shape', text: '', font: 'Cairo', bold: false, shape: 'circle', size: 2, x: 0.5, y: 0.5, color: '#ff5a36', background: 'none', backgroundColor: '#000000', curve: 0, letterSpacing: 0, angle: 0 },
+      { kind: 'text', text: 'أحمد', font: 'Anton', bold: true, shape: 'circle', size: 0.2, x: 0.5, y: 0.5, color: 'red', background: 'pill', backgroundColor: '#16181d', curve: 30, letterSpacing: 200, angle: 0 },
+      { kind: 'shape', text: '', font: 'Cairo', bold: false, shape: 'spaceship', size: 0.2, x: 0.5, y: 0.5, color: '#000000', background: 'none', backgroundColor: '#000000', curve: 0, letterSpacing: 0, angle: 0 },
+    ] }] },
+  };
+  const mock = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', (c) => (body += c));
+    req.on('end', () => {
+      const j = JSON.parse(body);
+      seen.push(j);
+      const kind = JSON.stringify(j.output_config.format.schema).includes('logos') ? 'logos' : 'slogans';
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ id: 'msg_1', type: 'message', role: 'assistant', model: j.model, content: [{ type: 'text', text: JSON.stringify(answers[kind]) }], stop_reason: 'end_turn', usage: { input_tokens: 10, output_tokens: 10 } }));
+    });
+  });
+  await new Promise((r) => mock.listen(0, r));
+  process.env.ANTHROPIC_API_KEY = 'test-key';
+  process.env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${mock.address().port}`;
+  try {
+    const s = await (await post('/api/ai/slogans', { about: 'my brother', tone: 'funny', lang: 'both' })).json();
+    assert.deepStrictEqual(s.slogans.map((x) => x.text), ['أحلى أخ في الدنيا', 'Best Bro Ever']);
+    assert.strictEqual(s.slogans[1].font, 'Bebas Neue'); // an Arabic font on English text is replaced
+    assert.strictEqual(s.left, 14);
+    assert.strictEqual(seen[0].model, 'claude-haiku-5-5');
+    assert.strictEqual(seen[0].output_config.format.type, 'json_schema');
+    assert.strictEqual(seen[0].output_config.effort, 'low');
+    assert.strictEqual(seen[0].temperature, undefined);
+
+    assert.strictEqual((await post('/api/ai/logos', { name: '  ' })).status, 400);
+    const l = await (await post('/api/ai/logos', { name: 'أحمد', style: 'sporty', garment: '#1f2023' })).json();
+    const items = l.logos[0].items;
+    assert.strictEqual(items.length, 2); // unknown shape dropped
+    assert.strictEqual(items[0].w, 0.95); // size clamped
+    assert.deepStrictEqual([items[1].font, items[1].fill, items[1].bgShape, items[1].curve, items[1].spacing], ['Lalezar', '#16181d', 'pill', 30, undefined]);
+  } finally {
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_BASE_URL;
+    mock.close();
+  }
+});

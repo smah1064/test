@@ -18,7 +18,7 @@
   const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
   const HISTORY_LIMIT = 60;
   const SNAP_PX = 7;
-  const EXTRA_PROPS = ['name', 'selectable', 'evented', 'curve', 'mask', 'maskBorder', 'maskBorderColor', 'lockRatio', 'bgShape', 'textFx'];
+  const EXTRA_PROPS = ['name', 'selectable', 'evented', 'curve', 'mask', 'maskBorder', 'maskBorderColor', 'lockRatio', 'bgShape', 'textFx', 'boosted'];
   const $ = (id) => document.getElementById(id);
   const { esc, money, toast, t, tr } = POD;
   const D = window.POD_DESIGN;
@@ -91,10 +91,25 @@
   }
   // Drafts: designs started from the products page are kept in this browser
   // until they go into the cart (editing a cart item never touches them).
+  let fromShare = false;
+  if (!params.get('design') && /^[A-Za-z0-9_-]{12}$/.test(params.get('share') || '')) {
+    try {
+      const shared = await POD.api('/api/shares/' + encodeURIComponent(params.get('share')) + '/design');
+      st.product = products.find((p) => p.id === shared.productId) || st.product;
+      st.colorId = shared.color;
+      st.sizeId = shared.size;
+      for (const [sideId, data] of Object.entries(shared.editor || {})) {
+        if (st.product.sides.some((sd) => sd.id === sideId)) st.designs[sideId] = await blobifyImages(data.objects || []);
+      }
+      fromShare = true;
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  }
   const draftMode = !params.get('design') && !!(POD.drafts && window.indexedDB);
   let restoredDraft = false;
   let bootDone = false; // autosave starts once the editor has loaded
-  if (draftMode) {
+  if (draftMode && !fromShare) {
     const draft = await POD.drafts.get(st.product.id);
     if (draft && draft.designs && Object.values(draft.designs).some((o) => o && o.length)) {
       st.colorId = draft.colorId;
@@ -629,18 +644,23 @@
   $('template-grid').addEventListener('click', serial(async (e) => {
     const btn = e.target.closest('[data-tpl]');
     if (!btn) return;
+    await addTemplate(D.TEMPLATES[Number(btn.dataset.tpl)]);
+  }));
+  /** Put a template's (or an AI logo's) elements on the product, selected together. */
+  async function addTemplate(tpl) {
     cancelCrop();
-    const objs = await D.buildTemplate(D.TEMPLATES[Number(btn.dataset.tpl)], area(), inkFor(surfaceHex()));
+    const objs = await D.buildTemplate(tpl, area(), inkFor(surfaceHex()));
+    if (!objs.length) return;
     st.silent = true;
     canvas.discardActiveObject();
     objs.forEach((o) => canvas.add(o));
     st.silent = false;
-    canvas.setActiveObject(new fabric.ActiveSelection(objs, { canvas }));
+    canvas.setActiveObject(objs.length > 1 ? new fabric.ActiveSelection(objs, { canvas }) : objs[0]);
     canvas.requestRenderAll();
     commit();
     closeFlyouts();
     if (st.preview) togglePreview();
-  }));
+  }
 
   // ---------- Images ----------
   // Huge files are downscaled; while editing they are kept as blob: URLs.
@@ -1329,6 +1349,7 @@
           <div class="mask-grid">${MASKS.map((m) => `<button class="mask-btn ${(o.mask || 'none') === m ? 'active' : ''}" data-mask="${m}" title="${esc(t('mask.' + m))}"><span class="mask-icon mask-${m}"></span><small>${esc(t('mask.' + m))}</small></button>`).join('')}</div>
         </div>
         ${o.mask ? `<div class="field"><label>${esc(t('props.border'))}</label><div class="color-row"><input type="color" id="p-bordercolor" value="${toHex(o.maskBorderColor)}">${palette('border')}</div><input type="range" id="p-border" min="0" max="12" step="0.5" value="${o.maskBorder || 0}" aria-label="${esc(t('props.border'))}"></div>` : ''}
+        ${boostBox(o)}
         <div class="field">
           <button class="btn btn-sm btn-block" data-act="removebg">✦ ${esc(t('props.removeBg'))}</button>
           <p class="muted small" style="margin:6px 0 0">${esc(t('props.removeBgHint'))}</p>
@@ -1832,6 +1853,7 @@
     if (act === 'reset-words') { st.wordSel = null; o.set({ styles: {} }); o.dirty = true; canvas.requestRenderAll(); commit(); renderProps(); }
     if (act === 'crop') startCrop(o);
     if (act === 'removebg') await removeImageBackground(o);
+    if (act === 'boost') await boostImage(o);
     if (act === 'reset-adjust') { applyFilterState(o, { ...filterState(o), brightness: 0, contrast: 0, saturation: 0, gray: false, sepia: false }, { now: true }); renderProps(); }
   }));
 
@@ -2282,6 +2304,247 @@
     return withArtworkOnly(() => canvas.toCanvasElement(scale, { left: 0, top: 0, width: W, height: H }), rects().trim);
   }
 
+  // ---------- Photo quality boost ----------
+  function boostScale(o) {
+    const el = o._originalElement || o.getElement();
+    const long = Math.max(el.naturalWidth || el.width, el.naturalHeight || el.height) || 1;
+    const dpi = imageDpi(o);
+    return Math.max(1, Math.min(4, 4000 / long, Math.max(1.5, 300 / Math.max(1, dpi))));
+  }
+  function boostBox(o) {
+    const dpi = imageDpi(o);
+    const k = boostScale(o);
+    const text = o.boosted ? t('boost.already') : dpi < 300 && k > 1.05 ? t('boost.textLow', { dpi, to: Math.round(dpi * k) }) : t('boost.textOk');
+    return `<div class="field boost-box"><p>${esc(text)}</p>
+      <button class="btn btn-sm btn-block ${o.boosted ? '' : 'btn-primary'}" data-act="boost" ${o.boosted ? 'disabled' : ''}>${esc(t('boost.button'))}</button></div>`;
+  }
+  /** Enlarge and sharpen the photo on the server, keeping its size, crop, shape and filters. */
+  async function boostImage(o) {
+    if (!o || o.type !== 'image' || o.boosted) return;
+    const k0 = boostScale(o);
+    busy(true, t('boost.working'));
+    try {
+      const blob = await (await fetch(o.getSrc())).blob();
+      const type = /^image\/(png|jpeg|webp)$/.test(blob.type) ? blob.type : 'image/png';
+      const res = await fetch('/api/enhance', { method: 'POST', headers: { 'Content-Type': type, 'x-scale': k0.toFixed(3), 'x-lang': POD.lang }, body: blob });
+      if (!res.ok) throw new Error(((await res.json().catch(() => ({}))).error) || t('msg.badImage'));
+      const k = Number(res.headers.get('X-Scale')) || k0;
+      const url = URL.createObjectURL(await res.blob());
+      const keep = { cropX: (o.cropX || 0) * k, cropY: (o.cropY || 0) * k, width: o.width * k, height: o.height * k, scaleX: o.scaleX / k, scaleY: o.scaleY / k };
+      await new Promise((resolve) => o.setSrc(url, resolve));
+      o.set({ ...keep, boosted: true });
+      if (o.filters && o.filters.length) o.applyFilters();
+      o.setCoords();
+      o.dirty = true;
+      canvas.requestRenderAll();
+      commit();
+      renderProps();
+      scheduleCheck();
+      toast(t('boost.done', { dpi: imageDpi(o) }));
+    } finally {
+      busy(false);
+    }
+  }
+
+  // ---------- AI help ----------
+  const aiState = { tab: 'slogan', tone: 'funny', lang: POD.lang === 'en' ? 'en' : 'ar', style: 'modern', slogans: [], logos: [], busy: false };
+  document.querySelectorAll('[data-ai-pick="lang"] .chip').forEach((c) => c.classList.toggle('active', c.dataset.v === aiState.lang));
+  POD.api('/api/ai/status').then((r) => {
+    $('ai-off').hidden = r.enabled;
+    $('ai-on').hidden = !r.enabled;
+  }).catch(() => { $('ai-off').hidden = false; $('ai-on').hidden = true; });
+  $('flyout-ai').addEventListener('click', (e) => {
+    const tab = e.target.closest('[data-ai-tab]');
+    if (tab) {
+      aiState.tab = tab.dataset.aiTab;
+      document.querySelectorAll('[data-ai-tab]').forEach((b) => b.classList.toggle('active', b === tab));
+      $('ai-slogan-form').hidden = aiState.tab !== 'slogan';
+      $('ai-logo-form').hidden = aiState.tab !== 'logo';
+      renderAiResults();
+      return;
+    }
+    const chip = e.target.closest('[data-ai-pick] .chip');
+    if (chip) {
+      const box = chip.parentElement;
+      aiState[box.dataset.aiPick] = chip.dataset.v;
+      box.querySelectorAll('.chip').forEach((c) => c.classList.toggle('active', c === chip));
+    }
+  });
+  function aiSpinner() {
+    $('ai-results').innerHTML = `<div class="ai-spinner"><div class="spinner"></div>${esc(t('ai.working'))}</div>`;
+  }
+  async function renderAiResults() {
+    const box = $('ai-results');
+    if (aiState.tab === 'slogan') {
+      box.innerHTML = aiState.slogans.length
+        ? `<p class="ai-note">${esc(t('ai.tapToAdd'))}</p><div class="ai-results">${aiState.slogans.map((sl, i) => `<button type="button" class="ai-slogan" data-slogan="${i}" dir="auto" style="font-family:'${esc(sl.font)}'">${esc(sl.text)}</button>`).join('')}</div><p class="ai-note">${esc(t('ai.notice'))}</p>`
+        : '';
+      aiState.slogans.forEach((sl) => D.ensureFont(sl.font));
+      return;
+    }
+    if (!aiState.logos.length) { box.innerHTML = ''; return; }
+    box.innerHTML = `<p class="ai-note">${esc(t('ai.tapLogo'))}</p><div class="ai-logos">${aiState.logos.map((l, i) => `<button type="button" class="ai-logo" data-logo="${i}"><img alt="" data-logo-thumb="${i}"><small dir="auto">${esc(l.name.ar)}</small></button>`).join('')}</div><p class="ai-note">${esc(t('ai.notice'))}</p>`;
+    const bg = surfaceHex();
+    for (let i = 0; i < aiState.logos.length; i++) {
+      const img = box.querySelector(`[data-logo-thumb="${i}"]`);
+      if (img) img.src = await D.templateThumb(aiState.logos[i], bg);
+    }
+  }
+  function showAiLeft(n) {
+    $('ai-left').textContent = Number.isFinite(n) ? t('ai.left', { n: POD.num ? POD.num(n) : n }) : '';
+  }
+  async function aiRequest(url, body) {
+    if (aiState.busy) return null;
+    aiState.busy = true;
+    aiSpinner();
+    try {
+      const r = await POD.api(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      showAiLeft(r.left);
+      return r;
+    } catch (err) {
+      $('ai-results').innerHTML = '';
+      toast(err.message, 'error');
+      return null;
+    } finally {
+      aiState.busy = false;
+    }
+  }
+  $('ai-slogan-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const r = await aiRequest('/api/ai/slogans', { about: $('ai-about').value, tone: aiState.tone, lang: aiState.lang });
+    if (!r) return;
+    aiState.slogans = r.slogans || [];
+    $('ai-slogan-go').textContent = t('ai.again');
+    renderAiResults();
+  });
+  $('ai-logo-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = $('ai-name').value.trim();
+    if (!name) { $('ai-name').focus(); return toast(t('ai.namePh'), 'error'); }
+    const r = await aiRequest('/api/ai/logos', { name, tagline: $('ai-tagline').value, style: aiState.style, garment: surfaceHex() });
+    if (!r) return;
+    const stamp = Date.now();
+    aiState.logos = (r.logos || []).map((l, i) => ({ id: `ai-${stamp}-${i}`, name: { en: l.title, ar: l.title }, items: l.items }));
+    $('ai-logo-go').textContent = t('ai.again');
+    renderAiResults();
+  });
+  $('ai-results').addEventListener('click', serial(async (e) => {
+    const sb = e.target.closest('[data-slogan]');
+    if (sb) {
+      const sl = aiState.slogans[Number(sb.dataset.slogan)];
+      if (!sl) return;
+      await D.ensureFont(sl.font, 'normal');
+      const arabic = D.ARABIC_RE.test(sl.text);
+      addObject(new fabric.IText(sl.text, {
+        name: 'Text', fontFamily: sl.font, fontSize: Math.round(area().w * 0.12), fill: inkFor(surfaceHex()),
+        direction: arabic ? 'rtl' : 'ltr', textAlign: 'center', paintFirst: 'stroke',
+      }));
+      closeFlyouts();
+      return;
+    }
+    const lb = e.target.closest('[data-logo]');
+    if (lb) {
+      const tpl = aiState.logos[Number(lb.dataset.logo)];
+      if (tpl) await addTemplate(tpl);
+    }
+  }));
+
+  // ---------- Share a design (friends approve or suggest changes) ----------
+  const hashStr = (str) => {
+    let h = 5381;
+    for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+    return (h >>> 0).toString(36);
+  };
+  const shareKey = () => 'pod-share:' + st.product.id;
+  function designSignature() {
+    const designs = {};
+    for (const sd of st.product.sides) designs[sd.id] = sd.id === st.side ? serialize() : (st.designs[sd.id] || []);
+    return hashStr(JSON.stringify([designs, st.colorId, st.sizeId]));
+  }
+  function readLastShare() {
+    try { return JSON.parse(localStorage.getItem(shareKey()) || 'null'); } catch (e) { return null; }
+  }
+  const shareUrl = (id) => `${location.origin}/s/${id}`;
+  function renderShareReplies(share) {
+    const fb = (share && share.feedback) || [];
+    $('share-dialog-replies').innerHTML = fb.length
+      ? fb.slice().reverse().map((f) => `<li class="${f.vote === 'up' ? 'up' : 'change'}"><strong>${f.vote === 'up' ? '👍 ' + esc(t('share.approved')) : '✏️ ' + esc(t('share.wantsChange'))}</strong>${f.comment ? `<p dir="auto">${esc(f.comment)}</p>` : ''}<span class="muted small">${f.name ? esc(f.name) : ''}</span></li>`).join('')
+      : `<li class="muted small">${esc(t('share.noReplies'))}</li>`;
+  }
+  function openShareDialog(share) {
+    st.share = share;
+    const url = shareUrl(share.id);
+    $('share-url').value = url;
+    $('share-wa').href = 'https://wa.me/?text=' + encodeURIComponent(t('share.message', { url }));
+    $('share-native').hidden = !navigator.share;
+    renderShareReplies(share);
+    $('share-dialog').hidden = false;
+  }
+  $('share-open').addEventListener('click', serial(async () => {
+    cancelCrop();
+    commit();
+    const sides = designedSides();
+    if (!sides.length) return toast(t('msg.addFirst'), 'error');
+    const sig = designSignature();
+    const last = readLastShare();
+    if (last && last.sig === sig) {
+      try {
+        return openShareDialog(await POD.api('/api/shares/' + encodeURIComponent(last.id)));
+      } catch (e) { /* expired or removed: make a new link */ }
+    }
+    canvas.discardActiveObject();
+    const prevZoom = st.zoom;
+    if (st.zoom !== 1) setZoom(1);
+    const wasPreview = st.preview;
+    if (wasPreview) togglePreview();
+    const original = st.side;
+    busy(true, t('share.creating'));
+    try {
+      const sidesPayload = {};
+      const previews = {};
+      for (const sd of sides) {
+        await showSide(sd.id);
+        sidesPayload[sd.id] = { objects: await inlineImages(st.designs[sd.id]) };
+        previews[sd.id] = await toDataUrl(URL.createObjectURL(await exportPreview()));
+      }
+      await showSide(original);
+      const share = await POD.api('/api/shares', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId: st.product.id, color: st.colorId, size: st.sizeId, sides: sidesPayload, previews }),
+      });
+      try { localStorage.setItem(shareKey(), JSON.stringify({ id: share.id, sig })); } catch (e) { /* private mode */ }
+      openShareDialog(share);
+    } catch (err) {
+      await showSide(original).catch(() => {});
+      toast(err.message, 'error');
+    } finally {
+      busy(false);
+      if (st.zoom !== prevZoom) setZoom(prevZoom);
+      canvas.requestRenderAll();
+    }
+  }));
+  $('share-close').addEventListener('click', () => { $('share-dialog').hidden = true; });
+  $('share-dialog').addEventListener('click', (e) => { if (e.target === $('share-dialog')) $('share-dialog').hidden = true; });
+  $('share-copy').addEventListener('click', async () => {
+    const input = $('share-url');
+    try {
+      await navigator.clipboard.writeText(input.value);
+    } catch (e) {
+      input.select();
+      document.execCommand('copy');
+    }
+    toast(t('share.copied'));
+  });
+  $('share-native').addEventListener('click', () => {
+    const url = $('share-url').value;
+    navigator.share({ title: 'OneOff Print', text: t('share.message', { url: '' }).trim(), url }).catch(() => {});
+  });
+  $('share-refresh').addEventListener('click', async () => {
+    if (!st.share) return;
+    try { renderShareReplies(st.share = await POD.api('/api/shares/' + encodeURIComponent(st.share.id))); } catch (err) { toast(err.message, 'error'); }
+  });
+
   // ---------- Saved design (draft) ----------
   let draftTimer = null;
   let draftSaving = Promise.resolve(true);
@@ -2534,5 +2797,6 @@
     }, 1500);
   }
   if (restoredDraft) toast(t('draft.restored'));
+  if (fromShare) { toast(t('share.loaded')); scheduleDraft(); }
   window.__editor = { canvas, st, rects, checkIssues, exportSvg, exportPrint }; // handy for debugging in the console
 })();

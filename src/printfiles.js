@@ -181,4 +181,24 @@ async function filmPdf(pieces, { rollWidthIn = 22, gapIn = 0.25, mirror = true, 
   });
 }
 
-module.exports = { finalizePrintPng, pngInfo, mirroredPng, cmykTiff, cmykProof, printPdf, hardAlpha, dtfFilmPng, dtgUnderbase, filmPdf };
+/**
+ * Photo quality boost: enlarge with Lanczos resampling (up to `scale` times,
+ * at most 4000 px on the long side), lightly clean JPEG noise, then sharpen.
+ * Keeps transparency (PNG out) or returns a high-quality JPEG.
+ */
+async function enhancePhoto(buf, scale) {
+  const meta = await sharp(buf, { limitInputPixels: 40e6 }).metadata();
+  if (!meta.width || !meta.height) throw new Error('not an image');
+  const long = Math.max(meta.width, meta.height);
+  const k = Math.max(1, Math.min(scale, 4, 4000 / long));
+  const w = Math.round(meta.width * k);
+  const h = Math.round(meta.height * k);
+  const alpha = Boolean(meta.hasAlpha);
+  let img = sharp(buf, { limitInputPixels: 40e6 }).rotate();
+  if (!alpha && meta.format === 'jpeg') img = img.median(3);
+  img = img.resize(w, h, { kernel: 'lanczos3' }).sharpen({ sigma: 0.6 + 0.25 * k, m1: 0.6, m2: 2.2 });
+  const data = alpha ? await img.png({ compressionLevel: 8 }).toBuffer() : await img.jpeg({ quality: 92, mozjpeg: true }).toBuffer();
+  return { data, format: alpha ? 'png' : 'jpeg', scale: +(w / meta.width).toFixed(3), width: w, height: h };
+}
+
+module.exports = { enhancePhoto, finalizePrintPng, pngInfo, mirroredPng, cmykTiff, cmykProof, printPdf, hardAlpha, dtfFilmPng, dtgUnderbase, filmPdf };

@@ -367,16 +367,18 @@
 
   const thumbCache = new Map();
   /** Small PNG preview of a template on a white square. */
-  async function templateThumb(tpl) {
-    if (thumbCache.has(tpl.id)) return thumbCache.get(tpl.id);
+  async function templateThumb(tpl, bg = '#ffffff') {
+    const key = tpl.id + '|' + bg;
+    if (thumbCache.has(key)) return thumbCache.get(key);
     const size = 160;
-    const sc = new fabric.StaticCanvas(null, { width: size, height: size, backgroundColor: '#ffffff', renderOnAddRemove: false });
-    const objs = await buildTemplate(tpl, { x: 12, y: 12, w: size - 24, h: size - 24 }, '#16181d');
+    const dark = (() => { const n = parseInt(bg.slice(1), 16); return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255 < 0.45; })();
+    const sc = new fabric.StaticCanvas(null, { width: size, height: size, backgroundColor: bg, renderOnAddRemove: false });
+    const objs = await buildTemplate(tpl, { x: 12, y: 12, w: size - 24, h: size - 24 }, dark ? '#ffffff' : '#16181d');
     objs.forEach((o) => sc.add(o));
     sc.renderAll();
     const url = sc.toDataURL({ format: 'png' });
     sc.dispose();
-    thumbCache.set(tpl.id, url);
+    thumbCache.set(key, url);
     return url;
   }
 

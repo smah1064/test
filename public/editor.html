@@ -62,6 +62,9 @@
         <button class="tool" data-flyout="stickers" data-i18n-title="tool.stickers.title">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.5 3H6a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h7l8-8V6.5"/><path d="M21 13h-5a3 3 0 0 0-3 3v5"/><path d="M8 10h.01M14 10h.01M8.5 14.5s1.2 1.5 3.5 1.5"/></svg><span data-i18n="tool.stickers"></span>
         </button>
+        <button class="tool tool-ai" data-flyout="ai" data-i18n-title="ai.toolTitle">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8zM5 15l.6 1.4L7 17l-1.4.6L5 19l-.6-1.4L3 17l1.4-.6z"/></svg><span data-i18n="ai.tool"></span>
+        </button>
         <button class="tool mobile-only" data-sheet="product" data-i18n-title="tool.product">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M8 3 4 6l2 4 2-1v12h8V9l2 1 2-4-4-3c-.5 1.5-2 2.5-4 2.5S8.5 4.5 8 3z"/></svg><span data-i18n="tool.product"></span>
         </button>
@@ -87,6 +90,9 @@
           </button>
           <button class="btn btn-sm btn-dark" id="preview-open" data-i18n-title="pv.open">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2 3 7v10l9 5 9-5V7z"/><path d="M3 7l9 5 9-5M12 12v10"/></svg><span class="btn-label" data-i18n="pv.open"></span>
+          </button>
+          <button class="btn btn-sm" id="share-open" data-i18n-title="share.buttonTitle">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg><span class="btn-label" data-i18n="share.button"></span>
           </button>
           <button class="btn btn-sm" id="preview-toggle" data-i18n-title="bar.preview.title">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span class="btn-label" data-i18n="bar.preview"></span>
@@ -123,6 +129,47 @@
           <div class="fly-head"><h4 data-i18n="fly.stickers"></h4><button class="fly-close" data-i18n-aria="bar.close">✕</button></div>
           <div class="cat-chips small-chips" id="sticker-cats"></div>
           <div class="sticker-grid" id="sticker-grid"></div>
+        </div>
+        <div class="flyout" id="flyout-ai" hidden>
+          <div class="fly-head"><h4 data-i18n="ai.title"></h4><button class="fly-close" data-i18n-aria="bar.close">✕</button></div>
+          <p class="notice" id="ai-off" hidden data-i18n="ai.off"></p>
+          <div id="ai-on">
+            <div class="ai-tabs" role="tablist">
+              <button type="button" class="active" data-ai-tab="slogan" data-i18n="ai.tabSlogan"></button>
+              <button type="button" data-ai-tab="logo" data-i18n="ai.tabLogo"></button>
+            </div>
+            <form id="ai-slogan-form">
+              <div class="field"><label for="ai-about" data-i18n="ai.about"></label><textarea id="ai-about" rows="2" maxlength="300" data-i18n-placeholder="ai.aboutPh" dir="auto"></textarea></div>
+              <div class="field"><label data-i18n="ai.tone"></label><div class="ai-chips" data-ai-pick="tone">
+                <button type="button" class="chip active" data-v="funny" data-i18n="ai.tone.funny"></button>
+                <button type="button" class="chip" data-v="sweet" data-i18n="ai.tone.sweet"></button>
+                <button type="button" class="chip" data-v="proud" data-i18n="ai.tone.proud"></button>
+                <button type="button" class="chip" data-v="romantic" data-i18n="ai.tone.romantic"></button>
+                <button type="button" class="chip" data-v="motivational" data-i18n="ai.tone.motivational"></button>
+              </div></div>
+              <div class="field"><label data-i18n="ai.lang"></label><div class="ai-chips" data-ai-pick="lang">
+                <button type="button" class="chip active" data-v="ar" data-i18n="ai.lang.ar"></button>
+                <button type="button" class="chip" data-v="en" data-i18n="ai.lang.en"></button>
+                <button type="button" class="chip" data-v="both" data-i18n="ai.lang.both"></button>
+              </div></div>
+              <button class="btn btn-primary btn-block" type="submit" id="ai-slogan-go" data-i18n="ai.write"></button>
+            </form>
+            <form id="ai-logo-form" hidden>
+              <div class="field"><label for="ai-name" data-i18n="ai.name"></label><input type="text" id="ai-name" maxlength="40" data-i18n-placeholder="ai.namePh" dir="auto"></div>
+              <div class="field"><label for="ai-tagline" data-i18n="ai.tagline"></label><input type="text" id="ai-tagline" maxlength="60" dir="auto"></div>
+              <div class="field"><label data-i18n="ai.style"></label><div class="ai-chips" data-ai-pick="style">
+                <button type="button" class="chip active" data-v="modern" data-i18n="ai.style.modern"></button>
+                <button type="button" class="chip" data-v="classic" data-i18n="ai.style.classic"></button>
+                <button type="button" class="chip" data-v="playful" data-i18n="ai.style.playful"></button>
+                <button type="button" class="chip" data-v="sporty" data-i18n="ai.style.sporty"></button>
+                <button type="button" class="chip" data-v="elegant" data-i18n="ai.style.elegant"></button>
+                <button type="button" class="chip" data-v="calligraphy" data-i18n="ai.style.calligraphy"></button>
+              </div></div>
+              <button class="btn btn-primary btn-block" type="submit" id="ai-logo-go" data-i18n="ai.design"></button>
+            </form>
+            <div id="ai-results"></div>
+            <p class="ai-note" id="ai-left"></p>
+          </div>
         </div>
         <div class="flyout" id="flyout-shapes" hidden>
           <div class="fly-head"><h4 data-i18n="fly.shapes"></h4><button class="fly-close" data-i18n-aria="bar.close">✕</button></div>
@@ -185,6 +232,21 @@
       </aside>
     </div>
   </main>
+
+  <div class="share-dialog" id="share-dialog" hidden>
+    <div class="box" role="dialog" aria-modal="true" aria-labelledby="share-dialog-title">
+      <div class="head"><h3 id="share-dialog-title" data-i18n="share.dialogTitle"></h3><button class="fly-close" id="share-close" data-i18n-aria="bar.close">✕</button></div>
+      <p class="muted small" style="margin:0" data-i18n="share.dialogText"></p>
+      <div class="share-link-row"><input id="share-url" readonly><button class="btn btn-sm" id="share-copy" data-i18n="share.copy"></button></div>
+      <div class="share-actions">
+        <a class="btn btn-whatsapp" id="share-wa" target="_blank" rel="noopener" data-i18n="share.whatsapp"></a>
+        <button class="btn" id="share-native" data-i18n="share.more"></button>
+      </div>
+      <h3 class="share-replies-title" data-i18n="share.replies"></h3>
+      <ul class="share-replies" id="share-dialog-replies"></ul>
+      <button class="btn btn-sm btn-block" id="share-refresh" data-i18n="share.refresh"></button>
+    </div>
+  </div>
 
   <div class="pv-modal" id="pv" hidden>
     <div class="pv-box" role="dialog" aria-modal="true" aria-labelledby="pv-title">

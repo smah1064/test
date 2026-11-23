@@ -23,6 +23,7 @@ const { GOVERNORATES, normalizeEgyptMobile } = require('./egypt');
 const { FIELDS, langOf, format } = require('./i18n');
 // Loaded on first use: the shop keeps working even if the image library cannot load on a server.
 const thumbs = require('./thumbs');
+const ai = require('./ai');
 let printfilesModule = null;
 const printfiles = new Proxy({}, { get: (_, key) => (printfilesModule ||= require('./printfiles'))[key] });
 
@@ -181,6 +182,9 @@ function createApp({ dataDir, adminPassword }) {
   const adminHash = crypto.createHash('sha256').update(adminPassword).digest();
 
   app.disable('x-powered-by');
+  // Hostinger runs the app behind its proxy and CDN: use the visitor's own IP
+  // (from X-Forwarded-For) for the per-visitor limits.
+  app.set('trust proxy', process.env.TRUST_PROXY === 'false' ? false : true);
   app.use((req, res, next) => {
     res.set('X-Content-Type-Options', 'nosniff');
     res.set('Referrer-Policy', 'same-origin');
@@ -367,6 +371,164 @@ function createApp({ dataDir, adminPassword }) {
       console.warn(`[client-error] ${clip(e.page, 80)} | ${clip(e.msg, 300)} | ${clip(e.src, 120)}:${clip(e.line, 8)} | ${clip(e.stack, 600)} | ${clip(req.get('user-agent'), 160)}`);
     }
     res.status(204).end();
+  });
+
+  // ---------- AI help (slogans, logos) ----------
+  // Per-visitor and whole-shop daily limits keep the AI bill predictable.
+  const AI_PER_VISITOR = Math.max(1, Number(process.env.AI_DAILY_LIMIT) || 15);
+  const AI_PER_DAY = Math.max(1, Number(process.env.AI_GLOBAL_DAILY_LIMIT) || 300);
+  const aiUse = { day: '', total: 0, byIp: new Map() };
+  function takeAiCredit(ip) {
+    const day = new Date().toISOString().slice(0, 10);
+    if (aiUse.day !== day) Object.assign(aiUse, { day, total: 0, byIp: new Map() });
+    const used = aiUse.byIp.get(ip) || 0;
+    if (used >= AI_PER_VISITOR || aiUse.total >= AI_PER_DAY) throw new HttpError(429, 'aiLimit');
+    aiUse.byIp.set(ip, used + 1);
+    aiUse.total += 1;
+    return AI_PER_VISITOR - used - 1;
+  }
+  app.get('/api/ai/status', (req, res) => {
+    res.json({ enabled: ai.enabled(), perDay: AI_PER_VISITOR });
+  });
+  const aiRoute = (fn) => async (req, res, next) => {
+    try {
+      if (!ai.enabled()) throw new HttpError(503, 'aiOff');
+      const left = takeAiCredit(req.ip);
+      const result = await fn(req.body || {});
+      res.json({ ...result, left });
+    } catch (e) {
+      if (e instanceof ai.AiError) {
+        if (e.status >= 500) console.warn('[ai]', e.key);
+        return next(new HttpError(e.status, e.key));
+      }
+      next(e);
+    }
+  };
+  app.post('/api/ai/slogans', express.json({ limit: '8kb' }), aiRoute(async (body) => ({ slogans: await ai.slogans(body) })));
+  app.post('/api/ai/logos', express.json({ limit: '8kb' }), aiRoute(async (body) => ({ logos: await ai.logos(body) })));
+
+  // ---------- Photo quality boost ----------
+  // Enlarge a low-resolution photo (Lanczos) and sharpen it, so it prints crisper.
+  const enhanceHits = new Map();
+  app.post('/api/enhance', express.raw({ type: ['image/png', 'image/jpeg', 'image/webp'], limit: '15mb' }), async (req, res, next) => {
+    try {
+      const now = Date.now();
+      const hits = (enhanceHits.get(req.ip) || []).filter((tm) => now - tm < 60000);
+      if (hits.length >= 20) throw new HttpError(429, 'aiLimit');
+      enhanceHits.set(req.ip, [...hits, now]);
+      if (enhanceHits.size > 5000) enhanceHits.clear();
+      const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+      if (buf.length < 32) throw new HttpError(400, 'enhanceBad');
+      const want = Math.min(4, Math.max(1, Number(req.get('x-scale')) || 2));
+      const out = await printfiles.enhancePhoto(buf, want).catch(() => { throw new HttpError(400, 'enhanceBad'); });
+      res.set('X-Scale', String(out.scale));
+      res.set('Access-Control-Expose-Headers', 'X-Scale');
+      res.type(out.format).send(out.data);
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  // ---------- Shared designs (approval links) ----------
+  const sharesDir = path.join(dataDir, 'shares');
+  fs.mkdirSync(sharesDir, { recursive: true });
+  const SHARE_RE = /^[A-Za-z0-9_-]{12}$/;
+  const shareFile = (id, name) => path.join(sharesDir, id, name);
+  function readShare(id) {
+    if (!SHARE_RE.test(id || '')) return null;
+    try {
+      return JSON.parse(fs.readFileSync(shareFile(id, 'share.json'), 'utf8'));
+    } catch (e) {
+      return null;
+    }
+  }
+  const writeShare = (share) => {
+    const tmp = shareFile(share.id, `share.json.${process.pid}.tmp`);
+    fs.writeFileSync(tmp, JSON.stringify(share));
+    fs.renameSync(tmp, shareFile(share.id, 'share.json'));
+  };
+  const publicShare = (sh) => {
+    const product = getProduct(sh.productId);
+    return {
+      id: sh.id,
+      createdAt: sh.createdAt,
+      productId: sh.productId,
+      productName: product ? product.name : sh.productId,
+      color: sh.color,
+      size: sh.size,
+      sides: sh.sides.map((sd) => ({ id: sd.id, name: sd.name, preview: `/api/shares/${sh.id}/preview/${sd.id}.png` })),
+      feedback: sh.feedback || [],
+    };
+  };
+  const shareHits = new Map();
+  const limitHits = (map, ip, max) => {
+    const now = Date.now();
+    const hits = (map.get(ip) || []).filter((tm) => now - tm < 60000);
+    if (hits.length >= max) throw new HttpError(429, 'tooFast');
+    map.set(ip, [...hits, now]);
+    if (map.size > 5000) map.clear();
+  };
+  app.post('/api/shares', express.json({ limit: '40mb' }), (req, res) => {
+    limitHits(shareHits, req.ip, 10);
+    const b = req.body || {};
+    const product = getProduct(b.productId);
+    if (!product) throw new HttpError(400, 'unknownProduct', { id: String(b.productId || '').slice(0, 40) });
+    const color = product.colors.find((c) => c.id === b.color) || product.colors[0];
+    const size = product.sizes.find((z) => z.id === b.size) || product.sizes[0];
+    const sides = product.sides.filter((sd) => b.sides && b.sides[sd.id] && Array.isArray(b.sides[sd.id].objects) && b.sides[sd.id].objects.length);
+    if (!sides.length) throw new HttpError(400, 'shareEmpty');
+    const id = crypto.randomBytes(9).toString('base64url');
+    fs.mkdirSync(path.join(sharesDir, id), { recursive: true });
+    const editor = {};
+    for (const sd of sides) {
+      editor[sd.id] = { objects: b.sides[sd.id].objects };
+      const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(String((b.previews || {})[sd.id] || ''));
+      const png = m ? Buffer.from(m[1], 'base64') : null;
+      if (!png || png.length > 4e6 || !png.subarray(0, 8).equals(PNG_SIGNATURE)) throw new HttpError(400, 'badPng', { label: 'preview' });
+      fs.writeFileSync(shareFile(id, `${sd.id}.png`), png);
+    }
+    fs.writeFileSync(shareFile(id, 'editor.json'), JSON.stringify(editor));
+    const share = {
+      id, createdAt: new Date().toISOString(), productId: product.id,
+      color: { id: color.id, name: color.name, hex: color.hex }, size: { id: size.id, label: size.label },
+      sides: sides.map((sd) => ({ id: sd.id, name: sd.name })), feedback: [],
+    };
+    writeShare(share);
+    res.status(201).json(publicShare(share));
+  });
+  app.get('/api/shares/:id', (req, res) => {
+    const sh = readShare(req.params.id);
+    if (!sh) throw new HttpError(404, 'shareNotFound');
+    res.set('Cache-Control', 'no-store');
+    res.json(publicShare(sh));
+  });
+  app.get('/api/shares/:id/design', (req, res) => {
+    const sh = readShare(req.params.id);
+    if (!sh) throw new HttpError(404, 'shareNotFound');
+    const editor = JSON.parse(fs.readFileSync(shareFile(sh.id, 'editor.json'), 'utf8'));
+    res.json({ productId: sh.productId, color: sh.color.id, size: sh.size.id, editor });
+  });
+  app.get('/api/shares/:id/preview/:side.png', (req, res) => {
+    const sh = readShare(req.params.id);
+    const sd = sh && sh.sides.find((x) => x.id === req.params.side);
+    if (!sd) throw new HttpError(404, 'shareNotFound');
+    res.set('Cache-Control', 'public, max-age=86400, no-transform');
+    res.type('png').send(fs.readFileSync(shareFile(sh.id, `${sd.id}.png`)));
+  });
+  const feedbackHits = new Map();
+  app.post('/api/shares/:id/feedback', express.json({ limit: '4kb' }), (req, res) => {
+    limitHits(feedbackHits, req.ip, 6);
+    const sh = readShare(req.params.id);
+    if (!sh) throw new HttpError(404, 'shareNotFound');
+    const b = req.body || {};
+    const vote = b.vote === 'up' ? 'up' : 'change';
+    const comment = String(b.comment || '').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').trim().slice(0, 500);
+    const name = String(b.name || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 40);
+    if (vote === 'change' && !comment) throw new HttpError(400, 'feedbackEmpty');
+    sh.feedback = (sh.feedback || []).slice(-99);
+    sh.feedback.push({ vote, comment, name, at: new Date().toISOString() });
+    writeShare(sh);
+    res.status(201).json(publicShare(sh));
   });
 
   const proofHits = new Map();
@@ -659,6 +821,27 @@ function createApp({ dataDir, adminPassword }) {
     }
     return pages.get(name);
   };
+  // Short share links: the share page with a link preview (WhatsApp, Facebook).
+  app.get('/s/:id', (req, res, next) => {
+    const sh = readShare(req.params.id);
+    const html = pageFor('share');
+    if (!sh || !html) return next();
+    const product = getProduct(sh.productId);
+    const proto = String(req.get('x-forwarded-proto') || req.protocol).split(',')[0].trim();
+    const origin = `${proto}://${req.get('host')}`;
+    const escAttr = (v) => String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    const title = `${product ? product.name.ar : 'تصميم'} · ${product ? product.name.en : 'Design'} · OneOff Print`;
+    const tags = [
+      `<meta property="og:title" content="${escAttr(title)}">`,
+      `<meta property="og:description" content="${escAttr('شوف تصميمي وقولي رأيك · What do you think of my design?')}">`,
+      `<meta property="og:image" content="${escAttr(`${origin}/api/shares/${sh.id}/preview/${sh.sides[0].id}.png`)}">`,
+      `<meta property="og:url" content="${escAttr(`${origin}/s/${sh.id}`)}">`,
+      '<meta property="og:type" content="website">',
+      '<meta name="twitter:card" content="summary_large_image">',
+    ].join('\n  ');
+    res.set('Cache-Control', 'no-cache');
+    res.type('html').send(html.replace('</head>', `  ${tags}\n</head>`));
+  });
   app.get(/^\/(?:([a-z0-9-]+)(?:\.html)?)?$/, (req, res, next) => {
     const html = pageFor(req.params[0] || 'index');
     if (!html) return next();

@@ -21,12 +21,22 @@ Requires Node 18+. There is no database to set up: data is stored under `data/` 
 | `PORT`           | `3000`   | HTTP port                            |
 | `ADMIN_PASSWORD` | `admin`  | Password for the production dashboard (set this!) |
 | `DATA_DIR`       | `./data` | Where orders, designs and print files are stored |
+| `ANTHROPIC_API_KEY` | (none) | Turns on AI help (slogans, logos) |
+| `AI_DAILY_LIMIT` | `15` | AI requests per visitor per day |
+| `AI_GLOBAL_DAILY_LIMIT` | `300` | AI requests for the whole shop per day |
+| `TRUST_PROXY` | `true` | Use the visitor IP from the proxy (set `false` if not behind one) |
 
 ## What's in it
 
 **Storefront (`/`)**: 21 products in four categories: t-shirt, oversized t-shirt, polo, kids t-shirt, kids hoodie, baby onesie, hoodie, zip hoodie, sweatshirt, shorts, denim jacket (back), apron, cap, mug, cushion, framed poster, water bottle, tote bag, phone case, mouse pad and notebook. Each has colours, sizes and a mockup drawn in its colour.
 
 Product cards, the editor and the cart thumbnails all show **real product photos**, recoloured to the chosen colour (card pictures are made once on the server by `src/thumbs.js` and served from `/api/thumbs/<product>/<colour>.webp`); drawn mockups are only a fallback for products without a photo.
+
+**AI help** (editor tool "ذكاء"): writes slogans in Egyptian Arabic and/or English for an occasion and tone, and designs 3 logos from a name, built only from the editor's own fonts and shapes, so everything lands on the product as normal editable text and shapes. It runs on Claude Haiku 5.5 (`src/ai.js`) with structured JSON output. It is off until the server has an `ANTHROPIC_API_KEY` environment variable. Each visitor gets `AI_DAILY_LIMIT` requests a day (default 15), and the whole shop `AI_GLOBAL_DAILY_LIMIT` (default 300), so the bill stays predictable.
+
+**Photo quality boost**: a low-resolution photo can be enlarged (Lanczos, up to 4× or 4000 px) and sharpened on the server (`/api/enhance`). It keeps its size on the product, crop, shape and filters, and the DPI badge updates.
+
+**Share for approval**: the Share button makes a link (`/s/<id>`) with a picture of the design (WhatsApp shows it as a link preview). Friends tap "Looks great" or suggest a change; replies show on that page and in the editor's share window. "Open a copy in the editor" loads the design as a new draft. Shared designs are stored under `DATA_DIR/shares/`.
 
 **Saved designs**: the editor saves the design in the shopper's browser as they work (IndexedDB, so uploaded photos fit), and the **Save** button takes them back to the products page, where the card shows their design with a "Saved design" badge. Opening the product again restores it. The draft is cleared once the design goes into the cart.
 
@@ -91,6 +101,8 @@ src/app.js           Express routes: catalog, designs, orders, admin
 src/products.js      catalog, mockup SVGs, print areas, EGP pricing
 src/egypt.js         governorates, mobile number validation
 src/thumbs.js        recoloured product-photo card pictures (sharp)
+src/ai.js            AI slogans and logos (Claude Haiku 5.5, structured output)
+public/share.html    shared-design page (approve / suggest a change)
 src/i18n.js          server messages in English and Arabic
 public/js/i18n.js    all interface text in English and Arabic
 public/js/templates.js  fonts, shapes, text presets, templates
