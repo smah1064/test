@@ -1025,9 +1025,28 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   }, 3000).unref();
 
   // ---------- Orders ----------
+  /** What a design costs right now (prices the owner changed apply), or null if it can't be ordered. */
+  const designPrice = (d) => {
+    if (!d || (d.status && d.status !== 'ready') || d.orderId) return null;
+    if (d.kind === 'gangsheet') return d.price;
+    const product = getProduct(d.productId);
+    return product ? priceFor(product, d.size.id, d.sides.length) : null;
+  };
+  // The cart asks for today's prices before the customer orders.
+  app.post('/api/cart/quote', express.json({ limit: '20kb' }), (req, res) => {
+    const ids = Array.isArray((req.body || {}).designIds) ? req.body.designIds.slice(0, MAX_ITEMS_PER_ORDER) : [];
+    const items = ids.map((id) => {
+      const d = typeof id === 'string' && UUID_RE.test(id) ? store.getDesign(id) : null;
+      const price = designPrice(d);
+      return { designId: String(id).slice(0, 40), price, gone: price === null };
+    });
+    const subtotal = round2(items.reduce((n, i) => n + (i.price || 0), 0));
+    const shipping = items.some((i) => !i.gone) ? shippingFor(subtotal) : 0;
+    res.json({ items, subtotal, shipping, total: round2(subtotal + shipping), freeShippingOver: FREE_SHIPPING_OVER, shippingFlat: SHIPPING_FLAT });
+  });
+
   app.post('/api/orders', express.json({ limit: '100kb' }), (req, res) => {
-    rateLimit(req, 'orders');
-    const { customer = {}, designIds } = req.body || {};
+    const { customer = {}, designIds, expectedTotal } = req.body || {};
     const c = {
       name: cleanString(customer.name, 'name', { max: 120 }),
       phone: cleanString(customer.phone, 'phone', { max: 30 }),
@@ -1044,6 +1063,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (!Array.isArray(designIds) || designIds.length === 0) throw new HttpError(400, 'cartEmpty');
     if (designIds.length > MAX_ITEMS_PER_ORDER) throw new HttpError(400, 'tooManyItems', { max: MAX_ITEMS_PER_ORDER });
     if (new Set(designIds).size !== designIds.length) throw new HttpError(400, 'duplicateDesign');
+    // Only orders that passed the checks count towards the limit, so typos don't lock a customer out.
+    rateLimit(req, 'orders');
 
     const designs = designIds.map((id) => {
       const d = typeof id === 'string' && UUID_RE.test(id) && store.getDesign(id);
@@ -1083,6 +1104,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     for (const it of items) if (costs[it.productId]) it.costAtOrder = accounting.itemCostFrom(costs, it);
     const subtotal = round2(items.reduce((sum, i) => sum + i.price, 0));
     const shipping = shippingFor(subtotal);
+    // The customer must have seen this total: if a price changed since, show them the new one first.
+    if (expectedTotal !== undefined && Math.abs(Number(expectedTotal) - round2(subtotal + shipping)) > 0.009) {
+      throw new HttpError(409, 'priceChanged', { total: round2(subtotal + shipping) });
+    }
     const order = store.createOrder({
       id: crypto.randomUUID(),
       createdAt: now,
@@ -1670,7 +1695,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   app.get('/s/:id', (req, res, next) => {
     const sh = readShare(req.params.id);
     const html = pageFor('share');
-    if (!sh || !html) return next();
+    if (!html) return next();
+    // An old or wrong link: the share page itself says the design wasn't found.
+    if (!sh) return sendPage(res.status(404), 'share', html);
     const product = getProduct(sh.productId);
     const proto = String(req.get('x-forwarded-proto') || req.protocol).split(',')[0].trim();
     const origin = `${proto}://${req.get('host')}`;
@@ -1706,6 +1733,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   }));
 
   app.use('/api', (req, res) => res.status(404).json({ error: format('notFound', {}, langOf(req)) }));
+  // Any other unknown address: the shop's own "page not found" page.
+  app.use((req, res, next) => {
+    const html = (req.method === 'GET' || req.method === 'HEAD') && req.accepts('html') && pageFor('404');
+    if (!html) return next();
+    sendPage(res.status(404), '404', html);
+  });
 
   // ---------- Housekeeping ----------
   // Unordered designs (abandoned carts) and old share links are removed so

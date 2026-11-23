@@ -734,3 +734,47 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 .place-btns { display: flex; gap: 4px; direction: ltr; }
 .place-btns .btn { min-width: 34px; padding-inline: 8px; }
 .placement-note { margin-top: 4px; font-weight: 700; color: #d9480f; }
+
+/* Product page: start from scratch or from a ready design */
+.pp-hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 28px; align-items: start; margin: 18px 0 30px; }
+.pp-photo { padding: 0; overflow: hidden; aspect-ratio: 5 / 6; display: grid; place-items: center; background: #f4f5f7; }
+.pp-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pp-info h1 { margin: 6px 0 8px; }
+.pp-price { margin: 6px 0 14px; }
+.pp-price .amount { font-size: 22px; font-weight: 800; }
+.pp-choices { display: grid; gap: 12px; margin-top: 8px; }
+.pp-choice { display: flex; gap: 14px; align-items: center; padding: 16px 18px; text-decoration: none; color: inherit; border: 2px solid transparent; transition: border-color .15s, transform .15s; }
+.pp-choice:hover { border-color: var(--accent, #ff5a36); transform: translateY(-1px); }
+.pp-scratch { border-color: var(--accent, #ff5a36); }
+.pp-choice-icon { font-size: 26px; flex: 0 0 auto; }
+.pp-ready h2 { margin-bottom: 4px; }
+.pp-design .thumb { display: block; }
+.pp-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.pp-actions .btn { flex: 1 1 auto; text-align: center; }
+@media (max-width: 760px) {
+  .pp-hero { grid-template-columns: 1fr; gap: 16px; }
+  .pp-photo { aspect-ratio: 1 / 1; }
+}
+
+/* Header on small phones: everything fits, the language button stays on screen. */
+@media (max-width: 440px) {
+  .site-header .inner { gap: 8px; }
+  .brand { font-size: 16px; white-space: nowrap; gap: 6px; flex: 0 0 auto; }
+  .brand-mark { width: 22px; height: 22px; font-size: 13px; }
+  .site-header nav { gap: 10px; font-size: 14px; min-width: 0; }
+  .site-header nav a { white-space: nowrap; }
+  .site-header .lang-toggle { padding: 4px 8px; }
+}
+@media (max-width: 380px) {
+  .brand { font-size: 0; }
+  .brand-mark { font-size: 13px; }
+  .site-header nav { gap: 7px; font-size: 12.5px; }
+  .site-header .lang-toggle { padding: 3px 6px; font-size: 12px; }
+  .site-header .badge { min-width: 17px; height: 17px; font-size: 11px; padding: 0 4px; }
+}
+/* Cart rows: the buttons wrap on narrow phones instead of pushing the page sideways. */
+.cart-item { grid-template-columns: 110px minmax(0, 1fr) auto; }
+.cart-item .actions { flex-wrap: wrap; }
+@media (max-width: 640px) { .cart-item { grid-template-columns: 80px minmax(0, 1fr); } }
+/* Admin tabs: wrap instead of scrolling the whole page sideways on phones. */
+.tabs { flex-wrap: wrap; }

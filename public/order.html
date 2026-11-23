@@ -52,7 +52,7 @@
           return;
         }
         const o = order;
-        const place = [o.customer.city, tr(o.customer.governorate)].filter(Boolean).join('، ');
+        const place = [o.customer.city, tr(o.customer.governorate)].filter(Boolean).join(POD.lang === 'ar' ? '، ' : ', ');
         content.innerHTML = `
           <div class="page-head">
             ${params.get('new') ? `<p class="notice" style="margin-bottom:16px">${esc(t('order.thanks'))}</p>` : ''}
@@ -80,7 +80,7 @@
             <div class="line"><span>${esc(t('checkout.shipping'))}</span><span>${o.shipping ? esc(money(o.shipping)) : esc(t('free'))}</span></div>
             <div class="line total"><span>${esc(t('checkout.total'))}</span><span>${esc(money(o.total))}</span></div>
             ${o.payment && o.payment.method === 'cod' ? `<div class="pay-box"><strong>${esc(t('order.payCod', { amount: money(o.total) }))}</strong><span>${esc(t('checkout.codText'))}</span></div>` : ''}
-            <p class="muted small" style="margin-bottom:0">${esc(t('order.deliverTo', { name: o.customer.name, place }))}</p>
+            <p class="muted small" style="margin-bottom:0;overflow-wrap:anywhere">${esc(t('order.deliverTo', { name: o.customer.name, place }))}</p>
           </div>
           ${shopWa ? `<div class="order-wa"><p>${esc(t('order.waText'))}</p><a class="btn btn-whatsapp" id="order-wa" target="_blank" rel="noopener" href="${esc(whatsappLink(o))}">${esc(t('order.waButton'))}</a></div>` : ''}`;
       }
@@ -90,6 +90,8 @@
           order = await POD.api('/api/orders/' + encodeURIComponent(params.get('id') || ''));
           error = null;
         } catch (e) {
+          // A failed refresh (weak signal) keeps showing the order already loaded.
+          if (order && e.status !== 404) return;
           error = e.message;
         }
         render();

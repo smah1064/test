@@ -45,12 +45,25 @@
       $('share-thanks').textContent = t('share.thanks');
     }
   }
+  let sending = false;
   async function send(vote, comment, name) {
-    share = await POD.api(`/api/shares/${encodeURIComponent(share.id)}/feedback`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ vote, comment, name }),
-    });
+    if (sending) return; // a double click sends one vote
+    sending = true;
+    $('vote-up').disabled = true;
+    $('vote-change').disabled = true;
+    try {
+      share = await POD.api(`/api/shares/${encodeURIComponent(share.id)}/feedback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vote, comment, name }),
+      });
+    } catch (e) {
+      $('vote-up').disabled = false;
+      $('vote-change').disabled = false;
+      throw e;
+    } finally {
+      sending = false;
+    }
     try { localStorage.setItem('pod-voted:' + share.id, vote); } catch (e) { /* private mode */ }
     $('change-form').hidden = true;
     $('vote-up').disabled = true;

@@ -24,6 +24,7 @@ const MESSAGES = {
   aiNeedName: { en: 'Type a name first.', ar: 'اكتب الاسم أولًا.' },
   aiLimit: { en: 'You\'ve used today\'s AI help. Try again tomorrow.', ar: 'استخدمت رصيد اليوم من المساعدة. جرّب غدًا.' },
   enhanceBad: { en: 'This photo couldn\'t be improved.', ar: 'تعذّر تحسين هذه الصورة.' },
+  priceChanged: { en: 'Prices changed since you added these items. Please check the new total and place the order again.', ar: 'الأسعار اتغيرت من وقت ما ضفت المنتجات. راجع الإجمالي الجديد واطلب تاني.' },
   badPrice: { en: 'Enter a valid price (a number; prices cannot go below 1)', ar: 'اكتب سعرًا صحيحًا (رقم، والسعر لا يقل عن 1)' },
   badCost: { en: 'Enter a valid amount (a number, 0 or more)', ar: 'اكتب مبلغًا صحيحًا (رقم، صفر أو أكثر)' },
   badDate: { en: 'Enter a valid date', ar: 'اكتب تاريخًا صحيحًا' },

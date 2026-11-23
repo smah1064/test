@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OneOff Print</title>
+  <script>(function(){var l;try{l=localStorage.getItem('pod-lang')}catch(e){}l=l==='en'?'en':'ar';var d=document.documentElement;d.lang=l;d.dir=l==='ar'?'rtl':'ltr'})()</script>
+  <link rel="stylesheet" href="/fonts/fonts.css">
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body data-title-key="pp.pageTitle">
+  <header class="site-header">
+    <div class="container inner">
+      <a class="brand" href="/"><span class="brand-mark">1</span>OneOff Print</a>
+      <nav>
+        <a href="/#products" data-i18n="nav.products"></a>
+        <a href="/designs" data-i18n="nav.designs"></a>
+        <a class="cart-link" href="/cart"><span data-i18n="nav.cart"></span> <span class="badge" data-cart-count hidden>0</span></a>
+        <button class="btn btn-sm lang-toggle" data-lang-toggle data-i18n="lang.other"></button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <div id="pp-missing" class="card empty" hidden>
+      <h2 data-i18n="pp.notFound"></h2>
+      <a class="btn btn-primary" href="/#products" data-i18n="book.browse"></a>
+    </div>
+
+    <div id="pp" hidden>
+      <section class="pp-hero">
+        <div class="card pp-photo"><img id="pp-img" alt=""></div>
+        <div class="pp-info">
+          <a class="muted small" href="/#products" data-i18n="pp.back"></a>
+          <h1 id="pp-name"></h1>
+          <p class="muted" id="pp-desc" style="line-height:1.7"></p>
+          <div class="pp-price"><span class="amount" id="pp-price"></span> <span class="muted small" id="pp-sizes"></span></div>
+          <div class="field">
+            <label><span data-i18n="panel.colour"></span> <span class="muted" id="pp-color-name"></span></label>
+            <div class="swatches" id="pp-swatches"></div>
+          </div>
+          <div class="pp-choices">
+            <a class="card pp-choice pp-scratch" id="pp-scratch">
+              <span class="pp-choice-icon">✏️</span>
+              <span><strong id="pp-scratch-title"></strong><br><span class="muted small" data-i18n="pp.scratchText"></span></span>
+            </a>
+            <a class="card pp-choice" href="#pp-ready">
+              <span class="pp-choice-icon">✨</span>
+              <span><strong data-i18n="pp.readyTitle"></strong><br><span class="muted small" data-i18n="pp.readyText"></span></span>
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <section id="pp-ready" class="pp-ready">
+        <h2 data-i18n="pp.readyHead"></h2>
+        <p class="muted small" data-i18n="pp.readyHelp" style="margin-top:-6px"></p>
+        <div class="cat-chips" id="pp-cats"></div>
+        <div class="product-grid design-grid" id="pp-grid"></div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="site-footer"><div class="container" data-i18n="footer"></div></footer>
+
+  <script src="/vendor/fabric-5.3.0.min.js"></script>
+  <script src="/js/i18n.js"></script>
+  <script src="/js/common.js"></script>
+  <script src="/js/fabric-ext.js"></script>
+  <script src="/js/templates.js"></script>
+  <script src="/js/stickers.js"></script>
+  <script src="/js/photo-mockups.js"></script>
+  <script src="/js/design-render.js"></script>
+  <script src="/js/product.js"></script>
+</body>
+</html>

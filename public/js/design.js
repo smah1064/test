@@ -80,7 +80,7 @@
     $('dp-sizes').innerHTML = product.sizes.map((s) => `<button class="chip ${s.id === size.id ? 'active' : ''}" data-size="${s.id}">${esc(tr(s.label))}${s.surcharge ? ` <span style="opacity:.7">+${esc(money(s.surcharge))}</span>` : ''}</button>`).join('');
     $('dp-price').textContent = money(product.basePrice + size.surcharge);
     $('dp-edit').href = `/editor?library=${encodeURIComponent(design.id)}&product=${product.id}&color=${color.id}`;
-    document.title = `${tr(design.name)} · OneOff Print`;
+    document.title = `${tr(design.name)} · ${t('brand')}`;
     const active = $('dp-products').querySelector('.active');
     if (active) active.scrollIntoView({ block: 'nearest', inline: 'center' });
   }

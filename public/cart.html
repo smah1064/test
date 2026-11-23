@@ -38,15 +38,15 @@
 
       <form class="card summary" id="checkout" novalidate>
         <h2 style="font-size:18px" data-i18n="checkout.title"></h2>
-        <div class="field"><label for="name" data-i18n="checkout.name"></label><input type="text" id="name" name="name" autocomplete="name" required></div>
-        <div class="field"><label for="phone" data-i18n="checkout.phone"></label><input type="tel" id="phone" name="phone" autocomplete="tel" inputmode="tel" dir="ltr" placeholder="01xxxxxxxxx" required></div>
-        <div class="field"><label for="email" data-i18n="checkout.email"></label><input type="email" id="email" name="email" autocomplete="email" dir="ltr"></div>
+        <div class="field"><label for="name" data-i18n="checkout.name"></label><input type="text" id="name" name="name" autocomplete="name" maxlength="120" required></div>
+        <div class="field"><label for="phone" data-i18n="checkout.phone"></label><input type="tel" id="phone" name="phone" autocomplete="tel" maxlength="30" inputmode="tel" dir="ltr" placeholder="01xxxxxxxxx" required></div>
+        <div class="field"><label for="email" data-i18n="checkout.email"></label><input type="email" id="email" name="email" autocomplete="email" maxlength="200" dir="ltr"></div>
         <div class="field grid-2">
           <div><label for="governorate" data-i18n="checkout.governorate"></label><select id="governorate" name="governorate" required></select></div>
-          <div><label for="city" data-i18n="checkout.city"></label><input type="text" id="city" name="city" autocomplete="address-level2" required></div>
+          <div><label for="city" data-i18n="checkout.city"></label><input type="text" id="city" name="city" autocomplete="address-level2" maxlength="100" required></div>
         </div>
-        <div class="field"><label for="address" data-i18n="checkout.address"></label><textarea id="address" name="address" rows="2" autocomplete="street-address" data-i18n-placeholder="checkout.addressPh" required></textarea></div>
-        <div class="field"><label for="notes" data-i18n="checkout.notes"></label><input type="text" id="notes" name="notes"></div>
+        <div class="field"><label for="address" data-i18n="checkout.address"></label><textarea id="address" name="address" rows="2" maxlength="300" autocomplete="street-address" data-i18n-placeholder="checkout.addressPh" required></textarea></div>
+        <div class="field"><label for="notes" data-i18n="checkout.notes"></label><input type="text" id="notes" name="notes" maxlength="500"></div>
 
         <div class="line"><span data-i18n="checkout.subtotal"></span><span id="subtotal"></span></div>
         <div class="line"><span data-i18n="checkout.shipping"></span><span id="shipping"></span></div>
@@ -97,12 +97,40 @@
             </div>
             <div class="price">${esc(money(item.price))}</div>
           </div>`).join('');
-        const subtotal = cart.reduce((s, i) => s + i.price, 0);
-        const shipping = subtotal >= pricing.freeShippingOver ? 0 : pricing.shipping;
+        const subtotal = Math.round(cart.reduce((s, i) => s + i.price, 0) * 100) / 100;
+        const freeOver = quote ? quote.freeShippingOver : pricing.freeShippingOver;
+        const shipping = subtotal >= freeOver ? 0 : (quote ? quote.shippingFlat : pricing.shipping);
+        render.total = subtotal + shipping;
         document.getElementById('subtotal').textContent = money(subtotal);
         document.getElementById('shipping').textContent = shipping ? money(shipping) : t('free');
         document.getElementById('total').textContent = money(subtotal + shipping);
-        document.getElementById('free-note').textContent = shipping ? t('checkout.freeOver', { price: money(pricing.freeShippingOver) }) : '';
+        document.getElementById('free-note').textContent = shipping ? t('checkout.freeOver', { price: money(freeOver) }) : '';
+      }
+
+      // Today's prices from the shop (the cart keeps the price from when an item was added).
+      let quote = null;
+      async function refreshPrices({ announce = false } = {}) {
+        const cart = POD.getCart();
+        if (!cart.length) { quote = null; return; }
+        try {
+          quote = await POD.api('/api/cart/quote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ designIds: cart.map((i) => i.designId) }) });
+        } catch (e) {
+          quote = null;
+          return;
+        }
+        const gone = [];
+        let changed = false;
+        const keep = cart.filter((item, i) => {
+          const q = quote.items[i];
+          if (!q || q.designId !== item.designId) return true;
+          if (q.gone) { gone.push(tr(item.productName)); return false; }
+          if (q.price !== item.price) { item.price = q.price; changed = true; }
+          return true;
+        });
+        if (gone.length || changed) POD.setCart(keep);
+        if (gone.length) POD.toast(t('cart.gone', { list: gone.join('، ') }), 'error');
+        else if (changed && announce) POD.toast(t('cart.pricesUpdated'));
+        if (gone.length) return refreshPrices();
       }
 
       document.getElementById('items').addEventListener('click', (e) => {
@@ -127,14 +155,24 @@
         btn.textContent = t('checkout.placing');
         try {
           const customer = Object.fromEntries(new FormData(form));
+          // Check prices again right before ordering: the customer must see what they will pay.
+          const before = render.total;
+          await refreshPrices();
+          render();
+          if (!POD.getCart().length) throw new Error(t('cart.emptyTitle'));
+          if (Math.abs(render.total - before) > 0.009) throw Object.assign(new Error(t('cart.pricesUpdated')), { code: 'priceChanged' });
           const order = await POD.api('/api/orders', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ customer, designIds: POD.getCart().map((i) => i.designId) }),
+            body: JSON.stringify({ customer, designIds: POD.getCart().map((i) => i.designId), expectedTotal: render.total }),
           });
           POD.setCart([]);
           location.href = '/order?id=' + encodeURIComponent(order.id) + '&new=1';
         } catch (err) {
+          if (err.code === 'priceChanged' || err.code === 'designGone' || err.code === 'designOrdered') {
+            await refreshPrices();
+            render();
+          }
           POD.toast(err.message, 'error');
           btn.disabled = false;
           btn.textContent = t('checkout.place');
@@ -143,7 +181,10 @@
 
       renderGovernorates();
       render();
+      refreshPrices({ announce: true }).then(render);
       document.addEventListener('pod:langchange', () => { renderGovernorates(); render(); });
+      // The cart changed in another tab (an order placed there, an item added).
+      window.addEventListener('storage', (e) => { if (e.key === 'pod-cart-v2') refreshPrices().then(render); });
     })();
   </script>
 </body>

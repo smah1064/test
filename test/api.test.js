@@ -279,7 +279,9 @@ test('rate limits on new designs and orders', async () => {
   const at = `http://127.0.0.1:${s2.address().port}`;
   try {
     const mk = () => fetch(at + '/api/designs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ productId: 'tshirt', color: 'white', size: 'M', sides: { front: { editor: { objects: [{ type: 'rect' }] } } } }) });
-    assert.strictEqual((await mk()).status, 201);
+    const first = await mk();
+    assert.strictEqual(first.status, 201);
+    const { id: designId } = await first.json();
     assert.strictEqual((await mk()).status, 201);
     const third = await mk();
     assert.strictEqual(third.status, 429);
@@ -287,9 +289,13 @@ test('rate limits on new designs and orders', async () => {
     // hosting proxy appends the real address (here 127.0.0.1) after it.
     const spoof = await fetch(at + '/api/designs', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': '9.9.9.9, 127.0.0.1' }, body: '{}' });
     assert.strictEqual(spoof.status, 429);
-    const order = () => fetch(at + '/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customer: CUSTOMER, designIds: [] }) });
-    assert.strictEqual((await order()).status, 400);
-    assert.strictEqual((await order()).status, 429);
+    const order = (designIds) => fetch(at + '/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customer: CUSTOMER, designIds }) });
+    // Mistakes in the form don't use up the limit (customers can fix a typo)...
+    assert.strictEqual((await order([])).status, 400);
+    assert.strictEqual((await order([])).status, 400);
+    // ...order attempts that pass the checks do.
+    assert.strictEqual((await order([designId])).status, 400, 'design not finished');
+    assert.strictEqual((await order([designId])).status, 429);
   } finally {
     s2.close();
     fs.rmSync(dir, { recursive: true, force: true });

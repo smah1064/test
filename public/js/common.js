@@ -173,11 +173,20 @@
   }
 
   async function api(url, options = {}) {
-    const res = await fetch(url, { ...options, headers: { 'x-lang': lang, ...(options.headers || {}) } });
-    const body = res.headers.get('content-type')?.includes('json') ? await res.json() : null;
+    let res;
+    try {
+      res = await fetch(url, { ...options, headers: { 'x-lang': lang, ...(options.headers || {}) } });
+    } catch (e) {
+      // No connection: say so in the shopper's language instead of the browser's "Failed to fetch".
+      const err = new Error(t('msg.network'));
+      err.network = true;
+      throw err;
+    }
+    const body = res.headers.get('content-type')?.includes('json') ? await res.json().catch(() => null) : null;
     if (!res.ok) {
-      const err = new Error((body && body.error) || `Request failed (${res.status})`);
+      const err = new Error((body && body.error) || t('msg.requestFailed', { status: res.status }));
       err.status = res.status;
+      err.code = body && body.code;
       throw err;
     }
     return body;
