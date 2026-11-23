@@ -7,7 +7,28 @@
   <script>(function(){var l;try{l=localStorage.getItem('pod-lang')}catch(e){}l=l==='en'?'en':'ar';var d=document.documentElement;d.lang=l;d.dir=l==='ar'?'rtl':'ltr'})()</script>
   <link rel="stylesheet" href="/fonts/fonts.css">
   <link rel="stylesheet" href="/css/styles.css">
-  <script>(function(){var d=document.documentElement;function h(){d.style.setProperty('--app-h',window.innerHeight+'px')}h();window.addEventListener('resize',h);window.addEventListener('orientationchange',function(){setTimeout(h,300)})})()</script>
+  <script>
+    // Height of the screen area the page can really use. Phones report the
+    // address bar differently while loading, so take the smallest reading and
+    // measure again after load and on every resize (not while typing: the
+    // on-screen keyboard must not shrink the editor).
+    (function () {
+      var d = document.documentElement;
+      function h() {
+        var a = document.activeElement;
+        if (a && (a.tagName === 'TEXTAREA' || a.tagName === 'INPUT')) return;
+        var v = window.visualViewport ? window.visualViewport.height * window.visualViewport.scale : window.innerHeight;
+        var px = Math.floor(Math.min(window.innerHeight, v || window.innerHeight));
+        d.style.setProperty('--app-h', px + 'px');
+      }
+      h();
+      window.addEventListener('resize', h);
+      window.addEventListener('pageshow', h);
+      window.addEventListener('load', function () { h(); setTimeout(h, 300); setTimeout(h, 1200); });
+      window.addEventListener('orientationchange', function () { setTimeout(h, 300); });
+      if (window.visualViewport) window.visualViewport.addEventListener('resize', h);
+    })();
+  </script>
   <script type="importmap">{ "imports": { "three": "/vendor/three/three.module.min.js" } }</script>
 </head>
 <body class="editor-page" data-title-key="editor.pageTitle">

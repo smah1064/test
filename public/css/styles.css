@@ -360,7 +360,7 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
   .mobile-only { display: flex !important; }
   /* The editor fills exactly the visible screen (--app-h is set from the
      browser's real inner height), so the tool bar never falls off the bottom. */
-  body.editor-page { height: 100vh; height: 100dvh; height: var(--app-h, 100dvh); overflow: hidden; display: flex; flex-direction: column; }
+  body.editor-page { height: 100vh; height: 100dvh; height: min(100dvh, var(--app-h, 100dvh)); overflow: hidden; display: flex; flex-direction: column; }
   body.editor-page .site-header { flex: none; }
   body.editor-page .site-header .inner { height: 50px; }
   body.editor-page .site-header nav a[href="/#products"] { display: none; }
