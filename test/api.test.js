@@ -749,6 +749,19 @@ test('personalised books: create, preview pages, edit, order, print PDF', async 
   const cb = await (await post('/api/books/dream-jobs/designs', { answers: { name: 'Laila', gender: 'girl' }, face: dataUrl })).json();
   assert.strictEqual((await fetch(`${base}/api/books/designs/${cb.id}/pages/3.jpg`)).status, 200);
 
+  // A girl gets the girl pictures (every page that shows the child has one).
+  const fs = require('fs');
+  const path = require('path');
+  const books = require('../src/books');
+  for (const book of Object.values(books.BOOKS)) {
+    for (const page of book.pages.filter((pg) => pg.img && pg.face)) {
+      const ext = book.kind === 'coloring' && page.type !== 'cover' ? 'png' : 'jpg';
+      assert.ok(fs.existsSync(path.join(__dirname, '..', 'src', 'book-assets', book.dir, `${page.img}-girl.${ext}`)), `${book.dir}/${page.img} has a girl picture`);
+    }
+  }
+  const pageOf = async (gender) => (await books.renderPage({ book: books.BOOKS['space-hero'], answers: { name: 'Sam', gender, city: 'Cairo', father: 'A', mother: 'B' } }, 2, 200, { noText: true })).raw().toBuffer();
+  assert.notDeepStrictEqual(await pageOf('girl'), await pageOf('boy'));
+
   // Order both; the admin gets a print-ready PDF; the book can no longer be edited.
   const order = await post('/api/orders', { customer: CUSTOMER, designIds: [d.id, cb.id] });
   assert.strictEqual(order.status, 201);
