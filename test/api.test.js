@@ -833,6 +833,29 @@ test('AI books: an AQ. key the Gemini API rejects is used on Vertex AI', async (
   }
 });
 
+test('AI and EPS files are drawn to a transparent PNG for the editor', async () => {
+  const sharp = require('sharp');
+  const eps = Buffer.from('%!PS-Adobe-3.0 EPSF-3.0\n%%BoundingBox: 0 0 200 100\n%%EndComments\n1 0 0 setrgbcolor newpath 100 50 40 0 360 arc fill\nshowpage\n%%EOF\n');
+  const send = (body) => fetch(base + '/api/artwork', { method: 'POST', headers: { 'Content-Type': 'application/octet-stream', 'x-max-px': '800' }, body });
+  let r = await send(eps);
+  assert.strictEqual(r.status, 200);
+  const out = Buffer.from(await r.arrayBuffer());
+  const meta = await sharp(out).metadata();
+  assert.strictEqual(meta.format, 'png');
+  assert.strictEqual(meta.channels, 4);
+  assert.ok(Math.abs(meta.width - meta.height) <= 2 && meta.width > 300, 'trimmed to the circle');
+  // An .ai file saved "PDF compatible" is a PDF inside.
+  const PDF = require('pdfkit');
+  const ai = await new Promise((resolve) => { const d = new PDF({ size: [600, 300] }); const b = []; d.on('data', (c) => b.push(c)); d.on('end', () => resolve(Buffer.concat(b))); d.rect(50, 50, 200, 100).fill('#0055ff'); d.end(); });
+  r = await send(ai);
+  assert.strictEqual(r.status, 200);
+  const m2 = await sharp(Buffer.from(await r.arrayBuffer())).metadata();
+  assert.ok(m2.width > m2.height * 1.8, 'the rectangle, 2:1');
+  // Not a design file / nothing drawn.
+  assert.strictEqual((await send(Buffer.from('just text'))).status, 400);
+  assert.strictEqual((await send(Buffer.from('%!PS\nshowpage\n'))).status, 400);
+});
+
 const png4 = (w, h) => png(w, h);
 test('two copies of the app on one data folder share orders, sign-ins and edits', async () => {
   const { createApp: make } = require('../src/app');

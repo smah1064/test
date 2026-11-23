@@ -33,6 +33,7 @@ let sharpModule = null;
 const sharp = () => (sharpModule ||= require('sharp'));
 let printfilesModule = null;
 const printfiles = new Proxy({}, { get: (_, key) => (printfilesModule ||= require('./printfiles'))[key] });
+const artwork = require('./artwork');
 
 /** Short hash of every file under dir: changes whenever the site's code or assets change. */
 function siteVersion(dir) {
@@ -196,6 +197,8 @@ const DEFAULT_LIMITS = {
   redrawAll: [{ max: Number(process.env.REDRAW_DAILY_PAGES) || 450, ms: 24 * 3600e3 }],
   // WhatsApp/email alerts for the whole shop, so fake orders cannot flood the owner's phone.
   notify: [{ max: 30, ms: 3600e3 }, { max: 200, ms: 24 * 3600e3 }],
+  // Illustrator / EPS files turned into pictures for the editor.
+  artwork: [{ max: 15, ms: 10 * 60e3 }, { max: 60, ms: 24 * 3600e3 }],
 };
 
 function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 3600e3 }) {
@@ -500,6 +503,29 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       res.set('X-Scale', String(out.scale));
       res.set('Access-Control-Expose-Headers', 'X-Scale');
       res.type(out.format).send(out.data);
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  // ---------- Illustrator (.ai) and EPS uploads ----------
+  // Browsers cannot show these, so the server draws them to a transparent PNG.
+  app.post('/api/artwork', express.raw({ type: () => true, limit: '40mb' }), async (req, res, next) => {
+    try {
+      const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+      if (!artwork.sniff(buf)) throw new HttpError(400, 'artworkType');
+      rateLimit(req, 'artwork');
+      const px = Math.min(4000, Math.max(500, Number(req.get('x-max-px')) || 3000));
+      let out;
+      try {
+        out = await artwork.convertArtwork(buf, { px });
+      } catch (e) {
+        if (!(e instanceof artwork.ArtworkError)) throw e;
+        if (e.reason === 'busy') throw new HttpError(429, 'tooFast');
+        if (e.detail) console.warn('[artwork]', e.reason, String(e.detail).slice(0, 300));
+        throw new HttpError(400, e.reason === 'empty' ? 'artworkEmpty' : 'artworkBad');
+      }
+      res.type('image/png').send(out.png);
     } catch (e) {
       next(e);
     }

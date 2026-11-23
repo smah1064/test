@@ -16,6 +16,7 @@
   const MAX_PRINT_SIDE = 8000;
   const MAX_UPLOAD_PX = 3000;
   const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+  const MAX_VECTOR_BYTES = 40 * 1024 * 1024;
   const HISTORY_LIMIT = 60;
   const SNAP_PX = 7;
   const EXTRA_PROPS = ['name', 'selectable', 'evented', 'curve', 'mask', 'maskBorder', 'maskBorderColor', 'lockRatio', 'bgShape', 'textFx', 'boosted'];
@@ -687,9 +688,37 @@
       img.src = url;
     });
   }
+  // Illustrator and EPS files: the server draws them to a transparent PNG first.
+  const isVectorFile = (file) => /\.(ai|eps|epsf|ps)$/i.test(file.name || '') || /postscript|illustrator/.test(file.type || '');
+  async function convertVectorFile(file) {
+    if (file.size > MAX_VECTOR_BYTES) throw new Error(t('msg.tooBigVector'));
+    busy(true, t('busy.artwork'));
+    try {
+      const res = await fetch('/api/artwork', {
+        method: 'POST',
+        headers: { 'x-lang': POD.lang, 'x-max-px': String(MAX_UPLOAD_PX), 'Content-Type': 'application/octet-stream' },
+        body: file,
+      });
+      if (!res.ok) {
+        const body = res.headers.get('content-type')?.includes('json') ? await res.json() : null;
+        throw new Error((body && body.error) || t('msg.badImage'));
+      }
+      const blob = await res.blob();
+      return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.png', { type: 'image/png' });
+    } finally {
+      busy(false);
+    }
+  }
   async function addImageFile(file) {
     if (!file) return;
-    if (!/^image\/(png|jpeg|webp|gif)$/.test(file.type)) return toast(t('msg.badType'), 'error');
+    if (isVectorFile(file)) {
+      try {
+        file = await convertVectorFile(file);
+      } catch (e) {
+        return toast(e.message, 'error');
+      }
+    }
+    if (!/^image\/(png|jpeg|webp|gif)$/.test(file.type) && !/\.(jpe?g)$/i.test(file.name || '')) return toast(t('msg.badType'), 'error');
     if (file.size > MAX_UPLOAD_BYTES) return toast(t('msg.tooBig'), 'error');
     const srcUrl = URL.createObjectURL(file);
     try {
@@ -699,7 +728,7 @@
       c.width = Math.round(img.naturalWidth * scale);
       c.height = Math.round(img.naturalHeight * scale);
       c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-      const jpeg = file.type === 'image/jpeg';
+      const jpeg = file.type === 'image/jpeg' || (!file.type && /\.jpe?g$/i.test(file.name || ''));
       const blob = await new Promise((r) => c.toBlob(r, jpeg ? 'image/jpeg' : 'image/png', 0.92));
       const fimg = await new Promise((resolve) => fabric.Image.fromURL(URL.createObjectURL(blob), resolve));
       fimg.set({ name: file.name.replace(/\.[^.]+$/, '').slice(0, 40) || 'Image' });
