@@ -724,3 +724,71 @@ test('personalised books: create, preview pages, edit, order, print PDF', async 
   assert.strictEqual(buf.subarray(0, 4).toString(), '%PDF');
   assert.strictEqual((buf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length, 14);
 });
+
+test('AI books: one cartoon face for the preview, every page redrawn after the order', async () => {
+  const http = require('http');
+  const sharp = require('sharp');
+  const calls = [];
+  // A stand-in for the Gemini API: returns an image tinted orange so we can tell it was used.
+  const mock = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', (c) => { body += c; });
+    req.on('end', async () => {
+      const j = JSON.parse(body || '{}');
+      calls.push({ url: req.url, key: req.headers['x-goog-api-key'], parts: j.contents[0].parts.length, config: j.generationConfig });
+      const size = j.generationConfig && j.generationConfig.imageConfig && j.generationConfig.imageConfig.imageSize === '2K' ? 2048 : 768;
+      const img = await sharp({ create: { width: size, height: size, channels: 3, background: '#ff8800' } }).png().toBuffer();
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ candidates: [{ content: { role: 'model', parts: [{ inlineData: { mimeType: 'image/png', data: img.toString('base64') } }] }, finishReason: 'STOP' }] }));
+    });
+  });
+  await new Promise((r) => mock.listen(0, r));
+  process.env.GEMINI_API_KEY = 'test-key';
+  process.env.GEMINI_API_BASE = `http://127.0.0.1:${mock.address().port}`;
+  try {
+    const face = await sharp({ create: { width: 400, height: 500, channels: 3, background: '#d9a27e' } }).jpeg().toBuffer();
+    const dataUrl = 'data:image/jpeg;base64,' + face.toString('base64');
+    const answers = { name: 'Yousef', gender: 'boy', birthday: '2019-03-12', city: 'Cairo', father: 'Ahmed', mother: 'Mona', fruit: 'mango', animal: 'cat', friend: 'Omar' };
+    assert.strictEqual((await (await fetch(base + '/api/books/space-hero')).json()).ai, true);
+
+    const d = await (await post('/api/books/space-hero/designs', { answers, face: dataUrl, aiConsent: true })).json();
+    assert.strictEqual(d.cartoon, 'ready', 'preview uses the AI cartoon face');
+    assert.strictEqual(calls.length, 1, 'only one image for the preview');
+    assert.ok(/:generateContent$/.test(calls[0].url) && calls[0].key === 'test-key' && calls[0].parts === 3);
+    // Changing an answer does not make another image.
+    await fetch(`${base}/api/books/designs/${d.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'x-edit-token': d.editToken }, body: JSON.stringify({ answers: { ...answers, friend: 'Salma' }, aiConsent: true }) });
+    assert.strictEqual(calls.length, 1);
+
+    // Without consent: no AI at all.
+    const plain = await (await post('/api/books/space-hero/designs', { answers, face: dataUrl })).json();
+    assert.strictEqual(plain.cartoon, 'off');
+    assert.strictEqual(calls.length, 1);
+
+    const order = await (await post('/api/orders', { customer: CUSTOMER, designIds: [d.id, plain.id] })).json();
+    const itemId = order.items.find((i) => i.designId === d.id).id;
+    let item;
+    for (let i = 0; i < 100; i++) {
+      await new Promise((r) => setTimeout(r, 150));
+      const q = await (await admin('/api/admin/orders')).json();
+      item = q.orders.flatMap((o) => o.items).find((it) => it.id === itemId);
+      if (item.redraw && item.redraw.status === 'done') break;
+    }
+    assert.strictEqual(item.redraw.status, 'done');
+    assert.strictEqual(item.redraw.done, 12);
+    assert.strictEqual(calls.length, 13, '1 preview + 12 redrawn pages');
+    assert.ok(calls.slice(1).every((c) => c.config.imageConfig.imageSize === '2K'));
+    const plainItem = (await (await admin('/api/admin/orders')).json()).orders.flatMap((o) => o.items).find((it) => it.designId === plain.id);
+    assert.strictEqual(plainItem.redraw.status, 'off');
+
+    // The redrawn page is used in the book (orange from the mock).
+    const page = await fetch(`${base}/api/books/designs/${d.id}/pages/4.jpg?v=x`);
+    const st = await sharp(Buffer.from(await page.arrayBuffer())).extract({ left: 20, top: 20, width: 60, height: 60 }).stats();
+    assert.ok(st.channels[0].mean > 200 && st.channels[2].mean < 80, 'page 4 shows the redrawn picture');
+    const pdf = await admin(`/api/admin/files/${d.id}/book?format=book-pdf`);
+    assert.strictEqual(pdf.status, 200);
+  } finally {
+    delete process.env.GEMINI_API_KEY;
+    delete process.env.GEMINI_API_BASE;
+    mock.close();
+  }
+});

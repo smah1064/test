@@ -103,6 +103,14 @@
     return [c.name, c.address1, c.address2, [c.city, c.region, c.postalCode].filter(Boolean).join(' '), c.country].filter(Boolean).map(esc).join('<br>');
   }
 
+  function redrawLine(item) {
+    const r = item.redraw;
+    if (!r) return esc(t('admin.redraw.off'));
+    const line = esc(t('admin.redraw.' + r.status, { done: POD.num(r.done || 0), total: POD.num(r.total || 0) }));
+    const kept = r.failed && r.failed.length ? ` · ${esc(t('admin.redraw.kept', { n: POD.num(r.failed.length) }))}` : '';
+    const again = ['done', 'failed'].includes(r.status) ? ` <button class="btn btn-sm" data-redraw="${esc(item.id)}">${esc(t('admin.redraw.again'))}</button>` : '';
+    return line + kept + again;
+  }
   function spec(item) {
     const c = item.customer;
     return `
@@ -117,6 +125,7 @@
           ${item.process === 'dtg' && isDark(item.color.hex) ? `<div class="small" style="color:var(--warn);margin-top:4px">${esc(t('admin.darkHint'))}</div>` : ''}
           ${item.filmBatch ? `<div><span class="pill printed">${esc(t('admin.onFilm', { id: item.filmBatch.id }))}</span></div>` : ''}
         </dd>` : ''}
+        ${item.kind === 'book' ? `<dt>${esc(t('admin.bookFiles'))}</dt><dd>${redrawLine(item)}</dd>` : ''}
         ${item.kind === 'gangsheet' && item.sides[0] ? `<dt>${esc(t('admin.spec.print', { side: tr(item.sides[0].name) }))}</dt><dd>${esc(t('admin.sheetInfo', { w: POD.num(item.sides[0].widthIn * 2.54), l: POD.num(Math.round(item.sides[0].heightIn * 2.54)), n: POD.num(item.pieces || 0), dpi: item.sides[0].dpi || '?' }))}</dd>` : ''}
         <dt>${esc(t('admin.spec.shipTo'))}</dt><dd>${address(c)}</dd>
         ${c.phone ? `<dt>${esc(t('admin.spec.phone'))}</dt><dd><a href="tel:${esc(c.phone)}" dir="ltr">${esc(c.phone)}</a></dd>` : ''}
@@ -380,6 +389,19 @@
         setTimeout(() => URL.revokeObjectURL(url), 10000);
       } catch (err) {
         toast(err.message, 'error');
+      }
+      return;
+    }
+    const rbtn = e.target.closest('[data-redraw]');
+    if (rbtn) {
+      rbtn.disabled = true;
+      try {
+        await adminApi('/api/admin/items/' + encodeURIComponent(rbtn.dataset.redraw) + '/redraw', { method: 'POST' });
+        toast(t('admin.redraw.started'));
+        await refresh();
+      } catch (err) {
+        toast(err.message, 'error');
+        rbtn.disabled = false;
       }
       return;
     }

@@ -449,7 +449,7 @@ function panel(px, x, y, w, h, opacity = 0.88) {
  * One page of a book as an image `px` wide (square, including bleed).
  * `data`: { book, answers, lang, face (photo square), faceLine (line art) }.
  */
-async function renderPage({ book, answers, face, faceLine }, index, px) {
+async function renderPage({ book, answers, face, faceLine, redrawn }, index, px, { noText = false } = {}) {
   const lang = 'en'; // the books are printed in English
   const page = book.pages[index];
   const P = (v) => Math.round((v / 100) * px);
@@ -457,11 +457,14 @@ async function renderPage({ book, answers, face, faceLine }, index, px) {
   let base;
   const coloring = book.kind === 'coloring';
 
-  if (page.img) base = await illustration(`${book.dir}/${page.img}.${coloring && page.type !== 'cover' ? 'png' : 'jpg'}`, px);
+  // A page the AI already redrew with the child: use it as the picture.
+  const redraw = redrawn && redrawn[index];
+  if (redraw) base = await sharp(redraw).resize(px, px, { fit: 'cover' }).flatten({ background: '#ffffff' }).png({ compressionLevel: 1 }).toBuffer();
+  else if (page.img) base = await illustration(`${book.dir}/${page.img}.${coloring && page.type !== 'cover' ? 'png' : 'jpg'}`, px);
   else base = await sharp({ create: { width: px, height: px, channels: 3, background: page.type === 'back' ? (coloring ? '#ff8a3d' : '#1c2a55') : '#ffffff' } }).png().toBuffer();
 
   // Companions (favourite animal / fruit) go under the text, over the picture.
-  for (const c of page.companions || []) {
+  for (const c of redraw ? [] : page.companions || []) {
     if (!answers[c.kind]) continue;
     const w = P(c.w);
     const img = await sharp(companionFile(c.kind, answers)).resize(w, w, { fit: 'inside' }).png().toBuffer();
@@ -470,13 +473,14 @@ async function renderPage({ book, answers, face, faceLine }, index, px) {
   }
 
   // The child's face, inside the drawn face.
-  if (page.face && (face || faceLine)) {
+  if (!redraw && page.face && (face || faceLine)) {
     const useLine = coloring && page.type !== 'cover';
     if (useLine && faceLine) layers.push(...(await lineFaceLayers(faceLine, px, page.face)));
     else if (!useLine && face) layers.push(...(await storyFaceLayers(base, face, px, page.face)));
   }
 
   const put = (t, cx, top) => layers.push({ input: t.img, left: Math.round(cx - t.w / 2), top: Math.round(top) });
+  if (noText) return sharp(base).composite(layers).flatten({ background: '#ffffff' });
 
   if (page.type === 'cover') {
     const big = await textImage(fill(page.title[lang], answers, lang), { font: 'Lalezar', pt: 96, px, width: px * 0.9, maxH: px * 0.2, color: coloring ? '#e4572e' : '#ffd166' });

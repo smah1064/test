@@ -27,11 +27,12 @@
     hasPhoto: false, // the server already has a photo for this book
     design: null, // { id, editToken, version, pages, ... }
     page: 0,
+    aiConsent: !!saved.aiConsent,
     dirty: true,
     cartIndex: params.has('cart') ? Number(params.get('cart')) : null,
   };
   const remember = () => {
-    try { localStorage.setItem(KEY, JSON.stringify({ answers: state.answers, lang: state.lang, size: state.size.id })); } catch (e) { /* private mode */ }
+    try { localStorage.setItem(KEY, JSON.stringify({ answers: state.answers, lang: state.lang, size: state.size.id, aiConsent: state.aiConsent })); } catch (e) { /* private mode */ }
   };
 
   // Re-open a book that is already in the cart.
@@ -42,6 +43,7 @@
         const d = await POD.api('/api/books/designs/' + encodeURIComponent(item.designId), { headers: { 'x-edit-token': item.editToken } });
         state.design = { ...d, editToken: item.editToken };
         state.answers = d.answers;
+        state.aiConsent = !!d.aiConsent;
         state.size = product.sizes.find((s) => s.id === d.size.id) || state.size;
         state.hasPhoto = true;
         state.dirty = false;
@@ -111,7 +113,15 @@
     changed();
   });
 
-  // ---------- Photo: crop the face into the circle ----------
+  // ---------- AI drawing (optional, needs the parent's consent) ----------
+  $('bk-ai').hidden = !book.ai;
+  $('bk-ai-ok').checked = state.aiConsent;
+  $('bk-ai-ok').addEventListener('change', (e) => {
+    state.aiConsent = e.target.checked;
+    changed();
+  });
+
+  // ---------- Photo: crop the face into the oval ----------
   const cv = $('bk-canvas');
   const ctx = cv.getContext('2d');
   const crop = { img: null, zoom: 1, x: 0, y: 0 }; // x/y: image position of the oval's centre
@@ -278,9 +288,9 @@
       if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
       return false;
     }
-    busy(true, t('book.making'));
+    busy(true, t(book.ai && state.aiConsent && (state.face || !state.design) ? 'book.drawing' : 'book.making'));
     try {
-      const body = { answers: state.answers, lang: state.lang, size: state.size.id };
+      const body = { answers: state.answers, lang: state.lang, size: state.size.id, aiConsent: !!(book.ai && state.aiConsent) };
       if (state.face) body.face = exportFace();
       let d;
       if (!state.design) {
@@ -293,6 +303,8 @@
       state.face = null;
       state.hasPhoto = true;
       state.dirty = false;
+      if (book.ai && state.aiConsent && d.cartoon === 'failed') POD.toast(t('book.cartoonFailed'));
+      if (book.ai && state.aiConsent && d.cartoon === 'limit') POD.toast(t('book.cartoonLimit'));
       $('bk-crop').hidden = true;
       renderButtons();
       renderThumbs();

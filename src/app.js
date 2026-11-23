@@ -28,6 +28,7 @@ const notify = require('./notify');
 const { Library, CATEGORIES: DESIGN_CATEGORIES } = require('./library');
 const security = require('./security');
 const books = require('./books');
+const cartoon = require('./cartoon');
 let sharpModule = null;
 const sharp = () => (sharpModule ||= require('sharp'));
 let printfilesModule = null;
@@ -178,6 +179,7 @@ function adminItem(order, item, index) {
     customer: adminCustomer(order.customer),
     payment: order.payment,
     orderTotal: order.total,
+    redraw: item.redraw || null,
   };
 }
 
@@ -187,6 +189,11 @@ const DEFAULT_LIMITS = {
   designsAll: [{ max: 3000, ms: 24 * 3600e3 }],
   orders: [{ max: 5, ms: 10 * 60e3 }, { max: 20, ms: 24 * 3600e3 }],
   shares: [{ max: 10, ms: 60e3 }, { max: 60, ms: 24 * 3600e3 }],
+  // AI cartoon faces for book previews (one image each): per visitor and for the whole shop.
+  cartoon: [{ max: Number(process.env.CARTOON_DAILY_LIMIT) || 4, ms: 24 * 3600e3 }],
+  cartoonAll: [{ max: Number(process.env.CARTOON_GLOBAL_DAILY_LIMIT) || 150, ms: 24 * 3600e3 }],
+  // AI page redraws after orders (about 12-15 per book), for the whole shop.
+  redrawAll: [{ max: Number(process.env.REDRAW_DAILY_PAGES) || 450, ms: 24 * 3600e3 }],
   // WhatsApp/email alerts for the whole shop, so fake orders cannot flood the owner's phone.
   notify: [{ max: 30, ms: 3600e3 }, { max: 200, ms: 24 * 3600e3 }],
 };
@@ -637,7 +644,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   // edit token. Photos are deleted 30 days after the book is shipped.
   const bookFor = (id) => (Object.prototype.hasOwnProperty.call(books.BOOKS, id) ? books.BOOKS[id] : null);
   const bookProduct = (book) => PRODUCTS.find((p) => p.kind === 'book' && p.book === book.id);
-  app.get('/api/books', (req, res) => res.json({ books: Object.values(books.BOOKS).map(books.publicBook) }));
+  app.get('/api/books', (req, res) => res.json({ ai: cartoon.enabled(), books: Object.values(books.BOOKS).map(books.publicBook) }));
   app.get('/api/books/companion/:id.png', (req, res) => {
     const file = books.companionPath(req.params.id);
     if (!file) throw new HttpError(404, 'notFound');
@@ -647,7 +654,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   app.get('/api/books/:id', (req, res) => {
     const book = bookFor(req.params.id);
     if (!book) throw new HttpError(404, 'notFound');
-    res.json(books.publicBook(book));
+    res.json({ ...books.publicBook(book), ai: cartoon.enabled() });
   });
   // A sample cover (no photo) for product cards and the book page before a photo is added.
   const samples = new Map();
@@ -682,18 +689,44 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       throw new HttpError(400, 'bookPhoto');
     }
   }
-  const bookData = (design) => {
-    const face = store.designFile(design.id, 'face.jpg');
-    const line = store.designFile(design.id, 'face-line.png');
+  const readIf = (file) => (fs.existsSync(file) ? fs.readFileSync(file) : null);
+  /** Everything the renderer needs: answers, the face (AI cartoon if there is one), redrawn pages. */
+  const bookData = (design, { withRedraws = true } = {}) => {
+    const f = (name) => store.designFile(design.id, name);
+    const book = bookFor(design.bookId);
+    const redrawn = {};
+    if (withRedraws) book.pages.forEach((_, i) => { const r = readIf(f(`redraw-${i}.jpg`)); if (r) redrawn[i] = r; });
     return {
-      book: bookFor(design.bookId),
+      book,
       answers: design.answers,
       lang: design.lang,
-      face: fs.existsSync(face) ? fs.readFileSync(face) : null,
-      faceLine: fs.existsSync(line) ? fs.readFileSync(line) : null,
+      face: readIf(f('face-cartoon.jpg')) || readIf(f('face.jpg')),
+      faceLine: readIf(f('face-line.png')),
+      redrawn,
     };
   };
-  async function saveBook(design, { answers, lang, face, size }) {
+  /** The AI cartoon face for previews: once per photo, within the daily limits. */
+  async function makeCartoon(design, ip) {
+    const book = bookFor(design.bookId);
+    const photo = readIf(store.designFile(design.id, 'face.jpg'));
+    const drop = async (status, reason) => {
+      fs.rmSync(store.designFile(design.id, 'face-cartoon.jpg'), { force: true });
+      design.cartoon = { status, reason, at: new Date().toISOString() };
+      if (book.kind === 'coloring' && photo) store.writeDesignFile(design.id, 'face-line.png', await books.lineArt(photo));
+    };
+    if (!design.aiConsent || !cartoon.enabled()) return drop('off');
+    if (limiter.hit(`cartoon:${ip}`, LIMITS.cartoon) || limiter.hit('cartoonAll:*', LIMITS.cartoonAll)) return drop('limit');
+    try {
+      const face = await cartoon.cartoonFace(photo, fs.readFileSync(cartoon.STYLE_REFS[book.kind === 'coloring' ? 'coloring' : 'story']), book.kind);
+      store.writeDesignFile(design.id, 'face-cartoon.jpg', face);
+      if (book.kind === 'coloring') store.writeDesignFile(design.id, 'face-line.png', await books.lineArt(face));
+      design.cartoon = { status: 'ready', at: new Date().toISOString() };
+    } catch (e) {
+      console.warn('[cartoon] face failed:', e.reason || '', e.message);
+      await drop('failed', e.reason || 'failed');
+    }
+  }
+  async function saveBook(design, { answers, face, size, aiConsent }, ip) {
     const book = bookFor(design.bookId);
     const product = bookProduct(book);
     try {
@@ -706,12 +739,17 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const sizeDef = product.sizes.find((z) => z.id === size) || product.sizes[0];
     design.size = { id: sizeDef.id, label: sizeDef.label };
     design.price = priceFor(product, sizeDef.id, 1);
+    const consent = aiConsent === true;
+    const consentChanged = consent !== Boolean(design.aiConsent);
+    design.aiConsent = consent;
     if (face) {
       const jpg = await readFace(face);
       store.writeDesignFile(design.id, 'face.jpg', jpg);
       if (book.kind === 'coloring') store.writeDesignFile(design.id, 'face-line.png', await books.lineArt(jpg));
     }
     if (!fs.existsSync(store.designFile(design.id, 'face.jpg'))) throw new HttpError(400, 'bookPhoto');
+    // New photo, or the AI choice changed: make (or drop) the cartoon face.
+    if (face || consentChanged || (consent && cartoon.enabled() && !(design.cartoon && design.cartoon.status === 'ready'))) await makeCartoon(design, ip);
     design.version = (design.version || 0) + 1;
     fs.rmSync(store.designFile(design.id, 'book-print.pdf'), { force: true });
     store.writeDesignFile(design.id, 'book-preview.png', await (await books.renderPage(bookData(design), 0, 600)).png().toBuffer());
@@ -719,7 +757,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   }
   const bookResponse = (design, token) => {
     const { uploadTokenHash, answers, ...pub } = design; // eslint-disable-line no-unused-vars
-    return { ...pub, ...(token ? { editToken: token } : {}), pages: bookFor(design.bookId).pages.length, previewUrl: `/files/designs/${design.id}/book-preview.png?v=${design.version}` };
+    return { ...pub, ...(token ? { editToken: token } : {}), cartoon: design.cartoon ? design.cartoon.status : 'off', pages: bookFor(design.bookId).pages.length, previewUrl: `/files/designs/${design.id}/book-preview.png?v=${design.version}` };
   };
 
   app.post('/api/books/:id/designs', (req, res, next) => {
@@ -753,7 +791,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       };
       store.createDesign(design, {});
       try {
-        await saveBook(design, req.body || {});
+        await saveBook(design, req.body || {}, req.ip);
       } catch (e) {
         fs.rmSync(store.designDir(design.id), { recursive: true, force: true });
         delete store.db.designs[design.id];
@@ -776,7 +814,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   app.put('/api/books/designs/:id', express.json({ limit: '10mb' }), async (req, res, next) => {
     try {
       const design = editableBook(req);
-      await saveBook(design, req.body || {});
+      await saveBook(design, req.body || {}, req.ip);
       res.json(bookResponse(design));
     } catch (e) {
       next(e);
@@ -808,6 +846,100 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       next(e);
     }
   });
+
+  // ---------- AI page redraws for ordered books ----------
+  // Runs one page at a time in the background; progress is kept on the order
+  // item (admin sees it) and survives restarts. A page that fails twice keeps
+  // the preview version, so a book can always be printed.
+  const redrawQueue = [];
+  let redrawBusy = false;
+  function queueRedraw(order, item, { force = false } = {}) {
+    const design = store.getDesign(item.designId);
+    if (!design || design.kind !== 'book' || design.photoRemoved) return false;
+    if (!design.aiConsent || !cartoon.enabled()) {
+      item.redraw = { status: 'off' };
+      store.save();
+      return false;
+    }
+    if (!force && item.redraw && ['done', 'queued', 'running'].includes(item.redraw.status)) return false;
+    const book = bookFor(design.bookId);
+    const pages = book.pages.map((p, i) => (p.face ? i : -1)).filter((i) => i >= 0);
+    if (force) for (const i of pages) fs.rmSync(store.designFile(design.id, `redraw-${i}.jpg`), { force: true });
+    item.redraw = { status: 'queued', total: pages.length, done: 0, failed: [], at: new Date().toISOString() };
+    store.save();
+    if (!redrawQueue.includes(item.id)) redrawQueue.push(item.id);
+    setImmediate(runRedraws);
+    return true;
+  }
+  async function runRedraws() {
+    if (redrawBusy) return;
+    redrawBusy = true;
+    try {
+      while (redrawQueue.length) {
+        const found = store.findItem(redrawQueue[0]);
+        if (!found) { redrawQueue.shift(); continue; }
+        const { item } = found;
+        const design = store.getDesign(item.designId);
+        const book = design && bookFor(design.bookId);
+        if (!book || design.photoRemoved) { redrawQueue.shift(); continue; }
+        item.redraw.status = 'running';
+        store.save();
+        const pages = book.pages.map((p, i) => (p.face ? i : -1)).filter((i) => i >= 0);
+        let waited = false;
+        for (const i of pages) {
+          const file = store.designFile(design.id, `redraw-${i}.jpg`);
+          if (fs.existsSync(file) || item.redraw.failed.includes(i)) continue;
+          // Shop-wide daily budget: wait for it to free up instead of failing.
+          const wait = limiter.hit('redrawAll:*', LIMITS.redrawAll);
+          if (wait) {
+            item.redraw.status = 'waiting';
+            store.save();
+            await new Promise((r) => setTimeout(r, Math.min(wait, 3600) * 1000).unref());
+            waited = true;
+            break;
+          }
+          const data = bookData(design, { withRedraws: false });
+          const input = await (await books.renderPage(data, i, 1024, { noText: true })).jpeg({ quality: 90 }).toBuffer();
+          let ok = false;
+          for (let attempt = 0; attempt < 2 && !ok; attempt++) {
+            try {
+              const img = await cartoon.redrawPage(input, data.face, book.kind);
+              store.writeDesignFile(design.id, `redraw-${i}.jpg`, await sharp()(img).resize(2048, 2048, { fit: 'cover' }).jpeg({ quality: 93 }).toBuffer());
+              ok = true;
+            } catch (e) {
+              console.warn(`[redraw] ${design.id} page ${i} attempt ${attempt + 1}:`, e.reason || '', e.message);
+              if (e.reason === 'off' || e.reason === 'key') break;
+            }
+          }
+          if (!ok) item.redraw.failed.push(i);
+          item.redraw.done = pages.filter((p) => fs.existsSync(store.designFile(design.id, `redraw-${p}.jpg`))).length;
+          fs.rmSync(store.designFile(design.id, 'book-print.pdf'), { force: true });
+          store.save();
+        }
+        if (waited) continue;
+        item.redraw.status = item.redraw.done ? 'done' : 'failed';
+        item.redraw.finishedAt = new Date().toISOString();
+        store.writeDesignFile(design.id, 'book-preview.png', await (await books.renderPage(bookData(design), 0, 600)).png().toBuffer());
+        design.version = (design.version || 0) + 1;
+        store.save();
+        console.log(`[redraw] ${design.id}: ${item.redraw.done}/${item.redraw.total} pages redrawn${item.redraw.failed.length ? `, ${item.redraw.failed.length} kept as preview` : ''}`);
+        redrawQueue.shift();
+      }
+    } catch (e) {
+      console.error('[redraw]', e);
+    } finally {
+      redrawBusy = false;
+    }
+  }
+  // Pick up books that were waiting or half-done when the server restarted.
+  setTimeout(() => {
+    for (const order of store.listOrders()) {
+      for (const item of order.items) {
+        if (item.kind === 'book' && item.redraw && ['queued', 'running', 'waiting'].includes(item.redraw.status) && !redrawQueue.includes(item.id)) redrawQueue.push(item.id);
+      }
+    }
+    runRedraws();
+  }, 3000).unref();
 
   // ---------- Orders ----------
   app.post('/api/orders', express.json({ limit: '100kb' }), (req, res) => {
@@ -879,6 +1011,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       lang: langOf(req),
     });
     res.status(201).json(publicOrder(order));
+    // Books: the AI redraws every page with the child, in the background.
+    for (const item of order.items) if (item.kind === 'book') queueRedraw(order, item);
     // Tell the shop and the customer, after answering: sending never holds up or fails an order.
     if (limiter.hit('notify:*', LIMITS.notify)) {
       console.warn(`[notify] skipped alerts for ${order.number}: too many orders this hour`);
@@ -997,6 +1131,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     res.json({ orders });
   });
 
+  // Redraw a book's pages again (after fixing the AI key, or if the shop wants a fresh try).
+  app.post('/api/admin/items/:itemId/redraw', requireAdmin, (req, res) => {
+    const found = store.findItem(req.params.itemId);
+    if (!found || found.item.kind !== 'book') throw new HttpError(404, 'itemNotFound');
+    if (!cartoon.enabled()) throw new HttpError(400, 'aiOff');
+    queueRedraw(found.order, found.item, { force: true });
+    res.json({ ok: true, redraw: found.item.redraw });
+  });
   app.patch('/api/admin/items/:itemId', requireAdmin, express.json(), (req, res) => {
     const { status, process: method } = req.body || {};
     const found = store.findItem(req.params.itemId);
@@ -1061,6 +1203,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         const title = `${base}-${design.bookId}`;
         if (f === 'proof') return res.download(store.designFile(designId, 'book-preview.png'), `${title}-cover.png`);
         if (f !== 'book-pdf' || design.photoRemoved) throw new HttpError(404, 'notFound');
+        const item = order && order.items.find((it) => it.designId === design.id);
+        if (item && item.redraw && ['queued', 'running', 'waiting'].includes(item.redraw.status) && req.query.now !== '1') {
+          throw new HttpError(409, 'bookDrawing', { done: item.redraw.done || 0, total: item.redraw.total || 0 });
+        }
         const target = store.designFile(designId, 'book-print.pdf');
         if (!fs.existsSync(target)) store.writeDesignFile(designId, 'book-print.pdf', await books.bookPdf(bookData(design), { title }));
         return res.download(target, `${title}.pdf`);
