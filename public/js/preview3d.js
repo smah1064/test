@@ -351,24 +351,42 @@ export function mount(container, { product, color, textures, spin = true }) {
   obj.position.sub(center);
   scene.add(contactShadow(Math.max(size.x, size.z) * 1.6, -size.y / 2 - 0.05));
 
-  const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 500);
+  // Fit the whole product in view on any screen shape (phones are narrow, so
+  // the horizontal field of view often decides), and keep the depth range
+  // tight: many phones have a 16-bit depth buffer, and a wide near/far range
+  // makes nearby surfaces flicker into stripes (z-fighting).
   const radius = Math.max(size.x, size.y, size.z) * 0.62;
-  const dist = radius / Math.sin(THREE.MathUtils.degToRad(16)) * 1.05;
-  camera.position.set(dist * 0.18, dist * 0.16, dist * 0.97);
+  const camera = new THREE.PerspectiveCamera(32, 1, 1, 100);
+  const viewDir = new THREE.Vector3(0.18, 0.16, 0.97).normalize();
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.enablePan = false;
-  controls.minDistance = dist * 0.45;
-  controls.maxDistance = dist * 2.2;
   controls.autoRotate = spin;
   controls.autoRotateSpeed = 1.6;
+  let fitted = 0;
+  const fit = (aspect) => {
+    const halfV = THREE.MathUtils.degToRad(camera.fov / 2);
+    const halfH = Math.atan(Math.tan(halfV) * aspect);
+    const dist = (radius / Math.sin(Math.min(halfV, halfH))) * 1.05;
+    controls.minDistance = dist * 0.45;
+    controls.maxDistance = dist * 2.2;
+    camera.near = Math.max(dist * 0.03, dist * 0.45 - radius * 1.45);
+    camera.far = dist * 2.2 + radius * 2;
+    // Keep the current viewing direction; only the distance changes.
+    const dir = fitted ? camera.position.clone().sub(controls.target).normalize() : viewDir;
+    const cur = fitted ? camera.position.distanceTo(controls.target) / fitted : 1;
+    camera.position.copy(controls.target).addScaledVector(dir, dist * cur);
+    fitted = dist;
+  };
 
   const resize = () => {
     const w = container.clientWidth || 400;
     const h = container.clientHeight || 400;
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
+    fit(camera.aspect);
     camera.updateProjectionMatrix();
+    controls.update();
   };
   const ro = new ResizeObserver(resize);
   ro.observe(container);

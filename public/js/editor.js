@@ -88,6 +88,22 @@
       toast(t('msg.openFailed', { msg: e.message }), 'error');
     }
   }
+  // Drafts: designs started from the products page are kept in this browser
+  // until they go into the cart (editing a cart item never touches them).
+  const draftMode = !params.get('design');
+  let restoredDraft = false;
+  let bootDone = false; // autosave starts once the editor has loaded
+  if (draftMode) {
+    const draft = await POD.drafts.get(st.product.id);
+    if (draft && draft.designs && Object.values(draft.designs).some((o) => o && o.length)) {
+      st.colorId = draft.colorId;
+      st.sizeId = draft.sizeId;
+      for (const [sideId, objs] of Object.entries(draft.designs)) {
+        if (st.product.sides.some((s) => s.id === sideId)) st.designs[sideId] = await blobifyImages(objs || []);
+      }
+      restoredDraft = true;
+    }
+  }
   st.colorId = st.product.colors.some((c) => c.id === st.colorId) ? st.colorId : st.product.colors[0].id;
   st.sizeId = st.product.sizes.some((s) => s.id === st.sizeId) ? st.sizeId : st.product.sizes[0].id;
   st.side = st.product.sides.find((s) => (st.designs[s.id] || []).length)?.id || st.product.sides[0].id;
@@ -303,15 +319,45 @@
     return imageCache.get(url);
   }
 
+  /**
+   * The real product photo, recoloured, placed so its measured print area
+   * sits exactly on the side's print area. Dark parts that are never printed
+   * on (camera lenses) go on top as the overlay.
+   */
+  async function photoMockup(cfg, side, hex) {
+    const P = window.POD_PHOTOS;
+    const at = P.placement(cfg, side.printArea);
+    const [cv, dark] = await Promise.all([
+      P.render(cfg, hex, { width: 1000, cutout: true }),
+      cfg.keepDark ? P.darkOverlay(cfg, 1000) : null,
+    ]);
+    const image = (el) => new fabric.Image(el, {
+      originX: 'left', originY: 'top', left: at.x, top: at.y, scaleX: at.k / el.scale, scaleY: at.k / el.scale,
+    });
+    return [image(cv), dark ? image(dark) : null];
+  }
+
   let mockupToken = 0;
   async function applyMockup(sideId = st.side) {
     const token = ++mockupToken;
     const side = sideDef(sideId);
     const hex = color().hex;
-    const [bg, ov] = await Promise.all([
-      fabricImage(POD.mockupUrl(side, hex)),
-      side.overlay ? fabricImage(POD.mockupUrl(side, hex, 'overlay')) : null,
-    ]);
+    let bg;
+    let ov;
+    const photo = window.POD_PHOTOS && window.POD_PHOTOS.forSide(st.product.id, side.id);
+    if (photo) {
+      try {
+        [bg, ov] = await photoMockup(photo, side, hex);
+      } catch (e) {
+        bg = null;
+      }
+    }
+    if (!bg) {
+      [bg, ov] = await Promise.all([
+        fabricImage(POD.mockupUrl(side, hex)),
+        side.overlay ? fabricImage(POD.mockupUrl(side, hex, 'overlay')) : null,
+      ]);
+    }
     if (token !== mockupToken) return;
     canvas.backgroundImage = bg;
     canvas.overlayImage = ov;
@@ -1682,6 +1728,7 @@
     return st.product.sides.filter((s) => (s.id === st.side ? canvas.getObjects().length : (st.designs[s.id] || []).length) > 0);
   }
   function refreshChrome() {
+    if (bootDone) scheduleDraft();
     const p = st.product;
     const size = p.sizes.find((s) => s.id === st.sizeId);
     const n = designedSides().length;
@@ -1765,6 +1812,47 @@
     return withArtworkOnly(() => canvas.toCanvasElement(scale, { left: 0, top: 0, width: W, height: H }), rects().trim);
   }
 
+  // ---------- Saved design (draft) ----------
+  let draftTimer = null;
+  let draftSaving = Promise.resolve(true);
+  /** Save the current design for this product in the browser (or forget it when empty). */
+  function saveDraft() {
+    clearTimeout(draftTimer);
+    if (!draftMode || st.exporting) return draftSaving;
+    const designs = {};
+    for (const s of st.product.sides) designs[s.id] = s.id === st.side ? serialize() : (st.designs[s.id] || []);
+    const empty = !Object.values(designs).some((o) => o.length);
+    const productId = st.product.id;
+    const meta = { productId, colorId: st.colorId, sizeId: st.sizeId, side: st.side };
+    let preview = null;
+    if (!empty) {
+      try {
+        preview = exportPreview(); // a Blob promise for the products page thumbnail
+      } catch (e) {
+        preview = null;
+      }
+    }
+    draftSaving = draftSaving.then(async () => {
+      if (empty) {
+        await POD.drafts.remove(productId);
+        return true;
+      }
+      const inl = {};
+      for (const [id, objs] of Object.entries(designs)) inl[id] = await inlineImages(objs);
+      const blob = preview ? await preview.catch(() => null) : null;
+      return POD.drafts.set(productId, { ...meta, designs: inl, preview: blob, savedAt: new Date().toISOString() });
+    });
+    return draftSaving;
+  }
+  function scheduleDraft() {
+    if (!draftMode) return;
+    clearTimeout(draftTimer);
+    draftTimer = setTimeout(saveDraft, 1200);
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden' && draftTimer) saveDraft();
+  });
+
   function busy(on, text) {
     $('busy').hidden = !on;
     if (text) $('busy-text').textContent = text;
@@ -1843,6 +1931,11 @@
       else cart.push(entry);
       POD.setCart(cart);
       st.dirty = false;
+      if (draftMode) {
+        clearTimeout(draftTimer);
+        await draftSaving;
+        await POD.drafts.remove(st.product.id);
+      }
       location.href = '/cart?added=1';
     } catch (e) {
       await showSide(original).catch(() => {});
@@ -1878,8 +1971,40 @@
     window.POD_PREVIEW.open({ product: st.product, color: color(), sides, startSide: original });
   }));
 
+  $('preview-open-m').addEventListener('click', () => $('preview-open').click());
+
+  // Phones scroll the page to show the on-screen keyboard while typing on the
+  // product and leave it scrolled afterwards, hiding the top toolbar. The
+  // editor page never scrolls, so put it back whenever nothing is being typed.
+  const typing = () => {
+    const a = document.activeElement;
+    return a && (a.tagName === 'TEXTAREA' || a.tagName === 'INPUT' || a.isContentEditable);
+  };
+  const phoneLayout = window.matchMedia('(max-width: 820px)');
+  const unscroll = () => {
+    if (!phoneLayout.matches || typing()) return;
+    if (window.scrollY || window.scrollX) window.scrollTo(0, 0);
+    for (const el of [document.querySelector('main'), document.querySelector('.editor'), document.querySelector('.stage-wrap')]) {
+      if (el && el.scrollTop) el.scrollTop = 0;
+    }
+  };
+  window.addEventListener('scroll', () => setTimeout(unscroll, 150), { passive: true });
+  document.addEventListener('focusout', () => setTimeout(unscroll, 300));
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', () => setTimeout(unscroll, 300));
+
+  $('save-draft').addEventListener('click', serial(async () => {
+    commit();
+    busy(true, t('busy.saving'));
+    const ok = await saveDraft();
+    busy(false);
+    if (!ok) return toast(t('draft.saveFailed'), 'error');
+    st.dirty = false;
+    location.href = '/?saved=' + encodeURIComponent(st.product.id) + '#products';
+  }));
+
   window.addEventListener('beforeunload', (e) => {
-    if (st.dirty) {
+    if (draftMode && draftTimer) saveDraft();
+    if (st.dirty && !draftMode) {
       e.preventDefault();
       e.returnValue = '';
     }
@@ -1909,5 +2034,7 @@
   refreshChrome();
   renderProps();
   renderCheck();
+  bootDone = true;
+  if (restoredDraft) toast(t('draft.restored'));
   window.__editor = { canvas, st, rects, checkIssues, exportSvg, exportPrint }; // handy for debugging in the console
 })();

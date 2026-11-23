@@ -114,7 +114,9 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .product-card { overflow: hidden; display: flex; flex-direction: column; text-decoration: none; transition: transform .15s, box-shadow .15s; }
 .product-card:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(16, 24, 40, .12); }
 .product-card .thumb { background: linear-gradient(180deg, #f1f3f6, #e8ebf0); aspect-ratio: 5 / 5; display: grid; place-items: center; overflow: hidden; }
+.product-card .thumb { position: relative; }
 .product-card .thumb img { width: 86%; }
+.saved-badge { position: absolute; top: 10px; inset-inline-start: 10px; background: var(--ok, #12805c); color: #fff; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; }
 .product-card .body { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
 .product-card h3 { font-size: 16px; margin: 0; }
 .product-card .desc { font-size: 13px; color: var(--ink-3); margin: 0; line-height: 1.45; flex: 1; }
@@ -181,6 +183,9 @@ body.editor-page main { display: flex; min-height: 0; }
 .layers li span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .layers li button { border: 0; background: none; cursor: pointer; color: var(--ink-3); padding: 2px; }
 .panel-foot { border-top: 1px solid var(--line); padding: 14px 16px; background: #fff; }
+.foot-actions { display: flex; gap: 8px; }
+.foot-actions #add-to-cart { flex: 1; }
+.foot-actions #save-draft { flex: none; }
 .price-line { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
 .price-line .amount { font-size: 22px; font-weight: 800; }
 .price-note { font-size: 12px; color: var(--ink-3); }
@@ -387,7 +392,9 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
   .panel-foot .price-line > .text-end { display: none; }
   .panel-foot .amount { font-size: 18px; }
   .panel-foot .price-note { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .panel-foot #add-to-cart { width: auto; flex: none; padding: 11px 18px; font-size: 15px; }
+  .panel-foot #add-to-cart, .panel-foot #save-draft, .panel-foot #preview-open-m { width: auto; flex: none; padding: 11px 12px; font-size: 14px; }
+  .panel-foot #preview-open-m { gap: 5px; align-items: center; }
+  .foot-actions { flex: none; }
 
   .flyout {
     position: fixed; inset-inline: 0; bottom: 0; top: auto; width: auto; margin: 0;

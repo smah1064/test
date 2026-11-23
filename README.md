@@ -26,6 +26,10 @@ Requires Node 18+. There is no database to set up: data is stored under `data/` 
 
 **Storefront (`/`)**: 21 products in four categories: t-shirt, oversized t-shirt, polo, kids t-shirt, kids hoodie, baby onesie, hoodie, zip hoodie, sweatshirt, shorts, denim jacket (back), apron, cap, mug, cushion, framed poster, water bottle, tote bag, phone case, mouse pad and notebook. Each has colours, sizes and a mockup drawn in its colour.
 
+Product cards, the editor and the cart thumbnails all show **real product photos**, recoloured to the chosen colour (drawn mockups are only a fallback for products without a photo).
+
+**Saved designs**: the editor saves the design in the shopper's browser as they work (IndexedDB, so uploaded photos fit), and the **Save** button takes them back to the products page, where the card shows their design with a "Saved design" badge. Opening the product again restores it. The draft is cleared once the design goes into the cart.
+
 **DTF gang sheet builder (`/gangsheet`)**: customers upload their own logos and artwork (PNG, JPG or WebP), set each one's size in cm and how many copies they need, and the site packs them onto a 56 cm DTF film roll (MaxRects nesting, pieces rotated when that saves film). Empty transparent edges are trimmed automatically, each design shows its DPI at the chosen size, and plain backgrounds can be removed with one click. The price is per metre of film (400 EGP/m, minimum 50 cm, in 10 cm steps). The sheet goes into the cart like any other item, and the server re-checks the layout and price.
 
 **Design editor (`/editor`)**, built on Fabric.js:
@@ -122,4 +126,4 @@ Add an entry to `PRODUCTS` in `src/products.js`. Mockups are SVGs in a 500 × 60
 Each photo is a white (or natural) product on a light background, plus a mask from background removal. To add or replace one:
 
 1. Save the photo as `public/mockups/photos/<name>.webp`, 1000 px wide, and its mask as `<name>-mask.png` (white = product).
-2. Add an entry to `public/js/photo-mockups.js` with the print rectangle in photo pixels and the warp type. Set `base` if the product in the photo isn't white.
+2. Add an entry to `public/js/photo-mockups.js` with the print rectangle in photo pixels and the warp type. Set `base` if the product in the photo isn't white. The same rectangle places the photo in the editor, so the print area lines up with the product.

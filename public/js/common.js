@@ -194,6 +194,35 @@
   else initChrome();
   window.addEventListener('storage', (e) => e.key === CART_KEY && updateCartBadge());
 
+  // ---------- Saved designs (drafts) ----------
+  // One unfinished design per product, kept in this browser (IndexedDB, so
+  // uploaded photos fit). Every call resolves, even where storage is blocked.
+  const drafts = (() => {
+    let dbp = null;
+    const open = () => dbp || (dbp = new Promise((resolve, reject) => {
+      const req = indexedDB.open('pod-drafts', 1);
+      req.onupgradeneeded = () => req.result.createObjectStore('drafts');
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    }));
+    const run = async (mode, fn) => {
+      const db = await open();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction('drafts', mode);
+        const req = fn(tx.objectStore('drafts'));
+        tx.oncomplete = () => resolve(req ? req.result : undefined);
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error);
+      });
+    };
+    return {
+      get: (productId) => run('readonly', (s) => s.get(productId)).catch(() => null),
+      set: (productId, draft) => run('readwrite', (s) => s.put(draft, productId)).then(() => true).catch(() => false),
+      remove: (productId) => run('readwrite', (s) => s.delete(productId)).catch(() => null),
+      all: () => run('readonly', (s) => s.getAll()).catch(() => []),
+    };
+  })();
+
   window.POD = {
     get lang() {
       return lang;
@@ -201,6 +230,6 @@
     t, tr, setLang, applyI18n,
     loadCatalog, fillMockup, mockupUrl, svgDataUrl, luminance,
     money, date, num,
-    getCart, setCart, updateCartBadge, toast, esc, api,
+    getCart, setCart, updateCartBadge, toast, esc, api, drafts,
   };
 })();
