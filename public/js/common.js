@@ -192,8 +192,21 @@
     return body;
   }
 
+  /** "Account" in every shop header (next to the cart): a person icon, with the word on wider screens. */
+  function addAccountLink() {
+    const cartLink = document.querySelector('.site-header nav .cart-link');
+    if (!cartLink || document.querySelector('[data-account-link]')) return;
+    const a = document.createElement('a');
+    a.href = '/account';
+    a.className = 'acct-link';
+    a.setAttribute('data-account-link', '');
+    a.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg><span data-i18n="nav.account"></span>';
+    cartLink.before(a);
+  }
   function initChrome() {
+    addAccountLink();
     applyI18n();
+    document.querySelectorAll('[data-account-link]').forEach((a) => a.setAttribute('aria-label', t('nav.account')));
     updateCartBadge();
     document.querySelectorAll('[data-lang-toggle]').forEach((btn) => {
       btn.addEventListener('click', () => setLang(lang === 'ar' ? 'en' : 'ar'));

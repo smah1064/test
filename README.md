@@ -188,6 +188,17 @@ In the editor, "Remove background (AI)" on a selected photo, or "Remove the back
 
 Admin → **Coupons**: create codes for a percentage off (optionally capped), an amount off, or free shipping, with an optional minimum order, start/end dates, total uses, uses per customer (by mobile number) and categories. Pause, edit or delete them; each shows how often it was used and the discount given. Customers type the code in the cart; the server checks it again when the order is placed (uses are counted from the saved orders under the store lock, so several app copies can't go over a limit). The discount is shown in the cart, on the order page, in the emails, in the admin order details and in the Accounts report and CSV (`src/coupons.js`).
 
+## Customer accounts
+
+Customers can create an account at `/account` (name, mobile number, optional email, password of 8+ characters) or from the "Account" link in the header, and sign in with their mobile number or email.
+
+- **My orders**: every order placed while signed in, with its status (received, printing, shipped) and a link to the order page.
+- **Details & address**: name, email and a delivery address. Checkout fills them in for signed-in customers; the address of the first order is saved if the account has none.
+- **Password**: change it (this signs out every other device). **Forgot password** sends a link valid for 1 hour by email (when the account has an email and Brevo is set up); otherwise it offers to ask the shop on WhatsApp.
+- Accounts are optional: guests can still order without one.
+
+Passwords are stored as scrypt hashes. The session is a signed, httpOnly cookie (`pod_c`, 60 days) whose key comes from the shop's secret file, so every app copy accepts it (`src/customers.js`).
+
 ## Printing houses
 
 Admin → **Printing houses** tab: save each printing house (name, email and/or WhatsApp number, how you usually send), and pick which one prints each product.

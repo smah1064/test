@@ -31,6 +31,7 @@ const dispatch = require('./dispatch');
 const accounting = require('./accounting');
 const bgremove = require('./bgremove');
 const coupons = require('./coupons');
+const customers = require('./customers');
 
 // Prices the owner changed in the admin are laid over the built-in ones.
 accounting.initPricing(PRODUCTS, EXTRA_SIDE_PRICE);
@@ -242,6 +243,11 @@ const DEFAULT_LIMITS = {
   // AI background removal (about 2 s of server time each).
   removeBg: [{ max: 20, ms: 10 * 60e3 }, { max: 80, ms: 24 * 3600e3 }],
   removeBgAll: [{ max: 1500, ms: 24 * 3600e3 }],
+  // Customer accounts: sign-in attempts, new accounts, password-reset emails.
+  accountLogin: [{ max: 10, ms: 15 * 60e3 }, { max: 60, ms: 24 * 3600e3 }],
+  accountLoginId: [{ max: 10, ms: 3600e3 }],
+  accountSignup: [{ max: 5, ms: 3600e3 }, { max: 20, ms: 24 * 3600e3 }],
+  accountForgot: [{ max: 5, ms: 3600e3 }],
   // Printing houses downloading their files.
   downloads: [{ max: 200, ms: 3600e3 }],
 };
@@ -1113,6 +1119,134 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const product = getProduct(d.productId);
     return product ? priceFor(product, d.size.id, d.sides.length) : null;
   };
+  // ---------- Customer accounts ----------
+  const customerList = () => store.db.customers || [];
+  const findCustomer = (id) => customerList().find((x) => x.id === id) || null;
+  const currentCustomer = (req) => customers.readSession(auth.customerKey, customers.tokenFrom(req), findCustomer);
+  const isHttps = (req) => String(req.get('x-forwarded-proto') || req.protocol).split(',')[0].trim() === 'https';
+  const setSession = (req, res, cust) => res.set('Set-Cookie', customers.cookie(cust ? customers.sessionToken(auth.customerKey, cust) : '', { secure: isHttps(req) }));
+  const signedIn = (req) => {
+    const me = currentCustomer(req);
+    if (!me) throw new HttpError(401, 'acctSignIn');
+    return me;
+  };
+  app.get('/api/account', (req, res) => {
+    res.set('Cache-Control', 'private, no-store');
+    const me = currentCustomer(req);
+    res.json({ customer: me ? customers.publicCustomer(me) : null, emailReset: notify.emailReady() });
+  });
+  app.post('/api/account/signup', express.json({ limit: '10kb' }), (req, res) => {
+    const { fields, error } = customers.cleanSignup(req.body);
+    if (error) throw new HttpError(400, error);
+    rateLimit(req, 'accountSignup');
+    const { salt, hash } = customers.hashPassword(fields.password);
+    const created = store.mutate((db) => {
+      db.customers ||= [];
+      if (db.customers.some((x) => x.phone === fields.phone)) throw new HttpError(409, 'acctPhoneTaken');
+      if (fields.email && db.customers.some((x) => x.email === fields.email)) throw new HttpError(409, 'acctEmailTaken');
+      const cust = { id: crypto.randomUUID(), name: fields.name, phone: fields.phone, email: fields.email, salt, passHash: hash, pv: 1, createdAt: new Date().toISOString() };
+      db.customers.push(cust);
+      return cust;
+    });
+    setSession(req, res, created);
+    res.status(201).json({ customer: customers.publicCustomer(created) });
+  });
+  app.post('/api/account/login', express.json({ limit: '10kb' }), (req, res) => {
+    const { login, password } = req.body || {};
+    rateLimit(req, 'accountLogin');
+    const key = customers.loginKey(login);
+    const cust = key && customerList().find((x) => (key.phone ? x.phone === key.phone : x.email === key.email));
+    if (cust) rateLimit(req, 'accountLoginId', cust.id);
+    // Same answer whether the account exists or not.
+    if (!cust || !customers.checkPassword(cust, password)) throw new HttpError(401, 'acctWrong');
+    setSession(req, res, cust);
+    res.json({ customer: customers.publicCustomer(cust) });
+  });
+  app.post('/api/account/logout', (req, res) => {
+    setSession(req, res, null);
+    res.json({ ok: true });
+  });
+  app.put('/api/account', express.json({ limit: '10kb' }), (req, res) => {
+    const me = signedIn(req);
+    const b = req.body || {};
+    const name = String(b.name || '').trim().replace(/\s+/g, ' ').slice(0, 120);
+    const email = String(b.email || '').trim().toLowerCase().slice(0, 200);
+    if (name.length < 2) throw new HttpError(400, 'acctName');
+    if (email && !EMAIL_RE.test(email)) throw new HttpError(400, 'badEmail');
+    let address = null;
+    if (b.address && typeof b.address === 'object' && (b.address.address || b.address.city)) {
+      const a = b.address;
+      address = {
+        governorate: governorate(a.governorate) ? a.governorate : '',
+        city: String(a.city || '').trim().slice(0, 100),
+        address: String(a.address || '').trim().slice(0, 300),
+        notes: String(a.notes || '').trim().slice(0, 500),
+      };
+    }
+    const updated = store.mutate((db) => {
+      const cust = (db.customers || []).find((x) => x.id === me.id);
+      if (!cust) throw new HttpError(401, 'acctSignIn');
+      if (email && db.customers.some((x) => x.email === email && x.id !== cust.id)) throw new HttpError(409, 'acctEmailTaken');
+      Object.assign(cust, { name, email });
+      if (address) cust.address = address;
+      return cust;
+    });
+    res.json({ customer: customers.publicCustomer(updated) });
+  });
+  app.post('/api/account/password', express.json({ limit: '10kb' }), (req, res) => {
+    const me = signedIn(req);
+    const { current, password } = req.body || {};
+    rateLimit(req, 'accountLoginId', me.id);
+    if (!customers.checkPassword(me, current)) throw new HttpError(401, 'acctWrongCurrent');
+    const weak = customers.passwordProblem(String(password || ''));
+    if (weak) throw new HttpError(400, weak);
+    const { salt, hash } = customers.hashPassword(password);
+    const updated = store.mutate((db) => {
+      const cust = db.customers.find((x) => x.id === me.id);
+      Object.assign(cust, { salt, passHash: hash, pv: (cust.pv || 1) + 1 }); // other devices are signed out
+      return cust;
+    });
+    setSession(req, res, updated);
+    res.json({ ok: true });
+  });
+  app.get('/api/account/orders', (req, res) => {
+    const me = signedIn(req);
+    res.set('Cache-Control', 'private, no-store');
+    res.json({ orders: store.listOrders().filter((o) => o.customerId === me.id).slice().reverse().map(publicOrder) });
+  });
+  app.post('/api/account/forgot', express.json({ limit: '10kb' }), async (req, res, next) => {
+    try {
+      rateLimit(req, 'accountForgot');
+      const key = customers.loginKey((req.body || {}).login);
+      const cust = key && customerList().find((x) => (key.phone ? x.phone === key.phone : x.email === key.email));
+      const lang = langOf(req);
+      // Only by email (a link valid for 1 hour); otherwise the shop helps on WhatsApp.
+      if (cust && cust.email && notify.emailReady()) {
+        const link = `${notify.siteUrl() || `${isHttps(req) ? 'https' : 'http'}://${req.get('host')}`}/account?reset=${encodeURIComponent(customers.resetToken(auth.customerKey, cust))}`;
+        const ar = lang === 'ar';
+        const subject = ar ? 'إعادة تعيين كلمة المرور · ون أوف برنت' : 'Reset your password · OneOff Print';
+        const text = ar ? `اضغط الرابط ده خلال ساعة عشان تختار كلمة مرور جديدة:\n${link}\nلو مش انت اللي طلبت ده، تجاهل الرسالة.` : `Open this link within 1 hour to choose a new password:\n${link}\nIf you didn't ask for this, ignore this email.`;
+        notify.emailTo(cust.email, subject, `<p dir="${ar ? 'rtl' : 'ltr'}">${text.replace(/\n/g, '<br>').replace(link, `<a href="${link}">${link}</a>`)}</p>`, text).catch((e) => console.warn('[account] reset email failed:', e.message));
+      }
+      // The same answer either way, so nobody can find out who has an account.
+      res.json({ ok: true, byEmail: notify.emailReady(), whatsapp: notify.shopWhatsApp() || null });
+    } catch (e) {
+      next(e);
+    }
+  });
+  app.post('/api/account/reset', express.json({ limit: '10kb' }), (req, res) => {
+    const { token, password } = req.body || {};
+    rateLimit(req, 'accountLogin');
+    const cust = customers.readReset(auth.customerKey, token, findCustomer);
+    if (!cust) throw new HttpError(400, 'acctResetExpired');
+    const weak = customers.passwordProblem(String(password || ''));
+    if (weak) throw new HttpError(400, weak);
+    const { salt, hash } = customers.hashPassword(password);
+    const updated = store.mutate((db) => Object.assign(db.customers.find((x) => x.id === cust.id), { salt, passHash: hash, pv: (cust.pv || 1) + 1 }));
+    setSession(req, res, updated);
+    res.json({ customer: customers.publicCustomer(updated) });
+  });
+
   // ---------- Coupons ----------
   const findCoupon = (code) => (store.db.coupons || []).find((c) => c.code === coupons.normCode(code)) || null;
   const couponLine = (design, price) => {
@@ -1219,11 +1353,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (expectedTotal !== undefined && !(Math.abs(Number(expectedTotal) - total) <= 0.009)) {
       throw new HttpError(409, 'priceChanged', { total });
     }
+    const me = currentCustomer(req);
     const order = store.createOrder({
       id: crypto.randomUUID(),
       createdAt: now,
       currency: CURRENCY,
       customer: c,
+      ...(me ? { customerId: me.id } : {}),
       items,
       subtotal,
       ...(applied ? { discount, coupon: applied } : {}),
@@ -1245,6 +1381,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         if (!r.ok) throw new HttpError(409, r.reason, r.params || {});
       }
     });
+    // A signed-in customer without a saved address keeps this one for next time.
+    if (me && !me.address) {
+      store.mutate((db) => {
+        const cust = (db.customers || []).find((x) => x.id === me.id);
+        if (cust && !cust.address) cust.address = { governorate: c.governorate, city: c.city, address: c.address, notes: c.notes || '' };
+      });
+    }
     res.status(201).json(publicOrder(order));
     // Books: the AI redraws every page with the child, in the background.
     for (const item of order.items) if (item.kind === 'book') queueRedraw(order, item);

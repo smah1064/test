@@ -77,6 +77,7 @@ input[type=text], input[type=email], input[type=tel], input[type=number], input[
 }
 input:focus, select:focus, textarea:focus { outline: 2px solid #ffc6b8; border-color: var(--accent); }
 textarea { resize: vertical; min-height: 64px; }
+input:disabled, select:disabled, textarea:disabled { background: #f1f3f6; color: var(--ink-2); cursor: not-allowed; }
 input[type=color] { width: 40px; height: 36px; padding: 2px; border: 1px solid var(--line); border-radius: 8px; background: #fff; cursor: pointer; }
 input[type=range] { width: 100%; accent-color: var(--accent); }
 .field { margin-bottom: 14px; }
@@ -786,3 +787,19 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 .coupon-msg { margin: 6px 0 0; color: var(--ok, #2b8a3e); min-height: 1em; }
 .coupon-msg.bad { color: var(--danger, #c0392b); }
 .discount-line { color: var(--ok, #2b8a3e); font-weight: 600; }
+
+/* Customer accounts */
+.acct-link { display: inline-flex; align-items: center; gap: 5px; }
+@media (max-width: 440px) { .acct-link span { display: none; } }
+.acct { max-width: 860px; }
+.acct-card { padding: 20px; max-width: 460px; margin: 24px auto; }
+.acct-tabs { margin-bottom: 16px; }
+.acct-in-card, #acct-in .acct-card { margin: 0; max-width: 560px; }
+.acct-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.acct-order { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 12px 14px; margin-bottom: 10px; text-decoration: none; color: inherit; }
+.acct-order:hover { border-color: var(--accent, #ff5a36); }
+.acct-order-pics { display: flex; gap: 4px; }
+.acct-order-pics img { width: 46px; height: 56px; object-fit: contain; background: #f1f3f6; border-radius: 8px; }
+.acct-order-total { font-weight: 800; }
+.acct-note { margin: -4px 0 12px; color: var(--ink-2); }
+@media (max-width: 560px) { .acct-order { grid-template-columns: minmax(0, 1fr) auto; } .acct-order-pics { display: none; } }

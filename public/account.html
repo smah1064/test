@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>OneOff Print</title>
+  <script>(function(){var l;try{l=localStorage.getItem('pod-lang')}catch(e){}l=l==='en'?'en':'ar';var d=document.documentElement;d.lang=l;d.dir=l==='ar'?'rtl':'ltr'})()</script>
+  <link rel="stylesheet" href="/fonts/fonts.css">
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body data-title-key="acct.pageTitle">
+  <header class="site-header">
+    <div class="container inner">
+      <a class="brand" href="/"><span class="brand-mark">1</span>OneOff Print</a>
+      <nav>
+        <a href="/#products" data-i18n="nav.products"></a>
+        <a href="/designs" data-i18n="nav.designs"></a>
+        <a class="cart-link" href="/cart"><span data-i18n="nav.cart"></span> <span class="badge" data-cart-count hidden>0</span></a>
+        <button class="btn btn-sm lang-toggle" data-lang-toggle data-i18n="lang.other"></button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container acct">
+    <!-- Signed out: sign in / create an account / forgot password -->
+    <section id="acct-out" hidden>
+      <div class="card acct-card">
+        <div class="side-tabs acct-tabs">
+          <button class="side-tab active" type="button" data-acct-tab="in" data-i18n="acct.signIn"></button>
+          <button class="side-tab" type="button" data-acct-tab="up" data-i18n="acct.signUp"></button>
+        </div>
+        <form id="f-in" novalidate>
+          <div class="field"><label for="in-login" data-i18n="acct.login"></label><input type="text" id="in-login" autocomplete="username" dir="ltr" maxlength="200" required></div>
+          <div class="field"><label for="in-pass" data-i18n="acct.password"></label><input id="in-pass" type="password" autocomplete="current-password" maxlength="200" required></div>
+          <button class="btn btn-primary btn-block" type="submit" data-i18n="acct.signIn"></button>
+          <button class="link-btn small" type="button" id="forgot-open" style="margin-top:10px" data-i18n="acct.forgot"></button>
+        </form>
+        <form id="f-up" novalidate hidden>
+          <div class="field"><label for="up-name" data-i18n="checkout.name"></label><input type="text" id="up-name" autocomplete="name" maxlength="120" required></div>
+          <div class="field"><label for="up-phone" data-i18n="checkout.phone"></label><input id="up-phone" type="tel" inputmode="tel" autocomplete="tel" dir="ltr" placeholder="01xxxxxxxxx" maxlength="30" required></div>
+          <div class="field"><label for="up-email" data-i18n="acct.emailOptional"></label><input id="up-email" type="email" autocomplete="email" dir="ltr" maxlength="200"></div>
+          <div class="field"><label for="up-pass" data-i18n="acct.newPassword"></label><input id="up-pass" type="password" autocomplete="new-password" minlength="8" maxlength="200" required></div>
+          <button class="btn btn-primary btn-block" type="submit" data-i18n="acct.create"></button>
+          <p class="muted small" style="margin:10px 0 0;line-height:1.6" data-i18n="acct.why"></p>
+        </form>
+        <form id="f-forgot" novalidate hidden>
+          <p class="muted small" style="margin:0 0 10px;line-height:1.6" data-i18n="acct.forgotText"></p>
+          <div class="field"><label for="fg-login" data-i18n="acct.login"></label><input type="text" id="fg-login" dir="ltr" maxlength="200" required></div>
+          <button class="btn btn-primary btn-block" type="submit" data-i18n="acct.sendLink"></button>
+          <p class="small" id="fg-msg" style="margin:10px 0 0;line-height:1.6"></p>
+        </form>
+        <form id="f-reset" novalidate hidden>
+          <h2 style="font-size:17px;margin:0 0 10px" data-i18n="acct.chooseNew"></h2>
+          <div class="field"><label for="rs-pass" data-i18n="acct.newPassword"></label><input id="rs-pass" type="password" autocomplete="new-password" minlength="8" maxlength="200" required></div>
+          <button class="btn btn-primary btn-block" type="submit" data-i18n="houses.save"></button>
+        </form>
+      </div>
+    </section>
+
+    <!-- Signed in -->
+    <section id="acct-in" hidden>
+      <div class="page-head acct-head">
+        <h1 id="acct-hello"></h1>
+        <button class="btn btn-sm" type="button" id="logout" data-i18n="acct.signOut"></button>
+      </div>
+      <div class="side-tabs acct-tabs" style="margin-bottom:14px">
+        <button class="side-tab active" type="button" data-acct-view="orders" data-i18n="acct.orders"></button>
+        <button class="side-tab" type="button" data-acct-view="profile" data-i18n="acct.profile"></button>
+        <button class="side-tab" type="button" data-acct-view="security" data-i18n="acct.security"></button>
+      </div>
+      <div id="v-orders"></div>
+      <form class="card acct-card" id="v-profile" novalidate hidden>
+        <div class="field"><label for="pf-name" data-i18n="checkout.name"></label><input type="text" id="pf-name" autocomplete="name" maxlength="120"></div>
+        <div class="field"><label data-i18n="checkout.phone"></label><input type="text" id="pf-phone" dir="ltr" disabled></div>
+        <div class="field"><label for="pf-email" data-i18n="checkout.email"></label><input id="pf-email" type="email" dir="ltr" maxlength="200"></div>
+        <h3 style="font-size:15px;margin:16px 0 8px" data-i18n="acct.address"></h3>
+        <div class="field grid-2">
+          <div><label for="pf-gov" data-i18n="checkout.governorate"></label><select id="pf-gov"></select></div>
+          <div><label for="pf-city" data-i18n="checkout.city"></label><input type="text" id="pf-city" maxlength="100"></div>
+        </div>
+        <div class="field"><label for="pf-address" data-i18n="checkout.address"></label><textarea id="pf-address" rows="2" maxlength="300"></textarea></div>
+        <div class="field"><label for="pf-notes" data-i18n="checkout.notes"></label><input type="text" id="pf-notes" maxlength="500"></div>
+        <button class="btn btn-primary" type="submit" data-i18n="houses.save"></button>
+      </form>
+      <form class="card acct-card" id="v-security" novalidate hidden>
+        <div class="field"><label for="pw-cur" data-i18n="acct.currentPassword"></label><input id="pw-cur" type="password" autocomplete="current-password" maxlength="200"></div>
+        <div class="field"><label for="pw-new" data-i18n="acct.newPassword"></label><input id="pw-new" type="password" autocomplete="new-password" minlength="8" maxlength="200"></div>
+        <button class="btn btn-primary" type="submit" data-i18n="acct.changePassword"></button>
+        <p class="muted small" style="margin:10px 0 0" data-i18n="acct.changeNote"></p>
+      </form>
+    </section>
+  </main>
+
+  <footer class="site-footer"><div class="container" data-i18n="footer"></div></footer>
+  <script src="/js/i18n.js"></script>
+  <script src="/js/common.js"></script>
+  <script src="/js/account.js"></script>
+</body>
+</html>

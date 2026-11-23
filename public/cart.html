@@ -38,6 +38,7 @@
 
       <form class="card summary" id="checkout" novalidate>
         <h2 style="font-size:18px" data-i18n="checkout.title"></h2>
+        <p class="small acct-note" id="acct-note"></p>
         <div class="field"><label for="name" data-i18n="checkout.name"></label><input type="text" id="name" name="name" autocomplete="name" maxlength="120" required></div>
         <div class="field"><label for="phone" data-i18n="checkout.phone"></label><input type="tel" id="phone" name="phone" autocomplete="tel" maxlength="30" inputmode="tel" dir="ltr" placeholder="01xxxxxxxxx" required></div>
         <div class="field"><label for="email" data-i18n="checkout.email"></label><input type="email" id="email" name="email" autocomplete="email" maxlength="200" dir="ltr"></div>
@@ -222,8 +223,31 @@
         render();
       });
 
+      // Signed-in customers: their details are filled in and the order is saved to their account.
+      async function prefillAccount() {
+        let me = null;
+        try { me = (await POD.api('/api/account')).customer; } catch (e) { me = null; }
+        const note = document.getElementById('acct-note');
+        if (!me) {
+          note.innerHTML = `${esc(t('acct.checkoutGuest'))} <a href="/account?next=cart">${esc(t('acct.signIn'))}</a>`;
+          return;
+        }
+        note.textContent = t('acct.checkoutAs', { name: me.name });
+        const fill = (id, v) => { const el = document.getElementById(id); if (el && !el.value && v) el.value = v; };
+        fill('name', me.name);
+        fill('phone', me.phone);
+        fill('email', me.email);
+        if (me.address) {
+          fill('governorate', me.address.governorate);
+          fill('city', me.address.city);
+          fill('address', me.address.address);
+          fill('notes', me.address.notes);
+        }
+      }
+
       renderGovernorates();
       render();
+      prefillAccount();
       refreshPrices({ announce: true }).then(render);
       document.addEventListener('pod:langchange', () => { renderGovernorates(); render(); });
       // The cart changed in another tab (an order placed there, an item added).

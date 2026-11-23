@@ -1135,6 +1135,53 @@ test('coupons: admin creates them, checkout applies them, limits hold', async ()
   assert.match((await post('/api/cart/quote', { designIds: [d2.id], couponCode: 'EID20' }).then((x) => x.json())).couponError, /not valid/);
 });
 
+test('customer accounts: sign up, sign in, orders, address, password', async () => {
+  const call = (url, body, cookie, method = 'POST') => fetch(base + url, { method, headers: { 'Content-Type': 'application/json', ...(cookie ? { cookie } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
+  const cookieOf = (r) => (r.headers.get('set-cookie') || '').split(';')[0];
+  assert.deepStrictEqual((await (await fetch(base + '/api/account')).json()).customer, null);
+  assert.strictEqual((await call('/api/account/signup', { name: 'Mona', phone: '01112223334', password: 'short' })).status, 400);
+  let r = await call('/api/account/signup', { name: 'Mona Ali', phone: '0111 222 3334', email: 'Mona@Example.com', password: 'longenough1' });
+  assert.strictEqual(r.status, 201, await r.clone().text());
+  const c1 = cookieOf(r);
+  assert.match(c1, /^pod_c=/);
+  assert.match(r.headers.get('set-cookie'), /HttpOnly/);
+  assert.strictEqual((await r.json()).customer.phone, '01112223334');
+  assert.strictEqual((await call('/api/account/signup', { name: 'Other', phone: '01112223334', password: 'longenough2' })).status, 409, 'phone taken');
+  // Wrong password / right password (by phone or email).
+  assert.strictEqual((await call('/api/account/login', { login: '01112223334', password: 'nope-nope' })).status, 401);
+  r = await call('/api/account/login', { login: 'mona@example.com', password: 'longenough1' });
+  assert.strictEqual(r.status, 200);
+  const c2 = cookieOf(r);
+  assert.strictEqual((await (await fetch(base + '/api/account', { headers: { cookie: c2 } })).json()).customer.name, 'Mona Ali');
+  // An order placed while signed in is in the account, and its address is kept.
+  const d = await makeDesign();
+  r = await fetch(base + '/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json', cookie: c2 }, body: JSON.stringify({ customer: { ...CUSTOMER, phone: '01112223334' }, designIds: [d.id] }) });
+  assert.strictEqual(r.status, 201);
+  const order = await r.json();
+  const mine = await (await fetch(base + '/api/account/orders', { headers: { cookie: c2 } })).json();
+  assert.deepStrictEqual(mine.orders.map((o) => o.id), [order.id]);
+  assert.strictEqual((await fetch(base + '/api/account/orders')).status, 401, 'signed out');
+  const me = (await (await fetch(base + '/api/account', { headers: { cookie: c2 } })).json()).customer;
+  assert.strictEqual(me.address.city, CUSTOMER.city);
+  // Profile update; password change signs out the other device.
+  r = await call('/api/account', { name: 'Mona A.', email: '', address: { governorate: 'giza', city: 'Dokki', address: 'X st' } }, c2, 'PUT');
+  assert.strictEqual((await r.json()).customer.address.city, 'Dokki');
+  assert.strictEqual((await call('/api/account/password', { current: 'wrong', password: 'newpassword9' }, c2)).status, 401);
+  r = await call('/api/account/password', { current: 'longenough1', password: 'newpassword9' }, c2);
+  assert.strictEqual(r.status, 200);
+  const c3 = cookieOf(r);
+  assert.strictEqual((await (await fetch(base + '/api/account', { headers: { cookie: c1 } })).json()).customer, null, 'old device signed out');
+  assert.strictEqual((await (await fetch(base + '/api/account', { headers: { cookie: c3 } })).json()).customer.name, 'Mona A.');
+  // A forged cookie is ignored; sign out clears it.
+  assert.strictEqual((await (await fetch(base + '/api/account', { headers: { cookie: c3.slice(0, -2) + 'xx' } })).json()).customer, null);
+  r = await call('/api/account/logout', undefined, c3);
+  assert.match(r.headers.get('set-cookie'), /Max-Age=0/);
+  // Forgot password answers the same whether or not the account exists.
+  const a = await (await call('/api/account/forgot', { login: '01112223334' })).json();
+  const b = await (await call('/api/account/forgot', { login: '01099999999' })).json();
+  assert.deepStrictEqual(a, b);
+});
+
 const png4 = (w, h) => png(w, h);
 test('two copies of the app on one data folder share orders, sign-ins and edits', async () => {
   const { createApp: make } = require('../src/app');

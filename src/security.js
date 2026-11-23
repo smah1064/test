@@ -132,6 +132,8 @@ class AdminAuth {
     this.key = crypto.createHmac('sha256', secret).update(this.hash).digest();
     // Signs download links sent to printing houses (independent of the password).
     this.linkKey = crypto.createHmac('sha256', secret).update('print-house-links').digest();
+    // Signs customers' sign-in cookies and password-reset links (independent of the admin password).
+    this.customerKey = crypto.createHmac('sha256', secret).update('customer-sessions').digest();
     this.sessions = new Map(); // revoked tokens when there is no store
     this.fails = new Map(); // ip -> [times]
     this.globalFails = [];
