@@ -17,7 +17,7 @@
   const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
   const HISTORY_LIMIT = 60;
   const SNAP_PX = 7;
-  const EXTRA_PROPS = ['name', 'selectable', 'evented'];
+  const EXTRA_PROPS = ['name', 'selectable', 'evented', 'curve', 'mask', 'maskBorder', 'maskBorderColor'];
   const $ = (id) => document.getElementById(id);
   const { esc, money, toast, t, tr } = POD;
   const D = window.POD_DESIGN;
@@ -39,6 +39,10 @@
     originX: 'center',
     originY: 'center',
   });
+  // Bigger handles for fingers.
+  const COARSE = window.matchMedia('(pointer: coarse)').matches;
+  if (COARSE) Object.assign(fabric.Object.prototype, { cornerSize: 13, touchCornerSize: 40, padding: 6 });
+  const MOBILE = window.matchMedia('(max-width: 820px)');
 
   // ---------- Load catalog and (optionally) a saved design ----------
   let catalog;
@@ -102,13 +106,23 @@
     stopContextMenu: true,
     fireRightClick: false,
   });
+  if (COARSE) canvas.selection = false; // one finger drags objects, two fingers zoom
 
   function fit() {
     const stage = $('stage');
-    const base = Math.max(0.3, Math.min((stage.clientWidth - 32) / W, (stage.clientHeight - 32) / H, 1.6));
-    const z = base * st.zoom;
+    // With the phone panel open there is little room: zoom in on the print area instead of the whole product.
+    const focus = MOBILE.matches && st.sheet;
+    const a = area();
+    const base = focus
+      ? Math.min((stage.clientWidth - 16) / (a.w + 48), (stage.clientHeight - 16) / (a.h + 48))
+      : Math.min((stage.clientWidth - 32) / W, (stage.clientHeight - 32) / H, 1.6);
+    const z = Math.max(0.15, base) * st.zoom;
     canvas.setDimensions({ width: Math.round(W * z), height: Math.round(H * z) });
     canvas.setZoom(z);
+    if (focus) {
+      stage.scrollLeft = (a.x + a.w / 2) * z - stage.clientWidth / 2;
+      stage.scrollTop = (a.y + a.h / 2) * z - stage.clientHeight / 2;
+    }
     $('zoom-label').textContent = Math.round(st.zoom * 100) + '%';
     canvas.requestRenderAll();
   }
@@ -137,6 +151,15 @@
     const px = 1 / vt[0];
     ctx.save();
     ctx.transform(vt[0], vt[1], vt[2], vt[3], vt[4], vt[5]);
+    if (crop) {
+      const f = crop.full;
+      const r = cropRect();
+      ctx.fillStyle = 'rgba(15, 17, 22, .55)';
+      ctx.beginPath();
+      ctx.rect(f.L, f.T, f.W, f.H);
+      ctx.rect(r.x, r.y, r.w, r.h);
+      ctx.fill('evenodd');
+    }
     ctx.setLineDash([6 * px, 4 * px]);
     ctx.lineWidth = 1.5 * px;
     ctx.strokeStyle = 'rgba(255, 90, 54, .9)';
@@ -147,7 +170,12 @@
     const s = sideDef();
     ctx.font = `600 ${11 * px}px Cairo, system-ui, sans-serif`;
     ctx.fillStyle = 'rgba(255, 90, 54, .95)';
-    ctx.fillText(t('printArea', { w: POD.num(s.printWidthIn * 2.54), h: POD.num(s.printHeightIn * 2.54) }), a.x, a.y - 6 * px);
+    const dims = { w: POD.num(s.printWidthIn * 2.54), h: POD.num(s.printHeightIn * 2.54) };
+    let label = t('printArea', dims);
+    if (ctx.measureText(label).width > a.w + 30 * px) label = t('printAreaShort', dims);
+    const rtl = POD.lang === 'ar';
+    ctx.textAlign = rtl ? 'right' : 'left';
+    ctx.fillText(label, rtl ? a.x + a.w : a.x, a.y - 6 * px);
     if (st.guides) {
       ctx.setLineDash([]);
       ctx.strokeStyle = '#d946ef';
@@ -163,6 +191,7 @@
   // Snap to the centre and edges of the print area while dragging.
   canvas.on('object:moving', (e) => {
     const o = e.target;
+    if (crop && o === crop.cropper) return clampCropper();
     const a = area();
     const th = SNAP_PX / canvas.getZoom();
     const guides = { v: [], h: [] };
@@ -247,15 +276,39 @@
     if (!st.silent) commit();
   });
   canvas.on('object:removed', () => !st.silent && commit());
-  canvas.on('object:modified', () => commit());
+  canvas.on('object:modified', (e) => {
+    if (crop && e.target === crop.cropper) {
+      clampCropper();
+      canvas.requestRenderAll();
+      return;
+    }
+    commit();
+  });
   canvas.on('text:changed', (e) => {
     fixArabic(e.target);
     renderLayers();
     syncTextField();
     scheduleCommit();
   });
-  canvas.on('text:editing:exited', () => commit());
-  ['selection:created', 'selection:updated', 'selection:cleared'].forEach((ev) => canvas.on(ev, () => { renderProps(); renderLayers(); }));
+  // Curved text is edited straight, then bends back when editing ends.
+  canvas.on('text:editing:entered', (e) => { e.target.initDimensions(); e.target.setCoords(); canvas.requestRenderAll(); });
+  canvas.on('text:editing:exited', (e) => { e.target.initDimensions(); e.target.setCoords(); canvas.requestRenderAll(); commit(); });
+  ['selection:created', 'selection:updated'].forEach((ev) => canvas.on(ev, () => {
+    renderProps();
+    renderLayers();
+    if (MOBILE.matches) setSheet('props');
+  }));
+  let lastCleared = null;
+  canvas.on('selection:cleared', (e) => {
+    lastCleared = { objs: e.deselected || [], at: Date.now() };
+    if (crop) {
+      canvas.setActiveObject(crop.cropper);
+      return;
+    }
+    renderProps();
+    renderLayers();
+    if (st.sheet === 'props') setSheet(null);
+  });
   canvas.on('object:scaling', updateQuality);
   canvas.on('object:rotating', (e) => { const r = $('p-angle'); if (r) r.value = Math.round(e.target.angle); });
 
@@ -277,7 +330,7 @@
   }
   function commit() {
     clearTimeout(commitTimer);
-    if (st.silent) return;
+    if (st.silent || crop) return;
     const snap = JSON.stringify(serialize());
     const h = hist();
     if (h.stack[h.i] !== snap) {
@@ -291,6 +344,7 @@
     refreshChrome();
   }
   async function stepHistory(delta) {
+    cancelCrop();
     commit();
     const h = hist();
     const next = h.i + delta;
@@ -322,6 +376,7 @@
 
   // ---------- Adding things ----------
   function addObject(obj, { select = true, shrinkToFit = true } = {}) {
+    cancelCrop();
     const a = area();
     obj.set({ originX: 'center', originY: 'center', left: a.x + a.w / 2, top: a.y + a.h / 2 });
     const maxW = a.w * 0.85;
@@ -414,6 +469,7 @@
   $('template-grid').addEventListener('click', serial(async (e) => {
     const btn = e.target.closest('[data-tpl]');
     if (!btn) return;
+    cancelCrop();
     const objs = await D.buildTemplate(D.TEMPLATES[Number(btn.dataset.tpl)], area(), inkFor(surfaceHex()));
     st.silent = true;
     canvas.discardActiveObject();
@@ -509,32 +565,13 @@
     }));
   }
 
-  const FILTERS = {
-    white: () => new fabric.Image.filters.RemoveColor({ color: '#ffffff', distance: 0.12 }),
-    gray: () => new fabric.Image.filters.Grayscale(),
-    sepia: () => new fabric.Image.filters.Sepia(),
-  };
-  const FILTER_TYPES = { white: 'RemoveColor', gray: 'Grayscale', sepia: 'Sepia' };
-  const hasFilter = (o, k) => (o.filters || []).some((f) => f && f.type === FILTER_TYPES[k]);
-  function setFilter(o, key, on) {
-    let keep = Object.keys(FILTERS).filter((k) => (k === key ? on : hasFilter(o, k)));
-    // Black & white and vintage are alternatives.
-    if (on && key === 'gray') keep = keep.filter((k) => k !== 'sepia');
-    if (on && key === 'sepia') keep = keep.filter((k) => k !== 'gray');
-    o.filters = keep.map((k) => FILTERS[k]());
-    o.applyFilters();
-    canvas.requestRenderAll();
-    commit();
-    renderProps();
-  }
-
   // ---------- Flyouts ----------
   function closeFlyouts() {
     document.querySelectorAll('.flyout').forEach((f) => (f.hidden = true));
     document.querySelectorAll('.tool').forEach((x) => x.classList.remove('open'));
   }
   let templatesRendered = false;
-  document.querySelectorAll('.tool').forEach((btn) => {
+  document.querySelectorAll('.tool[data-flyout]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const fly = $('flyout-' + btn.dataset.flyout);
       const open = fly.hidden;
@@ -548,6 +585,98 @@
     });
   });
   canvas.on('mouse:down', closeFlyouts);
+  document.querySelectorAll('.flyout .fly-close').forEach((b) => b.addEventListener('click', closeFlyouts));
+
+  // ---------- Stickers ----------
+  const SK = window.POD_STICKERS;
+  let stickerCat = 'all';
+  function renderStickers() {
+    $('sticker-cats').innerHTML = [{ id: 'all', name: null }, ...SK.CATEGORIES]
+      .map((c) => `<button class="chip ${c.id === stickerCat ? 'active' : ''}" data-scat="${c.id}">${esc(c.name ? tr(c.name) : t('cat.all'))}</button>`).join('');
+    $('sticker-grid').innerHTML = SK.STICKERS.filter((s) => stickerCat === 'all' || s.cat === stickerCat)
+      .map((s) => `<button class="sticker-btn" data-sticker="${s.id}" title="${esc(tr(s.name))}" aria-label="${esc(tr(s.name))}"><img alt="" loading="lazy" src="${SK.thumbUrl(s)}"></button>`).join('');
+  }
+  $('sticker-cats').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-scat]');
+    if (!b) return;
+    stickerCat = b.dataset.scat;
+    renderStickers();
+  });
+  $('sticker-grid').addEventListener('click', serial(async (e) => {
+    const b = e.target.closest('[data-sticker]');
+    if (!b) return;
+    const obj = await SK.makeSticker(SK.STICKERS.find((x) => x.id === b.dataset.sticker));
+    const a = area();
+    obj.scale(Math.min((a.w * 0.42) / obj.width, (a.h * 0.42) / obj.height));
+    addObject(obj);
+  }));
+
+  // ---------- Phone layout: slide-up panel ----------
+  function syncSheetTitle() {
+    if (st.sheet) $('sheet-title').textContent = st.sheet === 'product' ? t('sheet.product') : $('props-title').textContent;
+  }
+  function setSheet(mode) {
+    st.sheet = mode;
+    document.body.classList.toggle('sheet-props', mode === 'props');
+    document.body.classList.toggle('sheet-product', mode === 'product');
+    document.querySelectorAll('[data-sheet]').forEach((b) => b.classList.toggle('open', b.dataset.sheet === mode));
+    syncSheetTitle();
+    requestAnimationFrame(() => fit());
+  }
+  document.querySelectorAll('[data-sheet]').forEach((b) => b.addEventListener('click', () => {
+    closeFlyouts();
+    if (st.sheet === b.dataset.sheet) return setSheet(null);
+    cancelCrop();
+    canvas.discardActiveObject();
+    canvas.requestRenderAll();
+    setSheet(b.dataset.sheet);
+  }));
+  $('sheet-close').addEventListener('click', () => {
+    if (st.sheet === 'props') {
+      cancelCrop();
+      canvas.discardActiveObject();
+      canvas.requestRenderAll();
+    }
+    setSheet(null);
+  });
+  MOBILE.addEventListener('change', () => setSheet(null));
+
+  // Two-finger pinch zooms and pans the view.
+  const stageEl = $('stage');
+  let pinch = null;
+  const tDist = (tt) => Math.hypot(tt[0].clientX - tt[1].clientX, tt[0].clientY - tt[1].clientY);
+  const tMid = (tt) => ({ x: (tt[0].clientX + tt[1].clientX) / 2, y: (tt[0].clientY + tt[1].clientY) / 2 });
+  stageEl.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 2) return;
+    pinch = { d: tDist(e.touches), z: st.zoom, m: tMid(e.touches), sl: stageEl.scrollLeft, stp: stageEl.scrollTop };
+    e.preventDefault();
+    e.stopPropagation();
+    // The first finger reached the canvas a moment earlier: undo whatever it started.
+    canvas._currentTransform = null;
+    const recent = lastCleared && Date.now() - lastCleared.at < 400 ? lastCleared.objs.filter((o) => canvas.contains(o)) : [];
+    if (recent.length && !canvas.getActiveObject()) {
+      canvas.setActiveObject(recent.length === 1 ? recent[0] : new fabric.ActiveSelection(recent, { canvas }));
+    }
+    canvas.requestRenderAll();
+  }, { passive: false, capture: true });
+  stageEl.addEventListener('touchmove', (e) => {
+    if (!pinch) return;
+    // Keep the canvas out of it until every finger has lifted, so the selection survives.
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.touches.length !== 2) return;
+    setZoom(pinch.z * (tDist(e.touches) / pinch.d));
+    const m = tMid(e.touches);
+    stageEl.scrollLeft = pinch.sl - (m.x - pinch.m.x);
+    stageEl.scrollTop = pinch.stp - (m.y - pinch.m.y);
+  }, { passive: false, capture: true });
+  const endPinch = (e) => {
+    if (!pinch) return;
+    e.stopPropagation();
+    if (e.touches.length === 0) pinch = null;
+  };
+  stageEl.addEventListener('touchend', endPinch, { capture: true });
+  stageEl.addEventListener('touchcancel', endPinch, { capture: true });
 
   // ---------- Object actions ----------
   const active = () => canvas.getActiveObject();
@@ -608,6 +737,25 @@
   }
 
   // ---------- Properties panel ----------
+  const props = $('props');
+  const PALETTE = ['#16181d', '#ffffff', '#ff5a36', '#e03131', '#f783ac', '#fcc419', '#e0a526', '#2f9e44', '#1c7ed6', '#22304f', '#7048e8', '#8d6e63'];
+  const MASKS = ['none', 'circle', 'rounded', 'heart', 'star', 'hexagon', 'arch'];
+  const openGroups = new Set(['text', 'colours', 'photo']);
+  const group = (id, title, body) =>
+    `<details class="pgroup" data-group="${id}" ${openGroups.has(id) ? 'open' : ''}><summary>${esc(title)}</summary><div class="pgroup-body">${body}</div></details>`;
+  const palette = (target) =>
+    `<div class="palette">${PALETTE.map((c) => `<button type="button" class="pal" data-pal="${target}" data-c="${c}" style="background:${c}" aria-label="${c}"></button>`).join('')}</div>`;
+  const isSticker = (o) => typeof o.name === 'string' && o.name.startsWith('sticker:');
+  const isGradient = (f) => f && typeof f === 'object' && Array.isArray(f.colorStops);
+  const makeGradient = (c1, c2) => new fabric.Gradient({
+    type: 'linear', gradientUnits: 'percentage', coords: { x1: 0, y1: 0, x2: 0, y2: 1 },
+    colorStops: [{ offset: 0, color: c1 }, { offset: 1, color: c2 }],
+  });
+  props.addEventListener('toggle', (e) => {
+    const d = e.target;
+    if (d.dataset && d.dataset.group) d.open ? openGroups.add(d.dataset.group) : openGroups.delete(d.dataset.group);
+  }, true);
+
   function fontPicker(o) {
     const opt = (f, sample) => `<button type="button" class="font-option ${f === o.fontFamily ? 'active' : ''}" data-font="${esc(f)}" style="font-family:'${esc(f)}'">${sample}<small>${esc(f)}</small></button>`;
     return `
@@ -622,12 +770,86 @@
       </details>`;
   }
 
+  function fillControls(o) {
+    const grad = isGradient(o.fill);
+    const hollow = !grad && (!o.fill || o.fill === 'transparent');
+    const c1 = grad ? o.fill.colorStops[0].color : hollow ? '#ffffff' : o.fill;
+    const c2 = grad ? o.fill.colorStops[o.fill.colorStops.length - 1].color : D.ACCENT;
+    return `
+      <div class="field">
+        <label>${esc(t('props.fillStyle'))}</label>
+        <div class="btn-group">
+          <button class="btn btn-sm ${grad ? '' : 'active'}" data-fillmode="solid">${esc(t('props.solid'))}</button>
+          <button class="btn btn-sm ${grad ? 'active' : ''}" data-fillmode="gradient">${esc(t('props.gradient'))}</button>
+        </div>
+      </div>
+      ${grad
+        ? `<div class="field row"><input class="shrink" type="color" id="p-grad1" value="${toHex(c1)}"><span class="grad-preview" style="background:linear-gradient(90deg, ${toHex(c1)}, ${toHex(c2)})"></span><input class="shrink" type="color" id="p-grad2" value="${toHex(c2)}"></div>`
+        : `<div class="field color-row"><input type="color" id="p-fill" value="${toHex(c1)}" aria-label="${esc(t('props.colour'))}">${palette('fill')}</div>`}
+      <div class="field"><label class="check"><input type="checkbox" id="p-nofill" ${hollow ? 'checked' : ''}> ${esc(t(isText(o) ? 'props.hollow' : 'props.none'))}</label></div>`;
+  }
+
+  function outlineControls(o, max) {
+    return `
+      <div class="field">
+        <label>${esc(t('props.outline'))}</label>
+        <div class="color-row"><input type="color" id="p-stroke" value="${toHex(o.stroke || '#000000')}" aria-label="${esc(t('props.outline'))}">${palette('stroke')}</div>
+        <input type="range" id="p-stroke-w" min="0" max="${max}" step="0.5" value="${o.strokeWidth || 0}" aria-label="${esc(t('props.outlineWidth'))}">
+      </div>`;
+  }
+
+  function arrangeGroup(o) {
+    return group('arrange', t('grp.arrange'), `
+      <div class="field grid-2">
+        <div><label for="p-opacity">${esc(t('props.opacity'))}</label><input type="range" id="p-opacity" min="0.05" max="1" step="0.05" value="${o.opacity}"></div>
+        <div><label for="p-angle">${esc(t('props.rotation'))}</label><input type="number" id="p-angle" min="-360" max="360" value="${Math.round(o.angle)}"></div>
+      </div>
+      <div class="field"><label class="check"><input type="checkbox" id="p-shadow" ${o.shadow ? 'checked' : ''}> ${esc(t('props.shadow'))}</label></div>
+      <div class="grid-4" dir="ltr">
+        <button class="btn btn-sm" data-act="flip-x" title="${esc(t('props.flipH'))}">⇋</button>
+        <button class="btn btn-sm" data-act="flip-y" title="${esc(t('props.flipV'))}">⇵</button>
+        <button class="btn btn-sm" data-act="top" title="${esc(t('props.front'))}">⤒</button>
+        <button class="btn btn-sm" data-act="bottom" title="${esc(t('props.back'))}">⤓</button>
+      </div>`);
+  }
+
+  const ICON = {
+    dup: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>',
+    del: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
+  };
+  function quickActions() {
+    return `<div class="quick-actions" dir="ltr">
+      <button class="btn btn-sm" data-act="duplicate" title="${esc(t('props.duplicate'))}" aria-label="${esc(t('props.duplicate'))}">${ICON.dup}</button>
+      <button class="btn btn-sm" data-act="center-h" title="${esc(t('props.centerH'))}">↔</button>
+      <button class="btn btn-sm" data-act="center-v" title="${esc(t('props.centerV'))}">↕</button>
+      <button class="btn btn-sm" data-act="up" title="${esc(t('props.forward'))}">▲</button>
+      <button class="btn btn-sm" data-act="down" title="${esc(t('props.backward'))}">▼</button>
+      <button class="btn btn-sm btn-danger" data-act="delete" title="${esc(t('props.delete'))}" aria-label="${esc(t('props.delete'))}">${ICON.del}</button>
+    </div>`;
+  }
+
   function renderProps() {
     const o = active();
     const box = $('props');
     $('props-title').textContent = t('panel.selected');
+    if (crop) {
+      $('props-title').textContent = t('props.crop');
+      box.innerHTML = `
+        <p class="muted small" style="margin-top:0">${esc(t('props.cropHint'))}</p>
+        <div class="field"><div class="btn-group">
+          <button class="btn btn-sm ${crop.square ? '' : 'active'}" data-act="crop-free">${esc(t('props.cropFree'))}</button>
+          <button class="btn btn-sm ${crop.square ? 'active' : ''}" data-act="crop-square">${esc(t('props.cropSquare'))}</button>
+        </div></div>
+        <div class="grid-2">
+          <button class="btn btn-primary btn-sm" data-act="crop-apply">${esc(t('props.cropApply'))}</button>
+          <button class="btn btn-sm" data-act="crop-cancel">${esc(t('props.cropCancel'))}</button>
+        </div>`;
+      syncSheetTitle();
+      return;
+    }
     if (!o) {
       box.innerHTML = `<p class="empty-props">${esc(t('panel.empty'))}<br><br><span class="small">${esc(t('panel.tip'))}</span></p>`;
+      syncSheetTitle();
       return;
     }
     if (o.type === 'activeSelection') {
@@ -638,89 +860,77 @@
           <button class="btn btn-sm" data-act="center-v">${esc(t('props.centerV'))}</button>
         </div>
         <button class="btn btn-sm btn-block btn-danger" data-act="delete" style="margin-top:8px">${esc(t('props.deleteSelected'))}</button>`;
+      syncSheetTitle();
       return;
     }
     const text = isText(o);
     const image = o.type === 'image';
-    const shape = !text && !image;
-    $('props-title').textContent = text ? t('panel.text') : image ? t('panel.image') : shapeName(o);
-    let html = '';
+    const sticker = isSticker(o);
+    $('props-title').textContent = text ? t('panel.text') : image ? t('panel.image') : layerName(o);
+    let html = quickActions();
 
     if (text) {
       const arabic = D.ARABIC_RE.test(o.text);
-      html += `
+      html += group('text', t('grp.text'), `
         <div class="field"><textarea id="p-text" rows="2" dir="auto">${esc(o.text)}</textarea></div>
         <div class="field">${fontPicker(o)}</div>
         <div class="field row">
-          <input type="number" id="p-size" min="4" max="400" value="${Math.round(o.fontSize)}" aria-label="${esc(t('props.size'))}" title="${esc(t('props.size'))}">
-          <input class="shrink" type="color" id="p-fill" value="${toHex(o.fill)}" aria-label="${esc(t('props.textColour'))}" title="${esc(t('props.textColour'))}">
-        </div>
-        <div class="field row">
+          <input type="number" id="p-size" min="4" max="400" value="${Math.round(o.fontSize)}" aria-label="${esc(t('props.size'))}" title="${esc(t('props.size'))}" style="max-width:84px">
           <div class="btn-group">
             <button class="btn btn-sm ${o.fontWeight === 'bold' || Number(o.fontWeight) >= 600 ? 'active' : ''}" data-toggle="bold" title="${esc(t('props.bold'))}"><b>B</b></button>
             <button class="btn btn-sm ${o.fontStyle === 'italic' ? 'active' : ''}" data-toggle="italic" title="${esc(t('props.italic'))}"><i>I</i></button>
             <button class="btn btn-sm ${o.underline ? 'active' : ''}" data-toggle="underline" title="${esc(t('props.underline'))}"><u>U</u></button>
           </div>
-          <div class="btn-group" dir="ltr">
-            ${['left', 'center', 'right'].map((al) => `<button class="btn btn-sm ${o.textAlign === al ? 'active' : ''}" data-align="${al}" title="${esc(t('props.align' + al[0].toUpperCase() + al.slice(1)))}">${{ left: '⇤', center: '↔', right: '⇥' }[al]}</button>`).join('')}
-          </div>
+        </div>
+        <div class="field btn-group" dir="ltr">
+          ${['left', 'center', 'right'].map((al) => `<button class="btn btn-sm ${o.textAlign === al ? 'active' : ''}" data-align="${al}" title="${esc(t('props.align' + al[0].toUpperCase() + al.slice(1)))}">${{ left: '⇤', center: '↔', right: '⇥' }[al]}</button>`).join('')}
+        </div>`);
+      html += group('colours', t('grp.colours'), fillControls(o) + outlineControls(o, 12));
+      html += group('effects', t('grp.effects'), `
+        <div class="field">
+          <label for="p-curve">${esc(t('props.curve'))}</label>
+          <div class="row"><input type="range" id="p-curve" min="-100" max="100" step="5" value="${o.curve || 0}"><button class="btn btn-sm shrink" data-act="straighten">${esc(t('props.straighten'))}</button></div>
+        </div>
+        <div class="field">
+          <label class="check"><input type="checkbox" id="p-textbg" ${o.backgroundColor ? 'checked' : ''}> ${esc(t('props.textBg'))}</label>
+          ${o.backgroundColor ? `<div class="color-row" style="margin-top:6px"><input type="color" id="p-bgcolor" value="${toHex(o.backgroundColor)}">${palette('bg')}</div>` : ''}
         </div>
         <div class="field grid-2">
           <div><label for="p-spacing">${esc(t('props.spacing'))}</label>${arabic ? `<div class="muted small">${esc(t('props.spacingArabic'))}</div>` : `<input type="range" id="p-spacing" min="-100" max="800" step="10" value="${o.charSpacing || 0}">`}</div>
           <div><label for="p-lh">${esc(t('props.lineHeight'))}</label><input type="range" id="p-lh" min="0.7" max="2.5" step="0.05" value="${o.lineHeight}"></div>
-        </div>
-        <div class="field">
-          <label>${esc(t('props.outline'))}</label>
-          <div class="row"><input class="shrink" type="color" id="p-stroke" value="${toHex(o.stroke || '#000000')}" aria-label="${esc(t('props.outline'))}"><input type="range" id="p-stroke-w" min="0" max="12" step="0.5" value="${o.strokeWidth || 0}" aria-label="${esc(t('props.outlineWidth'))}"></div>
-        </div>`;
-    }
-    if (shape) {
-      const hollow = !o.fill || o.fill === 'transparent';
-      html += `
+        </div>`);
+    } else if (image) {
+      const fs = filterState(o);
+      html += `<div class="field" id="quality-box"></div>`;
+      html += group('photo', t('grp.photo'), `
         <div class="field grid-2">
-          <div><label for="p-fill">${esc(t('props.fill'))}</label><div class="row"><input class="shrink" type="color" id="p-fill" value="${toHex(hollow ? '#ffffff' : o.fill)}"><label class="check small shrink"><input type="checkbox" id="p-nofill" ${hollow ? 'checked' : ''}> ${esc(t('props.none'))}</label></div></div>
-          <div><label for="p-stroke">${esc(t('props.outline'))}</label><input type="color" id="p-stroke" value="${toHex(o.stroke || '#000000')}"></div>
+          <button class="btn btn-sm" data-act="crop">✂ ${esc(t('props.crop'))}</button>
+          <button class="btn btn-sm" data-act="fit">${esc(t('props.fit'))}</button>
         </div>
-        <div class="field"><label for="p-stroke-w">${esc(t('props.outlineWidth'))}</label><input type="range" id="p-stroke-w" min="0" max="30" step="1" value="${o.strokeWidth || 0}"></div>
-        ${o.type === 'rect' ? `<div class="field"><label for="p-rx">${esc(t('props.radius'))}</label><input type="range" id="p-rx" min="0" max="${Math.round(Math.min(o.width, o.height) / 2)}" value="${o.rx || 0}"></div>` : ''}`;
-    }
-    if (image) {
-      html += `<div class="field" id="quality-box"></div>
-        <div class="field"><button class="btn btn-sm btn-block" data-act="fit">${esc(t('props.fit'))}</button></div>
         <div class="field">
-          <label>${esc(t('props.filters'))}</label>
-          <div class="toggles">
-            <label class="check"><input type="checkbox" data-filter="white" ${hasFilter(o, 'white') ? 'checked' : ''}> ${esc(t('props.removeWhite'))}</label>
-            <label class="check"><input type="checkbox" data-filter="gray" ${hasFilter(o, 'gray') ? 'checked' : ''}> ${esc(t('props.grayscale'))}</label>
-            <label class="check"><input type="checkbox" data-filter="sepia" ${hasFilter(o, 'sepia') ? 'checked' : ''}> ${esc(t('props.sepia'))}</label>
-          </div>
-        </div>`;
-    }
-    html += `
-      <div class="field grid-2">
-        <div><label for="p-opacity">${esc(t('props.opacity'))}</label><input type="range" id="p-opacity" min="0.05" max="1" step="0.05" value="${o.opacity}"></div>
-        <div><label for="p-angle">${esc(t('props.rotation'))}</label><input type="number" id="p-angle" min="-360" max="360" value="${Math.round(o.angle)}"></div>
-      </div>
-      <div class="field"><label class="check"><input type="checkbox" id="p-shadow" ${o.shadow ? 'checked' : ''}> ${esc(t('props.shadow'))}</label></div>
-      <div class="field">
-        <label>${esc(t('props.position'))}</label>
-        <div class="grid-4" dir="ltr">
-          <button class="btn btn-sm" data-act="center-h" title="${esc(t('props.centerH'))}">↔</button>
-          <button class="btn btn-sm" data-act="center-v" title="${esc(t('props.centerV'))}">↕</button>
-          <button class="btn btn-sm" data-act="flip-x" title="${esc(t('props.flipH'))}">⇋</button>
-          <button class="btn btn-sm" data-act="flip-y" title="${esc(t('props.flipV'))}">⇵</button>
-          <button class="btn btn-sm" data-act="up" title="${esc(t('props.forward'))}">▲</button>
-          <button class="btn btn-sm" data-act="down" title="${esc(t('props.backward'))}">▼</button>
-          <button class="btn btn-sm" data-act="top" title="${esc(t('props.front'))}">⤒</button>
-          <button class="btn btn-sm" data-act="bottom" title="${esc(t('props.back'))}">⤓</button>
+          <label>${esc(t('props.photoShape'))}</label>
+          <div class="mask-grid">${MASKS.map((m) => `<button class="mask-btn ${(o.mask || 'none') === m ? 'active' : ''}" data-mask="${m}" title="${esc(t('mask.' + m))}"><span class="mask-icon mask-${m}"></span><small>${esc(t('mask.' + m))}</small></button>`).join('')}</div>
         </div>
-      </div>
-      <div class="grid-2">
-        <button class="btn btn-sm" data-act="duplicate">${esc(t('props.duplicate'))}</button>
-        <button class="btn btn-sm btn-danger" data-act="delete">${esc(t('props.delete'))}</button>
-      </div>`;
+        ${o.mask ? `<div class="field"><label>${esc(t('props.border'))}</label><div class="color-row"><input type="color" id="p-bordercolor" value="${toHex(o.maskBorderColor)}">${palette('border')}</div><input type="range" id="p-border" min="0" max="12" step="0.5" value="${o.maskBorder || 0}" aria-label="${esc(t('props.border'))}"></div>` : ''}
+        <div class="field">
+          <button class="btn btn-sm btn-block" data-act="removebg">✦ ${esc(t('props.removeBg'))}</button>
+          <p class="muted small" style="margin:6px 0 0">${esc(t('props.removeBgHint'))}</p>
+        </div>`);
+      html += group('adjust', t('grp.adjust'), `
+        ${['brightness', 'contrast', 'saturation'].map((k) => `<div class="field"><label for="p-${k}">${esc(t('props.' + k))}</label><input type="range" id="p-${k}" data-adjust="${k}" min="-100" max="100" step="5" value="${Math.round(fs[k] * 100)}"></div>`).join('')}
+        <div class="field toggles">
+          <label class="check"><input type="checkbox" data-filter="gray" ${fs.gray ? 'checked' : ''}> ${esc(t('props.grayscale'))}</label>
+          <label class="check"><input type="checkbox" data-filter="sepia" ${fs.sepia ? 'checked' : ''}> ${esc(t('props.sepia'))}</label>
+        </div>
+        <button class="btn btn-sm" data-act="reset-adjust">${esc(t('props.reset'))}</button>`);
+    } else if (!sticker) {
+      html += group('colours', t('grp.colours'), fillControls(o) + outlineControls(o, 30) +
+        (o.type === 'rect' ? `<div class="field"><label for="p-rx">${esc(t('props.radius'))}</label><input type="range" id="p-rx" min="0" max="${Math.round(Math.min(o.width, o.height) / 2)}" value="${o.rx || 0}"></div>` : ''));
+    }
+    html += arrangeGroup(o);
     box.innerHTML = html;
     if (image) updateQuality();
+    syncSheetTitle();
   }
 
   function toHex(c) {
@@ -748,27 +958,196 @@
     if (o && f && document.activeElement !== f) f.value = o.text;
   }
 
-  function setProp(props, { commitNow = false } = {}) {
+  function setProp(propsToSet, { commitNow = false } = {}) {
     const o = active();
     if (!o) return;
-    o.set(props);
-    if ('text' in props) fixArabic(o);
+    o.set(propsToSet);
+    if ('text' in propsToSet) fixArabic(o);
     if (o.initDimensions) o.initDimensions();
     o.setCoords();
+    o.dirty = true;
     canvas.requestRenderAll();
     commitNow ? commit() : scheduleCommit();
   }
 
   function shadowFor(o) {
-    const s = Math.max(2, Math.min(o.getScaledWidth(), o.getScaledHeight()) * 0.04);
+    const s = Math.max(1.5, Math.min(o.width, o.height) * 0.035);
     return new fabric.Shadow({ color: 'rgba(0,0,0,0.35)', blur: s * 2, offsetX: s, offsetY: s });
   }
 
-  const props = $('props');
+  // ----- Photo filters -----
+  const ADJUST = { brightness: 'Brightness', contrast: 'Contrast', saturation: 'Saturation' };
+  function filterState(o) {
+    const get = (type) => (o.filters || []).find((f) => f && f.type === type);
+    return {
+      white: !!get('RemoveColor'),
+      gray: !!get('Grayscale'),
+      sepia: !!get('Sepia'),
+      brightness: get('Brightness')?.brightness || 0,
+      contrast: get('Contrast')?.contrast || 0,
+      saturation: get('Saturation')?.saturation || 0,
+    };
+  }
+  let filterTimer = null;
+  function applyFilterState(o, s, { now = false } = {}) {
+    const F = fabric.Image.filters;
+    const list = [];
+    if (s.white) list.push(new F.RemoveColor({ color: '#ffffff', distance: 0.12 }));
+    if (s.brightness) list.push(new F.Brightness({ brightness: s.brightness }));
+    if (s.contrast) list.push(new F.Contrast({ contrast: s.contrast }));
+    if (s.saturation) list.push(new F.Saturation({ saturation: s.saturation }));
+    if (s.gray) list.push(new F.Grayscale());
+    if (s.sepia) list.push(new F.Sepia());
+    o.filters = list;
+    clearTimeout(filterTimer);
+    const run = () => {
+      o.applyFilters();
+      o.dirty = true;
+      canvas.requestRenderAll();
+      commit();
+    };
+    now ? run() : (filterTimer = setTimeout(run, 120));
+  }
+
+  async function removeImageBackground(o) {
+    busy(true, t('busy.removingBg'));
+    try {
+      await new Promise((r) => setTimeout(r, 40)); // let the overlay paint first
+      const blob = await window.POD_FX.removeBackground(o._originalElement || o.getElement());
+      if (!blob) {
+        toast(t('msg.removeBgNone'), 'error');
+        return;
+      }
+      const img = await loadHtmlImage(URL.createObjectURL(blob));
+      o.setElement(img, { width: o.width, height: o.height, cropX: o.cropX, cropY: o.cropY });
+      if (o.filters && o.filters.length) o.applyFilters();
+      o.dirty = true;
+      canvas.requestRenderAll();
+      commit();
+      renderProps();
+    } finally {
+      busy(false);
+    }
+  }
+
+  // ----- Crop -----
+  let crop = null;
+  function startCrop(img) {
+    if (crop) return;
+    const el = img.getElement();
+    const fullW = el.naturalWidth || el.width;
+    const fullH = el.naturalHeight || el.height;
+    const sx = img.scaleX;
+    const sy = img.scaleY;
+    const prev = { cropX: img.cropX, cropY: img.cropY, width: img.width, height: img.height, angle: img.angle, center: img.getCenterPoint() };
+    img.rotate(0);
+    const c = img.getCenterPoint();
+    const visL = c.x - (img.width * sx) / 2;
+    const visT = c.y - (img.height * sy) / 2;
+    const dispX = img.flipX ? fullW - img.cropX - img.width : img.cropX;
+    const dispY = img.flipY ? fullH - img.cropY - img.height : img.cropY;
+    const full = { L: visL - dispX * sx, T: visT - dispY * sy, W: fullW * sx, H: fullH * sy };
+    img.set({ cropX: 0, cropY: 0, width: fullW, height: fullH });
+    img.setPositionByOrigin(new fabric.Point(full.L + full.W / 2, full.T + full.H / 2), 'center', 'center');
+    img.setCoords();
+    const cropper = new fabric.Rect({
+      name: '__cropper', left: c.x, top: c.y, width: prev.width * sx, height: prev.height * sy,
+      fill: 'rgba(0,0,0,0)', stroke: '#ffffff', strokeWidth: 1.5, strokeDashArray: [6, 4], strokeUniform: true,
+      cornerColor: '#ffffff', cornerStrokeColor: '#16181d', borderColor: '#ffffff', lockRotation: true,
+      excludeFromExport: true, noScaleCache: false, padding: 0,
+    });
+    cropper.setControlsVisibility({ mtr: false });
+    const others = canvas.getObjects().map((o) => [o, o.selectable, o.evented]);
+    others.forEach(([o]) => o.set({ selectable: false, evented: false }));
+    crop = { img, cropper, prev, full, sx, sy, fullW, fullH, others, square: false };
+    st.silent = true;
+    canvas.add(cropper);
+    st.silent = false;
+    cropper.clipPath = null;
+    canvas.setActiveObject(cropper);
+    canvas.requestRenderAll();
+    renderProps();
+  }
+  function cropRect() {
+    const c = crop.cropper;
+    const p = c.getCenterPoint();
+    const w = c.width * c.scaleX;
+    const h = c.height * c.scaleY;
+    return { x: p.x - w / 2, y: p.y - h / 2, w, h };
+  }
+  function clampCropper() {
+    const f = crop.full;
+    const c = crop.cropper;
+    let { x, y, w, h } = cropRect();
+    w = Math.min(w, f.W);
+    h = Math.min(h, f.H);
+    x = Math.min(Math.max(x, f.L), f.L + f.W - w);
+    y = Math.min(Math.max(y, f.T), f.T + f.H - h);
+    c.set({ scaleX: w / c.width, scaleY: h / c.height });
+    c.setPositionByOrigin(new fabric.Point(x + w / 2, y + h / 2), 'center', 'center');
+    c.setCoords();
+  }
+  function setCropSquare(on) {
+    crop.square = on;
+    const c = crop.cropper;
+    c.setControlsVisibility({ ml: !on, mr: !on, mt: !on, mb: !on });
+    if (on) {
+      const { x, y, w, h } = cropRect();
+      const s = Math.min(w, h);
+      c.set({ scaleX: s / c.width, scaleY: s / c.height });
+      c.setPositionByOrigin(new fabric.Point(x + w / 2, y + h / 2), 'center', 'center');
+      clampCropper();
+    }
+    canvas.requestRenderAll();
+    renderProps();
+  }
+  function finishCrop() {
+    st.silent = true;
+    canvas.remove(crop.cropper);
+    st.silent = false;
+    crop.others.forEach(([o, sel, ev]) => o.set({ selectable: sel, evented: ev }));
+    const img = crop.img;
+    crop = null;
+    canvas.setActiveObject(img);
+    canvas.requestRenderAll();
+    renderProps();
+  }
+  function applyCrop() {
+    const { img, full, sx, sy, fullW, fullH, prev } = crop;
+    const r = cropRect();
+    let x = Math.max(0, Math.round((r.x - full.L) / sx));
+    let y = Math.max(0, Math.round((r.y - full.T) / sy));
+    const w = Math.max(4, Math.min(fullW - x, Math.round(r.w / sx)));
+    const h = Math.max(4, Math.min(fullH - y, Math.round(r.h / sy)));
+    if (img.flipX) x = fullW - x - w;
+    if (img.flipY) y = fullH - y - h;
+    img.set({ cropX: x, cropY: y, width: w, height: h });
+    img.setPositionByOrigin(new fabric.Point(r.x + r.w / 2, r.y + r.h / 2), 'center', 'center');
+    img.rotate(prev.angle);
+    img.setCoords();
+    finishCrop();
+    commit();
+  }
+  function cancelCrop() {
+    if (!crop) return;
+    const { img, prev } = crop;
+    img.set({ cropX: prev.cropX, cropY: prev.cropY, width: prev.width, height: prev.height });
+    img.rotate(prev.angle);
+    img.setPositionByOrigin(prev.center, 'center', 'center');
+    img.setCoords();
+    finishCrop();
+  }
+
   props.addEventListener('input', (e) => {
     const o = active();
-    if (!o) return;
+    if (!o || crop) return;
     const v = e.target.value;
+    if (e.target.dataset.adjust) {
+      const s = filterState(o);
+      s[e.target.dataset.adjust] = Number(v) / 100;
+      applyFilterState(o, s);
+      return;
+    }
     switch (e.target.id) {
       case 'p-text': {
         const wasArabic = D.ARABIC_RE.test(o.text);
@@ -778,14 +1157,24 @@
         break;
       }
       case 'p-size': if (Number(v) >= 4) setProp({ fontSize: Number(v) }); break;
-      case 'p-fill': if (!$('p-nofill') || !$('p-nofill').checked) setProp({ fill: v }); break;
-      case 'p-stroke': setProp({ stroke: v, strokeUniform: true }); break;
+      case 'p-fill': if (!$('p-nofill').checked) setProp({ fill: v }); break;
+      case 'p-grad1': case 'p-grad2': {
+        setProp({ fill: makeGradient($('p-grad1').value, $('p-grad2').value) });
+        const prev = props.querySelector('.grad-preview');
+        if (prev) prev.style.background = `linear-gradient(90deg, ${$('p-grad1').value}, ${$('p-grad2').value})`;
+        break;
+      }
+      case 'p-stroke': setProp({ stroke: v, strokeUniform: true, strokeWidth: o.strokeWidth || 2, paintFirst: 'stroke' }); break;
       case 'p-stroke-w': setProp({ strokeWidth: Number(v), stroke: o.stroke || $('p-stroke').value, strokeUniform: true, paintFirst: 'stroke' }); break;
       case 'p-spacing': setProp({ charSpacing: Number(v) }); break;
       case 'p-lh': setProp({ lineHeight: Number(v) }); break;
       case 'p-rx': setProp({ rx: Number(v), ry: Number(v) }); break;
       case 'p-opacity': setProp({ opacity: Number(v) }); break;
       case 'p-angle': o.rotate(Number(v) || 0); setProp({}); break;
+      case 'p-curve': setProp({ curve: Number(v) }); break;
+      case 'p-bgcolor': setProp({ backgroundColor: v }); break;
+      case 'p-border': setProp({ maskBorder: Number(v) }); break;
+      case 'p-bordercolor': setProp({ maskBorderColor: v, maskBorder: o.maskBorder || 4 }); break;
       default:
     }
   });
@@ -798,23 +1187,78 @@
   }
   props.addEventListener('change', (e) => {
     const o = active();
-    if (!o) return;
-    if (e.target.id === 'p-nofill') setProp({ fill: e.target.checked ? 'transparent' : $('p-fill').value }, { commitNow: true });
-    if (e.target.id === 'p-shadow') setProp({ shadow: e.target.checked ? shadowFor(o) : null }, { commitNow: true });
-    if (e.target.dataset.filter) setFilter(o, e.target.dataset.filter, e.target.checked);
+    if (!o || crop) return;
+    const id = e.target.id;
+    if (id === 'p-nofill') {
+      const solid = $('p-fill') ? $('p-fill').value : inkFor(surfaceHex());
+      const off = e.target.checked;
+      setProp(off ? { fill: 'transparent', stroke: o.stroke || inkFor(surfaceHex()), strokeWidth: o.strokeWidth || 2, paintFirst: 'stroke' } : { fill: solid }, { commitNow: true });
+      renderProps();
+    }
+    if (id === 'p-shadow') setProp({ shadow: e.target.checked ? shadowFor(o) : null }, { commitNow: true });
+    if (id === 'p-textbg') {
+      setProp({ backgroundColor: e.target.checked ? (inkFor(surfaceHex()) === '#ffffff' ? '#ff5a36' : '#fcc419') : '' }, { commitNow: true });
+      renderProps();
+    }
+    if (e.target.dataset.filter) {
+      const s = filterState(o);
+      s[e.target.dataset.filter] = e.target.checked;
+      if (e.target.checked) s[e.target.dataset.filter === 'gray' ? 'sepia' : 'gray'] = false;
+      applyFilterState(o, s, { now: true });
+      renderProps();
+    }
+    if (['p-text', 'p-size', 'p-curve', 'p-spacing', 'p-lh', 'p-opacity', 'p-border', 'p-stroke-w'].includes(id) || e.target.dataset.adjust) commit();
   });
   props.addEventListener('click', serial(async (e) => {
+    if (crop) {
+      const act = e.target.closest('[data-act]')?.dataset.act;
+      if (act === 'crop-apply') applyCrop();
+      if (act === 'crop-cancel') cancelCrop();
+      if (act === 'crop-free') setCropSquare(false);
+      if (act === 'crop-square') setCropSquare(true);
+      return;
+    }
     const o = active();
+    if (!o) return;
     const fontBtn = e.target.closest('[data-font]');
-    if (o && fontBtn) {
+    if (fontBtn) {
       const family = fontBtn.dataset.font;
       await D.ensureFont(family, o.fontWeight, o.fontStyle);
       setProp({ fontFamily: family }, { commitNow: true });
       renderProps();
       return;
     }
+    const pal = e.target.closest('[data-pal]');
+    if (pal) {
+      const c = pal.dataset.c;
+      ({
+        fill: () => setProp({ fill: c }, { commitNow: true }),
+        stroke: () => setProp({ stroke: c, strokeWidth: o.strokeWidth || 2, strokeUniform: true, paintFirst: 'stroke' }, { commitNow: true }),
+        bg: () => setProp({ backgroundColor: c }, { commitNow: true }),
+        border: () => setProp({ maskBorderColor: c, maskBorder: o.maskBorder || 4 }, { commitNow: true }),
+      })[pal.dataset.pal]();
+      renderProps();
+      return;
+    }
+    const maskBtn = e.target.closest('[data-mask]');
+    if (maskBtn) {
+      const m = maskBtn.dataset.mask;
+      setProp({ mask: m === 'none' ? null : m }, { commitNow: true });
+      renderProps();
+      return;
+    }
     const btn = e.target.closest('button');
-    if (!o || !btn) return;
+    if (!btn) return;
+    if (btn.dataset.fillmode) {
+      const grad = isGradient(o.fill);
+      if (btn.dataset.fillmode === 'gradient' && !grad) {
+        const base = typeof o.fill === 'string' && o.fill !== 'transparent' ? toHex(o.fill) : D.ACCENT;
+        setProp({ fill: makeGradient(base, base === D.ACCENT ? '#fcc419' : D.ACCENT) }, { commitNow: true });
+      }
+      if (btn.dataset.fillmode === 'solid' && grad) setProp({ fill: o.fill.colorStops[0].color }, { commitNow: true });
+      renderProps();
+      return;
+    }
     if (btn.dataset.toggle) {
       const tg = btn.dataset.toggle;
       if (tg === 'bold') {
@@ -841,11 +1285,19 @@
     if (act === 'duplicate') duplicateSelected();
     if (act === 'delete') removeSelected();
     if (act === 'fit') fitToArea(o);
+    if (act === 'straighten') { setProp({ curve: 0 }, { commitNow: true }); renderProps(); }
+    if (act === 'crop') startCrop(o);
+    if (act === 'removebg') await removeImageBackground(o);
+    if (act === 'reset-adjust') { applyFilterState(o, { ...filterState(o), brightness: 0, contrast: 0, saturation: 0, gray: false, sepia: false }, { now: true }); renderProps(); }
   }));
 
   // ---------- Layers ----------
   function shapeName(o) {
     if (o.name === 'Background') return t('layers.background');
+    if (isSticker(o)) {
+      const sk = SK.STICKERS.find((x) => 'sticker:' + x.id === o.name);
+      return sk ? tr(sk.name) : t('tool.stickers');
+    }
     const def = Object.values(D.SHAPES).find((s) => s.name.en === o.name);
     return def ? tr(def.name) : o.name || t('panel.shape');
   }
@@ -904,10 +1356,34 @@
   $('swatches').addEventListener('click', serial(async (e) => {
     const b = e.target.closest('[data-color]');
     if (!b || b.dataset.color === st.colorId) return;
+    const oldInk = inkFor(surfaceHex());
     st.colorId = b.dataset.color;
+    const newInk = inkFor(surfaceHex());
     renderOptions();
     await applyMockup();
+    if (oldInk !== newInk) swapInk(oldInk, newInk);
   }));
+  /** Text and shapes in the default ink colour follow the product: dark on light, white on dark. */
+  function swapInk(from, to) {
+    const same = (c) => typeof c === 'string' && c.toLowerCase() === from;
+    const fix = (o) => {
+      const p = {};
+      if (same(o.fill)) p.fill = to;
+      if (same(o.stroke)) p.stroke = to;
+      return p;
+    };
+    let changed = false;
+    canvas.getObjects().forEach((o) => {
+      const p = fix(o);
+      if (Object.keys(p).length) { o.set(p); o.dirty = true; changed = true; }
+    });
+    for (const s of st.product.sides) {
+      if (s.id === st.side || !st.designs[s.id]) continue;
+      st.designs[s.id] = st.designs[s.id].map((o) => ({ ...o, ...fix(o) }));
+    }
+    canvas.requestRenderAll();
+    if (changed) commit();
+  }
   $('sizes').addEventListener('click', (e) => {
     const b = e.target.closest('[data-size]');
     if (!b) return;
@@ -921,6 +1397,7 @@
   async function changeProduct(id) {
     const next = products.find((p) => p.id === id);
     if (!next || next === st.product) return;
+    cancelCrop();
     commit();
     const prev = st.product;
     const pending = prev.sides.filter((s) => (st.designs[s.id] || []).length).map((s) => s.id);
@@ -980,10 +1457,12 @@
   async function showSide(id) {
     st.side = id;
     await Promise.all([applyMockup(id), loadObjects(st.designs[id])]);
+    if (MOBILE.matches && st.sheet) fit();
   }
   $('side-tabs').addEventListener('click', serial(async (e) => {
     const b = e.target.closest('[data-side]');
     if (!b || b.dataset.side === st.side) return;
+    cancelCrop();
     commit();
     await showSide(b.dataset.side);
     seedHistory();
@@ -1014,6 +1493,11 @@
 
   document.addEventListener('keydown', (e) => {
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+    if (crop) {
+      if (e.key === 'Escape') cancelCrop();
+      if (e.key === 'Enter') applyCrop();
+      return;
+    }
     const o = active();
     if (o && o.isEditing) return;
     const mod = e.ctrlKey || e.metaKey;
@@ -1065,6 +1549,9 @@
     const bg = canvas.backgroundImage;
     const ov = canvas.overlayImage;
     const vt = canvas.viewportTransform.slice();
+    const limits = [fabric.perfLimitSizeTotal, fabric.maxCacheSideLimit];
+    fabric.perfLimitSizeTotal = 64e6; // full resolution for any object that still caches
+    fabric.maxCacheSideLimit = 8192;
     st.exporting = true;
     canvas.backgroundImage = null;
     canvas.overlayImage = null;
@@ -1077,6 +1564,7 @@
       canvas.backgroundImage = bg;
       canvas.overlayImage = ov;
       canvas.setViewportTransform(vt);
+      [fabric.perfLimitSizeTotal, fabric.maxCacheSideLimit] = limits;
       st.exporting = false;
     }
   }
@@ -1095,6 +1583,7 @@
   }
 
   $('add-to-cart').addEventListener('click', serial(async () => {
+    cancelCrop();
     commit();
     canvas.discardActiveObject();
     const sides = designedSides();
@@ -1170,6 +1659,7 @@
     renderOptions();
     renderPresets();
     renderShapes();
+    renderStickers();
     if (templatesRendered) renderTemplates();
     refreshChrome();
     renderProps();
@@ -1180,6 +1670,7 @@
   renderOptions();
   renderPresets();
   renderShapes();
+  renderStickers();
   fit();
   await D.ensureFont('Cairo', 600); // print-area label
   await showSide(st.side);

@@ -31,8 +31,12 @@ Requires Node 18+. There is no database to set up: data is stored under `data/` 
 - **Templates** to start from (birthday, Ramadan Kareem, team jersey, family badge and more, in Arabic and English).
 - Text presets with size, colour, bold/italic/underline, alignment, letter spacing, line height, outline and shadow. Double-click text to type directly on the product.
 - **Snap guides** to the centre and edges of the print area, and **zoom**.
-- Image **filters**: remove a white background, black & white, vintage.
 - **Lock** layers so they can't be moved by accident.
+- **Curved text** (arcs up or down, works with Arabic), **gradient** colours, hollow outline text, a rounded **background box** behind text, and a quick colour palette.
+- **Sticker library**: 36 original vector stickers in six categories (Egypt, Ramadan, football, love, birthday, fun).
+- **Photo tools**: crop (free or square), shape a photo into a circle, heart, star, hexagon, arch or rounded frame with an optional border, brightness/contrast/saturation, and smart **background removal** for photos on a plain background.
+- **Phone-first layout** on small screens: bottom toolbar, settings in a slide-up panel that zooms the view to the print area, pinch to zoom, bigger touch targets.
+- When the product colour changes between light and dark, text and shapes in the default colour switch automatically (dark ↔ white) so they stay visible.
 - Image upload (click or drag and drop) with a live **print-quality / DPI indicator** and a warning before you order a blurry image.
 - Shapes, plus a one-click "fill print area" background.
 - Move, scale, rotate, flip, opacity, layer order, duplicate, delete, centre in print area, and a layers list.
@@ -66,6 +70,8 @@ src/egypt.js         governorates, mobile number validation
 src/i18n.js          server messages in English and Arabic
 public/js/i18n.js    all interface text in English and Arabic
 public/js/templates.js  fonts, shapes, text presets, templates
+public/js/stickers.js   sticker library (original SVG artwork)
+public/js/fabric-ext.js curved text, text boxes, photo shapes, background removal
 public/fonts/        self-hosted fonts (SIL Open Font License)
 src/store.js         JSON-file store with atomic writes
 public/              static site (index, editor, cart, order, admin)

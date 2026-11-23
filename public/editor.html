@@ -36,6 +36,12 @@
         <button class="tool" data-flyout="shapes" data-i18n-title="tool.shapes.title">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><circle cx="8" cy="8" r="5"/><path d="M13 13h8v8h-8z"/></svg><span data-i18n="tool.shapes"></span>
         </button>
+        <button class="tool" data-flyout="stickers" data-i18n-title="tool.stickers.title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.5 3H6a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h7l8-8V6.5"/><path d="M21 13h-5a3 3 0 0 0-3 3v5"/><path d="M8 10h.01M14 10h.01M8.5 14.5s1.2 1.5 3.5 1.5"/></svg><span data-i18n="tool.stickers"></span>
+        </button>
+        <button class="tool mobile-only" data-sheet="product" data-i18n-title="tool.product">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M8 3 4 6l2 4 2-1v12h8V9l2 1 2-4-4-3c-.5 1.5-2 2.5-4 2.5S8.5 4.5 8 3z"/></svg><span data-i18n="tool.product"></span>
+        </button>
       </aside>
 
       <!-- Canvas -->
@@ -55,24 +61,28 @@
           <button class="btn btn-sm btn-icon" id="redo" data-i18n-title="bar.redo" data-i18n-aria="bar.redo">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/></svg>
           </button>
-          <button class="btn btn-sm" id="preview-toggle" data-i18n="bar.preview" data-i18n-title="bar.preview.title"></button>
-          <button class="btn btn-sm btn-danger" id="clear-side" data-i18n="bar.clear" data-i18n-title="bar.clear.title"></button>
+          <button class="btn btn-sm" id="preview-toggle" data-i18n-title="bar.preview.title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span class="btn-label" data-i18n="bar.preview"></span>
+          </button>
+          <button class="btn btn-sm btn-danger" id="clear-side" data-i18n-title="bar.clear.title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg><span class="btn-label" data-i18n="bar.clear"></span>
+          </button>
         </div>
         <div class="stage" id="stage">
           <canvas id="design-canvas"></canvas>
         </div>
 
         <div class="flyout" id="flyout-templates" hidden>
-          <h4 data-i18n="fly.templates"></h4>
+          <div class="fly-head"><h4 data-i18n="fly.templates"></h4><button class="fly-close" data-i18n-aria="bar.close">✕</button></div>
           <p class="muted small" style="margin-top:0" data-i18n="fly.templates.hint"></p>
           <div class="template-grid" id="template-grid"></div>
         </div>
         <div class="flyout" id="flyout-text" hidden>
-          <h4 data-i18n="fly.text"></h4>
+          <div class="fly-head"><h4 data-i18n="fly.text"></h4><button class="fly-close" data-i18n-aria="bar.close">✕</button></div>
           <div id="text-presets"></div>
         </div>
         <div class="flyout" id="flyout-upload" hidden>
-          <h4 data-i18n="fly.upload"></h4>
+          <div class="fly-head"><h4 data-i18n="fly.upload"></h4><button class="fly-close" data-i18n-aria="bar.close">✕</button></div>
           <label class="dropzone" id="dropzone" for="file-input">
             <span data-i18n-html="fly.upload.drop"></span><br>
             <span class="muted small" data-i18n="fly.upload.types"></span>
@@ -80,8 +90,13 @@
           <input type="file" id="file-input" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
           <p class="muted small" style="line-height:1.5;margin-bottom:0;" data-i18n="fly.upload.tip"></p>
         </div>
+        <div class="flyout" id="flyout-stickers" hidden>
+          <div class="fly-head"><h4 data-i18n="fly.stickers"></h4><button class="fly-close" data-i18n-aria="bar.close">✕</button></div>
+          <div class="cat-chips small-chips" id="sticker-cats"></div>
+          <div class="sticker-grid" id="sticker-grid"></div>
+        </div>
         <div class="flyout" id="flyout-shapes" hidden>
-          <h4 data-i18n="fly.shapes"></h4>
+          <div class="fly-head"><h4 data-i18n="fly.shapes"></h4><button class="fly-close" data-i18n-aria="bar.close">✕</button></div>
           <div class="shape-grid" id="shape-grid"></div>
           <button class="btn btn-block btn-sm" id="fill-area" style="margin-top:12px;" data-i18n="fly.fillArea"></button>
         </div>
@@ -89,8 +104,9 @@
 
       <!-- Product + properties -->
       <aside class="panel">
+        <div class="sheet-head"><strong id="sheet-title"></strong><button id="sheet-close" class="fly-close" data-i18n-aria="bar.close">✕</button></div>
         <div class="panel-scroll">
-          <section class="panel-section">
+          <section class="panel-section" id="sec-product">
             <div class="field">
               <label for="product-select" data-i18n="panel.product"></label>
               <select id="product-select"></select>
@@ -105,12 +121,12 @@
             </div>
           </section>
 
-          <section class="panel-section">
+          <section class="panel-section" id="sec-props">
             <h3 id="props-title"></h3>
             <div id="props"></div>
           </section>
 
-          <section class="panel-section">
+          <section class="panel-section" id="sec-layers">
             <h3 data-i18n="panel.layers"></h3>
             <ul class="layers" id="layers"></ul>
           </section>
@@ -134,7 +150,9 @@
   <script src="/vendor/fabric-5.3.0.min.js"></script>
   <script src="/js/i18n.js"></script>
   <script src="/js/common.js"></script>
+  <script src="/js/fabric-ext.js"></script>
   <script src="/js/templates.js"></script>
+  <script src="/js/stickers.js"></script>
   <script src="/js/editor.js"></script>
 </body>
 </html>
