@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../format.dart';
+import '../l10n/strings.dart';
 import '../services/api.dart';
 
 class HistoryScreen extends StatefulWidget {
@@ -30,7 +31,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       final r = await Api.instance.history(monthKey(_month));
       if (mounted) setState(() => _records = r);
     } on ApiException catch (e) {
-      if (mounted) setState(() => _error = e.message);
+      if (mounted) setState(() => _error = e.text(S.of(context)));
     }
   }
 
@@ -44,6 +45,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final s = S.of(context);
     // Group by day (records arrive newest first)
     final byDay = <String, List<dynamic>>{};
     for (final r in _records ?? const []) {
@@ -52,7 +54,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final isCurrent = monthKey(_month) == monthKey(DateTime.now());
 
     return Scaffold(
-      appBar: AppBar(title: const Text('My attendance')),
+      appBar: AppBar(title: Text(s.myAttendance)),
       body: Column(
         children: [
           Padding(
@@ -61,7 +63,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
               children: [
                 IconButton(onPressed: () => _shift(-1), icon: const Icon(Icons.chevron_left)),
                 Expanded(
-                  child: Text(formatMonth(_month),
+                  child: Text(formatMonth(s, _month),
                       textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleMedium),
                 ),
                 IconButton(onPressed: isCurrent ? null : () => _shift(1), icon: const Icon(Icons.chevron_right)),
@@ -70,7 +72,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
           ),
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: Text('${byDay.length} day${byDay.length == 1 ? '' : 's'} attended',
+            child: Text(s.daysAttended(byDay.length),
                 style: TextStyle(color: scheme.onSurfaceVariant)),
           ),
           const Divider(height: 1),
@@ -80,21 +82,21 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 : _records == null
                     ? const Center(child: CircularProgressIndicator())
                     : byDay.isEmpty
-                        ? Center(child: Text('No attendance this month', style: TextStyle(color: scheme.onSurfaceVariant)))
+                        ? Center(child: Text(s.noAttendanceThisMonth, style: TextStyle(color: scheme.onSurfaceVariant)))
                         : RefreshIndicator(
                             onRefresh: _load,
                             child: ListView(
                               children: [
                                 for (final entry in byDay.entries)
                                   ListTile(
-                                    title: Text(formatDayHeader(entry.key)),
+                                    title: Text(formatDayHeader(s, entry.key)),
                                     subtitle: Wrap(
                                       spacing: 12,
                                       children: [
                                         for (final r in entry.value.reversed)
                                           Text(
-                                            '${r['type'] == 'in' ? 'In' : 'Out'} '
-                                            '${formatTime(DateTime.parse(r['ts'] as String).toLocal())}',
+                                            '${r['type'] == 'in' ? s.inShort : s.outShort} '
+                                            '${formatTime(s, DateTime.parse(r['ts'] as String).toLocal())}',
                                             style: TextStyle(
                                               color: r['type'] == 'in' ? Colors.green.shade700 : Colors.orange.shade800,
                                             ),

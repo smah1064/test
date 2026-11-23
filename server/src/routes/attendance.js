@@ -6,6 +6,7 @@ const multer = require('multer');
 const config = require('../config');
 const { db, getSettings } = require('../db');
 const { requireAuth } = require('../auth');
+const { t, en } = require('../i18n');
 const { localDate, haversineM, toBool, monthDays } = require('../util');
 
 const router = express.Router();
@@ -52,19 +53,21 @@ router.get('/history', (req, res) => {
   res.json({ records: rows });
 });
 
-function reject(req, res, status, code, reason, extra = {}) {
+// Logs the blocked attempt for admins (in English) and answers the app in
+// the employee's language. `code` is also the i18n message key.
+function reject(req, res, status, code, params, extra = {}) {
   db.prepare(
     'INSERT INTO rejected_attempts (user_id, ts, reason, code, lat, lng, details) VALUES (?, ?, ?, ?, ?, ?, ?)'
   ).run(
     req.user.id,
     new Date().toISOString(),
-    reason,
+    en(code, params),
     code,
     Number.isFinite(extra.lat) ? extra.lat : null,
     Number.isFinite(extra.lng) ? extra.lng : null,
     JSON.stringify({ ...extra.details, ua: req.get('user-agent') || null })
   );
-  return res.status(status).json({ error: reason, code });
+  return res.status(status).json({ error: t(req, code, params), code });
 }
 
 // POST /api/attendance  (multipart/form-data)
@@ -89,34 +92,34 @@ router.post('/', upload.single('photo'), (req, res) => {
   // 1. Device integrity — reported by the app and logged for admins, even
   //    when the app couldn't get a location fix.
   if (details.dev_mode) {
-    return reject(req, res, 403, 'DEV_MODE', 'Developer options are turned on. Turn them off and try again.', { lat, lng, details });
+    return reject(req, res, 403, 'DEV_MODE', {}, { lat, lng, details });
   }
   if (details.is_mocked) {
-    return reject(req, res, 403, 'MOCK_LOCATION', 'A fake-GPS / mock location was detected. Punch blocked.', { lat, lng, details });
+    return reject(req, res, 403, 'MOCK_LOCATION', {}, { lat, lng, details });
   }
   if (details.rooted) {
-    return reject(req, res, 403, 'ROOTED', 'This phone is rooted or jailbroken and cannot be used for attendance.', { lat, lng, details });
+    return reject(req, res, 403, 'ROOTED', {}, { lat, lng, details });
   }
 
   if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
-    return res.status(400).json({ error: 'Location is missing' });
+    return res.status(400).json({ error: t(req, 'LOCATION_MISSING') });
   }
 
   // 2. Selfie must be present, a real JPEG, and freshly taken.
   const photo = req.file;
   if (!photo || photo.buffer.length < 1024 || photo.buffer[0] !== 0xff || photo.buffer[1] !== 0xd8) {
-    return res.status(400).json({ error: 'A selfie taken with the in-app camera is required' });
+    return res.status(400).json({ error: t(req, 'SELFIE_REQUIRED') });
   }
   const age = Number(b.capture_age_sec);
   if (!Number.isFinite(age) || age < 0 || age > config.maxCaptureAgeSec) {
-    return reject(req, res, 400, 'STALE', 'The selfie is too old. Please take a new one.', { lat, lng, details: { ...details, age } });
+    return reject(req, res, 400, 'STALE', {}, { lat, lng, details: { ...details, age } });
   }
 
   // 3. GPS quality and geofence.
   if (!Number.isFinite(accuracy) || accuracy <= 0 || accuracy > config.maxGpsAccuracyM) {
     return reject(
       req, res, 400, 'LOW_ACCURACY',
-      `GPS signal is too weak (±${Number.isFinite(accuracy) ? Math.round(accuracy) : '?'} m). Move near a window or outside and try again.`,
+      { acc: Number.isFinite(accuracy) ? Math.round(accuracy) : '?' },
       { lat, lng, details }
     );
   }
@@ -125,7 +128,7 @@ router.post('/', upload.single('photo'), (req, res) => {
     ? db.prepare('SELECT * FROM sites WHERE id = ?').all(req.user.site_id)
     : db.prepare('SELECT * FROM sites').all();
   if (sites.length === 0) {
-    return res.status(400).json({ error: 'No work location is set up yet. Contact your admin.' });
+    return res.status(400).json({ error: t(req, 'NO_SITES') });
   }
   let best = null;
   for (const s of sites) {
@@ -135,7 +138,7 @@ router.post('/', upload.single('photo'), (req, res) => {
   if (best.d > best.site.radius_m) {
     return reject(
       req, res, 403, 'OUT_OF_RANGE',
-      `You are ${Math.round(best.d)} m from ${best.site.name}. You must be within ${Math.round(best.site.radius_m)} m.`,
+      { distance: Math.round(best.d), site: best.site.name, radius: Math.round(best.site.radius_m) },
       { lat, lng, details: { ...details, site_id: best.site.id, distance_m: Math.round(best.d) } }
     );
   }
@@ -143,8 +146,8 @@ router.post('/', upload.single('photo'), (req, res) => {
   // 4. Sequence: can't check in twice or check out without checking in.
   const today = todayRecords(req.user.id);
   const last = today[today.length - 1];
-  if (type === 'in' && last && last.type === 'in') return res.status(409).json({ error: 'You are already checked in' });
-  if (type === 'out' && (!last || last.type === 'out')) return res.status(409).json({ error: 'You are not checked in' });
+  if (type === 'in' && last && last.type === 'in') return res.status(409).json({ error: t(req, 'ALREADY_IN') });
+  if (type === 'out' && (!last || last.type === 'out')) return res.status(409).json({ error: t(req, 'NOT_IN') });
 
   // 5. Save.
   const now = new Date();
@@ -172,7 +175,7 @@ router.post('/', upload.single('photo'), (req, res) => {
 
 // Multer errors (e.g. photo too large) -> JSON
 router.use((err, req, res, next) => {
-  if (err instanceof multer.MulterError) return res.status(400).json({ error: `Upload error: ${err.message}` });
+  if (err instanceof multer.MulterError) return res.status(400).json({ error: t(req, 'UPLOAD_ERROR', { detail: err.message }) });
   next(err);
 });
 

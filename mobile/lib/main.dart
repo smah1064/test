@@ -3,6 +3,8 @@ import 'package:material_ui/material_ui.dart';
 import 'package:safe_device/safe_device.dart';
 import 'package:safe_device/safe_device_config.dart';
 
+import 'l10n/language.dart';
+import 'l10n/strings.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
 import 'services/api.dart';
@@ -13,6 +15,7 @@ Future<void> main() async {
   // plugin's own background location listener isn't needed.
   SafeDevice.init(const SafeDeviceConfig(mockLocationCheckEnabled: false));
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+  await LanguageController.load();
   await Api.instance.init();
   runApp(const AttendanceApp());
 }
@@ -31,8 +34,20 @@ class _AttendanceAppState extends State<AttendanceApp> {
   @override
   Widget build(BuildContext context) {
     const seed = Color(0xFF1F5FBF);
+    // Rebuilds the whole app (and flips it to right-to-left for Arabic)
+    // whenever the language changes.
+    return ValueListenableBuilder<Locale>(
+      valueListenable: LanguageController.instance,
+      builder: (context, locale, _) => _app(locale, seed),
+    );
+  }
+
+  Widget _app(Locale locale, Color seed) {
     return MaterialApp(
-      title: 'Attendance',
+      onGenerateTitle: (context) => S.of(context).appTitle,
+      locale: locale,
+      supportedLocales: S.supportedLocales,
+      localizationsDelegates: const [S.delegate, ...GlobalMaterialLocalizations.delegates],
       debugShowCheckedModeBanner: false,
       theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: seed)),
       darkTheme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: seed, brightness: Brightness.dark)),

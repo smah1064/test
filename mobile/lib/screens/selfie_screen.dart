@@ -4,6 +4,8 @@ import 'package:camera/camera.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../l10n/strings.dart';
+
 class Selfie {
   Selfie(this.file, this.takenAt);
   final File file;
@@ -14,8 +16,8 @@ class Selfie {
 /// hand-off to the phone's own camera app, so beauty filters, edited photos
 /// and old pictures can't be used — the raw camera frame is what's uploaded.
 class SelfieScreen extends StatefulWidget {
-  const SelfieScreen({super.key, required this.title});
-  final String title;
+  const SelfieScreen({super.key, required this.checkIn});
+  final bool checkIn;
 
   @override
   State<SelfieScreen> createState() => _SelfieScreenState();
@@ -63,7 +65,7 @@ class _SelfieScreenState extends State<SelfieScreen> with WidgetsBindingObserver
       final cameras = await availableCameras();
       final front = cameras.where((c) => c.lensDirection == CameraLensDirection.front).toList();
       if (front.isEmpty) {
-        setState(() => _error = 'This phone has no front camera.');
+        setState(() => _error = S.of(context).noFrontCamera);
         return;
       }
       final controller = CameraController(
@@ -81,9 +83,11 @@ class _SelfieScreenState extends State<SelfieScreen> with WidgetsBindingObserver
       setState(() => _controller = controller);
     } on CameraException catch (e) {
       final denied = e.code.contains('AccessDenied') || e.code.contains('Restricted');
+      if (!mounted) return;
+      final s = S.of(context);
       setState(() {
         _permissionDenied = denied;
-        _error = denied ? 'Camera permission is needed to take your attendance selfie.' : 'Camera error: ${e.description ?? e.code}';
+        _error = denied ? s.cameraPermissionNeeded : s.cameraError(e.description ?? e.code);
       });
     }
   }
@@ -99,7 +103,7 @@ class _SelfieScreenState extends State<SelfieScreen> with WidgetsBindingObserver
       await c.dispose();
       setState(() => _shot = shot);
     } on CameraException catch (e) {
-      setState(() => _error = 'Couldn\'t take the photo: ${e.description ?? e.code}');
+      if (mounted) setState(() => _error = S.of(context).photoError(e.description ?? e.code));
     } finally {
       if (mounted) setState(() => _taking = false);
     }
@@ -116,12 +120,13 @@ class _SelfieScreenState extends State<SelfieScreen> with WidgetsBindingObserver
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final s = S.of(context);
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
-        title: Text(widget.title),
+        title: Text(s.selfieTitle(checkIn: widget.checkIn)),
       ),
       body: SafeArea(
         child: Column(
@@ -141,7 +146,7 @@ class _SelfieScreenState extends State<SelfieScreen> with WidgetsBindingObserver
                             ),
                             onPressed: _retake,
                             icon: const Icon(Icons.refresh),
-                            label: const Text('Retake'),
+                            label: Text(s.retake),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -150,7 +155,7 @@ class _SelfieScreenState extends State<SelfieScreen> with WidgetsBindingObserver
                             style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
                             onPressed: () => Navigator.pop(context, _shot),
                             icon: const Icon(Icons.check),
-                            label: const Text('Use photo'),
+                            label: Text(s.usePhoto),
                           ),
                         ),
                       ],
@@ -158,8 +163,8 @@ class _SelfieScreenState extends State<SelfieScreen> with WidgetsBindingObserver
                   : _controller != null
                       ? Column(
                           children: [
-                            const Text('Look at the camera. Your face must be clearly visible.',
-                                style: TextStyle(color: Colors.white70), textAlign: TextAlign.center),
+                            Text(s.lookAtCamera,
+                                style: const TextStyle(color: Colors.white70), textAlign: TextAlign.center),
                             const SizedBox(height: 16),
                             GestureDetector(
                               onTap: _take,
@@ -208,7 +213,7 @@ class _SelfieScreenState extends State<SelfieScreen> with WidgetsBindingObserver
             const SizedBox(height: 16),
             FilledButton(
               onPressed: _permissionDenied ? Geolocator.openAppSettings : _start,
-              child: Text(_permissionDenied ? 'Open app settings' : 'Try again'),
+              child: Text(_permissionDenied ? S.of(context).openAppSettings : S.of(context).tryAgain),
             ),
           ],
         ),

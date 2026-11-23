@@ -207,3 +207,37 @@ test('integrity violations are logged even without location or photo', async () 
   r = await api('GET', '/api/admin/rejected', { token: admin });
   assert.ok(r.data.some((x) => x.emp_code === 'E002' && x.code === 'DEV_MODE'));
 });
+
+test('employee-facing messages follow Accept-Language, admin log stays English', async () => {
+  const login = (lang, body) =>
+    fetch(base + '/api/auth/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'accept-language': lang },
+      body: JSON.stringify(body),
+    }).then(async (r) => ({ status: r.status, data: await r.json() }));
+
+  let r = await login('ar', { emp_code: 'E001', password: 'wrong' });
+  assert.equal(r.status, 401);
+  assert.equal(r.data.error, 'رمز الموظف أو كلمة المرور غير صحيحة');
+  r = await login('en', { emp_code: 'E001', password: 'wrong' });
+  assert.equal(r.data.error, 'Wrong employee code or password');
+  r = await login('ar-SA,ar;q=0.9,en;q=0.5', { emp_code: 'E001', password: 'wrong' });
+  assert.match(r.data.error, /كلمة المرور/);
+
+  // Out-of-range punch in Arabic, with the numbers and site name filled in
+  r = await login('ar', { emp_code: 'E001', password: 'secret1', device_id: 'phone-B' });
+  assert.equal(r.status, 200);
+  const form = punchForm('in', { lat: SITE.lat + 0.01 });
+  const res = await fetch(base + '/api/attendance', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${r.data.token}`, 'x-device-id': 'phone-B', 'accept-language': 'ar' },
+    body: form,
+  });
+  const body = await res.json();
+  assert.equal(body.code, 'OUT_OF_RANGE');
+  assert.match(body.error, /^أنت على بُعد \d+ م من HQ\. يجب أن تكون ضمن 100 م\.$/);
+
+  const admin = (await api('POST', '/api/auth/login', { body: { emp_code: 'admin', password: 'admin123' } })).data.token;
+  const log = (await api('GET', '/api/admin/rejected', { token: admin })).data;
+  assert.match(log[0].reason, /^You are \d+ m from HQ\. You must be within 100 m\.$/);
+});

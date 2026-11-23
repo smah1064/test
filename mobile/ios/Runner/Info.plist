@@ -2,10 +2,15 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>ar</string>
+	</array>
 	<key>NSCameraUsageDescription</key>
-	<string>A selfie is taken when you check in or out to confirm your attendance.</string>
+	<string>A selfie is taken when you check in or out to confirm your attendance. / يتم التقاط صورة سيلفي عند تسجيل الحضور أو الانصراف لتأكيد حضورك.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Your location is checked when you check in or out to confirm you are at your work location.</string>
+	<string>Your location is checked when you check in or out to confirm you are at your work location. / يتم التحقق من موقعك عند تسجيل الحضور أو الانصراف للتأكد من وجودك في موقع العمل.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>

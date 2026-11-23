@@ -10,18 +10,33 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:uuid/uuid.dart';
 
 import '../config.dart';
+import '../l10n/language.dart';
+import '../l10n/strings.dart';
 import 'integrity.dart';
 
+/// [message] comes from the server, already in the user's language. Errors
+/// raised in the app itself have no message, only a [code] (NETWORK, TIMEOUT,
+/// SERVER, ADMIN_ACCOUNT) that the UI translates — see [ApiException.text].
 class ApiException implements Exception {
   ApiException(this.message, {this.status = 0, this.code});
-  final String message;
+  final String? message;
   final int status;
   final String? code;
 
   /// The session is no longer valid — send the user back to login.
   bool get mustLogin => status == 401 || code == 'DEVICE_MISMATCH';
+  /// Text to show the user.
+  String text(S s) =>
+      message ??
+      switch (code) {
+        'TIMEOUT' => s.timeoutError,
+        'NETWORK' => s.networkError,
+        'ADMIN_ACCOUNT' => s.adminsUseDashboard,
+        _ => s.serverError(status),
+      };
+
   @override
-  String toString() => message;
+  String toString() => message ?? code ?? 'error';
 }
 
 class Api {
@@ -77,6 +92,8 @@ class Api {
         if (_token != null) 'authorization': 'Bearer $_token',
         'x-device-id': ?_deviceId,
         'user-agent': 'AttendanceApp/$_appVersion ($_deviceModel)',
+        // The server answers error messages in the app's language.
+        'accept-language': LanguageController.instance.code,
       };
 
   Uri _u(String path, [Map<String, String>? q]) => Uri.parse('$apiBaseUrl$path').replace(queryParameters: q);
@@ -86,11 +103,11 @@ class Api {
     try {
       res = await req.timeout(const Duration(seconds: 45));
     } on TimeoutException {
-      throw ApiException('The server took too long to answer. Check your internet and try again.');
+      throw ApiException(null, code: 'TIMEOUT');
     } on SocketException {
-      throw ApiException('No connection to the server. Check your internet and try again.');
+      throw ApiException(null, code: 'NETWORK');
     } on http.ClientException {
-      throw ApiException('No connection to the server. Check your internet and try again.');
+      throw ApiException(null, code: 'NETWORK');
     }
     dynamic body;
     try {
@@ -99,10 +116,10 @@ class Api {
       body = null;
     }
     if (res.statusCode >= 400) {
-      final msg = body is Map && body['error'] is String ? body['error'] as String : 'Server error (${res.statusCode})';
+      final msg = body is Map && body['error'] is String ? body['error'] as String : null;
       final code = body is Map ? body['code'] as String? : null;
       if (res.statusCode == 401 || code == 'DEVICE_MISMATCH') await logout();
-      throw ApiException(msg, status: res.statusCode, code: code);
+      throw ApiException(msg, status: res.statusCode, code: code ?? (msg == null ? 'SERVER' : null));
     }
     return body;
   }
@@ -120,7 +137,7 @@ class Api {
     ));
     final user = body['user'] as Map<String, dynamic>;
     if (user['role'] != 'employee') {
-      throw ApiException('Admins use the web dashboard, not the app.');
+      throw ApiException(null, code: 'ADMIN_ACCOUNT');
     }
     _token = body['token'] as String;
     await _storage.write(key: 'token', value: _token);

@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const { db } = require('../db');
 const { signToken, requireAuth } = require('../auth');
+const { t } = require('../i18n');
 
 const router = express.Router();
 
@@ -25,16 +26,16 @@ function recordFailure(key) {
 
 router.post('/login', (req, res) => {
   const { emp_code, password, device_id, device_model, portal } = req.body || {};
-  if (!emp_code || !password) return res.status(400).json({ error: 'Employee code and password are required' });
+  if (!emp_code || !password) return res.status(400).json({ error: t(req, 'CODE_PASSWORD_REQUIRED') });
   const key = String(emp_code).toLowerCase();
-  if (tooManyFailures(key)) return res.status(429).json({ error: 'Too many attempts. Try again in 15 minutes.' });
+  if (tooManyFailures(key)) return res.status(429).json({ error: t(req, 'TOO_MANY_ATTEMPTS') });
 
   const user = db.prepare('SELECT * FROM users WHERE emp_code = ?').get(String(emp_code).trim());
   if (!user || !bcrypt.compareSync(String(password), user.password_hash)) {
     recordFailure(key);
-    return res.status(401).json({ error: 'Wrong employee code or password' });
+    return res.status(401).json({ error: t(req, 'WRONG_CREDENTIALS') });
   }
-  if (!user.active) return res.status(403).json({ error: 'Account disabled' });
+  if (!user.active) return res.status(403).json({ error: t(req, 'ACCOUNT_DISABLED') });
   failures.delete(key);
 
   if (portal === 'admin' && user.role !== 'admin') {
@@ -42,7 +43,7 @@ router.post('/login', (req, res) => {
   }
 
   if (user.role === 'employee') {
-    if (!device_id) return res.status(400).json({ error: 'Please use the mobile app to log in' });
+    if (!device_id) return res.status(400).json({ error: t(req, 'USE_MOBILE_APP') });
     if (!user.device_id) {
       // First login: bind the account to this phone.
       db.prepare('UPDATE users SET device_id = ?, device_model = ? WHERE id = ?').run(
@@ -53,7 +54,7 @@ router.post('/login', (req, res) => {
       user.device_id = device_id;
     } else if (user.device_id !== device_id) {
       return res.status(403).json({
-        error: 'This account is registered to another phone. Ask your admin to reset your device.',
+        error: t(req, 'DEVICE_MISMATCH'),
         code: 'DEVICE_MISMATCH',
       });
     }

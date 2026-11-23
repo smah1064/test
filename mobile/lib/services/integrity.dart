@@ -4,21 +4,14 @@ import 'package:flutter/services.dart';
 import 'package:safe_device/safe_device.dart';
 
 import '../config.dart';
-
-class IntegrityProblem {
-  const IntegrityProblem(this.code, this.title, this.message);
-  final String code;
-  final String title;
-  final String message;
-}
+import '../l10n/strings.dart';
 
 class IntegrityReport {
   IntegrityReport({required this.problems, required this.devMode, required this.rooted});
-  final List<IntegrityProblem> problems;
+  final List<IntegrityCode> problems;
   final bool devMode;
   final bool rooted;
   bool get ok => problems.isEmpty;
-  bool get hasDevMode => problems.any((p) => p.code == 'DEV_MODE');
 }
 
 /// Checks that the phone hasn't been set up to fake attendance:
@@ -29,7 +22,7 @@ class Integrity {
   static const _channel = MethodChannel('attendance/integrity');
 
   static Future<IntegrityReport> check() async {
-    final problems = <IntegrityProblem>[];
+    final problems = <IntegrityCode>[];
     var devMode = false;
 
     if (Platform.isAndroid) {
@@ -40,32 +33,17 @@ class Integrity {
         devMode = true; // fail closed: if we can't verify, don't allow
       }
       if (devMode && !allowDevModeForTesting) {
-        problems.add(const IntegrityProblem(
-          'DEV_MODE',
-          'Developer options are turned on',
-          'Attendance can\'t be recorded while Developer options are on, because they allow fake GPS apps.\n\n'
-              'Open Settings → System → Developer options and turn the switch at the top OFF '
-              '(on Samsung: Settings → Developer options). Then come back and tap "Check again".',
-        ));
+        problems.add(IntegrityCode.devMode);
       }
     }
 
     final rooted = await SafeDevice.isJailBroken;
     if (rooted) {
-      problems.add(IntegrityProblem(
-        'ROOTED',
-        Platform.isIOS ? 'This iPhone is jailbroken' : 'This phone is rooted',
-        'Modified phones can fake their location, so they can\'t be used for attendance. '
-            'Please use an unmodified phone or contact your admin.',
-      ));
+      problems.add(IntegrityCode.rooted);
     }
 
     if (!allowDevModeForTesting && !await SafeDevice.isRealDevice) {
-      problems.add(const IntegrityProblem(
-        'EMULATOR',
-        'Emulator detected',
-        'Attendance must be recorded on a real phone.',
-      ));
+      problems.add(IntegrityCode.emulator);
     }
 
     return IntegrityReport(problems: problems, devMode: devMode && !allowDevModeForTesting, rooted: rooted);

@@ -1,5 +1,8 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../l10n/language.dart';
+import '../l10n/strings.dart';
+
 import '../services/api.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -29,7 +32,7 @@ class _LoginScreenState extends State<LoginScreen> {
       await Api.instance.login(_code.text, _password.text);
       widget.onLoggedIn();
     } on ApiException catch (e) {
-      setState(() => _error = e.message);
+      if (mounted) setState(() => _error = e.text(S.of(context)));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -38,7 +41,18 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final s = S.of(context);
     return Scaffold(
+      appBar: AppBar(
+        actions: [
+          TextButton.icon(
+            onPressed: LanguageController.instance.toggle,
+            icon: const Icon(Icons.translate),
+            label: Text(s.switchLanguageLabel),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -50,24 +64,24 @@ class _LoginScreenState extends State<LoginScreen> {
                 children: [
                   Icon(Icons.fact_check_outlined, size: 64, color: scheme.primary),
                   const SizedBox(height: 12),
-                  Text('Attendance', textAlign: TextAlign.center, style: Theme.of(context).textTheme.headlineMedium),
+                  Text(s.appTitle, textAlign: TextAlign.center, style: Theme.of(context).textTheme.headlineMedium),
                   const SizedBox(height: 4),
-                  Text('Log in with the code your admin gave you',
+                  Text(s.loginSubtitle,
                       textAlign: TextAlign.center, style: TextStyle(color: scheme.onSurfaceVariant)),
                   const SizedBox(height: 32),
                   TextFormField(
                     controller: _code,
-                    decoration: const InputDecoration(labelText: 'Employee code', border: OutlineInputBorder()),
+                    decoration: InputDecoration(labelText: s.employeeCode, border: const OutlineInputBorder()),
                     textInputAction: TextInputAction.next,
                     autocorrect: false,
-                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter your employee code' : null,
+                    validator: (v) => (v == null || v.trim().isEmpty) ? s.enterEmployeeCode : null,
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _password,
                     obscureText: _hide,
                     decoration: InputDecoration(
-                      labelText: 'Password',
+                      labelText: s.password,
                       border: const OutlineInputBorder(),
                       suffixIcon: IconButton(
                         icon: Icon(_hide ? Icons.visibility : Icons.visibility_off),
@@ -75,7 +89,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     onFieldSubmitted: (_) => _submit(),
-                    validator: (v) => (v == null || v.isEmpty) ? 'Enter your password' : null,
+                    validator: (v) => (v == null || v.isEmpty) ? s.enterPassword : null,
                   ),
                   if (_error != null) ...[
                     const SizedBox(height: 16),
@@ -87,11 +101,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     onPressed: _busy ? null : _submit,
                     child: _busy
                         ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Text('Log in'),
+                        : Text(s.logIn),
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'Your account will be linked to this phone the first time you log in.',
+                    s.deviceLinkNote,
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
                   ),

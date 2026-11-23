@@ -4,6 +4,8 @@ import 'package:geolocator/geolocator.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../format.dart';
+import '../l10n/language.dart';
+import '../l10n/strings.dart';
 import '../services/api.dart';
 import '../services/integrity.dart';
 import '../services/location.dart';
@@ -59,8 +61,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         });
       }
     } on ApiException catch (e) {
-      if (e.mustLogin) return widget.onLoggedOut(e.message);
-      if (mounted) setState(() => _loadError = e.message);
+      if (e.mustLogin) return widget.onLoggedOut(mounted ? e.text(S.of(context)) : null);
+      if (mounted) setState(() => _loadError = e.text(S.of(context)));
     }
   }
 
@@ -75,28 +77,29 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   void _fail(String message, {String? fix}) {
     if (!mounted) return;
+    final s = S.of(context);
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         icon: const Icon(Icons.error_outline),
-        title: const Text('Not recorded'),
+        title: Text(s.notRecorded),
         content: Text(message),
         actions: [
           if (fix == 'location_settings')
-            TextButton(onPressed: () => Geolocator.openLocationSettings(), child: const Text('Location settings')),
+            TextButton(onPressed: () => Geolocator.openLocationSettings(), child: Text(s.locationSettings)),
           if (fix == 'app_settings')
-            TextButton(onPressed: () => Geolocator.openAppSettings(), child: const Text('App settings')),
-          FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK')),
+            TextButton(onPressed: () => Geolocator.openAppSettings(), child: Text(s.openAppSettings)),
+          FilledButton(onPressed: () => Navigator.pop(ctx), child: Text(s.ok)),
         ],
       ),
     );
   }
 
   Future<void> _punch(String type) async {
-    final label = type == 'in' ? 'Check in' : 'Check out';
+    final s = S.of(context);
     try {
       // 1. Phone security
-      setState(() => _step = 'Checking phone security…');
+      setState(() => _step = s.stepSecurity);
       var integrity = await Integrity.check();
       if (!integrity.ok) {
         unawaited(Api.instance.reportBlocked(type, await Geolocator.getLastKnownPosition(), integrity));
@@ -106,26 +109,25 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       }
 
       // 2. GPS
-      setState(() => _step = 'Getting your location…');
+      setState(() => _step = s.stepLocation);
       var position = await Locator.bestFix();
       if (position.isMocked) {
         await Api.instance.reportBlocked(type, position, integrity, mocked: true);
-        _fail('A fake GPS / mock location app was detected. Uninstall it, turn off Developer options and try again.\n\n'
-            'This attempt has been reported to your admin.');
+        _fail(s.mockLocationDetected);
         return;
       }
 
       // 3. Selfie
       if (!mounted) return;
-      setState(() => _step = 'Taking selfie…');
+      setState(() => _step = s.stepSelfie);
       final selfie = await Navigator.push<Selfie>(
         context,
-        MaterialPageRoute(builder: (_) => SelfieScreen(title: '$label selfie')),
+        MaterialPageRoute(builder: (_) => SelfieScreen(checkIn: type == 'in')),
       );
       if (selfie == null) return;
 
       // 4. Re-check right before sending (settings could change while the camera was open)
-      setState(() => _step = 'Verifying…');
+      setState(() => _step = s.stepVerifying);
       integrity = await Integrity.check();
       if (!integrity.ok) {
         unawaited(Api.instance.reportBlocked(type, position, integrity));
@@ -137,13 +139,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         position = await Locator.bestFix();
         if (position.isMocked) {
           await Api.instance.reportBlocked(type, position, integrity, mocked: true);
-          _fail('A fake GPS / mock location was detected. This attempt has been reported to your admin.');
+          _fail(s.mockLocationDetected);
           return;
         }
       }
 
       // 5. Upload
-      setState(() => _step = 'Sending…');
+      setState(() => _step = s.stepSending);
       final res = await Api.instance.punch(
         type: type,
         position: position,
@@ -161,31 +163,32 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         context: context,
         builder: (ctx) => AlertDialog(
           icon: Icon(Icons.check_circle, color: Colors.green.shade600, size: 48),
-          title: Text(type == 'in' ? 'Checked in' : 'Checked out'),
-          content: Text('${formatTime(ts)} at ${res['site']}', textAlign: TextAlign.center),
-          actions: [FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('Done'))],
+          title: Text(type == 'in' ? s.checkedIn : s.checkedOut),
+          content: Text(s.punchedAt(formatTime(s, ts), '${res['site']}'), textAlign: TextAlign.center),
+          actions: [FilledButton(onPressed: () => Navigator.pop(ctx), child: Text(s.done))],
         ),
       );
     } on LocationProblem catch (e) {
-      _fail(e.message, fix: e.fix);
+      _fail(s.locationIssue(e.issue, e.detail), fix: e.fix);
     } on ApiException catch (e) {
-      if (e.mustLogin) return widget.onLoggedOut(e.message);
-      _fail(e.message);
+      if (e.mustLogin) return widget.onLoggedOut(e.text(s));
+      _fail(e.text(s));
     } catch (e) {
-      _fail('Something went wrong: $e');
+      _fail(s.somethingWentWrong('$e'));
     } finally {
       if (mounted) setState(() => _step = null);
     }
   }
 
   Future<void> _logout() async {
+    final s = S.of(context);
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Log out?'),
+        title: Text(s.logOutQuestion),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Log out')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(s.cancel)),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(s.logOut)),
         ],
       ),
     );
@@ -199,6 +202,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
+    final s = S.of(context);
     final me = _me;
     final now = DateTime.now();
     final checkedIn = me?['checked_in'] == true;
@@ -207,14 +211,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(me?['company_name'] as String? ?? 'Attendance'),
+        title: Text(me?['company_name'] as String? ?? s.appTitle),
         actions: [
           IconButton(
-            tooltip: 'My history',
+            tooltip: s.changeLanguage,
+            icon: const Icon(Icons.translate),
+            onPressed: LanguageController.instance.toggle,
+          ),
+          IconButton(
+            tooltip: s.myHistory,
             icon: const Icon(Icons.calendar_month_outlined),
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const HistoryScreen())),
           ),
-          IconButton(tooltip: 'Log out', icon: const Icon(Icons.logout), onPressed: _logout),
+          IconButton(tooltip: s.logOut, icon: const Icon(Icons.logout), onPressed: _logout),
         ],
       ),
       body: RefreshIndicator(
@@ -223,10 +232,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           padding: const EdgeInsets.all(20),
           children: [
             if (me != null) ...[
-              Text('Hello, ${me['user']['name']}', style: text.titleLarge),
+              Text(s.hello('${me['user']['name']}'), style: text.titleLarge),
               const SizedBox(height: 2),
               Text(
-                me['site'] != null ? 'Work location: ${me['site']['name']}' : 'Work location: any company site',
+                me['site'] != null ? s.workLocation('${me['site']['name']}') : s.workLocationAny,
                 style: TextStyle(color: scheme.onSurfaceVariant),
               ),
             ],
@@ -236,7 +245,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 child: ListTile(
                   leading: const Icon(Icons.wifi_off),
                   title: Text(_loadError!),
-                  trailing: TextButton(onPressed: _refresh, child: const Text('Retry')),
+                  trailing: TextButton(onPressed: _refresh, child: Text(s.retry)),
                 ),
               ),
             if (blocked)
@@ -245,21 +254,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 margin: const EdgeInsets.only(top: 16),
                 child: ListTile(
                   leading: Icon(Icons.gpp_bad, color: scheme.onErrorContainer),
-                  title: Text(_integrity!.problems.first.title,
+                  title: Text(s.integrityTitle(_integrity!.problems.first, ios: Theme.of(context).platform == TargetPlatform.iOS),
                       style: TextStyle(color: scheme.onErrorContainer, fontWeight: FontWeight.bold)),
-                  subtitle: Text('Fix this before you can check in.', style: TextStyle(color: scheme.onErrorContainer)),
+                  subtitle: Text(s.fixBeforeCheckIn, style: TextStyle(color: scheme.onErrorContainer)),
                   trailing: Icon(Icons.chevron_right, color: scheme.onErrorContainer),
                   onTap: () => _showBlocked(_integrity!),
                 ),
               ),
             const SizedBox(height: 28),
-            Center(child: Text(formatTime(now), style: text.displayMedium?.copyWith(fontWeight: FontWeight.w600))),
-            Center(child: Text(formatLongDate(now), style: TextStyle(color: scheme.onSurfaceVariant))),
+            Center(child: Text(formatTime(s, now), style: text.displayMedium?.copyWith(fontWeight: FontWeight.w600))),
+            Center(child: Text(formatLongDate(s, now), style: TextStyle(color: scheme.onSurfaceVariant))),
             const SizedBox(height: 28),
             Center(
               child: Chip(
                 avatar: Icon(checkedIn ? Icons.work : Icons.work_off_outlined, size: 18),
-                label: Text(me == null ? '…' : checkedIn ? 'You are checked in' : 'You are not checked in'),
+                label: Text(me == null ? '…' : checkedIn ? s.youAreCheckedIn : s.youAreNotCheckedIn),
                 backgroundColor: checkedIn ? Colors.green.withValues(alpha: 0.15) : null,
               ),
             ),
@@ -275,16 +284,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 icon: _step != null
                     ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5))
                     : Icon(checkedIn ? Icons.logout : Icons.login),
-                label: Text(_step ?? (checkedIn ? 'Check out' : 'Check in')),
+                label: Text(_step ?? (checkedIn ? s.checkOut : s.checkIn)),
               ),
             ),
             const SizedBox(height: 32),
-            Text('Today', style: text.titleMedium),
+            Text(s.today, style: text.titleMedium),
             const SizedBox(height: 8),
             if (today.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Text('No check-ins yet today.', style: TextStyle(color: scheme.onSurfaceVariant)),
+                child: Text(s.noPunchesToday, style: TextStyle(color: scheme.onSurfaceVariant)),
               )
             else
               Card(
@@ -296,8 +305,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           r['type'] == 'in' ? Icons.login : Icons.logout,
                           color: r['type'] == 'in' ? Colors.green.shade600 : Colors.orange.shade800,
                         ),
-                        title: Text(r['type'] == 'in' ? 'Checked in' : 'Checked out'),
-                        trailing: Text(formatTime(DateTime.parse(r['ts'] as String).toLocal()),
+                        title: Text(r['type'] == 'in' ? s.checkedIn : s.checkedOut),
+                        trailing: Text(formatTime(s, DateTime.parse(r['ts'] as String).toLocal()),
                             style: const TextStyle(fontWeight: FontWeight.w600)),
                       ),
                   ],

@@ -8,6 +8,7 @@ A mobile app for employees to check in and out, and a web dashboard for admins.
 - **One phone per employee.** An account is locked to the first phone it logs in on, so a colleague can't check in for someone else. An admin can reset it.
 - **Monthly report.** On the 1st of each month the server builds an Excel report for the previous month and can email it to admins. Admins can also download any month from the dashboard at any time.
 - **Security alerts.** Every blocked attempt is logged with the employee, the reason and the map location, and shows up in the report.
+- **Arabic and English.** The app follows the phone's language and has a switch to change it. In Arabic the whole app is right-to-left, and the server's messages (wrong password, "you are 300 m from Head Office", …) come back in Arabic. The admin dashboard and reports stay in English.
 
 ```
 mobile/   Flutter app (Android + iOS) for employees
@@ -102,6 +103,8 @@ Developer options must be off. On most Android phones: **Settings → System →
 ---
 
 ## Developing
+
+- **Translations:** all app text is in `mobile/lib/l10n/strings.dart` (`SEn` and `SAr`). Each language must define every string, so a missing translation won't compile. Server messages for employees are in `server/src/i18n.js`.
 
 - **Server:** `cd server && npm run dev`; tests: `npm test`.
 - **App:** you need USB debugging to run the app from your computer, and the app normally blocks that. Run debug builds with `flutter run --dart-define=ALLOW_DEV_MODE=true --dart-define=API_URL=http://<your-pc-ip>:3000` to skip the developer-mode and emulator checks. The flag is ignored in release builds. Debug builds may use plain `http://`; release builds need HTTPS.

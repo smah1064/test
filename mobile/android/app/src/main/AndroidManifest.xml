@@ -6,7 +6,7 @@
     <uses-feature android:name="android.hardware.camera.front" android:required="true" />
     <uses-feature android:name="android.hardware.location.gps" android:required="true" />
     <application
-        android:label="Attendance"
+        android:label="@string/app_name"
         android:allowBackup="false"
         android:fullBackupContent="false"
         android:name="${applicationName}"

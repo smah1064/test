@@ -1,19 +1,22 @@
+import 'dart:io';
+
 import 'package:material_ui/material_ui.dart';
 
+import '../l10n/strings.dart';
 import '../services/integrity.dart';
 
 /// Shown when the phone fails a security check. "Check again" pops with
 /// `true` once the problem is fixed.
 class BlockedScreen extends StatefulWidget {
   const BlockedScreen({super.key, required this.problems});
-  final List<IntegrityProblem> problems;
+  final List<IntegrityCode> problems;
 
   @override
   State<BlockedScreen> createState() => _BlockedScreenState();
 }
 
 class _BlockedScreenState extends State<BlockedScreen> {
-  late List<IntegrityProblem> _problems = widget.problems;
+  late List<IntegrityCode> _problems = widget.problems;
   bool _checking = false;
 
   Future<void> _recheck() async {
@@ -27,16 +30,17 @@ class _BlockedScreenState extends State<BlockedScreen> {
         _problems = report.problems;
         _checking = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Still not fixed.')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.of(context).stillNotFixed)));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final devMode = _problems.any((p) => p.code == 'DEV_MODE');
+    final s = S.of(context);
+    final devMode = _problems.contains(IntegrityCode.devMode);
     return Scaffold(
-      appBar: AppBar(title: const Text('Attendance blocked')),
+      appBar: AppBar(title: Text(s.attendanceBlocked)),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(20),
@@ -44,7 +48,7 @@ class _BlockedScreenState extends State<BlockedScreen> {
             Icon(Icons.gpp_bad_outlined, size: 64, color: scheme.error),
             const SizedBox(height: 12),
             Text(
-              'This phone can\'t record attendance right now',
+              s.blockedHeadline,
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.titleLarge,
             ),
@@ -57,17 +61,17 @@ class _BlockedScreenState extends State<BlockedScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(p.title,
+                      Text(s.integrityTitle(p, ios: Platform.isIOS),
                           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: scheme.onErrorContainer)),
                       const SizedBox(height: 8),
-                      Text(p.message, style: TextStyle(color: scheme.onErrorContainer)),
+                      Text(s.integrityMessage(p), style: TextStyle(color: scheme.onErrorContainer)),
                     ],
                   ),
                 ),
               ),
             const SizedBox(height: 8),
             Text(
-              'This attempt has been reported to your admin.',
+              s.reportedToAdmin,
               textAlign: TextAlign.center,
               style: TextStyle(color: scheme.onSurfaceVariant),
             ),
@@ -77,7 +81,7 @@ class _BlockedScreenState extends State<BlockedScreen> {
                 style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(50)),
                 onPressed: Integrity.openDeveloperSettings,
                 icon: const Icon(Icons.settings),
-                label: const Text('Open Developer options'),
+                label: Text(s.openDeveloperOptions),
               ),
             const SizedBox(height: 12),
             FilledButton.icon(
@@ -86,7 +90,7 @@ class _BlockedScreenState extends State<BlockedScreen> {
               icon: _checking
                   ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                   : const Icon(Icons.refresh),
-              label: const Text('Check again'),
+              label: Text(s.checkAgain),
             ),
           ],
         ),

@@ -4,15 +4,21 @@ import 'dart:io';
 import 'package:geolocator/geolocator.dart';
 
 import '../config.dart';
+import '../l10n/strings.dart';
 
 class LocationProblem implements Exception {
-  LocationProblem(this.message, {this.fix});
-  final String message;
+  LocationProblem(this.issue, [this.detail]);
+  final LocationIssue issue;
+  final String? detail;
 
   /// 'location_settings' or 'app_settings' — what the user should open to fix it.
-  final String? fix;
+  String? get fix => switch (issue) {
+        LocationIssue.serviceOff => 'location_settings',
+        LocationIssue.permissionDeniedForever || LocationIssue.reducedAccuracy => 'app_settings',
+        _ => null,
+      };
   @override
-  String toString() => message;
+  String toString() => '$issue ${detail ?? ''}';
 }
 
 class Locator {
@@ -30,18 +36,18 @@ class Locator {
 
   static Future<void> ensureReady() async {
     if (!await Geolocator.isLocationServiceEnabled()) {
-      throw LocationProblem('Location (GPS) is turned off. Turn it on to check in.', fix: 'location_settings');
+      throw LocationProblem(LocationIssue.serviceOff);
     }
     var perm = await Geolocator.checkPermission();
     if (perm == LocationPermission.denied) perm = await Geolocator.requestPermission();
     if (perm == LocationPermission.denied) {
-      throw LocationProblem('Location permission is needed to check in.');
+      throw LocationProblem(LocationIssue.permissionDenied);
     }
     if (perm == LocationPermission.deniedForever) {
-      throw LocationProblem('Location permission was denied. Allow it in the app settings.', fix: 'app_settings');
+      throw LocationProblem(LocationIssue.permissionDeniedForever);
     }
     if (await Geolocator.getLocationAccuracy() == LocationAccuracyStatus.reduced) {
-      throw LocationProblem('Please allow "Precise location" for this app in its settings.', fix: 'app_settings');
+      throw LocationProblem(LocationIssue.reducedAccuracy);
     }
   }
 
@@ -57,7 +63,7 @@ class Locator {
         if (best != null) {
           done.complete(best!);
         } else {
-          done.completeError(LocationProblem('Couldn\'t get your location. Move near a window or outside and try again.'));
+          done.completeError(LocationProblem(LocationIssue.noFix));
         }
       }
     });
@@ -72,7 +78,7 @@ class Locator {
         if (p.accuracy <= targetAccuracyM && !done.isCompleted) done.complete(p);
       },
       onError: (Object e) {
-        if (!done.isCompleted) done.completeError(LocationProblem('Location error: $e'));
+        if (!done.isCompleted) done.completeError(LocationProblem(LocationIssue.error, '$e'));
       },
     );
     try {
