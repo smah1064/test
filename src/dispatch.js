@@ -76,25 +76,35 @@ const T = {
   en: {
     dir: 'ltr', hello: (n) => `Hello ${n},`, intro: 'Please print the following job for OneOff Print:',
     order: 'Order', product: 'Product', colour: 'Colour / size', method: 'Print method', sides: 'Print areas', qty: 'Quantity',
+    placement: (v) => `moved ${v} from the standard position, see the preview PDF`,
     note: 'Note', files: 'Files', attached: 'attached to this email', expires: (d) => `Download links work until ${d}.`,
     thanks: 'Thank you!', subject: (o, p) => `Print job ${o} · ${p}`,
   },
   ar: {
     dir: 'rtl', hello: (n) => `أهلًا ${n}،`, intro: 'من فضلك اطبعوا الشغل ده لـ OneOff Print:',
     order: 'الطلب', product: 'المنتج', colour: 'اللون / المقاس', method: 'طريقة الطباعة', sides: 'أماكن الطباعة', qty: 'الكمية',
+    placement: (v) => `متحرك ${v} عن المكان القياسي، شوف ملف المعاينة`,
     note: 'ملاحظة', files: 'الملفات', attached: 'مرفقة في الإيميل ده', expires: (d) => `روابط التحميل شغالة لحد ${d}.`,
     thanks: 'شكرًا!', subject: (o, p) => `شغل طباعة ${o} · ${p}`,
   },
 };
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const cm = (inches) => Math.round(inches * 2.54 * 10) / 10;
+/** "3 cm lower, 2 cm left" in the message language. */
+function placement(o, lang) {
+  const ar = lang === 'ar';
+  const parts = [];
+  if (o.y) parts.push(ar ? `${Math.abs(o.y)} سم ${o.y > 0 ? 'لتحت' : 'لفوق'}` : `${Math.abs(o.y)} cm ${o.y > 0 ? 'lower' : 'higher'}`);
+  if (o.x) parts.push(ar ? `${Math.abs(o.x)} سم ${o.x > 0 ? 'يمين' : 'شمال'}` : `${Math.abs(o.x)} cm ${o.x > 0 ? 'right' : 'left'}`);
+  return parts.join(ar ? ' و' : ', ');
+}
 
 /** The job's facts, in the admin's language. */
 function jobLines(order, item, design, lang) {
   const t = T[lang];
   const sides = (design.sides || [])
     .filter((s) => s.widthIn)
-    .map((s) => `${pick(s.name, lang)} ${cm(s.widthIn)} × ${cm(s.heightIn)} cm`)
+    .map((s) => `${pick(s.name, lang)} ${cm(s.widthIn)} × ${cm(s.heightIn)} cm${s.offsetCm ? ` (${t.placement(placement(s.offsetCm, lang))})` : ''}`)
     .join(' + ');
   return [
     [t.order, `${order.number} (${item.position}/${order.items.length})`],

@@ -1206,6 +1206,39 @@ function round2(n) {
  * Price of one printed item. `sideCount` is the number of sides that carry
  * a design. Returns null when the size is unknown.
  */
+// Garments and bags: the customer can move the print area within this zone
+// (mockup units; measured from the product photos, kept clear of collars,
+// hems, zips, plackets and pockets).
+const MOVE_ZONES = {
+  'tshirt:front': { x: 114, y: 100, w: 271, h: 397 },
+  'tshirt:back': { x: 118, y: 93, w: 264, h: 397 },
+  'kidstee:front': { x: 107, y: 114, w: 286, h: 440 },
+  'kidstee:back': { x: 110, y: 126, w: 279, h: 423 },
+  'hoodie:front': { x: 156, y: 166, w: 191, h: 239 },
+  'hoodie:back': { x: 105, y: 165, w: 291, h: 361 },
+  'sweatshirt:front': { x: 94, y: 112, w: 313, h: 392 },
+  'sweatshirt:back': { x: 119, y: 116, w: 264, h: 376 },
+  'polo:front': { x: 266, y: 120, w: 123, h: 267 },
+  'polo:back': { x: 139, y: 115, w: 220, h: 338 },
+  'oversized:front': { x: 133, y: 125, w: 235, h: 296 },
+  'ziphoodie:front': { x: 272, y: 132, w: 120, h: 183 },
+  'ziphoodie:back': { x: 108, y: 175, w: 282, h: 312 },
+  'denim:back': { x: 103, y: 170, w: 294, h: 280 },
+  'onesie:front': { x: 178, y: 151, w: 142, h: 211 },
+  'kidshoodie:front': { x: 173, y: 192, w: 155, h: 198 },
+  'kidshoodie:back': { x: 132, y: 196, w: 235, h: 262 },
+  'shorts:front': { x: 264, y: 249, w: 100, h: 144 },
+  'jersey:front': { x: 115, y: 98, w: 265, h: 389 },
+  'jersey:back': { x: 112, y: 101, w: 272, h: 416 },
+  'tote:front': { x: 135, y: 252, w: 230, h: 268 },
+  'tote:back': { x: 135, y: 252, w: 230, h: 268 },
+};
+for (const [key, zone] of Object.entries(MOVE_ZONES)) {
+  const [pid, sid] = key.split(':');
+  const side = PRODUCTS.find((p) => p.id === pid)?.sides.find((s) => s.id === sid);
+  if (side) side.moveZone = zone;
+}
+
 function priceFor(product, sizeId, sideCount) {
   const size = product.sizes.find((s) => s.id === sizeId);
   if (!size) return null;

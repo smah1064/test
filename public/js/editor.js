@@ -70,6 +70,7 @@
     side: null,
     designs: {}, // sideId -> serialized objects
     history: {}, // sideId -> { stack: [json], i }
+    offsets: {}, // sideId -> { dx, dy }: where the customer moved the print area
     editingCartIndex: null,
     preview: false,
     exporting: false,
@@ -87,6 +88,7 @@
       st.sizeId = saved.size.id;
       for (const [sideId, data] of Object.entries(saved.editor)) {
         st.designs[sideId] = await blobifyImages(data.objects || []);
+        if (data.offset) st.offsets[sideId] = data.offset;
       }
       const idx = Number(params.get('cart'));
       const cart = POD.getCart();
@@ -115,7 +117,10 @@
       st.colorId = shared.color;
       st.sizeId = shared.size;
       for (const [sideId, data] of Object.entries(shared.editor || {})) {
-        if (st.product.sides.some((sd) => sd.id === sideId)) st.designs[sideId] = await blobifyImages(data.objects || []);
+        if (st.product.sides.some((sd) => sd.id === sideId)) {
+          st.designs[sideId] = await blobifyImages(data.objects || []);
+          if (data.offset) st.offsets[sideId] = data.offset;
+        }
       }
       fromShare = true;
     } catch (e) {
@@ -133,6 +138,7 @@
       for (const [sideId, objs] of Object.entries(draft.designs)) {
         if (st.product.sides.some((s) => s.id === sideId)) st.designs[sideId] = await blobifyImages(objs || []);
       }
+      for (const [sideId, o] of Object.entries(draft.offsets || {})) if (st.product.sides.some((s) => s.id === sideId)) st.offsets[sideId] = o;
       restoredDraft = true;
     }
   }
@@ -140,7 +146,18 @@
   st.sizeId = st.product.sizes.some((s) => s.id === st.sizeId) ? st.sizeId : st.product.sizes[0].id;
   st.side = st.product.sides.find((s) => (st.designs[s.id] || []).length)?.id || st.product.sides[0].id;
 
-  const sideDef = (id = st.side) => st.product.sides.find((s) => s.id === id);
+  // On garments and bags the print area can be moved (st.offsets, in mockup units);
+  // sideDef() gives the side with its print area where the customer put it.
+  const baseSide = (id = st.side) => st.product.sides.find((s) => s.id === id);
+  const movedSides = new Map();
+  const sideDef = (id = st.side) => {
+    const s = baseSide(id);
+    const o = s && st.offsets[s.id];
+    if (!o || (!o.dx && !o.dy)) return s;
+    const key = `${st.product.id}:${s.id}:${o.dx}:${o.dy}`;
+    if (!movedSides.has(key)) movedSides.set(key, { ...s, printArea: { ...s.printArea, x: s.printArea.x + o.dx, y: s.printArea.y + o.dy } });
+    return movedSides.get(key);
+  };
   const area = (id) => sideDef(id).printArea;
   const color = () => st.product.colors.find((c) => c.id === st.colorId);
   const surfaceHex = () => st.product.surface || color().hex;
@@ -292,6 +309,32 @@
       ctx.textAlign = 'left';
       ctx.fillText(txt, bx + 5 * px, by + 11.5 * px);
     }
+    // Movable print area: a handle under the box (and the allowed zone while dragging).
+    st.handleRect = null;
+    const zone = zoneOf();
+    if (zone && !crop) {
+      if (st.movingArea) {
+        ctx.setLineDash([2 * px, 4 * px]);
+        ctx.lineWidth = 1 * px;
+        ctx.strokeStyle = 'rgba(255, 90, 54, .55)';
+        ctx.strokeRect(zone.x, zone.y, zone.w, zone.h);
+      }
+      const label = '✥ ' + t('area.drag');
+      ctx.setLineDash([]);
+      ctx.font = `700 ${11 * px}px Cairo, system-ui, sans-serif`;
+      const hw = ctx.measureText(label).width + 22 * px;
+      const hh = 24 * px;
+      const hx = a.x + a.w / 2 - hw / 2;
+      const hy = Math.min(a.y + a.h + 8 * px, H - hh - 2 * px);
+      st.handleRect = { x: hx, y: hy, w: hw, h: hh };
+      ctx.fillStyle = st.movingArea ? '#d9480f' : 'rgba(255, 90, 54, .95)';
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(hx, hy, hw, hh, hh / 2); else ctx.rect(hx, hy, hw, hh);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'center';
+      ctx.fillText(label, hx + hw / 2, hy + 16 * px);
+    }
     const s = sideDef();
     ctx.font = `600 ${11 * px}px Cairo, system-ui, sans-serif`;
     ctx.fillStyle = 'rgba(255, 90, 54, .95)';
@@ -311,6 +354,110 @@
       ctx.stroke();
     }
     ctx.restore();
+  });
+
+  // ---------- Moving the print area (garments and bags) ----------
+  function zoneOf(id = st.side) {
+    return (baseSide(id) && baseSide(id).moveZone) || null;
+  }
+  const areaUnitsPerCm = (id = st.side) => { const sd = baseSide(id); return sd.printArea.w / (sd.printWidthIn * 2.54); };
+  /** Keep the print area inside the side's allowed zone. */
+  function clampOffset(dx, dy, id = st.side) {
+    const z = zoneOf(id);
+    if (!z) return { dx: 0, dy: 0 };
+    const a = baseSide(id).printArea;
+    const clamp = (v, lo, hi) => Math.round(Math.min(Math.max(v, Math.min(lo, 0)), Math.max(hi, 0)));
+    return { dx: clamp(dx, z.x - a.x, z.x + z.w - a.w - a.x), dy: clamp(dy, z.y - a.y, z.y + z.h - a.h - a.y) };
+  }
+  /** Put the print area at this offset; the design moves with it. */
+  function moveArea(dx, dy) {
+    const cur = st.offsets[st.side] || { dx: 0, dy: 0 };
+    const next = clampOffset(dx, dy);
+    const ddx = next.dx - cur.dx;
+    const ddy = next.dy - cur.dy;
+    if (!ddx && !ddy) return false;
+    if (next.dx || next.dy) st.offsets[st.side] = next;
+    else delete st.offsets[st.side];
+    canvas.discardActiveObject();
+    canvas.getObjects().forEach((o) => {
+      if (o.name === '__cropper') return;
+      o.set({ left: o.left + ddx, top: o.top + ddy });
+      o.setCoords();
+    });
+    applyClips();
+    renderPlacement();
+    if (typeof hideFloatBar === 'function') hideFloatBar();
+    return true;
+  }
+  function renderPlacement() {
+    const box = $('place-field');
+    if (!box) return;
+    const z = zoneOf();
+    box.hidden = !z;
+    if (!z) return;
+    const o = st.offsets[st.side] || { dx: 0, dy: 0 };
+    const u = areaUnitsPerCm();
+    const x = Math.round((o.dx / u) * 2) / 2;
+    const y = Math.round((o.dy / u) * 2) / 2;
+    const parts = [];
+    if (y) parts.push(t(y > 0 ? 'area.lower' : 'area.higher', { n: POD.num(Math.abs(y)) }));
+    if (x) parts.push(t(x > 0 ? 'area.right' : 'area.left', { n: POD.num(Math.abs(x)) }));
+    $('place-info').textContent = parts.length ? t('area.moved', { v: parts.join(POD.lang === 'ar' ? ' و' : ', ') }) : t('area.standard');
+    $('place-reset').disabled = !parts.length;
+  }
+  {
+    // Drag the handle under the print area (mouse and touch). Caught before Fabric sees it.
+    let drag = null;
+    const onHandle = (e) => {
+      const r = st.handleRect;
+      if (!r || st.preview || crop || !zoneOf()) return false;
+      const p = canvas.getPointer(e);
+      const pad = 6 / canvas.getZoom();
+      return p.x >= r.x - pad && p.x <= r.x + r.w + pad && p.y >= r.y - pad && p.y <= r.y + r.h + pad;
+    };
+    const start = (e) => {
+      if (drag || !e.isPrimary || !onHandle(e)) return;
+      e.stopPropagation();
+      if (e.cancelable) e.preventDefault();
+      const p = canvas.getPointer(e);
+      const o = st.offsets[st.side] || { dx: 0, dy: 0 };
+      drag = { x: p.x, y: p.y, dx: o.dx, dy: o.dy };
+      st.movingArea = true;
+      canvas.requestRenderAll();
+    };
+    const move = (e) => {
+      if (!drag) return;
+      if (e.cancelable) e.preventDefault();
+      const p = canvas.getPointer(e);
+      if (!moveArea(drag.dx + p.x - drag.x, drag.dy + p.y - drag.y)) canvas.requestRenderAll();
+    };
+    const end = () => {
+      if (!drag) return;
+      drag = null;
+      st.movingArea = false;
+      commit();
+      canvas.requestRenderAll();
+    };
+    // Pointer events drive the drag; the mouse/touch events Fabric listens to are stopped while it runs.
+    canvas.wrapperEl.addEventListener('pointerdown', start, { capture: true });
+    for (const ev of ['mousedown', 'touchstart']) {
+      canvas.wrapperEl.addEventListener(ev, (e) => { if (drag) { e.stopPropagation(); if (e.cancelable) e.preventDefault(); } }, { capture: true, passive: false });
+    }
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+    canvas.on('mouse:move', (opt) => { if (!drag && onHandle(opt.e)) canvas.setCursor('grab'); });
+  }
+  document.addEventListener('click', (e) => {
+    const n = e.target.closest('[data-nudge]');
+    if (n) {
+      const [sx, sy] = n.dataset.nudge.split(',').map(Number);
+      const o = st.offsets[st.side] || { dx: 0, dy: 0 };
+      const u = areaUnitsPerCm();
+      if (moveArea(o.dx + sx * u, o.dy + sy * u)) commit();
+      return;
+    }
+    if (e.target.closest('#place-reset') && moveArea(0, 0)) commit();
   });
 
   // Snap to the centre and edges of the print area while dragging.
@@ -382,7 +529,7 @@
    */
   async function photoMockup(cfg, side, hex) {
     const P = window.POD_PHOTOS;
-    const at = P.placement(cfg, side.printArea);
+    const at = P.placement(cfg, baseSide(side.id).printArea);
     const [cv, dark] = await Promise.all([
       P.render(cfg, hex, { width: 1000, cutout: true }),
       cfg.keepDark ? P.darkOverlay(cfg, 1000) : null,
@@ -508,7 +655,7 @@
   function seedHistory() {
     const h = hist();
     if (!h.stack.length) {
-      h.stack.push(JSON.stringify(serialize()));
+      h.stack.push(snapshot());
       h.i = 0;
     }
   }
@@ -520,7 +667,7 @@
   function commit() {
     clearTimeout(commitTimer);
     if (st.silent || crop) return;
-    const snap = JSON.stringify(serialize());
+    const snap = snapshot();
     const h = hist();
     if (h.stack[h.i] !== snap) {
       h.stack = h.stack.slice(0, h.i + 1);
@@ -529,8 +676,11 @@
       h.i = h.stack.length - 1;
       st.dirty = true;
     }
-    st.designs[st.side] = JSON.parse(snap);
+    st.designs[st.side] = JSON.parse(snap).o;
     refreshChrome();
+  }
+  function snapshot() {
+    return JSON.stringify({ o: serialize(), a: st.offsets[st.side] || null });
   }
   async function stepHistory(delta) {
     cancelCrop();
@@ -540,8 +690,12 @@
     const next = h.i + delta;
     if (next < 0 || next >= h.stack.length) return;
     h.i = next;
-    await loadObjects(JSON.parse(h.stack[h.i]));
-    st.designs[st.side] = JSON.parse(h.stack[h.i]);
+    const snap = JSON.parse(h.stack[h.i]);
+    if (snap.a) st.offsets[st.side] = snap.a;
+    else delete st.offsets[st.side];
+    await loadObjects(snap.o);
+    st.designs[st.side] = snap.o;
+    renderPlacement();
     refreshChrome();
     renderProps();
   }
@@ -2056,7 +2210,7 @@
     const prev = st.product;
     const pending = prev.sides.filter((s) => (st.designs[s.id] || []).length).map((s) => s.id);
     const mapped = {};
-    const from = (sid) => prev.sides.find((x) => x.id === sid).printArea;
+    const from = (sid) => sideDef(sid).printArea; // where the customer had moved it
     for (const s of next.sides) {
       if (pending.includes(s.id)) {
         mapped[s.id] = remap(st.designs[s.id], from(s.id), s.printArea);
@@ -2075,6 +2229,7 @@
     }
     st.product = next;
     st.designs = mapped;
+    st.offsets = {}; // the new product starts at its standard print position
     st.history = {};
     if (!next.colors.some((c) => c.id === st.colorId)) st.colorId = next.colors[0].id;
     if (!next.sizes.some((s) => s.id === st.sizeId)) st.sizeId = next.sizes[0].id;
@@ -2263,6 +2418,7 @@
   }
   function refreshChrome() {
     if (bootDone) scheduleDraft();
+    renderPlacement();
     const hint = $('stage-hint');
     if (hint) hint.hidden = st.preview || canvas.getObjects().length > 0;
     const p = st.product;
@@ -2514,7 +2670,7 @@
   function designSignature() {
     const designs = {};
     for (const sd of st.product.sides) designs[sd.id] = sd.id === st.side ? serialize() : (st.designs[sd.id] || []);
-    return hashStr(JSON.stringify([designs, st.colorId, st.sizeId]));
+    return hashStr(JSON.stringify([designs, st.colorId, st.sizeId, st.offsets]));
   }
   function readLastShare() {
     try { return JSON.parse(localStorage.getItem(shareKey()) || 'null'); } catch (e) { return null; }
@@ -2559,7 +2715,7 @@
       const previews = {};
       for (const sd of sides) {
         await showSide(sd.id);
-        sidesPayload[sd.id] = { objects: await inlineImages(st.designs[sd.id]) };
+        sidesPayload[sd.id] = { objects: await inlineImages(st.designs[sd.id]), ...(st.offsets[sd.id] ? { offset: st.offsets[sd.id] } : {}) };
         previews[sd.id] = await toDataUrl(URL.createObjectURL(await exportPreview()));
       }
       await showSide(original);
@@ -2611,7 +2767,7 @@
     for (const s of st.product.sides) designs[s.id] = s.id === st.side ? serialize() : (st.designs[s.id] || []);
     const empty = !Object.values(designs).some((o) => o.length);
     const productId = st.product.id;
-    const meta = { productId, colorId: st.colorId, sizeId: st.sizeId, side: st.side };
+    const meta = { productId, colorId: st.colorId, sizeId: st.sizeId, side: st.side, offsets: { ...st.offsets } };
     let preview = null;
     if (!empty) {
       try {
@@ -2670,7 +2826,7 @@
       for (const s of sides) {
         await showSide(s.id);
         checkIssues().forEach((i) => problems.push(`• ${tr(s.name)}: ${t(i.key, { ...i.params, dpi: i.params.dpi, pt: i.params.pt })}`));
-        sidesPayload[s.id] = { editor: { version: fabric.version, objects: await inlineImages(st.designs[s.id]) } };
+        sidesPayload[s.id] = { editor: { version: fabric.version, objects: await inlineImages(st.designs[s.id]), ...(st.offsets[s.id] ? { offset: st.offsets[s.id] } : {}) } };
         files[`${s.id}-print.png`] = await exportPrint(s);
         files[`${s.id}-preview.png`] = await exportPreview();
         files[`${s.id}-design.svg`] = new Blob([await exportSvg(s)], { type: 'image/svg+xml' });
@@ -2747,6 +2903,7 @@
       sides.push({
         side: sd,
         rects: rects(sd.id),
+        shift: st.offsets[sd.id] || null,
         design: exportDesignLayer(3),
         designScale: 3,
         hasDesign: canvas.getObjects().length > 0,

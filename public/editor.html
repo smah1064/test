@@ -195,6 +195,20 @@
               <label data-i18n="panel.size"></label>
               <div class="chips" id="sizes"></div>
             </div>
+            <div class="field place-field" id="place-field" hidden>
+              <label data-i18n="area.title"></label>
+              <div class="place-row">
+                <span class="small" id="place-info"></span>
+                <div class="place-btns">
+                  <button class="btn btn-sm" type="button" data-nudge="0,-1" data-i18n-aria="area.up">↑</button>
+                  <button class="btn btn-sm" type="button" data-nudge="0,1" data-i18n-aria="area.down">↓</button>
+                  <button class="btn btn-sm" type="button" data-nudge="-1,0" data-i18n-aria="area.toLeft">←</button>
+                  <button class="btn btn-sm" type="button" data-nudge="1,0" data-i18n-aria="area.toRight">→</button>
+                  <button class="btn btn-sm" type="button" id="place-reset" data-i18n="area.reset"></button>
+                </div>
+              </div>
+              <p class="muted small" style="margin:6px 0 0;line-height:1.5" data-i18n="area.help"></p>
+            </div>
           </section>
 
           <section class="panel-section" id="sec-check">

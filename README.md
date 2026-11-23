@@ -172,6 +172,10 @@ Add an entry to `PRODUCTS` in `src/products.js`. Mockups are SVGs in a 500 × 60
 - **AI drawing (option, with the parent's consent):** with `GEMINI_API_KEY` set, the book page offers "Draw my child as a cartoon". The preview then uses **one** AI image: the child's face drawn in the book's style (`src/cartoon.js`), reused for every page and answer change. After the order is placed, a background queue **redraws every page with a face** (12 for the story, 14 for the colouring book, 2K each) so the child is painted into the scene; text is still added by the server so it stays exact. Progress shows in admin; a page that fails twice keeps its preview version; admin can "Redraw pages" again. The PDF waits until drawing finishes. Typical cost: about $0.04–0.10 for the preview and $0.6–1.5 per ordered book.
 - **Privacy:** the photo is deleted 30 days after the book is shipped, and unordered books after 7 days.
 
+## Movable print area
+
+On garments and bags (`moveZone` on a side in `src/products.js`, measured from the product photos and kept clear of collars, hems, zips, plackets and pockets) the customer can move the print box: drag the orange "Drag to move" tag under it, or use the arrow buttons (1 cm) in the panel. The design moves with it. The print file size stays the same; the position is saved per side (`offsetCm`, positive = right / lower) and shown to the admin, in the print PDF label and in messages to printing houses ("moved 5 cm lower from the standard position"). The live and realistic previews show the new position.
+
 ## Printing houses
 
 Admin → **Printing houses** tab: save each printing house (name, email and/or WhatsApp number, how you usually send), and pick which one prints each product.

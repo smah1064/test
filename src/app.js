@@ -110,6 +110,33 @@ function cleanString(value, field, { max = 200, required = true } = {}) {
 }
 
 const heightIn = (side) => round2((side.printWidthIn * side.printArea.h) / side.printArea.w);
+/**
+ * Where the customer moved the print area (garments and bags with a moveZone),
+ * kept inside the zone; { dx, dy } in mockup units, or null for the standard spot.
+ */
+function cleanOffset(side, offset) {
+  const z = side.moveZone;
+  if (!z || !offset || typeof offset !== 'object') return null;
+  const a = side.printArea;
+  const clamp = (v, lo, hi) => Math.round(Math.min(Math.max(Number(v) || 0, Math.min(lo, 0)), Math.max(hi, 0)));
+  const dx = clamp(offset.dx, z.x - a.x, z.x + z.w - a.w - a.x);
+  const dy = clamp(offset.dy, z.y - a.y, z.y + z.h - a.h - a.y);
+  return dx || dy ? { dx, dy } : null;
+}
+/** "3 cm lower, 2 cm left" */
+function placementEn(o) {
+  const parts = [];
+  if (o.y) parts.push(`${Math.abs(o.y)} cm ${o.y > 0 ? 'lower' : 'higher'}`);
+  if (o.x) parts.push(`${Math.abs(o.x)} cm ${o.x > 0 ? 'right' : 'left'}`);
+  return parts.join(', ');
+}
+/** The same offset in centimetres on the product (positive = right / lower), for the printer. */
+function offsetCm(side, o) {
+  if (!o) return null;
+  const perCm = side.printArea.w / (side.printWidthIn * 2.54);
+  const r = (v) => Math.round((v / perCm) * 2) / 2;
+  return { x: r(o.dx), y: r(o.dy) };
+}
 
 function publicProduct(p) {
   return { ...p, sides: p.sides.map((s) => ({ ...s, printHeightIn: heightIn(s) })) };
@@ -314,8 +341,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (!s.editor || typeof s.editor !== 'object' || !Array.isArray(s.editor.objects) || s.editor.objects.length === 0) {
         throw new HttpError(400, 'sideEmpty', { side: side.name });
       }
-      editor[side.id] = s.editor;
-      storedSides.push({ id: side.id, name: side.name, widthIn: side.printWidthIn, heightIn: heightIn(side), bleedIn: side.bleedIn || 0 });
+      const offset = cleanOffset(side, s.editor.offset);
+      editor[side.id] = { ...s.editor, offset: offset || undefined };
+      storedSides.push({
+        id: side.id, name: side.name, widthIn: side.printWidthIn, heightIn: heightIn(side), bleedIn: side.bleedIn || 0,
+        ...(offset ? { offsetCm: offsetCm(side, offset) } : {}),
+      });
     }
     const editorJson = JSON.stringify(editor);
     if (Buffer.byteLength(editorJson) > MAX_EDITOR_JSON_BYTES) throw new HttpError(413, 'designTooLarge');
@@ -593,7 +624,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     fs.mkdirSync(path.join(sharesDir, id), { recursive: true });
     const editor = {};
     for (const sd of sides) {
-      editor[sd.id] = { objects: b.sides[sd.id].objects };
+      const offset = cleanOffset(sd, b.sides[sd.id].offset);
+      editor[sd.id] = { objects: b.sides[sd.id].objects, ...(offset ? { offset } : {}) };
       const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(String((b.previews || {})[sd.id] || ''));
       const png = m ? Buffer.from(m[1], 'base64') : null;
       if (!png || png.length > 4e6 || !png.subarray(0, 8).equals(PNG_SIGNATURE)) throw new HttpError(400, 'badPng', { label: 'preview' });
@@ -1145,7 +1177,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       product: product.id,
       color: sh.color.id,
       objects: editor[side.id].objects,
-      area: sideDef.printArea,
+      // A moved print area: the ready design is re-centred on the standard spot.
+      area: editor[side.id].offset ? { ...sideDef.printArea, x: sideDef.printArea.x + editor[side.id].offset.dx, y: sideDef.printArea.y + editor[side.id].offset.dy } : sideDef.printArea,
       preview: fs.readFileSync(shareFile(sh.id, `${side.id}.png`)),
     });
     res.status(201).json(libraryCard(meta));
@@ -1303,7 +1336,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (fmt.make) out = await fmt.make(png, side);
       else if (fmt.ext === 'pdf') {
         const product = getProduct(design.productId);
-        const label = `${order ? order.number + ' · ' : ''}${pickEn(design.productName)} · ${pickEn(design.size.label)} · ${pickEn(design.color.name)} · ${pickEn(side.name)} · trim ${side.widthIn} x ${side.heightIn} in${side.bleedIn ? ` + ${side.bleedIn} in bleed` : ''} · ${side.dpi} DPI · ${product ? product.process.toUpperCase() : ''}`;
+        const label = `${order ? order.number + ' · ' : ''}${pickEn(design.productName)} · ${pickEn(design.size.label)} · ${pickEn(design.color.name)} · ${pickEn(side.name)} · trim ${side.widthIn} x ${side.heightIn} in${side.bleedIn ? ` + ${side.bleedIn} in bleed` : ''}${side.offsetCm ? ` · PLACEMENT moved ${placementEn(side.offsetCm)} from standard` : ''} · ${side.dpi} DPI · ${product ? product.process.toUpperCase() : ''}`;
         out = await printfiles.printPdf(png, side, { marks: format === 'pdf-marks', title: base, slug: label });
       } else throw new HttpError(404, 'notFound');
       store.writeDesignFile(designId, fmt.file(sideId), out);

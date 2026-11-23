@@ -383,6 +383,11 @@
       const trim = entry.rects.trim;
       const aspect = trim.w / trim.h;
       const r = window.POD_PHOTOS.rectFor(cfg, aspect);
+      // A print area the customer moved: shift it on the photo by the same amount.
+      if (entry.shift) {
+        r.x += (entry.shift.dx * r.w) / trim.w;
+        r.y += (entry.shift.dy * r.h) / trim.h;
+      }
       const ds = entry.designScale || S;
       const DW = entry.design.width;
       const dd = entry.design.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, DW, entry.design.height).data;

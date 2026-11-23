@@ -1016,6 +1016,29 @@ test('accounts: change prices, set costs, profit per order, expenses, CSV', asyn
   assert.strictEqual(back.products.find((p) => p.id === 'tshirt').basePrice, 450);
 });
 
+test('moved print area: kept inside the garment zone, shown to the printer in cm', async () => {
+  const products = (await (await fetch(base + '/api/products')).json()).products;
+  assert.ok(products.find((p) => p.id === 'tshirt').sides[0].moveZone, 'tees can move');
+  assert.ok(!products.find((p) => p.id === 'mug').sides[0].moveZone, 'mugs cannot');
+  // 30 units lower, and far too far left (clamped to the zone).
+  const d = await makeDesign({ sides: { front: { editor: { ...EDITOR, offset: { dx: -999, dy: 30 } } } } });
+  const saved = await (await fetch(`${base}/api/designs/${d.id}`)).json();
+  const zone = products.find((p) => p.id === 'tshirt').sides[0].moveZone;
+  const area = products.find((p) => p.id === 'tshirt').sides[0].printArea;
+  assert.deepStrictEqual(saved.editor.front.offset, { dx: zone.x - area.x, dy: 30 });
+  assert.ok(saved.sides[0].offsetCm.y > 5 && saved.sides[0].offsetCm.x < 0);
+  // A product that can't move ignores it.
+  const mug = await makeDesign({ productId: 'mug', color: 'white', size: '11oz', sides: { front: { editor: { ...EDITOR, offset: { dx: 0, dy: 40 } } } } });
+  const m = await (await fetch(`${base}/api/designs/${mug.id}`)).json();
+  assert.strictEqual(m.editor.front.offset, undefined);
+  assert.strictEqual(m.sides[0].offsetCm, undefined);
+  // The admin sees it on the order.
+  const order = await (await post('/api/orders', { customer: CUSTOMER, designIds: [d.id] })).json();
+  const q = await (await admin('/api/admin/queue')).json();
+  const it = q.waiting.find((i) => i.orderId === order.id);
+  assert.deepStrictEqual(it.sides[0].offsetCm, saved.sides[0].offsetCm);
+});
+
 const png4 = (w, h) => png(w, h);
 test('two copies of the app on one data folder share orders, sign-ins and edits', async () => {
   const { createApp: make } = require('../src/app');
