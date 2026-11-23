@@ -364,19 +364,114 @@ function buildCard(color, tex, renderer, product) {
     bctx.scale(-1, 1);
     bctx.drawImage(tex[product.sides[0].id].baseImg, 0, 0, backCv.width, backCv.height);
   }
+  // Bags and pouches have real depth (product.model.depthIn): front and back
+  // stand apart and side, bottom (and top, for zipped bags) walls join them.
+  const m = product.model || {};
+  const depth = m.depthIn || 0;
   const fg = new THREE.PlaneGeometry(w, h, 48, 1);
-  bend(fg, 1);
   const bg = new THREE.PlaneGeometry(w, h, 48, 1);
-  bend(bg, 1);
+  if (!depth) {
+    bend(fg, 1);
+    bend(bg, 1);
+  }
   // The renders already carry the photo's own light and shading, so show them
   // unlit: the front and back then look the same whichever way the panel faces.
   const photoMat = (cv) => new THREE.MeshBasicMaterial({ map: texture(cv, renderer), alphaTest: 0.5 });
   const fm = new THREE.Mesh(fg, photoMat(front));
   const bm = new THREE.Mesh(bg, photoMat(backCv));
   bm.rotation.y = Math.PI;
-  bm.position.z = -0.3;
+  if (depth) {
+    fm.position.z = depth / 2;
+    bm.position.z = -depth / 2;
+    for (const wall of bagWalls(firstImg, w, h, depth, m)) g.add(wall);
+  } else {
+    bm.position.z = -0.3;
+  }
   g.add(fm, bm);
+  if (depth) g.rotation.y = -0.45;
   return g;
+}
+
+/**
+ * The walls of a bag: found from the photo (the rows where the body is at
+ * least 70% of its widest, which leaves out handles), coloured like the body.
+ */
+function bagWalls(img, w, h, depth, m) {
+  const sw = 160;
+  const sh = Math.max(1, Math.round((sw * img.height) / img.width));
+  const c = canvas(sw, sh);
+  const ctx = c.getContext('2d');
+  ctx.drawImage(img, 0, 0, sw, sh);
+  const d = ctx.getImageData(0, 0, sw, sh).data;
+  const rows = [];
+  let widest = 0;
+  for (let y = 0; y < sh; y++) {
+    let l = -1;
+    let r = -1;
+    for (let x = 0; x < sw; x++) {
+      if (d[(y * sw + x) * 4 + 3] > 128) {
+        if (l < 0) l = x;
+        r = x;
+      }
+    }
+    rows.push(l < 0 ? null : [l, r]);
+    if (l >= 0) widest = Math.max(widest, r - l);
+  }
+  let top = -1;
+  let bottom = -1;
+  let left = sw;
+  let right = 0;
+  let rs = 0;
+  let gs = 0;
+  let bs = 0;
+  let n = 0;
+  rows.forEach((row, y) => {
+    if (!row || row[1] - row[0] < widest * 0.7) return;
+    if (top < 0) top = y;
+    bottom = y;
+    left = Math.min(left, row[0]);
+    right = Math.max(right, row[1]);
+    for (const x of [row[0] + 2, row[1] - 2]) {
+      const i = (y * sw + Math.max(0, Math.min(sw - 1, x))) * 4;
+      rs += d[i];
+      gs += d[i + 1];
+      bs += d[i + 2];
+      n++;
+    }
+  });
+  if (top < 0) return [];
+  const toX = (px) => (px / sw - 0.5) * w;
+  const toY = (py) => (0.5 - py / sh) * h;
+  // Tucked in a little so the walls stay behind rounded corners and seams.
+  const inset = (right - left) * 0.015;
+  const xL = toX(left + 0.5 + inset);
+  const xR = toX(right + 0.5 - inset);
+  const yT = toY(top + (bottom - top) * 0.04);
+  const yB = toY(bottom + 1 - (bottom - top) * 0.015);
+  // The edge colour, a little darker: the sides face away from the light.
+  const col = new THREE.Color(`rgb(${Math.round((rs / n) * 0.88)}, ${Math.round((gs / n) * 0.88)}, ${Math.round((bs / n) * 0.88)})`);
+  const wallMat = new THREE.MeshStandardMaterial({ color: col, roughness: 0.9, metalness: 0, side: THREE.DoubleSide });
+  const plane = (pw, ph) => new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), wallMat);
+  const walls = [];
+  const bodyH = yT - yB;
+  const bodyW = xR - xL;
+  for (const x of [xL, xR]) {
+    const s = plane(depth, bodyH);
+    s.rotation.y = Math.PI / 2;
+    s.position.set(x, (yT + yB) / 2, 0);
+    walls.push(s);
+  }
+  const b = plane(bodyW, depth);
+  b.rotation.x = -Math.PI / 2;
+  b.position.set((xL + xR) / 2, yB, 0);
+  walls.push(b);
+  if (m.closedTop) {
+    const t = plane(bodyW, depth);
+    t.rotation.x = Math.PI / 2;
+    t.position.set((xL + xR) / 2, yT, 0);
+    walls.push(t);
+  }
+  return walls;
 }
 
 function contactShadow(width, y) {
