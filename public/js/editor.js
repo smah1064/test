@@ -19,7 +19,7 @@
   const MAX_VECTOR_BYTES = 40 * 1024 * 1024;
   const HISTORY_LIMIT = 60;
   const SNAP_PX = 7;
-  const EXTRA_PROPS = ['name', 'selectable', 'evented', 'curve', 'mask', 'maskBorder', 'maskBorderColor', 'lockRatio', 'bgShape', 'textFx', 'boosted', 'importSource'];
+  const EXTRA_PROPS = ['name', 'selectable', 'evented', 'curve', 'mask', 'maskBorder', 'maskBorderColor', 'lockRatio', 'bgShape', 'textFx', 'boosted', 'importSource', 'mergeFit'];
   const $ = (id) => document.getElementById(id);
   const { esc, money, toast, t, tr } = POD;
   const D = window.POD_DESIGN;
@@ -80,6 +80,9 @@
     dirty: false,
     zoom: 1, // relative to "fit to screen"
     guides: null,
+    mergeList: null, // name list: { columns, rows, total, truncated, fileName }
+    mergeRow: 0, // the row shown in the preview
+    mergePreview: false, // the canvas shows a row's real values (editing paused)
   };
 
   if (params.get('design')) {
@@ -89,6 +92,7 @@
       st.colorId = saved.color.id;
       st.sizeId = saved.size.id;
       if (saved.method === 'embroidery') st.method = 'embroidery';
+      if (saved.mergeList) st.mergeList = { columns: saved.mergeList.columns, rows: saved.mergeList.rows, total: saved.mergeList.rows.length, truncated: false, fileName: '' };
       for (const [sideId, data] of Object.entries(saved.editor)) {
         st.designs[sideId] = await blobifyImages(data.objects || []);
         if (data.offset) st.offsets[sideId] = data.offset;
@@ -146,6 +150,7 @@
       for (const [sideId, o] of Object.entries(draft.offsets || {})) if (st.product.sides.some((s) => s.id === sideId)) st.offsets[sideId] = o;
       if (draft.pattern) st.pattern = draft.pattern;
       if (draft.method === 'embroidery') st.method = 'embroidery';
+      if (draft.mergeList && draft.mergeList.columns && draft.mergeList.rows) st.mergeList = draft.mergeList;
       restoredDraft = true;
     }
   }
@@ -760,7 +765,7 @@
   }
   function commit() {
     clearTimeout(commitTimer);
-    if (st.silent || crop) return;
+    if (st.silent || crop || st.mergePreview) return;
     const snap = snapshot();
     const h = hist();
     if (h.stack[h.i] !== snap) {
@@ -778,6 +783,7 @@
     return JSON.stringify({ o: serialize(), a: st.offsets[st.side] || null });
   }
   async function stepHistory(delta) {
+    if (st.mergePreview) endMergePreview();
     cancelCrop();
     hideFloatBar();
     commit();
@@ -2663,6 +2669,7 @@
     }).join('');
   }
   async function showSide(id) {
+    if (st.mergePreview) endMergePreview();
     st.side = id;
     await Promise.all([applyMockup(id), loadObjects(st.designs[id])]);
     if (MOBILE.matches && st.sheet) fit();
@@ -2845,8 +2852,11 @@
     const n = designedSides().length;
     const perSide = p.extraSidePrice != null ? p.extraSidePrice : catalog.pricing.extraSide;
     const embFee = emb() ? emb().surcharge : 0;
-    $('price').textContent = money(p.basePrice + size.surcharge + Math.max(0, n - 1) * perSide + embFee);
+    const unit = p.basePrice + size.surcharge + Math.max(0, n - 1) * perSide + embFee;
+    const copies = p.merge && st.mergeList ? mergeCount() : 1;
+    $('price').textContent = money(unit * copies);
     const notes = [];
+    if (copies > 1) notes.push(t('merge.priceCopies', { n: POD.num(copies), price: money(unit) }));
     if (embFee) notes.push(t('emb.fee', { price: money(embFee) }));
     if (activeSides().length > 1 && perSide > 0) notes.push(n > 1 ? t('price.bothSides') : t('price.addSide', { price: money(perSide) }));
     if (size.surcharge) notes.push(`${tr(size.label)} +${money(size.surcharge)}`);
@@ -2858,6 +2868,370 @@
     renderSideTabs();
     renderLayers();
     renderCheck();
+    renderMerge();
+  }
+
+  // ---------- Name lists (variable data) ----------
+  // The customer uploads a spreadsheet (first row: column titles) and puts
+  // fields such as {Name} into texts. Every row prints one copy with its own
+  // values. Long values shrink to fit the width set for that text.
+  const FIELD_RE = /\{([^{}\n]{1,60})\}/g;
+  const fieldsOf = (s) => [...String(s || '').matchAll(FIELD_RE)].map((m) => m[1].trim());
+  const srcText = (o) => (o.__mergeSrc != null ? o.__mergeSrc : o.text);
+  const isFieldText = (o) => isText(o) && fieldsOf(srcText(o)).length > 0;
+  const mergeObjects = () => canvas.getObjects().filter(isFieldText);
+  /** Sides with at least one field (the side on screen is read from the canvas). */
+  function fieldSides() {
+    return designedSides().filter((s) => (s.id === st.side ? mergeObjects().length > 0 : (st.designs[s.id] || []).some((o) => o && /text/i.test(o.type) && fieldsOf(o.text).length)));
+  }
+  const mergeCount = () => (st.mergeList ? st.mergeList.rows.length : 0);
+  const rowValues = (i) => {
+    const L = st.mergeList;
+    const r = (L && L.rows[i]) || [];
+    return Object.fromEntries(L ? L.columns.map((c, k) => [c.trim(), r[k] || '']) : []);
+  };
+  const fillFields = (src, vals) => String(src).replace(FIELD_RE, (m, k) => (Object.hasOwn(vals, k.trim()) ? vals[k.trim()] : m));
+  /** How wide the longest value may get: a share of the safe area (set per text). */
+  const fitWidth = (o) => (o.mergeFit || 0.9) * rects().safe.w;
+  const anchorX = (o) => (o.textAlign === 'left' ? 'left' : o.textAlign === 'right' ? 'right' : 'center');
+
+  /** Show one row's values in a field text; returns how much the text had to shrink (1 = not at all). */
+  function applyRow(o, vals) {
+    if (o.__mergeSrc == null) {
+      o.__mergeSrc = o.text;
+      o.__mergeSize = o.fontSize;
+      o.__mergeStyles = o.styles;
+      o.__mergeLeft = o.left;
+      o.__mergeTop = o.top;
+      o.__mergeAnchor = o.translateToOriginPoint(o.getCenterPoint(), anchorX(o), 'center');
+    }
+    o.set({ text: fillFields(o.__mergeSrc, vals), fontSize: o.__mergeSize, styles: {} });
+    const maxW = fitWidth(o);
+    const w = o.width * Math.abs(o.scaleX || 1);
+    let k = 1;
+    if (w > maxW && w > 0) {
+      k = maxW / w;
+      o.set('fontSize', o.__mergeSize * k);
+    }
+    o.setPositionByOrigin(o.__mergeAnchor, anchorX(o), 'center');
+    o.setCoords();
+    return k;
+  }
+  function restoreFields(objs = canvas.getObjects()) {
+    for (const o of objs) {
+      if (o.__mergeSrc == null) continue;
+      o.set({ text: o.__mergeSrc, fontSize: o.__mergeSize, styles: o.__mergeStyles || {}, left: o.__mergeLeft, top: o.__mergeTop });
+      o.setCoords();
+      ['__mergeSrc', '__mergeSize', '__mergeStyles', '__mergeLeft', '__mergeTop', '__mergeAnchor'].forEach((k) => delete o[k]);
+    }
+  }
+  /** Download every letter used in the list, in the fonts of the field texts (Arabic too). */
+  const mergeFontsDone = new Set();
+  async function mergeFonts(objs) {
+    if (!document.fonts || !st.mergeList) return;
+    const sample = [...new Set(st.mergeList.rows.flat().join(''))].join('').slice(0, 4000) || 'Aa';
+    let loaded = false;
+    await Promise.all(objs.map(async (o) => {
+      const key = `${o.fontFamily}|${o.fontWeight}|${o.fontStyle}|${st.mergeList.rows.length}|${sample.length}`;
+      if (mergeFontsDone.has(key)) return;
+      mergeFontsDone.add(key);
+      await D.ensureFont(o.fontFamily, o.fontWeight, o.fontStyle);
+      await document.fonts.load(`${o.fontStyle || 'normal'} ${o.fontWeight || 'normal'} 40px "${o.fontFamily}"`, sample).catch(() => {});
+      loaded = true;
+    }));
+    if (loaded) objs.forEach((o) => { fabric.util.clearFabricFontCache(o.fontFamily); o.initDimensions && o.initDimensions(); });
+  }
+
+  // Preview: the canvas shows a row's real values (editing is paused meanwhile).
+  async function showMergeRow(i) {
+    if (!st.mergeList) return;
+    const n = mergeCount();
+    st.mergeRow = ((i % n) + n) % n;
+    const objs = mergeObjects();
+    await mergeFonts(objs);
+    if (!st.mergePreview) {
+      canvas.discardActiveObject();
+      st.mergePreview = true;
+      for (const o of canvas.getObjects()) {
+        o.__mergeLock = { selectable: o.selectable, evented: o.evented };
+        o.set({ selectable: false, evented: false });
+      }
+    }
+    const vals = rowValues(st.mergeRow);
+    objs.forEach((o) => applyRow(o, vals));
+    canvas.requestRenderAll();
+    renderMerge();
+  }
+  function endMergePreview() {
+    if (!st.mergePreview) return;
+    restoreFields();
+    for (const o of canvas.getObjects()) {
+      if (o.__mergeLock) o.set(o.__mergeLock);
+      delete o.__mergeLock;
+    }
+    st.mergePreview = false;
+    canvas.requestRenderAll();
+    commit();
+    renderMerge();
+  }
+
+  /** Rows whose values had to shrink a lot to fit (worth checking) and rows with empty fields. */
+  function mergeReport() {
+    const out = { small: [], empty: [] };
+    const L = st.mergeList;
+    if (!L) return out;
+    const objs = mergeObjects();
+    if (!objs.length) return out;
+    const used = [...new Set(objs.flatMap((o) => fieldsOf(srcText(o))))];
+    const wasPreview = st.mergePreview;
+    const keep = wasPreview ? rowValues(st.mergeRow) : null;
+    for (let i = 0; i < L.rows.length; i++) {
+      const vals = rowValues(i);
+      if (used.some((f) => Object.hasOwn(vals, f) && !String(vals[f]).trim())) out.empty.push(i);
+      const k = Math.min(...objs.map((o) => applyRow(o, vals)));
+      if (k < 0.7) out.small.push(i);
+    }
+    if (wasPreview) objs.forEach((o) => applyRow(o, keep));
+    else restoreFields(objs);
+    return out;
+  }
+
+  const rowList = (rows) => rows.slice(0, 12).map((i) => `<button class="link-btn" data-merge-row="${i}">${esc(POD.num(i + 1))}</button>`).join(', ') + (rows.length > 12 ? ` …` : '');
+  function renderMerge() {
+    const sec = $('sec-merge');
+    if (!sec) return;
+    sec.hidden = !st.product.merge;
+    if (!st.product.merge) return;
+    const L = st.mergeList;
+    const body = $('merge-body');
+    if (!L) {
+      body.innerHTML = `
+        <div class="grid-2">
+          <button class="btn btn-primary btn-sm" data-merge="upload">${esc(t('merge.upload'))}</button>
+          <button class="btn btn-sm" data-merge="example">${esc(t('merge.example'))}</button>
+        </div>
+        ${mergeObjects().length ? `<p class="small merge-warn">${esc(t('merge.needList'))}</p>` : ''}`;
+      return;
+    }
+    const objs = mergeObjects();
+    const sel = active();
+    const fieldSel = sel && isFieldText(sel) ? sel : null;
+    const rep = st.mergePreview || !objs.length ? null : mergeReport();
+    const row = st.mergeRow || 0;
+    const first = L.columns[0];
+    const label = (i) => String(L.rows[i][0] || '').slice(0, 40) || t('merge.emptyValue');
+    body.innerHTML = `
+      <div class="merge-sum">
+        <span><strong>${esc(t('merge.count', { n: POD.num(L.rows.length) }))}</strong> · ${esc(L.fileName || '')}</span>
+        <button class="btn btn-sm" data-merge="remove">${esc(t('merge.remove'))}</button>
+      </div>
+      ${L.truncated ? `<p class="small merge-warn">${esc(t('merge.truncated', { n: POD.num(L.total), max: POD.num(L.rows.length) }))}</p>` : ''}
+      <div class="field">
+        <label>${esc(t('merge.insert'))}</label>
+        <div class="chips">${L.columns.map((c, i) => `<button class="chip" data-merge-field="${i}">{${esc(c)}}</button>`).join('')}</div>
+        <p class="muted small" style="margin:6px 0 0;line-height:1.5">${esc(t('merge.insertHelp', { field: `{${first}}` }))}</p>
+      </div>
+      ${objs.length ? `
+      <div class="field">
+        <label>${esc(t('merge.preview'))}</label>
+        <div class="merge-nav">
+          <button class="btn btn-sm" data-merge="prev" aria-label="${esc(t('merge.prev'))}">‹</button>
+          <button class="btn btn-sm ${st.mergePreview ? 'active' : ''}" data-merge="toggle">${esc(st.mergePreview ? t('merge.row', { i: POD.num(row + 1), n: POD.num(L.rows.length), v: label(row) }) : t('merge.showNames'))}</button>
+          <button class="btn btn-sm" data-merge="next" aria-label="${esc(t('merge.next'))}">›</button>
+        </div>
+        ${st.mergePreview ? `<button class="btn btn-sm btn-block" style="margin-top:6px" data-merge="end">${esc(t('merge.backToEdit'))}</button>` : ''}
+      </div>` : `<p class="small merge-warn">${esc(t('merge.addField', { field: `{${first}}` }))}</p>`}
+      ${fieldSel && !st.mergePreview ? `
+      <div class="field">
+        <label for="merge-fit">${esc(t('merge.fit'))} <span class="muted" id="merge-fit-val">${esc(POD.num(Math.round((fieldSel.mergeFit || 0.9) * 100)))}%</span></label>
+        <input type="range" id="merge-fit" min="20" max="100" step="5" value="${Math.round((fieldSel.mergeFit || 0.9) * 100)}">
+        <p class="muted small" style="margin:4px 0 0;line-height:1.5">${esc(t('merge.fitHelp'))}</p>
+      </div>` : ''}
+      ${rep && rep.small.length ? `<p class="small merge-warn">${esc(t('merge.small', { n: POD.num(rep.small.length) }))} ${rowList(rep.small)}</p>` : ''}
+      ${rep && rep.empty.length ? `<p class="small merge-warn">${esc(t('merge.empty', { n: POD.num(rep.empty.length) }))} ${rowList(rep.empty)}</p>` : ''}
+      <p class="muted small" style="margin:8px 0 0">${esc(t('merge.priceNote', { n: POD.num(L.rows.length) }))}</p>`;
+  }
+
+  async function uploadMergeFile(file) {
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) throw new Error(t('merge.tooBig'));
+    busy(true, t('merge.reading'));
+    try {
+      const res = await fetch('/api/merge/parse', { method: 'POST', headers: { 'Content-Type': 'application/octet-stream', 'x-lang': POD.lang }, body: file });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || t('merge.readFailed'));
+      endMergePreview();
+      st.mergeList = { columns: data.columns, rows: data.rows, total: data.total, truncated: data.truncated, fileName: file.name.slice(0, 80) };
+      st.mergeRow = 0;
+      mergeFontsDone.clear();
+      // A design without fields yet: start one with the first column, ready to style.
+      if (!mergeObjects().length && !designedSides().some((s) => s.id !== st.side && fieldSides().some((x) => x.id === s.id))) await addFieldText(0);
+      refreshChrome();
+      toast(t('merge.loaded', { n: POD.num(data.rows.length) }), 'success');
+    } finally {
+      busy(false);
+    }
+  }
+  async function addFieldText(col) {
+    const L = st.mergeList;
+    const token = `{${L ? L.columns[col] : 'Name'}}`;
+    const o = active();
+    // Typing in a text: put the field where the cursor is.
+    if (o && isText(o) && o.isEditing) {
+      o.insertChars(token, null, o.selectionStart, o.selectionEnd);
+      o.selectionStart = o.selectionEnd = o.selectionStart + token.length;
+      canvas.requestRenderAll();
+      commit();
+      return;
+    }
+    const sample = L ? L.rows.map((r) => r[col]).find(Boolean) || '' : '';
+    const arabic = D.ARABIC_RE.test(sample);
+    const font = arabic ? 'Cairo' : 'Montserrat';
+    await D.ensureFont(font, 'bold', 'normal');
+    addObject(new fabric.IText(token, {
+      name: token,
+      fontFamily: font,
+      fontWeight: 'bold',
+      fontSize: Math.round(area().w * 0.09),
+      direction: arabic ? 'rtl' : 'ltr',
+      fill: inkFor(surfaceHex()),
+      textAlign: 'center',
+      mergeFit: 0.9,
+    }));
+    commit();
+  }
+  function downloadExample() {
+    const ar = POD.lang === 'ar';
+    const rows = ar
+      ? [['الاسم', 'الوظيفة'], ['أحمد علي', 'مدير'], ['منى حسن', 'مهندسة'], ['Omar Khaled', 'Designer']]
+      : [['Name', 'Title'], ['Ahmed Ali', 'Manager'], ['Mona Hassan', 'Engineer'], ['عمر خالد', 'مصمم']];
+    const csv = '﻿' + rows.map((r) => r.join(',')).join('\r\n') + '\r\n';
+    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })), download: ar ? 'قائمة-الأسماء.csv' : 'names.csv' });
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+  if ($('sec-merge')) {
+    $('merge-body').addEventListener('click', serial(async (e) => {
+      const rowBtn = e.target.closest('[data-merge-row]');
+      if (rowBtn) return showMergeRow(Number(rowBtn.dataset.mergeRow));
+      const f = e.target.closest('[data-merge-field]');
+      if (f) {
+        if (st.mergePreview) endMergePreview();
+        return addFieldText(Number(f.dataset.mergeField));
+      }
+      const b = e.target.closest('[data-merge]');
+      if (!b) return;
+      const act = b.dataset.merge;
+      if (act === 'upload') $('merge-file').click();
+      else if (act === 'example') downloadExample();
+      else if (act === 'remove') {
+        endMergePreview();
+        st.mergeList = null;
+        refreshChrome();
+      } else if (act === 'toggle') {
+        if (st.mergePreview) endMergePreview();
+        else await showMergeRow(st.mergeRow || 0);
+      } else if (act === 'prev') await showMergeRow((st.mergeRow || 0) - 1);
+      else if (act === 'next') await showMergeRow((st.mergeRow || 0) + 1);
+      else if (act === 'end') endMergePreview();
+    }));
+    $('merge-file').addEventListener('change', serial(async (e) => {
+      const file = e.target.files && e.target.files[0];
+      e.target.value = '';
+      await uploadMergeFile(file);
+    }));
+    $('merge-body').addEventListener('input', (e) => {
+      if (e.target.id !== 'merge-fit') return;
+      const o = active();
+      if (!o || !isFieldText(o)) return;
+      o.set('mergeFit', Number(e.target.value) / 100);
+      $('merge-fit-val').textContent = `${POD.num(Number(e.target.value))}%`;
+      scheduleCommit();
+    });
+    $('merge-body').addEventListener('change', (e) => { if (e.target.id === 'merge-fit') renderMerge(); });
+  }
+
+  /**
+   * Print files for a side with fields (on screen): the background without the
+   * field texts (and anything lying over them), and one transparent picture
+   * per row of just that part, all the same size, cropped to `box` (print pixels).
+   */
+  async function exportMergeSide(side, onProgress) {
+    const { bleed, u } = rects(side.id);
+    const mult = Math.min(TARGET_DPI / u, Math.sqrt(MAX_PRINT_PIXELS / (bleed.w * bleed.h)), MAX_PRINT_SIDE / Math.max(bleed.w, bleed.h));
+    const W = Math.floor(bleed.w * mult + 1e-6);
+    const H = Math.floor(bleed.h * mult + 1e-6);
+    const objs = canvas.getObjects().filter((o) => o.name !== '__cropper' && o.visible !== false);
+    const fields = objs.filter(isFieldText);
+    await mergeFonts(fields);
+    const n = mergeCount();
+    // 1. Where the field texts can reach over every row.
+    const union = (a, r) => (a ? { l: Math.min(a.l, r.left), t: Math.min(a.t, r.top), r: Math.max(a.r, r.left + r.width), b: Math.max(a.b, r.top + r.height) } : { l: r.left, t: r.top, r: r.left + r.width, b: r.top + r.height });
+    let R = null;
+    for (let i = 0; i < n; i++) {
+      const vals = rowValues(i);
+      for (const o of fields) {
+        applyRow(o, vals);
+        R = union(R, o.getBoundingRect(true, true));
+      }
+    }
+    // 2. Objects above the lowest field text that overlap that area go with the texts (so layers stay in order).
+    const low = Math.min(...fields.map((o) => objs.indexOf(o)));
+    const front = new Set(fields);
+    for (let again = true; again;) {
+      again = false;
+      for (const o of objs.slice(low)) {
+        if (front.has(o)) continue;
+        const r = o.getBoundingRect(true, true);
+        if (r.left < R.r && r.left + r.width > R.l && r.top < R.b && r.top + r.height > R.t) {
+          front.add(o);
+          R = union(R, r);
+          again = true;
+        }
+      }
+    }
+    // 3. The box in print pixels (inside the print file).
+    const pad = 2;
+    const x = Math.max(0, Math.floor((R.l - bleed.x) * mult) - pad);
+    const y = Math.max(0, Math.floor((R.t - bleed.y) * mult) - pad);
+    const box = { x, y, w: Math.max(1, Math.min(W, Math.ceil((R.r - bleed.x) * mult) + pad) - x), h: Math.max(1, Math.min(H, Math.ceil((R.b - bleed.y) * mult) + pad) - y) };
+    const exact = (el, w, h) => {
+      if (el.width === w && el.height === h) return el;
+      const c = document.createElement('canvas');
+      c.width = w;
+      c.height = h;
+      c.getContext('2d').drawImage(el, 0, 0);
+      return c;
+    };
+    // 4. The background: everything except the front set.
+    restoreFields(fields);
+    front.forEach((o) => { o.__mergeVis = o.visible; o.visible = false; });
+    let base;
+    try {
+      base = await canvasBlob(exact(withArtworkOnly(() => canvas.toCanvasElement(mult, { left: bleed.x, top: bleed.y, width: (W + 0.5) / mult, height: (H + 0.5) / mult })), W, H));
+    } finally {
+      front.forEach((o) => { o.visible = o.__mergeVis !== false; delete o.__mergeVis; });
+    }
+    // 5. One picture per row: only the front set, cropped to the box.
+    const others = objs.filter((o) => !front.has(o));
+    others.forEach((o) => { o.__mergeVis = o.visible; o.visible = false; });
+    const pics = [];
+    try {
+      const region = { left: bleed.x + box.x / mult, top: bleed.y + box.y / mult, width: (box.w + 0.5) / mult, height: (box.h + 0.5) / mult };
+      for (let i = 0; i < n; i++) {
+        const vals = rowValues(i);
+        fields.forEach((o) => applyRow(o, vals));
+        const el = withArtworkOnly(() => canvas.toCanvasElement(mult, region));
+        pics.push(await canvasBlob(exact(el, box.w, box.h)));
+        if (onProgress && (i % 10 === 9 || i === n - 1)) onProgress(i + 1, n);
+      }
+    } finally {
+      others.forEach((o) => { o.visible = o.__mergeVis !== false; delete o.__mergeVis; });
+      restoreFields(fields);
+      canvas.requestRenderAll();
+    }
+    return { base, bin: new Blob(pics, { type: 'application/octet-stream' }), box };
   }
 
   // ---------- Export & add to cart ----------
@@ -3255,7 +3629,7 @@
     for (const s of st.product.sides) designs[s.id] = s.id === st.side ? serialize() : (st.designs[s.id] || []);
     const empty = !Object.values(designs).some((o) => o.length);
     const productId = st.product.id;
-    const meta = { productId, colorId: st.colorId, sizeId: st.sizeId, side: st.side, offsets: { ...st.offsets }, ...(st.pattern ? { pattern: { ...st.pattern } } : {}), method: st.method };
+    const meta = { productId, colorId: st.colorId, sizeId: st.sizeId, side: st.side, offsets: { ...st.offsets }, ...(st.pattern ? { pattern: { ...st.pattern } } : {}), method: st.method, mergeList: st.mergeList || null };
     let preview = null;
     if (!empty) {
       try {
@@ -3301,6 +3675,29 @@
       toast(t('msg.addFirst'), 'error');
       return;
     }
+    // Name list: the fields must match the list's columns (and a list needs a field).
+    if (st.mergePreview) endMergePreview();
+    const mergeSides = st.product.merge ? fieldSides() : [];
+    const useMerge = Boolean(st.product.merge && st.mergeList);
+    if (st.product.merge) {
+      if (mergeSides.length && !st.mergeList) {
+        toast(t('merge.needList'), 'error');
+        return;
+      }
+      if (useMerge && !mergeSides.length) {
+        toast(t('merge.addField', { field: `{${st.mergeList.columns[0]}}` }), 'error');
+        return;
+      }
+      if (useMerge) {
+        const cols = new Set(st.mergeList.columns.map((c) => c.trim()));
+        const all = mergeSides.flatMap((s) => (s.id === st.side ? mergeObjects().map((o) => o.text) : (st.designs[s.id] || []).filter((o) => o && /text/i.test(o.type)).map((o) => o.text)));
+        const unknown = [...new Set(all.flatMap(fieldsOf))].filter((f) => !cols.has(f));
+        if (unknown.length) {
+          toast(t('merge.unknownField', { field: `{${unknown[0]}}`, list: st.mergeList.columns.map((c) => `{${c}}`).join(' ') }), 'error');
+          return;
+        }
+      }
+    }
     // Pictures imported from other sites: the customer confirms the rights first.
     const imported = hasImports();
     if (imported && !(await confirmRights())) return;
@@ -3314,15 +3711,35 @@
     try {
       // 1. Render every designed side and collect print problems.
       const sidesPayload = {};
+      const mergeSidesPayload = {};
       const files = {};
       const problems = [];
       for (const s of sides) {
         await showSide(s.id);
         checkIssues().forEach((i) => problems.push(`• ${tr(s.name)}: ${t(i.key, { ...i.params, dpi: i.params.dpi, pt: i.params.pt })}`));
         sidesPayload[s.id] = { editor: { version: fabric.version, objects: await inlineImages(st.designs[s.id]), ...(st.offsets[s.id] ? { offset: st.offsets[s.id] } : {}), ...(st.pattern ? { pattern: { ...st.pattern } } : {}) } };
-        files[`${s.id}-print.png`] = await exportPrint(s);
-        files[`${s.id}-preview.png`] = await exportPreview();
-        files[`${s.id}-design.svg`] = new Blob([await exportSvg(s)], { type: 'image/svg+xml' });
+        const withFields = useMerge && mergeSides.some((x) => x.id === s.id);
+        if (withFields) {
+          // The background and one picture of the names per row...
+          const m = await exportMergeSide(s, (i, n) => busy(true, t('merge.preparing', { i: POD.num(i), n: POD.num(n) })));
+          files[`${s.id}-merge-base.png`] = m.base;
+          files[`${s.id}-merge.bin`] = m.bin;
+          mergeSidesPayload[s.id] = { box: m.box };
+          // ...and the usual files showing the first row (cart picture, single print).
+          await mergeFonts(mergeObjects());
+          const first = rowValues(0);
+          mergeObjects().forEach((o) => applyRow(o, first));
+        }
+        try {
+          files[`${s.id}-print.png`] = await exportPrint(s);
+          files[`${s.id}-preview.png`] = await exportPreview();
+          files[`${s.id}-design.svg`] = new Blob([await exportSvg(s)], { type: 'image/svg+xml' });
+        } finally {
+          if (withFields) {
+            restoreFields();
+            canvas.requestRenderAll();
+          }
+        }
       }
       await showSide(original);
       if (problems.length) {
@@ -3336,7 +3753,7 @@
       const created = await POD.api('/api/designs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productId: st.product.id, color: st.colorId, size: st.sizeId, sides: sidesPayload, ...(imported ? { rightsConfirmed: true } : {}), ...(emb() ? { method: 'embroidery' } : {}) }),
+        body: JSON.stringify({ productId: st.product.id, color: st.colorId, size: st.sizeId, sides: sidesPayload, ...(imported ? { rightsConfirmed: true } : {}), ...(emb() ? { method: 'embroidery' } : {}), ...(useMerge ? { merge: { columns: st.mergeList.columns, rows: st.mergeList.rows, sides: mergeSidesPayload } } : {}) }),
       });
       let done = 0;
       busy(true, t('busy.uploading', { n: 0, total: created.files.length }));
@@ -3360,6 +3777,7 @@
         sizeLabel: design.size.label,
         sides: design.sides.map((s) => s.name),
         price: design.price,
+        ...(design.merge ? { copies: design.merge.count } : {}),
         previewUrl: design.previewUrl,
         addedAt: new Date().toISOString(),
       };

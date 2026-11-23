@@ -98,7 +98,7 @@
             <img src="${esc(item.previewUrl)}" alt="${esc(t('cart.preview', { product: tr(item.productName) }))}">
             <div>
               <h3>${esc(tr(item.productName))}</h3>
-              <div class="meta">${esc(tr(item.colorName))} · ${esc(tr(item.sizeLabel))}<br>${esc(t('cart.printed', { sides: item.sides.map(tr).join(' + ') }))}</div>
+              <div class="meta">${esc(tr(item.colorName))} · ${esc(tr(item.sizeLabel))}${item.copies > 1 ? ` · <span class="cart-copies">${esc(t('cart.copies', { n: POD.num(item.copies) }))}</span>` : ''}<br>${esc(t('cart.printed', { sides: item.sides.map(tr).join(' + ') }))}</div>
               <div class="actions">
                 ${item.productId === 'dtfsheet' ? '' : item.bookId ? `<a class="btn btn-sm" href="/book?b=${encodeURIComponent(item.bookId)}&cart=${i}">${esc(t('cart.edit'))}</a>` : `<a class="btn btn-sm" href="/editor?design=${encodeURIComponent(item.designId)}&cart=${i}">${esc(t('cart.edit'))}</a>
                 ${item.bookId ? '' : `<a class="btn btn-sm" href="/editor?design=${encodeURIComponent(item.designId)}">${esc(t('cart.duplicate'))}</a>`}`}

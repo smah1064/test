@@ -49,6 +49,11 @@ const sharp = () => (sharpModule ||= require('sharp'));
 let printfilesModule = null;
 const printfiles = new Proxy({}, { get: (_, key) => (printfilesModule ||= require('./printfiles'))[key] });
 const artwork = require('./artwork');
+// Name lists (variable data): loaded on first use.
+let mergeModule = null;
+const merge = new Proxy({}, { get: (_, key) => (mergeModule ||= require('./merge'))[key] });
+let mergeDataModule = null;
+const mergeData = new Proxy({}, { get: (_, key) => (mergeDataModule ||= require('./merge-data'))[key] });
 
 /** Short hash of every file under dir: changes whenever the site's code or assets change. */
 function siteVersion(dir) {
@@ -69,8 +74,9 @@ function siteVersion(dir) {
 const ITEM_STATUSES = ['queued', 'printing', 'printed', 'shipped'];
 
 const MAX_EDITOR_JSON_BYTES = 40 * 1024 * 1024;
-const UPLOAD_LIMITS = { print: 60 * 1024 * 1024, preview: 8 * 1024 * 1024, svg: 40 * 1024 * 1024, source: 60 * 1024 * 1024 };
-const FILE_RE = /^(front|back)-(print|preview)\.png$|^(front|back)-design\.svg$|^src-\d{1,2}\.(png|jpg|webp)$/;
+// merge: a name list's pictures, one per copy (up to 1,000 of them).
+const UPLOAD_LIMITS = { print: 60 * 1024 * 1024, preview: 8 * 1024 * 1024, svg: 40 * 1024 * 1024, source: 60 * 1024 * 1024, merge: 150 * 1024 * 1024 };
+const FILE_RE = /^(front|back)-(print|preview|merge-base)\.png$|^(front|back)-design\.svg$|^(front|back)-merge\.bin$|^src-\d{1,2}\.(png|jpg|webp)$/;
 const SIGNATURES = {
   png: (b) => b.subarray(0, 8).equals(PNG_SIGNATURE),
   jpg: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
@@ -96,7 +102,8 @@ const FILE_LABELS = { print: t('print file', 'ملف الطباعة'), preview: 
 
 /** Check an uploaded file's type and size; returns its kind. */
 function checkUpload(name, buf) {
-  const kind = name.startsWith('src-') ? 'source' : name.endsWith('.svg') ? 'svg' : name.includes('-print') ? 'print' : 'preview';
+  // Name lists: the background and the names (many PNGs back to back) are print files too.
+  const kind = name.startsWith('src-') ? 'source' : name.endsWith('.svg') ? 'svg' : name.endsWith('-merge.bin') ? 'merge' : name.includes('-print') || name.includes('-merge') ? 'print' : 'preview';
   if (buf.length > UPLOAD_LIMITS[kind]) throw new HttpError(413, 'uploadTooLarge');
   if (kind === 'source') {
     const ext = name.split('.').pop();
@@ -185,6 +192,8 @@ function publicItem(item) {
     pattern: item.pattern || null,
     method: item.method || null,
     emb: item.emb || null,
+    copies: item.copies || 1,
+    merge: item.merge ? { count: item.merge.count, columns: item.merge.columns } : null,
   };
 }
 
@@ -235,6 +244,29 @@ function adminItem(order, item, index) {
   };
 }
 
+/** A product drawing (its mockup SVG) in a colour, as a 640 px WebP picture (for products without a photo). */
+const drawnCache = new Map();
+async function drawnThumb(svgTpl, hex) {
+  const key = svgTpl.length + '|' + hex + '|' + svgTpl.slice(0, 200);
+  if (!drawnCache.has(key)) {
+    const lum = (h) => {
+      const n = parseInt(String(h).slice(1), 16);
+      return (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
+    };
+    const line = lum(hex) < 0.25 ? '#8a8f98' : '#b9bdc4';
+    const svg = svgTpl.replace(/\{\{C\}\}/g, hex).replace(/\{\{S\}\}/g, hex).replace(/\{\{L\}\}/g, line);
+    drawnCache.set(key, (async () => {
+      const png = await sharp()(Buffer.from(svg), { density: 192 }).png().toBuffer();
+      const trimmed = await sharp()(png).trim({ threshold: 2 }).toBuffer();
+      return sharp()(trimmed).resize(560, 560, { fit: 'contain', background: '#ffffff' }).extend({ top: 40, bottom: 40, left: 40, right: 40, background: '#ffffff' }).flatten({ background: '#ffffff' }).webp({ quality: 86 }).toBuffer();
+    })().catch(() => null));
+  }
+  return drawnCache.get(key);
+}
+
+/** Rows in one name list (copies of one design). */
+const MERGE_MAX_ROWS = 1000;
+
 /** Per-visitor limits; tests and special setups can override them. */
 const DEFAULT_LIMITS = {
   designs: [{ max: 30, ms: 10 * 60e3 }, { max: 200, ms: 24 * 3600e3 }],
@@ -250,6 +282,7 @@ const DEFAULT_LIMITS = {
   notify: [{ max: 30, ms: 3600e3 }, { max: 200, ms: 24 * 3600e3 }],
   // Illustrator / EPS files turned into pictures for the editor.
   artwork: [{ max: 15, ms: 10 * 60e3 }, { max: 60, ms: 24 * 3600e3 }],
+  mergeParse: [{ max: 30, ms: 10 * 60e3 }, { max: 150, ms: 24 * 3600e3 }],
   // AI background removal (about 2 s of server time each).
   removeBg: [{ max: 20, ms: 10 * 60e3 }, { max: 80, ms: 24 * 3600e3 }],
   importLink: [{ max: 20, ms: 10 * 60e3 }, { max: 100, ms: 24 * 3600e3 }],
@@ -326,7 +359,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const color = product && product.colors.find((c) => c.id === req.params.colorId);
       if (!color) throw new HttpError(404, 'notFound');
       if (product.kind === 'book') return res.redirect(302, `/api/books/${product.book}/sample/0.jpg`);
-      const img = product.pattern ? await thumbs.patternImage(product, color.hex) : await thumbs.cardImage(product.id, product.sides[0].id, color.hex);
+      let img = product.pattern ? await thumbs.patternImage(product, color.hex) : await thumbs.cardImage(product.id, product.sides[0].id, color.hex);
+      // No product photo yet: the drawn product in its colour, trimmed, on white.
+      if (!img && product.sides[0].svg) img = await drawnThumb(product.sides[0].svg, color.hex);
       if (!img) throw new HttpError(404, 'notFound');
       res.set('Cache-Control', 'public, max-age=86400, no-transform');
       res.type('image/webp').send(img);
@@ -355,6 +390,119 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   //   1. POST   /api/designs                      layout + options -> id and upload token
   //   2. PUT    /api/designs/:id/files/:name      each PNG/SVG file
   //   3. POST   /api/designs/:id/complete         checks files, embeds colour profile + DPI
+  // ---------- Name lists (variable data) ----------
+  // The customer's spreadsheet (Excel or CSV) read into columns and rows; the
+  // editor fills {Column} fields with each row (see src/merge.js).
+  app.post('/api/merge/parse', (req, res, next) => {
+    rateLimit(req, 'mergeParse');
+    next();
+  }, express.raw({ type: () => true, limit: '5mb' }), (req, res) => {
+    const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+    if (!buf.length) throw new HttpError(400, 'mergeEmpty');
+    let table;
+    try {
+      table = mergeData.parseTable(buf, { maxRows: MERGE_MAX_ROWS });
+    } catch (e) {
+      if (e && e.name === 'MergeDataError') throw new HttpError(400, { xls: 'mergeXls', empty: 'mergeEmpty' }[e.reason] || 'mergeUnreadable');
+      throw e;
+    }
+    res.json({ columns: table.columns, rows: table.rows, total: table.total, truncated: table.truncated, maxRows: MERGE_MAX_ROWS });
+  });
+
+  /** The list sent with a design, checked: { count, columns, rows, sides: { front: { box } } }. */
+  function cleanMerge(product, m, storedSides, { emb, pattern }) {
+    if (!product.merge || emb || pattern) throw new HttpError(400, 'mergeNotAllowed');
+    if (!m || typeof m !== 'object' || !Array.isArray(m.columns) || !Array.isArray(m.rows) || !m.sides || typeof m.sides !== 'object') throw new HttpError(400, 'mergeBad');
+    const text = (v, max) => [...String(v == null ? '' : v).replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim()].slice(0, max).join('');
+    if (m.columns.length < 1 || m.columns.length > 20) throw new HttpError(400, 'mergeBad');
+    const columns = [];
+    m.columns.forEach((c, i) => {
+      let name = text(c, 60) || `Column ${i + 1}`;
+      while (columns.includes(name)) name += ' 2';
+      columns.push(name);
+    });
+    const max = Math.min(MERGE_MAX_ROWS, product.merge.maxRows || MERGE_MAX_ROWS);
+    if (m.rows.length < 1) throw new HttpError(400, 'mergeEmpty');
+    if (m.rows.length > max) throw new HttpError(400, 'mergeTooMany', { max });
+    const rows = m.rows.map((r) => columns.map((_, i) => text(Array.isArray(r) ? r[i] : '', 200)));
+    const sides = {};
+    for (const [id, v] of Object.entries(m.sides)) {
+      if (!storedSides.some((sd) => sd.id === id)) throw new HttpError(400, 'mergeBad');
+      const b = v && v.box;
+      const ok = b && ['x', 'y', 'w', 'h'].every((k) => Number.isInteger(b[k]) && b[k] >= 0 && b[k] <= 20000) && b.w >= 1 && b.h >= 1;
+      if (!ok) throw new HttpError(400, 'mergeBad');
+      sides[id] = { box: { x: b.x, y: b.y, w: b.w, h: b.h } };
+    }
+    if (!Object.keys(sides).length) throw new HttpError(400, 'mergeNoFields');
+    return { count: rows.length, columns, rows, sides };
+  }
+
+  /** On /complete: the background and one name picture per row, all the right size. */
+  function checkMergeFiles(design) {
+    for (const [id, m] of Object.entries(design.merge.sides)) {
+      const side = design.sides.find((s) => s.id === id);
+      const read = (n) => {
+        const f = store.designFile(design.id, n);
+        if (!fs.existsSync(f)) throw new HttpError(400, 'mergeFiles');
+        return fs.readFileSync(f);
+      };
+      let base;
+      let pics;
+      try {
+        base = mergeData.pngSize(read(`${id}-merge-base.png`));
+        pics = mergeData.splitPngs(read(`${id}-merge.bin`), { max: design.merge.count });
+      } catch (e) {
+        if (e instanceof HttpError) throw e;
+        throw new HttpError(400, 'mergeFiles');
+      }
+      const b = m.box;
+      if (!side || base.width !== side.widthPx || base.height !== side.heightPx) throw new HttpError(400, 'mergeFiles');
+      if (b.x + b.w > base.width || b.y + b.h > base.height) throw new HttpError(400, 'mergeFiles');
+      if (pics.length !== design.merge.count) throw new HttpError(400, 'mergeFiles');
+      for (const pic of pics) {
+        const sz = mergeData.pngSize(pic);
+        if (sz.width !== b.w || sz.height !== b.h) throw new HttpError(400, 'mergeFiles');
+      }
+    }
+  }
+  const readMergeList = (design) => {
+    try {
+      return JSON.parse(fs.readFileSync(store.designFile(design.id, 'merge.json'), 'utf8'));
+    } catch (e) {
+      return null;
+    }
+  };
+
+  /** The name-list downloads: every copy in one PDF (with or without crop marks), one PDF per copy, the list. */
+  async function makeMergeFile(design, format, base) {
+    const files = { 'merge-pdf': 'merge-print.pdf', 'merge-pdf-marks': 'merge-print-marks.pdf', 'merge-zip': 'merge-copies.zip', 'merge-csv': 'merge-list.csv' };
+    const list = design.merge && readMergeList(design);
+    if (!list || !Object.hasOwn(files, format)) throw new HttpError(404, 'notFound');
+    const n = design.merge.count;
+    const target = store.designFile(design.id, files[format]);
+    if (!fs.existsSync(target)) {
+      if (format === 'merge-csv') {
+        store.writeDesignFile(design.id, files[format], merge.csv(list.columns, list.rows));
+      } else {
+        const lays = await merge.layers(design, (name) => fs.readFileSync(store.designFile(design.id, name)));
+        const label = (r) => (list.rows[r] || []).filter(Boolean).slice(0, 2).join(' / ');
+        if (format === 'merge-zip') {
+          try {
+            await merge.writeZipOfPdfs(lays, n, list.rows, target, { title: base });
+          } catch (e) {
+            if (e.code === 'ZIP_TOO_BIG') throw new HttpError(413, 'mergeZipTooBig');
+            throw e;
+          }
+        } else {
+          await merge.writePdf(lays, n, target, { marks: format === 'merge-pdf-marks', title: base, label });
+        }
+      }
+    }
+    const ext = { 'merge-pdf': 'pdf', 'merge-pdf-marks': 'pdf', 'merge-zip': 'zip', 'merge-csv': 'csv' }[format];
+    const suffix = { 'merge-pdf': '', 'merge-pdf-marks': '-cropmarks', 'merge-zip': '-separate', 'merge-csv': '-list' }[format];
+    return { path: target, name: `${base}-${n}-names${suffix}.${ext}` };
+  }
+
   app.post('/api/designs', (req, res, next) => {
     // Checked before reading the (large) body.
     rateLimit(req, 'designs');
@@ -418,6 +566,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     }
     const editorJson = JSON.stringify(editor);
     if (Buffer.byteLength(editorJson) > MAX_EDITOR_JSON_BYTES) throw new HttpError(413, 'designTooLarge');
+    // Name list: one printed copy per row, the {Column} fields filled in per copy.
+    const mergeIn = (req.body || {}).merge;
+    const mergeList = mergeIn ? cleanMerge(product, mergeIn, storedSides, { emb, pattern }) : null;
     // Pictures imported from other sites: the customer must confirm they may print them.
     const imported = [...new Set(Object.values(editor).flatMap((e) => e.objects.map((o) => (o && typeof o.importSource === 'string' ? o.importSource.slice(0, 500) : null)).filter(Boolean)))].slice(0, 10);
     if (imported.length && (req.body || {}).rightsConfirmed !== true) throw new HttpError(400, 'rightsRequired');
@@ -435,15 +586,17 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       color: { id: colorDef.id, name: colorDef.name, hex: colorDef.hex },
       size: { id: sizeDef.id, label: sizeDef.label },
       sides: storedSides,
-      price: priceFor(product, sizeDef.id, storedSides.length) + (emb ? emb.surcharge : 0),
+      price: round2((priceFor(product, sizeDef.id, storedSides.length) + (emb ? emb.surcharge : 0)) * (mergeList ? mergeList.count : 1)),
+      ...(mergeList ? { unitPrice: priceFor(product, sizeDef.id, storedSides.length), merge: { count: mergeList.count, columns: mergeList.columns, sides: mergeList.sides } } : {}),
       currency: CURRENCY,
       orderId: null,
       ...(imported.length ? { imports: imported, rightsConfirmedAt: new Date().toISOString() } : {}),
       ...(pattern ? { pattern } : {}),
     };
     const files = storedSides.flatMap((sd) => [`${sd.id}-print.png`, `${sd.id}-preview.png`, `${sd.id}-design.svg`]);
+    if (mergeList) for (const sd of Object.keys(mergeList.sides)) files.push(`${sd}-merge-base.png`, `${sd}-merge.bin`);
     design.expectedFiles = files;
-    store.createDesign(design, { 'editor.json': editorJson });
+    store.createDesign(design, { 'editor.json': editorJson, ...(mergeList ? { 'merge.json': JSON.stringify({ columns: mergeList.columns, rows: mergeList.rows }) } : {}) });
     res.status(201).json({ id: design.id, uploadToken: token, files });
   });
 
@@ -454,7 +607,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     return design;
   };
 
-  app.put('/api/designs/:id/files/:name', express.raw({ type: () => true, limit: '60mb' }), (req, res) => {
+  app.put('/api/designs/:id/files/:name', express.raw({ type: () => true, limit: '150mb' }), (req, res) => {
     const design = uploadingDesign(req);
     const { name } = req.params;
     if (!FILE_RE.test(name) || !(design.expectedFiles || []).includes(name)) throw new HttpError(400, 'notFound');
@@ -511,6 +664,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         }
         Object.assign(side, { widthPx: info.width, heightPx: info.height, dpi, hasSvg: fs.existsSync(store.designFile(design.id, `${side.id}-design.svg`)) });
       }
+      if (design.merge) checkMergeFiles(design);
       if (design.method === 'embroidery') await makeEmbroidery(design);
       design.status = 'ready';
       delete design.uploadTokenHash;
@@ -862,7 +1016,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (!design) throw new HttpError(404, 'designNotFound');
     const editor = JSON.parse(fs.readFileSync(store.designFile(design.id, 'editor.json'), 'utf8'));
     const { uploadTokenHash, ...pub } = design; // eslint-disable-line no-unused-vars
-    res.json({ ...pub, editor });
+    const list = design.merge ? readMergeList(design) : null;
+    res.json({ ...pub, editor, ...(list ? { mergeList: list } : {}) });
   });
 
   // Mockup previews are public (design ids are unguessable); print files are admin-only.
@@ -1232,8 +1387,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (!d || (d.status && d.status !== 'ready') || d.orderId) return null;
     if (d.kind === 'gangsheet') return d.price;
     const product = getProduct(d.productId);
-    return product ? priceFor(product, d.size.id, d.sides.length) + embExtra(product, d) : null;
+    return product ? round2((priceFor(product, d.size.id, d.sides.length) + embExtra(product, d)) * copiesOf(d)) : null;
   };
+  /** Copies of a design: one per row of its name list, else one. */
+  const copiesOf = (d) => (d && d.merge ? d.merge.count : 1);
   /** The embroidery charge on top of the product price. */
   const embExtra = (product, d) => (d.method === 'embroidery' && product.embroidery ? product.embroidery.surcharge : 0);
   // ---------- Customer accounts ----------
@@ -1542,7 +1699,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         size: d.size,
         sides: d.sides,
         process: d.process || product.process,
-        price: priceFor(product, d.size.id, d.sides.length) + embExtra(product, d),
+        price: round2((priceFor(product, d.size.id, d.sides.length) + embExtra(product, d)) * copiesOf(d)),
+        ...(d.merge ? { copies: d.merge.count, unitPrice: priceFor(product, d.size.id, d.sides.length), merge: { count: d.merge.count, columns: d.merge.columns } } : {}),
         ...(d.method === 'embroidery' ? { method: 'embroidery', emb: d.emb || null } : {}),
         ...(d.imports ? { imports: d.imports, rightsConfirmedAt: d.rightsConfirmedAt } : {}),
         ...(d.pattern ? { pattern: d.pattern } : {}),
@@ -1838,6 +1996,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       }
       return { path: target, name: `${order ? order.number : 'design'}-${design.productId}-preview.pdf` };
     }
+    if (format && format.startsWith('merge-')) return makeMergeFile(design, format, base.replace(`-${sideId}`, ''));
     if (format === 'dst' || format === 'stitches') {
       if (design.method !== 'embroidery') throw new HttpError(404, 'notFound');
       const sd = design.sides[0];

@@ -162,6 +162,18 @@ Add an entry to `PRODUCTS` in `src/products.js`. Mockups are SVGs in a 500 × 60
 - **Storage:** the JSON store suits a single server. For scale, move metadata into a database and print files into object storage.
 - **Admin auth** is a single shared password. Use real accounts if several people run the press.
 
+## Name lists (variable data printing)
+
+For invitations, certificates, greeting cards, ID cards, name labels and sticker sheets, the editor has **Print a list of names**:
+
+1. The customer uploads an Excel (.xlsx) or CSV file. The first row holds the column titles (Name, Title…), then one row per copy; up to 1,000 rows. `POST /api/merge/parse` reads it (`src/merge-data.js`: CSV with any separator and Arabic encodings, .xlsx read without extra libraries; old .xls is refused with a "save as .xlsx" message). An example file can be downloaded from the panel.
+2. Fields such as `{Name}` go into any text (chips insert them; while typing, at the cursor). The customer styles them like any text and can step through the real rows on the canvas. Each field text has a **longest name width**: longer values get a smaller font so they always fit; the panel lists rows whose names shrink a lot or are empty.
+3. The price is per copy (one copy per row) everywhere: editor, cart, order, coupons, costs in the accounts.
+4. On save the browser draws, with the same fonts and effects as the editor, the side's background without the field texts (`<side>-merge-base.png`) and one small transparent picture of the field area per row (`<side>-merge.bin`, PNGs back to back), plus the usual files showing row 1. The server checks every picture's size and count.
+5. Admin downloads (`src/merge.js`): **All names · PDF with crop marks** (recommended) or without; the background is stored once in the PDF and every page only adds its name, so even 1,000 copies make a small file (300 A4 certificates ≈ 12 MB, built in about 10 s). Also **one PDF per name (ZIP)**, named `0001-Ahmed-Ali.pdf`…, and the **list as CSV** (opens in Excel with Arabic).
+
+New products for this: **Invitation Cards** (13 × 18 cm, 350 gsm, with envelope, front/back) and **Certificates** (A4 or A3 landscape, 300 gsm). Until they have product photos, their product cards show the drawn product.
+
 ## On a model (clothing previews)
 
 The preview window has an **On a model** tab for clothing: photos of people wearing the blank white garment (`public/mockups/models/`, made with Creative Claw), each with a garment-only mask. The same engine as the product photos recolours the garment from the photo's own shading and warps the design into the print area, shown at about its real size. Skin, hair and backdrop are never touched. The photos and print rectangles are listed in `POD_MODELS` (`public/js/photo-mockups.js`); with several models per side the customer picks one with chips.

@@ -41,7 +41,7 @@
       const shopWa = catalog && catalog.contact && catalog.contact.whatsapp;
       /** A WhatsApp chat with the shop, the order details already typed. */
       function whatsappLink(o) {
-        const items = o.items.map((it, i) => `${POD.num(i + 1)}. ${tr(it.productName)} · ${tr(it.color.name)} · ${tr(it.size.label)}`).join('\n');
+        const items = o.items.map((it, i) => `${POD.num(i + 1)}. ${tr(it.productName)} · ${tr(it.color.name)} · ${tr(it.size.label)}${it.copies > 1 ? ` · ${t('cart.copies', { n: POD.num(it.copies) })}` : ''}`).join('\n');
         const text = t('order.waMessage', { n: o.number, items, total: money(o.total), name: o.customer.name });
         return `https://wa.me/${shopWa}?text=${encodeURIComponent(text)}`;
       }
@@ -67,7 +67,7 @@
                 <img src="${esc(item.sides[0].previewUrl)}" alt="">
                 <div>
                   <h3>${POD.num(i + 1)}. ${esc(tr(item.productName))}</h3>
-                  <div class="meta">${esc(tr(item.color.name))} · ${esc(tr(item.size.label))} · ${esc(item.sides.map((s) => tr(s.name)).join(' + '))}</div>
+                  <div class="meta">${esc(tr(item.color.name))} · ${esc(tr(item.size.label))} · ${esc(item.sides.map((s) => tr(s.name)).join(' + '))}${item.copies > 1 ? ` · <span class="cart-copies">${esc(t('cart.copies', { n: POD.num(item.copies) }))}</span>` : ''}</div>
                   <div class="status-label" style="margin-top:10px">${esc(t('item.' + item.status))}</div>
                   <div class="status-steps">${STEPS.map((s, k) => `<div class="${k <= reached ? 'done' : ''}" title="${esc(t('item.' + s))}"></div>`).join('')}</div>
                 </div>

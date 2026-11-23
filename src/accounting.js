@@ -114,6 +114,9 @@ function itemCostFrom(costs, item) {
   const blank = round2((c.blank || 0) + ((c.sizes && item.size && c.sizes[item.size.id]) || 0));
   const print = round2((c.printFirst || 0) + (sides - 1) * (c.printExtra || 0));
   const other = round2(c.other || 0);
+  // Name lists: one printed copy per row.
+  const n = Math.max(1, item.copies || 1);
+  if (n > 1) return { blank: round2(blank * n), print: round2(print * n), other: round2(other * n), total: round2((blank + print + other) * n), set: Boolean(costs && costs[item.productId]), copies: n };
   return { blank, print, other, total: round2(blank + print + other), set: Boolean(costs && costs[item.productId]) };
 }
 /** The cost used in the books: the admin's correction, else the copy made at order time, else today's costs. */

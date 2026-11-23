@@ -812,6 +812,25 @@ PRODUCTS.push(
     sides: [{ id: 'front', name: t('Cover', 'الغلاف'), svg: flat(140, 80, 220, 311), printArea: { x: 140, y: 80, w: 220, h: 311 }, printWidthIn: 4.13 }],
   },
   {
+    id: 'invitations',
+    category: 'occasions',
+    name: t('Invitation Cards', 'كروت دعوة'),
+    description: t('Flat 350 gsm invitation cards (13 × 18 cm) with white envelopes. For weddings, engagements, birthdays and events. Upload a list to print every guest\'s name.', 'كروت دعوة 350 جرام (13 × 18 سم) مع ظروف بيضاء. للأفراح والخطوبة وأعياد الميلاد والمناسبات. ارفع قائمة الأسماء ونطبع اسم كل ضيف على كارته.'),
+    basePrice: 35,
+    colors: [
+      { id: 'matte', name: t('Matte white', 'أبيض مطفي'), hex: '#ffffff' },
+      { id: 'pearl', name: t('Pearl shimmer', 'لؤلؤي لامع'), hex: '#f7f4ee' },
+      C.cream,
+      C.kraft,
+    ],
+    sizes: [{ id: '13x18', label: t('13 × 18 cm + envelope', '13 × 18 سم + ظرف'), surcharge: 0 }],
+    sides: [
+      { id: 'front', name: FRONT, svg: flat(150, 75, 200, 280, 3), printArea: { x: 150, y: 75, w: 200, h: 280, rx: 3 }, printWidthIn: 5.12 },
+      { id: 'back', name: BACK, svg: flat(150, 75, 200, 280, 3), printArea: { x: 150, y: 75, w: 200, h: 280, rx: 3 }, printWidthIn: 5.12 },
+    ],
+    extraSidePrice: 10,
+  },
+  {
     id: 'plaque',
     category: 'occasions',
     name: t('Acrylic Photo Plaque', 'بلاك أكريليك للصور'),
@@ -1069,6 +1088,19 @@ PRODUCTS.push(
       { id: 'front', name: FRONT, svg: flat(160, 130, 180, 285, 10), printArea: { x: 160, y: 130, w: 180, h: 285, rx: 10 }, printWidthIn: 2.13 },
       { id: 'back', name: BACK, svg: flat(160, 130, 180, 285, 10), printArea: { x: 160, y: 130, w: 180, h: 285, rx: 10 }, printWidthIn: 2.13 },
     ],
+  },
+  {
+    id: 'certificates',
+    category: 'business',
+    name: t('Certificates', 'شهادات تقدير'),
+    description: t('Certificates on thick 300 gsm card, landscape. For schools, courses, awards and staff. Upload a list to print every name.', 'شهادات على كارت 300 جرام سميك، بالعرض. للمدارس والكورسات والتكريم والموظفين. ارفع قائمة الأسماء ونطبع كل اسم على شهادته.'),
+    basePrice: 45,
+    colors: [C.white, C.cream],
+    sizes: [
+      { id: 'A4', label: t('A4 (29.7 × 21 cm)', 'A4 (29.7 × 21 سم)'), surcharge: 0 },
+      { id: 'A3', label: t('A3 (42 × 29.7 cm)', 'A3 (42 × 29.7 سم)'), surcharge: 40 },
+    ],
+    sides: [{ id: 'front', name: FRONT, svg: flat(40, 155, 420, 297), printArea: { x: 40, y: 155, w: 420, h: 297 }, printWidthIn: 11.69 }],
   },
 );
 
@@ -1362,6 +1394,8 @@ const PRODUCTION = {
   prayermat: { process: 'sublimation', safeIn: 0.5, bleedIn: 0, model: { type: 'pad', depthIn: 0.3, radiusIn: 0.2, edge: '#efe9df', material: 'fabric' } },
   eidenvelopes: { process: 'paper', safeIn: 0.15, bleedIn: 0.08, model: { type: 'block', depthIn: 0.03, radiusIn: 0.02, edge: '#f6f6f4', material: 'paper', plainBack: '#f6f6f4' } },
   greetingcard: { process: 'paper', safeIn: 0.15, bleedIn: 0.08, model: { type: 'foldcard', material: 'paper' } },
+  invitations: { process: 'paper', safeIn: 0.15, bleedIn: 0.08, model: { type: 'block', depthIn: 0.03, radiusIn: 0.02, edge: '#f6f6f4', material: 'paper' } },
+  certificates: { process: 'paper', safeIn: 0.3, bleedIn: 0.08, model: { type: 'block', depthIn: 0.02, radiusIn: 0.02, edge: '#f6f6f4', material: 'paper' } },
   plaque: { process: 'uv', safeIn: 0.15, bleedIn: 0, model: { type: 'block', depthIn: 0.8, radiusIn: 0.05, material: 'plastic', clear: true } },
   sign: { process: 'uv', safeIn: 0.5, bleedIn: 0, model: { type: 'block', depthIn: 0.2, radiusIn: 0.02, edge: '#f4f4f2', material: 'paper' } },
   deskmat: { process: 'sublimation', safeIn: 0.4, bleedIn: 0.125, model: { type: 'pad', depthIn: 0.12, radiusIn: 0.5, material: 'fabric' } },
@@ -1481,6 +1515,10 @@ for (const p of PRODUCTS) {
   if (p.sizes.every((sz) => sz.chestCm)) p.photoChestCm = PHOTO_CHEST[p.id] || 52;
 }
 
+// Name lists (variable data): one design, a spreadsheet of names, one printed copy per row.
+const MERGE_PRODUCTS = ['invitations', 'certificates', 'greetingcard', 'idcards', 'namelabels', 'stickersheet'];
+for (const p of PRODUCTS) if (MERGE_PRODUCTS.includes(p.id)) p.merge = { maxRows: 1000 };
+
 // Sizes that change the physical print (the drawing area keeps its shape):
 // printScale multiplies the side's printWidthIn (and height) for that size.
 const SIZE_PRINT_SCALE = {
@@ -1489,6 +1527,7 @@ const SIZE_PRINT_SCALE = {
   canvaswide: { '40x60': 4 / 3, '60x90': 2 },
   cushion: { 50: 50 / 40 },
   greetingcard: { A5: 14.8 / 10.5 },
+  certificates: { A3: 42 / 29.7 },
   plaque: { '18x25': 18 / 13 },
   sign: { A1: 59.4 / 42 },
   stickersheet: { A4: 21 / 14.8 },
