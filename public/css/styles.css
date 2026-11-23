@@ -687,3 +687,18 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 .zoom-pop img { display: block; width: min(460px, 42vw); height: auto; max-height: 78vh; object-fit: contain; border-radius: 8px; background: #f4f4f4; }
 .zoom-pop.two img { width: min(340px, 30vw); }
 .zoom-pop[hidden] { display: none; }
+
+/* Admin: printing houses */
+.house-form { padding: 18px; margin-bottom: 14px; }
+.house-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; flex-wrap: wrap; }
+.house-map-cat { font-size: 14px; margin: 16px 0 8px; }
+.house-map-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px 16px; }
+.house-map-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 14px; }
+.house-map-row select { max-width: 55%; }
+.send-panel { border: 1px solid #e7e7e7; border-radius: 12px; padding: 14px; margin: 10px 0; background: #fafafa; }
+.send-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0 14px; }
+.send-files, .chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.check-chip, .chip-radio { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 999px; background: #fff; font-size: 13px; cursor: pointer; }
+.chip-radio.is-off { opacity: 0.55; cursor: not-allowed; }
+.send-panel textarea { width: 100%; }
+.send-history { font-size: 13px; color: var(--ok, #2b8a3e); margin: 6px 0; line-height: 1.6; }

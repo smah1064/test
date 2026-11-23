@@ -38,6 +38,7 @@
           <button class="btn btn-sm" data-tab="orders" data-i18n="admin.tabOrders"></button>
           <button class="btn btn-sm" data-tab="film" data-i18n="admin.tabFilm"></button>
           <button class="btn btn-sm" data-tab="library" data-i18n="lib.tab"></button>
+          <button class="btn btn-sm" data-tab="houses" data-i18n="houses.tab"></button>
         </div>
       </div>
 
@@ -80,6 +81,33 @@
           </div>
         </form>
         <div class="queue-list" id="lib-list"></div>
+      </section>
+
+      <section id="tab-houses" hidden>
+        <p class="notice" id="houses-email-off" hidden data-i18n="houses.emailOff" style="margin:0 0 12px"></p>
+        <form class="card house-form" id="house-form">
+          <h2 style="font-size:16px;margin:0 0 4px" id="house-form-title" data-i18n="houses.addTitle"></h2>
+          <p class="muted small" style="margin:0 0 10px;line-height:1.6" data-i18n="houses.addHelp"></p>
+          <input type="hidden" id="house-id">
+          <div class="lib-form">
+            <div class="field"><label for="house-name" data-i18n="houses.name"></label><input type="text" id="house-name" maxlength="80" required></div>
+            <div class="field"><label for="house-email" data-i18n="houses.email"></label><input type="email" id="house-email" maxlength="120" dir="ltr" placeholder="name@example.com"></div>
+            <div class="field"><label for="house-wa" data-i18n="houses.whatsapp"></label><input type="tel" id="house-wa" maxlength="24" dir="ltr" placeholder="01012345678"></div>
+            <div class="field"><label for="house-prefer" data-i18n="houses.prefer"></label><select id="house-prefer"><option value="email" data-i18n="houses.byEmail"></option><option value="whatsapp" data-i18n="houses.byWhatsApp"></option></select></div>
+          </div>
+          <div class="field"><label for="house-notes" data-i18n="houses.notes"></label><input type="text" id="house-notes" maxlength="300"></div>
+          <div class="row" style="flex-wrap:wrap;gap:10px;align-items:center">
+            <button class="btn btn-primary shrink" type="submit" id="house-save" data-i18n="houses.save"></button>
+            <button class="btn shrink" type="button" id="house-cancel" hidden data-i18n="houses.cancel"></button>
+            <span class="small" id="house-msg"></span>
+          </div>
+        </form>
+        <div class="queue-list" id="house-list"></div>
+        <div class="card" style="padding:18px;margin-top:18px">
+          <h2 style="font-size:16px;margin:0 0 4px" data-i18n="houses.mapTitle"></h2>
+          <p class="muted small" style="margin:0 0 12px;line-height:1.6" data-i18n="houses.mapHelp"></p>
+          <div id="house-map"></div>
+        </div>
       </section>
 
       <section id="tab-orders" hidden>

@@ -25,6 +25,7 @@ const { FIELDS, langOf, format } = require('./i18n');
 const thumbs = require('./thumbs');
 const ai = require('./ai');
 const notify = require('./notify');
+const dispatch = require('./dispatch');
 const { Library, CATEGORIES: DESIGN_CATEGORIES } = require('./library');
 const security = require('./security');
 const books = require('./books');
@@ -181,6 +182,7 @@ function adminItem(order, item, index) {
     payment: order.payment,
     orderTotal: order.total,
     redraw: item.redraw || null,
+    sends: item.sends || [],
   };
 }
 
@@ -199,6 +201,8 @@ const DEFAULT_LIMITS = {
   notify: [{ max: 30, ms: 3600e3 }, { max: 200, ms: 24 * 3600e3 }],
   // Illustrator / EPS files turned into pictures for the editor.
   artwork: [{ max: 15, ms: 10 * 60e3 }, { max: 60, ms: 24 * 3600e3 }],
+  // Printing houses downloading their files.
+  downloads: [{ max: 200, ms: 3600e3 }],
 };
 
 function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 3600e3 }) {
@@ -1223,77 +1227,233 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const placements = sheet.placements.map((pl, i) => ({ id: i, x: pl.x / 2.54, y: pl.y / 2.54, w: pl.w / 2.54, h: pl.h / 2.54, rotated: pl.rotated }));
     return printfiles.filmPdf(pieces, { rollWidthIn: sheet.widthCm / 2.54, mirror, labels: false, margin: 0, placements, lengthIn: sheet.lengthCm / 2.54, title: `DTF gang sheet ${sheet.widthCm}x${sheet.lengthCm}cm` });
   }
+  /**
+   * Makes (or reuses) one downloadable file for a design: a print file of one
+   * side, the book or gang-sheet PDF, or the customer-design preview PDF.
+   * Returns { path, name } or throws an HttpError.
+   */
+  async function makeFile(design, sideId, format, { now = false } = {}) {
+    const designId = design.id;
+    const side = design.sides.find((s) => s.id === sideId);
+    const order = design.orderId && store.getOrder(design.orderId);
+    const base = `${order ? order.number : 'design'}-${design.productId}-${sideId}`;
+    if (format === 'preview-pdf') {
+      // What the customer designed (all sides, or every book page), as one PDF.
+      const target = store.designFile(designId, design.kind === 'book' ? 'book-preview.pdf' : `preview-v${design.version || 0}.pdf`);
+      if (!fs.existsSync(target)) {
+        const title = `${order ? order.number + ' · ' : ''}${pickEn(design.productName) || ''}`;
+        const lines = [
+          [design.color && pickEn(design.color.name), design.size && pickEn(design.size.label)].filter(Boolean).join(' · '),
+          order ? `Ordered ${order.createdAt.slice(0, 10)}` : '',
+        ].filter(Boolean);
+        let pages;
+        if (design.kind === 'book') {
+          if (design.photoRemoved) throw new HttpError(404, 'notFound');
+          const book = bookFor(design.bookId);
+          const data = bookData(design);
+          pages = [];
+          for (let i = 0; i < book.pages.length; i++) pages.push({ img: await books.pageJpeg(data, i, 900, 85), label: `Page ${i + 1}` });
+        } else {
+          pages = design.sides
+            .map((sd) => ({ file: store.designFile(designId, `${sd.id}-preview.png`), label: pickEn(sd.name) || sd.id }))
+            .filter((pg) => fs.existsSync(pg.file))
+            .map((pg) => ({ img: fs.readFileSync(pg.file), label: pg.label }));
+        }
+        if (!pages.length) throw new HttpError(404, 'notFound');
+        store.writeDesignFile(designId, path.basename(target), await printfiles.previewPdf(pages, { title, lines }));
+      }
+      return { path: target, name: `${order ? order.number : 'design'}-${design.productId}-preview.pdf` };
+    }
+    if (design.kind === 'book') {
+      const f = format || 'book-pdf';
+      const title = `${base}-${design.bookId}`;
+      if (f === 'proof') return { path: store.designFile(designId, 'book-preview.png'), name: `${title}-cover.png` };
+      if (f !== 'book-pdf' || design.photoRemoved) throw new HttpError(404, 'notFound');
+      const item = order && order.items.find((it) => it.designId === design.id);
+      if (item && item.redraw && ['queued', 'running', 'waiting'].includes(item.redraw.status) && !now) {
+        throw new HttpError(409, 'bookDrawing', { done: item.redraw.done || 0, total: item.redraw.total || 0 });
+      }
+      const target = store.designFile(designId, 'book-print.pdf');
+      if (!fs.existsSync(target)) store.writeDesignFile(designId, 'book-print.pdf', await books.bookPdf(bookData(design), { title }));
+      return { path: target, name: `${title}.pdf` };
+    }
+    if (design.kind === 'gangsheet') {
+      const f = format || 'sheet-pdf';
+      if (f === 'proof') return { path: store.designFile(designId, 'front-preview.png'), name: `${base}-proof.png` };
+      if (f !== 'sheet-pdf' && f !== 'sheet-pdf-plain') throw new HttpError(404, 'notFound');
+      const name = f === 'sheet-pdf' ? 'sheet-film-mirrored.pdf' : 'sheet-film.pdf';
+      const target = store.designFile(designId, name);
+      if (!fs.existsSync(target)) store.writeDesignFile(designId, name, (await gangSheetPdf(design, f === 'sheet-pdf')).pdf);
+      return { path: target, name: `${base}${SUFFIX[f]}.pdf` };
+    }
+    const fmt = FORMATS[format || 'png'];
+    if (!side || !fmt) throw new HttpError(404, 'notFound');
+    const target = store.designFile(designId, fmt.file(sideId));
+    if (!fs.existsSync(target)) {
+      const png = fs.readFileSync(store.designFile(designId, `${sideId}-print.png`));
+      let out;
+      if (fmt.make) out = await fmt.make(png, side);
+      else if (fmt.ext === 'pdf') {
+        const product = getProduct(design.productId);
+        const label = `${order ? order.number + ' · ' : ''}${pickEn(design.productName)} · ${pickEn(design.size.label)} · ${pickEn(design.color.name)} · ${pickEn(side.name)} · trim ${side.widthIn} x ${side.heightIn} in${side.bleedIn ? ` + ${side.bleedIn} in bleed` : ''} · ${side.dpi} DPI · ${product ? product.process.toUpperCase() : ''}`;
+        out = await printfiles.printPdf(png, side, { marks: format === 'pdf-marks', title: base, slug: label });
+      } else throw new HttpError(404, 'notFound');
+      store.writeDesignFile(designId, fmt.file(sideId), out);
+    }
+    return { path: target, name: `${base}${SUFFIX[format] || ''}.${fmt.ext}` };
+  }
+
   app.get('/api/admin/files/:designId/:side', requireAdmin, async (req, res, next) => {
     try {
       const { designId, side: sideId } = req.params;
       const design = UUID_RE.test(designId) && store.getDesign(designId);
-      const side = design && design.sides.find((s) => s.id === sideId);
-      const order = design && design.orderId && store.getOrder(design.orderId);
-      const base = design ? `${order ? order.number : 'design'}-${design.productId}-${sideId}` : '';
-      if (design && req.query.format === 'preview-pdf') {
-        // What the customer designed (all sides, or every book page), as one PDF.
-        const target = store.designFile(designId, design.kind === 'book' ? 'book-preview.pdf' : `preview-v${design.version || 0}.pdf`);
-        if (!fs.existsSync(target)) {
-          const title = `${order ? order.number + ' · ' : ''}${pickEn(design.productName) || ''}`;
-          const lines = [
-            [design.color && pickEn(design.color.name), design.size && pickEn(design.size.label)].filter(Boolean).join(' · '),
-            order ? `Ordered ${order.createdAt.slice(0, 10)}` : '',
-          ].filter(Boolean);
-          let pages;
-          if (design.kind === 'book') {
-            if (design.photoRemoved) throw new HttpError(404, 'notFound');
-            const book = bookFor(design.bookId);
-            const data = bookData(design);
-            pages = [];
-            for (let i = 0; i < book.pages.length; i++) pages.push({ img: await books.pageJpeg(data, i, 900, 85), label: `Page ${i + 1}` });
-          } else {
-            pages = design.sides
-              .map((sd) => ({ file: store.designFile(designId, `${sd.id}-preview.png`), label: pickEn(sd.name) || sd.id }))
-              .filter((pg) => fs.existsSync(pg.file))
-              .map((pg) => ({ img: fs.readFileSync(pg.file), label: pg.label }));
-          }
-          if (!pages.length) throw new HttpError(404, 'notFound');
-          store.writeDesignFile(designId, path.basename(target), await printfiles.previewPdf(pages, { title, lines }));
+      if (!design) throw new HttpError(404, 'notFound');
+      const f = await makeFile(design, sideId, req.query.format, { now: req.query.now === '1' });
+      res.download(f.path, f.name);
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  // ---------- Printing houses: who prints what, and sending them the job ----------
+  const houses = () => (store.db.printHouses ||= []);
+  const productHouses = () => (store.db.productHouses ||= {});
+  const findHouse = (id) => houses().find((h) => h.id === id) || null;
+  // Formats made once per item (not once per side).
+  const ONCE = new Set(['preview-pdf', 'book-pdf', 'proof', 'sheet-pdf', 'sheet-pdf-plain']);
+  const SEND_FORMATS = new Set([...Object.keys(FORMATS), ...ONCE]);
+  const FILE_LABELS = {
+    pdf: 'Print PDF', 'pdf-marks': 'Print PDF with crop marks', png: 'Print PNG (transparent)', 'png-mirror': 'Print PNG (mirrored)',
+    tiff: 'Print TIFF (CMYK)', svg: 'Vector SVG', 'dtf-film': 'DTF film PNG', 'dtf-pdf': 'DTF film PDF', 'dtg-white': 'DTG white underbase',
+    'preview-pdf': 'Preview PDF (customer design)', 'book-pdf': 'Book print PDF', proof: 'Preview image', 'sheet-pdf': 'Gang sheet PDF (mirrored)', 'sheet-pdf-plain': 'Gang sheet PDF',
+  };
+
+  app.get('/api/admin/houses', requireAdmin, (req, res) => {
+    res.json({
+      houses: houses(),
+      productHouses: productHouses(),
+      products: PRODUCTS.map((p) => ({ id: p.id, name: p.name, category: p.category })),
+      categories: CATEGORIES,
+      email: notify.emailReady(),
+    });
+  });
+  app.post('/api/admin/houses', requireAdmin, express.json(), (req, res) => {
+    const { house, error } = dispatch.cleanHouse(req.body);
+    if (error) throw new HttpError(400, error);
+    const created = store.mutate(() => {
+      if (houses().length >= 50) throw new HttpError(400, 'houseMany');
+      const h = { id: crypto.randomUUID(), ...house, createdAt: new Date().toISOString() };
+      houses().push(h);
+      return h;
+    });
+    res.status(201).json(created);
+  });
+  app.put('/api/admin/houses/:id', requireAdmin, express.json(), (req, res) => {
+    const { house, error } = dispatch.cleanHouse(req.body);
+    if (error) throw new HttpError(400, error);
+    const updated = store.mutate(() => {
+      const h = findHouse(req.params.id);
+      if (!h) throw new HttpError(404, 'houseNotFound');
+      return Object.assign(h, house);
+    });
+    res.json(updated);
+  });
+  app.delete('/api/admin/houses/:id', requireAdmin, (req, res) => {
+    store.mutate((db) => {
+      db.printHouses = houses().filter((h) => h.id !== req.params.id);
+      for (const [pid, hid] of Object.entries(productHouses())) if (hid === req.params.id) delete db.productHouses[pid];
+    });
+    res.json({ ok: true });
+  });
+  app.put('/api/admin/product-houses', requireAdmin, express.json(), (req, res) => {
+    const { productId, houseId } = req.body || {};
+    if (!getProduct(productId)) throw new HttpError(400, 'unknownProduct');
+    if (houseId && !findHouse(houseId)) throw new HttpError(404, 'houseNotFound');
+    store.mutate((db) => {
+      productHouses();
+      if (houseId) db.productHouses[productId] = houseId;
+      else delete db.productHouses[productId];
+    });
+    res.json({ productHouses: productHouses() });
+  });
+
+  /** Send one item's files to a printing house by email or WhatsApp. */
+  app.post('/api/admin/items/:itemId/send', requireAdmin, express.json(), async (req, res, next) => {
+    try {
+      const { houseId, channel, formats, note } = req.body || {};
+      const found = store.findItem(req.params.itemId);
+      if (!found) throw new HttpError(404, 'itemNotFound');
+      const { order, item } = found;
+      const house = findHouse(houseId);
+      if (!house) throw new HttpError(404, 'houseNotFound');
+      if (channel !== 'email' && channel !== 'whatsapp') throw new HttpError(400, 'houseChannel');
+      if (channel === 'email' && !house.email) throw new HttpError(400, 'houseNoEmail');
+      if (channel === 'whatsapp' && !house.whatsapp) throw new HttpError(400, 'houseNoWhatsApp');
+      if (channel === 'email' && !notify.emailReady()) throw new HttpError(400, 'emailOff');
+      const wanted = [...new Set(Array.isArray(formats) ? formats.map(String) : [])].filter((f) => SEND_FORMATS.has(f));
+      if (!wanted.length) throw new HttpError(400, 'houseNoFiles');
+      const design = store.getDesign(item.designId);
+      if (!design) throw new HttpError(404, 'notFound');
+      const lang = req.get('x-lang') === 'en' ? 'en' : 'ar';
+      const siteUrl = notify.siteUrl() || `${req.protocol}://${req.get('host')}`;
+
+      // Make every file now, so problems show up here and not at the printing house.
+      const files = [];
+      let expires = '';
+      for (const format of wanted) {
+        const sideIds = ONCE.has(format) ? [design.sides[0].id] : design.sides.map((sd) => sd.id);
+        for (const sideId of sideIds) {
+          const f = await makeFile(design, sideId, format);
+          const link = dispatch.signLink(auth.linkKey, { designId: design.id, side: sideId, format });
+          expires = link.expires;
+          const sideName = !ONCE.has(format) && design.sides.length > 1 ? ` · ${pickEn(design.sides.find((sd) => sd.id === sideId).name)}` : '';
+          files.push({ format, side: sideId, name: f.name, path: f.path, size: fs.statSync(f.path).size, label: `${FILE_LABELS[format] || format}${sideName}`, url: `${siteUrl}/dl/${link.token}` });
         }
-        return res.download(target, `${order ? order.number : 'design'}-${design.productId}-preview.pdf`);
       }
-      if (design && design.kind === 'book') {
-        const f = req.query.format || 'book-pdf';
-        const title = `${base}-${design.bookId}`;
-        if (f === 'proof') return res.download(store.designFile(designId, 'book-preview.png'), `${title}-cover.png`);
-        if (f !== 'book-pdf' || design.photoRemoved) throw new HttpError(404, 'notFound');
-        const item = order && order.items.find((it) => it.designId === design.id);
-        if (item && item.redraw && ['queued', 'running', 'waiting'].includes(item.redraw.status) && req.query.now !== '1') {
-          throw new HttpError(409, 'bookDrawing', { done: item.redraw.done || 0, total: item.redraw.total || 0 });
+      const view = adminItem(order, item, order.items.indexOf(item));
+      const msg = { house, order, item: view, design, files, note: String(note || '').trim().slice(0, 500), lang, expires };
+      let result;
+      if (channel === 'email') {
+        // Attach the files when they fit comfortably in an email; the links are always there too.
+        const total = files.reduce((n, f) => n + f.size, 0);
+        const attach = total <= 10 * 1024 * 1024;
+        const body = dispatch.emailBody({ ...msg, attached: attach });
+        try {
+          await notify.emailTo(house.email, body.subject, body.html, body.text, attach ? files.map((f) => ({ name: f.name, data: fs.readFileSync(f.path) })) : []);
+        } catch (e) {
+          console.warn(`[houses] email to ${house.name} failed: ${e.message}`);
+          throw new HttpError(502, 'houseEmailFailed');
         }
-        const target = store.designFile(designId, 'book-print.pdf');
-        if (!fs.existsSync(target)) store.writeDesignFile(designId, 'book-print.pdf', await books.bookPdf(bookData(design), { title }));
-        return res.download(target, `${title}.pdf`);
+        result = { status: 'sent', attached: attach };
+      } else {
+        const text = dispatch.whatsappText(msg);
+        result = { status: 'opened', whatsappUrl: `https://wa.me/${house.whatsapp}?text=${encodeURIComponent(text)}` };
       }
-      if (design && design.kind === 'gangsheet') {
-        const f = req.query.format || 'sheet-pdf';
-        if (f === 'proof') return res.download(store.designFile(designId, 'front-preview.png'), `${base}-proof.png`);
-        if (f !== 'sheet-pdf' && f !== 'sheet-pdf-plain') throw new HttpError(404, 'notFound');
-        const name = f === 'sheet-pdf' ? 'sheet-film-mirrored.pdf' : 'sheet-film.pdf';
-        const target = store.designFile(designId, name);
-        if (!fs.existsSync(target)) store.writeDesignFile(designId, name, (await gangSheetPdf(design, f === 'sheet-pdf')).pdf);
-        return res.download(target, `${base}${SUFFIX[f]}.pdf`);
-      }
-      const fmt = FORMATS[req.query.format || 'png'];
-      if (!side || !fmt) throw new HttpError(404, 'notFound');
-      const target = store.designFile(designId, fmt.file(sideId));
-      if (!fs.existsSync(target)) {
-        const png = fs.readFileSync(store.designFile(designId, `${sideId}-print.png`));
-        let out;
-        if (fmt.make) out = await fmt.make(png, side);
-        else if (fmt.ext === 'pdf') {
-          const product = getProduct(design.productId);
-          const label = `${order ? order.number + ' · ' : ''}${pickEn(design.productName)} · ${pickEn(design.size.label)} · ${pickEn(design.color.name)} · ${pickEn(side.name)} · trim ${side.widthIn} x ${side.heightIn} in${side.bleedIn ? ` + ${side.bleedIn} in bleed` : ''} · ${side.dpi} DPI · ${product ? product.process.toUpperCase() : ''}`;
-          out = await printfiles.printPdf(png, side, { marks: req.query.format === 'pdf-marks', title: base, slug: label });
-        } else throw new HttpError(404, 'notFound');
-        store.writeDesignFile(designId, fmt.file(sideId), out);
-      }
-      res.download(target, `${base}${SUFFIX[req.query.format] || ''}.${fmt.ext}`);
+      const record = {
+        id: crypto.randomUUID(), houseId: house.id, houseName: house.name, channel,
+        to: channel === 'email' ? house.email : `+${house.whatsapp}`, files: files.map((f) => f.label), at: new Date().toISOString(), status: result.status,
+      };
+      store.mutate(() => {
+        item.sends = [...(item.sends || []), record].slice(-20);
+      });
+      res.json({ ...result, send: record, item: adminItem(order, item, order.items.indexOf(item)) });
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  // Download links in the messages to printing houses (signed, expire after 30 days).
+  app.get('/dl/:token', async (req, res, next) => {
+    try {
+      rateLimit(req, 'downloads');
+      const link = dispatch.readLink(auth.linkKey, req.params.token);
+      if (!link) throw new HttpError(404, 'linkExpired');
+      const design = UUID_RE.test(link.designId) && store.getDesign(link.designId);
+      if (!design || !design.orderId) throw new HttpError(404, 'linkExpired');
+      const f = await makeFile(design, link.side, link.format);
+      res.set('Cache-Control', 'private, no-store');
+      res.set('X-Robots-Tag', 'noindex');
+      res.download(f.path, f.name);
     } catch (e) {
       next(e);
     }

@@ -145,12 +145,15 @@ const emailText = (order, links, lang, forAdmin) => {
 };
 
 // ---------- Senders ----------
-async function sendEmail(cfg, to, subject, html, text) {
+async function sendEmail(cfg, to, subject, html, text, attachments) {
   const res = await fetch(cfg.brevoUrl, {
     method: 'POST',
     headers: { 'api-key': cfg.brevoKey, 'content-type': 'application/json', accept: 'application/json' },
-    body: JSON.stringify({ sender: { email: cfg.mailFrom, name: cfg.mailFromName }, to: [{ email: to }], subject, htmlContent: html, textContent: text }),
-    signal: AbortSignal.timeout(15000),
+    body: JSON.stringify({
+      sender: { email: cfg.mailFrom, name: cfg.mailFromName }, to: [{ email: to }], subject, htmlContent: html, textContent: text,
+      ...(attachments && attachments.length ? { attachment: attachments.map((a) => ({ name: a.name, content: a.data.toString('base64') })) } : {}),
+    }),
+    signal: AbortSignal.timeout(attachments && attachments.length ? 60000 : 15000),
   });
   if (!res.ok) throw new Error(`Brevo ${res.status}: ${(await res.text()).slice(0, 200)}`);
 }
@@ -206,4 +209,13 @@ async function adminTest() {
   return result;
 }
 
-module.exports = { status, orderPlaced, adminTest, shopWhatsApp: () => config().shopWhatsApp };
+/** Email to anyone (printing houses), with optional attachments [{ name, data }]. */
+function emailReady() {
+  const c = config();
+  return Boolean(c.brevoKey && c.mailFrom);
+}
+async function emailTo(to, subject, html, text, attachments) {
+  await sendEmail(config(), to, subject, html, text, attachments);
+}
+
+module.exports = { status, orderPlaced, adminTest, emailReady, emailTo, shopWhatsApp: () => config().shopWhatsApp, siteUrl: () => config().siteUrl };

@@ -866,6 +866,92 @@ test('AI and EPS files are drawn to a transparent PNG for the editor', async () 
   assert.strictEqual((await send(Buffer.from('%!PS\nshowpage\n'))).status, 400);
 });
 
+test('printing houses: per-product default, send by email or WhatsApp with signed links', async () => {
+  const http = require('http');
+  const mails = [];
+  const mock = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', (c) => { body += c; });
+    req.on('end', () => { mails.push(JSON.parse(body)); res.writeHead(201, { 'content-type': 'application/json' }); res.end('{"messageId":"x"}'); });
+  });
+  await new Promise((r) => mock.listen(0, r));
+  try {
+    assert.strictEqual((await fetch(base + '/api/admin/houses')).status, 401);
+    // Add two printing houses (Egyptian numbers become international).
+    let r = await admin('/api/admin/houses', { method: 'POST', body: JSON.stringify({ name: 'Cairo Tees', email: 'jobs@cairotees.example', whatsapp: '010 1234 5678', prefer: 'email' }) });
+    assert.strictEqual(r.status, 201);
+    const tees = await r.json();
+    assert.strictEqual(tees.whatsapp, '201012345678');
+    r = await admin('/api/admin/houses', { method: 'POST', body: JSON.stringify({ name: 'Mug Masters', whatsapp: '+971 50 123 4567', prefer: 'email' }) });
+    const mugs = await r.json();
+    assert.strictEqual(mugs.prefer, 'whatsapp', 'no email, so WhatsApp');
+    assert.strictEqual((await admin('/api/admin/houses', { method: 'POST', body: JSON.stringify({ name: 'Nobody' }) })).status, 400);
+    // Default house per product.
+    r = await admin('/api/admin/product-houses', { method: 'PUT', body: JSON.stringify({ productId: 'tshirt', houseId: tees.id }) });
+    assert.deepStrictEqual((await r.json()).productHouses.tshirt, tees.id);
+    const list = await (await admin('/api/admin/houses')).json();
+    assert.strictEqual(list.houses.length, 2);
+    assert.ok(list.products.some((p) => p.id === 'mug'));
+
+    const d = await makeDesign({ sides: { front: SIDE, back: SIDE } });
+    const order = await (await post('/api/orders', { customer: CUSTOMER, designIds: [d.id] })).json();
+    const itemId = order.items[0].id;
+    const send = (body, lang = 'en') => admin(`/api/admin/items/${itemId}/send`, { method: 'POST', headers: { 'x-lang': lang }, body: JSON.stringify(body) });
+
+    // Email without Brevo set up: a clear message.
+    r = await send({ houseId: tees.id, channel: 'email', formats: ['pdf', 'preview-pdf'] });
+    assert.strictEqual(r.status, 400);
+    assert.match((await r.json()).error, /Email is not set up/);
+
+    Object.assign(process.env, { BREVO_API_KEY: 'brevo-test', BREVO_API_URL: `http://127.0.0.1:${mock.address().port}/email`, MAIL_FROM: 'shop@example.com' });
+    r = await send({ houseId: tees.id, channel: 'email', formats: ['pdf', 'preview-pdf'], note: 'Rush please' });
+    assert.strictEqual(r.status, 200, await r.clone().text());
+    const sent = await r.json();
+    assert.strictEqual(sent.status, 'sent');
+    assert.strictEqual(mails.length, 1);
+    const mail = mails[0];
+    assert.deepStrictEqual(mail.to, [{ email: 'jobs@cairotees.example' }]);
+    assert.match(mail.subject, new RegExp(order.number));
+    assert.deepStrictEqual(mail.attachment.map((a) => a.name).sort(), [`${order.number}-tshirt-back.pdf`, `${order.number}-tshirt-front.pdf`, `${order.number}-tshirt-preview.pdf`].sort());
+    assert.match(mail.htmlContent, /Rush please/);
+    assert.ok(!mail.htmlContent.includes(CUSTOMER.address), 'no customer address');
+    assert.strictEqual(sent.item.sends.length, 1);
+    assert.strictEqual(sent.item.sends[0].houseName, 'Cairo Tees');
+
+    // The links in the email download the files, without signing in.
+    const links = [...mail.textContent.matchAll(/https?:\/\/\S+\/dl\/(\S+)/g)].map((m) => m[1]);
+    assert.strictEqual(links.length, 3);
+    const dl = await fetch(`${base}/dl/${links[0]}`);
+    assert.strictEqual(dl.status, 200);
+    assert.strictEqual(Buffer.from(await dl.arrayBuffer()).subarray(0, 4).toString(), '%PDF');
+    const bad = links[0].slice(0, -2) + (links[0].endsWith('AA') ? 'BB' : 'AA');
+    assert.strictEqual((await fetch(`${base}/dl/${bad}`)).status, 404);
+
+    // WhatsApp: a wa.me link with the job and links, for the admin to send.
+    r = await send({ houseId: mugs.id, channel: 'whatsapp', formats: ['preview-pdf'] }, 'ar');
+    const wa = await r.json();
+    assert.strictEqual(wa.status, 'opened');
+    assert.match(wa.whatsappUrl, /^https:\/\/wa\.me\/971501234567\?text=/);
+    const text = decodeURIComponent(wa.whatsappUrl.split('text=')[1]);
+    assert.match(text, /أهلًا Mug Masters/);
+    assert.match(text, /\/dl\//);
+    assert.strictEqual(mails.length, 1, 'no email for WhatsApp');
+    r = await send({ houseId: mugs.id, channel: 'email', formats: ['pdf'] });
+    assert.strictEqual(r.status, 400, 'house has no email');
+    r = await send({ houseId: tees.id, channel: 'email', formats: ['nope'] });
+    assert.strictEqual(r.status, 400);
+
+    // Deleting a house clears it from products.
+    await admin(`/api/admin/houses/${tees.id}`, { method: 'DELETE' });
+    const after = await (await admin('/api/admin/houses')).json();
+    assert.strictEqual(after.houses.length, 1);
+    assert.strictEqual(after.productHouses.tshirt, undefined);
+  } finally {
+    for (const k of ['BREVO_API_KEY', 'BREVO_API_URL', 'MAIL_FROM']) delete process.env[k];
+    mock.close();
+  }
+});
+
 const png4 = (w, h) => png(w, h);
 test('two copies of the app on one data folder share orders, sign-ins and edits', async () => {
   const { createApp: make } = require('../src/app');

@@ -84,6 +84,7 @@
     $('tab-orders').hidden = tab !== 'orders';
     $('tab-film').hidden = tab !== 'film';
     $('tab-library').hidden = tab !== 'library';
+    $('tab-houses').hidden = tab !== 'houses';
     refresh();
   }));
 
@@ -170,6 +171,217 @@
       </div>`;
   }
 
+  // ---------- Sending items to printing houses ----------
+  let housesData = null;
+  const sendOpen = new Set();
+  const sendState = {};
+  const findHouse = (id) => (housesData && housesData.houses.find((h) => h.id === id)) || null;
+  const printPdfKey = (item) => (item.kind === 'book' ? 'book-pdf' : item.kind === 'gangsheet' ? 'sheet-pdf' : 'pdf');
+  function sendFormats(item) {
+    if (item.kind === 'book') return ['book-pdf', 'preview-pdf', 'proof'];
+    if (item.kind === 'gangsheet') return ['sheet-pdf', 'sheet-pdf-plain', 'preview-pdf', 'proof'];
+    const more = (FORMATS_BY_METHOD[item.process] || ['png', 'pdf-marks', 'png-mirror', 'tiff']).concat(item.sides.some((sd) => sd.hasSvg) ? ['svg'] : []);
+    return [...new Set(['pdf', 'preview-pdf', ...more])];
+  }
+  function sendDefaults(item) {
+    const houseId = (housesData && (housesData.productHouses[item.productId] || (housesData.houses[0] && housesData.houses[0].id))) || '';
+    const house = findHouse(houseId);
+    return { houseId, channel: house ? house.prefer : 'email', formats: new Set([printPdfKey(item), 'preview-pdf']), note: '', msg: '', busy: false };
+  }
+  const when = (iso) => new Date(iso).toLocaleString(POD.lang === 'ar' ? 'ar-EG' : 'en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  function sendHistory(item) {
+    const list = (item.sends || []).slice(-3).reverse();
+    if (!list.length) return '';
+    return `<div class="send-history">${list.map((x) => `<div>📤 ${esc(t('houses.sentLine', { house: x.houseName, channel: t(x.channel === 'email' ? 'houses.byEmail' : 'houses.byWhatsApp'), date: when(x.at) }))}</div>`).join('')}</div>`;
+  }
+  function sendButton(item, big) {
+    return `<button class="btn ${big ? 'btn-lg shrink' : 'btn-sm'}" data-send-toggle="${item.id}" type="button">📤 ${esc(t('houses.send'))}</button>`;
+  }
+  function sendPanel(item) {
+    if (!sendOpen.has(item.id)) return '';
+    if (!housesData || !housesData.houses.length) {
+      return `<div class="send-panel"><p class="muted small" style="margin:0 0 8px">${esc(t('houses.none'))}</p><button class="btn btn-sm" type="button" data-go-tab="houses">${esc(t('houses.goSetup'))}</button></div>`;
+    }
+    const st = (sendState[item.id] ||= sendDefaults(item));
+    if (!findHouse(st.houseId)) Object.assign(st, sendDefaults(item), { formats: st.formats });
+    const house = findHouse(st.houseId);
+    const def = housesData.productHouses[item.productId];
+    const ch = (key, ok) => `<label class="chip-radio ${ok ? '' : 'is-off'}"><input type="radio" name="send-ch-${item.id}" value="${key}" data-send-channel="${item.id}" ${st.channel === key ? 'checked' : ''} ${ok ? '' : 'disabled'}> ${esc(t(key === 'email' ? 'houses.byEmail' : 'houses.byWhatsApp'))}${ok ? '' : ` <span class="muted">${esc(t(key === 'email' ? 'houses.noEmail' : 'houses.noWhatsApp'))}</span>`}</label>`;
+    const emailOff = st.channel === 'email' && !housesData.email;
+    return `
+      <div class="send-panel" data-send-panel="${item.id}">
+        <div class="send-grid">
+          <div class="field"><label>${esc(t('houses.sendTo'))}</label>
+            <select data-send-house="${item.id}">${housesData.houses.map((h) => `<option value="${esc(h.id)}" ${h.id === st.houseId ? 'selected' : ''}>${esc(h.name)}${h.id === def ? ` · ${esc(t('houses.default'))}` : ''}</option>`).join('')}</select>
+          </div>
+          <div class="field"><label>${esc(t('houses.via'))}</label><div class="chip-row">${ch('email', Boolean(house && house.email))}${ch('whatsapp', Boolean(house && house.whatsapp))}</div></div>
+        </div>
+        ${emailOff ? `<p class="notice small" style="margin:0 0 10px">${esc(t('houses.emailOff'))}</p>` : ''}
+        <div class="field"><label>${esc(t('houses.files'))}</label>
+          <div class="send-files">${sendFormats(item).map((f) => `<label class="check-chip"><input type="checkbox" data-send-format="${item.id}" value="${f}" ${st.formats.has(f) ? 'checked' : ''}> ${esc(t('fmt.' + f))}</label>`).join('')}</div>
+        </div>
+        <div class="field"><label>${esc(t('houses.note'))}</label><textarea rows="2" maxlength="500" data-send-note="${item.id}">${esc(st.note)}</textarea></div>
+        <div class="row" style="flex-wrap:wrap;gap:10px;align-items:center">
+          <button class="btn btn-primary shrink" type="button" data-send-go="${item.id}" ${st.busy || emailOff || !st.formats.size ? 'disabled' : ''}>${esc(t(st.busy ? 'houses.sending' : 'houses.sendNow'))}</button>
+          <span class="small send-msg">${st.msg || ''}</span>
+        </div>
+      </div>`;
+  }
+  const rerenderQueue = () => lastQueue && renderQueue(lastQueue);
+  const itemById = (id) => lastQueue && [...lastQueue.printing, ...lastQueue.waiting, ...lastQueue.toShip].find((i) => i.id === id);
+  document.addEventListener('click', async (e) => {
+    const go = e.target.closest('[data-go-tab]');
+    if (go) { document.querySelector(`[data-tab="${go.dataset.goTab}"]`).click(); return; }
+    const tog = e.target.closest('[data-send-toggle]');
+    if (tog) {
+      const id = tog.dataset.sendToggle;
+      if (sendOpen.has(id)) sendOpen.delete(id);
+      else { sendOpen.add(id); if (!housesData) housesData = await adminApi('/api/admin/houses').catch(() => null); }
+      rerenderQueue();
+      return;
+    }
+    const btn = e.target.closest('[data-send-go]');
+    if (!btn) return;
+    const id = btn.dataset.sendGo;
+    const st = sendState[id];
+    const item = itemById(id);
+    if (!st || !item) return;
+    // Open the WhatsApp window now (browsers block it after waiting for the server).
+    const win = st.channel === 'whatsapp' ? window.open('about:blank', '_blank') : null;
+    st.busy = true;
+    st.msg = '';
+    rerenderQueue();
+    try {
+      const r = await adminApi(`/api/admin/items/${id}/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang },
+        body: JSON.stringify({ houseId: st.houseId, channel: st.channel, formats: [...st.formats], note: st.note }),
+      });
+      item.sends = r.item.sends;
+      const house = findHouse(st.houseId);
+      if (r.whatsappUrl) {
+        if (win) { win.opener = null; win.location.href = r.whatsappUrl; }
+        st.msg = `<span style="color:var(--ok);font-weight:600">${esc(t('houses.sentWhatsApp', { house: house ? house.name : '' }))}</span> <a class="btn btn-sm" href="${esc(r.whatsappUrl)}" target="_blank" rel="noopener">${esc(t('houses.openWhatsApp'))}</a>`;
+      } else {
+        st.msg = `<span style="color:var(--ok);font-weight:600">${esc(t('houses.sentEmail', { house: house ? house.name : '' }))}</span>`;
+        toast(t('houses.sentEmail', { house: house ? house.name : '' }));
+      }
+    } catch (err) {
+      if (win) win.close();
+      st.msg = `<span style="color:var(--danger, #c0392b)">${esc(err.message)}</span>`;
+    } finally {
+      st.busy = false;
+      rerenderQueue();
+    }
+  });
+  document.addEventListener('change', (e) => {
+    const el = e.target;
+    const id = el.dataset.sendHouse || el.dataset.sendChannel || el.dataset.sendFormat;
+    if (!id || !sendState[id]) return;
+    const st = sendState[id];
+    if (el.dataset.sendHouse) {
+      st.houseId = el.value;
+      const h = findHouse(el.value);
+      if (h) st.channel = h.prefer;
+    } else if (el.dataset.sendChannel) st.channel = el.value;
+    else if (el.checked) st.formats.add(el.value);
+    else st.formats.delete(el.value);
+    st.msg = '';
+    rerenderQueue();
+  });
+  document.addEventListener('input', (e) => {
+    const id = e.target.dataset && e.target.dataset.sendNote;
+    if (id && sendState[id]) sendState[id].note = e.target.value;
+  });
+
+  // ---------- Printing houses tab ----------
+  function renderHouses(d) {
+    $('houses-email-off').hidden = d.email;
+    const uses = (id) => Object.values(d.productHouses).filter((h) => h === id).length;
+    $('house-list').innerHTML = d.houses.length
+      ? d.houses.map((h) => `
+        <div class="card house-row">
+          <div>
+            <strong>${esc(h.name)}</strong> <span class="pill queued">${esc(t(h.prefer === 'email' ? 'houses.byEmail' : 'houses.byWhatsApp'))}</span>
+            <div class="muted small">${[h.email ? `✉️ <bdi dir="ltr">${esc(h.email)}</bdi>` : '', h.whatsapp ? `💬 <bdi dir="ltr">+${esc(h.whatsapp)}</bdi>` : '', esc(t('houses.products', { n: POD.num(uses(h.id)) }))].filter(Boolean).join(' · ')}</div>
+            ${h.notes ? `<div class="muted small">${esc(h.notes)}</div>` : ''}
+          </div>
+          <div class="row" style="gap:8px;flex:0 0 auto">
+            <button class="btn btn-sm" type="button" data-house-edit="${esc(h.id)}">${esc(t('houses.edit'))}</button>
+            <button class="btn btn-sm" type="button" data-house-del="${esc(h.id)}">${esc(t('houses.delete'))}</button>
+          </div>
+        </div>`).join('')
+      : `<p class="muted">${esc(t('houses.empty'))}</p>`;
+    const opts = (pid) => `<option value="">${esc(t('houses.unset'))}</option>${d.houses.map((h) => `<option value="${esc(h.id)}" ${d.productHouses[pid] === h.id ? 'selected' : ''}>${esc(h.name)}</option>`).join('')}`;
+    $('house-map').innerHTML = d.categories.map((c) => {
+      const prods = d.products.filter((p) => p.category === c.id);
+      if (!prods.length) return '';
+      return `<h3 class="house-map-cat">${esc(tr(c.name))}</h3><div class="house-map-grid">${prods.map((p) => `
+        <label class="house-map-row"><span>${esc(tr(p.name))}</span><select data-map-product="${esc(p.id)}" ${d.houses.length ? '' : 'disabled'}>${opts(p.id)}</select></label>`).join('')}</div>`;
+    }).join('');
+  }
+  function resetHouseForm() {
+    $('house-form').reset();
+    $('house-id').value = '';
+    $('house-cancel').hidden = true;
+    $('house-form-title').textContent = t('houses.addTitle');
+  }
+  $('house-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const id = $('house-id').value;
+    const body = { name: $('house-name').value, email: $('house-email').value, whatsapp: $('house-wa').value, prefer: $('house-prefer').value, notes: $('house-notes').value };
+    $('house-save').disabled = true;
+    try {
+      await adminApi(id ? `/api/admin/houses/${encodeURIComponent(id)}` : '/api/admin/houses', { method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang }, body: JSON.stringify(body) });
+      resetHouseForm();
+      $('house-msg').textContent = t('houses.saved');
+      setTimeout(() => { $('house-msg').textContent = ''; }, 2500);
+      renderHouses((housesData = await adminApi('/api/admin/houses')));
+    } catch (err) {
+      $('house-msg').textContent = err.message;
+    } finally {
+      $('house-save').disabled = false;
+    }
+  });
+  $('house-cancel').addEventListener('click', resetHouseForm);
+  $('house-list').addEventListener('click', async (e) => {
+    const ed = e.target.closest('[data-house-edit]');
+    const del = e.target.closest('[data-house-del]');
+    const h = findHouse((ed || del || {}).dataset ? (ed || del).dataset.houseEdit || (ed || del).dataset.houseDel : '');
+    if (!h) return;
+    if (ed) {
+      $('house-id').value = h.id;
+      $('house-name').value = h.name;
+      $('house-email').value = h.email || '';
+      $('house-wa').value = h.whatsapp ? '+' + h.whatsapp : '';
+      $('house-prefer').value = h.prefer;
+      $('house-notes').value = h.notes || '';
+      $('house-cancel').hidden = false;
+      $('house-form-title').textContent = t('houses.editTitle');
+      $('house-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      $('house-name').focus();
+    } else if (confirm(t('houses.confirmDelete', { name: h.name }))) {
+      try {
+        await adminApi(`/api/admin/houses/${encodeURIComponent(h.id)}`, { method: 'DELETE' });
+        renderHouses((housesData = await adminApi('/api/admin/houses')));
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+  });
+  $('house-map').addEventListener('change', async (e) => {
+    const pid = e.target.dataset.mapProduct;
+    if (!pid) return;
+    try {
+      const r = await adminApi('/api/admin/product-houses', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang }, body: JSON.stringify({ productId: pid, houseId: e.target.value || null }) });
+      housesData.productHouses = r.productHouses;
+      renderHouses(housesData);
+      toast(t('houses.saved'));
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  });
+
   /** The customer's design (all sides / book pages) as one PDF, to check or send them. */
   function previewFile(item) {
     const s = item.sides[0];
@@ -197,8 +409,11 @@
           ${spec(item)}
           ${item.sides.map((s) => printFiles(item, s)).join('')}
           ${previewFile(item)}
-          <div class="row" style="max-width:440px">
+          ${sendHistory(item)}
+          ${sendPanel(item)}
+          <div class="row" style="max-width:640px;flex-wrap:wrap">
             <button class="btn btn-primary btn-lg" data-item="${item.id}" data-status="${next.status}">${esc(t(next.label))}</button>
+            ${sendButton(item, true)}
             ${item.status === 'printing' ? `<button class="btn btn-lg shrink" data-item="${item.id}" data-status="queued" title="${esc(t('admin.backToQueue.title'))}">${esc(t('admin.backToQueue'))}</button>` : ''}
           </div>
         </div>
@@ -217,9 +432,11 @@
         </div>
         <div class="queue-actions">
           <button class="btn btn-sm" data-toggle-item="${item.id}">${esc(t(isOpen ? 'admin.hideDetails' : 'admin.details'))}</button>
+          ${sendButton(item)}
           <button class="btn btn-sm ${item.status === 'queued' ? 'btn-primary' : ''}" data-item="${item.id}" data-status="${next.status}">${esc(t(next.label))}</button>
         </div>
         ${isOpen ? `<div class="queue-details">${spec(item)}${item.sides.map((s) => printFiles(item, s)).join('')}${previewFile(item)}</div>` : ''}
+        ${sendOpen.has(item.id) || (item.sends && item.sends.length) ? `<div class="queue-details">${sendHistory(item)}${sendPanel(item)}</div>` : ''}
       </div>`;
   }
 
@@ -350,7 +567,12 @@
       $('login').hidden = false;
       return;
     }
-    if (tab === 'queue') renderQueue((lastQueue = await adminApi('/api/admin/queue')));
+    if (tab === 'queue') {
+      // Don't redraw while the admin is typing in a send form.
+      if (document.activeElement && document.activeElement.closest && document.activeElement.closest('.send-panel') && lastQueue) return;
+      if (!housesData) housesData = await adminApi('/api/admin/houses').catch(() => null);
+      renderQueue((lastQueue = await adminApi('/api/admin/queue')));
+    } else if (tab === 'houses') renderHouses((housesData = await adminApi('/api/admin/houses')));
     else if (tab === 'film') renderFilm((lastFilm = (await adminApi('/api/admin/dtf-items')).items));
     else if (tab === 'library') renderLibrary((lastLibrary = await adminApi('/api/admin/library')));
     else { renderOrders((lastOrders = (await adminApi('/api/admin/orders')).orders)); renderNotifyStatus(); }
@@ -364,6 +586,7 @@
     if (tab === 'orders' && lastOrders) renderOrders(lastOrders);
     if (tab === 'film' && lastFilm) renderFilm(lastFilm);
     if (tab === 'library' && lastLibrary) renderLibrary(lastLibrary);
+    if (tab === 'houses' && housesData) renderHouses(housesData);
   });
 
   $('film-list').addEventListener('change', (e) => {

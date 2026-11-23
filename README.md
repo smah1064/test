@@ -172,6 +172,17 @@ Add an entry to `PRODUCTS` in `src/products.js`. Mockups are SVGs in a 500 × 60
 - **AI drawing (option, with the parent's consent):** with `GEMINI_API_KEY` set, the book page offers "Draw my child as a cartoon". The preview then uses **one** AI image: the child's face drawn in the book's style (`src/cartoon.js`), reused for every page and answer change. After the order is placed, a background queue **redraws every page with a face** (12 for the story, 14 for the colouring book, 2K each) so the child is painted into the scene; text is still added by the server so it stays exact. Progress shows in admin; a page that fails twice keeps its preview version; admin can "Redraw pages" again. The PDF waits until drawing finishes. Typical cost: about $0.04–0.10 for the preview and $0.6–1.5 per ordered book.
 - **Privacy:** the photo is deleted 30 days after the book is shipped, and unordered books after 7 days.
 
+## Printing houses
+
+Admin → **Printing houses** tab: save each printing house (name, email and/or WhatsApp number, how you usually send), and pick which one prints each product.
+
+On any item in the print queue, **Send to printing house** opens a small form: the product's printing house is chosen already, with its usual channel and two files ticked (print-ready PDF and the customer-design preview PDF). Any other print file can be ticked too, and a note added.
+
+- **Email** goes through Brevo (`BREVO_API_KEY`, `MAIL_FROM`). Files are attached when they total 10 MB or less, and download links are always in the message.
+- **WhatsApp** opens WhatsApp (web, desktop or phone) with the message ready to send: the job details and download links. WhatsApp links cannot carry attachments.
+- Download links (`/dl/...`) are signed, need no sign-in, and stop working after 30 days. The customer's name, phone and address are not sent.
+- Every send is recorded on the item ("Sent to … by … · date").
+
 ## Security
 
 - **Admin sign-in:** the password is sent once to `POST /api/admin/login`, which returns a session token (12 hours, kept in the tab's `sessionStorage`, sent as `Authorization: Bearer`). Sign out ends it on the server. 5 wrong passwords lock that visitor out for 15 minutes, and 50 wrong passwords per hour from everyone lock sign-in for the hour. The dashboard warns when `ADMIN_PASSWORD` is easy to guess. Sessions are kept in memory, so a restart or deploy signs you out.

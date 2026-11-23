@@ -130,6 +130,8 @@ class AdminAuth {
       try { secret = Buffer.from(fs.readFileSync(file, 'utf8').trim(), 'hex'); } catch (e) { /* keep the random one */ }
     }
     this.key = crypto.createHmac('sha256', secret).update(this.hash).digest();
+    // Signs download links sent to printing houses (independent of the password).
+    this.linkKey = crypto.createHmac('sha256', secret).update('print-house-links').digest();
     this.sessions = new Map(); // revoked tokens when there is no store
     this.fails = new Map(); // ip -> [times]
     this.globalFails = [];
