@@ -7,7 +7,7 @@ const config = require('../config');
 const { db, getSettings } = require('../db');
 const { requireAuth } = require('../auth');
 const { t, en } = require('../i18n');
-const { clientIp, ipMatches } = require('../network');
+const { clientIp, siteAllowsIp, siteRequiresNetwork } = require('../network');
 const { localDate, haversineM, toBool, monthDays } = require('../util');
 
 const router = express.Router();
@@ -24,18 +24,20 @@ function todayRecords(userId) {
     .all(userId, localDate());
 }
 
-router.get('/me', (req, res) => {
+router.get('/me', async (req, res) => {
   const u = req.user;
   const site = u.site_id ? db.prepare('SELECT id, name, lat, lng, radius_m FROM sites WHERE id = ?').get(u.site_id) : null;
   // Office Wi-Fi status, so the page can warn before the selfie is taken:
   // 'ok' = on an office network, 'off' = must be but isn't, null = not required.
   const mySites = u.site_id
-    ? db.prepare('SELECT office_ips FROM sites WHERE id = ?').all(u.site_id)
-    : db.prepare('SELECT office_ips FROM sites').all();
+    ? db.prepare('SELECT * FROM sites WHERE id = ?').all(u.site_id)
+    : db.prepare('SELECT * FROM sites').all();
   const ip = clientIp(req);
   let officeNetwork = null;
-  if (mySites.some((s) => s.office_ips && ipMatches(s.office_ips, ip))) officeNetwork = 'ok';
-  else if (mySites.length && mySites.every((s) => s.office_ips)) officeNetwork = 'off';
+  let onAny = false;
+  for (const s of mySites) if (await siteAllowsIp(s, ip)) onAny = true;
+  if (onAny) officeNetwork = 'ok';
+  else if (mySites.length && mySites.every(siteRequiresNetwork)) officeNetwork = 'off';
   const s = getSettings();
   const today = todayRecords(u.id);
   res.json({
@@ -88,7 +90,7 @@ const MAX_ACCURACY_ON_OFFICE_NETWORK_M = 1000;
 // POST /api/attendance  (multipart/form-data)
 //   type=in|out, lat, lng, accuracy, is_mocked, dev_mode, rooted,
 //   capture_age_sec, app_version, source=app|web, photo=<jpeg>
-router.post('/', upload.single('photo'), (req, res) => {
+router.post('/', upload.single('photo'), async (req, res) => {
   const b = req.body || {};
   const type = b.type;
   const lat = Number(b.lat);
@@ -141,12 +143,13 @@ router.post('/', upload.single('photo'), (req, res) => {
   if (sites.length === 0) {
     return res.status(400).json({ error: t(req, 'NO_SITES') });
   }
-  const onNetwork = sites.filter((s) => s.office_ips && ipMatches(s.office_ips, details.ip));
+  const onNetwork = [];
+  for (const s of sites) if (await siteAllowsIp(s, details.ip)) onNetwork.push(s);
   const viaNetwork = onNetwork.length > 0;
   if (viaNetwork) {
     sites = onNetwork;
   } else {
-    const gpsOnly = sites.filter((s) => !s.office_ips);
+    const gpsOnly = sites.filter((s) => !siteRequiresNetwork(s));
     if (gpsOnly.length === 0) {
       return reject(req, res, 403, 'NOT_OFFICE_NETWORK', {}, { lat, lng, details });
     }

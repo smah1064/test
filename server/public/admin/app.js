@@ -265,16 +265,82 @@
     t.innerHTML = `<thead><tr><th>Name</th><th>Coordinates</th><th class="num">Radius</th><th>Check-in requires</th><th>Map</th><th>Actions</th></tr></thead><tbody>${
       sitesCache.length ? sitesCache.map((s) => `<tr><td><strong>${esc(s.name)}</strong></td><td>${s.lat.toFixed(6)}, ${s.lng.toFixed(6)}</td>
         <td class="num">${s.radius_m} m</td>
-        <td>${s.office_ips ? `<span class="badge ok">Office Wi-Fi</span> <span class="muted">${esc(s.office_ips)}</span>` : '<span class="badge warn">GPS only</span>'}</td><td><a target="_blank" rel="noopener" href="https://maps.google.com/?q=${s.lat},${s.lng}">Open</a></td>
-        <td><div class="actions"><button class="btn small" data-edit="${s.id}">Edit</button><button class="btn small danger" data-del="${s.id}">Delete</button></div></td></tr>`).join('')
+        <td>${networkCell(s)}</td><td><a target="_blank" rel="noopener" href="https://maps.google.com/?q=${s.lat},${s.lng}">Open</a></td>
+        <td><div class="actions"><button class="btn small" data-edit="${s.id}">Edit</button><button class="btn small" data-conn="${s.id}">Office connector</button><button class="btn small danger" data-del="${s.id}">Delete</button></div></td></tr>`).join('')
       : '<tr><td colspan="6" class="empty">No locations yet. Add your office so employees can check in.</td></tr>'}</tbody>`;
     $$('[data-edit]', t).forEach((b) => b.addEventListener('click', () => siteForm(sitesCache.find((s) => String(s.id) === b.dataset.edit))));
+    $$('[data-conn]', t).forEach((b) => b.addEventListener('click', () => connectorDialog(sitesCache.find((s) => String(s.id) === b.dataset.conn))));
     $$('[data-del]', t).forEach((b) => b.addEventListener('click', async () => {
       if (!confirm('Delete this location? Employees assigned to it will be able to check in at any location.')) return;
       await api('DELETE', `/admin/sites/${b.dataset.del}`);
       loaders.sites();
     }));
   };
+  // Connector is "online" if it reported in the last 5 minutes.
+  const connectorOnline = (s) => s.connector_seen_at && Date.now() - new Date(s.connector_seen_at) < 5 * 60 * 1000;
+  const ago = (iso) => {
+    const m = Math.round((Date.now() - new Date(iso)) / 60000);
+    return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : fmtDateTime(iso);
+  };
+  function connectorBadge(s) {
+    const addrs = (s.connector_addresses || []).map((a) => a.ip).join(', ');
+    if (!s.connector_seen_at) return '<span class="badge warn">Connector not started</span>';
+    if (connectorOnline(s)) return `<span class="badge ok">Connector online</span> <span class="muted">${esc(addrs)}</span>`;
+    return `<span class="badge bad">Connector offline</span> <span class="muted">last report ${esc(ago(s.connector_seen_at))}</span>`;
+  }
+  function networkCell(s) {
+    const parts = [];
+    if (s.office_ips) parts.push(`<span class="badge ok">Office Wi-Fi</span> <span class="muted">${esc(s.office_ips)}</span>`);
+    if (s.connector_token) parts.push(connectorBadge(s));
+    return parts.length ? parts.join('<br>') : '<span class="badge warn">GPS only</span>';
+  }
+
+  function connectorDialog(s) {
+    const link = s.connector_token ? `${location.origin}/office.html#${s.connector_token}` : '';
+    const script = s.connector_token
+      ? `curl -fsS -X POST -H "content-type: application/json" -d "{\"token\":\"${s.connector_token}\"}" ${location.origin}/api/office-ping`
+      : '';
+    openModal(`<h3>Office connector — ${esc(s.name)}</h3>
+      <p class="muted">For offices whose internet address changes (dynamic IP). Open the link below on any computer in the office that stays on —
+        a reception PC, a tablet or a mini-PC. It tells the server the office's current address every minute, so the office Wi-Fi check keeps working
+        when the address changes.</p>
+      ${s.connector_token ? `
+        <div>${connectorBadge(s)}</div>
+        <label>Connector link — open it on the office computer
+          <input readonly value="${esc(link)}" id="conn-link"></label>
+        <div class="actions"><button type="button" class="btn" id="conn-copy">Copy link</button></div>
+        <p class="muted">Keep this link private: anyone who has it can make their own internet address count as the office.
+          Every new office address is listed under <strong>Security alerts → Office address changes</strong>.</p>
+        <details><summary class="muted">Prefer a script? (Windows Task Scheduler, cron, router)</summary>
+          <p class="muted">Run this every minute on a computer in the office instead of keeping the page open:</p>
+          <input readonly value="${esc(script)}"></details>
+        <div class="modal-actions">
+          <button type="button" class="btn danger" id="conn-off">Turn off</button>
+          <button type="button" class="btn" id="conn-new">Replace link</button>
+          <button type="button" class="btn primary" data-close>Done</button>
+        </div>`
+      : `<div class="modal-actions">
+          <button type="button" class="btn ghost" data-close>Cancel</button>
+          <button type="button" class="btn primary" id="conn-new">Create connector link</button>
+        </div>`}`);
+    $('#conn-copy')?.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(link); toast('Link copied'); } catch { $('#conn-link').select(); }
+    });
+    $('#conn-new')?.addEventListener('click', async () => {
+      if (s.connector_token && !confirm('Replace the link? The old link stops working; open the new one on the office computer.')) return;
+      const updated = await api('POST', `/admin/sites/${s.id}/connector`);
+      await loaders.sites();
+      modal.close();
+      connectorDialog(updated);
+    });
+    $('#conn-off')?.addEventListener('click', async () => {
+      if (!confirm('Turn off the connector? Check-ins will then only be checked against the addresses entered on the location.')) return;
+      await api('DELETE', `/admin/sites/${s.id}/connector`);
+      modal.close();
+      loaders.sites();
+    });
+  }
+
   function siteForm(s = {}) {
     openModal(`<form><h3>${s.id ? 'Edit' : 'Add'} location</h3>
       <label>Name<input name="name" value="${esc(s.name || '')}" required></label>
@@ -286,7 +352,10 @@
       <label>Office Wi-Fi (public internet address)
         <textarea name="office_ips" rows="2" placeholder="e.g. 203.0.113.7">${esc(s.office_ips || '')}</textarea></label>
       <p class="muted">When filled in, check-ins at this location are only accepted from this network. Stand in the office, connect to its Wi-Fi and click
-        the button below. Add several separated by commas if the office has more than one internet line. Leave empty for GPS-only sites.</p>
+        the button below. Add several separated by commas if the office has more than one internet line.
+        If your router has <strong>dynamic DNS</strong>, enter its name instead (e.g. <code>myoffice.ddns.net</code>).
+        If the address changes and you have no dynamic DNS, leave this empty and use <strong>Office connector</strong> on the Locations page.
+        Leave empty (and no connector) for GPS-only sites.</p>
       <button type="button" class="btn" id="use-net">Use this network</button>
       <p class="muted" id="net-note"></p>
       <p class="error"></p><div class="modal-actions"><button type="button" class="btn ghost" data-close>Cancel</button><button class="btn primary">Save</button></div></form>`,
@@ -326,6 +395,10 @@
         <td><span class="badge ${c}">${esc(l)}</span></td><td>${esc(r.reason)}</td>
         <td>${r.lat != null ? `<a target="_blank" rel="noopener" href="https://maps.google.com/?q=${r.lat},${r.lng}">Open</a>` : '—'}</td></tr>`; }).join('')
       : '<tr><td colspan="5" class="empty">No blocked punches. 👍</td></tr>'}</tbody>`;
+    const changes = await api('GET', '/admin/network-changes');
+    $('#netchange-table').innerHTML = `<thead><tr><th>When</th><th>Location</th><th>New office address</th></tr></thead><tbody>${
+      changes.length ? changes.map((c) => `<tr><td>${fmtDateTime(c.ts)}</td><td>${esc(c.site_name || '—')}</td><td>${esc(c.ip)}</td></tr>`).join('')
+      : '<tr><td colspan="3" class="empty">No changes reported by an office connector.</td></tr>'}</tbody>`;
   };
 
   // ---------- Settings ----------

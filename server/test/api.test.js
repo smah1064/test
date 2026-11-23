@@ -345,3 +345,77 @@ test('pages are served: check-in at /, dashboard at /admin/', async () => {
   assert.equal(admin.status, 200); // redirected to /admin/
   assert.match(await admin.text(), /Attendance Admin/);
 });
+
+test('dynamic office address: office connector and dynamic DNS', async () => {
+  const network = require('../src/network');
+  const admin = (await api('POST', '/api/auth/login', { body: { emp_code: 'admin', password: 'admin123' } })).data.token;
+  const OFFICE = { lat: 26.4207, lng: 50.0888 };
+
+  // A location with no fixed address, using the office connector
+  const site = (await api('POST', '/api/admin/sites', { token: admin, body: { name: 'Dammam Office', ...OFFICE, radius_m: 100 } })).data;
+  const withConn = (await api('POST', `/api/admin/sites/${site.id}/connector`, { token: admin })).data;
+  assert.ok(withConn.connector_token.length >= 30);
+  await api('POST', '/api/admin/employees', { token: admin, body: { emp_code: 'D1', name: 'Faisal', password: 'secret4', site_id: site.id } });
+
+  let res = await fetch(base + '/api/auth/login', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ emp_code: 'D1', password: 'secret4', portal: 'web' }),
+  });
+  const cookie = res.headers.get('set-cookie').split(';')[0];
+  const token = (await res.json()).token;
+  const emp = (method, url, ip, body) =>
+    fetch(base + url, { method, headers: { authorization: `Bearer ${token}`, cookie, 'x-forwarded-for': ip }, body })
+      .then(async (x) => ({ status: x.status, data: await x.json() }));
+  const ping = (tok, ip) =>
+    fetch(base + '/api/office-ping', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...(ip ? { 'x-forwarded-for': ip } : {}) },
+      body: JSON.stringify({ token: tok }),
+    }).then(async (x) => ({ status: x.status, data: await x.json() }));
+
+  // Before the connector has reported, the location still requires office Wi-Fi
+  assert.equal((await emp('GET', '/api/attendance/me', '192.0.2.10')).data.office_network, 'off');
+  let r = await emp('POST', '/api/attendance', '192.0.2.10', punchForm('in', { ...OFFICE, source: 'web' }));
+  assert.equal(r.data.code, 'NOT_OFFICE_NETWORK');
+
+  // Connector reports the office address → employees on it can check in
+  r = await ping(withConn.connector_token, '192.0.2.10');
+  assert.deepEqual([r.status, r.data.ip, r.data.changed], [200, '192.0.2.10', true]);
+  assert.equal((await emp('GET', '/api/attendance/me', '192.0.2.10')).data.office_network, 'ok');
+  r = await emp('POST', '/api/attendance', '192.0.2.10', punchForm('in', { ...OFFICE, source: 'web' }));
+  assert.equal(r.status, 201, JSON.stringify(r.data));
+  assert.equal(r.data.via_network, true);
+
+  // Same address again is not a "change"; a new address is
+  assert.equal((await ping(withConn.connector_token, '192.0.2.10')).data.changed, false);
+  assert.equal((await ping(withConn.connector_token, '192.0.2.99')).data.changed, true);
+  // the new address works, and the old one keeps working for a grace period
+  assert.equal((await emp('GET', '/api/attendance/me', '192.0.2.99')).data.office_network, 'ok');
+  assert.equal((await emp('GET', '/api/attendance/me', '192.0.2.10')).data.office_network, 'ok');
+  // an unrelated address does not
+  assert.equal((await emp('GET', '/api/attendance/me', '198.51.100.5')).data.office_network, 'off');
+
+  // Changes are listed for admins
+  const changes = (await api('GET', '/api/admin/network-changes', { token: admin })).data.filter((c) => c.site_name === 'Dammam Office');
+  assert.deepEqual(changes.map((c) => c.ip), ['192.0.2.99', '192.0.2.10']);
+  const listed = (await api('GET', '/api/admin/sites', { token: admin })).data.find((s) => s.id === site.id);
+  assert.equal(listed.connector_addresses.length, 2);
+  assert.ok(listed.connector_seen_at);
+
+  // Wrong token, private address, replaced link
+  assert.equal((await ping('x'.repeat(32), '192.0.2.10')).status, 404);
+  assert.equal((await ping(withConn.connector_token)).status, 400); // 127.0.0.1 = private
+  const replaced = (await api('POST', `/api/admin/sites/${site.id}/connector`, { token: admin })).data;
+  assert.equal((await ping(withConn.connector_token, '192.0.2.10')).status, 404);
+  assert.equal((await ping(replaced.connector_token, '192.0.2.11')).status, 200);
+
+  // Dynamic DNS name in the office list
+  network._setLookup(async (host) => {
+    if (host === 'myoffice.ddns.example') return ['203.0.113.200'];
+    throw new Error('ENOTFOUND');
+  });
+  r = await api('PUT', `/api/admin/sites/${site.id}`, { token: admin, body: { name: 'Dammam Office', ...OFFICE, radius_m: 100, office_ips: 'MyOffice.DDNS.example' } });
+  assert.equal(r.data.office_ips, 'myoffice.ddns.example');
+  assert.equal((await emp('GET', '/api/attendance/me', '203.0.113.200')).data.office_network, 'ok');
+  assert.equal((await emp('GET', '/api/attendance/me', '203.0.113.201')).data.office_network, 'off');
+});

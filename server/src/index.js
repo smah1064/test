@@ -13,6 +13,7 @@ function createApp() {
   app.use('/api/auth', require('./routes/auth'));
   app.use('/api/attendance', require('./routes/attendance'));
   app.use('/api/admin', require('./routes/admin'));
+  app.use('/api/office-ping', require('./routes/office'));
   app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
 
   // Employee check-in page at /, admin dashboard at /admin/

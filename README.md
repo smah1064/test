@@ -3,7 +3,7 @@
 A check-in web page for employees, an admin dashboard, and a monthly report. There is also an optional mobile app for staff who don't work in an office.
 
 - **Check in from a web page.** Employees open the company's attendance address on their phone. There's nothing to install, and it works on Android and iPhone. They can also add it to the home screen so it opens like an app.
-- **Office Wi-Fi required.** Each office location can list its Wi-Fi's internet address. Check-ins there are only accepted from that network. A fake-GPS app can't change which network a phone is on, so this is the main protection against cheating.
+- **Office Wi-Fi required.** Check-ins at an office are only accepted from that office's internet connection. A fake-GPS app can't change which network a phone is on, so this is the main protection against cheating. It works even if your internet address changes (dynamic IP), using the office connector or dynamic DNS.
 - **Live selfie on every check-in and check-out.** The page captures the photo from the live front camera. There is no upload button, so gallery photos and filtered or edited pictures can't be used.
 - **GPS is checked too.** The location is recorded with every check-in and must be at the office.
 - **One phone per employee.** An account is locked to the first browser or phone it logs in on, so a colleague can't check in for someone else. An admin can reset it.
@@ -96,13 +96,32 @@ Open `https://<your-address>/admin` and log in with `ADMIN_CODE` / `ADMIN_PASSWO
 
 1. **Change password** (top right).
 2. **Settings:** company name, work hours, grace period, weekend days and holidays.
-3. **Locations:** add each office with its coordinates and a radius. 100–200 m is typical. Then set up its Wi-Fi:
-   1. Go to the office and connect your phone or laptop to the **office Wi-Fi**, with mobile data and any VPN off.
-   2. Open the dashboard there, edit the location and click **Use this network**. The office's internet address is filled in.
-   3. If the office has a second internet line or a backup connection, connect to it and click the button again. All the addresses are kept.
-
-   If the office's internet provider changes the address (some home-style connections do), check-ins will be rejected as "not on office Wi-Fi". Repeat these steps, or ask the provider for a **static IP**, which is the usual choice for offices.
+3. **Locations:** add each office with its coordinates and a radius. 100–200 m is typical. Then set up its Wi-Fi using **one** of the options below (see [Office Wi-Fi: choosing a method](#office-wi-fi-choosing-a-method)).
 4. **Employees:** add each employee with a code, name, password and work location.
+
+### Office Wi-Fi: choosing a method
+
+The server recognises the office Wi-Fi by the office's **public internet address**. Many internet providers change that address from time to time (a "dynamic" address), so there are three ways to tell the server what it is:
+
+| Your office internet | Use |
+|---|---|
+| **Dynamic address** (changes from time to time). This is the most common case | **Office connector** (works with any router) or **Dynamic DNS** (if your router supports it) |
+| **Fixed ("static") address** | **Use this network** |
+
+**Office connector (recommended for dynamic addresses).**
+1. On **Locations**, click **Office connector → Create connector link**, then **Copy link**.
+2. Open the link on any computer in the office that stays on and is connected to the office network: a reception PC, an old laptop, a tablet or a mini-PC. Leave the page open. It shows **Connected** and reports the office address every minute.
+3. That's it. When the provider changes the address, the connector reports the new one within a minute, and the previous address keeps working for an hour so nobody is caught mid-change.
+
+   - Prefer not to keep a browser open? The same dialog shows a one-line command to run every minute from Windows Task Scheduler or cron.
+   - Make sure the computer doesn't sleep during working hours. The Locations page shows **Connector offline** if it hasn't reported for 5 minutes. If the address changes while the connector is offline, check-ins are rejected until it reports again.
+   - Keep the link private. Anyone with it could make their home address count as the office. Every new address appears under **Security alerts → Office address changes**. If you see one you don't recognise, click **Replace link**.
+
+**Dynamic DNS (if your router supports it).** Many routers (TP-Link, ASUS, Huawei, ZTE, MikroTik…) have a **DDNS** setting that keeps a name such as `myoffice.ddns.net` pointing at the current address. Set it up in the router, then type that name into the location's **Office Wi-Fi** box instead of an address. The server looks the name up whenever an employee checks in, and you don't need a computer left on.
+
+**Use this network (fixed address only).** Connect to the office Wi-Fi (mobile data and VPN off), open the dashboard, edit the location and click **Use this network**. If the office has a second internet line, connect to it and click again.
+
+> **Why not the Wi-Fi name?** Web pages can't read the Wi-Fi name. Browsers block it on every phone. A name is also trivial to fake: anyone can rename their home router or phone hotspot to "Office-WiFi". The internet address can't be faked from outside the office.
 
 ### 3. Employees
 
@@ -129,6 +148,7 @@ Before a Play Store release, change the app ID `com.yourcompany.attendance_app` 
 ## Developing
 
 - **Server:** `cd server && npm run dev`; tests: `npm test`. The check-in page is `server/public/index.html` + `checkin.js`; the dashboard is `server/public/admin/`.
+- **Office connector:** `server/public/office.html` posts to `/api/office-ping`; the address logic is in `server/src/network.js`.
 - **Testing the Wi-Fi check locally:** requests from your own machine come from `127.0.0.1`. Put `127.0.0.1` in a location's office Wi-Fi list to test, and remove it afterwards.
 - **Translations:** check-in page text is at the top of `server/public/checkin.js`, app text is in `mobile/lib/l10n/strings.dart`, and server messages are in `server/src/i18n.js`.
 - **App development:** run debug builds with `flutter run --dart-define=ALLOW_DEV_MODE=true --dart-define=API_URL=http://<your-pc-ip>:3000` to skip the developer-mode check, which USB debugging needs. The flag has no effect in release builds.

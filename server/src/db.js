@@ -75,6 +75,16 @@ function addColumn(table, column, type) {
   if (!cols.includes(column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
 }
 addColumn('sites', 'office_ips', "TEXT NOT NULL DEFAULT ''"); // office Wi-Fi public IPs / ranges
+addColumn('sites', 'connector_token', 'TEXT'); // office connector secret (dynamic office address)
+addColumn('sites', 'connector_ips', 'TEXT'); // JSON: addresses reported by the connector
+addColumn('sites', 'connector_seen_at', 'TEXT'); // last report, ISO time
+db.exec(`CREATE TABLE IF NOT EXISTS network_changes (
+  id      INTEGER PRIMARY KEY AUTOINCREMENT,
+  site_id INTEGER REFERENCES sites(id) ON DELETE CASCADE,
+  ts      TEXT NOT NULL,
+  ip      TEXT NOT NULL,
+  how     TEXT NOT NULL
+)`);
 addColumn('attendance', 'ip', 'TEXT');
 addColumn('attendance', 'via_network', 'INTEGER NOT NULL DEFAULT 0'); // 1 = verified on office Wi-Fi
 addColumn('attendance', 'source', "TEXT NOT NULL DEFAULT 'app'"); // 'app' or 'web'

@@ -8,7 +8,8 @@ const { db, getSettings, setSettings } = require('../db');
 const { requireAuth } = require('../auth');
 const { localDate, monthDays, parseHHMM } = require('../util');
 const { buildMonthlyReport, reportToXlsx, reportToCsv } = require('../report');
-const { clientIp, parseIpList, formatIpList, suggestEntry, isPrivate } = require('../network');
+const crypto = require('crypto');
+const { clientIp, parseIpList, formatIpList, suggestEntry, isPrivate, connectorAddresses } = require('../network');
 
 const router = express.Router();
 router.use(requireAuth('admin'));
@@ -35,8 +36,36 @@ router.get('/my-ip', (req, res) => {
   res.json({ ip, suggestion: suggestEntry(ip), private: isPrivate(ip) });
 });
 
+function siteOut(s) {
+  if (!s) return s;
+  const { connector_ips, ...rest } = s;
+  return { ...rest, connector_addresses: connectorAddresses(s) };
+}
+
 router.get('/sites', (req, res) => {
-  res.json(db.prepare('SELECT * FROM sites ORDER BY name').all());
+  res.json(db.prepare('SELECT * FROM sites ORDER BY name').all().map(siteOut));
+});
+
+// Office connector: create (or replace) the secret link for a location.
+router.post('/sites/:id/connector', (req, res) => {
+  const site = db.prepare('SELECT * FROM sites WHERE id = ?').get(req.params.id);
+  if (!site) return res.status(404).json({ error: 'Not found' });
+  const token = crypto.randomBytes(24).toString('base64url');
+  db.prepare('UPDATE sites SET connector_token = ?, connector_ips = NULL, connector_seen_at = NULL WHERE id = ?').run(token, site.id);
+  res.json(siteOut(db.prepare('SELECT * FROM sites WHERE id = ?').get(site.id)));
+});
+router.delete('/sites/:id/connector', (req, res) => {
+  db.prepare('UPDATE sites SET connector_token = NULL, connector_ips = NULL, connector_seen_at = NULL WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
+router.get('/network-changes', (req, res) => {
+  res.json(
+    db.prepare(
+      `SELECT n.ts, n.ip, n.how, s.name AS site_name FROM network_changes n
+         LEFT JOIN sites s ON s.id = n.site_id ORDER BY n.ts DESC LIMIT 200`
+    ).all()
+  );
 });
 router.post('/sites', (req, res) => {
   const err = validSite(req.body || {});
@@ -45,7 +74,7 @@ router.post('/sites', (req, res) => {
   const info = db
     .prepare('INSERT INTO sites (name, lat, lng, radius_m, office_ips) VALUES (?, ?, ?, ?, ?)')
     .run(String(name).trim(), +lat, +lng, +radius_m, officeIps(req.body));
-  res.status(201).json(db.prepare('SELECT * FROM sites WHERE id = ?').get(info.lastInsertRowid));
+  res.status(201).json(siteOut(db.prepare('SELECT * FROM sites WHERE id = ?').get(info.lastInsertRowid)));
 });
 router.put('/sites/:id', (req, res) => {
   const err = validSite(req.body || {});
@@ -54,7 +83,7 @@ router.put('/sites/:id', (req, res) => {
   db.prepare('UPDATE sites SET name = ?, lat = ?, lng = ?, radius_m = ?, office_ips = ? WHERE id = ?').run(
     String(name).trim(), +lat, +lng, +radius_m, officeIps(req.body), req.params.id
   );
-  res.json(db.prepare('SELECT * FROM sites WHERE id = ?').get(req.params.id));
+  res.json(siteOut(db.prepare('SELECT * FROM sites WHERE id = ?').get(req.params.id)));
 });
 router.delete('/sites/:id', (req, res) => {
   db.prepare('DELETE FROM sites WHERE id = ?').run(req.params.id);
