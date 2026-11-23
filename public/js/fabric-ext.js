@@ -56,7 +56,7 @@
     let res = Math.min(12, Math.max(1, Math.ceil(dev * 1.25 * 4) / 4));
     while ((g.w + pad * 2) * (g.h + pad * 2) * res * res > 30e6 && res > 1) res -= 0.5;
     const key = [this.text, this.fontFamily, this.fontSize, this.fontWeight, this.fontStyle, fillKey(this.fill), this.stroke, this.strokeWidth,
-      this.charSpacing, this.lineHeight, this.textAlign, this.underline, this.linethrough, this.direction, this.paintFirst, g.w, g.h, res].join('|');
+      this.charSpacing, this.lineHeight, this.textAlign, this.underline, this.linethrough, this.direction, this.paintFirst, g.w, g.h, res, JSON.stringify(this.styles || {})].join('|');
     if (!this._curveCache || this._curveCache.key !== key) {
       const c = fabric.util.createCanvasElement();
       c.width = Math.ceil((g.w + pad * 2) * res);
@@ -104,13 +104,47 @@
     ctx.arcTo(x, y, x + w, y, r);
     ctx.closePath();
   }
+  // Background shapes: box (rounded), pill, banner (notched ribbon ends), ticket (round notches).
+  TP.bgShape = 'box';
+  TP.cacheProperties = TP.cacheProperties.concat('bgShape');
   TP._renderBackground = function (ctx) {
     if (!this.backgroundColor) return;
     const dim = this._getNonTransformedDimensions();
     const px = this.fontSize * 0.3;
     const py = this.fontSize * 0.15;
+    const x = -dim.x / 2 - px;
+    const y = -dim.y / 2 - py;
+    const w = dim.x + px * 2;
+    const h = dim.y + py * 2;
     ctx.fillStyle = this.backgroundColor;
-    roundRectPath(ctx, -dim.x / 2 - px, -dim.y / 2 - py, dim.x + px * 2, dim.y + py * 2, this.fontSize * 0.25);
+    const shape = this.bgShape || 'box';
+    if (shape === 'pill') {
+      roundRectPath(ctx, x, y, w, h, h / 2);
+    } else if (shape === 'banner') {
+      const n = Math.min(h * 0.32, w * 0.15);
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + w, y);
+      ctx.lineTo(x + w - n, y + h / 2);
+      ctx.lineTo(x + w, y + h);
+      ctx.lineTo(x, y + h);
+      ctx.lineTo(x + n, y + h / 2);
+      ctx.closePath();
+    } else if (shape === 'ticket') {
+      const r = Math.min(h * 0.22, w * 0.1);
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + w, y);
+      ctx.lineTo(x + w, y + h / 2 - r);
+      ctx.arc(x + w, y + h / 2, r, -Math.PI / 2, Math.PI / 2, true);
+      ctx.lineTo(x + w, y + h);
+      ctx.lineTo(x, y + h);
+      ctx.lineTo(x, y + h / 2 + r);
+      ctx.arc(x, y + h / 2, r, Math.PI / 2, -Math.PI / 2, true);
+      ctx.closePath();
+    } else {
+      roundRectPath(ctx, x, y, w, h, this.fontSize * 0.25);
+    }
     ctx.fill();
     this._removeShadow(ctx);
   };
@@ -318,8 +352,11 @@
   // Curved text and text with a background box are drawn by custom code, so
   // they go into the SVG as a 300 DPI picture of exactly what is on screen.
   const origTextSvg = TP.toSVG;
+  // Text with coloured words is embedded the same way (the right-to-left SVG
+  // layout below draws each line as one run).
+  const hasWordStyles = (o) => o.styles && Object.values(o.styles).some((line) => line && Object.keys(line).length);
   TP.toSVG = function (reviver) {
-    if (!this.curve && !this.backgroundColor) return origTextSvg.call(this, reviver);
+    if (!this.curve && !this.backgroundColor && !hasWordStyles(this)) return origTextSvg.call(this, reviver);
     const r = this.getBoundingRect(true, true);
     const mult = Math.min(24, Math.max(2, 300 / (TP.svgUnitsPerInch || 50))); // 300 DPI at the product's real size
     const url = this.toDataURL({ multiplier: mult, format: 'png' });

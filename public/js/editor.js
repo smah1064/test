@@ -18,7 +18,7 @@
   const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
   const HISTORY_LIMIT = 60;
   const SNAP_PX = 7;
-  const EXTRA_PROPS = ['name', 'selectable', 'evented', 'curve', 'mask', 'maskBorder', 'maskBorderColor'];
+  const EXTRA_PROPS = ['name', 'selectable', 'evented', 'curve', 'mask', 'maskBorder', 'maskBorderColor', 'lockRatio', 'bgShape', 'textFx'];
   const $ = (id) => document.getElementById(id);
   const { esc, money, toast, t, tr } = POD;
   const D = window.POD_DESIGN;
@@ -42,7 +42,8 @@
   });
   // Bigger handles for fingers.
   const COARSE = window.matchMedia('(pointer: coarse)').matches;
-  if (COARSE) Object.assign(fabric.Object.prototype, { cornerSize: 13, touchCornerSize: 40, padding: 6 });
+  if (COARSE) Object.assign(fabric.Object.prototype, { cornerSize: 18, touchCornerSize: 48, padding: 8 });
+  if (COARSE && fabric.Object.prototype.controls && fabric.Object.prototype.controls.mtr) fabric.Object.prototype.controls.mtr.offsetY = -46;
   const MOBILE = window.matchMedia('(max-width: 820px)');
 
   // ---------- Load catalog and (optionally) a saved design ----------
@@ -136,6 +137,7 @@
     const z = Math.max(0.15, base) * st.zoom;
     canvas.setDimensions({ width: Math.round(W * z), height: Math.round(H * z) });
     canvas.setZoom(z);
+    requestAnimationFrame(() => typeof positionFloatBar === 'function' && positionFloatBar());
     if (focus) {
       stage.scrollLeft = (a.x + a.w / 2) * z - stage.clientWidth / 2;
       stage.scrollTop = (a.y + a.h / 2) * z - stage.clientHeight / 2;
@@ -176,7 +178,12 @@
   // While editing, artwork shows into the bleed; the preview shows the trimmed result.
   const currentClip = () => (st.preview ? rects().trim : rects().bleed);
   function applyClips(r = currentClip()) {
-    canvas.getObjects().forEach((o) => { if (o.name !== '__cropper') { o.clipPath = clipRect(r); o.dirty = true; } });
+    canvas.getObjects().forEach((o) => {
+      if (o.name === '__cropper') return;
+      o.clipPath = clipRect(r);
+      o.dirty = true;
+      if (o.type === 'group') o.getObjects().forEach((c) => { c.clipPath = null; c.dirty = true; });
+    });
     canvas.requestRenderAll();
   }
   function pathRect(ctx, r) {
@@ -294,6 +301,24 @@
     tryY(c.y, a.y + a.h / 2);
     tryY(r.top, a.y);
     tryY(r.top + r.height, a.y + a.h);
+    // ...and to the centres and edges of the other elements.
+    const moving = new Set(o.type === 'activeSelection' ? o.getObjects() : [o]);
+    for (const other of canvas.getObjects()) {
+      if (moving.has(other) || other.name === '__cropper' || other.visible === false) continue;
+      const q = other.getBoundingRect(true, true);
+      const qc = { x: q.left + q.width / 2, y: q.top + q.height / 2 };
+      tryX(c.x, qc.x);
+      tryX(r.left, q.left);
+      tryX(r.left + r.width, q.left + q.width);
+      tryX(r.left, q.left + q.width);
+      tryX(r.left + r.width, q.left);
+      tryY(c.y, qc.y);
+      tryY(r.top, q.top);
+      tryY(r.top + r.height, q.top + q.height);
+      tryY(r.top, q.top + q.height);
+      tryY(r.top + r.height, q.top);
+      if (dx && dy) break;
+    }
     if (dx || dy) o.setPositionByOrigin(new fabric.Point(c.x + dx, c.y + dy), 'center', 'center');
     st.guides = guides.v.length || guides.h.length ? guides : null;
   });
@@ -411,14 +436,21 @@
   canvas.on('text:editing:entered', (e) => { e.target.initDimensions(); e.target.setCoords(); canvas.requestRenderAll(); });
   canvas.on('text:editing:exited', (e) => { e.target.initDimensions(); e.target.setCoords(); canvas.requestRenderAll(); commit(); });
   ['selection:created', 'selection:updated'].forEach((ev) => canvas.on(ev, () => {
+    canvas.getActiveObjects().forEach(applyRatioLock);
+    st.wordSel = null;
     renderProps();
     renderLayers();
     scheduleCheck();
-    if (MOBILE.matches) setSheet('props');
+    // Phones: a newly added element opens its settings; tapping an existing
+    // one shows the floating bar, which has a button for the settings.
+    if (MOBILE.matches && st.openSheetOnSelect) setSheet('props');
+    st.openSheetOnSelect = false;
+    renderFloatBar();
   }));
   let lastCleared = null;
   canvas.on('selection:cleared', (e) => {
-    lastCleared = { objs: e.deselected || [], at: Date.now() };
+    if (st.reselecting) return;
+    lastCleared = { objs: e.deselected || [], at: Date.now(), sheet: st.sheet };
     if (crop) {
       canvas.setActiveObject(crop.cropper);
       return;
@@ -427,7 +459,13 @@
     renderLayers();
     scheduleCheck();
     if (st.sheet === 'props') setSheet(null);
+    renderFloatBar();
   });
+  // Hide the floating bar while dragging, bring it back afterwards.
+  ['object:moving', 'object:scaling', 'object:rotating'].forEach((ev) => canvas.on(ev, () => { st.dragging = true; hideFloatBar(); }));
+  canvas.on('mouse:up', () => { if (st.dragging) { st.dragging = false; renderFloatBar(); } });
+  canvas.on('text:editing:entered', hideFloatBar);
+  canvas.on('text:editing:exited', () => renderFloatBar());
   canvas.on('object:scaling', updateQuality);
   ['object:moving', 'object:scaling', 'object:rotating'].forEach((ev) => canvas.on(ev, () => scheduleCheck()));
   canvas.on('object:rotating', (e) => { const r = $('p-angle'); if (r) r.value = Math.round(e.target.angle); });
@@ -465,6 +503,7 @@
   }
   async function stepHistory(delta) {
     cancelCrop();
+    hideFloatBar();
     commit();
     const h = hist();
     const next = h.i + delta;
@@ -496,6 +535,7 @@
 
   // ---------- Adding things ----------
   function addObject(obj, { select = true, shrinkToFit = true } = {}) {
+    if (select) st.openSheetOnSelect = true;
     cancelCrop();
     const a = area();
     obj.set({ originX: 'center', originY: 'center', left: a.x + a.w / 2, top: a.y + a.h / 2 });
@@ -741,7 +781,7 @@
     document.body.classList.toggle('sheet-product', mode === 'product');
     document.querySelectorAll('[data-sheet]').forEach((b) => b.classList.toggle('open', b.dataset.sheet === mode));
     syncSheetTitle();
-    requestAnimationFrame(() => fit());
+    requestAnimationFrame(() => { fit(); renderFloatBar(); });
   }
   document.querySelectorAll('[data-sheet]').forEach((b) => b.addEventListener('click', () => {
     closeFlyouts();
@@ -751,12 +791,9 @@
     canvas.requestRenderAll();
     setSheet(b.dataset.sheet);
   }));
+  // Closing the settings keeps the element selected, with its floating bar.
   $('sheet-close').addEventListener('click', () => {
-    if (st.sheet === 'props') {
-      cancelCrop();
-      canvas.discardActiveObject();
-      canvas.requestRenderAll();
-    }
+    if (st.sheet === 'props') cancelCrop();
     setSheet(null);
   });
   MOBILE.addEventListener('change', () => setSheet(null));
@@ -775,6 +812,7 @@
     canvas._currentTransform = null;
     const recent = lastCleared && Date.now() - lastCleared.at < 400 ? lastCleared.objs.filter((o) => canvas.contains(o)) : [];
     if (recent.length && !canvas.getActiveObject()) {
+      if (lastCleared.sheet === 'props') st.openSheetOnSelect = true;
       canvas.setActiveObject(recent.length === 1 ? recent[0] : new fabric.ActiveSelection(recent, { canvas }));
     }
     canvas.requestRenderAll();
@@ -856,11 +894,258 @@
     renderLayers();
   }
 
+  // ---------- Layout: exact size in cm, alignment, distribution, groups ----------
+  const unitsPerCm = () => rects().u / 2.54;
+  function boxOf(o) {
+    o.setCoords();
+    return o.getBoundingRect(true, true);
+  }
+  /** Keep proportions: by default for text, photos, stickers and groups; shapes can stretch. */
+  const ratioLocked = (o) => (typeof o.lockRatio === 'boolean' ? o.lockRatio : isText(o) || o.type === 'image' || o.type === 'group' || isSticker(o));
+  function applyRatioLock(o) {
+    if (!o || o.type === 'activeSelection' || !o.setControlsVisibility) return;
+    const free = !ratioLocked(o);
+    o.setControlsVisibility({ ml: free, mr: free, mt: free, mb: free });
+  }
+  function sizeCm(o) {
+    const u = unitsPerCm();
+    const r = boxOf(o);
+    const a = area();
+    return { w: o.getScaledWidth() / u, h: o.getScaledHeight() / u, x: (r.left - a.x) / u, y: (r.top - a.y) / u };
+  }
+  function setSizeCm(o, dim, cm) {
+    const u = unitsPerCm();
+    const c = o.getCenterPoint();
+    const target = Math.max(0.2, cm) * u;
+    // The measured size includes outlines, so correct the scale until it matches.
+    for (let i = 0; i < 3; i++) {
+      const now = dim === 'w' ? o.getScaledWidth() : o.getScaledHeight();
+      if (!now || Math.abs(now - target) < 0.01) break;
+      const k = target / now;
+      if (dim === 'w') o.set(ratioLocked(o) ? { scaleX: o.scaleX * k, scaleY: o.scaleY * k } : { scaleX: o.scaleX * k });
+      else o.set(ratioLocked(o) ? { scaleX: o.scaleX * k, scaleY: o.scaleY * k } : { scaleY: o.scaleY * k });
+    }
+    o.setPositionByOrigin(c, 'center', 'center');
+    o.setCoords();
+  }
+  function setPosCm(o, axis, cm) {
+    const u = unitsPerCm();
+    const r = boxOf(o);
+    const a = area();
+    if (axis === 'x') o.set({ left: o.left + (a.x + cm * u - r.left) });
+    else o.set({ top: o.top + (a.y + cm * u - r.top) });
+    o.setCoords();
+  }
+  /** Run fn on the loose objects of the selection, then select them again. */
+  function onSelectedObjects(fn) {
+    const sel = active();
+    if (!sel) return;
+    const objs = canvas.getActiveObjects();
+    const multi = sel.type === 'activeSelection';
+    st.reselecting = true;
+    if (multi) canvas.discardActiveObject();
+    fn(objs);
+    objs.forEach((o) => o.setCoords());
+    if (multi) canvas.setActiveObject(new fabric.ActiveSelection(objs, { canvas }));
+    st.reselecting = false;
+    canvas.requestRenderAll();
+    commit();
+    renderProps();
+    renderFloatBar();
+  }
+  function unionBox(objs) {
+    const rs = objs.map(boxOf);
+    const left = Math.min(...rs.map((r) => r.left));
+    const top = Math.min(...rs.map((r) => r.top));
+    return { left, top, width: Math.max(...rs.map((r) => r.left + r.width)) - left, height: Math.max(...rs.map((r) => r.top + r.height)) - top };
+  }
+  /** Align to the selection's own box (several elements) or to the print area (one element). */
+  function alignSelected(how) {
+    onSelectedObjects((objs) => {
+      const a = area();
+      const box = objs.length > 1 ? unionBox(objs) : { left: a.x, top: a.y, width: a.w, height: a.h };
+      for (const o of objs) {
+        const r = boxOf(o);
+        let dx = 0;
+        let dy = 0;
+        if (how === 'left') dx = box.left - r.left;
+        if (how === 'right') dx = box.left + box.width - (r.left + r.width);
+        if (how === 'hcenter') dx = box.left + box.width / 2 - (r.left + r.width / 2);
+        if (how === 'top') dy = box.top - r.top;
+        if (how === 'bottom') dy = box.top + box.height - (r.top + r.height);
+        if (how === 'vcenter') dy = box.top + box.height / 2 - (r.top + r.height / 2);
+        o.set({ left: o.left + dx, top: o.top + dy });
+      }
+    });
+  }
+  /** Equal gaps between three or more elements. */
+  function distributeSelected(axis) {
+    onSelectedObjects((objs) => {
+      if (objs.length < 3) return;
+      const k = axis === 'h' ? ['left', 'width'] : ['top', 'height'];
+      const items = objs.map((o) => ({ o, r: boxOf(o) })).sort((p, q) => p.r[k[0]] - q.r[k[0]]);
+      const first = items[0].r;
+      const last = items[items.length - 1].r;
+      const total = items.reduce((sum, it) => sum + it.r[k[1]], 0);
+      const gap = (last[k[0]] + last[k[1]] - first[k[0]] - total) / (items.length - 1);
+      let pos = first[k[0]] + first[k[1]] + gap;
+      for (const it of items.slice(1, -1)) {
+        const d = pos - it.r[k[0]];
+        it.o.set(axis === 'h' ? { left: it.o.left + d } : { top: it.o.top + d });
+        pos += it.r[k[1]] + gap;
+      }
+    });
+  }
+  function groupSelected() {
+    const sel = active();
+    if (!sel || sel.type !== 'activeSelection') return;
+    st.reselecting = true;
+    const g = sel.toGroup();
+    st.reselecting = false;
+    g.set({ lockRatio: true });
+    applyClips();
+    applyRatioLock(g);
+    canvas.setActiveObject(g);
+    canvas.requestRenderAll();
+    commit();
+    renderProps();
+    renderLayers();
+    renderFloatBar();
+  }
+  function ungroupSelected() {
+    const g = active();
+    if (!g || g.type !== 'group' || isSticker(g)) return;
+    st.reselecting = true;
+    const sel = g.toActiveSelection();
+    st.reselecting = false;
+    sel.getObjects().forEach(applyRatioLock);
+    applyClips();
+    canvas.setActiveObject(sel);
+    canvas.requestRenderAll();
+    commit();
+    renderProps();
+    renderLayers();
+    renderFloatBar();
+  }
+  const ALIGN_ICONS = {
+    left: '<path d="M4 3v18M8 7h12M8 15h7" />',
+    hcenter: '<path d="M12 3v18M6 7h12M8.5 15h7" />',
+    right: '<path d="M20 3v18M4 7h12M9 15h7" />',
+    top: '<path d="M3 4h18M7 8v12M15 8v7" />',
+    vcenter: '<path d="M3 12h18M7 6v12M15 8.5v7" />',
+    bottom: '<path d="M3 20h18M7 4v12M15 9v7" />',
+    dh: '<path d="M4 4v16M20 4v16M10 8h4v8h-4z" />',
+    dv: '<path d="M4 4h16M4 20h16M8 10h8v4H8z" />',
+  };
+  const alignIcon = (k) => `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">${ALIGN_ICONS[k]}</svg>`;
+  function alignButtons(multi) {
+    const b = (k, title) => `<button class="btn btn-sm btn-icon" data-align-to="${k}" title="${esc(t(title))}" aria-label="${esc(t(title))}">${alignIcon(k)}</button>`;
+    return `<div class="align-row" dir="ltr">
+      ${b('left', 'align.left')}${b('hcenter', 'align.hcenter')}${b('right', 'align.right')}
+      ${b('top', 'align.top')}${b('vcenter', 'align.vcenter')}${b('bottom', 'align.bottom')}
+    </div>
+    <p class="muted small" style="margin:4px 0 0">${esc(t(multi ? 'align.toSelection' : 'align.toArea'))}</p>`;
+  }
+  function sizeGroup(o) {
+    const z = sizeCm(o);
+    const f = (v) => (Math.round(v * 10) / 10).toString();
+    return group('size', t('grp.size'), `
+      <div class="field grid-2">
+        <div><label for="p-wcm">${esc(t('size.width'))}</label><input type="number" id="p-wcm" step="0.1" min="0.2" value="${f(z.w)}" inputmode="decimal"></div>
+        <div><label for="p-hcm">${esc(t('size.height'))}</label><input type="number" id="p-hcm" step="0.1" min="0.2" value="${f(z.h)}" inputmode="decimal"></div>
+      </div>
+      <div class="field"><label class="check"><input type="checkbox" id="p-ratio" ${ratioLocked(o) ? 'checked' : ''}> ${esc(t('size.lockRatio'))}</label></div>
+      <div class="field grid-2">
+        <div><label for="p-xcm">${esc(t('size.x'))}</label><input type="number" id="p-xcm" step="0.1" value="${f(z.x)}" inputmode="decimal"></div>
+        <div><label for="p-ycm">${esc(t('size.y'))}</label><input type="number" id="p-ycm" step="0.1" value="${f(z.y)}" inputmode="decimal"></div>
+      </div>
+      <div class="field">${alignButtons(false)}</div>`);
+  }
+
+  // ---------- Floating bar next to the selection ----------
+  const FB = {
+    edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/>',
+    style: '<circle cx="12" cy="12" r="9"/><circle cx="8.5" cy="10" r="1.3" fill="currentColor"/><circle cx="12" cy="7.5" r="1.3" fill="currentColor"/><circle cx="15.5" cy="10" r="1.3" fill="currentColor"/><path d="M12 21a3 3 0 0 1 0-6h2"/>',
+    dup: '<rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/>',
+    up: '<path d="M12 19V5M5 12l7-7 7 7"/>',
+    down: '<path d="M12 5v14M5 12l7 7 7-7"/>',
+    del: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+    group: '<rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/><path d="M11 7h6v6M7 11v6h6"/>',
+    ungroup: '<rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/>',
+  };
+  const fbIcon = (k) => `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${FB[k]}</svg>`;
+  function hideFloatBar() {
+    const bar = $('float-bar');
+    if (bar) bar.hidden = true;
+  }
+  function renderFloatBar() {
+    const bar = $('float-bar');
+    if (!bar) return;
+    const o = active();
+    // Phones: the settings sheet has the same actions and the design area is small.
+    if (!o || crop || st.preview || st.exporting || st.dragging || o.isEditing || (MOBILE.matches && st.sheet)) return hideFloatBar();
+    const multi = o.type === 'activeSelection';
+    const items = [];
+    if (isText(o)) items.push(['edit-text', 'edit', 'fb.editText', true]);
+    if (MOBILE.matches) items.push(['open-props', 'style', multi ? 'fb.arrange' : 'fb.style', true]);
+    if (multi) items.push(['group', 'group', 'group.make', false]);
+    if (o.type === 'group' && !isSticker(o)) items.push(['ungroup', 'ungroup', 'group.ungroup', false]);
+    if (!multi) items.push(['duplicate', 'dup', 'props.duplicate', false], ['up', 'up', 'props.forward', false], ['down', 'down', 'props.backward', false]);
+    items.push(['delete', 'del', multi ? 'props.deleteSelected' : 'props.delete', false]);
+    bar.innerHTML = items.map(([act, icon, key, label]) =>
+      `<button type="button" data-fb="${act}" class="${act === 'delete' ? 'danger' : ''}" title="${esc(t(key))}" aria-label="${esc(t(key))}">${fbIcon(icon)}${label ? `<span>${esc(t(key))}</span>` : ''}</button>`).join('');
+    bar.hidden = false;
+    positionFloatBar();
+  }
+  /** Below the element (the rotate handle is above it), or above when there is no room. */
+  function positionFloatBar() {
+    const bar = $('float-bar');
+    const o = active();
+    if (!bar || bar.hidden || !o) return;
+    o.setCoords();
+    const r = o.getBoundingRect();
+    const cv = canvas.upperCanvasEl.getBoundingClientRect();
+    const wrap = bar.parentElement.getBoundingClientRect();
+    const stage = $('stage').getBoundingClientRect();
+    const bw = bar.offsetWidth;
+    const bh = bar.offsetHeight;
+    const gap = COARSE ? 30 : 18;
+    let x = cv.left + r.left + r.width / 2 - bw / 2;
+    let y = cv.top + r.top + r.height + gap;
+    if (y + bh > stage.bottom - 6) y = cv.top + r.top - bh - (COARSE ? 64 : 48);
+    x = Math.max(stage.left + 6, Math.min(x, stage.right - bw - 6));
+    y = Math.max(stage.top + 6, Math.min(y, stage.bottom - bh - 6));
+    bar.style.transform = `translate(${Math.round(x - wrap.left)}px, ${Math.round(y - wrap.top)}px)`;
+  }
+  $('stage').addEventListener('scroll', positionFloatBar, { passive: true });
+  window.addEventListener('resize', () => requestAnimationFrame(positionFloatBar));
+  $('float-bar').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-fb]');
+    const o = active();
+    if (!btn || !o) return;
+    const act = btn.dataset.fb;
+    if (act === 'edit-text' && isText(o)) {
+      hideFloatBar();
+      o.enterEditing();
+      o.selectAll();
+      if (o.hiddenTextarea) o.hiddenTextarea.focus();
+      canvas.requestRenderAll();
+      return;
+    }
+    if (act === 'open-props') return setSheet('props');
+    if (act === 'group') return groupSelected();
+    if (act === 'ungroup') return ungroupSelected();
+    if (act === 'duplicate') duplicateSelected();
+    if (act === 'up' || act === 'down') layer(act);
+    if (act === 'delete') return removeSelected();
+    requestAnimationFrame(renderFloatBar);
+  });
+
   // ---------- Properties panel ----------
   const props = $('props');
   const PALETTE = ['#16181d', '#ffffff', '#ff5a36', '#e03131', '#f783ac', '#fcc419', '#e0a526', '#2f9e44', '#1c7ed6', '#22304f', '#7048e8', '#8d6e63'];
   const MASKS = ['none', 'circle', 'rounded', 'heart', 'star', 'hexagon', 'arch'];
-  const openGroups = new Set(['text', 'colours', 'photo']);
+  const openGroups = new Set(['text', 'fx', 'colours', 'photo']);
   const group = (id, title, body) =>
     `<details class="pgroup" data-group="${id}" ${openGroups.has(id) ? 'open' : ''}><summary>${esc(title)}</summary><div class="pgroup-body">${body}</div></details>`;
   const palette = (target) =>
@@ -974,11 +1259,21 @@
     }
     if (o.type === 'activeSelection') {
       $('props-title').textContent = t('panel.nSelected', { n: o.size() });
+      const n = o.size();
       box.innerHTML = `
+        <div class="field"><label>${esc(t('align.title'))}</label>${alignButtons(true)}</div>
+        <div class="field"><label>${esc(t('align.distribute'))}</label>
+          <div class="grid-2">
+            <button class="btn btn-sm" data-distribute="h" ${n < 3 ? 'disabled' : ''}>${alignIcon('dh')} ${esc(t('align.distH'))}</button>
+            <button class="btn btn-sm" data-distribute="v" ${n < 3 ? 'disabled' : ''}>${alignIcon('dv')} ${esc(t('align.distV'))}</button>
+          </div>
+          ${n < 3 ? `<p class="muted small" style="margin:4px 0 0">${esc(t('align.distHint'))}</p>` : ''}
+        </div>
         <div class="grid-2">
           <button class="btn btn-sm" data-act="center-h">${esc(t('props.centerH'))}</button>
           <button class="btn btn-sm" data-act="center-v">${esc(t('props.centerV'))}</button>
         </div>
+        <button class="btn btn-sm btn-block" data-act="group" style="margin-top:8px">${esc(t('group.make'))}</button>
         <button class="btn btn-sm btn-block btn-danger" data-act="delete" style="margin-top:8px">${esc(t('props.deleteSelected'))}</button>`;
       syncSheetTitle();
       return;
@@ -1005,7 +1300,8 @@
         <div class="field btn-group" dir="ltr">
           ${['left', 'center', 'right'].map((al) => `<button class="btn btn-sm ${o.textAlign === al ? 'active' : ''}" data-align="${al}" title="${esc(t('props.align' + al[0].toUpperCase() + al.slice(1)))}">${{ left: '⇤', center: '↔', right: '⇥' }[al]}</button>`).join('')}
         </div>`);
-      html += group('colours', t('grp.colours'), fillControls(o) + outlineControls(o, 12));
+      html += textFxGroup(o);
+      html += group('colours', t('grp.colours'), fillControls(o) + wordControls(o) + outlineControls(o, 12));
       html += group('effects', t('grp.effects'), `
         <div class="field">
           <label for="p-curve">${esc(t('props.curve'))}</label>
@@ -1013,7 +1309,8 @@
         </div>
         <div class="field">
           <label class="check"><input type="checkbox" id="p-textbg" ${o.backgroundColor ? 'checked' : ''}> ${esc(t('props.textBg'))}</label>
-          ${o.backgroundColor ? `<div class="color-row" style="margin-top:6px"><input type="color" id="p-bgcolor" value="${toHex(o.backgroundColor)}">${palette('bg')}</div>` : ''}
+          ${o.backgroundColor ? `<div class="color-row" style="margin-top:6px"><input type="color" id="p-bgcolor" value="${toHex(o.backgroundColor)}">${palette('bg')}</div>
+          <div class="btn-group bg-shapes" style="margin-top:6px">${['box', 'pill', 'banner', 'ticket'].map((k) => `<button type="button" class="btn btn-sm ${(o.bgShape || 'box') === k ? 'active' : ''}" data-bgshape="${k}" title="${esc(t('bgshape.' + k))}"><span class="bgs bgs-${k}"></span>${esc(t('bgshape.' + k))}</button>`).join('')}</div>` : ''}
         </div>
         <div class="field grid-2">
           <div><label for="p-spacing">${esc(t('props.spacing'))}</label>${arabic ? `<div class="muted small">${esc(t('props.spacingArabic'))}</div>` : `<input type="range" id="p-spacing" min="-100" max="800" step="10" value="${o.charSpacing || 0}">`}</div>
@@ -1043,10 +1340,12 @@
           <label class="check"><input type="checkbox" data-filter="sepia" ${fs.sepia ? 'checked' : ''}> ${esc(t('props.sepia'))}</label>
         </div>
         <button class="btn btn-sm" data-act="reset-adjust">${esc(t('props.reset'))}</button>`);
-    } else if (!sticker) {
+    } else if (!sticker && o.type !== 'group') {
       html += group('colours', t('grp.colours'), fillControls(o) + outlineControls(o, 30) +
         (o.type === 'rect' ? `<div class="field"><label for="p-rx">${esc(t('props.radius'))}</label><input type="range" id="p-rx" min="0" max="${Math.round(Math.min(o.width, o.height) / 2)}" value="${o.rx || 0}"></div>` : ''));
     }
+    if (o.type === 'group' && !isSticker(o)) html += `<button class="btn btn-sm btn-block" data-act="ungroup" style="margin-bottom:10px">${esc(t('group.ungroup'))}</button>`;
+    html += sizeGroup(o);
     html += arrangeGroup(o);
     box.innerHTML = html;
     if (image) updateQuality();
@@ -1088,6 +1387,81 @@
     o.dirty = true;
     canvas.requestRenderAll();
     commitNow ? commit() : scheduleCommit();
+  }
+
+  // ---------- Text styles (one tap) ----------
+  const TEXT_FX = ['none', 'shadow', 'neon', 'extrude', 'retro', 'outline', 'sticker', 'sunset', 'gold', 'ocean'];
+  const hexToRgb = (h) => { const n = parseInt(toHex(h).slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+  const mixHex = (a, b, k) => '#' + hexToRgb(a).map((v, i) => Math.round(v + (hexToRgb(b)[i] - v) * k).toString(16).padStart(2, '0')).join('');
+  /** The text's main colour, whatever its current fill is. */
+  function baseColour(o) {
+    if (isGradient(o.fill)) return toHex(o.fill.colorStops[0].color);
+    if (o.fill && o.fill !== 'transparent') return toHex(o.fill);
+    if (o.stroke) return toHex(o.stroke);
+    return inkFor(surfaceHex());
+  }
+  function textFxProps(o, id) {
+    const fs = o.fontSize;
+    const sc = Math.abs(o.scaleX || 1);
+    const base = baseColour(o);
+    const lum = POD.luminance(base);
+    const plain = { shadow: null, stroke: null, strokeWidth: 0, fill: base, textFx: id === 'none' ? null : id };
+    const shadow = (color, blur, off) => new fabric.Shadow({ color, blur: fs * blur, offsetX: fs * off, offsetY: fs * off });
+    switch (id) {
+      case 'shadow': return { ...plain, shadow: shadow('rgba(0,0,0,0.38)', 0.14, 0.06) };
+      case 'neon': {
+        const glow = lum < 0.12 || lum > 0.92 ? '#ff2d95' : base;
+        return { ...plain, fill: mixHex(glow, '#ffffff', 0.6), shadow: new fabric.Shadow({ color: glow, blur: fs * 0.42, offsetX: 0, offsetY: 0 }) };
+      }
+      case 'extrude': return { ...plain, shadow: shadow(mixHex(base, lum < 0.2 ? '#ffffff' : '#000000', 0.45), 0, 0.07) };
+      case 'retro': return { ...plain, stroke: '#16181d', strokeWidth: fs * sc * 0.045, strokeUniform: true, paintFirst: 'stroke', shadow: shadow(lum > 0.6 ? D.ACCENT : '#fcc419', 0, 0.09) };
+      case 'outline': return { ...plain, fill: 'transparent', stroke: base, strokeWidth: Math.max(1.5, fs * sc * 0.04), strokeUniform: true, paintFirst: 'stroke' };
+      case 'sticker': return { ...plain, stroke: '#ffffff', strokeWidth: fs * sc * 0.14, strokeUniform: true, paintFirst: 'stroke', strokeLineJoin: 'round', shadow: shadow('rgba(0,0,0,0.28)', 0.12, 0.03) };
+      case 'sunset': return { ...plain, fill: makeGradient('#ff5a36', '#fcc419') };
+      case 'gold': return { ...plain, fill: makeGradient('#f7d774', '#b8860b'), stroke: '#7a5a10', strokeWidth: Math.max(1, fs * sc * 0.015), strokeUniform: true, paintFirst: 'stroke' };
+      case 'ocean': return { ...plain, fill: makeGradient('#22d3ee', '#1c3faa') };
+      default: return plain;
+    }
+  }
+  function textFxGroup(o) {
+    const sample = D.ARABIC_RE.test(o.text) ? 'أبج' : 'Abc';
+    return group('fx', t('grp.textFx'), `
+      <div class="fx-grid">${TEXT_FX.map((id) => `<button type="button" class="fx-chip ${(o.textFx || 'none') === id ? 'active' : ''}" data-fx="${id}" title="${esc(t('fx.' + id))}">
+        <span class="fx-sample fx-${id}" style="font-family:'${esc(o.fontFamily)}'">${sample}</span><small>${esc(t('fx.' + id))}</small></button>`).join('')}</div>`);
+  }
+  // ---------- Colour single words ----------
+  function wordsOf(o) {
+    const out = [];
+    const re = /\S+/g;
+    let m;
+    while ((m = re.exec(o.text))) out.push({ text: m[0], start: m.index, end: m.index + m[0].length });
+    return out;
+  }
+  function wordColour(o, w) {
+    const st0 = o.getSelectionStyles ? o.getSelectionStyles(w.start, w.start + 1)[0] : null;
+    return toHex((st0 && st0.fill) || (isGradient(o.fill) || o.fill === 'transparent' ? baseColour(o) : o.fill));
+  }
+  function wordControls(o) {
+    if (o.type !== 'i-text' || !o.setSelectionStyles) return '';
+    const words = wordsOf(o);
+    if (words.length < 2) return '';
+    if (st.wordSel != null && !words[st.wordSel]) st.wordSel = null;
+    const styled = o.styles && Object.values(o.styles).some((l) => l && Object.keys(l).length);
+    return `<div class="field">
+      <label>${esc(t('words.title'))}</label>
+      <div class="word-chips" dir="auto">${words.map((w, i) => `<button type="button" class="word-chip ${st.wordSel === i ? 'active' : ''}" data-word="${i}" style="color:${wordColour(o, w)}">${esc(w.text)}</button>`).join('')}</div>
+      ${st.wordSel != null
+        ? `<div class="color-row" style="margin-top:6px"><input type="color" id="p-wordcolor" value="${wordColour(o, words[st.wordSel])}" aria-label="${esc(t('words.colour'))}">${palette('word')}</div>`
+        : `<p class="muted small" style="margin:4px 0 0">${esc(t('words.hint'))}</p>`}
+      ${styled ? `<button type="button" class="btn btn-sm" data-act="reset-words" style="margin-top:6px">${esc(t('words.reset'))}</button>` : ''}
+    </div>`;
+  }
+  function setWordColour(o, colour) {
+    const w = wordsOf(o)[st.wordSel];
+    if (!w) return;
+    o.setSelectionStyles({ fill: colour }, w.start, w.end);
+    o.dirty = true;
+    canvas.requestRenderAll();
   }
 
   function shadowFor(o) {
@@ -1292,7 +1666,27 @@
       case 'p-opacity': setProp({ opacity: Number(v) }); break;
       case 'p-angle': o.rotate(Number(v) || 0); setProp({}); break;
       case 'p-curve': setProp({ curve: Number(v) }); break;
+      case 'p-wcm': case 'p-hcm': {
+        const cm = parseFloat(String(v).replace(',', '.'));
+        if (cm > 0) {
+          setSizeCm(o, e.target.id === 'p-wcm' ? 'w' : 'h', cm);
+          canvas.requestRenderAll();
+          const z = sizeCm(o);
+          const other = $(e.target.id === 'p-wcm' ? 'p-hcm' : 'p-wcm');
+          if (other) other.value = (Math.round((e.target.id === 'p-wcm' ? z.h : z.w) * 10) / 10).toString();
+          updateQuality();
+          scheduleCheck();
+          renderFloatBar();
+        }
+        break;
+      }
+      case 'p-xcm': case 'p-ycm': {
+        const cm = parseFloat(String(v).replace(',', '.'));
+        if (!Number.isNaN(cm)) { setPosCm(o, e.target.id === 'p-xcm' ? 'x' : 'y', cm); canvas.requestRenderAll(); scheduleCheck(); renderFloatBar(); }
+        break;
+      }
       case 'p-bgcolor': setProp({ backgroundColor: v }); break;
+      case 'p-wordcolor': setWordColour(o, v); scheduleCommit(); break;
       case 'p-border': setProp({ maskBorder: Number(v) }); break;
       case 'p-bordercolor': setProp({ maskBorderColor: v, maskBorder: o.maskBorder || 4 }); break;
       default:
@@ -1316,6 +1710,7 @@
       renderProps();
     }
     if (id === 'p-shadow') setProp({ shadow: e.target.checked ? shadowFor(o) : null }, { commitNow: true });
+    if (id === 'p-ratio') { o.set({ lockRatio: e.target.checked }); applyRatioLock(o); canvas.requestRenderAll(); commit(); }
     if (id === 'p-textbg') {
       setProp({ backgroundColor: e.target.checked ? (inkFor(surfaceHex()) === '#ffffff' ? '#ff5a36' : '#fcc419') : '' }, { commitNow: true });
       renderProps();
@@ -1327,7 +1722,9 @@
       applyFilterState(o, s, { now: true });
       renderProps();
     }
-    if (['p-text', 'p-size', 'p-curve', 'p-spacing', 'p-lh', 'p-opacity', 'p-border', 'p-stroke-w'].includes(id) || e.target.dataset.adjust) commit();
+    if (id === 'p-wordcolor') renderProps();
+    if (['p-text', 'p-size', 'p-curve', 'p-spacing', 'p-lh', 'p-opacity', 'p-border', 'p-stroke-w', 'p-wcm', 'p-hcm', 'p-xcm', 'p-ycm'].includes(id) || e.target.dataset.adjust) commit();
+    if (['p-wcm', 'p-hcm', 'p-xcm', 'p-ycm'].includes(id)) renderProps();
   });
   props.addEventListener('click', serial(async (e) => {
     if (crop) {
@@ -1356,7 +1753,29 @@
         stroke: () => setProp({ stroke: c, strokeWidth: o.strokeWidth || 2, strokeUniform: true, paintFirst: 'stroke' }, { commitNow: true }),
         bg: () => setProp({ backgroundColor: c }, { commitNow: true }),
         border: () => setProp({ maskBorderColor: c, maskBorder: o.maskBorder || 4 }, { commitNow: true }),
+        word: () => { setWordColour(o, c); commit(); },
       })[pal.dataset.pal]();
+      renderProps();
+      return;
+    }
+    const fxBtn = e.target.closest('[data-fx]');
+    if (fxBtn && isText(o)) {
+      const fx = textFxProps(o, fxBtn.dataset.fx);
+      o.set({ shadow: null, stroke: null, strokeWidth: 0 });
+      setProp(fx, { commitNow: true });
+      renderProps();
+      return;
+    }
+    const wordBtn = e.target.closest('[data-word]');
+    if (wordBtn) {
+      const i = Number(wordBtn.dataset.word);
+      st.wordSel = st.wordSel === i ? null : i;
+      renderProps();
+      return;
+    }
+    const bgShapeBtn = e.target.closest('[data-bgshape]');
+    if (bgShapeBtn) {
+      setProp({ bgShape: bgShapeBtn.dataset.bgshape }, { commitNow: true });
       renderProps();
       return;
     }
@@ -1396,7 +1815,11 @@
       renderProps();
       return;
     }
+    if (btn.dataset.alignTo) { alignSelected(btn.dataset.alignTo); return; }
+    if (btn.dataset.distribute) { distributeSelected(btn.dataset.distribute); return; }
     const act = btn.dataset.act;
+    if (act === 'group') { groupSelected(); return; }
+    if (act === 'ungroup') { ungroupSelected(); return; }
     if (act === 'center-h') centerSelected('h');
     if (act === 'center-v') centerSelected('v');
     if (act === 'flip-x') setProp({ flipX: !o.flipX }, { commitNow: true });
@@ -1406,6 +1829,7 @@
     if (act === 'delete') removeSelected();
     if (act === 'fit') fitToArea(o);
     if (act === 'straighten') { setProp({ curve: 0 }, { commitNow: true }); renderProps(); }
+    if (act === 'reset-words') { st.wordSel = null; o.set({ styles: {} }); o.dirty = true; canvas.requestRenderAll(); commit(); renderProps(); }
     if (act === 'crop') startCrop(o);
     if (act === 'removebg') await removeImageBackground(o);
     if (act === 'reset-adjust') { applyFilterState(o, { ...filterState(o), brightness: 0, contrast: 0, saturation: 0, gray: false, sepia: false }, { now: true }); renderProps(); }
@@ -1414,6 +1838,7 @@
   // ---------- Layers ----------
   function shapeName(o) {
     if (o.name === 'Background') return t('layers.background');
+    if (o.type === 'group' && !isSticker(o)) return t('layers.group', { n: o.size() });
     if (isSticker(o)) {
       const sk = SK.STICKERS.find((x) => 'sticker:' + x.id === o.name);
       return sk ? tr(sk.name) : t('tool.stickers');
@@ -1435,14 +1860,57 @@
       ? objs.map((o, i) => {
           const locked = o.selectable === false;
           return `<li data-i="${objs.length - 1 - i}" class="${sel.includes(o) ? 'active' : ''} ${locked ? 'locked' : ''}">
-            <span dir="auto">${esc(layerName(o))}</span>
+            <span class="grip" data-grip title="${esc(t('layers.drag'))}" aria-label="${esc(t('layers.drag'))}">⋮⋮</span>
+            <span dir="auto" class="lname">${esc(layerName(o))}</span>
             <button data-lock class="${locked ? 'on' : ''}" title="${esc(t(locked ? 'layers.unlock' : 'layers.lock'))}" aria-label="${esc(t(locked ? 'layers.unlock' : 'layers.lock'))}">${locked ? LOCK_ICON : UNLOCK_ICON}</button>
             <button data-del title="${esc(t('layers.delete'))}" aria-label="${esc(t('layers.delete'))}">✕</button>
           </li>`;
         }).join('')
       : `<li style="cursor:default" class="muted"><span>${esc(t('layers.empty'))}</span></li>`;
   }
+  // Drag a layer by its handle to change the stacking order (mouse and touch).
+  $('layers').addEventListener('pointerdown', (e) => {
+    const grip = e.target.closest('[data-grip]');
+    if (!grip) return;
+    const li = grip.closest('li');
+    const list = $('layers');
+    const items = [...list.querySelectorAll('li[data-i]')];
+    if (items.length < 2) return;
+    e.preventDefault();
+    grip.setPointerCapture(e.pointerId);
+    const from = items.indexOf(li);
+    let to = from;
+    li.classList.add('dragging');
+    const move = (ev) => {
+      const y = ev.clientY;
+      to = items.length - 1;
+      for (let k = 0; k < items.length; k++) {
+        const r = items[k].getBoundingClientRect();
+        if (y < r.top + r.height / 2) { to = k; break; }
+      }
+      items.forEach((it, k) => it.classList.toggle('drop-before', k === to && to !== from && to < from));
+      items.forEach((it, k) => it.classList.toggle('drop-after', k === to && to !== from && to > from));
+    };
+    const up = () => {
+      grip.removeEventListener('pointermove', move);
+      grip.removeEventListener('pointerup', up);
+      grip.removeEventListener('pointercancel', up);
+      items.forEach((it) => it.classList.remove('dragging', 'drop-before', 'drop-after'));
+      if (to === from) return;
+      // The list shows the top layer first; canvas order is the reverse.
+      const o = canvas.getObjects()[Number(li.dataset.i)];
+      const n = canvas.getObjects().length;
+      canvas.moveTo(o, n - 1 - to);
+      canvas.requestRenderAll();
+      commit();
+      renderLayers();
+    };
+    grip.addEventListener('pointermove', move);
+    grip.addEventListener('pointerup', up);
+    grip.addEventListener('pointercancel', up);
+  });
   $('layers').addEventListener('click', (e) => {
+    if (e.target.closest('[data-grip]')) return;
     const li = e.target.closest('[data-i]');
     if (!li) return;
     const o = canvas.getObjects()[Number(li.dataset.i)];

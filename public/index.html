@@ -53,7 +53,6 @@
 
   <script src="/js/i18n.js"></script>
   <script src="/js/common.js"></script>
-  <script src="/js/photo-mockups.js"></script>
   <script>
     (async () => {
       const { t, tr, esc, money } = POD;
@@ -68,19 +67,18 @@
       }
       const { products, categories } = catalog;
 
-      // Real product photos, recoloured to the product's colour; drawn mockups
-      // only for products that have no photo.
-      const photoUrls = new Map();
-      const photoCfg = (p) => (window.POD_PHOTOS ? POD_PHOTOS.forSide(p.id, p.sides[0].id) : null);
-      function photoUrl(p, hex) {
-        const key = p.id + '|' + hex;
-        if (!photoUrls.has(key)) {
-          photoUrls.set(key, POD_PHOTOS.render(photoCfg(p), hex, { width: 640, cutout: true, crop: 0.04 })
-            .then((cv) => new Promise((r) => cv.toBlob((b) => r(b ? URL.createObjectURL(b) : null), 'image/webp', 0.9)))
-            .catch(() => null));
-        }
-        return photoUrls.get(key);
-      }
+      // Real product photos, recoloured on the server (small cached WebP);
+      // the drawn mockup is the fallback if a picture can't load.
+      const thumbUrl = (p, color) => `/api/thumbs/${encodeURIComponent(p.id)}/${encodeURIComponent(color.id)}.webp`;
+      document.addEventListener('error', (e) => {
+        const img = e.target;
+        if (!(img instanceof HTMLImageElement) || !img.dataset.pid || img.dataset.fallback) return;
+        const p = products.find((x) => x.id === img.dataset.pid);
+        const c = p && p.colors.find((x) => x.id === img.dataset.color);
+        if (!c) return;
+        img.dataset.fallback = '1';
+        img.src = POD.mockupUrl(p.sides[0], c.hex, 'full');
+      }, true);
       // Designs the shopper saved in the editor: shown on their product card.
       const drafts = {};
       for (const d of await POD.drafts.all()) {
@@ -93,26 +91,11 @@
       }
       function cardThumb(p) {
         const d = drafts[p.id];
-        if (!d || !d.url) return thumbImg(p, p.colors[0].hex);
+        if (!d || !d.url) return thumbImg(p, p.colors[0]);
         return `<img alt="" src="${d.url}"><span class="saved-badge">${esc(t('draft.badge'))}</span>`;
       }
-      function thumbImg(p, hex) {
-        if (!photoCfg(p)) return `<img alt="" loading="lazy" src="${POD.mockupUrl(p.sides[0], hex, 'full')}">`;
-        return `<img alt="" class="photo-thumb" data-pid="${p.id}" data-hex="${hex}">`;
-      }
-      // Cards on screen first, then the rest from the top down.
-      async function fillPhotos(root) {
-        const vh = window.innerHeight;
-        const rank = (img) => {
-          const r = img.getBoundingClientRect();
-          return r.bottom > 0 && r.top < vh ? r.top - 1e6 : Math.abs(r.top);
-        };
-        const imgs = [...root.querySelectorAll('img[data-pid]:not([src])')].sort((a, b) => rank(a) - rank(b));
-        for (const img of imgs) {
-          const p = products.find((x) => x.id === img.dataset.pid);
-          const url = await photoUrl(p, img.dataset.hex);
-          if (!img.src) img.src = url || POD.mockupUrl(p.sides[0], img.dataset.hex, 'full');
-        }
+      function thumbImg(p, color, eager) {
+        return `<img alt="" ${eager ? '' : 'loading="lazy" '}decoding="async" class="photo-thumb" data-pid="${esc(p.id)}" data-color="${esc(color.id)}" src="${thumbUrl(p, color)}">`;
       }
 
       function render() {
@@ -131,7 +114,6 @@
               </div>
             </div>
           </a>`).join('');
-        fillPhotos(grid);
       }
       document.getElementById('cats').addEventListener('click', (e) => {
         const b = e.target.closest('[data-cat]');
@@ -143,12 +125,11 @@
       const pick = (id, colorId) => {
         const p = products.find((x) => x.id === id);
         const c = p.colors.find((x) => x.id === colorId) || p.colors[0];
-        return thumbImg(p, c.hex);
+        return thumbImg(p, c, true);
       };
       const hero = document.getElementById('hero-art');
       hero.innerHTML = [pick('tshirt', 'navy'), pick('hoodie', 'cream'), pick('mug', 'white')].join('');
 
-      fillPhotos(hero);
       render();
       document.addEventListener('pod:langchange', render);
     })();

@@ -471,3 +471,57 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 
 .film-row { grid-template-columns: 22px 56px 1fr; cursor: pointer; }
 .film-row input { width: 18px; height: 18px; accent-color: var(--accent); }
+
+/* ---------- Floating bar next to the selection ---------- */
+.float-bar { position: absolute; left: 0; top: 0; z-index: 6; display: flex; gap: 2px; padding: 4px; background: #16181d; border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(16, 24, 40, .28); max-width: calc(100% - 12px); overflow-x: auto; scrollbar-width: none; }
+.float-bar[hidden] { display: none; }
+.float-bar button { display: inline-flex; align-items: center; gap: 5px; border: 0; background: transparent; color: #fff; font: inherit; font-size: 13px; font-weight: 600;
+  padding: 7px 9px; border-radius: 9px; cursor: pointer; white-space: nowrap; min-height: 36px; }
+.float-bar button:hover { background: rgba(255, 255, 255, .12); }
+.float-bar button.danger { color: #ff8a80; }
+@media (pointer: coarse) { .float-bar button { min-height: 42px; padding: 8px 10px; } }
+
+/* ---------- Layout tools ---------- */
+.align-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
+.align-row .btn { padding: 6px 0; justify-content: center; }
+[data-distribute] svg { vertical-align: middle; }
+
+/* ---------- Layers: drag handle ---------- */
+.layers li .grip { cursor: grab; color: var(--muted); padding: 2px 6px; margin-inline-end: 2px; touch-action: none; user-select: none; font-size: 14px; letter-spacing: -2px; }
+.layers li .lname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.layers li.dragging { opacity: .55; }
+.layers li.drop-before { box-shadow: inset 0 3px 0 var(--accent); }
+.layers li.drop-after { box-shadow: inset 0 -3px 0 var(--accent); }
+
+/* ---------- Text styles ---------- */
+.fx-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.fx-chip { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 2px 4px; border: 1px solid var(--line); border-radius: 10px; background: #fff; cursor: pointer; font: inherit; color: var(--ink); min-width: 0; }
+.fx-chip.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.fx-chip small { font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.fx-sample { font-size: 19px; font-weight: 700; line-height: 1.25; color: #16181d; display: block; padding: 0 2px; }
+.fx-shadow { text-shadow: 2px 2px 3px rgba(0,0,0,.35); }
+.fx-neon { color: #ffd1ea; text-shadow: 0 0 4px #ff2d95, 0 0 9px #ff2d95; background: #1c1d22; border-radius: 6px; }
+.fx-extrude { color: #ff5a36; text-shadow: 2px 2px 0 #8c2c16; }
+.fx-retro { color: #ff5a36; -webkit-text-stroke: 1px #16181d; text-shadow: 3px 3px 0 #fcc419; }
+.fx-outline { color: transparent; -webkit-text-stroke: 1.2px #16181d; }
+.fx-sticker { color: #ff5a36; text-shadow: 0 0 0 #fff, 2px 0 #fff, -2px 0 #fff, 0 2px #fff, 0 -2px #fff, 1px 3px 4px rgba(0,0,0,.3); background: #e9ecf1; border-radius: 6px; }
+.fx-sunset, .fx-gold, .fx-ocean { -webkit-background-clip: text; background-clip: text; color: transparent; }
+.fx-sunset { background-image: linear-gradient(#ff5a36, #fcc419); }
+.fx-gold { background-image: linear-gradient(#f7d774, #b8860b); }
+.fx-ocean { background-image: linear-gradient(#22d3ee, #1c3faa); }
+@media (max-width: 380px) { .fx-grid { grid-template-columns: repeat(4, 1fr); } }
+
+/* ---------- Colour single words ---------- */
+.word-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.word-chip { border: 1px solid var(--line); background: #f6f7f9; border-radius: 999px; padding: 4px 10px; font: inherit; font-weight: 700; cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 0 1px rgba(0,0,0,.25); }
+.word-chip.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); background: #fff; }
+
+/* ---------- Text background shapes ---------- */
+.bg-shapes { flex-wrap: wrap; }
+.bg-shapes .btn { gap: 5px; }
+.bgs { display: inline-block; width: 18px; height: 10px; background: currentColor; opacity: .75; }
+.bgs-box { border-radius: 3px; }
+.bgs-pill { border-radius: 6px; }
+.bgs-banner { clip-path: polygon(0 0, 100% 0, 80% 50%, 100% 100%, 0 100%, 20% 50%); }
+.bgs-ticket { -webkit-mask: radial-gradient(circle at 0 50%, transparent 3px, #000 3.5px) left / 51% 100% no-repeat, radial-gradient(circle at 100% 50%, transparent 3px, #000 3.5px) right / 51% 100% no-repeat; mask: radial-gradient(circle at 0 50%, transparent 3px, #000 3.5px) left / 51% 100% no-repeat, radial-gradient(circle at 100% 50%, transparent 3px, #000 3.5px) right / 51% 100% no-repeat; }

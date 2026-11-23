@@ -26,18 +26,21 @@ Requires Node 18+. There is no database to set up: data is stored under `data/` 
 
 **Storefront (`/`)**: 21 products in four categories: t-shirt, oversized t-shirt, polo, kids t-shirt, kids hoodie, baby onesie, hoodie, zip hoodie, sweatshirt, shorts, denim jacket (back), apron, cap, mug, cushion, framed poster, water bottle, tote bag, phone case, mouse pad and notebook. Each has colours, sizes and a mockup drawn in its colour.
 
-Product cards, the editor and the cart thumbnails all show **real product photos**, recoloured to the chosen colour (drawn mockups are only a fallback for products without a photo).
+Product cards, the editor and the cart thumbnails all show **real product photos**, recoloured to the chosen colour (card pictures are made once on the server by `src/thumbs.js` and served from `/api/thumbs/<product>/<colour>.webp`); drawn mockups are only a fallback for products without a photo.
 
 **Saved designs**: the editor saves the design in the shopper's browser as they work (IndexedDB, so uploaded photos fit), and the **Save** button takes them back to the products page, where the card shows their design with a "Saved design" badge. Opening the product again restores it. The draft is cleared once the design goes into the cart.
 
 **Design editor (`/editor`)**, built on Fabric.js:
-- **16 self-hosted fonts** (8 Arabic, 8 English) with a visual font picker. Arabic text is set right-to-left with properly joined letters, and switches to an Arabic font automatically if typed into an English-only one.
-- **Templates** to start from (birthday, Ramadan Kareem, team jersey, family badge and more, in Arabic and English).
+- **28 self-hosted fonts** (14 Arabic, 14 English) with a visual font picker. Arabic text is set right-to-left with properly joined letters, and switches to an Arabic font automatically if typed into an English-only one.
+- **22 templates** to start from: birthday, Ramadan, Eid, wedding, graduation, champions, gym, business logos, café sign, best mom/dad, neon "good vibes", kids and more, in Arabic and English.
 - Text presets with size, colour, bold/italic/underline, alignment, letter spacing, line height, outline and shadow. Double-click text to type directly on the product.
-- **Snap guides** to the centre and edges of the print area, and **zoom**.
-- **Lock** layers so they can't be moved by accident.
-- **Curved text** (arcs up or down, works with Arabic), **gradient** colours, hollow outline text, a rounded **background box** behind text, and a quick colour palette.
-- **Sticker library**: 36 original vector stickers in six categories (Egypt, Ramadan, football, love, birthday, fun).
+- **Snap guides** to the centre and edges of the print area and to the edges and centres of the other elements, and **zoom**.
+- **Floating bar** next to the selected element: edit text (types straight on the product), style, duplicate, forward/back, delete, group/ungroup. Bigger handles on touch screens.
+- **Layout tools**: exact width, height and position in cm, keep proportions on/off (shapes can stretch), align to the print area or to each other, even spacing for 3+ elements, and group/ungroup.
+- **Layers**: drag to reorder (mouse or finger), and lock so they can't be moved by accident.
+- **Text styles** in one tap: shadow, neon, 3D, retro, outline, sticker, and sunset/gold/ocean gradients. **Colour single words** differently.
+- **Curved text** (arcs up or down, works with Arabic), **gradient** colours, hollow outline text, a **background shape** behind text (box, pill, ribbon, ticket), and a quick colour palette.
+- **Sticker library**: 61 original vector stickers in 11 categories (Egypt, Ramadan, Eid, football, sports, love, wedding, birthday, graduation, nature, fun). 18 shapes, including ribbon, shield, speech bubble and cloud.
 - **Photo tools**: crop (free or square), shape a photo into a circle, heart, star, hexagon, arch or rounded frame with an optional border, brightness/contrast/saturation, and smart **background removal** for photos on a plain background.
 - **Phone-first layout** on small screens: bottom toolbar, settings in a slide-up panel that zooms the view to the print area, pinch to zoom, bigger touch targets.
 - **Print guides**: the print edge (red), a **safe zone** (green, keep text inside) and a **bleed** line (blue) for edge-to-edge products. A live **print check** flags low-resolution images, anything that will be cut off or isn't printed, text too close to the edge and text too small to read, and outlines the problem elements. Selected photos show a **DPI badge**. Shoppers are asked to confirm before ordering a design with problems.
@@ -87,6 +90,7 @@ server.js            entry point (env config)
 src/app.js           Express routes: catalog, designs, orders, admin
 src/products.js      catalog, mockup SVGs, print areas, EGP pricing
 src/egypt.js         governorates, mobile number validation
+src/thumbs.js        recoloured product-photo card pictures (sharp)
 src/i18n.js          server messages in English and Arabic
 public/js/i18n.js    all interface text in English and Arabic
 public/js/templates.js  fonts, shapes, text presets, templates

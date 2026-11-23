@@ -22,6 +22,7 @@ const {
 const { GOVERNORATES, normalizeEgyptMobile } = require('./egypt');
 const { FIELDS, langOf, format } = require('./i18n');
 // Loaded on first use: the shop keeps working even if the image library cannot load on a server.
+const thumbs = require('./thumbs');
 let printfilesModule = null;
 const printfiles = new Proxy({}, { get: (_, key) => (printfilesModule ||= require('./printfiles'))[key] });
 
@@ -184,6 +185,22 @@ function createApp({ dataDir, adminPassword }) {
     res.set('X-Content-Type-Options', 'nosniff');
     res.set('Referrer-Policy', 'same-origin');
     next();
+  });
+
+  // ---------- Product card pictures ----------
+  // The real photo recoloured to a product colour, made once on the server.
+  app.get('/api/thumbs/:productId/:colorId.webp', async (req, res, next) => {
+    try {
+      const product = getProduct(req.params.productId);
+      const color = product && product.colors.find((c) => c.id === req.params.colorId);
+      if (!color) throw new HttpError(404, 'notFound');
+      const img = await thumbs.cardImage(product.id, product.sides[0].id, color.hex);
+      if (!img) throw new HttpError(404, 'notFound');
+      res.set('Cache-Control', 'public, max-age=86400, no-transform');
+      res.type('image/webp').send(img);
+    } catch (e) {
+      next(e);
+    }
   });
 
   // ---------- Catalog ----------

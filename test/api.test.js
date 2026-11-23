@@ -341,3 +341,13 @@ test('items can switch between DTG and DTF; DTF/DTG files and the shared film ar
   const after = (await (await admin('/api/admin/dtf-items')).json()).items.find((i) => i.id === itemId);
   assert.match(after.filmBatch.id, /^F\d+$/);
 });
+
+test('product card pictures are recoloured photos', async () => {
+  const res = await fetch(base + '/api/thumbs/hoodie/black.webp');
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(res.headers.get('content-type'), 'image/webp');
+  const meta = await require('sharp')(Buffer.from(await res.arrayBuffer())).metadata();
+  assert.deepStrictEqual([meta.width, meta.height, meta.hasAlpha], [640, 640, true]);
+  assert.strictEqual((await fetch(base + '/api/thumbs/hoodie/purple.webp')).status, 404);
+  assert.strictEqual((await fetch(base + '/api/thumbs/nope/black.webp')).status, 404);
+});

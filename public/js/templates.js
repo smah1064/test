@@ -7,8 +7,8 @@
   'use strict';
 
   const FONTS = {
-    arabic: ['Cairo', 'Tajawal', 'Lalezar', 'Reem Kufi', 'El Messiri', 'Amiri', 'Aref Ruqaa', 'Rakkas'],
-    english: ['Montserrat', 'Bebas Neue', 'Oswald', 'Playfair Display', 'Roboto Slab', 'Pacifico', 'Lobster', 'Permanent Marker'],
+    arabic: ['Cairo', 'Tajawal', 'Lalezar', 'Reem Kufi', 'El Messiri', 'Amiri', 'Aref Ruqaa', 'Rakkas', 'Changa', 'Marhey', 'Lemonada', 'Kufam', 'Jomhuria', 'Vibes'],
+    english: ['Montserrat', 'Bebas Neue', 'Oswald', 'Playfair Display', 'Roboto Slab', 'Pacifico', 'Lobster', 'Permanent Marker', 'Anton', 'Righteous', 'Dancing Script', 'Bungee', 'Abril Fatface', 'Caveat'],
   };
   const BUNDLED = new Set([...FONTS.arabic, ...FONTS.english]);
   const ARABIC_RE = /[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]/;
@@ -57,6 +57,12 @@
     burst: { name: { en: 'Burst', ar: 'انفجار' }, icon: '<path d="M12 2l2 5 5-2-2 5 5 2-5 2 2 5-5-2-2 5-2-5-5 2 2-5-5-2 5-2-2-5 5 2z"/>', make: (f) => new fabric.Polygon(starPoints(12, 50, 36), { fill: f }) },
     arrow: { name: { en: 'Arrow', ar: 'سهم' }, icon: '<path d="M3 10h11V5l7 7-7 7v-5H3z"/>', make: (f) => new fabric.Polygon([{ x: 0, y: 30 }, { x: 60, y: 30 }, { x: 60, y: 5 }, { x: 100, y: 50 }, { x: 60, y: 95 }, { x: 60, y: 70 }, { x: 0, y: 70 }], { fill: f }) },
     line: { name: { en: 'Line', ar: 'خط' }, icon: '<rect x="3" y="11" width="18" height="2.5"/>', make: (f) => new fabric.Rect({ width: 140, height: 6, fill: f }) },
+    ribbon: { name: { en: 'Ribbon', ar: 'شريط' }, icon: '<path d="M2 8h20l-3 4 3 4H2l3-4z"/>', make: (f) => new fabric.Polygon([{ x: 0, y: 0 }, { x: 200, y: 0 }, { x: 180, y: 30 }, { x: 200, y: 60 }, { x: 0, y: 60 }, { x: 20, y: 30 }], { fill: f }) },
+    shield: { name: { en: 'Shield', ar: 'درع' }, icon: '<path d="M12 2l8 3v7c0 5-4 8-8 10-4-2-8-5-8-10V5z"/>', make: (f) => new fabric.Path('M50 0 L100 18 L100 55 C100 85 75 105 50 115 C25 105 0 85 0 55 L0 18 Z', { fill: f }) },
+    bubble: { name: { en: 'Speech bubble', ar: 'فقاعة كلام' }, icon: '<path d="M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H10l-5 4v-4H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/>', make: (f) => new fabric.Path('M14 0 H126 Q140 0 140 14 V70 Q140 84 126 84 H50 L24 106 L28 84 H14 Q0 84 0 70 V14 Q0 0 14 0 Z', { fill: f }) },
+    diamond: { name: { en: 'Diamond', ar: 'معيّن' }, icon: '<path d="M12 2l9 10-9 10-9-10z"/>', make: (f) => new fabric.Polygon([{ x: 50, y: 0 }, { x: 100, y: 60 }, { x: 50, y: 120 }, { x: 0, y: 60 }], { fill: f }) },
+    cloud: { name: { en: 'Cloud', ar: 'سحابة' }, icon: '<path d="M7 18a5 5 0 0 1-.6-10A6 6 0 0 1 18 9a4.5 4.5 0 0 1-.5 9z"/>', make: (f) => new fabric.Path('M30 80 A30 30 0 0 1 26 20 A36 36 0 0 1 94 22 A28 28 0 0 1 112 80 Z', { fill: f }) },
+    pentagon: { name: { en: 'Pentagon', ar: 'خماسي' }, icon: '<path d="M12 2l10 7.5-4 12H6l-4-12z"/>', make: (f) => new fabric.Polygon(starPoints(5, 50, 50), { fill: f }) },
   };
 
   // ---------- Text presets ----------
@@ -70,11 +76,18 @@
     { group: 'arabic', sample: 'خط كوفي', size: 0.16, font: 'Reem Kufi', weight: 'bold' },
     { group: 'arabic', sample: 'خط نسخ أنيق', size: 0.13, font: 'Amiri' },
     { group: 'arabic', sample: 'ركّاز', size: 0.2, font: 'Rakkas', outline: true },
+    { group: 'arabic', sample: 'خط مرح', size: 0.16, font: 'Marhey', weight: 'bold' },
+    { group: 'arabic', sample: 'ليمونادة', size: 0.13, font: 'Lemonada', weight: 'bold' },
+    { group: 'arabic', sample: 'جُمهورية', size: 0.3, font: 'Jomhuria' },
     { group: 'english', sample: 'BOLD', size: 0.26, font: 'Bebas Neue', outline: true },
     { group: 'english', sample: 'Script', size: 0.15, font: 'Pacifico' },
     { group: 'english', sample: 'Classic Serif', size: 0.12, font: 'Playfair Display', italic: true },
     { group: 'english', sample: 'Marker', size: 0.13, font: 'Permanent Marker' },
     { group: 'english', sample: 'CONDENSED', size: 0.14, font: 'Oswald', weight: 'bold', spacing: 120 },
+    { group: 'english', sample: 'IMPACT', size: 0.2, font: 'Anton' },
+    { group: 'english', sample: 'BUNGEE', size: 0.13, font: 'Bungee' },
+    { group: 'english', sample: 'Elegant', size: 0.16, font: 'Dancing Script', weight: 'bold' },
+    { group: 'english', sample: 'handwritten', size: 0.15, font: 'Caveat', weight: 'bold' },
   ];
 
   // ---------- Templates ----------
@@ -157,6 +170,140 @@
         T('أحلى ماما', 'Aref Ruqaa', 0.19, 0.5, 0.76, { weight: 'bold' }),
       ],
     },
+    {
+      id: 'eid-ar',
+      name: { en: 'Eid Mubarak (Arabic)', ar: 'عيد مبارك' },
+      items: [
+        S('crescent', 0.26, 0.5, 0.2, { fill: GOLD }),
+        S('star', 0.08, 0.66, 0.12, { fill: GOLD }),
+        T('عيد مبارك', 'Marhey', 0.26, 0.5, 0.52, { weight: 'bold', fill: '#2f9e44' }),
+        T('كل عام وأنتم بخير', 'Changa', 0.085, 0.5, 0.74, { bg: GOLD, bgShape: 'banner' }),
+      ],
+    },
+    {
+      id: 'eid-en',
+      name: { en: 'Eid Mubarak', ar: 'Eid Mubarak' },
+      items: [
+        S('crescent', 0.22, 0.5, 0.22, { fill: GOLD }),
+        T('EID', 'Abril Fatface', 0.3, 0.5, 0.5, { fill: GOLD, spacing: 120 }),
+        T('Mubarak', 'Dancing Script', 0.17, 0.5, 0.72, { weight: 'bold' }),
+      ],
+    },
+    {
+      id: 'wedding-ar',
+      name: { en: 'Wedding names (Arabic)', ar: 'أسماء العروسين' },
+      items: [
+        S('heart', 0.16, 0.5, 0.5, { fill: '#e64980' }),
+        T('أحمد', 'Aref Ruqaa', 0.2, 0.5, 0.3, { weight: 'bold' }),
+        T('سارة', 'Aref Ruqaa', 0.2, 0.5, 0.7, { weight: 'bold' }),
+        T('٢٠٢٦', 'Changa', 0.07, 0.5, 0.9, { fill: GOLD, weight: 'bold' }),
+      ],
+    },
+    {
+      id: 'wedding-en',
+      name: { en: 'Mr & Mrs', ar: 'Mr & Mrs' },
+      items: [
+        T('Mr & Mrs', 'Dancing Script', 0.22, 0.5, 0.36, { weight: 'bold' }),
+        S('line', 0.5, 0.5, 0.55, { fill: GOLD }),
+        T('AHMED + SARA', 'Montserrat', 0.075, 0.5, 0.68, { weight: 'bold', spacing: 250 }),
+        T('EST. 2026', 'Montserrat', 0.05, 0.5, 0.82, { fill: GOLD, spacing: 300 }),
+      ],
+    },
+    {
+      id: 'grad-ar',
+      name: { en: 'Graduation (Arabic)', ar: 'مبروك التخرج' },
+      items: [
+        S('shield', 0.42, 0.5, 0.36, { fill: '#1c3faa' }),
+        T('٢٠٢٦', 'Lalezar', 0.13, 0.5, 0.36, { fill: '#ffffff' }),
+        T('مبروك التخرج', 'Lemonada', 0.14, 0.5, 0.74, { weight: 'bold' }),
+        T('دفعة الأبطال', 'Tajawal', 0.07, 0.5, 0.88, { fill: ACCENT, weight: 'bold' }),
+      ],
+    },
+    {
+      id: 'grad-en',
+      name: { en: 'Class of 2026', ar: 'Class of 2026' },
+      items: [
+        T('CLASS OF', 'Bungee', 0.11, 0.5, 0.3),
+        T('2026', 'Bungee', 0.34, 0.5, 0.54, { fill: ACCENT, extrude: '#16181d' }),
+        T('Graduate', 'Dancing Script', 0.14, 0.5, 0.8, { weight: 'bold' }),
+      ],
+    },
+    {
+      id: 'champions',
+      name: { en: 'Champions', ar: 'الأبطال' },
+      items: [
+        S('shield', 0.5, 0.5, 0.38, { fill: ACCENT }),
+        S('star', 0.12, 0.5, 0.3, { fill: '#ffffff' }),
+        T('الأبطال', 'Kufam', 0.11, 0.5, 0.47, { fill: '#ffffff', weight: 'bold' }),
+        T('CHAMPIONS', 'Anton', 0.13, 0.5, 0.82, { spacing: 100 }),
+      ],
+    },
+    {
+      id: 'gym',
+      name: { en: 'No pain no gain', ar: 'No pain no gain' },
+      items: [
+        T('NO PAIN', 'Anton', 0.24, 0.5, 0.32, { spacing: 40 }),
+        T('NO GAIN', 'Anton', 0.24, 0.5, 0.58, { fill: ACCENT, spacing: 40 }),
+        S('line', 0.6, 0.5, 0.76, { fill: ACCENT }),
+        T('TRAIN HARD', 'Montserrat', 0.06, 0.5, 0.86, { weight: 'bold', spacing: 400 }),
+      ],
+    },
+    {
+      id: 'brand-en',
+      name: { en: 'Business logo', ar: 'شعار شركة (إنجليزي)' },
+      items: [
+        S('ring', 0.8, 0.5, 0.5, { stroke: true }),
+        T('YOUR BRAND', 'Righteous', 0.11, 0.5, 0.44),
+        T('EST. 2026', 'Montserrat', 0.055, 0.5, 0.6, { fill: ACCENT, weight: 'bold', spacing: 300 }),
+      ],
+    },
+    {
+      id: 'brand-ar',
+      name: { en: 'Business logo (Arabic)', ar: 'شعار شركة' },
+      items: [
+        S('rounded', 0.62, 0.5, 0.4, { fill: ACCENT }),
+        T('اسم شركتك', 'Changa', 0.13, 0.5, 0.4, { fill: '#ffffff', weight: 'bold' }),
+        T('جودة وثقة منذ ٢٠٢٦', 'Tajawal', 0.07, 0.5, 0.76, { weight: 'bold' }),
+      ],
+    },
+    {
+      id: 'cafe',
+      name: { en: 'Café sign', ar: 'لافتة مقهى' },
+      items: [
+        S('ribbon', 0.86, 0.5, 0.56, { fill: ACCENT }),
+        T('قهوة', 'Lalezar', 0.24, 0.5, 0.3),
+        T('COFFEE HOUSE', 'Righteous', 0.07, 0.5, 0.56, { fill: '#ffffff', spacing: 150 }),
+        T('منذ ٢٠٢٦', 'Tajawal', 0.06, 0.5, 0.78, { weight: 'bold' }),
+      ],
+    },
+    {
+      id: 'dad',
+      name: { en: 'Best Dad', ar: 'أحسن بابا' },
+      items: [
+        T('أحسن', 'Lemonada', 0.12, 0.5, 0.3, { weight: 'bold' }),
+        T('بابا', 'Jomhuria', 0.5, 0.5, 0.56, { fill: ACCENT }),
+        S('star', 0.1, 0.18, 0.2, { fill: GOLD, angle: -12 }),
+        S('star', 0.08, 0.84, 0.74, { fill: GOLD, angle: 14 }),
+      ],
+    },
+    {
+      id: 'neon-vibes',
+      name: { en: 'Good vibes (neon)', ar: 'Good vibes' },
+      items: [
+        T('good', 'Caveat', 0.2, 0.5, 0.34, { fill: '#ffd1ea', glow: '#ff2d95', weight: 'bold' }),
+        T('vibes', 'Caveat', 0.3, 0.5, 0.58, { fill: '#c5f6fa', glow: '#22b8cf', weight: 'bold' }),
+        T('ONLY', 'Bungee', 0.08, 0.5, 0.8, { fill: '#fff3bf', glow: '#fcc419' }),
+      ],
+    },
+    {
+      id: 'little-hero',
+      name: { en: 'Little hero (kids)', ar: 'بطل صغير' },
+      items: [
+        S('burst', 0.66, 0.5, 0.44, { fill: '#fcc419' }),
+        T('بطل', 'Lalezar', 0.24, 0.5, 0.4, { fill: '#e03131' }),
+        T('صغير', 'Marhey', 0.12, 0.5, 0.82, { weight: 'bold', curve: -30 }),
+      ],
+    },
   ];
 
   /**
@@ -181,7 +328,14 @@
           textAlign: 'center',
           charSpacing: ARABIC_RE.test(i.text) ? 0 : i.spacing || 0,
           direction: ARABIC_RE.test(i.text) ? 'rtl' : 'ltr',
+          backgroundColor: i.bg || '',
+          bgShape: i.bgShape || 'box',
+          curve: i.curve || 0,
         });
+        const fs = o.fontSize;
+        if (i.glow) o.set({ shadow: new fabric.Shadow({ color: i.glow, blur: fs * 0.42, offsetX: 0, offsetY: 0 }), textFx: 'neon' });
+        if (i.shadow) o.set({ shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.38)', blur: fs * 0.14, offsetX: fs * 0.06, offsetY: fs * 0.06 }), textFx: 'shadow' });
+        if (i.extrude) o.set({ shadow: new fabric.Shadow({ color: i.extrude, blur: 0, offsetX: fs * 0.07, offsetY: fs * 0.07 }), textFx: 'extrude' });
         if (o.width > area.w * 0.94) o.scaleToWidth(area.w * 0.94);
       } else {
         const def = SHAPES[i.shape];
