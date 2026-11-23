@@ -1,18 +1,21 @@
 <!doctype html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Your order · OneOff Print</title>
+  <title>OneOff Print</title>
+  <script>(function(){var l;try{l=localStorage.getItem('pod-lang')}catch(e){}l=l==='en'?'en':'ar';var d=document.documentElement;d.lang=l;d.dir=l==='ar'?'rtl':'ltr'})()</script>
+  <link rel="stylesheet" href="/fonts/fonts.css">
   <link rel="stylesheet" href="/css/styles.css">
 </head>
-<body>
+<body data-title-key="order.pageTitle">
   <header class="site-header">
     <div class="container inner">
       <a class="brand" href="/"><span class="brand-mark">1</span>OneOff Print</a>
       <nav>
-        <a href="/#products">Products</a>
-        <a class="cart-link" href="/cart">Cart <span class="badge" data-cart-count hidden>0</span></a>
+        <a href="/#products" data-i18n="nav.products"></a>
+        <a class="cart-link" href="/cart"><span data-i18n="nav.cart"></span> <span class="badge" data-cart-count hidden>0</span></a>
+        <button class="btn btn-sm lang-toggle" data-lang-toggle data-i18n="lang.other"></button>
       </nav>
     </div>
   </header>
@@ -21,55 +24,69 @@
     <div id="content"><div class="empty"><div class="spinner"></div></div></div>
   </main>
 
-  <footer class="site-footer"><div class="container">OneOff Print: print on demand, one item at a time.</div></footer>
+  <footer class="site-footer"><div class="container" data-i18n="footer"></div></footer>
 
+  <script src="/js/i18n.js"></script>
   <script src="/js/common.js"></script>
   <script>
     (async () => {
-      const { money, esc } = POD;
+      const { money, esc, t, tr } = POD;
       const params = new URLSearchParams(location.search);
       const content = document.getElementById('content');
       const STEPS = ['queued', 'printing', 'printed', 'shipped'];
-      const LABEL = { queued: 'In the print queue', printing: 'On the press now', printed: 'Printed, packing', shipped: 'Shipped' };
-      const ORDER_LABEL = { received: 'Order received', in_production: 'In production', shipped: 'Shipped' };
+      let order = null;
+      let error = null;
+
+      function render() {
+        if (error) {
+          content.innerHTML = `<div class="card empty"><h2>${esc(t('order.notFound'))}</h2><p class="muted">${esc(error)}</p><a class="btn" href="/">${esc(t('order.back'))}</a></div>`;
+          return;
+        }
+        const o = order;
+        const place = [o.customer.city, tr(o.customer.governorate)].filter(Boolean).join('، ');
+        content.innerHTML = `
+          <div class="page-head">
+            ${params.get('new') ? `<p class="notice" style="margin-bottom:16px">${esc(t('order.thanks'))}</p>` : ''}
+            <h1>${esc(t('order.title', { n: o.number }))}</h1>
+            <p class="muted">${esc(t('order.meta', { status: t('order.' + o.status), date: POD.date(o.createdAt), n: POD.num(o.items.length) }))}</p>
+          </div>
+          <div class="card order-items">
+            ${o.items.map((item, i) => {
+              const reached = STEPS.indexOf(item.status);
+              return `
+              <div class="cart-item">
+                <img src="${esc(item.sides[0].previewUrl)}" alt="">
+                <div>
+                  <h3>${POD.num(i + 1)}. ${esc(tr(item.productName))}</h3>
+                  <div class="meta">${esc(tr(item.color.name))} · ${esc(tr(item.size.label))} · ${esc(item.sides.map((s) => tr(s.name)).join(' + '))}</div>
+                  <div class="status-label" style="margin-top:10px">${esc(t('item.' + item.status))}</div>
+                  <div class="status-steps">${STEPS.map((s, k) => `<div class="${k <= reached ? 'done' : ''}" title="${esc(t('item.' + s))}"></div>`).join('')}</div>
+                </div>
+                <div class="price">${esc(money(item.price))}</div>
+              </div>`;
+            }).join('')}
+          </div>
+          <div class="card summary" style="margin-top:16px;position:static">
+            <div class="line"><span>${esc(t('checkout.subtotal'))}</span><span>${esc(money(o.subtotal))}</span></div>
+            <div class="line"><span>${esc(t('checkout.shipping'))}</span><span>${o.shipping ? esc(money(o.shipping)) : esc(t('free'))}</span></div>
+            <div class="line total"><span>${esc(t('checkout.total'))}</span><span>${esc(money(o.total))}</span></div>
+            ${o.payment && o.payment.method === 'cod' ? `<div class="pay-box"><strong>${esc(t('order.payCod', { amount: money(o.total) }))}</strong><span>${esc(t('checkout.codText'))}</span></div>` : ''}
+            <p class="muted small" style="margin-bottom:0">${esc(t('order.deliverTo', { name: o.customer.name, place }))}</p>
+          </div>`;
+      }
 
       async function load() {
         try {
-          const o = await POD.api('/api/orders/' + encodeURIComponent(params.get('id') || ''));
-          content.innerHTML = `
-            <div class="page-head">
-              ${params.get('new') ? '<p class="notice" style="margin-bottom:16px">Thanks for your order! Bookmark this page to follow each item through production.</p>' : ''}
-              <h1>Order ${esc(o.number)}</h1>
-              <p class="muted">${ORDER_LABEL[o.status]} · placed ${new Date(o.createdAt).toLocaleString()} · ${o.items.length} item${o.items.length > 1 ? 's' : ''}, each printed individually</p>
-            </div>
-            <div class="card order-items">
-              ${o.items.map((item, i) => {
-                const reached = STEPS.indexOf(item.status);
-                return `
-                <div class="cart-item">
-                  <img src="${esc(item.sides[0].previewUrl)}" alt="">
-                  <div>
-                    <h3>${i + 1}. ${esc(item.productName)}</h3>
-                    <div class="meta">${esc(item.color.name)} · ${esc(item.size.label)} · ${esc(item.sides.map((s) => s.name).join(' + '))}</div>
-                    <div class="status-label" style="margin-top:10px">${LABEL[item.status]}</div>
-                    <div class="status-steps">${STEPS.map((s, k) => `<div class="${k <= reached ? 'done' : ''}" title="${LABEL[s]}"></div>`).join('')}</div>
-                  </div>
-                  <div class="price">${money(item.price)}</div>
-                </div>`;
-              }).join('')}
-            </div>
-            <div class="card summary" style="margin-top:16px;position:static">
-              <div class="line"><span>Subtotal</span><span>${money(o.subtotal)}</span></div>
-              <div class="line"><span>Shipping</span><span>${o.shipping ? money(o.shipping) : 'Free'}</span></div>
-              <div class="line total"><span>Total</span><span>${money(o.total)}</span></div>
-              <p class="muted small" style="margin-bottom:0">Shipping to ${esc(o.customer.name)}, ${esc(o.customer.city)}, ${esc(o.customer.country)}</p>
-            </div>`;
+          order = await POD.api('/api/orders/' + encodeURIComponent(params.get('id') || ''));
+          error = null;
         } catch (e) {
-          content.innerHTML = `<div class="card empty"><h2>Order not found</h2><p class="muted">${esc(e.message)}</p><a class="btn" href="/">Back to the shop</a></div>`;
+          error = e.message;
         }
+        render();
       }
       await load();
       setInterval(load, 30000);
+      document.addEventListener('pod:langchange', render);
     })();
   </script>
 </body>

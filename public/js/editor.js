@@ -16,19 +16,23 @@
   const MAX_UPLOAD_PX = 3000;
   const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
   const HISTORY_LIMIT = 60;
-  const EXTRA_PROPS = ['name'];
-  const FONTS = ['Arial', 'Helvetica', 'Verdana', 'Trebuchet MS', 'Georgia', 'Times New Roman', 'Palatino Linotype', 'Courier New', 'Impact', 'Comic Sans MS', 'Brush Script MT'];
+  const SNAP_PX = 7;
+  const EXTRA_PROPS = ['name', 'selectable', 'evented'];
   const $ = (id) => document.getElementById(id);
-  const { esc, money, toast } = POD;
+  const { esc, money, toast, t, tr } = POD;
+  const D = window.POD_DESIGN;
+  const isText = (o) => o && (o.type === 'i-text' || o.type === 'text' || o.type === 'textbox');
 
   // ---------- Fabric defaults ----------
   fabric.Object.prototype.objectCaching = false;
+  fabric.enableGLFiltering = false; // canvas filters work on images of any size
   Object.assign(fabric.Object.prototype, {
     transparentCorners: false,
     cornerColor: '#ffffff',
     cornerStrokeColor: '#ff5a36',
     borderColor: '#ff5a36',
-    cornerSize: 11,
+    cornerSize: 12,
+    touchCornerSize: 28,
     cornerStyle: 'circle',
     borderScaleFactor: 1.5,
     padding: 4,
@@ -59,6 +63,8 @@
     exporting: false,
     silent: false,
     dirty: false,
+    zoom: 1, // relative to "fit to screen"
+    guides: null,
   };
 
   if (params.get('design')) {
@@ -72,9 +78,9 @@
       }
       const idx = Number(params.get('cart'));
       const cart = POD.getCart();
-      if (Number.isInteger(idx) && cart[idx] && cart[idx].designId === saved.id) st.editingCartIndex = idx;
+      if (params.get('cart') !== null && Number.isInteger(idx) && cart[idx] && cart[idx].designId === saved.id) st.editingCartIndex = idx;
     } catch (e) {
-      toast('Could not open that design: ' + e.message, 'error');
+      toast(t('msg.openFailed', { msg: e.message }), 'error');
     }
   }
   st.colorId = st.product.colors.some((c) => c.id === st.colorId) ? st.colorId : st.product.colors[0].id;
@@ -99,12 +105,21 @@
 
   function fit() {
     const stage = $('stage');
-    const z = Math.max(0.3, Math.min((stage.clientWidth - 32) / W, (stage.clientHeight - 32) / H, 1.6));
+    const base = Math.max(0.3, Math.min((stage.clientWidth - 32) / W, (stage.clientHeight - 32) / H, 1.6));
+    const z = base * st.zoom;
     canvas.setDimensions({ width: Math.round(W * z), height: Math.round(H * z) });
     canvas.setZoom(z);
+    $('zoom-label').textContent = Math.round(st.zoom * 100) + '%';
     canvas.requestRenderAll();
   }
-  new ResizeObserver(fit).observe($('stage'));
+  new ResizeObserver(() => fit()).observe($('stage'));
+  const setZoom = (z) => {
+    st.zoom = Math.min(4, Math.max(0.5, z));
+    fit();
+  };
+  $('zoom-in').addEventListener('click', () => setZoom(st.zoom * 1.25));
+  $('zoom-out').addEventListener('click', () => setZoom(st.zoom / 1.25));
+  $('zoom-fit').addEventListener('click', () => setZoom(1));
 
   function clipRect(a) {
     return new fabric.Rect({
@@ -113,7 +128,7 @@
     });
   }
 
-  // Print-area guide, drawn on top of everything while editing.
+  // Print-area guide and snap lines, drawn on top while editing.
   canvas.on('after:render', (opt) => {
     if (st.preview || st.exporting) return;
     const ctx = (opt && opt.ctx) || canvas.contextContainer;
@@ -130,10 +145,47 @@
     else ctx.rect(a.x, a.y, a.w, a.h);
     ctx.stroke();
     const s = sideDef();
-    ctx.font = `600 ${11 * px}px system-ui, sans-serif`;
+    ctx.font = `600 ${11 * px}px Cairo, system-ui, sans-serif`;
     ctx.fillStyle = 'rgba(255, 90, 54, .95)';
-    ctx.fillText(`Print area · ${s.printWidthIn} × ${s.printHeightIn} in`, a.x, a.y - 6 * px);
+    ctx.fillText(t('printArea', { w: POD.num(s.printWidthIn * 2.54), h: POD.num(s.printHeightIn * 2.54) }), a.x, a.y - 6 * px);
+    if (st.guides) {
+      ctx.setLineDash([]);
+      ctx.strokeStyle = '#d946ef';
+      ctx.lineWidth = 1 * px;
+      ctx.beginPath();
+      for (const x of st.guides.v) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+      for (const y of st.guides.h) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+      ctx.stroke();
+    }
     ctx.restore();
+  });
+
+  // Snap to the centre and edges of the print area while dragging.
+  canvas.on('object:moving', (e) => {
+    const o = e.target;
+    const a = area();
+    const th = SNAP_PX / canvas.getZoom();
+    const guides = { v: [], h: [] };
+    const c = o.getCenterPoint();
+    const r = o.getBoundingRect(true, true);
+    let dx = 0;
+    let dy = 0;
+    const tryX = (value, target) => { if (!dx && Math.abs(value - target) < th) { dx = target - value; guides.v.push(target); } };
+    const tryY = (value, target) => { if (!dy && Math.abs(value - target) < th) { dy = target - value; guides.h.push(target); } };
+    tryX(c.x, a.x + a.w / 2);
+    tryX(r.left, a.x);
+    tryX(r.left + r.width, a.x + a.w);
+    tryY(c.y, a.y + a.h / 2);
+    tryY(r.top, a.y);
+    tryY(r.top + r.height, a.y + a.h);
+    if (dx || dy) o.setPositionByOrigin(new fabric.Point(c.x + dx, c.y + dy), 'center', 'center');
+    st.guides = guides.v.length || guides.h.length ? guides : null;
+  });
+  canvas.on('mouse:up', () => {
+    if (st.guides) {
+      st.guides = null;
+      canvas.requestRenderAll();
+    }
   });
 
   // ---------- Mockup background / overlay ----------
@@ -175,7 +227,8 @@
     });
   }
 
-  function loadObjects(objects) {
+  async function loadObjects(objects) {
+    await D.ensureFontsFor(objects || []);
     return new Promise((resolve) => {
       fabric.util.enlivenObjects(objects || [], (enlivened) => {
         st.silent = true;
@@ -195,11 +248,14 @@
   });
   canvas.on('object:removed', () => !st.silent && commit());
   canvas.on('object:modified', () => commit());
-  canvas.on('text:changed', () => { renderLayers(); syncTextField(); scheduleCommit(); });
+  canvas.on('text:changed', (e) => {
+    fixArabic(e.target);
+    renderLayers();
+    syncTextField();
+    scheduleCommit();
+  });
   canvas.on('text:editing:exited', () => commit());
-  canvas.on('selection:created', renderProps);
-  canvas.on('selection:updated', renderProps);
-  canvas.on('selection:cleared', renderProps);
+  ['selection:created', 'selection:updated', 'selection:cleared'].forEach((ev) => canvas.on(ev, () => { renderProps(); renderLayers(); }));
   canvas.on('object:scaling', updateQuality);
   canvas.on('object:rotating', (e) => { const r = $('p-angle'); if (r) r.value = Math.round(e.target.angle); });
 
@@ -250,6 +306,20 @@
   let chain = Promise.resolve();
   const serial = (fn) => (...args) => (chain = chain.then(() => fn(...args)).catch((e) => toast(e.message, 'error')));
 
+  // ---------- Arabic text ----------
+  /** Arabic needs right-to-left direction, joined letters (no letter spacing) and an Arabic font. */
+  function fixArabic(o) {
+    if (!isText(o)) return;
+    const arabic = D.ARABIC_RE.test(o.text);
+    const props = { direction: arabic ? 'rtl' : 'ltr' };
+    if (arabic && o.charSpacing) props.charSpacing = 0;
+    if (arabic && D.FONTS.english.includes(o.fontFamily)) {
+      props.fontFamily = 'Cairo';
+      D.ensureFont('Cairo', o.fontWeight).then(() => { o.initDimensions(); o.setCoords(); canvas.requestRenderAll(); });
+    }
+    o.set(props);
+  }
+
   // ---------- Adding things ----------
   function addObject(obj, { select = true, shrinkToFit = true } = {}) {
     const a = area();
@@ -268,67 +338,57 @@
     if (st.preview) togglePreview();
   }
 
-  const TEXT_PRESETS = [
-    { label: 'Add a heading', text: 'Your Text', size: 0.17, weight: 'bold', font: 'Arial', style: 'font-size:22px;font-weight:800' },
-    { label: 'Add a subheading', text: 'Subheading', size: 0.11, weight: '600', font: 'Arial', style: 'font-size:17px;font-weight:600' },
-    { label: 'Add a line of body text', text: 'A little bit of body text', size: 0.065, weight: 'normal', font: 'Arial', style: 'font-size:14px' },
-    { label: 'BOLD STATEMENT', text: 'BOLD', size: 0.24, weight: 'normal', font: 'Impact', outline: true, style: 'font-family:Impact,sans-serif;font-size:24px;letter-spacing:.04em' },
-    { label: 'Classic serif', text: 'Est. 2026', size: 0.12, weight: 'normal', font: 'Georgia', italic: true, spacing: 80, style: 'font-family:Georgia,serif;font-style:italic;font-size:19px' },
-    { label: 'Handwritten script', text: 'with love', size: 0.15, weight: 'normal', font: 'Brush Script MT', style: 'font-family:"Brush Script MT",cursive;font-size:24px' },
-    { label: 'Typewriter', text: 'hello world', size: 0.09, weight: 'normal', font: 'Courier New', style: 'font-family:"Courier New",monospace;font-size:16px' },
-  ];
-  $('text-presets').innerHTML = TEXT_PRESETS.map((p, i) => `<button class="text-preset" data-i="${i}" style='${p.style}'>${esc(p.label)}</button>`).join('');
-  $('text-presets').addEventListener('click', (e) => {
+  function renderPresets() {
+    const groups = { basic: [], arabic: [], english: [] };
+    D.TEXT_PRESETS.forEach((p, i) => groups[p.group].push([p, i]));
+    const btn = ([p, i]) => {
+      const font = typeof p.font === 'object' ? p.font[POD.lang] : p.font;
+      const label = p.label ? t(p.label) : p.sample;
+      const size = p.group === 'basic' ? [22, 17, 14][i] : 22;
+      return `<button class="text-preset" data-i="${i}" style="font-family:'${font}';font-size:${size}px;font-weight:${p.weight === 'bold' ? 700 : 400};${p.italic ? 'font-style:italic' : ''}">${esc(label)}</button>`;
+    };
+    $('text-presets').innerHTML =
+      groups.basic.map(btn).join('') +
+      `<div class="preset-group">${esc(t('fly.text.arabic'))}</div>` + groups.arabic.map(btn).join('') +
+      `<div class="preset-group">${esc(t('fly.text.english'))}</div>` + groups.english.map(btn).join('');
+  }
+  $('text-presets').addEventListener('click', serial(async (e) => {
     const btn = e.target.closest('[data-i]');
     if (!btn) return;
-    const p = TEXT_PRESETS[Number(btn.dataset.i)];
+    const p = D.TEXT_PRESETS[Number(btn.dataset.i)];
+    const font = typeof p.font === 'object' ? p.font[POD.lang] : p.font;
+    const text = p.text ? t(p.text) : p.sample;
+    const arabic = D.ARABIC_RE.test(text);
+    await D.ensureFont(font, p.weight || 'normal', p.italic ? 'italic' : 'normal');
     const ink = inkFor(surfaceHex());
-    const t = new fabric.IText(p.text, {
+    const tx = new fabric.IText(text, {
       name: 'Text',
-      fontFamily: p.font,
+      fontFamily: font,
       fontSize: Math.round(area().w * p.size),
-      fontWeight: p.weight,
+      fontWeight: p.weight || 'normal',
       fontStyle: p.italic ? 'italic' : 'normal',
-      charSpacing: p.spacing || 0,
-      fill: p.outline ? '#ff5a36' : ink,
+      charSpacing: arabic ? 0 : p.spacing || 0,
+      direction: arabic ? 'rtl' : 'ltr',
+      fill: p.outline ? D.ACCENT : ink,
       stroke: p.outline ? ink : null,
       strokeWidth: p.outline ? 2 : 0,
       paintFirst: 'stroke',
       textAlign: 'center',
     });
-    addObject(t);
-  });
+    addObject(tx);
+  }));
 
-  const SHAPES = {
-    square: { label: 'Square', icon: '<rect x="4" y="4" width="16" height="16"/>', make: (f) => new fabric.Rect({ width: 100, height: 100, fill: f }) },
-    rounded: { label: 'Rounded', icon: '<rect x="4" y="4" width="16" height="16" rx="4"/>', make: (f) => new fabric.Rect({ width: 100, height: 100, rx: 18, ry: 18, fill: f }) },
-    circle: { label: 'Circle', icon: '<circle cx="12" cy="12" r="8"/>', make: (f) => new fabric.Circle({ radius: 50, fill: f }) },
-    ring: { label: 'Ring', icon: '<circle cx="12" cy="12" r="7" fill="none" stroke-width="3"/>', make: (f) => new fabric.Circle({ radius: 50, fill: 'transparent', stroke: f, strokeWidth: 10, strokeUniform: true }) },
-    triangle: { label: 'Triangle', icon: '<path d="M12 4 21 20H3z"/>', make: (f) => new fabric.Triangle({ width: 100, height: 88, fill: f }) },
-    star: { label: 'Star', icon: '<path d="m12 3 2.6 5.8 6.4.6-4.8 4.2 1.4 6.3L12 16.6 6.4 19.9l1.4-6.3L3 9.4l6.4-.6z"/>', make: (f) => new fabric.Polygon(starPoints(5, 50, 21), { fill: f }) },
-    heart: { label: 'Heart', icon: '<path d="M12 20s-8-5-8-11a4.5 4.5 0 0 1 8-2.8A4.5 4.5 0 0 1 20 9c0 6-8 11-8 11z"/>', make: (f) => new fabric.Path('M50 88 C20 66 0 48 0 28 C0 12 12 0 27 0 C37 0 45 5 50 14 C55 5 63 0 73 0 C88 0 100 12 100 28 C100 48 80 66 50 88 Z', { fill: f }) },
-    hexagon: { label: 'Hexagon', icon: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/>', make: (f) => new fabric.Polygon(starPoints(6, 50, 50, 0), { fill: f }) },
-    line: { label: 'Line', icon: '<rect x="3" y="11" width="18" height="2.5"/>', make: (f) => new fabric.Rect({ width: 140, height: 6, fill: f }) },
-  };
-  function starPoints(n, outer, inner, rot = -Math.PI / 2) {
-    const pts = [];
-    const steps = inner === outer ? n : n * 2;
-    for (let i = 0; i < steps; i++) {
-      const r = inner === outer || i % 2 === 0 ? outer : inner;
-      const a = rot + (i * Math.PI * 2) / steps;
-      pts.push({ x: Math.cos(a) * r, y: Math.sin(a) * r });
-    }
-    return pts;
+  function renderShapes() {
+    $('shape-grid').innerHTML = Object.entries(D.SHAPES)
+      .map(([k, s]) => `<button class="shape-btn" data-shape="${k}" title="${esc(tr(s.name))}" aria-label="${esc(tr(s.name))}"><svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor">${s.icon}</svg></button>`)
+      .join('');
   }
-  $('shape-grid').innerHTML = Object.entries(SHAPES)
-    .map(([k, s]) => `<button class="shape-btn" data-shape="${k}" title="${s.label}" aria-label="${s.label}"><svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor">${s.icon}</svg></button>`)
-    .join('');
   $('shape-grid').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-shape]');
     if (!btn) return;
-    const def = SHAPES[btn.dataset.shape];
-    const obj = def.make(inkFor(surfaceHex()) === '#ffffff' ? '#ffffff' : '#ff5a36');
-    obj.set({ name: def.label });
+    const def = D.SHAPES[btn.dataset.shape];
+    const obj = def.make(inkFor(surfaceHex()) === '#ffffff' ? '#ffffff' : D.ACCENT);
+    obj.set({ name: def.name.en });
     addObject(obj);
   });
   $('fill-area').addEventListener('click', () => {
@@ -341,19 +401,45 @@
     commit();
   });
 
-  // Images: downscale huge files, keep them as blob: URLs while editing.
+  // ---------- Templates ----------
+  async function renderTemplates() {
+    const grid = $('template-grid');
+    grid.innerHTML = D.TEMPLATES.map((tpl, i) => `<button class="template-btn" data-tpl="${i}"><img alt="" data-thumb="${i}"><span>${esc(tr(tpl.name))}</span></button>`).join('');
+    for (const [i, tpl] of D.TEMPLATES.entries()) {
+      const url = await D.templateThumb(tpl);
+      const img = grid.querySelector(`[data-thumb="${i}"]`);
+      if (img) img.src = url;
+    }
+  }
+  $('template-grid').addEventListener('click', serial(async (e) => {
+    const btn = e.target.closest('[data-tpl]');
+    if (!btn) return;
+    const objs = await D.buildTemplate(D.TEMPLATES[Number(btn.dataset.tpl)], area(), inkFor(surfaceHex()));
+    st.silent = true;
+    canvas.discardActiveObject();
+    objs.forEach((o) => canvas.add(o));
+    st.silent = false;
+    canvas.setActiveObject(new fabric.ActiveSelection(objs, { canvas }));
+    canvas.requestRenderAll();
+    commit();
+    closeFlyouts();
+    if (st.preview) togglePreview();
+  }));
+
+  // ---------- Images ----------
+  // Huge files are downscaled; while editing they are kept as blob: URLs.
   function loadHtmlImage(url) {
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error('That file could not be read as an image'));
+      img.onerror = () => reject(new Error(t('msg.badImage')));
       img.src = url;
     });
   }
   async function addImageFile(file) {
     if (!file) return;
-    if (!/^image\/(png|jpeg|webp|gif)$/.test(file.type)) return toast('Please choose a PNG, JPG, WebP or GIF image', 'error');
-    if (file.size > MAX_UPLOAD_BYTES) return toast('That image is larger than 25 MB', 'error');
+    if (!/^image\/(png|jpeg|webp|gif)$/.test(file.type)) return toast(t('msg.badType'), 'error');
+    if (file.size > MAX_UPLOAD_BYTES) return toast(t('msg.tooBig'), 'error');
     const srcUrl = URL.createObjectURL(file);
     try {
       const img = await loadHtmlImage(srcUrl);
@@ -370,7 +456,7 @@
       fimg.scale(Math.min((a.w * 0.8) / fimg.width, (a.h * 0.8) / fimg.height));
       addObject(fimg);
       const dpi = imageDpi(fimg);
-      if (dpi < 100) toast(`Heads up: this image is low resolution (${dpi} DPI at this size) and may print blurry.`, 'error');
+      if (dpi < 100) toast(t('msg.lowResToast', { dpi }), 'error');
     } catch (e) {
       toast(e.message, 'error');
     } finally {
@@ -382,8 +468,8 @@
     e.target.value = '';
   });
   const dz = $('dropzone');
-  ['dragenter', 'dragover'].forEach((t) => dz.addEventListener(t, (e) => { e.preventDefault(); dz.classList.add('over'); }));
-  ['dragleave', 'drop'].forEach((t) => dz.addEventListener(t, () => dz.classList.remove('over')));
+  ['dragenter', 'dragover'].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach((ev) => dz.addEventListener(ev, () => dz.classList.remove('over')));
   dz.addEventListener('drop', (e) => { e.preventDefault(); addImageFile(e.dataTransfer.files[0]); });
   $('stage').addEventListener('dragover', (e) => e.preventDefault());
   $('stage').addEventListener('drop', (e) => { e.preventDefault(); addImageFile(e.dataTransfer.files[0]); });
@@ -399,7 +485,7 @@
     return new Promise((resolve, reject) => {
       const r = new FileReader();
       r.onload = () => resolve(r.result);
-      r.onerror = () => reject(new Error('Could not read image'));
+      r.onerror = () => reject(new Error(t('msg.badImage')));
       r.readAsDataURL(blob);
     });
   }
@@ -423,11 +509,31 @@
     }));
   }
 
+  const FILTERS = {
+    white: () => new fabric.Image.filters.RemoveColor({ color: '#ffffff', distance: 0.12 }),
+    gray: () => new fabric.Image.filters.Grayscale(),
+    sepia: () => new fabric.Image.filters.Sepia(),
+  };
+  const FILTER_TYPES = { white: 'RemoveColor', gray: 'Grayscale', sepia: 'Sepia' };
+  const hasFilter = (o, k) => (o.filters || []).some((f) => f && f.type === FILTER_TYPES[k]);
+  function setFilter(o, key, on) {
+    let keep = Object.keys(FILTERS).filter((k) => (k === key ? on : hasFilter(o, k)));
+    // Black & white and vintage are alternatives.
+    if (on && key === 'gray') keep = keep.filter((k) => k !== 'sepia');
+    if (on && key === 'sepia') keep = keep.filter((k) => k !== 'gray');
+    o.filters = keep.map((k) => FILTERS[k]());
+    o.applyFilters();
+    canvas.requestRenderAll();
+    commit();
+    renderProps();
+  }
+
   // ---------- Flyouts ----------
   function closeFlyouts() {
     document.querySelectorAll('.flyout').forEach((f) => (f.hidden = true));
-    document.querySelectorAll('.tool').forEach((t) => t.classList.remove('open'));
+    document.querySelectorAll('.tool').forEach((x) => x.classList.remove('open'));
   }
+  let templatesRendered = false;
   document.querySelectorAll('.tool').forEach((btn) => {
     btn.addEventListener('click', () => {
       const fly = $('flyout-' + btn.dataset.flyout);
@@ -435,14 +541,16 @@
       closeFlyouts();
       fly.hidden = !open;
       btn.classList.toggle('open', open);
+      if (open && btn.dataset.flyout === 'templates' && !templatesRendered) {
+        templatesRendered = true;
+        renderTemplates();
+      }
     });
   });
   canvas.on('mouse:down', closeFlyouts);
 
   // ---------- Object actions ----------
-  function active() {
-    return canvas.getActiveObject();
-  }
+  const active = () => canvas.getActiveObject();
   function removeSelected() {
     const objs = canvas.getActiveObjects();
     if (!objs.length) return;
@@ -491,97 +599,128 @@
     canvas.requestRenderAll();
     commit();
   }
+  function setLocked(o, locked) {
+    o.set({ selectable: !locked, evented: !locked });
+    if (locked && canvas.getActiveObjects().includes(o)) canvas.discardActiveObject();
+    canvas.requestRenderAll();
+    commit();
+    renderLayers();
+  }
 
   // ---------- Properties panel ----------
+  function fontPicker(o) {
+    const opt = (f, sample) => `<button type="button" class="font-option ${f === o.fontFamily ? 'active' : ''}" data-font="${esc(f)}" style="font-family:'${esc(f)}'">${sample}<small>${esc(f)}</small></button>`;
+    return `
+      <details class="font-picker" id="p-font-picker">
+        <summary style="font-family:'${esc(o.fontFamily)}'" aria-label="${esc(t('props.font'))}">${esc(o.fontFamily)}</summary>
+        <div class="font-list">
+          <div class="group">${esc(t('props.fontsArabic'))}</div>
+          ${D.FONTS.arabic.map((f) => opt(f, 'أبجد هوز')).join('')}
+          <div class="group">${esc(t('props.fontsEnglish'))}</div>
+          ${D.FONTS.english.map((f) => opt(f, 'Aa Bb Cc')).join('')}
+        </div>
+      </details>`;
+  }
+
   function renderProps() {
     const o = active();
     const box = $('props');
-    $('props-title').textContent = 'Selected element';
+    $('props-title').textContent = t('panel.selected');
     if (!o) {
-      box.innerHTML = '<p class="empty-props">Add text, an image or a shape from the toolbar, then select it on the product to change how it looks.<br><br><span class="small">Tip: double-click text to type directly on the product.</span></p>';
+      box.innerHTML = `<p class="empty-props">${esc(t('panel.empty'))}<br><br><span class="small">${esc(t('panel.tip'))}</span></p>`;
       return;
     }
     if (o.type === 'activeSelection') {
-      $('props-title').textContent = `${o.size()} elements selected`;
+      $('props-title').textContent = t('panel.nSelected', { n: o.size() });
       box.innerHTML = `
         <div class="grid-2">
-          <button class="btn btn-sm" data-act="center-h">Center horizontally</button>
-          <button class="btn btn-sm" data-act="center-v">Center vertically</button>
+          <button class="btn btn-sm" data-act="center-h">${esc(t('props.centerH'))}</button>
+          <button class="btn btn-sm" data-act="center-v">${esc(t('props.centerV'))}</button>
         </div>
-        <button class="btn btn-sm btn-block btn-danger" data-act="delete" style="margin-top:8px">Delete selected</button>`;
+        <button class="btn btn-sm btn-block btn-danger" data-act="delete" style="margin-top:8px">${esc(t('props.deleteSelected'))}</button>`;
       return;
     }
-    const isText = o.type === 'i-text' || o.type === 'text' || o.type === 'textbox';
-    const isImage = o.type === 'image';
-    const isShape = !isText && !isImage;
-    $('props-title').textContent = isText ? 'Text' : isImage ? 'Image' : o.name || 'Shape';
+    const text = isText(o);
+    const image = o.type === 'image';
+    const shape = !text && !image;
+    $('props-title').textContent = text ? t('panel.text') : image ? t('panel.image') : shapeName(o);
     let html = '';
 
-    if (isText) {
+    if (text) {
+      const arabic = D.ARABIC_RE.test(o.text);
       html += `
-        <div class="field"><textarea id="p-text" rows="2">${esc(o.text)}</textarea></div>
+        <div class="field"><textarea id="p-text" rows="2" dir="auto">${esc(o.text)}</textarea></div>
+        <div class="field">${fontPicker(o)}</div>
         <div class="field row">
-          <select id="p-font" aria-label="Font">${FONTS.map((f) => `<option ${f === o.fontFamily ? 'selected' : ''} style="font-family:'${f}'">${f}</option>`).join('')}</select>
-          <input class="shrink" style="width:76px" type="number" id="p-size" min="4" max="400" value="${Math.round(o.fontSize)}" aria-label="Font size">
-          <input class="shrink" type="color" id="p-fill" value="${toHex(o.fill)}" aria-label="Text colour">
+          <input type="number" id="p-size" min="4" max="400" value="${Math.round(o.fontSize)}" aria-label="${esc(t('props.size'))}" title="${esc(t('props.size'))}">
+          <input class="shrink" type="color" id="p-fill" value="${toHex(o.fill)}" aria-label="${esc(t('props.textColour'))}" title="${esc(t('props.textColour'))}">
         </div>
         <div class="field row">
           <div class="btn-group">
-            <button class="btn btn-sm ${o.fontWeight === 'bold' || Number(o.fontWeight) >= 600 ? 'active' : ''}" data-toggle="bold" title="Bold"><b>B</b></button>
-            <button class="btn btn-sm ${o.fontStyle === 'italic' ? 'active' : ''}" data-toggle="italic" title="Italic"><i>I</i></button>
-            <button class="btn btn-sm ${o.underline ? 'active' : ''}" data-toggle="underline" title="Underline"><u>U</u></button>
+            <button class="btn btn-sm ${o.fontWeight === 'bold' || Number(o.fontWeight) >= 600 ? 'active' : ''}" data-toggle="bold" title="${esc(t('props.bold'))}"><b>B</b></button>
+            <button class="btn btn-sm ${o.fontStyle === 'italic' ? 'active' : ''}" data-toggle="italic" title="${esc(t('props.italic'))}"><i>I</i></button>
+            <button class="btn btn-sm ${o.underline ? 'active' : ''}" data-toggle="underline" title="${esc(t('props.underline'))}"><u>U</u></button>
           </div>
-          <div class="btn-group">
-            ${['left', 'center', 'right'].map((al) => `<button class="btn btn-sm ${o.textAlign === al ? 'active' : ''}" data-align="${al}" title="Align ${al}">${{ left: '⇤', center: '↔', right: '⇥' }[al]}</button>`).join('')}
+          <div class="btn-group" dir="ltr">
+            ${['left', 'center', 'right'].map((al) => `<button class="btn btn-sm ${o.textAlign === al ? 'active' : ''}" data-align="${al}" title="${esc(t('props.align' + al[0].toUpperCase() + al.slice(1)))}">${{ left: '⇤', center: '↔', right: '⇥' }[al]}</button>`).join('')}
           </div>
         </div>
         <div class="field grid-2">
-          <div><label for="p-spacing">Letter spacing</label><input type="range" id="p-spacing" min="-100" max="800" step="10" value="${o.charSpacing || 0}"></div>
-          <div><label for="p-lh">Line height</label><input type="range" id="p-lh" min="0.7" max="2.5" step="0.05" value="${o.lineHeight}"></div>
+          <div><label for="p-spacing">${esc(t('props.spacing'))}</label>${arabic ? `<div class="muted small">${esc(t('props.spacingArabic'))}</div>` : `<input type="range" id="p-spacing" min="-100" max="800" step="10" value="${o.charSpacing || 0}">`}</div>
+          <div><label for="p-lh">${esc(t('props.lineHeight'))}</label><input type="range" id="p-lh" min="0.7" max="2.5" step="0.05" value="${o.lineHeight}"></div>
         </div>
         <div class="field">
-          <label>Outline</label>
-          <div class="row"><input class="shrink" type="color" id="p-stroke" value="${toHex(o.stroke || '#000000')}" aria-label="Outline colour"><input type="range" id="p-stroke-w" min="0" max="12" step="0.5" value="${o.strokeWidth || 0}" aria-label="Outline width"></div>
+          <label>${esc(t('props.outline'))}</label>
+          <div class="row"><input class="shrink" type="color" id="p-stroke" value="${toHex(o.stroke || '#000000')}" aria-label="${esc(t('props.outline'))}"><input type="range" id="p-stroke-w" min="0" max="12" step="0.5" value="${o.strokeWidth || 0}" aria-label="${esc(t('props.outlineWidth'))}"></div>
         </div>`;
     }
-    if (isShape) {
+    if (shape) {
       const hollow = !o.fill || o.fill === 'transparent';
       html += `
         <div class="field grid-2">
-          <div><label for="p-fill">Fill</label><div class="row"><input class="shrink" type="color" id="p-fill" value="${toHex(hollow ? '#ffffff' : o.fill)}"><label class="small muted shrink" style="margin:0"><input type="checkbox" id="p-nofill" ${hollow ? 'checked' : ''}> None</label></div></div>
-          <div><label for="p-stroke">Outline</label><input type="color" id="p-stroke" value="${toHex(o.stroke || '#000000')}"></div>
+          <div><label for="p-fill">${esc(t('props.fill'))}</label><div class="row"><input class="shrink" type="color" id="p-fill" value="${toHex(hollow ? '#ffffff' : o.fill)}"><label class="check small shrink"><input type="checkbox" id="p-nofill" ${hollow ? 'checked' : ''}> ${esc(t('props.none'))}</label></div></div>
+          <div><label for="p-stroke">${esc(t('props.outline'))}</label><input type="color" id="p-stroke" value="${toHex(o.stroke || '#000000')}"></div>
         </div>
-        <div class="field"><label for="p-stroke-w">Outline width</label><input type="range" id="p-stroke-w" min="0" max="30" step="1" value="${o.strokeWidth || 0}"></div>
-        ${o.type === 'rect' ? `<div class="field"><label for="p-rx">Corner radius</label><input type="range" id="p-rx" min="0" max="${Math.round(Math.min(o.width, o.height) / 2)}" value="${o.rx || 0}"></div>` : ''}`;
+        <div class="field"><label for="p-stroke-w">${esc(t('props.outlineWidth'))}</label><input type="range" id="p-stroke-w" min="0" max="30" step="1" value="${o.strokeWidth || 0}"></div>
+        ${o.type === 'rect' ? `<div class="field"><label for="p-rx">${esc(t('props.radius'))}</label><input type="range" id="p-rx" min="0" max="${Math.round(Math.min(o.width, o.height) / 2)}" value="${o.rx || 0}"></div>` : ''}`;
     }
-    if (isImage) {
+    if (image) {
       html += `<div class="field" id="quality-box"></div>
-        <div class="field"><button class="btn btn-sm btn-block" data-act="fit">Fit to print area</button></div>`;
+        <div class="field"><button class="btn btn-sm btn-block" data-act="fit">${esc(t('props.fit'))}</button></div>
+        <div class="field">
+          <label>${esc(t('props.filters'))}</label>
+          <div class="toggles">
+            <label class="check"><input type="checkbox" data-filter="white" ${hasFilter(o, 'white') ? 'checked' : ''}> ${esc(t('props.removeWhite'))}</label>
+            <label class="check"><input type="checkbox" data-filter="gray" ${hasFilter(o, 'gray') ? 'checked' : ''}> ${esc(t('props.grayscale'))}</label>
+            <label class="check"><input type="checkbox" data-filter="sepia" ${hasFilter(o, 'sepia') ? 'checked' : ''}> ${esc(t('props.sepia'))}</label>
+          </div>
+        </div>`;
     }
     html += `
       <div class="field grid-2">
-        <div><label for="p-opacity">Opacity</label><input type="range" id="p-opacity" min="0.05" max="1" step="0.05" value="${o.opacity}"></div>
-        <div><label for="p-angle">Rotation</label><input type="number" id="p-angle" min="-360" max="360" value="${Math.round(o.angle)}"></div>
+        <div><label for="p-opacity">${esc(t('props.opacity'))}</label><input type="range" id="p-opacity" min="0.05" max="1" step="0.05" value="${o.opacity}"></div>
+        <div><label for="p-angle">${esc(t('props.rotation'))}</label><input type="number" id="p-angle" min="-360" max="360" value="${Math.round(o.angle)}"></div>
       </div>
+      <div class="field"><label class="check"><input type="checkbox" id="p-shadow" ${o.shadow ? 'checked' : ''}> ${esc(t('props.shadow'))}</label></div>
       <div class="field">
-        <label>Position &amp; layer</label>
-        <div class="grid-4">
-          <button class="btn btn-sm" data-act="center-h" title="Center horizontally in print area">↔</button>
-          <button class="btn btn-sm" data-act="center-v" title="Center vertically in print area">↕</button>
-          <button class="btn btn-sm" data-act="flip-x" title="Flip horizontally">⇋</button>
-          <button class="btn btn-sm" data-act="flip-y" title="Flip vertically">⇵</button>
-          <button class="btn btn-sm" data-act="up" title="Bring forward">▲</button>
-          <button class="btn btn-sm" data-act="down" title="Send backward">▼</button>
-          <button class="btn btn-sm" data-act="top" title="Bring to front">⤒</button>
-          <button class="btn btn-sm" data-act="bottom" title="Send to back">⤓</button>
+        <label>${esc(t('props.position'))}</label>
+        <div class="grid-4" dir="ltr">
+          <button class="btn btn-sm" data-act="center-h" title="${esc(t('props.centerH'))}">↔</button>
+          <button class="btn btn-sm" data-act="center-v" title="${esc(t('props.centerV'))}">↕</button>
+          <button class="btn btn-sm" data-act="flip-x" title="${esc(t('props.flipH'))}">⇋</button>
+          <button class="btn btn-sm" data-act="flip-y" title="${esc(t('props.flipV'))}">⇵</button>
+          <button class="btn btn-sm" data-act="up" title="${esc(t('props.forward'))}">▲</button>
+          <button class="btn btn-sm" data-act="down" title="${esc(t('props.backward'))}">▼</button>
+          <button class="btn btn-sm" data-act="top" title="${esc(t('props.front'))}">⤒</button>
+          <button class="btn btn-sm" data-act="bottom" title="${esc(t('props.back'))}">⤓</button>
         </div>
       </div>
       <div class="grid-2">
-        <button class="btn btn-sm" data-act="duplicate">Duplicate</button>
-        <button class="btn btn-sm btn-danger" data-act="delete">Delete</button>
+        <button class="btn btn-sm" data-act="duplicate">${esc(t('props.duplicate'))}</button>
+        <button class="btn btn-sm btn-danger" data-act="delete">${esc(t('props.delete'))}</button>
       </div>`;
     box.innerHTML = html;
-    if (isImage) updateQuality();
+    if (image) updateQuality();
   }
 
   function toHex(c) {
@@ -599,8 +738,8 @@
     const box = $('quality-box');
     if (!o || o.type !== 'image' || !box) return;
     const dpi = imageDpi(o);
-    const [cls, word] = dpi >= 150 ? ['good', 'Great'] : dpi >= 100 ? ['ok', 'OK'] : ['low', 'Low, may look blurry'];
-    box.innerHTML = `<div class="quality ${cls}">Print quality: ${word} (${dpi} DPI)</div>`;
+    const [cls, word] = dpi >= 150 ? ['good', t('props.qualityGreat')] : dpi >= 100 ? ['ok', t('props.qualityOk')] : ['low', t('props.qualityLow')];
+    box.innerHTML = `<div class="quality ${cls}">${esc(t('props.quality', { word, dpi }))}</div>`;
   }
 
   function syncTextField() {
@@ -613,10 +752,16 @@
     const o = active();
     if (!o) return;
     o.set(props);
+    if ('text' in props) fixArabic(o);
     if (o.initDimensions) o.initDimensions();
     o.setCoords();
     canvas.requestRenderAll();
     commitNow ? commit() : scheduleCommit();
+  }
+
+  function shadowFor(o) {
+    const s = Math.max(2, Math.min(o.getScaledWidth(), o.getScaledHeight()) * 0.04);
+    return new fabric.Shadow({ color: 'rgba(0,0,0,0.35)', blur: s * 2, offsetX: s, offsetY: s });
   }
 
   const props = $('props');
@@ -625,7 +770,13 @@
     if (!o) return;
     const v = e.target.value;
     switch (e.target.id) {
-      case 'p-text': setProp({ text: v }); renderLayers(); break;
+      case 'p-text': {
+        const wasArabic = D.ARABIC_RE.test(o.text);
+        setProp({ text: v });
+        renderLayers();
+        if (wasArabic !== D.ARABIC_RE.test(v)) renderPropsKeepFocus();
+        break;
+      }
       case 'p-size': if (Number(v) >= 4) setProp({ fontSize: Number(v) }); break;
       case 'p-fill': if (!$('p-nofill') || !$('p-nofill').checked) setProp({ fill: v }); break;
       case 'p-stroke': setProp({ stroke: v, strokeUniform: true }); break;
@@ -638,21 +789,41 @@
       default:
     }
   });
+  function renderPropsKeepFocus() {
+    const f = $('p-text');
+    const pos = f ? f.selectionStart : null;
+    renderProps();
+    const nf = $('p-text');
+    if (nf && pos !== null) { nf.focus(); nf.setSelectionRange(pos, pos); }
+  }
   props.addEventListener('change', (e) => {
     const o = active();
     if (!o) return;
-    if (e.target.id === 'p-font') setProp({ fontFamily: e.target.value }, { commitNow: true });
     if (e.target.id === 'p-nofill') setProp({ fill: e.target.checked ? 'transparent' : $('p-fill').value }, { commitNow: true });
+    if (e.target.id === 'p-shadow') setProp({ shadow: e.target.checked ? shadowFor(o) : null }, { commitNow: true });
+    if (e.target.dataset.filter) setFilter(o, e.target.dataset.filter, e.target.checked);
   });
-  props.addEventListener('click', (e) => {
+  props.addEventListener('click', serial(async (e) => {
     const o = active();
+    const fontBtn = e.target.closest('[data-font]');
+    if (o && fontBtn) {
+      const family = fontBtn.dataset.font;
+      await D.ensureFont(family, o.fontWeight, o.fontStyle);
+      setProp({ fontFamily: family }, { commitNow: true });
+      renderProps();
+      return;
+    }
     const btn = e.target.closest('button');
     if (!o || !btn) return;
     if (btn.dataset.toggle) {
-      const t = btn.dataset.toggle;
-      if (t === 'bold') setProp({ fontWeight: o.fontWeight === 'bold' || Number(o.fontWeight) >= 600 ? 'normal' : 'bold' }, { commitNow: true });
-      if (t === 'italic') setProp({ fontStyle: o.fontStyle === 'italic' ? 'normal' : 'italic' }, { commitNow: true });
-      if (t === 'underline') setProp({ underline: !o.underline }, { commitNow: true });
+      const tg = btn.dataset.toggle;
+      if (tg === 'bold') {
+        const weight = o.fontWeight === 'bold' || Number(o.fontWeight) >= 600 ? 'normal' : 'bold';
+        await D.ensureFont(o.fontFamily, weight, o.fontStyle);
+        setProp({ fontWeight: weight }, { commitNow: true });
+      }
+      if (tg === 'italic') setProp({ fontStyle: o.fontStyle === 'italic' ? 'normal' : 'italic' }, { commitNow: true });
+      if (tg === 'underline') setProp({ underline: !o.underline }, { commitNow: true });
       renderProps();
       return;
     }
@@ -670,44 +841,65 @@
     if (act === 'duplicate') duplicateSelected();
     if (act === 'delete') removeSelected();
     if (act === 'fit') fitToArea(o);
-  });
+  }));
 
   // ---------- Layers ----------
-  function layerName(o) {
-    if (o.type === 'i-text' || o.type === 'text') return `“${o.text.replace(/\s+/g, ' ').slice(0, 28)}”`;
-    return o.name || o.type;
+  function shapeName(o) {
+    if (o.name === 'Background') return t('layers.background');
+    const def = Object.values(D.SHAPES).find((s) => s.name.en === o.name);
+    return def ? tr(def.name) : o.name || t('panel.shape');
   }
+  function layerName(o) {
+    if (isText(o)) return `“${o.text.replace(/\s+/g, ' ').slice(0, 28)}”`;
+    if (o.type === 'image') return o.name || t('panel.image');
+    return shapeName(o);
+  }
+  const LOCK_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+  const UNLOCK_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>';
   function renderLayers() {
     const objs = canvas.getObjects().slice().reverse();
     const sel = canvas.getActiveObjects();
     $('layers').innerHTML = objs.length
-      ? objs.map((o, i) => `<li data-i="${objs.length - 1 - i}" class="${sel.includes(o) ? 'active' : ''}"><span>${esc(layerName(o))}</span><button data-del title="Delete" aria-label="Delete layer">✕</button></li>`).join('')
-      : '<li style="cursor:default" class="muted"><span>Nothing here yet</span></li>';
+      ? objs.map((o, i) => {
+          const locked = o.selectable === false;
+          return `<li data-i="${objs.length - 1 - i}" class="${sel.includes(o) ? 'active' : ''} ${locked ? 'locked' : ''}">
+            <span dir="auto">${esc(layerName(o))}</span>
+            <button data-lock class="${locked ? 'on' : ''}" title="${esc(t(locked ? 'layers.unlock' : 'layers.lock'))}" aria-label="${esc(t(locked ? 'layers.unlock' : 'layers.lock'))}">${locked ? LOCK_ICON : UNLOCK_ICON}</button>
+            <button data-del title="${esc(t('layers.delete'))}" aria-label="${esc(t('layers.delete'))}">✕</button>
+          </li>`;
+        }).join('')
+      : `<li style="cursor:default" class="muted"><span>${esc(t('layers.empty'))}</span></li>`;
   }
   $('layers').addEventListener('click', (e) => {
     const li = e.target.closest('[data-i]');
     if (!li) return;
     const o = canvas.getObjects()[Number(li.dataset.i)];
     if (!o) return;
+    const locked = o.selectable === false;
+    if (e.target.closest('[data-lock]')) return setLocked(o, !locked);
+    if (e.target.closest('[data-del]')) {
+      st.silent = true;
+      if (canvas.getActiveObjects().includes(o)) canvas.discardActiveObject();
+      canvas.remove(o);
+      st.silent = false;
+      commit();
+      renderProps();
+      return;
+    }
+    if (locked) return;
     canvas.setActiveObject(o);
     canvas.requestRenderAll();
-    if (e.target.closest('[data-del]')) removeSelected();
     renderProps();
     renderLayers();
   });
-  canvas.on('selection:created', renderLayers);
-  canvas.on('selection:updated', renderLayers);
-  canvas.on('selection:cleared', renderLayers);
 
   // ---------- Product options ----------
-  $('product-select').innerHTML = products.map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
-
   function renderOptions() {
     const p = st.product;
-    $('product-select').value = p.id;
-    $('swatches').innerHTML = p.colors.map((c) => `<button class="swatch ${c.id === st.colorId ? 'active' : ''}" data-color="${c.id}" title="${esc(c.name)}" aria-label="${esc(c.name)}" style="background:${c.hex}"></button>`).join('');
-    $('color-name').textContent = color().name;
-    $('sizes').innerHTML = p.sizes.map((s) => `<button class="chip ${s.id === st.sizeId ? 'active' : ''}" data-size="${s.id}">${esc(s.label)}${s.surcharge ? ` <span style="opacity:.7">+${money(s.surcharge)}</span>` : ''}</button>`).join('');
+    $('product-select').innerHTML = products.map((x) => `<option value="${x.id}" ${x === p ? 'selected' : ''}>${esc(tr(x.name))}</option>`).join('');
+    $('swatches').innerHTML = p.colors.map((c) => `<button class="swatch ${c.id === st.colorId ? 'active' : ''}" data-color="${c.id}" title="${esc(tr(c.name))}" aria-label="${esc(tr(c.name))}" style="background:${c.hex}"></button>`).join('');
+    $('color-name').textContent = tr(color().name);
+    $('sizes').innerHTML = p.sizes.map((s) => `<button class="chip ${s.id === st.sizeId ? 'active' : ''}" data-size="${s.id}">${esc(tr(s.label))}${s.surcharge ? ` <span style="opacity:.7">+${esc(money(s.surcharge))}</span>` : ''}</button>`).join('');
   }
   $('swatches').addEventListener('click', serial(async (e) => {
     const b = e.target.closest('[data-color]');
@@ -733,22 +925,22 @@
     const prev = st.product;
     const pending = prev.sides.filter((s) => (st.designs[s.id] || []).length).map((s) => s.id);
     const mapped = {};
+    const from = (sid) => prev.sides.find((x) => x.id === sid).printArea;
     for (const s of next.sides) {
-      const from = pending.includes(s.id) ? s.id : null;
-      if (from) {
-        mapped[s.id] = remap(st.designs[from], prev.sides.find((x) => x.id === from).printArea, s.printArea);
-        pending.splice(pending.indexOf(from), 1);
+      if (pending.includes(s.id)) {
+        mapped[s.id] = remap(st.designs[s.id], from(s.id), s.printArea);
+        pending.splice(pending.indexOf(s.id), 1);
       }
     }
     for (const s of next.sides) {
       if (!mapped[s.id] && pending.length) {
-        const from = pending.shift();
-        mapped[s.id] = remap(st.designs[from], prev.sides.find((x) => x.id === from).printArea, s.printArea);
+        const sid = pending.shift();
+        mapped[s.id] = remap(st.designs[sid], from(sid), s.printArea);
       }
     }
     if (pending.length) {
-      const names = pending.map((id) => prev.sides.find((s) => s.id === id).name.toLowerCase()).join(' and ');
-      toast(`${next.name} has no room for your ${names} design, so it was left out.`);
+      const names = pending.map((sid) => tr(prev.sides.find((s) => s.id === sid).name)).join(' + ');
+      toast(t('msg.noRoom', { product: tr(next.name), sides: names }));
     }
     st.product = next;
     st.designs = mapped;
@@ -772,25 +964,17 @@
     const fcy = from.y + from.h / 2;
     const tcx = to.x + to.w / 2;
     const tcy = to.y + to.h / 2;
-    return objects.map((o) => o.name === 'Background' && o.type === 'rect' ? {
+    return objects.map((o) => (o.name === 'Background' && o.type === 'rect'
       // A full-area background fill should keep filling the new print area.
-      ...o, left: tcx, top: tcy, width: to.w, height: to.h, scaleX: 1, scaleY: 1, angle: 0, rx: to.rx || 0, ry: to.rx || 0,
-    } : {
-      ...o,
-      left: tcx + (o.left - fcx) * s,
-      top: tcy + (o.top - fcy) * s,
-      scaleX: (o.scaleX || 1) * s,
-      scaleY: (o.scaleY || 1) * s,
-    });
+      ? { ...o, left: tcx, top: tcy, width: to.w, height: to.h, scaleX: 1, scaleY: 1, angle: 0, rx: to.rx || 0, ry: to.rx || 0 }
+      : { ...o, left: tcx + (o.left - fcx) * s, top: tcy + (o.top - fcy) * s, scaleX: (o.scaleX || 1) * s, scaleY: (o.scaleY || 1) * s }));
   }
 
   // ---------- Sides ----------
   function renderSideTabs() {
-    const sides = st.product.sides;
-    $('side-tabs').hidden = false;
-    $('side-tabs').innerHTML = sides.map((s) => {
+    $('side-tabs').innerHTML = st.product.sides.map((s) => {
       const count = s.id === st.side ? canvas.getObjects().length : (st.designs[s.id] || []).length;
-      return `<button class="side-tab ${s.id === st.side ? 'active' : ''}" data-side="${s.id}" role="tab" aria-selected="${s.id === st.side}">${esc(s.name)}${count ? '<span class="has" title="Has a design"></span>' : ''}</button>`;
+      return `<button class="side-tab ${s.id === st.side ? 'active' : ''}" data-side="${s.id}" role="tab" aria-selected="${s.id === st.side}">${esc(tr(s.name))}${count ? '<span class="has"></span>' : ''}</button>`;
     }).join('');
   }
   async function showSide(id) {
@@ -819,7 +1003,7 @@
   $('redo').addEventListener('click', serial(() => stepHistory(1)));
   $('clear-side').addEventListener('click', () => {
     if (!canvas.getObjects().length) return;
-    if (!confirm(`Remove everything from the ${sideDef().name.toLowerCase()} side?`)) return;
+    if (!confirm(t('msg.clearConfirm', { side: tr(sideDef().name) }))) return;
     st.silent = true;
     canvas.discardActiveObject();
     canvas.remove(...canvas.getObjects());
@@ -858,16 +1042,15 @@
     const p = st.product;
     const size = p.sizes.find((s) => s.id === st.sizeId);
     const n = designedSides().length;
-    const price = p.basePrice + size.surcharge + Math.max(0, n - 1) * catalog.pricing.extraSide;
-    $('price').textContent = money(price);
+    $('price').textContent = money(p.basePrice + size.surcharge + Math.max(0, n - 1) * catalog.pricing.extraSide);
     const notes = [];
-    if (p.sides.length > 1) notes.push(n > 1 ? `${n} sides printed` : `Add a second side for +${money(catalog.pricing.extraSide)}`);
-    if (size.surcharge) notes.push(`${size.label} +${money(size.surcharge)}`);
+    if (p.sides.length > 1) notes.push(n > 1 ? t('price.bothSides') : t('price.addSide', { price: money(catalog.pricing.extraSide) }));
+    if (size.surcharge) notes.push(`${tr(size.label)} +${money(size.surcharge)}`);
     $('price-note').textContent = notes.join(' · ');
     const h = hist();
     $('undo').disabled = h.i <= 0;
     $('redo').disabled = h.i >= h.stack.length - 1;
-    $('add-to-cart').textContent = st.editingCartIndex !== null ? 'Update cart item' : 'Add to cart';
+    $('add-to-cart').textContent = t(st.editingCartIndex !== null ? 'cart.update' : 'cart.add');
     renderSideTabs();
     renderLayers();
   }
@@ -881,9 +1064,11 @@
     const clips = objs.map((o) => o.clipPath);
     const bg = canvas.backgroundImage;
     const ov = canvas.overlayImage;
+    const vt = canvas.viewportTransform.slice();
     st.exporting = true;
     canvas.backgroundImage = null;
     canvas.overlayImage = null;
+    canvas.setViewportTransform([z, 0, 0, z, 0, 0]); // ignore scroll offsets
     objs.forEach((o) => (o.clipPath = null)); // the crop below does the clipping at full resolution
     try {
       return canvas.toDataURL({ format: 'png', left: a.x * z, top: a.y * z, width: a.w * z, height: a.h * z, multiplier: mult / z });
@@ -891,6 +1076,7 @@
       objs.forEach((o, i) => (o.clipPath = clips[i]));
       canvas.backgroundImage = bg;
       canvas.overlayImage = ov;
+      canvas.setViewportTransform(vt);
       st.exporting = false;
     }
   }
@@ -913,18 +1099,20 @@
     canvas.discardActiveObject();
     const sides = designedSides();
     if (!sides.length) {
-      toast('Add some text, an image or a shape first.', 'error');
+      toast(t('msg.addFirst'), 'error');
       return;
     }
     const lowRes = [];
     for (const s of sides) {
       for (const o of st.designs[s.id]) {
-        if (o.type === 'image' && imageDpi(o, s.id) < 100) lowRes.push(`${o.name || 'Image'} (${s.name.toLowerCase()}, ${imageDpi(o, s.id)} DPI)`);
+        if (o.type === 'image' && imageDpi(o, s.id) < 100) lowRes.push(`${o.name || t('panel.image')} (${tr(s.name)}, ${imageDpi(o, s.id)} DPI)`);
       }
     }
-    if (lowRes.length && !confirm(`These images are low resolution and may print blurry:\n\n${lowRes.join('\n')}\n\nAdd to cart anyway?`)) return;
+    if (lowRes.length && !confirm(t('msg.lowResConfirm', { list: lowRes.join('\n') }))) return;
 
-    busy(true, 'Preparing your print-ready files…');
+    const prevZoom = st.zoom;
+    if (st.zoom !== 1) setZoom(1);
+    busy(true, t('busy.preparing'));
     const original = st.side;
     try {
       const payload = { productId: st.product.id, color: st.colorId, size: st.sizeId, sides: {} };
@@ -937,7 +1125,7 @@
         };
       }
       await showSide(original);
-      busy(true, 'Saving your design…');
+      busy(true, t('busy.saving'));
       const design = await POD.api('/api/designs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -962,6 +1150,7 @@
       location.href = '/cart?added=1';
     } catch (e) {
       await showSide(original).catch(() => {});
+      setZoom(prevZoom);
       toast(e.message, 'error');
     } finally {
       busy(false);
@@ -976,9 +1165,23 @@
     }
   });
 
+  // Re-render everything the shopper reads when the language changes.
+  document.addEventListener('pod:langchange', () => {
+    renderOptions();
+    renderPresets();
+    renderShapes();
+    if (templatesRendered) renderTemplates();
+    refreshChrome();
+    renderProps();
+    canvas.requestRenderAll();
+  });
+
   // ---------- Boot ----------
   renderOptions();
+  renderPresets();
+  renderShapes();
   fit();
+  await D.ensureFont('Cairo', 600); // print-area label
   await showSide(st.side);
   seedHistory();
   refreshChrome();

@@ -1,52 +1,57 @@
 <!doctype html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex">
-  <title>Production · OneOff Print</title>
+  <title>OneOff Print</title>
+  <script>(function(){var l;try{l=localStorage.getItem('pod-lang')}catch(e){}l=l==='en'?'en':'ar';var d=document.documentElement;d.lang=l;d.dir=l==='ar'?'rtl':'ltr'})()</script>
+  <link rel="stylesheet" href="/fonts/fonts.css">
   <link rel="stylesheet" href="/css/styles.css">
 </head>
-<body>
+<body data-title-key="admin.pageTitle">
   <header class="site-header">
     <div class="container inner">
       <a class="brand" href="/"><span class="brand-mark">1</span>OneOff Print</a>
-      <span class="muted small">Production</span>
-      <nav><button class="btn btn-sm" id="logout" hidden>Sign out</button></nav>
+      <span class="muted small" data-i18n="admin.production"></span>
+      <nav>
+        <button class="btn btn-sm lang-toggle" data-lang-toggle data-i18n="lang.other"></button>
+        <button class="btn btn-sm" id="logout" hidden data-i18n="admin.signOut"></button>
+      </nav>
     </div>
   </header>
 
   <main class="container">
     <form class="card login" id="login" hidden>
-      <h2>Production dashboard</h2>
-      <p class="muted small">Enter the admin password to see the print queue.</p>
-      <div class="field"><label for="password">Password</label><input type="password" id="password" autocomplete="current-password" required></div>
-      <button class="btn btn-dark btn-block" type="submit">Sign in</button>
+      <h2 data-i18n="admin.loginTitle"></h2>
+      <p class="muted small" data-i18n="admin.loginText"></p>
+      <div class="field"><label for="password" data-i18n="admin.password"></label><input type="password" id="password" autocomplete="current-password" dir="ltr" required></div>
+      <button class="btn btn-dark btn-block" type="submit" data-i18n="admin.signIn"></button>
     </form>
 
     <div id="dash" hidden>
       <div class="page-head" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-        <h1 style="margin:0">Print queue</h1>
-        <div class="tabs" style="margin:0 0 0 auto">
-          <button class="btn btn-sm active" data-tab="queue">Queue</button>
-          <button class="btn btn-sm" data-tab="orders">All orders</button>
+        <h1 style="margin:0" data-i18n="admin.queueTitle"></h1>
+        <div class="tabs" style="margin:0;margin-inline-start:auto">
+          <button class="btn btn-sm active" data-tab="queue" data-i18n="admin.tabQueue"></button>
+          <button class="btn btn-sm" data-tab="orders" data-i18n="admin.tabOrders"></button>
         </div>
       </div>
 
       <section id="tab-queue">
         <div class="stats" id="stats"></div>
-        <h2 style="font-size:18px">On the press</h2>
+        <h2 style="font-size:18px" data-i18n="admin.onPress"></h2>
         <div id="current"></div>
-        <h2 style="font-size:18px;margin-top:28px">Up next</h2>
+        <h2 style="font-size:18px;margin-top:28px" data-i18n="admin.upNext"></h2>
         <div class="queue-list" id="up-next"></div>
-        <h2 style="font-size:18px;margin-top:28px">Printed, ready to ship</h2>
+        <h2 style="font-size:18px;margin-top:28px" data-i18n="admin.toShip"></h2>
         <div class="queue-list" id="to-ship"></div>
       </section>
 
       <section id="tab-orders" hidden>
         <div class="card" style="overflow-x:auto">
           <table class="orders">
-            <thead><tr><th>Order</th><th>Customer</th><th>Items</th><th>Total</th><th>Status</th></tr></thead>
+            <thead><tr><th data-i18n="admin.col.order"></th><th data-i18n="admin.col.customer"></th><th data-i18n="admin.col.items"></th><th data-i18n="admin.col.total"></th><th data-i18n="admin.col.status"></th></tr></thead>
             <tbody id="orders"></tbody>
           </table>
         </div>
@@ -54,6 +59,7 @@
     </div>
   </main>
 
+  <script src="/js/i18n.js"></script>
   <script src="/js/common.js"></script>
   <script src="/js/admin.js"></script>
 </body>

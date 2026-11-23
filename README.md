@@ -2,6 +2,8 @@
 
 A print-on-demand website where shoppers customise products in a drag-and-drop editor, and every item is printed individually, one at a time.
 
+Built for Egypt: **Arabic and English** (Arabic by default, full right-to-left layout, switch in the header), prices in **Egyptian pounds (EGP)**, and checkout with mobile number, governorate and **cash on delivery**.
+
 ## Run it
 
 ```bash
@@ -22,10 +24,15 @@ Requires Node 18+. There is no database to set up: data is stored under `data/` 
 
 ## What's in it
 
-**Storefront (`/`)**: six products (t-shirt, hoodie, mug, tote, framed poster, phone case), each with colours, sizes and a mockup drawn in its colour.
+**Storefront (`/`)**: 13 products in four categories: t-shirt, kids t-shirt, hoodie, sweatshirt, cap, mug, cushion, framed poster, water bottle, tote bag, phone case, mouse pad and notebook. Each has colours, sizes and a mockup drawn in its colour.
 
 **Design editor (`/editor`)**, built on Fabric.js:
-- Text presets with font, size, colour, bold/italic/underline, alignment, letter spacing, line height and outline. Double-click text to type directly on the product.
+- **16 self-hosted fonts** (8 Arabic, 8 English) with a visual font picker. Arabic text is set right-to-left with properly joined letters, and switches to an Arabic font automatically if typed into an English-only one.
+- **Templates** to start from (birthday, Ramadan Kareem, team jersey, family badge and more, in Arabic and English).
+- Text presets with size, colour, bold/italic/underline, alignment, letter spacing, line height, outline and shadow. Double-click text to type directly on the product.
+- **Snap guides** to the centre and edges of the print area, and **zoom**.
+- Image **filters**: remove a white background, black & white, vintage.
+- **Lock** layers so they can't be moved by accident.
 - Image upload (click or drag and drop) with a live **print-quality / DPI indicator** and a warning before you order a blurry image.
 - Shapes, plus a one-click "fill print area" background.
 - Move, scale, rotate, flip, opacity, layer order, duplicate, delete, centre in print area, and a layers list.
@@ -40,7 +47,7 @@ Requires Node 18+. There is no database to set up: data is stored under `data/` 
 
 The editable layout is also saved, so customers can re-open and edit or duplicate a design from the cart.
 
-**Checkout (`/cart`)** creates an order in which **every design is its own line with quantity 1**, so each one is a separate print job. Prices are recalculated on the server, and the client's numbers are never trusted. Payment is a demo stub (see below).
+**Checkout (`/cart`)** asks for name, Egyptian mobile number (any common format, including Arabic digits), governorate, city and address. Payment is **cash on delivery**. Every design is its own order line with quantity 1, so each one is a separate print job. Prices are recalculated on the server, and the client's numbers are never trusted.
 
 **Order tracking (`/order?id=…`)** shows each item moving through *queued → printing → printed → shipped*.
 
@@ -54,7 +61,12 @@ The editable layout is also saved, so customers can re-open and edit or duplicat
 ```
 server.js            entry point (env config)
 src/app.js           Express routes: catalog, designs, orders, admin
-src/products.js      catalog, mockup SVGs, print areas, pricing
+src/products.js      catalog, mockup SVGs, print areas, EGP pricing
+src/egypt.js         governorates, mobile number validation
+src/i18n.js          server messages in English and Arabic
+public/js/i18n.js    all interface text in English and Arabic
+public/js/templates.js  fonts, shapes, text presets, templates
+public/fonts/        self-hosted fonts (SIL Open Font License)
 src/store.js         JSON-file store with atomic writes
 public/              static site (index, editor, cart, order, admin)
 public/js/editor.js  the design editor
@@ -68,7 +80,7 @@ Add an entry to `PRODUCTS` in `src/products.js`. Mockups are SVGs in a 500 × 60
 
 ## Before going live
 
-- **Payments:** `POST /api/orders` marks orders as paid with a demo method. Add a payment provider (for example Stripe Checkout) and create the order only after payment is confirmed.
+- **Prices** are starting points in `src/products.js` (`basePrice`, size `surcharge`) and the shipping constants at the bottom of that file. Adjust them to your costs.
+- **Online card payments:** orders are cash on delivery. To also take cards, add an Egyptian gateway such as Paymob or Fawry.
 - **Storage:** the JSON store suits a single server. For scale, move metadata into a database and print files into object storage.
 - **Admin auth** is a single shared password sent in a header. Use real accounts if several people run the press.
-- **Fonts:** the editor uses fonts installed on the customer's device. To guarantee identical output, bundle web fonts and wait for them to load before rendering.

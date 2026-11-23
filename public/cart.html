@@ -1,71 +1,81 @@
 <!doctype html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Cart · OneOff Print</title>
+  <title>OneOff Print</title>
+  <script>(function(){var l;try{l=localStorage.getItem('pod-lang')}catch(e){}l=l==='en'?'en':'ar';var d=document.documentElement;d.lang=l;d.dir=l==='ar'?'rtl':'ltr'})()</script>
+  <link rel="stylesheet" href="/fonts/fonts.css">
   <link rel="stylesheet" href="/css/styles.css">
 </head>
-<body>
+<body data-title-key="cart.pageTitle">
   <header class="site-header">
     <div class="container inner">
       <a class="brand" href="/"><span class="brand-mark">1</span>OneOff Print</a>
       <nav>
-        <a href="/#products">Products</a>
-        <a class="cart-link" href="/cart">Cart <span class="badge" data-cart-count hidden>0</span></a>
+        <a href="/#products" data-i18n="nav.products"></a>
+        <a class="cart-link" href="/cart"><span data-i18n="nav.cart"></span> <span class="badge" data-cart-count hidden>0</span></a>
+        <button class="btn btn-sm lang-toggle" data-lang-toggle data-i18n="lang.other"></button>
       </nav>
     </div>
   </header>
 
   <main class="container">
-    <div class="page-head"><h1>Your cart</h1></div>
+    <div class="page-head"><h1 data-i18n="cart.title"></h1></div>
 
     <div id="empty" class="card empty" hidden>
-      <h2>Your cart is empty</h2>
-      <p class="muted">Design something one-of-a-kind and it'll show up here.</p>
-      <a class="btn btn-primary" href="/#products">Start designing</a>
+      <h2 data-i18n="cart.emptyTitle"></h2>
+      <p class="muted" data-i18n="cart.emptyText"></p>
+      <a class="btn btn-primary" href="/#products" data-i18n="home.start"></a>
     </div>
 
     <div class="cart-layout" id="cart-layout" hidden>
       <div>
         <div class="card" id="items"></div>
-        <p class="muted small" style="margin-top:12px">Every item in your cart is a unique design with its own print job. Want two of the same? Use <strong>Duplicate</strong> and each one is printed separately.</p>
+        <p class="muted small" style="margin-top:12px" data-i18n-html="cart.note"></p>
       </div>
 
       <form class="card summary" id="checkout" novalidate>
-        <h2 style="font-size:18px">Checkout</h2>
-        <div class="field"><label for="name">Full name</label><input type="text" id="name" name="name" autocomplete="name" required></div>
-        <div class="field"><label for="email">Email</label><input type="email" id="email" name="email" autocomplete="email" required></div>
-        <div class="field"><label for="address1">Address</label><input type="text" id="address1" name="address1" autocomplete="address-line1" required></div>
-        <div class="field"><input type="text" id="address2" name="address2" autocomplete="address-line2" placeholder="Apartment, suite (optional)" aria-label="Address line 2"></div>
+        <h2 style="font-size:18px" data-i18n="checkout.title"></h2>
+        <div class="field"><label for="name" data-i18n="checkout.name"></label><input type="text" id="name" name="name" autocomplete="name" required></div>
+        <div class="field"><label for="phone" data-i18n="checkout.phone"></label><input type="tel" id="phone" name="phone" autocomplete="tel" inputmode="tel" dir="ltr" placeholder="01xxxxxxxxx" required></div>
+        <div class="field"><label for="email" data-i18n="checkout.email"></label><input type="email" id="email" name="email" autocomplete="email" dir="ltr"></div>
         <div class="field grid-2">
-          <div><label for="city">City</label><input type="text" id="city" name="city" autocomplete="address-level2" required></div>
-          <div><label for="region">State / region</label><input type="text" id="region" name="region" autocomplete="address-level1"></div>
+          <div><label for="governorate" data-i18n="checkout.governorate"></label><select id="governorate" name="governorate" required></select></div>
+          <div><label for="city" data-i18n="checkout.city"></label><input type="text" id="city" name="city" autocomplete="address-level2" required></div>
         </div>
-        <div class="field grid-2">
-          <div><label for="postalCode">Postal code</label><input type="text" id="postalCode" name="postalCode" autocomplete="postal-code" required></div>
-          <div><label for="country">Country</label><input type="text" id="country" name="country" autocomplete="country-name" required></div>
-        </div>
+        <div class="field"><label for="address" data-i18n="checkout.address"></label><textarea id="address" name="address" rows="2" autocomplete="street-address" data-i18n-placeholder="checkout.addressPh" required></textarea></div>
+        <div class="field"><label for="notes" data-i18n="checkout.notes"></label><input type="text" id="notes" name="notes"></div>
 
-        <div class="line"><span>Subtotal</span><span id="subtotal"></span></div>
-        <div class="line"><span>Shipping</span><span id="shipping"></span></div>
-        <div class="line total"><span>Total</span><span id="total"></span></div>
-        <p class="notice" style="margin:12px 0">Demo checkout: no payment is taken. Placing the order sends each item to the print queue.</p>
-        <button class="btn btn-primary btn-lg btn-block" id="place-order" type="submit">Place order</button>
+        <div class="line"><span data-i18n="checkout.subtotal"></span><span id="subtotal"></span></div>
+        <div class="line"><span data-i18n="checkout.shipping"></span><span id="shipping"></span></div>
+        <div class="line total"><span data-i18n="checkout.total"></span><span id="total"></span></div>
+        <p class="muted small" id="free-note" style="margin:6px 0 0"></p>
+        <div class="pay-box"><strong data-i18n="checkout.cod"></strong><span data-i18n="checkout.codText"></span></div>
+        <button class="btn btn-primary btn-lg btn-block" id="place-order" type="submit" data-i18n="checkout.place"></button>
       </form>
     </div>
   </main>
 
-  <footer class="site-footer"><div class="container">OneOff Print: print on demand, one item at a time.</div></footer>
+  <footer class="site-footer"><div class="container" data-i18n="footer"></div></footer>
 
+  <script src="/js/i18n.js"></script>
   <script src="/js/common.js"></script>
   <script>
     (async () => {
-      const { money, esc } = POD;
-      const { pricing } = await POD.loadCatalog();
+      const { money, esc, t, tr } = POD;
+      const { pricing, governorates } = await POD.loadCatalog();
       if (new URLSearchParams(location.search).get('added')) {
-        POD.toast('Added to your cart');
+        POD.toast(t('cart.added'));
         history.replaceState(null, '', '/cart');
+      }
+
+      function renderGovernorates() {
+        const sel = document.getElementById('governorate');
+        const current = sel.value;
+        sel.innerHTML = `<option value="">${esc(t('checkout.choose'))}</option>` +
+          governorates.map((g) => `<option value="${g.id}">${esc(tr(g.name))}</option>`).join('');
+        sel.value = current;
       }
 
       function render() {
@@ -74,23 +84,24 @@
         document.getElementById('cart-layout').hidden = cart.length === 0;
         document.getElementById('items').innerHTML = cart.map((item, i) => `
           <div class="cart-item">
-            <img src="${esc(item.previewUrl)}" alt="Preview of your ${esc(item.productName)}">
+            <img src="${esc(item.previewUrl)}" alt="${esc(t('cart.preview', { product: tr(item.productName) }))}">
             <div>
-              <h3>${esc(item.productName)}</h3>
-              <div class="meta">${esc(item.colorName)} · ${esc(item.sizeLabel)}<br>Printed: ${esc(item.sides.join(' + '))}</div>
+              <h3>${esc(tr(item.productName))}</h3>
+              <div class="meta">${esc(tr(item.colorName))} · ${esc(tr(item.sizeLabel))}<br>${esc(t('cart.printed', { sides: item.sides.map(tr).join(' + ') }))}</div>
               <div class="actions">
-                <a class="btn btn-sm" href="/editor?design=${encodeURIComponent(item.designId)}&cart=${i}">Edit design</a>
-                <a class="btn btn-sm" href="/editor?design=${encodeURIComponent(item.designId)}">Duplicate</a>
-                <button class="btn btn-sm btn-danger" data-remove="${i}">Remove</button>
+                <a class="btn btn-sm" href="/editor?design=${encodeURIComponent(item.designId)}&cart=${i}">${esc(t('cart.edit'))}</a>
+                <a class="btn btn-sm" href="/editor?design=${encodeURIComponent(item.designId)}">${esc(t('cart.duplicate'))}</a>
+                <button class="btn btn-sm btn-danger" data-remove="${i}">${esc(t('cart.remove'))}</button>
               </div>
             </div>
-            <div class="price">${money(item.price)}</div>
+            <div class="price">${esc(money(item.price))}</div>
           </div>`).join('');
         const subtotal = cart.reduce((s, i) => s + i.price, 0);
         const shipping = subtotal >= pricing.freeShippingOver ? 0 : pricing.shipping;
         document.getElementById('subtotal').textContent = money(subtotal);
-        document.getElementById('shipping').textContent = shipping ? money(shipping) : 'Free';
+        document.getElementById('shipping').textContent = shipping ? money(shipping) : t('free');
         document.getElementById('total').textContent = money(subtotal + shipping);
+        document.getElementById('free-note').textContent = shipping ? t('checkout.freeOver', { price: money(pricing.freeShippingOver) }) : '';
       }
 
       document.getElementById('items').addEventListener('click', (e) => {
@@ -108,11 +119,11 @@
         const missing = [...form.querySelectorAll('[required]')].find((el) => !el.value.trim());
         if (missing) {
           missing.focus();
-          return POD.toast(`Please fill in ${missing.labels[0]?.textContent.toLowerCase() || 'all fields'}`, 'error');
+          return POD.toast(t('checkout.fill', { field: missing.labels[0]?.textContent || '' }), 'error');
         }
         const btn = document.getElementById('place-order');
         btn.disabled = true;
-        btn.textContent = 'Placing order…';
+        btn.textContent = t('checkout.placing');
         try {
           const customer = Object.fromEntries(new FormData(form));
           const order = await POD.api('/api/orders', {
@@ -125,11 +136,13 @@
         } catch (err) {
           POD.toast(err.message, 'error');
           btn.disabled = false;
-          btn.textContent = 'Place order';
+          btn.textContent = t('checkout.place');
         }
       });
 
+      renderGovernorates();
       render();
+      document.addEventListener('pod:langchange', () => { renderGovernorates(); render(); });
     })();
   </script>
 </body>

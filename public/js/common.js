@@ -1,14 +1,74 @@
-/* Shared helpers for every page: catalog loading, mockup rendering, cart, UI bits. */
+/* Shared helpers for every page: language, catalog, mockups, cart, UI bits. */
 (function () {
   'use strict';
 
-  const CART_KEY = 'pod-cart-v1';
+  const CART_KEY = 'pod-cart-v2';
+  const LANG_KEY = 'pod-lang';
+  const STRINGS = window.POD_STRINGS || {};
 
+  // ---------- Language ----------
+  function storedLang() {
+    try {
+      return localStorage.getItem(LANG_KEY);
+    } catch (e) {
+      return null;
+    }
+  }
+  // Arabic by default; the shopper's choice is remembered.
+  let lang = storedLang() === 'en' ? 'en' : 'ar';
+
+  function applyDir() {
+    document.documentElement.lang = lang;
+    document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+  }
+  applyDir();
+
+  function fill(str, params) {
+    return params ? str.replace(/\{(\w+)\}/g, (_, k) => (params[k] ?? '')) : str;
+  }
+
+  /** Translate a UI string key. */
+  function t(key, params) {
+    const pair = STRINGS[key];
+    if (!pair) return key;
+    return fill(pair[lang === 'ar' ? 1 : 0], params);
+  }
+
+  /** Pick the current language from a { en, ar } value (plain strings pass through). */
+  function tr(value) {
+    if (value && typeof value === 'object') return value[lang] || value.en || '';
+    return value == null ? '' : String(value);
+  }
+
+  /** Fill every [data-i18n*] element under root. */
+  function applyI18n(root = document) {
+    root.querySelectorAll('[data-i18n]').forEach((el) => (el.textContent = t(el.dataset.i18n)));
+    root.querySelectorAll('[data-i18n-html]').forEach((el) => (el.innerHTML = t(el.dataset.i18nHtml)));
+    root.querySelectorAll('[data-i18n-title]').forEach((el) => (el.title = t(el.dataset.i18nTitle)));
+    root.querySelectorAll('[data-i18n-aria]').forEach((el) => el.setAttribute('aria-label', t(el.dataset.i18nAria)));
+    root.querySelectorAll('[data-i18n-placeholder]').forEach((el) => (el.placeholder = t(el.dataset.i18nPlaceholder)));
+    const titleKey = document.body && document.body.dataset.titleKey;
+    if (titleKey) document.title = t(titleKey);
+  }
+
+  function setLang(next) {
+    lang = next === 'en' ? 'en' : 'ar';
+    try {
+      localStorage.setItem(LANG_KEY, lang);
+    } catch (e) {
+      /* the choice just won't be remembered */
+    }
+    applyDir();
+    applyI18n();
+    document.dispatchEvent(new CustomEvent('pod:langchange', { detail: { lang } }));
+  }
+
+  // ---------- Catalog ----------
   let catalogPromise = null;
   function loadCatalog() {
     if (!catalogPromise) {
       catalogPromise = fetch('/api/products').then((r) => {
-        if (!r.ok) throw new Error('Could not load products');
+        if (!r.ok) throw new Error(t('msg.loadFailed'));
         return r.json();
       });
     }
@@ -34,7 +94,7 @@
     return 0.2126 * r + 0.7152 * g + 0.0722 * b;
   }
 
-  /** Fill an SVG mockup template for a garment colour. */
+  /** Fill an SVG mockup template for a product colour. */
   function fillMockup(template, hex) {
     const dark = luminance(hex) < 0.25;
     const shade = dark ? mix(hex, '#ffffff', 0.12) : mix(hex, '#000000', 0.1);
@@ -45,12 +105,28 @@
     return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
   }
   function mockupUrl(side, hex, layer) {
-    const tpl = layer === 'overlay' ? side.overlay : side.svg;
+    let tpl = layer === 'overlay' ? side.overlay : side.svg;
+    // 'full' = product plus its top layer (camera, spiral, shine) for thumbnails.
+    if (layer === 'full' && side.overlay) tpl = side.svg.replace('</svg>', side.overlay.replace(/^<svg[^>]*>/, ''));
     return tpl ? svgDataUrl(fillMockup(tpl, hex)) : null;
   }
 
-  // ---------- Money ----------
-  const money = (n) => '$' + Number(n).toFixed(2);
+  // ---------- Money & dates ----------
+  function money(n) {
+    const v = Number(n);
+    return new Intl.NumberFormat(lang === 'ar' ? 'ar-EG' : 'en-EG', {
+      style: 'currency',
+      currency: 'EGP',
+      minimumFractionDigits: v % 1 ? 2 : 0,
+      maximumFractionDigits: 2,
+    }).format(v);
+  }
+  function date(iso) {
+    return new Date(iso).toLocaleString(lang === 'ar' ? 'ar-EG' : 'en-GB', { dateStyle: 'medium', timeStyle: 'short' });
+  }
+  function num(n) {
+    return new Intl.NumberFormat(lang === 'ar' ? 'ar-EG' : 'en-GB', { maximumFractionDigits: 1 }).format(n);
+  }
 
   // ---------- Cart (designs live on the server; the cart keeps references) ----------
   function getCart() {
@@ -65,7 +141,7 @@
     try {
       localStorage.setItem(CART_KEY, JSON.stringify(items));
     } catch (e) {
-      toast('Could not save your cart in this browser', 'error');
+      toast(t('msg.saveCartFailed'), 'error');
     }
     updateCartBadge();
   }
@@ -96,8 +172,8 @@
     return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
-  async function api(url, options) {
-    const res = await fetch(url, options);
+  async function api(url, options = {}) {
+    const res = await fetch(url, { ...options, headers: { 'x-lang': lang, ...(options.headers || {}) } });
     const body = res.headers.get('content-type')?.includes('json') ? await res.json() : null;
     if (!res.ok) {
       const err = new Error((body && body.error) || `Request failed (${res.status})`);
@@ -107,8 +183,24 @@
     return body;
   }
 
-  document.addEventListener('DOMContentLoaded', updateCartBadge);
+  function initChrome() {
+    applyI18n();
+    updateCartBadge();
+    document.querySelectorAll('[data-lang-toggle]').forEach((btn) => {
+      btn.addEventListener('click', () => setLang(lang === 'ar' ? 'en' : 'ar'));
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initChrome);
+  else initChrome();
   window.addEventListener('storage', (e) => e.key === CART_KEY && updateCartBadge());
 
-  window.POD = { loadCatalog, fillMockup, mockupUrl, svgDataUrl, luminance, money, getCart, setCart, updateCartBadge, toast, esc, api };
+  window.POD = {
+    get lang() {
+      return lang;
+    },
+    t, tr, setLang, applyI18n,
+    loadCatalog, fillMockup, mockupUrl, svgDataUrl, luminance,
+    money, date, num,
+    getCart, setCart, updateCartBadge, toast, esc, api,
+  };
 })();
