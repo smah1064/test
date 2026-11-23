@@ -99,8 +99,13 @@
       <form class="card acct-card" id="v-security" novalidate hidden>
         <div class="field" id="pw-cur-field"><label for="pw-cur" data-i18n="acct.currentPassword"></label><input id="pw-cur" type="password" autocomplete="current-password" maxlength="200"></div>
         <div class="field"><label for="pw-new" data-i18n="acct.newPassword"></label><input id="pw-new" type="password" autocomplete="new-password" minlength="8" maxlength="200"></div>
+        <p class="small acct-nopass" id="pw-nopass" hidden data-i18n="acct.noPassHelp"></p>
         <button class="btn btn-primary" type="submit" id="pw-submit" data-i18n="acct.changePassword"></button>
         <p class="muted small" style="margin:10px 0 0" data-i18n="acct.changeNote"></p>
+        <div id="pw-forgot-box" style="margin-top:12px">
+          <button class="link-btn small" type="button" id="pw-forgot" data-i18n="acct.forgotCurrent"></button>
+          <p class="small" id="pw-forgot-msg" style="margin:6px 0 0;line-height:1.6"></p>
+        </div>
       </form>
     </section>
   </main>

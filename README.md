@@ -197,6 +197,8 @@ Customers can create an account at `/account` (name, mobile number, optional ema
 - **My orders**: every order placed while signed in, with its status (received, printing, shipped) and a link to the order page.
 - **Details & address**: name, email and a delivery address. Checkout fills them in for signed-in customers; the address of the first order is saved if the account has none.
 - **Password**: change it (this signs out every other device). **Forgot password** sends a link valid for 1 hour by email (when the account has an email and Brevo is set up); otherwise it offers to ask the shop on WhatsApp.
+- Signed in but forgot the current password: **"Forgot your current password?"** on the Password tab emails a reset link to the account's email. Accounts made with Google have no password at first; that tab shows "Choose a password" (no current password needed) and explains they can keep using Google.
+- Admin → **Customers**: find a customer by name, mobile or email (with their orders and total), and make a **password reset link valid 24 hours, usable once**, to send on WhatsApp or by email: for customers without an email or whose email didn't arrive.
 - Accounts are optional: guests can still order without one.
 
 **Sign in with Google / Facebook** (optional; the buttons appear once set up). Privacy policy for the provider forms: `https://ebda3.me/privacy` (also the data-deletion instructions Facebook asks for). New accounts made this way add their mobile number on the account page (checkout asks for it anyway) and can set a password later. An account with the same verified email is linked, not duplicated (`src/oauth.js`).

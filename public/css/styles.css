@@ -71,7 +71,7 @@ main { flex: 1; }
 .btn-danger { color: var(--bad); }
 
 label { font-size: 13px; font-weight: 600; color: var(--ink-2); display: block; margin-bottom: 6px; }
-input[type=text], input[type=email], input[type=tel], input[type=number], input[type=password], select, textarea {
+input[type=text], input[type=email], input[type=tel], input[type=number], input[type=password], input[type=search], input[type=url], input[type=date], select, textarea {
   width: 100%; font: inherit; font-size: 14px; color: var(--ink);
   border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; background: #fff;
 }
@@ -846,3 +846,12 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 .lib-credits { margin: 10px 0 0; line-height: 1.5; }
 #lib-more { margin-top: 8px; }
 @media (max-width: 760px) { .flyout-lib { width: auto; } .lib-grid { grid-template-columns: repeat(5, 1fr); } }
+
+.acct-nopass { margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; background: #e7f5ff; color: #1864ab; line-height: 1.6; }
+
+/* Admin: customers */
+.cu-row { grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
+.cu-row .pill { margin-inline-start: 6px; }
+.cu-link { margin-top: 8px; padding: 10px; border-radius: 10px; background: #f8f9fb; border: 1px solid var(--line); max-width: 560px; }
+.cu-link input { width: 100%; font-size: 12px; margin-top: 4px; }
+#cu-q { width: 100%; max-width: 360px; }

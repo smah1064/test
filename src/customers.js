@@ -56,8 +56,8 @@ function readSession(key, token, findCustomer) {
   if (!c || String(c.pv || 1) !== pv) return null;
   return c;
 }
-function resetToken(key, customer) {
-  const exp = Math.floor(Date.now() / 1000) + 3600;
+function resetToken(key, customer, hours = 1) {
+  const exp = Math.floor(Date.now() / 1000) + Math.round(hours * 3600);
   return sign(key, ['reset', customer.id, exp.toString(36), String(customer.pv || 1)]);
 }
 function readReset(key, token, findCustomer) {

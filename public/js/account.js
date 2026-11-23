@@ -154,6 +154,22 @@
       render();
     });
   });
+  // Signed in but the current password is forgotten: a reset link to the account's email.
+  $('pw-forgot').addEventListener('click', async () => {
+    const b = $('pw-forgot');
+    b.disabled = true;
+    try {
+      const r = await POD.api('/api/account/forgot', json('POST', { login: me.email || me.phone }));
+      const wa = r.whatsapp ? `https://wa.me/${r.whatsapp}?text=${encodeURIComponent(t('acct.waReset', { login: me.phone || me.email }))}` : '';
+      $('pw-forgot-msg').innerHTML = me.email && r.byEmail
+        ? esc(t('acct.linkSentTo', { email: me.email }))
+        : `${esc(t('acct.noEmail'))}${wa ? ` <a class="btn btn-sm btn-whatsapp" target="_blank" rel="noopener" href="${esc(wa)}">${esc(t('acct.askWhatsApp'))}</a>` : ''}`;
+    } catch (err) {
+      POD.toast(err.message, 'error');
+    } finally {
+      b.disabled = false;
+    }
+  });
   $('v-security').addEventListener('submit', (e) => {
     e.preventDefault();
     submit($('v-security'), async () => {
@@ -183,6 +199,9 @@
     // Accounts made with Google/Facebook: no mobile number yet, maybe no password.
     $('acct-phone-note').hidden = Boolean(me.phone);
     $('pw-cur-field').hidden = !me.hasPassword;
+    // Signed in with Google and no password yet: they can just choose one.
+    $('pw-nopass').hidden = me.hasPassword;
+    $('pw-forgot-box').hidden = !me.hasPassword;
     $('pw-submit').textContent = t(me.hasPassword ? 'acct.changePassword' : 'acct.setPassword');
     if (view === 'orders') renderOrders();
     if (view === 'profile') renderProfile();

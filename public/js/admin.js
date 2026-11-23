@@ -90,6 +90,7 @@
     $('tab-houses').hidden = tab !== 'houses';
     $('tab-accounts').hidden = tab !== 'accounts';
     $('tab-coupons').hidden = tab !== 'coupons';
+    $('tab-customers').hidden = tab !== 'customers';
     refresh();
   }));
 
@@ -597,6 +598,7 @@
     } else if (tab === 'houses') renderHouses((housesData = await adminApi('/api/admin/houses')));
     else if (tab === 'accounts') await refreshAccounts({ auto: true });
     else if (tab === 'coupons') renderCoupons((couponData = await adminApi('/api/admin/coupons')));
+    else if (tab === 'customers') await loadCustomers();
     else if (tab === 'film') renderFilm((lastFilm = (await adminApi('/api/admin/dtf-items')).items));
     else if (tab === 'library') renderLibrary((lastLibrary = await adminApi('/api/admin/library')));
     else { renderOrders((lastOrders = (await adminApi('/api/admin/orders')).orders)); renderNotifyStatus(); }
@@ -613,6 +615,69 @@
     if (tab === 'houses' && housesData) renderHouses(housesData);
     if (tab === 'accounts') renderAccounts();
     if (tab === 'coupons' && couponData) renderCoupons(couponData);
+    if (tab === 'customers' && customerData) renderCustomers(customerData);
+  });
+
+  // ---------- Customers: find one, help with a forgotten password ----------
+  let customerData = null;
+  const resetLinks = new Map(); // customer id -> { url, whatsapp }
+  async function loadCustomers() {
+    if (document.activeElement && document.activeElement.closest && document.activeElement.closest('#cu-list') && customerData) return;
+    renderCustomers((customerData = await adminApi('/api/admin/customers?q=' + encodeURIComponent($('cu-q').value.trim()))));
+  }
+  function renderCustomers(d) {
+    $('cu-count').textContent = t('cu.count', { n: POD.num(d.customers.length), total: POD.num(d.total) });
+    $('cu-list').innerHTML = d.customers.length ? d.customers.map((c) => {
+      const link = resetLinks.get(c.id);
+      const msg = link ? t('cu.waText', { name: c.name.split(' ')[0], url: link.url }) : '';
+      return `
+      <div class="card queue-row cu-row">
+        <div>
+          <strong>${esc(c.name)}</strong>
+          ${c.linked.google ? '<span class="pill">Google</span>' : ''}${c.linked.facebook ? '<span class="pill">Facebook</span>' : ''}${c.hasPassword ? '' : `<span class="pill queued">${esc(t('cu.noPassword'))}</span>`}
+          <div class="muted small"><bdi dir="ltr">${esc(c.phone || '—')}</bdi> · <bdi dir="ltr">${esc(c.email || '—')}</bdi> · ${esc(t('cu.since', { date: POD.date(c.createdAt) }))}</div>
+          <div class="small">${esc(t('cu.orders', { n: POD.num(c.orders), total: money(c.spent) }))}${c.lastOrder ? ` · ${esc(t('cu.last', { date: POD.date(c.lastOrder) }))}` : ''}</div>
+          ${link ? `<div class="cu-link small"><div class="muted">${esc(t('cu.linkReady'))}</div><input type="text" readonly dir="ltr" value="${esc(link.url)}" data-cu-copy="${esc(c.id)}">
+            <div class="row" style="gap:6px;margin-top:6px;flex-wrap:wrap">
+              <button class="btn btn-sm" type="button" data-cu-copybtn="${esc(c.id)}">${esc(t('cu.copy'))}</button>
+              ${link.whatsapp ? `<a class="btn btn-sm btn-whatsapp" target="_blank" rel="noopener" href="${esc(link.whatsapp + '?text=' + encodeURIComponent(msg))}">${esc(t('cu.sendWa'))}</a>` : ''}
+              ${c.email ? `<a class="btn btn-sm" href="${esc('mailto:' + c.email + '?subject=' + encodeURIComponent(t('cu.mailSubject')) + '&body=' + encodeURIComponent(msg))}">${esc(t('cu.sendMail'))}</a>` : ''}
+            </div></div>` : ''}
+        </div>
+        <div class="queue-actions"><button class="btn btn-sm" type="button" data-cu-reset="${esc(c.id)}">${esc(t('cu.resetBtn'))}</button></div>
+      </div>`;
+    }).join('') : `<div class="card empty"><p>${esc(t('cu.none'))}</p></div>`;
+  }
+  let cuTimer = null;
+  $('cu-q').addEventListener('input', () => {
+    clearTimeout(cuTimer);
+    cuTimer = setTimeout(() => loadCustomers().catch((e) => toast(e.message, 'error')), 250);
+  });
+  $('cu-list').addEventListener('click', async (e) => {
+    const r = e.target.closest('[data-cu-reset]');
+    if (r) {
+      r.disabled = true;
+      try {
+        const link = await adminApi(`/api/admin/customers/${encodeURIComponent(r.dataset.cuReset)}/reset-link`, { method: 'POST' });
+        resetLinks.set(r.dataset.cuReset, link);
+        renderCustomers(customerData);
+      } catch (err) {
+        toast(err.message, 'error');
+        r.disabled = false;
+      }
+      return;
+    }
+    const cp = e.target.closest('[data-cu-copybtn]');
+    if (cp) {
+      const input = $('cu-list').querySelector(`[data-cu-copy="${CSS.escape(cp.dataset.cuCopybtn)}"]`);
+      try {
+        await navigator.clipboard.writeText(input.value);
+      } catch (err) {
+        input.select();
+        document.execCommand('copy');
+      }
+      toast(t('cu.copied'));
+    }
   });
 
   $('film-list').addEventListener('change', (e) => {

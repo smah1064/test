@@ -41,6 +41,7 @@
           <button class="btn btn-sm" data-tab="houses" data-i18n="houses.tab"></button>
           <button class="btn btn-sm" data-tab="accounts" data-i18n="acc.tab"></button>
           <button class="btn btn-sm" data-tab="coupons" data-i18n="cp.tab"></button>
+          <button class="btn btn-sm" data-tab="customers" data-i18n="cu.tab"></button>
         </div>
       </div>
 
@@ -188,6 +189,16 @@
           </div>
         </form>
         <div class="queue-list" id="cp-list"></div>
+      </section>
+
+      <section id="tab-customers" hidden>
+        <div class="card" style="padding:16px;margin-bottom:12px">
+          <h2 style="font-size:16px;margin:0 0 4px" data-i18n="cu.title"></h2>
+          <p class="muted small" style="margin:0 0 10px;line-height:1.6" data-i18n="cu.help"></p>
+          <input type="search" id="cu-q" autocomplete="off" maxlength="80" data-i18n-placeholder="cu.search" style="max-width:360px">
+          <span class="small muted" id="cu-count" style="margin-inline-start:10px"></span>
+        </div>
+        <div class="queue-list" id="cu-list"></div>
       </section>
 
       <section id="tab-orders" hidden>

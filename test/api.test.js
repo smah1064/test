@@ -1415,6 +1415,25 @@ test('editor library: icons and stickers searchable in Arabic and English', asyn
   assert.strictEqual((await q('كلمةمشموجودة')).total, 0);
 });
 
+test('admin customers: search and a 24-hour password reset link', async () => {
+  const r0 = await post('/api/account/signup', { name: 'Hoda Kamal', phone: '01155566677', password: 'firstpass1' });
+  assert.strictEqual(r0.status, 201);
+  assert.strictEqual((await fetch(base + '/api/admin/customers')).status, 401);
+  const found = await (await admin('/api/admin/customers?q=0115556')).json();
+  const hoda = found.customers.find((c) => c.name === 'Hoda Kamal');
+  assert.ok(hoda, 'found by part of the mobile');
+  assert.strictEqual(hoda.orders, 0);
+  assert.strictEqual((await (await admin('/api/admin/customers?q=hoda')).json()).customers.length >= 1, true, 'by name');
+  const link = await (await admin(`/api/admin/customers/${hoda.id}/reset-link`, { method: 'POST' })).json();
+  assert.strictEqual(link.hours, 24);
+  assert.strictEqual(link.whatsapp, 'https://wa.me/201155566677');
+  const token = new URL(link.url).searchParams.get('reset');
+  let r = await post('/api/account/reset', { token, password: 'secondpass2' });
+  assert.strictEqual(r.status, 200, await r.clone().text());
+  assert.strictEqual((await post('/api/account/reset', { token, password: 'thirdpass33' })).status, 400, 'works once');
+  assert.strictEqual((await post('/api/account/login', { login: '01155566677', password: 'secondpass2' })).status, 200);
+});
+
 const png4 = (w, h) => png(w, h);
 test('two copies of the app on one data folder share orders, sign-ins and edits', async () => {
   const { createApp: make } = require('../src/app');

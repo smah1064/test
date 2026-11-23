@@ -1831,6 +1831,37 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     }
   });
 
+  // ---------- Customers (admin): find a customer, help with a forgotten password ----------
+  app.get('/api/admin/customers', requireAdmin, (req, res) => {
+    const q = String(req.query.q || '').trim().toLowerCase().slice(0, 80);
+    const digits = q.replace(/\D/g, '');
+    const orders = store.listOrders();
+    const list = customerList()
+      .filter((c) => !q || String(c.name || '').toLowerCase().includes(q) || (c.email || '').includes(q) || (digits.length >= 3 && String(c.phone || '').includes(digits)))
+      .slice()
+      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+      .slice(0, 200)
+      .map((c) => {
+        const mine = orders.filter((o) => o.customerId === c.id || (c.phone && o.customer && o.customer.phone === c.phone));
+        return {
+          ...customers.publicCustomer(c),
+          orders: mine.length,
+          spent: round2(mine.reduce((n, o) => n + (o.total || 0), 0)),
+          lastOrder: mine.length ? mine[mine.length - 1].createdAt : null,
+        };
+      });
+    res.set('Cache-Control', 'no-store');
+    res.json({ customers: list, total: customerList().length });
+  });
+  // A password-reset link the shop sends the customer (WhatsApp or anything), valid 24 hours.
+  app.post('/api/admin/customers/:id/reset-link', requireAdmin, (req, res) => {
+    const c = findCustomer(req.params.id);
+    if (!c) throw new HttpError(404, 'notFound');
+    const url = `${notify.siteUrl() || `${isHttps(req) ? 'https' : 'http'}://${req.get('host')}`}/account?reset=${encodeURIComponent(customers.resetToken(auth.customerKey, c, 24))}`;
+    const phone = String(c.phone || '').replace(/^0/, '20');
+    res.json({ url, hours: 24, whatsapp: phone ? `https://wa.me/${phone}` : null });
+  });
+
   // ---------- Coupons (admin) ----------
   const couponRow = (c) => ({ ...c, uses: coupons.usesOf(store.listOrders(), c), discountGiven: accounting.round2(store.listOrders().filter((o) => coupons.usedOn(o, c)).reduce((n, o) => n + (o.discount || 0), 0)) });
   app.get('/api/admin/coupons', requireAdmin, (req, res) => {
