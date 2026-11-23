@@ -7,6 +7,7 @@
   <script>(function(){var l;try{l=localStorage.getItem('pod-lang')}catch(e){}l=l==='en'?'en':'ar';var d=document.documentElement;d.lang=l;d.dir=l==='ar'?'rtl':'ltr'})()</script>
   <link rel="stylesheet" href="/fonts/fonts.css">
   <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/quantities.css">
 </head>
 <body data-title-key="cart.pageTitle">
   <header class="site-header">
@@ -71,6 +72,7 @@
   <footer class="site-footer"><div class="container" data-i18n="footer"></div></footer>
 
   <script src="/js/i18n.js"></script>
+  <script src="/js/i18n-quantities.js"></script>
   <script src="/js/common.js"></script>
   <script>
     (async () => {
@@ -89,6 +91,49 @@
         sel.value = current;
       }
 
+      // One artwork in several colours / sizes: quantities = [{ color, size, qty, unitPrice }].
+      const qtyLines = (item) => (Array.isArray(item.quantities) ? item.quantities.filter((l) => l && Number(l.qty) > 0) : []);
+      const piecesText = (n) => t('qty.pieces.' + (n === 1 ? 'one' : n === 2 ? 'two' : n % 100 >= 3 && n % 100 <= 10 ? 'few' : 'many'), { n: POD.num(n) });
+      function qtyGroups(lines) {
+        const groups = new Map();
+        for (const l of lines) {
+          const c = l.color || {};
+          const key = c.id || tr(c.name) || '';
+          if (!groups.has(key)) groups.set(key, { color: c, lines: [] });
+          groups.get(key).lines.push(l);
+        }
+        return [...groups.values()];
+      }
+      /** Black: S×2 · M×5 / White: M×2 (one line per colour). */
+      function qtyBreakdown(lines) {
+        return `<div class="qty-break" aria-label="${esc(t('qty.breakdown'))}">${qtyGroups(lines).map((g) => `
+          <div class="qty-line">${g.color.hex ? `<span class="qty-dot" style="background:${esc(g.color.hex)}"></span>` : ''}${tr(g.color.name) ? `<span class="qty-cname">${esc(tr(g.color.name))}:</span>` : ''}
+            ${g.lines.map((l) => `<span class="qty-chip">${l.size && tr(l.size.label) ? `${esc(tr(l.size.label))}×` : '×'}<b>${esc(POD.num(Number(l.qty)))}</b></span>`).join('')}
+          </div>`).join('')}</div>`;
+      }
+      function itemMeta(item) {
+        const lines = qtyLines(item);
+        const isNames = Boolean(item.merge) || (!lines.length && item.copies > 1);
+        const names = isNames ? (item.merge && item.merge.count) || item.copies : 0;
+        const pieces = Math.max(1, Number(item.copies) || lines.reduce((n, l) => n + Number(l.qty), 0) || 1);
+        const one = lines.length === 1 ? lines[0] : null;
+        const printed = esc(t('cart.printed', { sides: item.sides.map(tr).join(' + ') }));
+        const badge = names > 1 ? `<span class="cart-copies">${esc(t('cart.copies', { n: POD.num(names) }))}</span>`
+          : !isNames && pieces > 1 ? `<span class="qty-pieces">${esc(piecesText(pieces))}</span>` : '';
+        if (lines.length > 1) return `${badge}${qtyBreakdown(lines)}${printed}`;
+        const color = one && one.color ? one.color.name : item.colorName;
+        const size = one && one.size ? one.size.label : item.sizeLabel;
+        return `${esc(tr(color))} · ${esc(tr(size))}${badge ? ' · ' + badge : ''}<br>${printed}`;
+      }
+      /** The price for all pieces; with one price per piece, that price under it. */
+      function itemPrice(item) {
+        const lines = qtyLines(item);
+        const pieces = Math.max(1, Number(item.copies) || lines.reduce((n, l) => n + Number(l.qty), 0) || 1);
+        const units = new Set(lines.map((l) => l.unitPrice).filter((u) => u != null));
+        const each = pieces > 1 && units.size <= 1 ? ` <span class="qty-each">${esc(t('qty.each', { price: money(Math.round(item.price / pieces * 100) / 100) }))}</span>` : '';
+        return esc(money(item.price)) + each;
+      }
+
       function render() {
         const cart = POD.getCart();
         document.getElementById('empty').hidden = cart.length > 0;
@@ -98,14 +143,14 @@
             <img src="${esc(item.previewUrl)}" alt="${esc(t('cart.preview', { product: tr(item.productName) }))}">
             <div>
               <h3>${esc(tr(item.productName))}</h3>
-              <div class="meta">${esc(tr(item.colorName))} · ${esc(tr(item.sizeLabel))}${item.copies > 1 ? ` · <span class="cart-copies">${esc(t('cart.copies', { n: POD.num(item.copies) }))}</span>` : ''}<br>${esc(t('cart.printed', { sides: item.sides.map(tr).join(' + ') }))}</div>
+              <div class="meta">${itemMeta(item)}</div>
               <div class="actions">
                 ${item.productId === 'dtfsheet' ? '' : item.bookId ? `<a class="btn btn-sm" href="/book?b=${encodeURIComponent(item.bookId)}&cart=${i}">${esc(t('cart.edit'))}</a>` : `<a class="btn btn-sm" href="/editor?design=${encodeURIComponent(item.designId)}&cart=${i}">${esc(t('cart.edit'))}</a>
                 ${item.bookId ? '' : `<a class="btn btn-sm" href="/editor?design=${encodeURIComponent(item.designId)}">${esc(t('cart.duplicate'))}</a>`}`}
                 <button class="btn btn-sm btn-danger" data-remove="${i}">${esc(t('cart.remove'))}</button>
               </div>
             </div>
-            <div class="price">${esc(money(item.price))}</div>
+            <div class="price">${itemPrice(item)}</div>
           </div>`).join('');
         const subtotal = Math.round(cart.reduce((s, i) => s + i.price, 0) * 100) / 100;
         const freeOver = quote ? quote.freeShippingOver : pricing.freeShippingOver;
@@ -146,14 +191,18 @@
         }
         const gone = [];
         let changed = false;
+        let synced = false;
         const keep = cart.filter((item, i) => {
           const q = quote.items[i];
           if (!q || q.designId !== item.designId) return true;
           if (q.gone) { gone.push(tr(item.productName)); return false; }
           if (q.price !== item.price) { item.price = q.price; changed = true; }
+          // Newer servers may also send the pieces; they are the ones that will be ordered.
+          if (Array.isArray(q.quantities) && JSON.stringify(q.quantities) !== JSON.stringify(item.quantities || null)) { item.quantities = q.quantities; synced = true; }
+          if (q.copies != null && (q.copies || 1) !== (item.copies || 1)) { item.copies = q.copies; synced = true; }
           return true;
         });
-        if (gone.length || changed) POD.setCart(keep);
+        if (gone.length || changed || synced) POD.setCart(keep);
         if (gone.length) POD.toast(t('cart.gone', { list: gone.join('، ') }), 'error');
         else if (changed && announce) POD.toast(t('cart.pricesUpdated'));
         if (gone.length) return refreshPrices();

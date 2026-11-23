@@ -829,6 +829,20 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 
 /* Fabric patterns (editor options) */
 .pat-label { margin: 8px 0 4px; }
+/* Pieces: one artwork in several sizes / colours */
+.qty-grid-wrap { overflow-x: auto; margin: 4px 0 6px; }
+.qty-grid { border-collapse: collapse; font-size: 13px; }
+.qty-grid th { font-weight: 600; padding: 4px 6px; white-space: nowrap; text-align: start; }
+.qty-grid thead th { text-align: center; color: var(--ink-2, #555); font-size: 12px; }
+.qty-grid td { padding: 2px 3px; text-align: center; }
+.qty-in { width: 44px; min-width: 38px; padding: 6px 2px; text-align: center; border: 1px solid var(--line, #ddd); border-radius: 8px; font: inherit; font-weight: 600; -moz-appearance: textfield; appearance: textfield; }
+.qty-in::-webkit-inner-spin-button, .qty-in::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.qty-in:focus { outline: 2px solid var(--brand, #ff5a36); outline-offset: -1px; }
+.qty-sw { display: inline-block; width: 14px; height: 14px; border-radius: 50%; border: 1px solid rgba(0,0,0,.2); vertical-align: middle; margin-inline-end: 6px; }
+.qty-x { background: none; border: 0; font-size: 18px; color: var(--ink-2, #888); cursor: pointer; padding: 0 4px; }
+.qty-add { margin-top: 4px; padding: 6px 8px; border-radius: 8px; border: 1px dashed var(--line, #ccc); background: #fff; font: inherit; font-size: 13px; max-width: 100%; }
+.qty-step { display: inline-flex; gap: 6px; align-items: center; }
+.qty-sum { font-weight: 700; margin: 6px 0 0; }
 /* Name lists (variable data) */
 .merge-sum { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; font-size: 14px; }
 .merge-nav { display: grid; grid-template-columns: auto 1fr auto; gap: 6px; }

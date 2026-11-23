@@ -62,7 +62,7 @@ test('name list design: one copy per row, priced per copy, print files for every
   const merge = { columns: ['Name', 'Title'], rows: ROWS, sides: { front: { box: BOX } } };
 
   // Only the products that offer name lists.
-  const no = await post('/api/designs', { productId: 'tshirt', color: 'black', size: 'M', sides, merge });
+  const no = await post('/api/designs', { productId: 'mug', color: 'white', size: '11oz', sides, merge });
   assert.strictEqual(no.status, 400);
   // The fields must be on a side that is printed.
   const badSide = await post('/api/designs', { productId: 'invitations', color: 'matte', size: '13x18', sides, merge: { ...merge, sides: { back: { box: BOX } } } });

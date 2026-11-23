@@ -83,6 +83,7 @@
     mergeList: null, // name list: { columns, rows, total, truncated, fileName }
     mergeRow: 0, // the row shown in the preview
     mergePreview: false, // the canvas shows a row's real values (editing paused)
+    qty: null, // pieces: { colorId: { sizeId: n } } (one artwork in several colours / sizes)
   };
 
   if (params.get('design')) {
@@ -92,6 +93,7 @@
       st.colorId = saved.color.id;
       st.sizeId = saved.size.id;
       if (saved.method === 'embroidery') st.method = 'embroidery';
+      if (saved.quantities) st.qty = Object.fromEntries([...new Set(saved.quantities.map((l) => l.color.id))].map((c) => [c, Object.fromEntries(saved.quantities.filter((l) => l.color.id === c).map((l) => [l.size.id, l.qty]))]));
       if (saved.mergeList) st.mergeList = { columns: saved.mergeList.columns, rows: saved.mergeList.rows, total: saved.mergeList.rows.length, truncated: false, fileName: '' };
       for (const [sideId, data] of Object.entries(saved.editor)) {
         st.designs[sideId] = await blobifyImages(data.objects || []);
@@ -151,6 +153,7 @@
       if (draft.pattern) st.pattern = draft.pattern;
       if (draft.method === 'embroidery') st.method = 'embroidery';
       if (draft.mergeList && draft.mergeList.columns && draft.mergeList.rows) st.mergeList = draft.mergeList;
+      if (draft.qty && typeof draft.qty === 'object') st.qty = draft.qty;
       restoredDraft = true;
     }
   }
@@ -2533,7 +2536,9 @@
     const b = e.target.closest('[data-color]');
     if (!b || b.dataset.color === st.colorId) return;
     const oldInk = inkFor(surfaceHex());
+    const fromColor = st.colorId;
     st.colorId = b.dataset.color;
+    qtyFollow(fromColor, st.sizeId);
     const newInk = inkFor(surfaceHex());
     renderOptions();
     await applyMockup();
@@ -2564,7 +2569,11 @@
   $('sizes').addEventListener('click', (e) => {
     const b = e.target.closest('[data-size]');
     if (!b) return;
-    if (b.dataset.size !== st.sizeId) changeSize(b.dataset.size);
+    if (b.dataset.size !== st.sizeId) {
+      const fromSize = st.sizeId;
+      changeSize(b.dataset.size);
+      qtyFollow(st.colorId, fromSize);
+    }
     renderOptions();
     refreshChrome();
   });
@@ -2844,6 +2853,25 @@
   function designedSides() {
     return activeSides().filter((s) => (s.id === st.side ? canvas.getObjects().length : (st.designs[s.id] || []).length) > 0);
   }
+  /** The full price: every piece at its size's price (or every name of the list). */
+  function refreshPrice(notes = null) {
+    const p = st.product;
+    let total;
+    let pieces;
+    if (p.merge && st.mergeList) {
+      pieces = mergeCount();
+      total = Array.from({ length: pieces }, (_, i) => unitPrice(mergeRowSize(i))).reduce((a, b) => a + b, 0);
+    } else if (p.kind === 'book') {
+      pieces = 1;
+      total = unitPrice(st.sizeId);
+    } else {
+      const lines = qtyLines();
+      pieces = lines.reduce((a, l) => a + l.qty, 0);
+      total = lines.reduce((a, l) => a + unitPrice(l.size) * l.qty, 0);
+    }
+    $('price').textContent = money(total);
+    if (notes && pieces > 1) notes.push(t('qty.priceNote', { n: POD.num(pieces) }));
+  }
   function refreshChrome() {
     if (bootDone) scheduleDraft();
     renderPlacement();
@@ -2855,10 +2883,8 @@
     const perSide = p.extraSidePrice != null ? p.extraSidePrice : catalog.pricing.extraSide;
     const embFee = emb() ? emb().surcharge : 0;
     const unit = p.basePrice + size.surcharge + Math.max(0, n - 1) * perSide + embFee;
-    const copies = p.merge && st.mergeList ? mergeCount() : 1;
-    $('price').textContent = money(unit * copies);
     const notes = [];
-    if (copies > 1) notes.push(t('merge.priceCopies', { n: POD.num(copies), price: money(unit) }));
+    refreshPrice(notes);
     if (embFee) notes.push(t('emb.fee', { price: money(embFee) }));
     if (activeSides().length > 1 && perSide > 0) notes.push(n > 1 ? t('price.bothSides') : t('price.addSide', { price: money(perSide) }));
     if (size.surcharge) notes.push(`${tr(size.label)} +${money(size.surcharge)}`);
@@ -2871,6 +2897,133 @@
     renderLayers();
     renderCheck();
     renderMerge();
+    renderQty();
+  }
+
+  // ---------- Pieces: one artwork, several identical items, sizes or colours ----------
+  const mix = () => st.product.mix || { colors: false, sizes: false };
+  /** The grid { colorId: { sizeId: n } }, starting with one piece in the chosen colour and size. */
+  function qtyGrid() {
+    const p = st.product;
+    let g = st.qty && typeof st.qty === 'object' ? st.qty : null;
+    // Only colours / sizes this product has, and only mixed where the print allows it.
+    const clean = {};
+    for (const [c, row] of Object.entries(g || {})) {
+      if (!p.colors.some((x) => x.id === c) || (!mix().colors && c !== st.colorId)) continue;
+      for (const [z, n] of Object.entries(row || {})) {
+        const v = Math.max(0, Math.min(1000, Math.floor(Number(n) || 0)));
+        if (p.sizes.some((x) => x.id === z) && (mix().sizes || z === st.sizeId) && v > 0) (clean[c] ||= {})[z] = v;
+      }
+    }
+    if (!Object.keys(clean).length) clean[st.colorId] = { [st.sizeId]: 1 };
+    st.qty = clean;
+    return clean;
+  }
+  const qtyLines = () => Object.entries(qtyGrid()).flatMap(([c, row]) => Object.entries(row).filter(([, n]) => n > 0).map(([z, n]) => ({ color: c, size: z, qty: n })));
+  const qtyTotal = () => qtyLines().reduce((n, l) => n + l.qty, 0);
+  /** A single piece follows the colour / size picked above; a bigger order stays as typed. */
+  function qtyFollow(fromColor, fromSize) {
+    const lines = qtyLines();
+    if (lines.length === 1 && lines[0].color === fromColor && lines[0].size === fromSize) st.qty = { [st.colorId]: { [st.sizeId]: lines[0].qty } };
+  }
+  function unitPrice(sizeId) {
+    const p = st.product;
+    const size = p.sizes.find((s) => s.id === sizeId) || p.sizes[0];
+    const n = designedSides().length;
+    const perSide = p.extraSidePrice != null ? p.extraSidePrice : catalog.pricing.extraSide;
+    return p.basePrice + size.surcharge + Math.max(0, n - 1) * perSide + (emb() ? emb().surcharge : 0);
+  }
+  function renderQty() {
+    const box = $('qty-field');
+    if (!box) return;
+    const p = st.product;
+    if (p.kind === 'book') {
+      box.hidden = true;
+      return;
+    }
+    box.hidden = false;
+    // A name list: every row is one piece (its size from a Size column if there is one).
+    if (p.merge && st.mergeList) {
+      const vc = mergeVariantCols();
+      box.innerHTML = `<label>${esc(t('qty.title'))}</label><p class="muted small" style="margin:0;line-height:1.5">${esc(t(vc.size >= 0 ? 'qty.fromListSizes' : 'qty.fromList', { n: POD.num(mergeCount()) }))}</p>`;
+      return;
+    }
+    const g = qtyGrid();
+    const sizes = mix().sizes ? p.sizes : p.sizes.filter((z) => z.id === st.sizeId);
+    const colors = p.colors.filter((c) => g[c.id]);
+    const total = qtyTotal();
+    const cell = (c, z) => `<input type="number" inputmode="numeric" min="0" max="1000" step="1" class="qty-in" data-qc="${c.id}" data-qz="${z.id}" value="${(g[c.id] && g[c.id][z.id]) || ''}" placeholder="0" aria-label="${esc(`${tr(c.name)} ${tr(z.label)}`)}">`;
+    const simple = !mix().sizes && !mix().colors;
+    box.innerHTML = `
+      <label>${esc(t('qty.title'))}</label>
+      ${simple ? `
+        <div class="qty-step">
+          <button type="button" class="btn btn-sm" data-qstep="-1" aria-label="−">−</button>
+          ${cell(p.colors.find((c) => c.id === st.colorId), p.sizes.find((z) => z.id === st.sizeId))}
+          <button type="button" class="btn btn-sm" data-qstep="1" aria-label="+">+</button>
+        </div>` : `
+        <div class="qty-grid-wrap"><table class="qty-grid">
+          <thead><tr><th></th>${sizes.map((z) => `<th>${esc(tr(z.label))}</th>`).join('')}${colors.length > 1 ? '<th></th>' : ''}</tr></thead>
+          <tbody>${colors.map((c) => `<tr>
+            <th><span class="qty-sw" style="background:${esc(c.hex)}"></span>${esc(tr(c.name))}</th>
+            ${sizes.map((z) => `<td>${cell(c, z)}</td>`).join('')}
+            ${colors.length > 1 ? `<td><button type="button" class="qty-x" data-qdel="${c.id}" aria-label="${esc(t('qty.removeColour', { c: tr(c.name) }))}">×</button></td>` : ''}
+          </tr>`).join('')}</tbody>
+        </table></div>
+        ${mix().colors && colors.length < p.colors.length ? `<select class="qty-add" id="qty-add"><option value="">${esc(t('qty.addColour'))}</option>${p.colors.filter((c) => !g[c.id]).map((c) => `<option value="${c.id}">${esc(tr(c.name))}</option>`).join('')}</select>` : ''}`}
+      <p class="small qty-sum">${esc(t('qty.total', { n: POD.num(total) }))}</p>
+      ${total > 1 ? `<p class="muted small" style="margin:2px 0 0;line-height:1.5">${esc(t(mix().sizes || mix().colors ? 'qty.help' : 'qty.helpSame'))}</p>` : ''}`;
+  }
+  if ($('qty-field')) {
+    const setCell = (c, z, v) => {
+      const g = qtyGrid();
+      g[c] ||= {};
+      g[c][z] = Math.max(0, Math.min(1000, Math.floor(Number(v) || 0)));
+      // At least one piece: clearing the last box puts 1 back.
+      if (!Object.values(g).some((row) => Object.values(row).some((n) => n > 0))) g[c][z] = 1;
+      st.qty = g;
+    };
+    $('qty-field').addEventListener('change', (e) => {
+      const i = e.target.closest('.qty-in');
+      if (i) {
+        setCell(i.dataset.qc, i.dataset.qz, i.value);
+        refreshChrome();
+        renderQty();
+      }
+      if (e.target.id === 'qty-add' && e.target.value) {
+        const g = qtyGrid();
+        g[e.target.value] = { [st.sizeId]: 1 };
+        st.qty = g;
+        refreshChrome();
+        renderQty();
+      }
+    });
+    $('qty-field').addEventListener('input', (e) => {
+      const i = e.target.closest('.qty-in');
+      if (!i) return;
+      setCell(i.dataset.qc, i.dataset.qz, i.value);
+      refreshPrice();
+      const sum = $('qty-field').querySelector('.qty-sum');
+      if (sum) sum.textContent = t('qty.total', { n: POD.num(qtyTotal()) });
+    });
+    $('qty-field').addEventListener('click', (e) => {
+      const step = e.target.closest('[data-qstep]');
+      if (step) {
+        const g = qtyGrid();
+        const now = (g[st.colorId] && g[st.colorId][st.sizeId]) || 0;
+        st.qty = { [st.colorId]: { [st.sizeId]: Math.max(1, Math.min(1000, now + Number(step.dataset.qstep))) } };
+        refreshChrome();
+        renderQty();
+      }
+      const del = e.target.closest('[data-qdel]');
+      if (del) {
+        const g = qtyGrid();
+        delete g[del.dataset.qdel];
+        st.qty = g;
+        refreshChrome();
+        renderQty();
+      }
+    });
   }
 
   // ---------- Name lists (variable data) ----------
@@ -2887,6 +3040,45 @@
     return designedSides().filter((s) => (s.id === st.side ? mergeObjects().length > 0 : (st.designs[s.id] || []).some((o) => o && /text/i.test(o.type) && fieldsOf(o.text).length)));
   }
   const mergeCount = () => (st.mergeList ? st.mergeList.rows.length : 0);
+  // A Size / Colour column gives each row its own size and colour (team kits), as on the server.
+  const looseTxt = (v) => String(v == null ? '' : v).toLowerCase()
+    .replace(/[\u064b-\u0652\u0640]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي')
+    .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).replace(/[\s\-–—_.()]+/g, '');
+  function mergeVariantCols() {
+    const cols = (st.mergeList && st.mergeList.columns) || [];
+    const find = (titles) => cols.findIndex((c) => titles.includes(looseTxt(c)));
+    const size = find(['size', 'sizes', 'مقاس', 'المقاس', 'المقاسات', 'مقاسات']);
+    const color = find(['color', 'colour', 'لون', 'اللون']);
+    return { size: mix().sizes ? size : -1, color: mix().colors ? color : -1 };
+  }
+  function matchSizeId(v) {
+    const x = looseTxt(v);
+    if (!x) return null;
+    const p = st.product;
+    const z = p.sizes.find((sz) => [sz.id, sz.label.en, sz.label.ar].some((y) => looseTxt(y) === x))
+      || p.sizes.find((sz) => [sz.label.en, sz.label.ar].some((y) => looseTxt(y).startsWith(x) && x.length >= 2));
+    return z ? z.id : null;
+  }
+  function matchColorId(v) {
+    const x = looseTxt(v);
+    const c = x && st.product.colors.find((co) => [co.id, co.name.en, co.name.ar].some((y) => looseTxt(y) === x));
+    return c ? c.id : null;
+  }
+  /** The size of row i (its Size column, else the size chosen above). */
+  const mergeRowSize = (i) => {
+    const vc = mergeVariantCols();
+    return (vc.size >= 0 && st.mergeList && matchSizeId(st.mergeList.rows[i][vc.size])) || st.sizeId;
+  };
+  /** Rows whose size or colour isn't one of the product's. */
+  function mergeBadVariants() {
+    const vc = mergeVariantCols();
+    const bad = [];
+    if (!st.mergeList) return bad;
+    st.mergeList.rows.forEach((r, i) => {
+      if ((vc.size >= 0 && !matchSizeId(r[vc.size])) || (vc.color >= 0 && !matchColorId(r[vc.color]))) bad.push(i);
+    });
+    return bad;
+  }
   const rowValues = (i) => {
     const L = st.mergeList;
     const r = (L && L.rows[i]) || [];
@@ -3049,6 +3241,7 @@
         <input type="range" id="merge-fit" min="20" max="100" step="5" value="${Math.round((fieldSel.mergeFit || 0.9) * 100)}">
         <p class="muted small" style="margin:4px 0 0;line-height:1.5">${esc(t('merge.fitHelp'))}</p>
       </div>` : ''}
+      ${mergeBadVariants().length ? `<p class="small merge-warn">${esc(t('merge.badVariant', { n: POD.num(mergeBadVariants().length), sizes: st.product.sizes.map((z) => tr(z.label)).join('، ') }))} ${rowList(mergeBadVariants())}</p>` : ''}
       ${rep && rep.small.length ? `<p class="small merge-warn">${esc(t('merge.small', { n: POD.num(rep.small.length) }))} ${rowList(rep.small)}</p>` : ''}
       ${rep && rep.empty.length ? `<p class="small merge-warn">${esc(t('merge.empty', { n: POD.num(rep.empty.length) }))} ${rowList(rep.empty)}</p>` : ''}
       <p class="muted small" style="margin:8px 0 0">${esc(t('merge.priceNote', { n: POD.num(L.rows.length) }))}</p>`;
@@ -3631,7 +3824,7 @@
     for (const s of st.product.sides) designs[s.id] = s.id === st.side ? serialize() : (st.designs[s.id] || []);
     const empty = !Object.values(designs).some((o) => o.length);
     const productId = st.product.id;
-    const meta = { productId, colorId: st.colorId, sizeId: st.sizeId, side: st.side, offsets: { ...st.offsets }, ...(st.pattern ? { pattern: { ...st.pattern } } : {}), method: st.method, mergeList: st.mergeList || null };
+    const meta = { productId, colorId: st.colorId, sizeId: st.sizeId, side: st.side, offsets: { ...st.offsets }, ...(st.pattern ? { pattern: { ...st.pattern } } : {}), method: st.method, mergeList: st.mergeList || null, qty: st.qty || null };
     let preview = null;
     if (!empty) {
       try {
@@ -3688,6 +3881,10 @@
       }
       if (useMerge && !mergeSides.length) {
         toast(t('merge.addField', { field: `{${st.mergeList.columns[0]}}` }), 'error');
+        return;
+      }
+      if (useMerge && mergeBadVariants().length) {
+        toast(t('merge.badVariant', { n: POD.num(mergeBadVariants().length), sizes: st.product.sizes.map((z) => tr(z.label)).join('، ') }), 'error');
         return;
       }
       if (useMerge) {
@@ -3755,7 +3952,7 @@
       const created = await POD.api('/api/designs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productId: st.product.id, color: st.colorId, size: st.sizeId, sides: sidesPayload, ...(imported ? { rightsConfirmed: true } : {}), ...(emb() ? { method: 'embroidery' } : {}), ...(useMerge ? { merge: { columns: st.mergeList.columns, rows: st.mergeList.rows, sides: mergeSidesPayload } } : {}) }),
+        body: JSON.stringify({ productId: st.product.id, color: st.colorId, size: st.sizeId, sides: sidesPayload, ...(imported ? { rightsConfirmed: true } : {}), ...(emb() ? { method: 'embroidery' } : {}), ...(useMerge ? { merge: { columns: st.mergeList.columns, rows: st.mergeList.rows, sides: mergeSidesPayload } } : { quantities: qtyLines() }) }),
       });
       let done = 0;
       busy(true, t('busy.uploading', { n: 0, total: created.files.length }));
@@ -3779,7 +3976,9 @@
         sizeLabel: design.size.label,
         sides: design.sides.map((s) => s.name),
         price: design.price,
-        ...(design.merge ? { copies: design.merge.count } : {}),
+        ...(design.copies > 1 ? { copies: design.copies } : {}),
+        ...(design.quantities ? { quantities: design.quantities } : {}),
+        ...(design.merge ? { merge: { count: design.merge.count } } : {}),
         previewUrl: design.previewUrl,
         addedAt: new Date().toISOString(),
       };

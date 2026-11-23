@@ -21,6 +21,9 @@ const {
   printAreaFor,
   printWidthFor,
   REPEATS,
+  matchSize,
+  matchColor,
+  variantColumns,
 } = require('./products');
 const { GOVERNORATES, normalizeEgyptMobile } = require('./egypt');
 const { FIELDS, langOf, format } = require('./i18n');
@@ -194,7 +197,9 @@ function publicItem(item) {
     method: item.method || null,
     emb: item.emb || null,
     copies: item.copies || 1,
-    unitPrice: item.unitPrice != null ? item.unitPrice : round2(item.price / (item.copies || 1)),
+    // One price per piece when every piece costs the same; null when sizes are priced differently (see quantities).
+    unitPrice: item.unitPrice != null ? item.unitPrice : item.quantities && new Set(item.quantities.map((l) => l.unitPrice)).size > 1 ? null : round2(item.price / (item.copies || 1)),
+    quantities: item.quantities || null,
     merge: item.merge ? { count: item.merge.count, columns: item.merge.columns } : null,
   };
 }
@@ -312,6 +317,8 @@ async function drawnThumb(svgTpl, hex) {
 
 /** Rows in one name list (copies of one design). */
 const MERGE_MAX_ROWS = 1000;
+/** Pieces of one design (one artwork in several sizes / colours). */
+const MAX_PIECES = 1000;
 
 /** Per-visitor limits; tests and special setups can override them. */
 const DEFAULT_LIMITS = {
@@ -458,7 +465,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   });
 
   /** The list sent with a design, checked: { count, columns, rows, sides: { front: { box } } }. */
-  function cleanMerge(product, m, storedSides, { emb, pattern }) {
+  function cleanMerge(product, m, storedSides, { emb, pattern, colorDef, sizeDef }) {
     if (!product.merge || emb || pattern) throw new HttpError(400, 'mergeNotAllowed');
     if (!m || typeof m !== 'object' || !Array.isArray(m.columns) || !Array.isArray(m.rows) || !m.sides || typeof m.sides !== 'object') throw new HttpError(400, 'mergeBad');
     const text = (v, max) => [...String(v == null ? '' : v).replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim()].slice(0, max).join('');
@@ -482,7 +489,60 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       sides[id] = { box: { x: b.x, y: b.y, w: b.w, h: b.h } };
     }
     if (!Object.keys(sides).length) throw new HttpError(400, 'mergeNoFields');
-    return { count: rows.length, columns, rows, sides };
+    // A Size / Colour column gives each row its own size and colour (team kits); else the design's.
+    const vc = variantColumns(columns);
+    const useSize = vc.size >= 0 && product.mix && product.mix.sizes;
+    const useColor = vc.color >= 0 && product.mix && product.mix.colors;
+    const counts = new Map();
+    rows.forEach((r, i) => {
+      const sz = useSize ? matchSize(product, r[vc.size]) : sizeDef;
+      const co = useColor ? matchColor(product, r[vc.color]) : colorDef;
+      if (!sz) throw new HttpError(400, 'mergeBadSize', { row: i + 1, value: r[vc.size] || '—', list: product.sizes.map((x) => x.id).join(', ') });
+      if (!co) throw new HttpError(400, 'mergeBadColor', { row: i + 1, value: r[vc.color] || '—', list: product.colors.map((x) => pickEn(x.name)).join(', ') });
+      const key = `${co.id}|${sz.id}`;
+      counts.set(key, { co, sz, qty: (counts.get(key) || { qty: 0 }).qty + 1 });
+    });
+    const lines = [...counts.values()].map(({ co, sz, qty }) => ({ color: { id: co.id, name: co.name, hex: co.hex }, size: { id: sz.id, label: sz.label }, qty }));
+    return { count: rows.length, columns, rows, sides, lines: lines.length > 1 || (lines[0] && (lines[0].color.id !== colorDef.id || lines[0].size.id !== sizeDef.id)) || rows.length > 1 ? lines : null, ...(useSize || useColor ? { variantCols: { size: useSize ? vc.size : -1, color: useColor ? vc.color : -1 } } : {}) };
+  }
+
+  /**
+   * The pieces asked for: [{ color, size, qty }] (ids), checked against the
+   * product. Only colours / sizes that share the print file can be mixed.
+   * Returns lines with names, or null for a single piece.
+   */
+  function cleanQuantities(product, q, colorDef, sizeDef) {
+    if (q == null) return null;
+    if (!Array.isArray(q) || q.length < 1 || q.length > 80) throw new HttpError(400, 'qtyBad');
+    const merged = new Map();
+    let total = 0;
+    for (const line of q) {
+      const co = product.colors.find((c) => c.id === (line && line.color));
+      const sz = product.sizes.find((z) => z.id === (line && line.size));
+      const qty = Number(line && line.qty);
+      if (!co || !sz || !Number.isInteger(qty) || qty < 1 || qty > MAX_PIECES) throw new HttpError(400, 'qtyBad');
+      if (co.id !== colorDef.id && !(product.mix && product.mix.colors)) throw new HttpError(400, 'qtyNoColors');
+      if (sz.id !== sizeDef.id && !(product.mix && product.mix.sizes)) throw new HttpError(400, 'qtyNoSizes');
+      const key = `${co.id}|${sz.id}`;
+      merged.set(key, { co, sz, qty: (merged.get(key) || { qty: 0 }).qty + qty });
+      total += qty;
+    }
+    if (total > MAX_PIECES) throw new HttpError(400, 'qtyTooMany', { max: MAX_PIECES });
+    if (total === 1 && merged.size === 1) {
+      const only = [...merged.values()][0];
+      if (only.co.id === colorDef.id && only.sz.id === sizeDef.id) return null; // just one, as chosen
+    }
+    return [...merged.values()].map(({ co, sz, qty }) => ({ color: { id: co.id, name: co.name, hex: co.hex }, size: { id: sz.id, label: sz.label }, qty }));
+  }
+  /** Total pieces and per-line prices of a design (for the cart, order and invoice). */
+  function pieceInfo(product, d) {
+    const unit = (sizeId) => priceFor(product, sizeId, d.sides.length) + embExtra(product, d);
+    if (d.quantities) {
+      for (const l of d.quantities) l.unitPrice = round2(unit(l.size.id));
+      const prices = new Set(d.quantities.map((l) => l.unitPrice));
+      return { copies: copiesOf(d), ...(prices.size === 1 ? { unitPrice: [...prices][0] } : { unitPrice: undefined }) };
+    }
+    return { copies: copiesOf(d), unitPrice: round2(unit(d.size.id)) };
   }
 
   /** On /complete: the background and one name picture per row, all the right size. */
@@ -523,7 +583,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
 
   /** The name-list downloads: every copy in one PDF (with or without crop marks), one PDF per copy, the list. */
   async function makeMergeFile(design, format, base) {
-    const files = { 'merge-pdf': 'merge-print.pdf', 'merge-pdf-marks': 'merge-print-marks.pdf', 'merge-zip': 'merge-copies.zip', 'merge-csv': 'merge-list.csv' };
+    const files = { 'merge-pdf': 'merge-print.pdf', 'merge-pdf-marks': 'merge-print-marks.pdf', 'merge-zip': 'merge-copies.zip', 'merge-csv': 'merge-list.csv', 'merge-names-zip': 'merge-names.zip' };
     const list = design.merge && readMergeList(design);
     if (!list || !Object.hasOwn(files, format)) throw new HttpError(404, 'notFound');
     const n = design.merge.count;
@@ -532,8 +592,18 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (format === 'merge-csv') {
         store.writeDesignFile(design.id, files[format], merge.csv(list.columns, list.rows));
       } else {
-        const lays = await merge.layers(design, (name) => fs.readFileSync(store.designFile(design.id, name)));
-        const label = (r) => (list.rows[r] || []).filter(Boolean).slice(0, 2).join(' / ');
+        const read = (name) => fs.readFileSync(store.designFile(design.id, name));
+        const product = getProduct(design.productId);
+        const garment = Boolean(product && product.methods.some((m) => m === 'dtf' || m === 'dtg'));
+        // Each piece's size / colour from the list (team kits), else the design's.
+        const vc = design.merge.variantCols || { size: -1, color: -1 };
+        const variant = (r) => [vc.size >= 0 ? (list.rows[r] || [])[vc.size] : '', vc.color >= 0 ? (list.rows[r] || [])[vc.color] : ''].filter(Boolean).join(' ');
+        const label = (r) => [(list.rows[r] || []).filter(Boolean).slice(0, 2).join(' / '), variant(r)].filter(Boolean).join(' · ');
+        if (format === 'merge-names-zip') {
+          await merge.writeZipOfNames(design, read, list.rows, target, { extra: variant });
+          return { path: target, name: `${base}-${n}-names-only.zip` };
+        }
+        const lays = await merge.layers(design, read, { keepAlpha: garment });
         if (format === 'merge-zip') {
           try {
             await merge.writeZipOfPdfs(lays, n, list.rows, target, { title: base });
@@ -546,8 +616,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         }
       }
     }
-    const ext = { 'merge-pdf': 'pdf', 'merge-pdf-marks': 'pdf', 'merge-zip': 'zip', 'merge-csv': 'csv' }[format];
-    const suffix = { 'merge-pdf': '', 'merge-pdf-marks': '-cropmarks', 'merge-zip': '-separate', 'merge-csv': '-list' }[format];
+    const ext = { 'merge-pdf': 'pdf', 'merge-pdf-marks': 'pdf', 'merge-zip': 'zip', 'merge-csv': 'csv', 'merge-names-zip': 'zip' }[format];
+    const suffix = { 'merge-pdf': '', 'merge-pdf-marks': '-cropmarks', 'merge-zip': '-separate', 'merge-csv': '-list', 'merge-names-zip': '-names-only' }[format];
     return { path: target, name: `${base}-${n}-names${suffix}.${ext}` };
   }
 
@@ -616,7 +686,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (Buffer.byteLength(editorJson) > MAX_EDITOR_JSON_BYTES) throw new HttpError(413, 'designTooLarge');
     // Name list: one printed copy per row, the {Column} fields filled in per copy.
     const mergeIn = (req.body || {}).merge;
-    const mergeList = mergeIn ? cleanMerge(product, mergeIn, storedSides, { emb, pattern }) : null;
+    const mergeList = mergeIn ? cleanMerge(product, mergeIn, storedSides, { emb, pattern, colorDef, sizeDef }) : null;
+    // One artwork, many pieces: several of the same, or the same artwork in other sizes / colours.
+    const lines = mergeList ? mergeList.lines : cleanQuantities(product, (req.body || {}).quantities, colorDef, sizeDef);
     // Pictures imported from other sites: the customer must confirm they may print them.
     const imported = [...new Set(Object.values(editor).flatMap((e) => e.objects.map((o) => (o && typeof o.importSource === 'string' ? o.importSource.slice(0, 500) : null)).filter(Boolean)))].slice(0, 10);
     if (imported.length && (req.body || {}).rightsConfirmed !== true) throw new HttpError(400, 'rightsRequired');
@@ -634,13 +706,17 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       color: { id: colorDef.id, name: colorDef.name, hex: colorDef.hex },
       size: { id: sizeDef.id, label: sizeDef.label },
       sides: storedSides,
-      price: round2((priceFor(product, sizeDef.id, storedSides.length) + (emb ? emb.surcharge : 0)) * (mergeList ? mergeList.count : 1)),
-      ...(mergeList ? { unitPrice: priceFor(product, sizeDef.id, storedSides.length), merge: { count: mergeList.count, columns: mergeList.columns, sides: mergeList.sides } } : {}),
+      price: 0, // set below from the pieces
+      ...(mergeList ? { merge: { count: mergeList.count, columns: mergeList.columns, sides: mergeList.sides, ...(mergeList.variantCols ? { variantCols: mergeList.variantCols } : {}) } } : {}),
+      ...(lines ? { quantities: lines } : {}),
       currency: CURRENCY,
       orderId: null,
       ...(imported.length ? { imports: imported, rightsConfirmedAt: new Date().toISOString() } : {}),
       ...(pattern ? { pattern } : {}),
     };
+    design.price = designPrice({ ...design, status: 'ready' });
+    if (design.price == null) throw new HttpError(400, 'unknownSize');
+    Object.assign(design, pieceInfo(product, design));
     const files = storedSides.flatMap((sd) => [`${sd.id}-print.png`, `${sd.id}-preview.png`, `${sd.id}-design.svg`]);
     if (mergeList) for (const sd of Object.keys(mergeList.sides)) files.push(`${sd}-merge-base.png`, `${sd}-merge.bin`);
     design.expectedFiles = files;
@@ -1435,10 +1511,26 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (!d || (d.status && d.status !== 'ready') || d.orderId) return null;
     if (d.kind === 'gangsheet') return d.price;
     const product = getProduct(d.productId);
-    return product ? round2((priceFor(product, d.size.id, d.sides.length) + embExtra(product, d)) * copiesOf(d)) : null;
+    if (!product) return null;
+    const unit = (sizeId) => {
+      const p = priceFor(product, sizeId, d.sides.length);
+      return p == null ? null : p + embExtra(product, d);
+    };
+    // Several colours / sizes: each line at its size's price.
+    if (d.quantities && d.quantities.length) {
+      let sum = 0;
+      for (const l of d.quantities) {
+        const u = unit(l.size.id);
+        if (u == null || !product.colors.some((c) => c.id === l.color.id)) return null;
+        sum += u * l.qty;
+      }
+      return round2(sum);
+    }
+    const u = unit(d.size.id);
+    return u == null ? null : round2(u * copiesOf(d));
   };
-  /** Copies of a design: one per row of its name list, else one. */
-  const copiesOf = (d) => (d && d.merge ? d.merge.count : 1);
+  /** Pieces in a design: one per row of its name list, else the quantities asked for, else one. */
+  const copiesOf = (d) => (!d ? 1 : d.merge ? d.merge.count : d.quantities ? d.quantities.reduce((n, l) => n + l.qty, 0) : 1);
   /** The embroidery charge on top of the product price. */
   const embExtra = (product, d) => (d.method === 'embroidery' && product.embroidery ? product.embroidery.surcharge : 0);
   // ---------- Customer accounts ----------
@@ -1747,8 +1839,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         size: d.size,
         sides: d.sides,
         process: d.process || product.process,
-        price: round2((priceFor(product, d.size.id, d.sides.length) + embExtra(product, d)) * copiesOf(d)),
-        ...(d.merge ? { copies: d.merge.count, unitPrice: priceFor(product, d.size.id, d.sides.length), merge: { count: d.merge.count, columns: d.merge.columns } } : {}),
+        price: designPrice({ ...d, status: 'ready', orderId: null }),
+        ...(copiesOf(d) > 1 || d.quantities ? pieceInfo(product, JSON.parse(JSON.stringify(d))) : {}),
+        ...(d.quantities ? { quantities: JSON.parse(JSON.stringify(d.quantities)).map((l) => ({ ...l, unitPrice: round2(priceFor(product, l.size.id, d.sides.length) + embExtra(product, d)) })) } : {}),
+        ...(d.merge ? { merge: { count: d.merge.count, columns: d.merge.columns } } : {}),
         ...(d.method === 'embroidery' ? { method: 'embroidery', emb: d.emb || null } : {}),
         ...(d.imports ? { imports: d.imports, rightsConfirmedAt: d.rightsConfirmedAt } : {}),
         ...(d.pattern ? { pattern: d.pattern } : {}),
@@ -1864,7 +1958,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     sizeLabel: d.size.label,
     sides: d.sides.map((sd) => sd.name),
     price: d.price,
-    ...(d.merge ? { copies: d.merge.count } : {}),
+    ...(copiesOf(d) > 1 ? { copies: copiesOf(d) } : {}),
+    ...(d.quantities ? { quantities: d.quantities } : {}),
+    ...(d.merge ? { merge: { count: d.merge.count } } : {}),
     previewUrl: d.kind === 'book' ? `/files/designs/${d.id}/book-preview.png?v=${d.version || 0}` : `/files/designs/${d.id}/${d.sides[0].id}-preview.png`,
     addedAt: new Date().toISOString(),
   });
@@ -1894,7 +1990,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         return;
       }
       design.price = price;
-      if (design.merge) design.unitPrice = priceFor(product, design.size.id, design.sides.length);
+      if (product) Object.assign(design, pieceInfo(product, design));
       store.save();
       items.push(cartEntry(design, token));
     });

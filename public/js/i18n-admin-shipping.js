@@ -49,4 +49,15 @@ Object.assign(window.POD_STRINGS, {
   'ship.deliveredOn': ['Delivered {date}', 'اتسلّم {date}'],
   'ship.mail': ['"On its way" email to the customer', 'إيميل "طلبك في الطريق" للعميل'],
   'ship.etaShort': ['ETA {date}', 'متوقع {date}'],
+  // One artwork in several colours / sizes: which blank pieces to take, and how many of each.
+  'adminQty.title': ['Pieces to print', 'القطع المطلوبة'],
+  'adminQty.colour': ['Colour', 'اللون'],
+  'adminQty.sizes': ['Size × pieces', 'المقاس × العدد'],
+  'adminQty.count': ['Pieces', 'العدد'],
+  'adminQty.total': ['Total', 'الإجمالي'],
+  'adminQty.n.one': ['1 piece', 'قطعة واحدة'],
+  'adminQty.n.two': ['2 pieces', 'قطعتين'],
+  'adminQty.n.few': ['{n} pieces', '{n} قطع'],
+  'adminQty.n.many': ['{n} pieces', '{n} قطعة'],
+  'adminQty.sameArt': ['Same artwork on every piece: one print file.', 'نفس التصميم على كل القطع: ملف طباعة واحد.'],
 });

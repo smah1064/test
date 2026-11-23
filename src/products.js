@@ -1516,7 +1516,8 @@ for (const p of PRODUCTS) {
 }
 
 // Name lists (variable data): one design, a spreadsheet of names, one printed copy per row.
-const MERGE_PRODUCTS = ['invitations', 'certificates', 'greetingcard', 'idcards', 'namelabels', 'stickersheet'];
+// Garments too: team kits with each player's name and number (a Size column gives each row its size).
+const MERGE_PRODUCTS = ['invitations', 'certificates', 'greetingcard', 'idcards', 'namelabels', 'stickersheet', 'tshirt', 'kidstee', 'hoodie', 'kidshoodie', 'sweatshirt', 'jersey', 'polo', 'oversized', 'ziphoodie'];
 for (const p of PRODUCTS) if (MERGE_PRODUCTS.includes(p.id)) p.merge = { maxRows: 1000 };
 
 // Sizes that change the physical print (the drawing area keeps its shape):
@@ -1538,6 +1539,49 @@ for (const [pid, sizes] of Object.entries(SIZE_PRINT_SCALE)) {
   const p = PRODUCTS.find((x) => x.id === pid);
   if (p) p.sizes = p.sizes.map((sz) => (sizes[sz.id] ? { ...sz, printScale: Math.round(sizes[sz.id] * 10000) / 10000 } : sz));
 }
+// One artwork, many pieces: can one design be ordered in several colours / sizes?
+// Only when every colour and size uses the same print file: not where a bigger
+// size is a bigger print (posters, mugs...), not canvas prints (the "colour" is
+// the edge, which is part of the print), not fabric by the metre, not books.
+for (const p of PRODUCTS) {
+  const plain = !p.pattern && p.kind !== 'book';
+  p.mix = {
+    colors: plain && p.colors.length > 1 && !(p.model && p.model.type === 'canvas'),
+    sizes: plain && p.sizes.length > 1 && !p.sizes.some((sz) => sz.printScale),
+  };
+}
+
+/** Text compared loosely: case, spaces, dashes and Arabic letter forms don't matter. */
+const loose = (v) => String(v == null ? '' : v)
+  .toLowerCase()
+  .replace(/[\u064b-\u0652\u0640]/g, '')
+  .replace(/[أإآ]/g, 'ا')
+  .replace(/ة/g, 'ه')
+  .replace(/ى/g, 'ي')
+  .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+  .replace(/[\s\-–—_.()]+/g, '');
+/** The product size a customer typed in a list ("XL", "xl", "8-10", "8–10 yrs"...), or null. */
+function matchSize(product, value) {
+  const v = loose(value);
+  if (!v) return null;
+  return product.sizes.find((sz) => [sz.id, sz.label.en, sz.label.ar].some((x) => loose(x) === v))
+    || product.sizes.find((sz) => [sz.label.en, sz.label.ar].some((x) => loose(x).startsWith(v) && v.length >= 2))
+    || null;
+}
+/** The product colour a customer typed ("Black", "اسود", "navy"...), or null. */
+function matchColor(product, value) {
+  const v = loose(value);
+  if (!v) return null;
+  return product.colors.find((c) => [c.id, c.name.en, c.name.ar].some((x) => loose(x) === v)) || null;
+}
+/** Which list columns give each row's size and colour (by their title). */
+const SIZE_TITLES = ['size', 'sizes', 'مقاس', 'المقاس', 'المقاسات', 'مقاسات'];
+const COLOR_TITLES = ['color', 'colour', 'لون', 'اللون'];
+function variantColumns(columns) {
+  const find = (titles) => columns.findIndex((c) => titles.includes(loose(c)));
+  return { size: find(SIZE_TITLES), color: find(COLOR_TITLES) };
+}
+
 /** A side's physical print width in inches for a size. */
 function printWidthFor(product, side, sizeId) {
   const size = product.sizes.find((z) => z.id === sizeId);
@@ -1603,6 +1647,9 @@ function shippingFor(subtotal) {
 
 module.exports = {
   PRODUCTS,
+  matchSize,
+  matchColor,
+  variantColumns,
   REPEATS,
   printAreaFor,
   printWidthFor,

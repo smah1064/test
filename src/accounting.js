@@ -109,6 +109,12 @@ function cleanCosts(product, body) {
 
 /** What one order item costs to make, from the product's costs. */
 function itemCostFrom(costs, item) {
+  // Several colours / sizes: each line costs what its size's blank costs.
+  if (item.quantities && item.quantities.length) {
+    const parts = item.quantities.map((l) => ({ ...itemCostFrom(costs, { ...item, quantities: null, copies: 1, size: l.size }), qty: l.qty }));
+    const sum = (k) => round2(parts.reduce((n, x) => n + x[k] * x.qty, 0));
+    return { blank: sum('blank'), print: sum('print'), other: sum('other'), total: sum('total'), set: Boolean(costs && costs[item.productId]), copies: parts.reduce((n, x) => n + x.qty, 0) };
+  }
   const c = (costs && costs[item.productId]) || {};
   const sides = item.kind === 'book' ? 1 : Math.max(1, (item.sides || []).length);
   const blank = round2((c.blank || 0) + ((c.sizes && item.size && c.sizes[item.size.id]) || 0));

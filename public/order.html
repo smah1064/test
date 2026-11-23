@@ -54,7 +54,15 @@
       const shopWa = catalog && catalog.contact && catalog.contact.whatsapp;
       /** A WhatsApp chat with the shop, the order details already typed. */
       function whatsappLink(o) {
-        const items = o.items.map((it, i) => `${POD.num(i + 1)}. ${tr(it.productName)} · ${tr(it.color.name)} · ${tr(it.size.label)}${it.copies > 1 ? ` · ${t('cart.copies', { n: POD.num(it.copies) })}` : ''}`).join('\n');
+        const A = PODAftercare;
+        const items = o.items.map((it, i) => {
+          const parts = [tr(it.productName)];
+          if (A.showBreakdown(it)) parts.push(A.qtyText(it));
+          else parts.push(tr(it.color.name), tr(it.size.label));
+          if (A.isNameList(it)) parts.push(t('cart.copies', { n: POD.num(A.pieces(it)) }));
+          else if (A.pieces(it) > 1) parts.push(t('qty.pieces', { n: POD.num(A.pieces(it)) }));
+          return `${POD.num(i + 1)}. ${parts.join(' · ')}`;
+        }).join('\n');
         const text = t('order.waMessage', { n: o.number, items, total: money(o.total), name: o.customer.name });
         return `https://wa.me/${shopWa}?text=${encodeURIComponent(text)}`;
       }
@@ -153,16 +161,21 @@
               const status = delivered ? 'delivered' : item.status;
               const reached = STEPS.indexOf(status);
               const pic = item.sides && item.sides[0] && item.sides[0].previewUrl;
+              // One design in several sizes / colours / quantities, or a name list.
+              const breakdown = PODAftercare.showBreakdown(item);
+              const names = PODAftercare.isNameList(item);
+              const pieces = PODAftercare.pieces(item);
               return `
               <div class="cart-item">
                 ${pic ? `<img src="${esc(pic)}" alt="">` : '<span></span>'}
                 <div>
                   <h3>${POD.num(i + 1)}. ${esc(tr(item.productName))}</h3>
-                  <div class="meta">${esc(tr(item.color.name))} · ${esc(tr(item.size.label))} · ${esc((item.sides || []).map((s) => tr(s.name)).join(' + '))}${item.copies > 1 ? ` · <span class="cart-copies">${esc(t('cart.copies', { n: POD.num(item.copies) }))}</span>` : ''}</div>
+                  <div class="meta">${breakdown ? '' : `${esc(tr(item.color.name))} · ${esc(tr(item.size.label))} · `}${esc((item.sides || []).map((s) => tr(s.name)).join(' + '))}${names ? ` · <span class="cart-copies">${esc(t('cart.copies', { n: POD.num(pieces) }))}</span>` : ''}</div>
+                  ${breakdown ? PODAftercare.qtyHtml(item) : ''}
                   <div class="status-label" style="margin-top:10px">${esc(t('item.' + status))}</div>
                   <div class="status-steps">${STEPS.map((s, k) => `<div class="${k <= reached ? 'done' : ''}" title="${esc(t('item.' + s))}"></div>`).join('')}</div>
                 </div>
-                <div class="price">${esc(money(item.price))}</div>
+                <div class="price">${esc(money(item.price))}${pieces > 1 && item.unitPrice ? `<div class="qty-each">${esc(t('qty.each', { price: money(item.unitPrice) }))}</div>` : ''}</div>
               </div>`;
             }).join('')}
           </div>

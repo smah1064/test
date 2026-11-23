@@ -26,4 +26,13 @@ Object.assign(window.POD_STRINGS, {
   'invoice.thanks': ['Thank you for your order! Every piece was printed just for you.', 'شكرًا لطلبك! كل قطعة في الطلب ده اتطبعت مخصوص عشانك.'],
   'invoice.print': ['Print / Save as PDF', 'طباعة / حفظ PDF'],
   'invoice.backToOrder': ['Back to order', 'الرجوع للطلب'],
+  // One artwork in several colours / sizes: a sub-row per line under the item.
+  'invoice.qty.one': ['1 piece', 'قطعة واحدة'],
+  'invoice.qty.two': ['2 pieces', 'قطعتين'],
+  'invoice.qty.few': ['{n} pieces', '{n} قطع'],
+  'invoice.qty.many': ['{n} pieces', '{n} قطعة'],
+  'invoice.qty.mixed': ['{pieces} in different colours/sizes (below)', '{pieces} بألوان/مقاسات مختلفة (التفاصيل تحت)'],
+  'invoice.qty.same': ['{pieces}, {price} each', '{pieces}، سعر القطعة {price}'],
+  'invoice.qty.line': ['× {n} · {price} each', '× {n}، سعر القطعة {price}'],
+  'invoice.qty.names': ['{n} names', '{n} اسم'],
 });

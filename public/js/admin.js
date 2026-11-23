@@ -25,8 +25,9 @@
           <input type="checkbox" data-film="${it.id}" ${filmPicked.has(it.id) || (!it.filmBatch && !filmSeen.has(it.id)) ? 'checked' : ''}>
           <img src="${esc(it.sides[0].previewUrl)}" alt="" ${zoomAttr(it)}>
           <div>
-            <strong>${esc(tr(it.productName))}</strong> ${pill(it.status)} ${it.filmBatch ? `<span class="pill printed">${esc(t('admin.onFilm', { id: it.filmBatch.id }))}</span>` : ''}
-            <div class="muted small">${esc(it.orderNumber)} · ${esc(t('admin.spec.itemOf', { i: it.position, n: it.of }))} · ${esc(tr(it.color.name))} · ${esc(tr(it.size.label))} · ${esc(it.sides.map((sd) => `${tr(sd.name)} ${t('admin.cmSize', { w: POD.num(sd.widthIn * 2.54), h: POD.num(sd.heightIn * 2.54) })}`).join(' + '))}</div>
+            <strong>${esc(tr(it.productName))}</strong> ${pill(it.status)}${piecesPill(it)} ${it.filmBatch ? `<span class="pill printed">${esc(t('admin.onFilm', { id: it.filmBatch.id }))}</span>` : ''}
+            <div class="muted small">${esc([it.orderNumber, t('admin.spec.itemOf', { i: it.position, n: it.of }), ...colourSizeText(it), it.sides.map((sd) => `${tr(sd.name)} ${t('admin.cmSize', { w: POD.num(sd.widthIn * 2.54), h: POD.num(sd.heightIn * 2.54) })}`).join(' + ')].join(' · '))}</div>
+            ${hasQty(it) ? qtySummary(it) : ''}
           </div>
         </label>`).join('')
       : `<p class="muted">${esc(t('admin.filmNone'))}</p>`;
@@ -104,6 +105,61 @@
   // (Arabic digits and the Arabic decimal mark are easy to misread on the print floor).
   const cm = (inches) => String(Math.round(inches * 2.54 * 10) / 10);
 
+  // ---------- One artwork in several colours / sizes (item.quantities) ----------
+  if (!document.querySelector('link[href="/css/quantities.css"]')) {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = '/css/quantities.css';
+    document.head.appendChild(link);
+  }
+  const qtyLines = (item) => (Array.isArray(item.quantities) ? item.quantities.filter((l) => l && Number(l.qty) > 0) : []);
+  const piecesOf = (item) => Math.max(1, Number(item.copies) || qtyLines(item).reduce((n, l) => n + Number(l.qty), 0) || 1);
+  const piecesText = (n) => t('adminQty.n.' + (n === 1 ? 'one' : n === 2 ? 'two' : n % 100 >= 3 && n % 100 <= 10 ? 'few' : 'many'), { n: POD.num(n) });
+  /** True when the shop prints more than one piece of this item in colours/sizes listed in quantities. */
+  const hasQty = (item) => qtyLines(item).length > 1 || (qtyLines(item).length === 1 && piecesOf(item) > 1);
+  /** The lines grouped by colour, in the order they come: [{ color, lines, qty }]. */
+  function qtyGroups(item) {
+    const groups = new Map();
+    for (const l of qtyLines(item)) {
+      const c = l.color || {};
+      const key = c.id || tr(c.name) || '';
+      if (!groups.has(key)) groups.set(key, { color: c, lines: [], qty: 0 });
+      const g = groups.get(key);
+      g.lines.push(l);
+      g.qty += Number(l.qty);
+    }
+    return [...groups.values()];
+  }
+  const swatch = (c) => (c && c.hex ? `<span class="qty-dot" style="background:${esc(c.hex)}"></span>` : '');
+  const sizeName = (l) => (l.size && tr(l.size.label)) || '';
+  /** Production table: colour swatch + name, then size × pieces, then pieces per colour and the total. */
+  function qtyTable(item) {
+    const groups = qtyGroups(item);
+    return `
+      <div class="qty-prod">
+        <table>
+          <thead><tr><th>${esc(t('adminQty.colour'))}</th><th>${esc(t('adminQty.sizes'))}</th><th class="qty-n">${esc(t('adminQty.count'))}</th></tr></thead>
+          <tbody>${groups.map((g) => `
+            <tr>
+              <td class="qty-color">${swatch(g.color)}${esc(tr(g.color.name) || '—')}</td>
+              <td><div class="qty-sizes">${g.lines.map((l) => `<span class="qty-size">${sizeName(l) ? `<span>${esc(sizeName(l))}</span>` : ''}<b>×${esc(POD.num(Number(l.qty)))}</b></span>`).join('')}</div></td>
+              <td class="qty-n">${esc(POD.num(g.qty))}</td>
+            </tr>`).join('')}
+          </tbody>
+          <tfoot><tr><td colspan="2">${esc(t('adminQty.total'))}</td><td class="qty-n">${esc(POD.num(piecesOf(item)))}</td></tr></tfoot>
+        </table>
+      </div>
+      ${item.merge ? '' : `<div class="qty-names-note">${esc(t('adminQty.sameArt'))}</div>`}`;
+  }
+  /** Short form for lists: ● Black: S×2 M×5 L×3 · ● White: M×2. */
+  function qtySummary(item) {
+    return `<div class="qty-sum">${qtyGroups(item).map((g) => `<span class="qty-grp">${swatch(g.color)}<b>${esc(tr(g.color.name))}${tr(g.color.name) ? ':' : ''}</b>${g.lines.map((l) => `<span class="qty-chip">${esc(sizeName(l))}×<b>${esc(POD.num(Number(l.qty)))}</b></span>`).join('')}</span>`).join('')}</div>`;
+  }
+  const piecesPill = (item) => (hasQty(item) ? ` <span class="qty-pieces">${esc(piecesText(piecesOf(item)))}</span>` : '');
+  /** "Black · M" for one piece, or nothing when the summary below lists the colours and sizes. */
+  const colourSizeText = (item) => (hasQty(item) ? [] : [tr(item.color.name), tr(item.size.label)]);
+  const anyDark = (item) => (qtyLines(item).length ? qtyLines(item).some((l) => l.color && isDark(l.color.hex)) : isDark(item.color.hex));
+
   function address(c) {
     if (c.governorate || c.address) {
       return [c.name, c.address, [c.city, tr(c.governorateName)].filter(Boolean).join('، '), c.notes ? `(${c.notes})` : ''].filter(Boolean).map(esc).join('<br>');
@@ -132,7 +188,7 @@
       <dl class="spec">
         <dt>${esc(t('admin.spec.order'))}</dt><dd>${esc(item.orderNumber)} · ${esc(t('admin.spec.itemOf', { i: item.position, n: item.of }))}</dd>
         <dt>${esc(t('admin.spec.product'))}</dt><dd>${esc(tr(item.productName))}</dd>
-        <dt>${esc(t('admin.spec.colourSize'))}</dt><dd>${esc(tr(item.color.name))} <span class="dot" style="display:inline-block;vertical-align:middle;background:${esc(item.color.hex)}"></span> · ${esc(tr(item.size.label))}</dd>
+        ${hasQty(item) ? `<dt>${esc(t('adminQty.title'))}</dt><dd class="qty-dd">${qtyTable(item)}</dd>` : `<dt>${esc(t('admin.spec.colourSize'))}</dt><dd>${esc(tr(item.color.name))} <span class="dot" style="display:inline-block;vertical-align:middle;background:${esc(item.color.hex)}"></span> · ${esc(tr(item.size.label))}</dd>`}
         ${item.sides.map((s) => `<dt>${esc(t('admin.spec.print', { side: tr(s.name) }))}</dt><dd><bdi dir="ltr">${cm(s.widthIn)} × ${cm(s.heightIn)} cm (${s.widthIn} × ${s.heightIn} in)${s.bleedIn ? ' ' + esc(t('admin.bleed', { mm: Math.round(s.bleedIn * 25.4) })) : ''} · ${s.widthPx} × ${s.heightPx} px · ${s.dpi} DPI · sRGB</bdi>${s.offsetCm ? `<div class="placement-note">📍 ${esc(t('admin.placement', { v: placementText(s.offsetCm) }))}</div>` : ''}</dd>`).join('')}
         ${item.emb ? `<dt>${esc(t('admin.emb'))}</dt><dd>
           <div><strong>${esc(t('admin.embSummary', { n: POD.num(item.emb.stitches), c: item.emb.colors.length, w: item.emb.widthMm, h: item.emb.heightMm }))}</strong></div>
@@ -144,7 +200,7 @@
         ${item.process ? `<dt>${esc(t('admin.method'))}</dt><dd>
           ${(item.methods || []).length > 1 ? `<div class="btn-group" style="max-width:180px;margin-bottom:6px">${item.methods.map((m) => `<button class="btn btn-sm ${m === item.process ? 'active' : ''}" data-item="${item.id}" data-method="${m}">${esc(t('method.' + m))}</button>`).join('')}</div>` : ''}
           ${esc(t('process.' + item.process))}
-          ${item.process === 'dtg' && isDark(item.color.hex) ? `<div class="small" style="color:var(--warn);margin-top:4px">${esc(t('admin.darkHint'))}</div>` : ''}
+          ${item.process === 'dtg' && anyDark(item) ? `<div class="small" style="color:var(--warn);margin-top:4px">${esc(t('admin.darkHint'))}</div>` : ''}
           ${item.filmBatch ? `<div><span class="pill printed">${esc(t('admin.onFilm', { id: item.filmBatch.id }))}</span></div>` : ''}
         </dd>` : ''}
         ${item.kind === 'book' ? `<dt>${esc(t('admin.bookFiles'))}</dt><dd>${redrawLine(item)}</dd>` : ''}
@@ -438,7 +494,7 @@
       <div class="card now-printing">
         <div class="previews">${item.sides.map((s) => `<img src="${esc(s.previewUrl)}" alt="${esc(tr(s.name))}" data-zoom="${esc(JSON.stringify([s.previewUrl]))}">`).join('')}</div>
         <div>
-          ${pill(item.status)}${importBadge(item)}
+          ${pill(item.status)}${importBadge(item)}${piecesPill(item)}
           ${spec(item)}
           ${importInfo(item)}
           ${item.sides.map((s) => printFiles(item, s)).join('')}
@@ -467,8 +523,9 @@
       <div class="card queue-row ${isOpen ? 'is-open' : ''}">
         <img src="${esc(item.sides[0].previewUrl)}" alt="" ${zoomAttr(item)}>
         <div>
-          <strong>${esc(tr(item.productName))}</strong> ${pill(item.status)}${importBadge(item)}
-          <div class="muted small">${esc(item.orderNumber)} · ${esc(t('admin.spec.itemOf', { i: item.position, n: item.of }))} · ${esc(tr(item.color.name))} · ${esc(tr(item.size.label))} · ${esc(item.sides.map((s) => tr(s.name)).join(' + '))}</div>
+          <strong>${esc(tr(item.productName))}</strong> ${pill(item.status)}${importBadge(item)}${piecesPill(item)}
+          <div class="muted small">${esc([item.orderNumber, t('admin.spec.itemOf', { i: item.position, n: item.of }), ...colourSizeText(item), item.sides.map((s) => tr(s.name)).join(' + ')].join(' · '))}</div>
+          ${hasQty(item) ? qtySummary(item) : ''}
         </div>
         <div class="queue-actions">
           <button class="btn btn-sm" data-toggle-item="${item.id}">${esc(t(isOpen ? 'admin.hideDetails' : 'admin.details'))}</button>
@@ -570,6 +627,12 @@
       </div>
     </div>`;
   }
+  /** Orders table: for items in several colours/sizes, what to print (product · pieces, then colour: size×n). */
+  function orderQty(o) {
+    const mixed = o.items.map((it, k) => ({ it, k })).filter((x) => hasQty(x.it));
+    if (!mixed.length) return '';
+    return `<div class="qty-orders">${mixed.map(({ it, k }) => `<div class="qty-oi"><strong>${o.items.length > 1 ? esc(POD.num(k + 1)) + '. ' : ''}${esc(tr(it.productName))}</strong>${piecesPill(it)}${qtySummary(it)}</div>`).join('')}</div>`;
+  }
   function renderOrders(orders) {
     $('ship-couriers').innerHTML = COURIERS().map((c) => `<option value="${esc(c)}"></option>`).join('');
     const col = (k) => esc(t('admin.col.' + k));
@@ -577,7 +640,7 @@
       <tr class="order-row ${shipOpen.has(o.id) ? 'open' : ''}">
         <td data-label="${col('order')}"><strong>${esc(o.number)}</strong><div class="muted small">${esc(POD.date(o.createdAt))}</div></td>
         <td data-label="${col('customer')}">${esc(o.customer.name)}<div class="muted small"><bdi dir="ltr">${esc(o.customer.phone || o.customer.email || '')}</bdi></div><div class="muted small">${esc(tr(o.customer.governorateName) || '')}</div></td>
-        <td data-label="${col('items')}"><div class="mini-items">${o.items.map((i) => `<img src="${esc(i.sides[0].previewUrl)}" title="${esc(tr(i.productName))}: ${esc(t('admin.status.' + i.status))}" alt="" ${zoomAttr(i)}>`).join('')}</div></td>
+        <td data-label="${col('items')}"><div class="mini-items">${o.items.map((i) => `<img src="${esc(i.sides[0].previewUrl)}" title="${esc(tr(i.productName))}: ${esc(t('admin.status.' + i.status))}" alt="" ${zoomAttr(i)}>`).join('')}</div>${orderQty(o)}</td>
         <td data-label="${col('total')}">${esc(money(o.total))}</td>
         <td data-label="${col('status')}"><div class="order-state">${statusPill(orderState(o))} ${payPill(o)}${shipNote(o)}</div>
           <button class="btn btn-sm ship-toggle" data-ship-toggle="${esc(o.id)}" aria-expanded="${shipOpen.has(o.id)}">${esc(t('ship.manage'))} ${shipOpen.has(o.id) ? '▴' : '▾'}</button></td>

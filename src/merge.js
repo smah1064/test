@@ -44,11 +44,13 @@ async function flatPng(buf) {
  * sides with fields the per-row pictures and where they go.
  * `read(name)` returns a design file as a Buffer.
  */
-async function layers(design, read) {
+async function layers(design, read, { keepAlpha = false } = {}) {
   const out = [];
   for (const side of design.sides) {
     const m = design.merge && design.merge.sides && design.merge.sides[side.id];
-    const base = await flatPng(read(m ? `${side.id}-merge-base.png` : `${side.id}-print.png`));
+    const raw = read(m ? `${side.id}-merge-base.png` : `${side.id}-print.png`);
+    // Garments (DTF / DTG) keep their transparency: only the artwork is printed.
+    const base = keepAlpha ? raw : await flatPng(raw);
     out.push({ side, base, box: m ? m.box : null, overlays: m ? splitPngs(read(`${side.id}-merge.bin`), { max: design.merge.count }) : null });
   }
   return out;
@@ -226,6 +228,29 @@ async function writeZipOfPdfs(lays, count, rows, file, { title = '', nameColumn 
   return writeZip(file, entries());
 }
 
+/**
+ * Garments: just the name / number pictures, one PNG per piece at print size,
+ * named "0007-Ahmed-10-L.png", with where they go (for printing names and
+ * numbers as separate transfers). `extra(r)` adds the size / colour to the name.
+ */
+async function writeZipOfNames(design, read, rows, file, { extra = () => '' } = {}) {
+  const entries = [];
+  for (const [id, m] of Object.entries(design.merge.sides)) {
+    const pics = splitPngs(read(`${id}-merge.bin`), { max: design.merge.count });
+    const side = design.sides.find((s) => s.id === id);
+    const dpi = side && side.dpi ? side.dpi : 300;
+    for (let r = 0; r < pics.length; r++) {
+      const who = fileSlug((rows[r] || []).filter(Boolean).slice(0, 2).join(' '));
+      const data = await sharp()(pics[r]).withDensity(dpi).png().toBuffer();
+      entries.push({ name: `${Object.keys(design.merge.sides).length > 1 ? `${id}/` : ''}${String(r + 1).padStart(4, '0')}${who ? `-${who}` : ''}${extra(r) ? `-${fileSlug(extra(r), 20)}` : ''}.png`, data });
+    }
+    const b = m.box;
+    entries.push({ name: `${id}-placement.txt`, data: Buffer.from(`Each picture goes ${(b.x / dpi * 2.54).toFixed(1)} cm from the left and ${(b.y / dpi * 2.54).toFixed(1)} cm from the top of the ${side ? side.widthIn : ''} x ${side ? side.heightIn : ''} in print area (with bleed), at ${dpi} DPI.\r\n`) });
+  }
+  async function* gen() { for (const e of entries) yield e; }
+  return writeZip(file, gen());
+}
+
 /** The list as CSV (UTF-8 with BOM so Excel shows Arabic correctly). */
 function csv(columns, rows) {
   const cell = (v) => {
@@ -239,4 +264,4 @@ function csv(columns, rows) {
 /** Values for `{Column}` fields: the row as { column: value }. */
 const rowObject = (columns, row) => Object.fromEntries(columns.map((c, i) => [c, row[i] || '']));
 
-module.exports = { layers, pdf, writePdf, writeZip, writeZipOfPdfs, csv, fileSlug, flatPng, rowObject, MAX_ZIP_BYTES };
+module.exports = { layers, pdf, writePdf, writeZip, writeZipOfPdfs, writeZipOfNames, csv, fileSlug, flatPng, rowObject, MAX_ZIP_BYTES };

@@ -33,23 +33,84 @@
     return (o.invoice && o.invoice.number) || 'INV-' + o.number;
   }
 
+  // Styles for the colour/size sub-rows (this page's own styles live in invoice.html).
+  if (!document.querySelector('link[href="/css/quantities.css"]')) {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = '/css/quantities.css';
+    document.head.appendChild(link);
+  }
+  const piecesText = (n) => t('invoice.qty.' + (n === 1 ? 'one' : n === 2 ? 'two' : n % 100 >= 3 && n % 100 <= 10 ? 'few' : 'many'), { n: POD.num(n) });
+  /** The colour/size lines of an item ordered in several colours or sizes (sorted by colour). */
+  function qtyLines(item) {
+    const lines = Array.isArray(item.quantities) ? item.quantities.filter((l) => l && Number(l.qty) > 0) : [];
+    const order = [];
+    for (const l of lines) {
+      const key = (l.color && (l.color.id || tr(l.color.name))) || '';
+      if (!order.includes(key)) order.push(key);
+    }
+    const keyOf = (l) => order.indexOf((l.color && (l.color.id || tr(l.color.name))) || '');
+    return lines.map((l, k) => ({ l, k })).sort((a, b) => keyOf(a.l) - keyOf(b.l) || a.k - b.k).map((x) => x.l);
+  }
+
   function itemRow(item, i) {
-    const copies = Math.max(1, Number(item.copies) || 1);
-    const unit = item.unitPrice != null ? Number(item.unitPrice) : round2(Number(item.price) / copies);
+    const lines = qtyLines(item);
+    const copies = Math.max(1, Number(item.copies) || lines.reduce((n, l) => n + Number(l.qty), 0) || 1);
     const sides = (item.sides || []).map((s) => tr(s.name)).filter(Boolean).join(' + ');
-    const desc = [item.color && tr(item.color.name), item.size && tr(item.size.label), sides].filter(Boolean).join(' · ');
+    if (lines.length > 1) return mixedRows(item, i, lines, copies, sides);
+    const unit = item.unitPrice != null ? Number(item.unitPrice) : round2(Number(item.price) / copies);
+    const one = lines[0];
+    const color = one && one.color ? one.color : item.color;
+    const size = one && one.size ? one.size : item.size;
+    const desc = [color && tr(color.name), size && tr(size.label), sides].filter(Boolean).join(' · ');
     return `
       <tr>
         <td class="n">${esc(POD.num(i + 1))}</td>
         <td>
           <div class="prod">${esc(tr(item.productName))}</div>
           ${desc ? `<div class="desc">${esc(desc)}</div>` : ''}
-          ${copies > 1 ? `<div class="copies">${esc(t('invoice.copies', { n: POD.num(copies), price: money(unit) }))}</div>` : ''}
+          ${copies > 1 ? `<div class="copies">${esc(one && !item.merge ? t('invoice.qty.same', { pieces: piecesText(copies), price: money(unit) }) : t('invoice.copies', { n: POD.num(copies), price: money(unit) }))}</div>` : ''}
         </td>
         <td class="num opt">${esc(POD.num(copies))}</td>
         <td class="num opt">${esc(money(unit))}</td>
         <td class="num">${esc(money(item.price))}</td>
       </tr>`;
+  }
+
+  /** One artwork in several colours/sizes: the item with its total, then one sub-row per colour · size. */
+  function mixedRows(item, i, lines, copies, sides) {
+    const units = new Set(lines.map((l) => (l.unitPrice != null ? Number(l.unitPrice) : null)));
+    const same = units.size === 1 && !units.has(null);
+    // One price for every piece: show it on the item; otherwise each line carries its own (bigger sizes cost more).
+    // (item.unitPrice may be an average of the lines, so it is not used here.)
+    const unit = same ? [...units][0] : null;
+    const lineUnit = (l) => (l.unitPrice != null ? Number(l.unitPrice) : round2(Number(item.price) / copies));
+    const names = item.merge && item.merge.count > 1 ? t('invoice.qty.names', { n: POD.num(item.merge.count) }) : '';
+    const desc = [sides, names].filter(Boolean).join(' · ');
+    const head = `
+      <tr class="qty-has-sub">
+        <td class="n">${esc(POD.num(i + 1))}</td>
+        <td>
+          <div class="prod">${esc(tr(item.productName))}</div>
+          ${desc ? `<div class="desc">${esc(desc)}</div>` : ''}
+          <div class="copies">${esc(t('invoice.qty.mixed', { pieces: piecesText(copies) }))}</div>
+        </td>
+        <td class="num opt">${esc(POD.num(copies))}</td>
+        <td class="num opt">${unit != null ? esc(money(unit)) : ''}</td>
+        <td class="num"><strong>${esc(money(item.price))}</strong></td>
+      </tr>`;
+    return head + lines.map((l, k) => {
+      const u = lineUnit(l);
+      const label = [l.color && tr(l.color.name), l.size && tr(l.size.label)].filter(Boolean).join(' · ');
+      return `
+      <tr class="inv-sub ${k === lines.length - 1 ? 'last' : ''}">
+        <td class="n"></td>
+        <td><div class="qty-sub-item">${l.color && l.color.hex ? `<span class="qty-dot" style="background:${esc(l.color.hex)}"></span>` : ''}<span>${esc(label)}</span><span class="qty-sub-ph">${esc(t('invoice.qty.line', { n: POD.num(Number(l.qty)), price: money(u) }))}</span></div></td>
+        <td class="num opt">${esc(POD.num(Number(l.qty)))}</td>
+        <td class="num opt">${esc(money(u))}</td>
+        <td class="num">${esc(money(round2(u * Number(l.qty))))}</td>
+      </tr>`;
+    }).join('');
   }
 
   function render() {
