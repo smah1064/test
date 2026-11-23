@@ -2037,6 +2037,34 @@
   renderProps();
   renderCheck();
   bootDone = true;
+  // Report the phone's real screen measurements once (sizes only) so the
+  // layout can be fitted to phones that draw pages behind system bars.
+  if (MOBILE.matches) {
+    setTimeout(() => {
+      try {
+        const probe = (css) => {
+          const el = document.createElement('div');
+          el.style.cssText = 'position:fixed;left:0;top:0;width:1px;visibility:hidden;' + css;
+          document.body.appendChild(el);
+          const v = Math.round(el.getBoundingClientRect().height);
+          el.remove();
+          return v;
+        };
+        const bottom = (sel) => { const e = document.querySelector(sel); return e ? Math.round(e.getBoundingClientRect().bottom) : null; };
+        const vv = window.visualViewport;
+        const m = {
+          ih: innerHeight, iw: innerWidth, oh: outerHeight, sh: screen.height, sah: screen.availHeight, dpr: devicePixelRatio,
+          vvh: vv ? Math.round(vv.height) : null, vvt: vv ? Math.round(vv.offsetTop) : null,
+          dvh: probe('height:100dvh'), svh: probe('height:100svh'), lvh: probe('height:100lvh'), vh: probe('height:100vh'),
+          envB: probe('height:env(safe-area-inset-bottom)'), appH: getComputedStyle(document.documentElement).getPropertyValue('--app-h'),
+          body: Math.round(document.body.getBoundingClientRect().height), tools: bottom('.tools'), foot: bottom('.panel-foot'),
+          docH: document.documentElement.clientHeight,
+        };
+        const body = JSON.stringify(m);
+        if (!navigator.sendBeacon || !navigator.sendBeacon('/api/client-layout', body)) fetch('/api/client-layout', { method: 'POST', body }).catch(() => {});
+      } catch (e) { /* diagnostics only */ }
+    }, 1500);
+  }
   if (restoredDraft) toast(t('draft.restored'));
   window.__editor = { canvas, st, rects, checkIssues, exportSvg, exportPrint }; // handy for debugging in the console
 })();

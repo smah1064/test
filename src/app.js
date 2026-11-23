@@ -324,6 +324,16 @@ function createApp({ dataDir, adminPassword }) {
   // "How will my colours print?" RGB -> CMYK -> RGB round trip of a small preview.
   // Script errors from shoppers' browsers, written to the server log (no personal data).
   const errorHits = new Map();
+  // Screen measurements from phones (no personal data), to fit the editor layout.
+  app.post('/api/client-layout', express.text({ type: '*/*', limit: '2kb' }), (req, res) => {
+    const now = Date.now();
+    const hits = (errorHits.get(req.ip) || []).filter((tm) => now - tm < 60000);
+    if (hits.length < 10) {
+      errorHits.set(req.ip, [...hits, now]);
+      console.log(`[client-layout] ${String(req.body || '').replace(/[\r\n]+/g, ' ').slice(0, 900)} | ${String(req.get('user-agent') || '').slice(0, 160)}`);
+    }
+    res.status(204).end();
+  });
   app.post('/api/client-error', express.text({ type: '*/*', limit: '4kb' }), (req, res) => {
     const now = Date.now();
     const hits = (errorHits.get(req.ip) || []).filter((tm) => now - tm < 60000);

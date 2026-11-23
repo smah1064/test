@@ -360,7 +360,7 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
   .mobile-only { display: flex !important; }
   /* The editor fills exactly the visible screen (--app-h is set from the
      browser's real inner height), so the tool bar never falls off the bottom. */
-  body.editor-page { height: 100vh; height: 100dvh; height: min(100dvh, var(--app-h, 100dvh)); overflow: hidden; display: flex; flex-direction: column; }
+  body.editor-page { height: 100vh; height: 100dvh; height: min(100svh, 100dvh, var(--app-h, 100dvh)); overflow: hidden; display: flex; flex-direction: column; }
   body.editor-page .site-header { flex: none; }
   body.editor-page .site-header .inner { height: 50px; }
   body.editor-page .site-header nav a[href="/#products"] { display: none; }
@@ -368,9 +368,11 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
   .editor { display: flex; flex-direction: column; height: 100%; }
   .stage-wrap { order: 1; flex: 1; min-height: 0; position: relative; }
   .panel { order: 2; border: 0; border-top: 1px solid var(--line); }
+  /* Tools sit at the top, under the header: some Android phones draw the
+     page behind the system navigation bar, which hid a bottom tool bar. */
   .tools {
-    order: 3; flex-direction: row; justify-content: space-around; gap: 0;
-    border: 0; border-top: 1px solid var(--line); padding: 4px 2px calc(4px + env(safe-area-inset-bottom));
+    order: 0; flex-direction: row; justify-content: space-around; gap: 0;
+    border: 0; border-bottom: 1px solid var(--line); padding: 2px;
     overflow-x: auto; flex: none;
   }
   .tool { min-width: 56px; padding: 6px 2px; font-size: 10.5px; }
@@ -394,7 +396,7 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
   body.sheet-props #sec-props > h3 { display: none; }
   .panel-section { padding-bottom: 12px; margin-bottom: 12px; }
 
-  .panel-foot { position: static; display: flex; align-items: center; gap: 10px; padding: 8px 12px; box-shadow: none; border-top: 1px solid var(--line); }
+  .panel-foot { position: static; display: flex; align-items: center; gap: 10px; padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); box-shadow: none; border-top: 1px solid var(--line); }
   .panel-foot .price-line { margin: 0; flex: 1; min-width: 0; }
   .panel-foot .price-line > .text-end { display: none; }
   .panel-foot .amount { font-size: 18px; }
