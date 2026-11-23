@@ -15,6 +15,9 @@
  *    the real cost of any item and the real shipping cost of any order.
  *  - Expenses (db.expenses): rent, ads, salaries… for net profit.
  */
+const DAY_FMT = new Intl.DateTimeFormat('en-CA', { timeZone: process.env.SHOP_TIMEZONE || 'Africa/Cairo', year: 'numeric', month: '2-digit', day: '2-digit' });
+/** YYYY-MM-DD in the shop's time zone (expense dates are already plain days). */
+const localDay = (iso) => (/^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso : DAY_FMT.format(new Date(iso)));
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const money = (v, { min = 0, max = 1e7 } = {}) => {
   if (v === '' || v === null || v === undefined) return null;
@@ -126,7 +129,8 @@ function itemCost(costs, item) {
  * YYYY-MM-DD) and the expenses in that time.
  */
 function report({ orders, costs, expenses, settings, from, to }) {
-  const inRange = (iso) => (!from || iso.slice(0, 10) >= from) && (!to || iso.slice(0, 10) <= to);
+  // Days are Cairo days (an order at 01:30 on the 1st belongs to the 1st, not the day before in UTC).
+  const inRange = (iso) => { const day = localDay(iso); return (!from || day >= from) && (!to || day <= to); };
   const defShip = (settings && settings.shippingCost) || 0;
   const rows = [];
   const byProduct = new Map();
@@ -163,7 +167,7 @@ function report({ orders, costs, expenses, settings, from, to }) {
     if (shipped) t.collected += o.total;
     else t.pending += o.total;
   }
-  const exp = (expenses || []).filter((e) => inRange(e.date + 'T')).sort((a, b) => b.date.localeCompare(a.date));
+  const exp = (expenses || []).filter((e) => inRange(e.date)).sort((a, b) => b.date.localeCompare(a.date));
   const expensesTotal = exp.reduce((n, e) => n + e.amount, 0);
   for (const k of Object.keys(t)) if (typeof t[k] === 'number') t[k] = round2(t[k]);
   t.grossProfit = round2(t.revenue - t.itemCost - t.shippingCost);
@@ -177,13 +181,16 @@ function report({ orders, costs, expenses, settings, from, to }) {
 
 /** The report's orders as CSV (opens in Excel; UTF-8 with BOM so Arabic names show). */
 function reportCsv(r, nameOf) {
+  // Numbers stay numbers (Excel adds them up); text that could start a formula gets a ' in front.
   const q = (v) => {
-    const s = String(v == null ? '' : v);
-    return /[",\n]/.test(s) || /^[=+\-@]/.test(s) ? `"${s.replace(/^([=+\-@])/, "'$1").replace(/"/g, '""')}"` : s;
+    if (typeof v === 'number') return Number.isFinite(v) ? String(v) : '';
+    let s = String(v == null ? '' : v);
+    if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+    return /[",\r\n]/.test(s) || s.startsWith("'") ? `"${s.replace(/"/g, '""')}"` : s;
   };
   const lines = [['Order', 'Date', 'Customer', 'Status', 'Items', 'Products', 'Sales', 'Shipping charged', 'Total', 'Item cost', 'Shipping cost', 'Profit'].join(',')];
   for (const o of r.orders) {
-    lines.push([o.number, o.createdAt.slice(0, 10), o.customer, o.status, o.items.length, o.items.map((i) => nameOf(i.productName)).join(' + '), o.subtotal, o.shipping, o.total, o.itemCost, o.shippingCost, o.profit].map(q).join(','));
+    lines.push([o.number, localDay(o.createdAt), o.customer, o.status, o.items.length, o.items.map((i) => nameOf(i.productName)).join(' + '), o.subtotal, o.shipping, o.total, o.itemCost, o.shippingCost, o.profit].map(q).join(','));
   }
   lines.push('');
   lines.push(['Expenses', 'Date', 'Category', 'Description', 'Amount'].join(','));
@@ -197,9 +204,10 @@ function reportCsv(r, nameOf) {
 const EXPENSE_CATEGORIES = ['materials', 'printing', 'shipping', 'marketing', 'rent', 'salaries', 'equipment', 'other'];
 function cleanExpense(body) {
   const date = String((body && body.date) || '');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date))) return { error: 'badDate' };
+  // A real calendar day (2026-02-30 is refused).
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date)) || new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) !== date) return { error: 'badDate' };
   const amount = money(body.amount, { min: 0.01 });
-  if (amount === null || amount === undefined) return { error: 'badCost' };
+  if (amount === null || amount === undefined) return { error: 'badAmount' };
   const category = EXPENSE_CATEGORIES.includes(body.category) ? body.category : 'other';
   const description = String(body.description || '').trim().slice(0, 200);
   return { expense: { date, amount, category, description } };

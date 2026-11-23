@@ -623,6 +623,8 @@ window.POD_STRINGS = {
   'houses.confirmDelete': ['Delete {name}? Products set to it will have no printing house.', 'حذف {name}؟ المنتجات المرتبطة بها هتبقى من غير مطبعة.'],
   'houses.empty': ['No printing houses yet. Add the first one above.', 'لا توجد مطابع بعد. أضف أول مطبعة بالأعلى.'],
   'houses.products': ['{n} products', '{n} منتج'],
+  'houses.product1': ['1 product', 'منتج واحد'],
+  'admin.cmSize': ['{w}×{h} cm', '{w}×{h} سم'],
   'houses.mapTitle': ['Who prints each product', 'مين يطبع كل منتج'],
   'houses.mapHelp': ['This printing house is chosen automatically when you send an item of that product. You can still pick another one for any item.', 'المطبعة دي بتتختار تلقائيًا لما تبعت منتج من النوع ده، وتقدر تختار غيرها لأي منتج.'],
   'houses.unset': ['— Not set —', '— غير محدد —'],

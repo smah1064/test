@@ -19,6 +19,7 @@ const {
   shippingFor,
   round2,
   printAreaFor,
+  printWidthFor,
 } = require('./products');
 const { GOVERNORATES, normalizeEgyptMobile } = require('./egypt');
 const { FIELDS, langOf, format } = require('./i18n');
@@ -345,7 +346,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const offset = cleanOffset(product, side, sizeDef.id, s.editor.offset);
       editor[side.id] = { ...s.editor, offset: offset || undefined };
       storedSides.push({
-        id: side.id, name: side.name, widthIn: side.printWidthIn, heightIn: heightIn(side), bleedIn: side.bleedIn || 0,
+        // The physical size for the chosen size (a 30 x 40 poster prints smaller than a 45 x 60 one).
+        id: side.id, name: side.name, widthIn: printWidthFor(product, side, sizeDef.id), heightIn: round2((heightIn(side) * printWidthFor(product, side, sizeDef.id)) / side.printWidthIn), bleedIn: side.bleedIn || 0,
         ...(offset ? { offsetCm: offsetCm(product, side, sizeDef.id, offset) } : {}),
       });
     }
@@ -706,7 +708,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const { id, side } = req.params;
     const design = UUID_RE.test(id) && store.getDesign(id);
     if (!design || !design.sides.some((s) => s.id === side)) throw new HttpError(404, 'notFound');
-    res.set('Cache-Control', 'public, max-age=31536000, immutable');
+    if (design.kind === 'book') {
+      // A child's photo: never kept in shared caches, and gone once the photo is deleted.
+      if (design.photoRemoved) return res.redirect(302, `/api/books/${encodeURIComponent(design.bookId)}/sample/0.jpg`);
+      res.set('Cache-Control', 'private, no-store');
+    } else {
+      res.set('Cache-Control', 'public, max-age=31536000, immutable');
+    }
     res.sendFile(store.designFile(id, `${side}-preview.png`));
   });
 
@@ -927,6 +935,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   // the preview version, so a book can always be printed.
   const redrawQueue = [];
   let redrawBusy = false;
+  const REDRAW_STALE = 5 * 60e3; // a claim not renewed for this long: that copy stopped
   function queueRedraw(order, item, { force = false } = {}) {
     const design = store.getDesign(item.designId);
     if (!design || design.kind !== 'book' || design.photoRemoved) return false;
@@ -954,16 +963,20 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         const found = store.findItem(redrawQueue[0]);
         if (!found) { redrawQueue.shift(); continue; }
         const { item } = found;
-        // Another copy of the app is already drawing this book (it updates the claim every page).
-        const claim = item.redraw && item.redraw.claim;
-        if (claim && claim.pid !== process.pid && Date.now() - claim.at < 10 * 60e3) { redrawQueue.shift(); continue; }
-        if (!item.redraw || item.redraw.status === 'done' || item.redraw.status === 'off') { redrawQueue.shift(); continue; }
         const design = store.getDesign(item.designId);
         const book = design && bookFor(design.bookId);
         if (!book || design.photoRemoved) { redrawQueue.shift(); continue; }
-        item.redraw.status = 'running';
-        item.redraw.claim = { pid: process.pid, at: Date.now() };
-        store.save();
+        // Claim the book under the lock: another copy may be drawing it (it renews its claim every
+        // page; a claim not renewed for a few minutes belongs to a copy that stopped).
+        const mine = store.mutate(() => {
+          const r = item.redraw;
+          if (!r || r.status === 'done' || r.status === 'off' || r.status === 'failed') return false;
+          if (r.claim && r.claim.pid !== process.pid && Date.now() - r.claim.at < REDRAW_STALE) return false;
+          r.status = 'running';
+          r.claim = { pid: process.pid, at: Date.now() };
+          return true;
+        });
+        if (!mine) { redrawQueue.shift(); continue; }
         const pages = book.pages.map((p, i) => (p.face ? i : -1)).filter((i) => i >= 0);
         let waited = false;
         for (const i of pages) {
@@ -1014,14 +1027,22 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       redrawBusy = false;
     }
   }
-  // Pick up books that were waiting or half-done when the server restarted.
-  setTimeout(() => {
+  // Pick up books that are waiting or half-done (after a restart, or left by a copy that stopped), now and every 2 minutes.
+  const scanRedraws = () => {
+    store.sync();
     for (const order of store.listOrders()) {
       for (const item of order.items) {
-        if (item.kind === 'book' && item.redraw && ['queued', 'running', 'waiting'].includes(item.redraw.status) && !redrawQueue.includes(item.id)) redrawQueue.push(item.id);
+        const r = item.redraw;
+        if (item.kind !== 'book' || !r || !['queued', 'running', 'waiting'].includes(r.status) || redrawQueue.includes(item.id)) continue;
+        if (r.claim && r.claim.pid !== process.pid && Date.now() - r.claim.at < REDRAW_STALE) continue;
+        redrawQueue.push(item.id);
       }
     }
     runRedraws();
+  };
+  if (cleanupEvery) setInterval(scanRedraws, 2 * 60e3).unref();
+  setTimeout(() => {
+    scanRedraws();
   }, 3000).unref();
 
   // ---------- Orders ----------
@@ -1046,7 +1067,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   });
 
   app.post('/api/orders', express.json({ limit: '100kb' }), (req, res) => {
-    const { customer = {}, designIds, expectedTotal } = req.body || {};
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const { designIds, expectedTotal } = body;
+    const customer = body.customer && typeof body.customer === 'object' ? body.customer : {};
     const c = {
       name: cleanString(customer.name, 'name', { max: 120 }),
       phone: cleanString(customer.phone, 'phone', { max: 30 }),
@@ -1105,7 +1128,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const subtotal = round2(items.reduce((sum, i) => sum + i.price, 0));
     const shipping = shippingFor(subtotal);
     // The customer must have seen this total: if a price changed since, show them the new one first.
-    if (expectedTotal !== undefined && Math.abs(Number(expectedTotal) - round2(subtotal + shipping)) > 0.009) {
+    if (expectedTotal !== undefined && !(Math.abs(Number(expectedTotal) - round2(subtotal + shipping)) <= 0.009)) {
       throw new HttpError(409, 'priceChanged', { total: round2(subtotal + shipping) });
     }
     const order = store.createOrder({
@@ -1120,6 +1143,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       // Cash on delivery: collected by the courier.
       payment: { method: 'cod', status: 'pending' },
       lang: langOf(req),
+    }, (db) => {
+      // Checked again under the lock with the latest data: another copy may have just ordered one of these.
+      for (const d of designs) {
+        const cur = db.designs[d.id];
+        if (!cur || (cur.status && cur.status !== 'ready')) throw new HttpError(400, 'designGone');
+        if (cur.orderId) throw new HttpError(409, 'designOrdered');
+      }
     });
     res.status(201).json(publicOrder(order));
     // Books: the AI redraws every page with the child, in the background.
@@ -1356,7 +1386,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (!fs.existsSync(target)) store.writeDesignFile(designId, name, (await gangSheetPdf(design, f === 'sheet-pdf')).pdf);
       return { path: target, name: `${base}${SUFFIX[f]}.pdf` };
     }
-    const fmt = FORMATS[format || 'png'];
+    const fmt = Object.hasOwn(FORMATS, format || 'png') ? FORMATS[format || 'png'] : null;
     if (!side || !fmt) throw new HttpError(404, 'notFound');
     const target = store.designFile(designId, fmt.file(sideId));
     if (!fs.existsSync(target)) {
@@ -1480,8 +1510,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   });
 
   // ---------- Printing houses: who prints what, and sending them the job ----------
-  const houses = () => (store.db.printHouses ||= []);
-  const productHouses = () => (store.db.productHouses ||= {});
+  // Read-only views; changes go through store.mutate (writing to store.db outside it loses data between copies).
+  const houses = () => store.db.printHouses || [];
+  const productHouses = () => store.db.productHouses || {};
   const findHouse = (id) => houses().find((h) => h.id === id) || null;
   // Formats made once per item (not once per side).
   const ONCE = new Set(['preview-pdf', 'book-pdf', 'proof', 'sheet-pdf', 'sheet-pdf-plain']);
@@ -1507,7 +1538,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const created = store.mutate(() => {
       if (houses().length >= 50) throw new HttpError(400, 'houseMany');
       const h = { id: crypto.randomUUID(), ...house, createdAt: new Date().toISOString() };
-      houses().push(h);
+      (store.db.printHouses ||= []).push(h);
       return h;
     });
     res.status(201).json(created);
@@ -1534,7 +1565,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (!getProduct(productId)) throw new HttpError(400, 'unknownProduct');
     if (houseId && !findHouse(houseId)) throw new HttpError(404, 'houseNotFound');
     store.mutate((db) => {
-      productHouses();
+      db.productHouses ||= {};
       if (houseId) db.productHouses[productId] = houseId;
       else delete db.productHouses[productId];
     });
@@ -1652,13 +1683,16 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         }
       }
       const film = await printfiles.filmPdf(pieces, { title: 'DTF film' });
-      const batchId = `F${(store.db.nextFilmNumber = (store.db.nextFilmNumber || 0) + 1)}`;
       const at = new Date().toISOString();
-      for (const it of chosen) {
-        const found = store.findItem(it.id);
-        if (found) found.item.filmBatch = { id: batchId, at };
-      }
-      store.save();
+      // Number the film under the lock, so two copies never hand out the same number.
+      const batchId = store.mutate((db) => {
+        const id = `F${(db.nextFilmNumber = (db.nextFilmNumber || 0) + 1)}`;
+        for (const it of chosen) {
+          const found = store.findItem(it.id);
+          if (found) found.item.filmBatch = { id, at };
+        }
+        return id;
+      });
       res.set('X-Film-Length-In', film.lengthIn.toFixed(2));
       res.set('X-Film-Batch', batchId);
       res.set('Access-Control-Expose-Headers', 'X-Film-Length-In, X-Film-Batch');
@@ -1747,22 +1781,29 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     try {
       // Children's photos in books: removed 30 days after the book was shipped.
       const monthAgo = Date.now() - 30 * 864e5;
-      let removed = 0;
-      for (const order of store.listOrders()) {
-        for (const item of order.items) {
-          if (item.kind !== 'book' || item.status !== 'shipped') continue;
-          const shipped = (item.history || []).find((h) => h.status === 'shipped');
-          const design = store.getDesign(item.designId);
-          if (!design || design.photoRemoved || !shipped || Date.parse(shipped.at) > monthAgo) continue;
-          for (const f of ['face.jpg', 'face-line.png', 'book-print.pdf', 'book-preview.pdf']) fs.rmSync(store.designFile(design.id, f), { force: true });
-          design.photoRemoved = true;
-          removed++;
+      const due = store.mutate((db) => {
+        const ids = [];
+        for (const order of db.orders) {
+          for (const item of order.items) {
+            if (item.kind !== 'book' || item.status !== 'shipped') continue;
+            const shipped = (item.history || []).find((h) => h.status === 'shipped');
+            const design = db.designs[item.designId];
+            if (!design || design.photoRemoved || !shipped || Date.parse(shipped.at) > monthAgo) continue;
+            design.photoRemoved = true;
+            ids.push(design.id);
+          }
+        }
+        return ids;
+      });
+      // Everything made from the photo goes: the photo, the drawn face, the redrawn pages, the cover and the PDFs.
+      for (const id of due) {
+        let files = [];
+        try { files = fs.readdirSync(store.designDir(id)); } catch (e) { files = []; }
+        for (const f of files) {
+          if (/^(face.*|redraw-\d+\.jpg|book-.*\.(pdf|png))$/.test(f)) fs.rmSync(store.designFile(id, f), { force: true });
         }
       }
-      if (removed) {
-        store.save();
-        console.log(`[cleanup] removed the child's photo from ${removed} shipped book(s)`);
-      }
+      if (due.length) console.log(`[cleanup] removed the child's photo from ${due.length} shipped book(s)`);
       return security.cleanup({ store, sharesDir });
     } catch (e) {
       console.error('[cleanup]', e.message);

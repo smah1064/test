@@ -394,7 +394,10 @@ test('admin can download PNG, mirrored PNG, SVG, PDF, PDF with crop marks and CM
 
   const pngRes = await get('png');
   const meta = await sharp(Buffer.from(await pngRes.arrayBuffer())).metadata();
-  assert.strictEqual(meta.density, Math.round(3600 / (17.7 + 0.25)), 'DPI embedded');
+  // A 30 x 40 poster prints 30 cm wide (the 45 x 60 one 45 cm).
+  const wIn = require('../src/products').printWidthFor(require('../src/products').getProduct('poster'), { printWidthIn: 17.7 }, '30x40');
+  assert.ok(Math.abs(wIn * 2.54 - 30) < 0.1);
+  assert.strictEqual(meta.density, Math.round(3600 / (wIn + 0.25)), 'DPI embedded');
   assert.ok(meta.icc, 'sRGB profile embedded');
 
   const mir = await get('png-mirror');
@@ -409,9 +412,9 @@ test('admin can download PNG, mirrored PNG, SVG, PDF, PDF with crop marks and CM
   const pdfText = pdf.toString('latin1');
   assert.match(pdfText, /\/TrimBox/);
   assert.match(pdfText, /\/BleedBox/);
-  // Page = trim + bleed: 17.7 x 23.6 in + 2 x 0.125 in.
+  // Page = trim + bleed: 11.8 x 15.7 in (30 x 40 cm) + 2 x 0.125 in.
   const mb = /\/MediaBox \[0 0 ([\d.]+) ([\d.]+)\]/.exec(pdfText);
-  assert.ok(Math.abs(Number(mb[1]) - (17.7 + 0.25) * 72) < 0.5, 'page width ' + mb[1]);
+  assert.ok(Math.abs(Number(mb[1]) - (wIn + 0.25) * 72) < 0.5, 'page width ' + mb[1]);
 
   const marks = Buffer.from(await (await get('pdf-marks')).arrayBuffer()).toString('latin1');
   const mb2 = /\/MediaBox \[0 0 ([\d.]+) ([\d.]+)\]/.exec(marks);

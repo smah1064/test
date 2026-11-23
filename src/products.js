@@ -1224,6 +1224,28 @@ for (const p of PRODUCTS) {
   if (p.sizes.every((sz) => sz.chestCm)) p.photoChestCm = PHOTO_CHEST[p.id] || 52;
 }
 
+// Sizes that change the physical print (the drawing area keeps its shape):
+// printScale multiplies the side's printWidthIn (and height) for that size.
+const SIZE_PRINT_SCALE = {
+  poster: { '30x40': 30 / 45 },
+  cushion: { 50: 50 / 40 },
+  greetingcard: { A5: 14.8 / 10.5 },
+  plaque: { '18x25': 18 / 13 },
+  sign: { A1: 59.4 / 42 },
+  stickersheet: { A4: 21 / 14.8 },
+  flyers: { 'A5-100': 14.8 / 21, 'A5-500': 14.8 / 21, 'A5-1000': 14.8 / 21 },
+  mug: { '15oz': 1.12 },
+};
+for (const [pid, sizes] of Object.entries(SIZE_PRINT_SCALE)) {
+  const p = PRODUCTS.find((x) => x.id === pid);
+  if (p) p.sizes = p.sizes.map((sz) => (sizes[sz.id] ? { ...sz, printScale: Math.round(sizes[sz.id] * 10000) / 10000 } : sz));
+}
+/** A side's physical print width in inches for a size. */
+function printWidthFor(product, side, sizeId) {
+  const size = product.sizes.find((z) => z.id === sizeId);
+  return Math.round(side.printWidthIn * ((size && size.printScale) || 1) * 1000) / 1000;
+}
+
 /** The print area for a size (same physical print, so smaller on the screen for bigger garments), top edge kept below the collar. */
 function printAreaFor(product, sideId, sizeId) {
   const side = product.sides.find((s) => s.id === sideId);
@@ -1284,6 +1306,7 @@ function shippingFor(subtotal) {
 module.exports = {
   PRODUCTS,
   printAreaFor,
+  printWidthFor,
   CATEGORIES,
   CURRENCY,
   MOCKUP_WIDTH,

@@ -37,6 +37,57 @@ function syncArray(t, v) {
   return t;
 }
 
+/** Put `v` at obj[k], keeping the identity of an existing object or array there. */
+function put(obj, k, v) {
+  const cur = obj[k];
+  if (isObj(cur) && isObj(v)) deepAssign(cur, v);
+  else if (Array.isArray(cur) && Array.isArray(v)) syncArray(cur, v);
+  else obj[k] = v;
+}
+const hasIds = (arr) => arr.every((x) => isObj(x) && x.id);
+
+/** mine = this copy, base = the file when we last read it, theirs = the file now. */
+function merge3(mine, base, theirs) {
+  if (sameJSON(mine, base)) return theirs; // not changed here
+  if (sameJSON(theirs, base)) return mine; // not changed there
+  if (mine === undefined) return theirs; // deleted here, changed there: keep their change
+  if (isObj(mine) && isObj(theirs)) {
+    const b = isObj(base) ? base : {};
+    for (const k of new Set([...Object.keys(mine), ...Object.keys(theirs)])) {
+      const v = merge3(mine[k], b[k], theirs[k]);
+      if (v === undefined) delete mine[k];
+      else if (v !== mine[k]) put(mine, k, v);
+    }
+    return mine;
+  }
+  if (Array.isArray(mine) && Array.isArray(theirs) && hasIds(mine) && hasIds(theirs)) {
+    const was = new Map((Array.isArray(base) ? base : []).filter((x) => isObj(x) && x.id).map((x) => [x.id, x]));
+    const mineById = new Map(mine.map((x) => [x.id, x]));
+    const out = [];
+    const seen = new Set();
+    for (const t of theirs) {
+      seen.add(t.id);
+      const m = mineById.get(t.id);
+      if (m) {
+        const v = merge3(m, was.get(t.id), t);
+        if (v !== m) deepAssign(m, v);
+        out.push(m);
+      } else if (!was.has(t.id) || !sameJSON(t, was.get(t.id))) {
+        out.push(t); // added there, or deleted here but changed there
+      }
+    }
+    for (const m of mine) {
+      if (seen.has(m.id)) continue;
+      if (!was.has(m.id)) out.push(m); // added here
+      else if (!sameJSON(m, was.get(m.id))) out.push(m); // deleted there but changed here
+    }
+    mine.length = 0;
+    mine.push(...out);
+    return mine;
+  }
+  return mine; // both changed the same value: this copy wins
+}
+
 class Store {
   constructor(dataDir) {
     this.dataDir = dataDir;
@@ -86,50 +137,26 @@ class Store {
     return true;
   }
 
-  /** Three-way merge of the file into memory: records changed here (vs. the last read) win. */
+  /**
+   * Three-way merge of the file into memory, field by field: whatever this
+   * copy changed since it last read the file is kept, everything else comes
+   * from the file. So two copies changing different items of one order (or
+   * different fields of one design) both keep their change. Counters take the
+   * highest value. A record deleted here but changed in the file is kept.
+   */
   merge(disk) {
     const db = this.db;
     const base = this.base;
-    // Designs, by id.
-    const mine = db.designs;
-    const theirs = disk.designs || {};
-    const was = base.designs || {};
-    for (const id of new Set([...Object.keys(mine), ...Object.keys(theirs), ...Object.keys(was)])) {
-      if (!sameJSON(mine[id], was[id])) continue; // changed (or deleted) here: keep ours
-      const t = theirs[id];
-      if (t === undefined) delete mine[id];
-      else if (mine[id]) deepAssign(mine[id], t);
-      else mine[id] = t;
-    }
-    // Orders, by id, in the file's order; orders created here and not yet saved go last.
-    const mineById = new Map(db.orders.map((o) => [o.id, o]));
-    const wasById = new Map((base.orders || []).map((o) => [o.id, o]));
-    const result = [];
-    const seen = new Set();
-    for (const t of disk.orders || []) {
-      seen.add(t.id);
-      const m = mineById.get(t.id);
-      if (m && !sameJSON(m, wasById.get(t.id))) result.push(m);
-      else if (m) result.push(deepAssign(m, t));
-      else if (!wasById.has(t.id)) result.push(t);
-    }
-    for (const m of db.orders) {
-      if (!seen.has(m.id) && (!wasById.has(m.id) || !sameJSON(m, wasById.get(m.id)))) result.push(m);
-    }
-    db.orders.length = 0;
-    db.orders.push(...result);
-    // Everything else (counters, small maps).
     for (const k of new Set([...Object.keys(db), ...Object.keys(disk)])) {
-      if (k === 'designs' || k === 'orders') continue;
       const m = db[k];
       const t = disk[k];
-      const changedHere = !sameJSON(m, base[k]);
-      if (changedHere && typeof m === 'number' && typeof t === 'number') db[k] = Math.max(m, t);
-      else if (changedHere && isObj(m) && isObj(t)) db[k] = Object.assign(m, { ...t, ...m });
-      else if (changedHere) continue;
-      else if (t === undefined) delete db[k];
-      else if (isObj(m) && isObj(t)) deepAssign(m, t);
-      else db[k] = t;
+      if (typeof m === 'number' && typeof t === 'number' && !sameJSON(m, base[k])) {
+        db[k] = Math.max(m, t);
+        continue;
+      }
+      const v = merge3(m, base[k], t);
+      if (v === undefined) delete db[k];
+      else if (v !== m) put(db, k, v);
     }
   }
 
@@ -208,9 +235,11 @@ class Store {
     return Object.prototype.hasOwnProperty.call(this.db.designs, id) ? this.db.designs[id] : null;
   }
 
-  createOrder(order) {
-    // The number is taken under the lock from the latest file, so two copies never hand out the same one.
+  createOrder(order, check) {
+    // The number is taken under the lock from the latest file, so two copies never hand out the same one;
+    // `check` runs there too (e.g. "these designs are still free"), so two copies can't order the same design.
     return this.mutate((db) => {
+      if (check) check(db);
       order.number = `POD-${db.nextOrderNumber++}`;
       db.orders.push(order);
       for (const item of order.items) {

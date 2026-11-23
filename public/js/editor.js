@@ -169,7 +169,11 @@
     if (!sizedSides.has(key)) {
       const a = areaFor(st.product, s.id, st.sizeId, o);
       const same = a.x === s.printArea.x && a.y === s.printArea.y && a.w === s.printArea.w && a.h === s.printArea.h;
-      sizedSides.set(key, same ? s : { ...s, printArea: a });
+      // Sizes that print bigger or smaller (posters, cards, signs): same drawing area, different inches.
+      const size = st.product.sizes.find((z) => z.id === st.sizeId);
+      const k = (size && size.printScale) || 1;
+      const physical = k === 1 ? {} : { printWidthIn: s.printWidthIn * k, printHeightIn: (s.printHeightIn || 0) * k };
+      sizedSides.set(key, same && k === 1 ? s : { ...s, ...physical, printArea: same ? s.printArea : a });
     }
     return sizedSides.get(key);
   };
@@ -375,7 +379,7 @@
   function zoneOf(id = st.side) {
     return (baseSide(id) && baseSide(id).moveZone) || null;
   }
-  const areaUnitsPerCm = (id = st.side) => areaFor(st.product, id, st.sizeId, null).w / (baseSide(id).printWidthIn * 2.54);
+  const areaUnitsPerCm = (id = st.side) => areaFor(st.product, id, st.sizeId, null).w / (sideDef(id).printWidthIn * 2.54);
   /** Keep the print area inside the side's allowed zone. */
   function clampOffset(dx, dy, id = st.side) {
     const z = zoneOf(id);
@@ -2535,7 +2539,8 @@
     }
   }
   /** Vector SVG of the artwork at its physical size, with the fonts embedded. */
-  async function exportSvg(side) {
+  async function exportSvg(baseSideDef) {
+    const side = sideDef(baseSideDef.id); // this size's physical inches
     const { bleed, b, u } = rects(side.id);
     const wIn = +(bleed.w / u).toFixed(4);
     const hIn = +(bleed.h / u).toFixed(4);

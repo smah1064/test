@@ -14,6 +14,7 @@
   let lastOrders = null;
   let lastFilm = null;
   const filmPicked = new Set();
+  const filmSeen = new Set();
   let filmMsg = '';
 
   function renderFilm(items) {
@@ -21,15 +22,16 @@
     $('film-list').innerHTML = items.length
       ? items.map((it) => `
         <label class="card queue-row film-row">
-          <input type="checkbox" data-film="${it.id}" ${filmPicked.has(it.id) || !it.filmBatch ? 'checked' : ''}>
+          <input type="checkbox" data-film="${it.id}" ${filmPicked.has(it.id) || (!it.filmBatch && !filmSeen.has(it.id)) ? 'checked' : ''}>
           <img src="${esc(it.sides[0].previewUrl)}" alt="" ${zoomAttr(it)}>
           <div>
             <strong>${esc(tr(it.productName))}</strong> ${pill(it.status)} ${it.filmBatch ? `<span class="pill printed">${esc(t('admin.onFilm', { id: it.filmBatch.id }))}</span>` : ''}
-            <div class="muted small">${esc(it.orderNumber)} · ${esc(t('admin.spec.itemOf', { i: it.position, n: it.of }))} · ${esc(tr(it.color.name))} · ${esc(tr(it.size.label))} · ${esc(it.sides.map((sd) => `${tr(sd.name)} ${POD.num(sd.widthIn * 2.54)}×${POD.num(sd.heightIn * 2.54)} cm`).join(' + '))}</div>
+            <div class="muted small">${esc(it.orderNumber)} · ${esc(t('admin.spec.itemOf', { i: it.position, n: it.of }))} · ${esc(tr(it.color.name))} · ${esc(tr(it.size.label))} · ${esc(it.sides.map((sd) => `${tr(sd.name)} ${t('admin.cmSize', { w: POD.num(sd.widthIn * 2.54), h: POD.num(sd.heightIn * 2.54) })}`).join(' + '))}</div>
           </div>
         </label>`).join('')
       : `<p class="muted">${esc(t('admin.filmNone'))}</p>`;
-    items.forEach((it) => { if (!it.filmBatch) filmPicked.add(it.id); });
+    // New items start ticked; an item the admin unticked stays unticked across refreshes.
+    items.forEach((it) => { if (!filmSeen.has(it.id)) { filmSeen.add(it.id); if (!it.filmBatch) filmPicked.add(it.id); } });
     $('film-build').disabled = !items.length;
     $('film-msg').textContent = filmMsg;
   }
@@ -44,6 +46,7 @@
   }
 
   function signOut(message) {
+    const wasIn = Boolean(token);
     if (token) fetch('/api/admin/logout', { method: 'POST', headers: authHeader() }).catch(() => {});
     token = '';
     sessionStorage.removeItem(KEY);
@@ -51,7 +54,7 @@
     $('dash').hidden = true;
     $('logout').hidden = true;
     $('login').hidden = false;
-    if (message) toast(message, 'error');
+    if (message && wasIn) toast(message, 'error'); // several requests fail at once: say it once
   }
 
   $('login').addEventListener('submit', async (e) => {
@@ -310,7 +313,7 @@
         <div class="card house-row">
           <div>
             <strong>${esc(h.name)}</strong> <span class="pill queued">${esc(t(h.prefer === 'email' ? 'houses.byEmail' : 'houses.byWhatsApp'))}</span>
-            <div class="muted small">${[h.email ? `✉️ <bdi dir="ltr">${esc(h.email)}</bdi>` : '', h.whatsapp ? `💬 <bdi dir="ltr">+${esc(h.whatsapp)}</bdi>` : '', esc(t('houses.products', { n: POD.num(uses(h.id)) }))].filter(Boolean).join(' · ')}</div>
+            <div class="muted small">${[h.email ? `✉️ <bdi dir="ltr">${esc(h.email)}</bdi>` : '', h.whatsapp ? `💬 <bdi dir="ltr">+${esc(h.whatsapp)}</bdi>` : '', esc(t(uses(h.id) === 1 ? 'houses.product1' : 'houses.products', { n: POD.num(uses(h.id)) }))].filter(Boolean).join(' · ')}</div>
             ${h.notes ? `<div class="muted small">${esc(h.notes)}</div>` : ''}
           </div>
           <div class="row" style="gap:8px;flex:0 0 auto">
@@ -580,7 +583,7 @@
       if (!housesData) housesData = await adminApi('/api/admin/houses').catch(() => null);
       renderQueue((lastQueue = await adminApi('/api/admin/queue')));
     } else if (tab === 'houses') renderHouses((housesData = await adminApi('/api/admin/houses')));
-    else if (tab === 'accounts') await refreshAccounts();
+    else if (tab === 'accounts') await refreshAccounts({ auto: true });
     else if (tab === 'film') renderFilm((lastFilm = (await adminApi('/api/admin/dtf-items')).items));
     else if (tab === 'library') renderLibrary((lastLibrary = await adminApi('/api/admin/library')));
     else { renderOrders((lastOrders = (await adminApi('/api/admin/orders')).orders)); renderNotifyStatus(); }
@@ -649,10 +652,10 @@
   }
   const rangeQuery = () => { const [f, to] = periodRange(acc.period); return `from=${encodeURIComponent(f || '')}&to=${encodeURIComponent(to || '')}`; };
   const cls = (n) => (n < 0 ? 'neg' : n > 0 ? 'pos' : '');
-  async function refreshAccounts() {
-    // Don't redraw while the admin is typing a price or a cost.
+  async function refreshAccounts({ auto = false } = {}) {
+    // The 15-second refresh doesn't redraw while the admin is typing a price or a cost.
     const a = document.activeElement;
-    if (a && a.closest && a.closest('#tab-accounts') && /INPUT|SELECT|TEXTAREA/.test(a.tagName) && (acc.report || acc.pricing)) return;
+    if (auto && a && a.closest && a.closest('#tab-accounts') && /INPUT|SELECT|TEXTAREA/.test(a.tagName) && (acc.report || acc.pricing)) return;
     if (acc.view === 'prices') acc.pricing = await adminApi('/api/admin/pricing');
     else {
       acc.report = await adminApi(`/api/admin/accounts?${rangeQuery()}`);

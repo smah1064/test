@@ -27,6 +27,7 @@ const MESSAGES = {
   priceChanged: { en: 'Prices changed since you added these items. Please check the new total and place the order again.', ar: 'الأسعار اتغيرت من وقت ما ضفت المنتجات. راجع الإجمالي الجديد واطلب تاني.' },
   badPrice: { en: 'Enter a valid price (a number; prices cannot go below 1)', ar: 'اكتب سعرًا صحيحًا (رقم، والسعر لا يقل عن 1)' },
   badCost: { en: 'Enter a valid amount (a number, 0 or more)', ar: 'اكتب مبلغًا صحيحًا (رقم، صفر أو أكثر)' },
+  badAmount: { en: 'Enter an amount more than 0', ar: 'اكتب مبلغ أكبر من صفر' },
   badDate: { en: 'Enter a valid date', ar: 'اكتب تاريخًا صحيحًا' },
   houseName: { en: 'Enter the printing house name', ar: 'اكتب اسم المطبعة' },
   houseEmail: { en: 'That email address does not look right', ar: 'البريد الإلكتروني غير صحيح' },

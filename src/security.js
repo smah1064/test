@@ -238,20 +238,25 @@ const DAY = 24 * 3600e3;
  */
 function cleanup({ store, sharesDir, designDays = 30, uploadingHours = 24, shareDays = 120 }) {
   const now = Date.now();
-  let designs = 0;
   let shares = 0;
-  for (const [id, d] of Object.entries(store.db.designs)) {
-    if (d.orderId) continue;
-    const age = now - Date.parse(d.createdAt || 0);
-    // Books hold a child's photo: unordered ones are kept for a week only.
-    const keepDays = d.kind === 'book' ? Math.min(7, designDays) : designDays;
-    if ((d.status === 'uploading' && age > uploadingHours * 3600e3) || age > keepDays * DAY) {
-      fs.rmSync(store.designDir(id), { recursive: true, force: true });
-      delete store.db.designs[id];
-      designs++;
+  // Decided under the lock with the latest data (another copy may have just
+  // ordered a design); files are removed only after the record is gone.
+  const gone = store.mutate((db) => {
+    const ids = [];
+    for (const [id, d] of Object.entries(db.designs)) {
+      if (d.orderId) continue;
+      const age = now - Date.parse(d.createdAt || 0);
+      // Books hold a child's photo: unordered ones are kept for a week only.
+      const keepDays = d.kind === 'book' ? Math.min(7, designDays) : designDays;
+      if ((d.status === 'uploading' && age > uploadingHours * 3600e3) || age > keepDays * DAY) {
+        delete db.designs[id];
+        ids.push(id);
+      }
     }
-  }
-  if (designs) store.save();
+    return ids;
+  });
+  for (const id of gone) fs.rmSync(store.designDir(id), { recursive: true, force: true });
+  const designs = gone.length;
   if (sharesDir && fs.existsSync(sharesDir)) {
     for (const id of fs.readdirSync(sharesDir)) {
       const file = path.join(sharesDir, id, 'share.json');
