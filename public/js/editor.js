@@ -329,6 +329,7 @@
       ctx.fill();
       ctx.fillStyle = '#fff';
       ctx.textAlign = 'left';
+      ctx.direction = 'ltr';
       ctx.fillText(txt, bx + 5 * px, by + 11.5 * px);
     }
     // Movable print area: a handle under the box (and the allowed zone while dragging).
@@ -355,6 +356,7 @@
       ctx.fill();
       ctx.fillStyle = '#fff';
       ctx.textAlign = 'center';
+      ctx.direction = POD.lang === 'ar' ? 'rtl' : 'ltr';
       ctx.fillText(label, hx + hw / 2, hy + 16 * px);
     }
     const s = sideDef();
@@ -365,6 +367,7 @@
     if (ctx.measureText(label).width > a.w + 30 * px) label = t('printAreaShort', dims);
     const rtl = POD.lang === 'ar';
     ctx.textAlign = rtl ? 'right' : 'left';
+    ctx.direction = rtl ? 'rtl' : 'ltr';
     ctx.fillText(label, rtl ? a.x + a.w : a.x, a.y - 6 * px);
     if (st.guides) {
       ctx.setLineDash([]);

@@ -7,6 +7,20 @@
 (function () {
   'use strict';
 
+  // ---------- Right-to-left text direction ----------
+  // Fabric sets the canvas text direction only when the canvas element's
+  // "dir" attribute differs from the text's. Every redraw of a cached text
+  // resets the context, so from the second draw on the direction is left as
+  // "inherit", which some browsers (Chrome/Edge on Windows) resolve to
+  // left-to-right for canvases outside the page: Arabic text is then drawn
+  // one text-width to the right and cut off. Clearing the attribute first
+  // makes Fabric set the direction (and alignment) itself on every draw.
+  const origRenderChars = fabric.Text.prototype._renderChars;
+  fabric.Text.prototype._renderChars = function (method, ctx, ...rest) {
+    if (ctx && ctx.canvas && ctx.canvas.removeAttribute) ctx.canvas.removeAttribute('dir');
+    return origRenderChars.call(this, method, ctx, ...rest);
+  };
+
   // ---------- Curved text ----------
   // The text is drawn straight into an offscreen canvas at the current
   // device resolution, then bent along an arc in thin vertical slices. This
