@@ -123,6 +123,22 @@ function itemCost(costs, item) {
   return { ...itemCostFrom(costs, item), source: 'current' };
 }
 
+/**
+ * An order's coupon discount shared over its items in proportion to their
+ * prices (in piastres, so the shares add up exactly to the discount).
+ */
+function discountShares(o) {
+  const total = Math.round((o.discount || 0) * 100);
+  const prices = o.items.map((it) => Math.round((it.price || 0) * 100));
+  const sum = prices.reduce((a, b) => a + b, 0);
+  if (!total || !sum) return prices.map(() => 0);
+  const raw = prices.map((p) => (total * p) / sum);
+  const out = raw.map(Math.floor);
+  let left = total - out.reduce((a, b) => a + b, 0);
+  raw.map((r, i) => [r - Math.floor(r), i]).sort((a, b) => b[0] - a[0]).forEach(([, i]) => { if (left > 0) { out[i]++; left--; } });
+  return out.map((v) => v / 100);
+}
+
 // ---------- Report ----------
 /**
  * Money for orders placed between `from` and `to` (inclusive dates,
@@ -138,14 +154,16 @@ function report({ orders, costs, expenses, settings, from, to }) {
   for (const o of orders) {
     if (!inRange(o.createdAt)) continue;
     let cost = 0;
-    const items = o.items.map((it) => {
+    const share = discountShares(o);
+    const items = o.items.map((it, idx) => {
       const c = itemCost(costs, it);
       cost += c.total;
       if (c.source !== 'actual' && !c.set) t.missingCosts++;
       const pk = it.productId;
       const p = byProduct.get(pk) || { productId: pk, productName: it.productName, units: 0, sales: 0, cost: 0 };
       p.units++;
-      p.sales = round2(p.sales + it.price);
+      // Sales after the coupon: the order's discount is shared over its items by price.
+      p.sales = round2(p.sales + it.price - share[idx]);
       p.cost = round2(p.cost + c.total);
       byProduct.set(pk, p);
       return { id: it.id, productId: it.productId, productName: it.productName, size: it.size, sides: (it.sides || []).length, price: it.price, status: it.status, cost: c.total, costSource: c.source, costParts: c.source === 'actual' ? null : { blank: c.blank, print: c.print, other: c.other } };

@@ -19,7 +19,7 @@
   const MAX_VECTOR_BYTES = 40 * 1024 * 1024;
   const HISTORY_LIMIT = 60;
   const SNAP_PX = 7;
-  const EXTRA_PROPS = ['name', 'selectable', 'evented', 'curve', 'mask', 'maskBorder', 'maskBorderColor', 'lockRatio', 'bgShape', 'textFx', 'boosted'];
+  const EXTRA_PROPS = ['name', 'selectable', 'evented', 'curve', 'mask', 'maskBorder', 'maskBorderColor', 'lockRatio', 'bgShape', 'textFx', 'boosted', 'importSource'];
   const $ = (id) => document.getElementById(id);
   const { esc, money, toast, t, tr } = POD;
   const D = window.POD_DESIGN;
@@ -927,7 +927,7 @@
       busy(false);
     }
   }
-  async function addImageFile(file) {
+  async function addImageFile(file, { source } = {}) {
     if (!file) return;
     if (isVectorFile(file)) {
       try {
@@ -949,7 +949,7 @@
       const jpeg = file.type === 'image/jpeg' || (!file.type && /\.jpe?g$/i.test(file.name || ''));
       const blob = await new Promise((r) => c.toBlob(r, jpeg ? 'image/jpeg' : 'image/png', 0.92));
       const fimg = await new Promise((resolve) => fabric.Image.fromURL(URL.createObjectURL(blob), resolve));
-      fimg.set({ name: file.name.replace(/\.[^.]+$/, '').slice(0, 40) || 'Image' });
+      fimg.set({ name: file.name.replace(/\.[^.]+$/, '').slice(0, 40) || 'Image', ...(source ? { importSource: source } : {}) });
       const a = area();
       fimg.scale(Math.min((a.w * 0.8) / fimg.width, (a.h * 0.8) / fimg.height));
       addObject(fimg);
@@ -963,6 +963,62 @@
       URL.revokeObjectURL(srcUrl);
     }
   }
+  // ---------- Import a picture from a link (another site's product page or an image link) ----------
+  $('imp-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const url = $('imp-url').value.trim();
+    if (!url) return;
+    const box = $('imp-results');
+    box.innerHTML = `<div class="muted small"><span class="spinner spinner-sm"></span> ${esc(t('imp.loading'))}</div>`;
+    try {
+      const r = await POD.api('/api/import/link', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang }, body: JSON.stringify({ url }) });
+      box.innerHTML = `<div class="muted small" style="margin-bottom:6px">${esc(t('imp.pick'))}</div><div class="imp-grid">${r.images.map((u) => `<button type="button" class="imp-pick" data-src="${esc(u)}"><img alt="" loading="lazy" src="/api/import/image?thumb=1&url=${encodeURIComponent(u)}"></button>`).join('')}</div>`;
+      box.dataset.page = url;
+      // Pictures that fail to load (blocked, not a picture) are hidden.
+      box.querySelectorAll('.imp-pick img').forEach((img) => img.addEventListener('error', () => img.parentElement.remove()));
+    } catch (err) {
+      box.innerHTML = `<div class="small" style="color:var(--danger,#e03131);line-height:1.6">${esc(err.message)}</div>`;
+    }
+  });
+  $('imp-results').addEventListener('click', async (e) => {
+    const b = e.target.closest('.imp-pick');
+    if (!b) return;
+    busy(true, t('imp.adding'));
+    try {
+      const res = await fetch(`/api/import/image?url=${encodeURIComponent(b.dataset.src)}`, { headers: { 'x-lang': POD.lang, 'x-max-px': String(MAX_UPLOAD_PX) } });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || t('msg.badImage'));
+      const blob = await res.blob();
+      const file = new File([blob], 'Imported.' + (blob.type === 'image/png' ? 'png' : 'jpg'), { type: blob.type });
+      busy(false);
+      await addImageFile(file, { source: $('imp-results').dataset.page || b.dataset.src });
+      toast(t('imp.cleanTip'));
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      busy(false);
+    }
+  });
+  /** True when any side uses a picture imported from another site. */
+  const hasImports = () => st.product.sides.some((sd) => (sd.id === st.side ? serialize() : st.designs[sd.id] || []).some((o) => o && o.importSource));
+  /** Ask the customer to confirm the rights to imported pictures (resolves true/false). */
+  function confirmRights() {
+    return new Promise((resolve) => {
+      const m = $('rights');
+      $('rights-check').checked = false;
+      $('rights-ok').disabled = true;
+      m.hidden = false;
+      const done = (ok) => {
+        m.hidden = true;
+        $('rights-ok').onclick = null;
+        $('rights-cancel').onclick = null;
+        resolve(ok);
+      };
+      $('rights-check').onchange = () => { $('rights-ok').disabled = !$('rights-check').checked; };
+      $('rights-ok').onclick = () => done(true);
+      $('rights-cancel').onclick = () => done(false);
+    });
+  }
+
   // Remembered in this browser.
   try { $('auto-bg').checked = localStorage.getItem('pod-auto-bg') === '1'; } catch (e) { /* private mode */ }
   $('auto-bg').addEventListener('change', (e) => { try { localStorage.setItem('pod-auto-bg', e.target.checked ? '1' : '0'); } catch (err) { /* private mode */ } });
@@ -2954,6 +3010,9 @@
       toast(t('msg.addFirst'), 'error');
       return;
     }
+    // Pictures imported from other sites: the customer confirms the rights first.
+    const imported = hasImports();
+    if (imported && !(await confirmRights())) return;
 
     const prevZoom = st.zoom;
     if (st.zoom !== 1) setZoom(1);
@@ -2986,7 +3045,7 @@
       const created = await POD.api('/api/designs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productId: st.product.id, color: st.colorId, size: st.sizeId, sides: sidesPayload }),
+        body: JSON.stringify({ productId: st.product.id, color: st.colorId, size: st.sizeId, sides: sidesPayload, ...(imported ? { rightsConfirmed: true } : {}) }),
       });
       let done = 0;
       busy(true, t('busy.uploading', { n: 0, total: created.files.length }));

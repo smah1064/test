@@ -203,8 +203,23 @@
     a.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg><span data-i18n="nav.account"></span>';
     cartLink.before(a);
   }
+  /** Footer: a link to the rights / takedown page. */
+  function addFooterLinks() {
+    const f = document.querySelector('.site-footer .container');
+    if (!f || f.querySelector('[data-rights-link]')) return;
+    if (f.hasAttribute('data-i18n')) {
+      // The footer text is translated into the box itself: move it into a span so the link survives.
+      const span = document.createElement('span');
+      span.dataset.i18n = f.dataset.i18n;
+      f.removeAttribute('data-i18n');
+      f.textContent = '';
+      f.append(span);
+    }
+    f.insertAdjacentHTML('beforeend', ' · <a href="/rights" data-rights-link data-i18n="rights.policy" style="color:inherit"></a>');
+  }
   function initChrome() {
     addAccountLink();
+    addFooterLinks();
     applyI18n();
     document.querySelectorAll('[data-account-link]').forEach((a) => a.setAttribute('aria-label', t('nav.account')));
     updateCartBadge();

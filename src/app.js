@@ -33,6 +33,7 @@ const bgremove = require('./bgremove');
 const coupons = require('./coupons');
 const customers = require('./customers');
 const oauth = require('./oauth');
+const importer = require('./importer');
 
 // Prices the owner changed in the admin are laid over the built-in ones.
 accounting.initPricing(PRODUCTS, EXTRA_SIDE_PRICE);
@@ -223,6 +224,8 @@ function adminItem(order, item, index) {
     coupon: order.coupon ? { code: order.coupon.code, discount: order.discount || 0 } : null,
     redraw: item.redraw || null,
     sends: item.sends || [],
+    imports: item.imports || null,
+    rightsConfirmedAt: item.rightsConfirmedAt || null,
   };
 }
 
@@ -243,6 +246,9 @@ const DEFAULT_LIMITS = {
   artwork: [{ max: 15, ms: 10 * 60e3 }, { max: 60, ms: 24 * 3600e3 }],
   // AI background removal (about 2 s of server time each).
   removeBg: [{ max: 20, ms: 10 * 60e3 }, { max: 80, ms: 24 * 3600e3 }],
+  importLink: [{ max: 20, ms: 10 * 60e3 }, { max: 100, ms: 24 * 3600e3 }],
+  importImage: [{ max: 120, ms: 10 * 60e3 }, { max: 600, ms: 24 * 3600e3 }],
+  takedown: [{ max: 5, ms: 3600e3 }, { max: 20, ms: 24 * 3600e3 }],
   removeBgAll: [{ max: 1500, ms: 24 * 3600e3 }],
   // Customer accounts: sign-in attempts, new accounts, password-reset emails.
   accountLogin: [{ max: 10, ms: 15 * 60e3 }, { max: 60, ms: 24 * 3600e3 }],
@@ -253,7 +259,7 @@ const DEFAULT_LIMITS = {
   downloads: [{ max: 200, ms: 3600e3 }],
 };
 
-function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 3600e3, oauthConfig = {}, oauthFetch }) {
+function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 3600e3, oauthConfig = {}, oauthFetch, importGet }) {
   if (!adminPassword) throw new Error('adminPassword is required');
   const store = new Store(dataDir);
   const app = express();
@@ -368,6 +374,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     }
     const editorJson = JSON.stringify(editor);
     if (Buffer.byteLength(editorJson) > MAX_EDITOR_JSON_BYTES) throw new HttpError(413, 'designTooLarge');
+    // Pictures imported from other sites: the customer must confirm they may print them.
+    const imported = [...new Set(Object.values(editor).flatMap((e) => e.objects.map((o) => (o && typeof o.importSource === 'string' ? o.importSource.slice(0, 500) : null)).filter(Boolean)))].slice(0, 10);
+    if (imported.length && (req.body || {}).rightsConfirmed !== true) throw new HttpError(400, 'rightsRequired');
 
     const token = crypto.randomBytes(24).toString('hex');
     const design = {
@@ -384,6 +393,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       price: priceFor(product, sizeDef.id, storedSides.length),
       currency: CURRENCY,
       orderId: null,
+      ...(imported.length ? { imports: imported, rightsConfirmedAt: new Date().toISOString() } : {}),
     };
     const files = storedSides.flatMap((sd) => [`${sd.id}-print.png`, `${sd.id}-preview.png`, `${sd.id}-design.svg`]);
     design.expectedFiles = files;
@@ -602,6 +612,49 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
 
   // ---------- Illustrator (.ai) and EPS uploads ----------
   // Browsers cannot show these, so the server draws them to a transparent PNG.
+  // ---------- Import a design from a link (another shop's product page or an image link) ----------
+  const importError = (e) => (e instanceof importer.ImportError ? new HttpError(['importBadUrl', 'importBlocked'].includes(e.code) ? 400 : 422, e.code) : e);
+  app.post('/api/import/link', express.json({ limit: '8kb' }), async (req, res, next) => {
+    try {
+      rateLimit(req, 'importLink');
+      const out = await importer.readLink((req.body || {}).url, importGet);
+      res.set('Cache-Control', 'no-store');
+      res.json(out);
+    } catch (e) {
+      if (e instanceof importer.ImportError && !['importBadUrl', 'importBlocked'].includes(e.code)) console.warn('[import] link:', e.code, e.message);
+      next(importError(e));
+    }
+  });
+  app.get('/api/import/image', async (req, res, next) => {
+    try {
+      rateLimit(req, 'importImage');
+      const maxPx = Math.min(6000, Math.max(500, parseInt(req.get('x-max-px'), 10) || 4000));
+      const img = await importer.fetchImage(String(req.query.url || ''), { maxPx, thumb: req.query.thumb ? 320 : 0 }, importGet);
+      res.set('Cache-Control', 'private, max-age=900');
+      res.set('X-Image-Size', `${img.width}x${img.height}`);
+      res.type(img.type).send(img.body);
+    } catch (e) {
+      next(importError(e));
+    }
+  });
+  // Rights holders ask for a design to be taken down: kept for the admin and emailed to the shop.
+  app.post('/api/takedown', express.json({ limit: '20kb' }), (req, res) => {
+    const b = req.body || {};
+    const clean = (v, n) => String(v || '').trim().replace(/\s+/g, ' ').slice(0, n);
+    const reqst = { name: clean(b.name, 120), contact: clean(b.contact, 200), owner: clean(b.owner, 200), link: clean(b.link, 500), details: String(b.details || '').trim().slice(0, 3000) };
+    if (reqst.name.length < 2 || reqst.contact.length < 5 || reqst.details.length < 10) throw new HttpError(400, 'takedownMissing');
+    rateLimit(req, 'takedown');
+    const saved = store.mutate((db) => {
+      db.takedowns ||= [];
+      const t = { id: crypto.randomUUID(), at: new Date().toISOString(), ...reqst, status: 'new' };
+      db.takedowns.push(t);
+      return t;
+    });
+    const text = `Rights / takedown request\nFrom: ${saved.name} (${saved.contact})\nRights holder: ${saved.owner}\nLink: ${saved.link}\n\n${saved.details}`;
+    if (notify.emailReady() && process.env.ADMIN_EMAIL) notify.emailTo(process.env.ADMIN_EMAIL, 'OneOff Print · Rights request', `<pre style="font:14px/1.5 sans-serif;white-space:pre-wrap">${text.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</pre>`, text).catch((e) => console.warn('[takedown] email failed:', e.message));
+    res.status(201).json({ ok: true });
+  });
+
   app.post('/api/artwork', express.raw({ type: () => true, limit: '40mb' }), async (req, res, next) => {
     try {
       const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
@@ -1380,8 +1433,6 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (!Array.isArray(designIds) || designIds.length === 0) throw new HttpError(400, 'cartEmpty');
     if (designIds.length > MAX_ITEMS_PER_ORDER) throw new HttpError(400, 'tooManyItems', { max: MAX_ITEMS_PER_ORDER });
     if (new Set(designIds).size !== designIds.length) throw new HttpError(400, 'duplicateDesign');
-    // Only orders that passed the checks count towards the limit, so typos don't lock a customer out.
-    rateLimit(req, 'orders');
 
     const designs = designIds.map((id) => {
       const d = typeof id === 'string' && UUID_RE.test(id) && store.getDesign(id);
@@ -1412,6 +1463,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         sides: d.sides,
         process: d.process || product.process,
         price: priceFor(product, d.size.id, d.sides.length),
+        ...(d.imports ? { imports: d.imports, rightsConfirmedAt: d.rightsConfirmedAt } : {}),
         status: 'queued',
         history: [{ status: 'queued', at: now }],
       };
@@ -1427,7 +1479,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (code) {
       const r = coupons.apply(findCoupon(code), { lines, orders: store.listOrders(), phone: c.phone });
       if (!r.ok) throw new HttpError(409, r.reason, r.params || {});
-      applied = { code, type: findCoupon(code).type, discount: r.discount, freeShipping: r.freeShipping };
+      applied = { id: findCoupon(code).id, code, type: findCoupon(code).type, discount: r.discount, freeShipping: r.freeShipping };
     }
     const discount = applied ? applied.discount : 0;
     const shipping = applied && applied.freeShipping ? 0 : shippingFor(round2(subtotal - discount));
@@ -1436,6 +1488,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (expectedTotal !== undefined && !(Math.abs(Number(expectedTotal) - total) <= 0.009)) {
       throw new HttpError(409, 'priceChanged', { total });
     }
+    // Only orders that passed every check (coupon, prices) count towards the limit,
+    // so a typo or a changed price doesn't lock a customer out.
+    rateLimit(req, 'orders');
     const me = currentCustomer(req);
     const order = store.createOrder({
       id: crypto.randomUUID(),
@@ -1460,7 +1515,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       }
       // The coupon's limits, with every order saved so far (by any copy of the app).
       if (applied) {
-        const r = coupons.apply((db.coupons || []).find((x) => x.code === applied.code), { lines, orders: db.orders, phone: c.phone });
+        const r = coupons.apply((db.coupons || []).find((x) => x.id === applied.id), { lines, orders: db.orders, phone: c.phone });
         if (!r.ok) throw new HttpError(409, r.reason, r.params || {});
       }
     });
@@ -1610,7 +1665,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (method !== undefined) {
       // Switch an item between DTG and DTF (for products that allow both).
       const allowed = getProduct(item.productId)?.methods || [];
-      if (!allowed.includes(method)) throw new HttpError(400, 'badStatus', { list: allowed.join(', ') });
+      if (!allowed.includes(method)) throw new HttpError(400, 'badProcess', { list: allowed.join(', ') });
       item.process = method;
       store.save();
       if (status === undefined) return res.json(adminItem(order, item, order.items.indexOf(item)));
@@ -1738,7 +1793,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   });
 
   // ---------- Coupons (admin) ----------
-  const couponRow = (c) => ({ ...c, uses: coupons.usesOf(store.listOrders(), c.code), discountGiven: accounting.round2(store.listOrders().filter((o) => o.coupon && o.coupon.code === c.code).reduce((n, o) => n + (o.discount || 0), 0)) });
+  const couponRow = (c) => ({ ...c, uses: coupons.usesOf(store.listOrders(), c), discountGiven: accounting.round2(store.listOrders().filter((o) => coupons.usedOn(o, c)).reduce((n, o) => n + (o.discount || 0), 0)) });
   app.get('/api/admin/coupons', requireAdmin, (req, res) => {
     res.json({ coupons: (store.db.coupons || []).map(couponRow), products: PRODUCTS.map((p) => ({ id: p.id, name: p.name, category: p.category })), categories: CATEGORIES });
   });
@@ -1950,13 +2005,21 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       for (const format of wanted) {
         const sideIds = ONCE.has(format) ? [design.sides[0].id] : design.sides.map((sd) => sd.id);
         for (const sideId of sideIds) {
-          const f = await makeFile(design, sideId, format);
+          let f;
+          try {
+            f = await makeFile(design, sideId, format);
+          } catch (e) {
+            // A side without a vector file (e.g. a photo-only side): send the others.
+            if (format === 'svg' && e.status === 404) continue;
+            throw e;
+          }
           const link = dispatch.signLink(auth.linkKey, { designId: design.id, side: sideId, format });
           expires = link.expires;
           const sideName = !ONCE.has(format) && design.sides.length > 1 ? ` · ${pickEn(design.sides.find((sd) => sd.id === sideId).name)}` : '';
           files.push({ format, side: sideId, name: f.name, path: f.path, size: fs.statSync(f.path).size, label: `${FILE_LABELS[format] || format}${sideName}`, url: `${siteUrl}/dl/${link.token}` });
         }
       }
+      if (!files.length) throw new HttpError(400, 'houseNoFiles');
       const view = adminItem(order, item, order.items.indexOf(item));
       const msg = { house, order, item: view, design, files, note: String(note || '').trim().slice(0, 500), lang, expires };
       let result;

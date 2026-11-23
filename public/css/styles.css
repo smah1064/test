@@ -810,3 +810,19 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 .acct-order-total { font-weight: 800; }
 .acct-note { margin: -4px 0 12px; color: var(--ink-2); }
 @media (max-width: 560px) { .acct-order { grid-template-columns: minmax(0, 1fr) auto; } .acct-order-pics { display: none; } }
+
+/* Import a picture from a link (editor upload panel) */
+.imp { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.imp h5 { margin: 0 0 8px; font-size: 14px; }
+.imp-row { display: flex; gap: 6px; }
+.imp-row input { flex: 1; min-width: 0; }
+.imp-hint { line-height: 1.5; margin: 6px 0 8px; }
+.imp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.imp-pick { padding: 0; border: 1px solid var(--line); border-radius: 8px; background: #f6f7f9; aspect-ratio: 1; overflow: hidden; cursor: pointer; }
+.imp-pick:hover, .imp-pick:focus-visible { border-color: var(--accent); }
+.imp-pick img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.spinner-sm { width: 14px; height: 14px; border-width: 2px; display: inline-block; vertical-align: -2px; margin: 0 4px; }
+.rights-box { max-width: 460px; padding: 20px; }
+.rights-box h3 { margin: 0 0 8px; }
+.import-pill { background: #fff0f6; color: #a61e4d; }
+.import-info { margin: 8px 0; padding: 8px 10px; border-radius: 8px; background: #fff0f6; line-height: 1.6; word-break: break-all; }

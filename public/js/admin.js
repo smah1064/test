@@ -417,8 +417,9 @@
       <div class="card now-printing">
         <div class="previews">${item.sides.map((s) => `<img src="${esc(s.previewUrl)}" alt="${esc(tr(s.name))}" data-zoom="${esc(JSON.stringify([s.previewUrl]))}">`).join('')}</div>
         <div>
-          ${pill(item.status)}
+          ${pill(item.status)}${importBadge(item)}
           ${spec(item)}
+          ${importInfo(item)}
           ${item.sides.map((s) => printFiles(item, s)).join('')}
           ${previewFile(item)}
           ${sendHistory(item)}
@@ -432,6 +433,12 @@
       </div>`;
   }
 
+  /** Imported design: a badge, and where it came from (the customer confirmed the rights). */
+  const importBadge = (item) => (item.imports && item.imports.length ? ` <span class="pill import-pill" title="${esc(t('admin.imported.title'))}">${esc(t('admin.imported'))}</span>` : '');
+  const importInfo = (item) => (item.imports && item.imports.length
+    ? `<div class="import-info small"><strong>${esc(t('admin.imported.from'))}</strong> ${item.imports.map((u) => `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer nofollow" dir="ltr">${esc(u.length > 70 ? u.slice(0, 67) + '…' : u)}</a>`).join('<br>')}<div class="muted">${esc(t('admin.imported.rights', { date: POD.date(item.rightsConfirmedAt || item.orderedAt) }))}</div></div>`
+    : '');
+
   function row(item) {
     const next = NEXT[item.status];
     const isOpen = open.has(item.id);
@@ -439,7 +446,7 @@
       <div class="card queue-row ${isOpen ? 'is-open' : ''}">
         <img src="${esc(item.sides[0].previewUrl)}" alt="" ${zoomAttr(item)}>
         <div>
-          <strong>${esc(tr(item.productName))}</strong> ${pill(item.status)}
+          <strong>${esc(tr(item.productName))}</strong> ${pill(item.status)}${importBadge(item)}
           <div class="muted small">${esc(item.orderNumber)} · ${esc(t('admin.spec.itemOf', { i: item.position, n: item.of }))} · ${esc(tr(item.color.name))} · ${esc(tr(item.size.label))} · ${esc(item.sides.map((s) => tr(s.name)).join(' + '))}</div>
         </div>
         <div class="queue-actions">
@@ -447,7 +454,7 @@
           ${sendButton(item)}
           <button class="btn btn-sm ${item.status === 'queued' ? 'btn-primary' : ''}" data-item="${item.id}" data-status="${next.status}">${esc(t(next.label))}</button>
         </div>
-        ${isOpen ? `<div class="queue-details">${spec(item)}${item.sides.map((s) => printFiles(item, s)).join('')}${previewFile(item)}</div>` : ''}
+        ${isOpen ? `<div class="queue-details">${spec(item)}${importInfo(item)}${item.sides.map((s) => printFiles(item, s)).join('')}${previewFile(item)}</div>` : ''}
         ${sendOpen.has(item.id) || (item.sends && item.sends.length) ? `<div class="queue-details">${sendHistory(item)}${sendPanel(item)}</div>` : ''}
       </div>`;
   }

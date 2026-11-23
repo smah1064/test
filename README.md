@@ -206,6 +206,12 @@ Customers can create an account at `/account` (name, mobile number, optional ema
 
 Passwords are stored as scrypt hashes. The session is a signed, httpOnly cookie (`pod_c`, 60 days) whose key comes from the shop's secret file, so every app copy accepts it (`src/customers.js`).
 
+## Import a design from a link
+
+Editor → **Photo** → **Import from a link**: paste another shop's product page (or a picture link) and pick one of its pictures; it is added like an upload (crop it and remove the background with the photo tools). The server reads the page (share picture, product data, big gallery pictures) and fetches the picture itself (`src/importer.js`): only http/https links on normal ports, no private or local addresses (checked on every connection and redirect), size limits, and pictures are re-encoded, so nothing but pixels reaches the editor. Some big sites block automatic reading; customers then save the picture or take a screenshot and upload it.
+
+Before a design with an imported picture goes in the cart, the customer must tick **"I own this design or have permission to print it"**. The confirmation and the source link are saved with the design and the order; the print queue shows an **Imported** badge and where it came from. Rights holders can send a takedown request from **/rights** (linked in every footer); requests are saved and emailed to `ADMIN_EMAIL` when email is set up. The shop remains responsible for what it prints: check imported brand logos before printing.
+
 ## Printing houses
 
 Admin → **Printing houses** tab: save each printing house (name, email and/or WhatsApp number, how you usually send), and pick which one prints each product.

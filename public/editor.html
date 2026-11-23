@@ -125,6 +125,15 @@
           <input type="file" id="file-input" accept="image/png,image/jpeg,image/webp,image/gif,.png,.jpg,.jpeg,.webp,.gif,.ai,.eps,application/postscript,application/illustrator" hidden>
           <label class="check auto-bg"><input type="checkbox" id="auto-bg"> <span><strong data-i18n="fly.upload.autoBg"></strong><br><span class="muted small" data-i18n="fly.upload.autoBgHint"></span></span></label>
           <p class="muted small" style="line-height:1.5;margin-bottom:0;" data-i18n="fly.upload.tip"></p>
+          <div class="imp">
+            <h5 data-i18n="imp.title"></h5>
+            <form class="imp-row" id="imp-form" novalidate>
+              <input type="url" id="imp-url" dir="ltr" maxlength="2000" autocomplete="off" data-i18n-placeholder="imp.placeholder">
+              <button class="btn btn-sm btn-primary" type="submit" data-i18n="imp.go"></button>
+            </form>
+            <p class="muted small imp-hint" data-i18n="imp.hint"></p>
+            <div class="imp-results" id="imp-results"></div>
+          </div>
         </div>
         <div class="flyout" id="flyout-stickers" hidden>
           <div class="fly-head"><h4 data-i18n="fly.stickers"></h4><button class="fly-close" data-i18n-aria="bar.close">✕</button></div>
@@ -284,6 +293,19 @@
     </div>
   </div>
 
+  <!-- Imported pictures: the customer confirms the rights before adding to the cart -->
+  <div class="pv-modal" id="rights" hidden>
+    <div class="card rights-box" role="dialog" aria-modal="true" aria-labelledby="rights-title">
+      <h3 id="rights-title" data-i18n="rights.title"></h3>
+      <p class="small" style="line-height:1.7" data-i18n="rights.text"></p>
+      <label class="check"><input type="checkbox" id="rights-check"> <span data-i18n="rights.check"></span></label>
+      <div class="row" style="justify-content:flex-end;gap:8px;margin-top:14px">
+        <button class="btn" type="button" id="rights-cancel" data-i18n="houses.cancel"></button>
+        <button class="btn btn-primary" type="button" id="rights-ok" disabled data-i18n="rights.continue"></button>
+      </div>
+      <a class="small muted" href="/rights" target="_blank" rel="noopener" data-i18n="rights.policy"></a>
+    </div>
+  </div>
   <div class="overlay-busy" id="busy" hidden><div><div class="spinner"></div><span id="busy-text"></span></div></div>
 
   <script src="/vendor/fabric-5.3.0.min.js"></script>

@@ -281,8 +281,19 @@ test('rate limits on new designs and orders', async () => {
     const mk = () => fetch(at + '/api/designs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ productId: 'tshirt', color: 'white', size: 'M', sides: { front: { editor: { objects: [{ type: 'rect' }] } } } }) });
     const first = await mk();
     assert.strictEqual(first.status, 201);
-    const { id: designId } = await first.json();
-    assert.strictEqual((await mk()).status, 201);
+    const d1 = await first.json();
+    const designId = d1.id;
+    const secondRes = await mk();
+    assert.strictEqual(secondRes.status, 201);
+    const d2 = await secondRes.json();
+    const finish = async (d) => {
+      for (const name of d.files) {
+        const body = name.endsWith('.svg') ? SVG : name.includes('print') ? PRINT : PREVIEW;
+        await fetch(`${at}/api/designs/${d.id}/files/${name}`, { method: 'PUT', headers: { 'x-upload-token': d.uploadToken, 'Content-Type': 'application/octet-stream' }, body });
+      }
+      const done = await fetch(`${at}/api/designs/${d.id}/complete`, { method: 'POST', headers: { 'x-upload-token': d.uploadToken } });
+      assert.strictEqual(done.status, 200, await done.clone().text());
+    };
     const third = await mk();
     assert.strictEqual(third.status, 429);
     // A made-up X-Forwarded-For entry does not get around the limit: the
@@ -293,9 +304,13 @@ test('rate limits on new designs and orders', async () => {
     // Mistakes in the form don't use up the limit (customers can fix a typo)...
     assert.strictEqual((await order([])).status, 400);
     assert.strictEqual((await order([])).status, 400);
-    // ...order attempts that pass the checks do.
     assert.strictEqual((await order([designId])).status, 400, 'design not finished');
-    assert.strictEqual((await order([designId])).status, 429);
+    assert.strictEqual((await order([designId])).status, 400, 'still not counted');
+    // ...orders that pass every check do.
+    await finish(d1);
+    await finish(d2);
+    assert.strictEqual((await order([d1.id])).status, 201);
+    assert.strictEqual((await order([d2.id])).status, 429);
   } finally {
     s2.close();
     fs.rmSync(dir, { recursive: true, force: true });
@@ -1133,6 +1148,24 @@ test('coupons: admin creates them, checkout applies them, limits hold', async ()
   // Pausing it stops it.
   await admin(`/api/admin/coupons/${eid.id}`, { method: 'PUT', body: JSON.stringify({ ...row, active: false }) });
   assert.match((await post('/api/cart/quote', { designIds: [d2.id], couponCode: 'EID20' }).then((x) => x.json())).couponError, /not valid/);
+  // Renaming a used code keeps its uses (they are counted by the coupon, not its code).
+  r = await admin(`/api/admin/coupons/${eid.id}`, { method: 'PUT', body: JSON.stringify({ ...row, code: 'EID21', active: true }) });
+  assert.strictEqual(r.status, 200, await r.clone().text());
+  const renamed = (await (await admin('/api/admin/coupons')).json()).coupons.find((c) => c.code === 'EID21');
+  assert.strictEqual(renamed.uses, 1);
+  r = await post('/api/orders', { customer: CUSTOMER, designIds: [d2.id], couponCode: 'EID21' });
+  assert.strictEqual(r.status, 409, 'still used by this phone');
+});
+
+test('accounts report: coupon discounts are shared over the products', () => {
+  const accounting = require('../src/accounting');
+  const it = (id, productId, price) => ({ id, productId, productName: { en: productId }, price, status: 'queued', sides: [{}] });
+  const orders = [{ id: 'o1', number: 1, createdAt: new Date().toISOString(), customer: { name: 'x' }, items: [it('a', 'tshirt', 450), it('b', 'mug', 310)], subtotal: 760, discount: 76, coupon: { code: 'SAVE10' }, shipping: 75, total: 759 }];
+  const r = accounting.report({ orders, costs: {}, expenses: [], settings: {} });
+  const by = Object.fromEntries(r.products.map((p) => [p.productId, p]));
+  assert.strictEqual(by.tshirt.sales + by.mug.sales, 760 - 76);
+  assert.strictEqual(by.tshirt.sales, 405);
+  assert.strictEqual(by.mug.sales, 279);
 });
 
 test('customer accounts: sign up, sign in, orders, address, password', async () => {
@@ -1265,6 +1298,74 @@ test('sign in with Google: redirect, callback, account linking', async () => {
     me = (await (await get('/api/account', cookies(r).find((c) => c.startsWith('pod_c=')))).json()).customer;
     assert.strictEqual(me.phone, '');
     assert.strictEqual(me.email, '');
+  } finally {
+    srv.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('import a design from a link: pictures found, unsafe links refused, rights required', async () => {
+  const importer = require('../src/importer');
+  // Finding a product page's main pictures.
+  const html = `<html><head><title>Cool tee</title><meta property="og:image" content="/img/front.jpg?v=1&amp;w=1200">
+    <script type="application/ld+json">{"@type":"Product","image":["https://cdn.shop.com/a.png",{"url":"https://cdn.shop.com/b.png"}]}</script></head>
+    <body><img src="/logo.svg"><img width="40" src="/tiny.png"><img data-src="/gallery/2.jpg"></body></html>`;
+  const found = importer.pageImages(html, 'https://shop.com/p/1');
+  assert.deepStrictEqual(found.images, ['https://shop.com/img/front.jpg?v=1&w=1200', 'https://cdn.shop.com/a.png', 'https://cdn.shop.com/b.png', 'https://shop.com/gallery/2.jpg']);
+  assert.strictEqual(found.title, 'Cool tee');
+  // Private and odd addresses are never fetched.
+  for (const ip of ['127.0.0.1', '10.1.2.3', '192.168.1.1', '172.20.0.1', '169.254.169.254', '::1', 'fd00::1', '::ffff:127.0.0.1', '100.64.0.1', '0.0.0.0']) assert.ok(importer.privateAddress(ip), ip);
+  for (const ip of ['8.8.8.8', '2606:4700::1111']) assert.ok(!importer.privateAddress(ip), ip);
+  for (const u of ['http://127.0.0.1/x', 'http://localhost/', 'file:///etc/passwd', 'ftp://a.com/x', 'http://user:pw@a.com/', 'http://a.com:8080/', 'http://[::1]/']) {
+    assert.throws(() => importer.checkUrl(u), (e) => ['importBlocked', 'importBadUrl'].includes(e.code), u);
+  }
+  await assert.rejects(importer.safeGet('http://127.0.0.1:' + new URL(base).port + '/api/products', { maxBytes: 1e6, accept: '*/*' }), (e) => ['importBlocked', 'importBadUrl'].includes(e.code));
+
+  // The routes, with the internet replaced by a stub.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pod-import-'));
+  const sharp = require('sharp');
+  const pic = await sharp({ create: { width: 900, height: 700, channels: 4, background: { r: 200, g: 30, b: 30, alpha: 1 } } }).png().toBuffer();
+  const pages = {
+    'https://shop.com/p/1': { type: 'text/html; charset=utf-8', body: Buffer.from(html) },
+    'https://shop.com/img/front.jpg?v=1&w=1200': { type: 'image/png', body: pic },
+    'https://shop.com/notapic': { type: 'image/png', body: Buffer.from('<svg onload=alert(1)>') },
+  };
+  const importGet = async (url) => {
+    const p = pages[url];
+    if (!p) throw new importer.ImportError('importFailed', '404');
+    return { url, ...p };
+  };
+  const iapp = createApp({ dataDir: dir, adminPassword: 'secret', limits: OPEN_LIMITS, cleanupEvery: 0, importGet });
+  const srv = await new Promise((resolve) => { const s = iapp.listen(0, () => resolve(s)); });
+  const B = `http://127.0.0.1:${srv.address().port}`;
+  try {
+    let r = await fetch(B + '/api/import/link', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: 'https://shop.com/p/1' }) });
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual((await r.json()).images.length, 4);
+    r = await fetch(B + '/api/import/link', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: 'javascript:alert(1)' }) });
+    assert.strictEqual(r.status, 400);
+    r = await fetch(B + '/api/import/image?url=' + encodeURIComponent('https://shop.com/img/front.jpg?v=1&w=1200'));
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.headers.get('content-type'), 'image/png');
+    assert.strictEqual(r.headers.get('x-image-size'), '900x700');
+    r = await fetch(B + '/api/import/image?thumb=1&url=' + encodeURIComponent('https://shop.com/img/front.jpg?v=1&w=1200'));
+    assert.strictEqual((await sharp(Buffer.from(await r.arrayBuffer())).metadata()).width, 320);
+    r = await fetch(B + '/api/import/image?url=' + encodeURIComponent('https://shop.com/notapic'));
+    assert.strictEqual(r.status, 422, 'not a picture');
+    // A design with an imported picture needs the rights confirmation.
+    const imported = { type: 'image', src: 'data:image/png;base64,AA', importSource: 'https://shop.com/p/1', left: 250, top: 300, width: 10, height: 10 };
+    const body = (extra) => JSON.stringify({ productId: 'tshirt', color: 'white', size: 'M', sides: { front: { editor: { objects: [imported] } } }, ...extra });
+    r = await fetch(B + '/api/designs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body({}) });
+    assert.strictEqual(r.status, 400);
+    assert.match((await r.json()).error, /confirm/);
+    r = await fetch(B + '/api/designs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body({ rightsConfirmed: true }) });
+    assert.strictEqual(r.status, 201);
+    // Rights holders can ask for a takedown.
+    r = await fetch(B + '/api/takedown', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Brand Co', contact: 'legal@brand.com', details: 'Our logo is used on design X' }) });
+    assert.strictEqual(r.status, 201);
+    r = await fetch(B + '/api/takedown', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'x' }) });
+    assert.strictEqual(r.status, 400);
+    assert.strictEqual((await fetch(B + '/rights')).status, 200);
   } finally {
     srv.close();
     fs.rmSync(dir, { recursive: true, force: true });

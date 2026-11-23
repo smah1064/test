@@ -63,8 +63,11 @@ function cleanCoupon(body, { products, categories }) {
   };
 }
 
-const usesOf = (orders, code) => orders.filter((o) => o.coupon && o.coupon.code === code).length;
-const usesBy = (orders, code, phone) => orders.filter((o) => o.coupon && o.coupon.code === code && o.customer && o.customer.phone === phone).length;
+// An order used this coupon: matched by the coupon's id (so renaming a used
+// code keeps its count), or by code for orders saved before ids were kept.
+const usedOn = (o, coupon) => Boolean(o.coupon) && (o.coupon.id ? o.coupon.id === coupon.id : o.coupon.code === coupon.code);
+const usesOf = (orders, coupon) => orders.filter((o) => usedOn(o, coupon)).length;
+const usesBy = (orders, coupon, phone) => orders.filter((o) => usedOn(o, coupon) && o.customer && o.customer.phone === phone).length;
 
 /**
  * What a coupon takes off this cart. `lines` = [{ productId, category, price }].
@@ -75,8 +78,8 @@ function apply(coupon, { lines, orders = [], phone = null }) {
   const day = today();
   if (coupon.startsOn && day < coupon.startsOn) return { ok: false, reason: 'couponNotYet', params: { date: coupon.startsOn } };
   if (coupon.endsOn && day > coupon.endsOn) return { ok: false, reason: 'couponExpired' };
-  if (coupon.maxUses && usesOf(orders, coupon.code) >= coupon.maxUses) return { ok: false, reason: 'couponUsedUp' };
-  if (phone && coupon.perCustomer && usesBy(orders, coupon.code, phone) >= coupon.perCustomer) return { ok: false, reason: 'couponUsedByYou' };
+  if (coupon.maxUses && usesOf(orders, coupon) >= coupon.maxUses) return { ok: false, reason: 'couponUsedUp' };
+  if (phone && coupon.perCustomer && usesBy(orders, coupon, phone) >= coupon.perCustomer) return { ok: false, reason: 'couponUsedByYou' };
   const subtotal = round2(lines.reduce((n, l) => n + l.price, 0));
   if (coupon.minOrder && subtotal < coupon.minOrder) return { ok: false, reason: 'couponMinOrder', params: { amount: coupon.minOrder } };
   const limited = coupon.products.length || coupon.categories.length;
@@ -89,4 +92,4 @@ function apply(coupon, { lines, orders = [], phone = null }) {
   return { ok: true, discount: round2(discount), freeShipping: coupon.type === 'freeship', eligible };
 }
 
-module.exports = { cleanCoupon, apply, normCode, usesOf, TYPES };
+module.exports = { cleanCoupon, apply, normCode, usesOf, usedOn, TYPES };

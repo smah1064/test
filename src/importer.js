@@ -181,6 +181,7 @@ function pageImages(html, pageUrl) {
 
 /** Reads a page or an image link: { title, images: [url...] }. */
 async function readLink(url, get = safeGet) {
+  url = checkUrl(url).href;
   const res = await get(url, { maxBytes: MAX_PAGE, accept: 'text/html,application/xhtml+xml,image/*;q=0.9,*/*;q=0.5' }).catch((e) => {
     // A direct image link bigger than a page is still fine to fetch as an image.
     if (e.code === 'importTooBig') return { url, type: 'image/unknown', body: Buffer.alloc(0) };
@@ -195,6 +196,7 @@ async function readLink(url, get = safeGet) {
 
 /** Fetches an image link and returns a clean PNG/JPEG (at most maxPx on the long side). */
 async function fetchImage(url, { maxPx = 4000, thumb = 0 } = {}, get = safeGet, sharp = require('sharp')) {
+  url = checkUrl(url).href;
   const res = await get(url, { maxBytes: MAX_IMAGE, accept: 'image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8' });
   let meta;
   try {
