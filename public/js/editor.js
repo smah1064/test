@@ -154,6 +154,8 @@
       restoredDraft = true;
     }
   }
+  // A colour picked on the product page (?color=) wins over the draft's; a saved design keeps its own.
+  if (!params.get('design') && st.product.colors.some((c) => c.id === params.get('color'))) st.colorId = params.get('color');
   st.colorId = st.product.colors.some((c) => c.id === st.colorId) ? st.colorId : st.product.colors[0].id;
   st.sizeId = st.product.sizes.some((s) => s.id === st.sizeId) ? st.sizeId : st.product.sizes[0].id;
   st.side = st.product.sides.find((s) => (st.designs[s.id] || []).length)?.id || st.product.sides[0].id;

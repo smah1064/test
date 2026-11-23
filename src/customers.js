@@ -60,18 +60,25 @@ function readSession(key, token, findCustomer) {
  * A password-reset link. `via`: 'e' when it was emailed to the account's
  * email (opening it proves the email is theirs), 'a' when the shop made it.
  */
+/** Short fingerprint of the account's email when a link was made (a link only works for that email). */
+const emailTag = (email) => crypto.createHash('sha256').update(String(email || '').toLowerCase()).digest('hex').slice(0, 12);
 function resetToken(key, customer, hours = 1, via = 'e') {
   const exp = Math.floor(Date.now() / 1000) + Math.round(hours * 3600);
-  return sign(key, ['reset', customer.id, exp.toString(36), String(customer.pv || 1), via === 'a' ? 'a' : 'e']);
+  return sign(key, ['reset', customer.id, exp.toString(36), String(customer.pv || 1), via === 'a' ? 'a' : 'e', emailTag(customer.email)]);
 }
-/** { customer, viaEmail } for a genuine, unexpired, unused reset link, else null. */
+/**
+ * { customer, viaEmail } for a genuine, unexpired, unused reset link, else null.
+ * A link stops working when the account's email changes: an emailed link
+ * proves only the address it was sent to, never one typed in afterwards.
+ */
 function readReset(key, token, findCustomer) {
-  const parts = verify(key, token, 5);
+  const parts = verify(key, token, 6);
   if (!parts || parts[0] !== 'reset') return null;
-  const [, id, exp, pv, via] = parts;
+  const [, id, exp, pv, via, tag] = parts;
   if (parseInt(exp, 36) * 1000 < Date.now()) return null;
   const c = findCustomer(id);
-  return c && String(c.pv || 1) === pv ? { customer: c, viaEmail: via === 'e' } : null;
+  if (!c || String(c.pv || 1) !== pv || emailTag(c.email) !== tag) return null;
+  return { customer: c, viaEmail: via === 'e' };
 }
 
 /** The cookie header value for a session (or for signing out, with an empty token). */

@@ -1310,13 +1310,29 @@ test('sign in with Google: redirect, callback, account linking', async () => {
     const atk = (await (await get('/api/account', cookies(attacker).find((c) => c.startsWith('pod_c=')))).json()).customer;
     assert.strictEqual(atk.email, '', 'the unproven email was removed');
     assert.strictEqual(atk.linked.google, false);
+    const secret = Buffer.from(fs.readFileSync(path.join(dir, '.session-secret'), 'utf8').trim(), 'hex');
+    const ckey = require('crypto').createHmac('sha256', secret).update('customer-sessions').digest();
+    // A reset link proves only the email it was sent to: change the account's
+    // email afterwards (to someone else's) and the old link no longer works.
+    r = await fetch(B + '/api/account/signup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Mallory', phone: '01055556666', email: 'mallory@example.com', password: 'longenough1' }) });
+    const mal = await r.json();
+    const malCookie = cookies(r).find((c) => c.startsWith('pod_c='));
+    const malLink = require('../src/customers').resetToken(ckey, { id: mal.customer.id, pv: 1, email: 'mallory@example.com' }, 1, 'e');
+    r = await fetch(B + '/api/account', { method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: malCookie }, body: JSON.stringify({ name: 'Mallory', email: 'victim@example.com' }) });
+    assert.strictEqual(r.status, 200, await r.clone().text());
+    r = await fetch(B + '/api/account/reset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: malLink, password: 'newpassword9' }) });
+    assert.notStrictEqual(r.status, 200, 'the old link must not work after the email changed');
+    r = await get('/auth/google');
+    let stV = new URL(r.headers.get('location')).searchParams.get('state');
+    profileFor = { cv: { sub: 'g-victim', email: 'victim@example.com', name: 'Victim' } };
+    r = await get(`/auth/google/callback?code=cv&state=${stV}`, cookies(r).find((c) => c.startsWith('pod_o=')));
+    me = (await (await get('/api/account', cookies(r).find((c) => c.startsWith('pod_c=')))).json()).customer;
+    assert.notStrictEqual(me.id, mal.customer.id, 'the victim gets their own account');
     // A password account whose email is proven (its emailed reset link was used) IS joined.
     r = await fetch(B + '/api/account/signup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Laila', phone: '01011223344', email: 'laila@example.com', password: 'longenough1' }) });
     const lailaId = (await r.json()).customer.id;
     // The link the shop emails (made here with the shop's own key).
-    const secret = Buffer.from(fs.readFileSync(path.join(dir, '.session-secret'), 'utf8').trim(), 'hex');
-    const ckey = require('crypto').createHmac('sha256', secret).update('customer-sessions').digest();
-    const emailed = require('../src/customers').resetToken(ckey, { id: lailaId, pv: 1 }, 1, 'e');
+    const emailed = require('../src/customers').resetToken(ckey, { id: lailaId, pv: 1, email: 'laila@example.com' }, 1, 'e');
     r = await fetch(B + '/api/account/reset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: emailed, password: 'newpassword9' }) });
     assert.strictEqual(r.status, 200);
     r = await get('/auth/google');
