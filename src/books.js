@@ -437,6 +437,19 @@ async function lineArt(buf, outW = FACE_W, outH = FACE_H, { work = 360, s1 = 2, 
 // ---------- Pages ----------
 const art = new Map();
 /** An illustration at a given size (cached: previews ask for the same sizes again and again). */
+/**
+ * The picture for a page: the girl version ("<name>-girl.jpg/png") when the
+ * child is a girl and that picture exists, else the usual one. Girl pictures
+ * keep the boy picture's pose and face position, so the same face spot fits.
+ */
+function pictureFile(book, page, answers) {
+  const ext = book.kind === 'coloring' && page.type !== 'cover' ? 'png' : 'jpg';
+  if (answers && answers.gender === 'girl') {
+    const girl = `${book.dir}/${page.img}-girl.${ext}`;
+    if (fs.existsSync(path.join(ASSETS, girl))) return girl;
+  }
+  return `${book.dir}/${page.img}.${ext}`;
+}
 async function illustration(file, px) {
   const key = `${file}|${px}`;
   if (!art.has(key)) {
@@ -467,7 +480,7 @@ async function renderPage({ book, answers, face, faceLine, redrawn }, index, px,
   // A page the AI already redrew with the child: use it as the picture.
   const redraw = redrawn && redrawn[index];
   if (redraw) base = await sharp(redraw).resize(px, px, { fit: 'cover' }).flatten({ background: '#ffffff' }).png({ compressionLevel: 1 }).toBuffer();
-  else if (page.img) base = await illustration(`${book.dir}/${page.img}.${coloring && page.type !== 'cover' ? 'png' : 'jpg'}`, px);
+  else if (page.img) base = await illustration(pictureFile(book, page, answers), px);
   else base = await sharp({ create: { width: px, height: px, channels: 3, background: page.type === 'back' ? (coloring ? '#ff8a3d' : '#1c2a55') : '#ffffff' } }).png().toBuffer();
 
   // Companions (favourite animal / fruit) go under the text, over the picture.
