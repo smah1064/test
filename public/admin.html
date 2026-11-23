@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Production · OneOff Print</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container inner">
+      <a class="brand" href="/"><span class="brand-mark">1</span>OneOff Print</a>
+      <span class="muted small">Production</span>
+      <nav><button class="btn btn-sm" id="logout" hidden>Sign out</button></nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <form class="card login" id="login" hidden>
+      <h2>Production dashboard</h2>
+      <p class="muted small">Enter the admin password to see the print queue.</p>
+      <div class="field"><label for="password">Password</label><input type="password" id="password" autocomplete="current-password" required></div>
+      <button class="btn btn-dark btn-block" type="submit">Sign in</button>
+    </form>
+
+    <div id="dash" hidden>
+      <div class="page-head" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <h1 style="margin:0">Print queue</h1>
+        <div class="tabs" style="margin:0 0 0 auto">
+          <button class="btn btn-sm active" data-tab="queue">Queue</button>
+          <button class="btn btn-sm" data-tab="orders">All orders</button>
+        </div>
+      </div>
+
+      <section id="tab-queue">
+        <div class="stats" id="stats"></div>
+        <h2 style="font-size:18px">On the press</h2>
+        <div id="current"></div>
+        <h2 style="font-size:18px;margin-top:28px">Up next</h2>
+        <div class="queue-list" id="up-next"></div>
+        <h2 style="font-size:18px;margin-top:28px">Printed, ready to ship</h2>
+        <div class="queue-list" id="to-ship"></div>
+      </section>
+
+      <section id="tab-orders" hidden>
+        <div class="card" style="overflow-x:auto">
+          <table class="orders">
+            <thead><tr><th>Order</th><th>Customer</th><th>Items</th><th>Total</th><th>Status</th></tr></thead>
+            <tbody id="orders"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script src="/js/common.js"></script>
+  <script src="/js/admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OneOff Print · Design your own</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container inner">
+      <a class="brand" href="/"><span class="brand-mark">1</span>OneOff Print</a>
+      <nav>
+        <a href="/#products">Products</a>
+        <a class="cart-link" href="/cart">Cart <span class="badge" data-cart-count hidden>0</span></a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="hero">
+      <div>
+        <h1>Your design. <em>One</em> print. Made just for you.</h1>
+        <p>Pick a product, open the editor, and drop in your own text, photos and shapes. Every order is printed individually, one piece at a time. No minimums, no bulk runs.</p>
+        <div class="row" style="max-width: 360px; margin-top: 24px;">
+          <a class="btn btn-primary btn-lg" href="/editor?product=tshirt">Start designing</a>
+          <a class="btn btn-lg" href="#products">Browse products</a>
+        </div>
+      </div>
+      <div class="hero-art" id="hero-art" aria-hidden="true"></div>
+    </section>
+
+    <section class="steps">
+      <div class="card step"><div class="num">1</div><h3>Design it</h3><p>Use the drag-and-drop editor to add text, upload images and arrange everything right on the product.</p></div>
+      <div class="card step"><div class="num">2</div><h3>We print it, one at a time</h3><p>Your item gets its own print-ready file and its own turn on the press. Nothing is batched or mass-produced.</p></div>
+      <div class="card step"><div class="num">3</div><h3>Track it to your door</h3><p>Follow each item from the print queue through printing and shipping on your order page.</p></div>
+    </section>
+
+    <section id="products">
+      <div class="section-title">
+        <h2>Pick something to customise</h2>
+        <span class="muted small hide-sm">Prices include printing on one side</span>
+      </div>
+      <div class="product-grid" id="product-grid"></div>
+    </section>
+  </main>
+
+  <footer class="site-footer"><div class="container">OneOff Print: print on demand, one item at a time.</div></footer>
+
+  <script src="/js/common.js"></script>
+  <script>
+    (async () => {
+      const grid = document.getElementById('product-grid');
+      try {
+        const { products } = await POD.loadCatalog();
+        grid.innerHTML = products.map((p) => {
+          const color = p.colors[0];
+          return `
+            <a class="card product-card" href="/editor?product=${p.id}">
+              <div class="thumb"><img alt="" src="${POD.mockupUrl(p.sides[0], color.hex)}"></div>
+              <div class="body">
+                <h3>${POD.esc(p.name)}</h3>
+                <p class="desc">${POD.esc(p.description)}</p>
+                <div class="foot">
+                  <span class="price">From ${POD.money(p.basePrice)}</span>
+                  <span class="dots">${p.colors.slice(0, 6).map((c) => `<span class="dot" title="${POD.esc(c.name)}" style="background:${c.hex}"></span>`).join('')}</span>
+                </div>
+              </div>
+            </a>`;
+        }).join('');
+
+        const pick = (id, colorId) => {
+          const p = products.find((x) => x.id === id);
+          const c = p.colors.find((x) => x.id === colorId) || p.colors[0];
+          return POD.mockupUrl(p.sides[0], c.hex);
+        };
+        document.getElementById('hero-art').innerHTML = [
+          pick('tshirt', 'navy'), pick('hoodie', 'cream'), pick('mug', 'white'),
+        ].map((src) => `<img alt="" src="${src}">`).join('');
+      } catch (e) {
+        grid.innerHTML = `<p class="muted">${POD.esc(e.message)}</p>`;
+      }
+    })();
+  </script>
+</body>
+</html>
