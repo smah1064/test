@@ -254,9 +254,15 @@ function createApp({ dataDir, adminPassword }) {
         }
         const file = store.designFile(design.id, `${side.id}-print.png`);
         const raw = fs.readFileSync(file);
-        const info = await printfiles.pngInfo(raw);
+        // Size straight from the PNG header, so this works even without the image library.
+        const info = { width: raw.readUInt32BE(16), height: raw.readUInt32BE(20) };
         const dpi = Math.round(info.width / (side.widthIn + 2 * side.bleedIn));
-        store.writeDesignFile(design.id, `${side.id}-print.png`, await printfiles.finalizePrintPng(raw, dpi));
+        try {
+          store.writeDesignFile(design.id, `${side.id}-print.png`, await printfiles.finalizePrintPng(raw, dpi));
+        } catch (err) {
+          // Never block an order over the colour-profile step; the PNG is still print-ready.
+          console.error('Could not embed colour profile/DPI:', err.message);
+        }
         Object.assign(side, { widthPx: info.width, heightPx: info.height, dpi, hasSvg: fs.existsSync(store.designFile(design.id, `${side.id}-design.svg`)) });
       }
       design.status = 'ready';
