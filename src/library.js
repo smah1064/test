@@ -211,17 +211,36 @@ class Library {
     fs.mkdirSync(this.dir, { recursive: true });
     this.indexPath = path.join(this.dir, 'index.json');
     this.index = { hidden: [], custom: [] };
+    this.stamp = null;
+    this.reload();
+  }
+  /** Re-read the index if another copy of the app changed it. */
+  reload() {
+    let stamp = null;
     try {
-      this.index = { ...this.index, ...JSON.parse(fs.readFileSync(this.indexPath, 'utf8')) };
-    } catch (e) { /* first run */ }
+      const st = fs.statSync(this.indexPath);
+      stamp = `${st.ino}:${st.size}:${st.mtimeMs}`;
+    } catch (e) {
+      return;
+    }
+    if (stamp === this.stamp) return;
+    try {
+      this.index = { hidden: [], custom: [], ...JSON.parse(fs.readFileSync(this.indexPath, 'utf8')) };
+      this.stamp = stamp;
+    } catch (e) { /* half-written; try next time */ }
   }
   save() {
     const tmp = `${this.indexPath}.${process.pid}.tmp`;
     fs.writeFileSync(tmp, JSON.stringify(this.index, null, 2));
     fs.renameSync(tmp, this.indexPath);
+    try {
+      const st = fs.statSync(this.indexPath);
+      this.stamp = `${st.ino}:${st.size}:${st.mtimeMs}`;
+    } catch (e) { /* ignore */ }
   }
   /** Every design, newest custom ones first, with `hidden` set. */
   all() {
+    this.reload();
     const hidden = new Set(this.index.hidden);
     return [...this.index.custom.slice().reverse(), ...SEED].map((d) => ({ ...d, hidden: hidden.has(d.id) }));
   }
@@ -244,6 +263,7 @@ class Library {
     return path.join(this.dir, `${id}.png`);
   }
   addCustom({ name, category, product, color, objects, area, preview }) {
+    this.reload();
     const id = 'c-' + crypto.randomBytes(6).toString('hex');
     fs.writeFileSync(path.join(this.dir, `${id}.json`), JSON.stringify(objects));
     if (preview) fs.writeFileSync(this.previewPath(id), preview);
@@ -253,6 +273,7 @@ class Library {
     return meta;
   }
   setHidden(id, hidden) {
+    this.reload();
     if (!this.all().some((d) => d.id === id)) return false;
     this.index.hidden = this.index.hidden.filter((x) => x !== id);
     if (hidden) this.index.hidden.push(id);
@@ -260,6 +281,7 @@ class Library {
     return true;
   }
   removeCustom(id) {
+    this.reload();
     const before = this.index.custom.length;
     this.index.custom = this.index.custom.filter((d) => d.id !== id);
     if (this.index.custom.length === before) return false;

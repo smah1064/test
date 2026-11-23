@@ -792,3 +792,58 @@ test('AI books: one cartoon face for the preview, every page redrawn after the o
     mock.close();
   }
 });
+
+const png4 = (w, h) => png(w, h);
+test('two copies of the app on one data folder share orders, sign-ins and edits', async () => {
+  const { createApp: make } = require('../src/app');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pod-two-'));
+  const start = (a) => new Promise((resolve) => { const s = a.listen(0, () => resolve(s)); });
+  const A = await start(make({ dataDir: dir, adminPassword: 'Str0ng!Passw0rd-2026', limits: OPEN_LIMITS, cleanupEvery: 0 }));
+  const B = await start(make({ dataDir: dir, adminPassword: 'Str0ng!Passw0rd-2026', limits: OPEN_LIMITS, cleanupEvery: 0 }));
+  const at = (s) => `http://127.0.0.1:${s.address().port}`;
+  const j = (url, body, headers = {}) => fetch(url, { method: body ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json', ...headers }, body: body && JSON.stringify(body) });
+  try {
+    // Designs made on alternating copies, then orders placed on both.
+    const designs = [];
+    for (let i = 0; i < 6; i++) {
+      const srv = i % 2 ? B : A;
+      const d = await (await j(`${at(srv)}/api/designs`, { productId: 'tshirt', color: 'white', size: 'M', sides: { front: { editor: { objects: [{ type: 'rect' }] } } } })).json();
+      const png = png4(3600, 4800);
+      await fetch(`${at(srv)}/api/designs/${d.id}/files/front-print.png`, { method: 'PUT', headers: { 'x-upload-token': d.uploadToken }, body: png });
+      await fetch(`${at(srv)}/api/designs/${d.id}/files/front-preview.png`, { method: 'PUT', headers: { 'x-upload-token': d.uploadToken }, body: png4(600, 720) });
+      const done = await fetch(`${at(i % 2 ? A : B)}/api/designs/${d.id}/complete`, { method: 'POST', headers: { 'x-upload-token': d.uploadToken } });
+      assert.strictEqual(done.status, 200, 'a design started on one copy can be finished on the other');
+      designs.push(d.id);
+    }
+    const o1 = await (await j(`${at(A)}/api/orders`, { customer: CUSTOMER, designIds: designs.slice(0, 3) })).json();
+    const o2 = await (await j(`${at(B)}/api/orders`, { customer: CUSTOMER, designIds: designs.slice(3) })).json();
+    assert.notStrictEqual(o1.number, o2.number, 'order numbers are unique across copies');
+
+    // Sign in on A, use the session on B; both orders are visible on both copies.
+    const { token } = await (await j(`${at(A)}/api/admin/login`, { password: 'Str0ng!Passw0rd-2026' })).json();
+    const auth = { Authorization: `Bearer ${token}` };
+    for (const srv of [A, B]) {
+      const r = await fetch(`${at(srv)}/api/admin/orders`, { headers: auth });
+      assert.strictEqual(r.status, 200);
+      const ids = (await r.json()).orders.map((o) => o.id);
+      assert.ok(ids.includes(o1.id) && ids.includes(o2.id), 'both orders on both copies');
+    }
+    // Status change on B is not lost when A saves something else.
+    const itemId = o1.items[0].id;
+    assert.strictEqual((await fetch(`${at(B)}/api/admin/items/${itemId}`, { method: 'PATCH', headers: { ...auth, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'printing' }) })).status, 200);
+    await j(`${at(A)}/api/designs`, { productId: 'mug', color: 'white', size: '11oz', sides: { front: { editor: { objects: [{ type: 'rect' }] } } } });
+    const after = (await (await fetch(`${at(A)}/api/admin/orders`, { headers: auth })).json()).orders.flatMap((o) => o.items).find((i) => i.id === itemId);
+    assert.strictEqual(after.status, 'printing');
+    // Sign out on B ends the session on A too.
+    await fetch(`${at(B)}/api/admin/logout`, { method: 'POST', headers: auth });
+    assert.strictEqual((await fetch(`${at(A)}/api/admin/queue`, { headers: auth })).status, 401);
+    // The file on disk has everything.
+    const db = JSON.parse(fs.readFileSync(path.join(dir, 'db.json'), 'utf8'));
+    assert.strictEqual(db.orders.length, 2);
+    assert.strictEqual(Object.keys(db.designs).length, 7);
+  } finally {
+    A.close();
+    B.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

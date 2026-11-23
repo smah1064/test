@@ -202,7 +202,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   if (!adminPassword) throw new Error('adminPassword is required');
   const store = new Store(dataDir);
   const app = express();
-  const auth = new security.AdminAuth(adminPassword);
+  const auth = new security.AdminAuth(adminPassword, { dataDir, store });
   const LIMITS = { ...DEFAULT_LIMITS, ...limits };
   const limiter = new security.RateLimiter();
   /** Throws 429 when this visitor (or everyone, for `*` keys) did `what` too often. */
@@ -220,6 +220,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   // in the header themselves is ignored.
   app.set('trust proxy', tp === 'false' ? false : tp === 'true' ? true : /^\d+$/.test(tp) ? Number(tp) : 1);
   app.use(security.securityHeaders);
+  // The host may run several copies of the app: start every request from the latest saved data.
+  app.use((req, res, next) => {
+    store.sync();
+    next();
+  });
 
   // How the hosting proxy passes the visitor's address, logged for the first
   // few page visits after a restart (to set TRUST_PROXY to the right hop count).
@@ -876,13 +881,19 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     redrawBusy = true;
     try {
       while (redrawQueue.length) {
+        store.sync();
         const found = store.findItem(redrawQueue[0]);
         if (!found) { redrawQueue.shift(); continue; }
         const { item } = found;
+        // Another copy of the app is already drawing this book (it updates the claim every page).
+        const claim = item.redraw && item.redraw.claim;
+        if (claim && claim.pid !== process.pid && Date.now() - claim.at < 10 * 60e3) { redrawQueue.shift(); continue; }
+        if (!item.redraw || item.redraw.status === 'done' || item.redraw.status === 'off') { redrawQueue.shift(); continue; }
         const design = store.getDesign(item.designId);
         const book = design && bookFor(design.bookId);
         if (!book || design.photoRemoved) { redrawQueue.shift(); continue; }
         item.redraw.status = 'running';
+        item.redraw.claim = { pid: process.pid, at: Date.now() };
         store.save();
         const pages = book.pages.map((p, i) => (p.face ? i : -1)).filter((i) => i >= 0);
         let waited = false;
@@ -912,12 +923,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
             }
           }
           if (!ok) item.redraw.failed.push(i);
+          item.redraw.claim = { pid: process.pid, at: Date.now() };
           item.redraw.done = pages.filter((p) => fs.existsSync(store.designFile(design.id, `redraw-${p}.jpg`))).length;
           fs.rmSync(store.designFile(design.id, 'book-print.pdf'), { force: true });
           store.save();
         }
         if (waited) continue;
         item.redraw.status = item.redraw.done ? 'done' : 'failed';
+        delete item.redraw.claim;
         item.redraw.finishedAt = new Date().toISOString();
         store.writeDesignFile(design.id, 'book-preview.png', await (await books.renderPage(bookData(design), 0, 600)).png().toBuffer());
         design.version = (design.version || 0) + 1;

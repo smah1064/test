@@ -110,11 +110,27 @@ function weakPassword(pw) {
   return s.length < 12 || (s.length < 16 && classes < 3) || /^(admin|password|123456|secret|qwerty)/i.test(s);
 }
 
+/**
+ * Admin sign-in. Sessions are signed tokens (expiry + random part + HMAC with
+ * a secret kept in the data folder), so every copy of the app accepts them;
+ * sign-out is recorded in the shared store. The secret also depends on the
+ * password, so changing ADMIN_PASSWORD signs everyone out.
+ */
 class AdminAuth {
-  constructor(password) {
+  constructor(password, { dataDir, store } = {}) {
     this.hash = sha256(password);
     this.weak = weakPassword(password);
-    this.sessions = new Map(); // sha256(token) hex -> expires
+    this.store = store || null;
+    let secret = crypto.randomBytes(32);
+    if (dataDir) {
+      const file = path.join(dataDir, '.session-secret');
+      try {
+        fs.writeFileSync(file, crypto.randomBytes(32).toString('hex'), { flag: 'wx', mode: 0o600 });
+      } catch (e) { /* already there (another copy made it) */ }
+      try { secret = Buffer.from(fs.readFileSync(file, 'utf8').trim(), 'hex'); } catch (e) { /* keep the random one */ }
+    }
+    this.key = crypto.createHmac('sha256', secret).update(this.hash).digest();
+    this.sessions = new Map(); // revoked tokens when there is no store
     this.fails = new Map(); // ip -> [times]
     this.globalFails = [];
   }
@@ -142,36 +158,43 @@ class AdminAuth {
       return null;
     }
     this.fails.delete(ip);
-    const token = crypto.randomBytes(32).toString('base64url');
     const expiresAt = Date.now() + SESSION_MS;
-    this.prune();
-    this.sessions.set(sha256(token).toString('hex'), expiresAt);
+    const body = `${expiresAt.toString(36)}.${crypto.randomBytes(18).toString('base64url')}`;
+    const token = `${body}.${this.sign(body)}`;
     console.log(`[admin] signed in from ${ip}`);
     return { token, expiresAt };
   }
+  sign(body) {
+    return crypto.createHmac('sha256', this.key).update(body).digest('base64url');
+  }
+  revoked() {
+    return this.store ? this.store.db.revokedSessions || {} : Object.fromEntries(this.sessions);
+  }
   verify(token) {
-    if (!token) return false;
-    const key = sha256(token).toString('hex');
-    const exp = this.sessions.get(key);
-    if (!exp) return false;
-    if (exp < Date.now()) {
-      this.sessions.delete(key);
-      return false;
-    }
-    return true;
+    const m = /^([0-9a-z]+)\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)$/.exec(token || '');
+    if (!m) return false;
+    const good = Buffer.from(this.sign(`${m[1]}.${m[2]}`));
+    const given = Buffer.from(m[3]);
+    if (good.length !== given.length || !crypto.timingSafeEqual(good, given)) return false;
+    if (parseInt(m[1], 36) < Date.now()) return false;
+    return !this.revoked()[sha256(token).toString('hex')];
   }
   logout(token) {
-    if (token) this.sessions.delete(sha256(token).toString('hex'));
-  }
-  prune() {
-    const now = Date.now();
-    for (const [k, exp] of this.sessions) if (exp < now) this.sessions.delete(k);
-    // Keep the newest sessions only.
-    while (this.sessions.size >= 50) this.sessions.delete(this.sessions.keys().next().value);
+    if (!this.verify(token)) return;
+    const id = sha256(token).toString('hex');
+    const exp = parseInt(token.split('.')[0], 36);
+    if (!this.store) return this.sessions.set(id, exp);
+    this.store.mutate((db) => {
+      const now = Date.now();
+      const list = db.revokedSessions || {};
+      for (const [k, e] of Object.entries(list)) if (e < now) delete list[k];
+      list[id] = exp;
+      db.revokedSessions = list;
+    });
   }
 }
 
-const bearer = (req) => (/^Bearer\s+([A-Za-z0-9_-]{20,})$/.exec(req.get('authorization') || '') || [])[1] || '';
+const bearer = (req) => (/^Bearer\s+([A-Za-z0-9_.-]{20,})$/.exec(req.get('authorization') || '') || [])[1] || '';
 
 // ---------- SVG uploads ----------
 
