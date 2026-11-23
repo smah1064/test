@@ -576,3 +576,5 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 /* ---------- Photo quality boost ---------- */
 .boost-box { border: 1px dashed var(--line); border-radius: 10px; padding: 10px; margin-top: 8px; }
 .boost-box p { margin: 0 0 8px; font-size: 12.5px; color: var(--ink-2); line-height: 1.5; }
+
+.tool[hidden] { display: none !important; }

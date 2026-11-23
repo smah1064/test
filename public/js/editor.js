@@ -2349,7 +2349,11 @@
   // ---------- AI help ----------
   const aiState = { tab: 'slogan', tone: 'funny', lang: POD.lang === 'en' ? 'en' : 'ar', style: 'modern', slogans: [], logos: [], busy: false };
   document.querySelectorAll('[data-ai-pick="lang"] .chip').forEach((c) => c.classList.toggle('active', c.dataset.v === aiState.lang));
+  // The AI tool only shows once the shop has switched AI help on.
+  const aiTool = document.querySelector('.tool[data-flyout="ai"]');
+  aiTool.hidden = true;
   POD.api('/api/ai/status').then((r) => {
+    aiTool.hidden = !r.enabled;
     $('ai-off').hidden = r.enabled;
     $('ai-on').hidden = !r.enabled;
   }).catch(() => { $('ai-off').hidden = false; $('ai-on').hidden = true; });
