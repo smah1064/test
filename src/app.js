@@ -205,7 +205,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   // Hostinger runs the app behind its proxy and CDN: use the visitor's own IP
   // (from X-Forwarded-For) for the per-visitor limits.
   const tp = process.env.TRUST_PROXY || '';
-  app.set('trust proxy', tp === 'false' ? false : /^\d+$/.test(tp) ? Number(tp) : true);
+  // Hostinger's proxy appends the real visitor address as the last
+  // X-Forwarded-For entry, so trust exactly one hop: anything a visitor puts
+  // in the header themselves is ignored.
+  app.set('trust proxy', tp === 'false' ? false : tp === 'true' ? true : /^\d+$/.test(tp) ? Number(tp) : 1);
   app.use(security.securityHeaders);
 
   // How the hosting proxy passes the visitor's address, logged for the first

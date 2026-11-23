@@ -24,7 +24,7 @@ Requires Node 18+. There is no database to set up: data is stored under `data/` 
 | `ANTHROPIC_API_KEY` | (none) | Turns on AI help (slogans, logos) |
 | `AI_DAILY_LIMIT` | `15` | AI requests per visitor per day |
 | `AI_GLOBAL_DAILY_LIMIT` | `300` | AI requests for the whole shop per day |
-| `TRUST_PROXY` | `true` | How to read the visitor IP behind a proxy: `true`, a number of proxy hops, or `false` |
+| `TRUST_PROXY` | `1` | Proxy hops in front of the app (Hostinger: 1, the last X-Forwarded-For entry); `false` if none |
 | `CALLMEBOT_PHONE`, `CALLMEBOT_APIKEY` | (none) | WhatsApp alert to the shop owner for each new order ([CallMeBot](https://www.callmebot.com), free, own number only) |
 | `BREVO_API_KEY`, `MAIL_FROM` | (none) | Email via [Brevo](https://www.brevo.com) (free plan); `MAIL_FROM` must be a verified sender |
 | `MAIL_FROM_NAME` | `OneOff Print` | Sender name on emails |
