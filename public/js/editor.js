@@ -3121,7 +3121,7 @@
   if (fromShare) { toast(t('share.loaded')); scheduleDraft(); }
   if (libraryDesign) {
     if (libraryDesign.kind === 'template') {
-      await addTemplate({ id: libraryDesign.id, items: libraryDesign.items });
+      await addTemplate({ id: libraryDesign.id, items: libraryDesign.items, aspect: libraryDesign.aspect });
       canvas.discardActiveObject();
     } else {
       await loadObjects(remap(libraryDesign.objects || [], libraryDesign.area || area(), area()));

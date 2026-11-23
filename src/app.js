@@ -32,6 +32,7 @@ const accounting = require('./accounting');
 const bgremove = require('./bgremove');
 const coupons = require('./coupons');
 const customers = require('./customers');
+const oauth = require('./oauth');
 
 // Prices the owner changed in the admin are laid over the built-in ones.
 accounting.initPricing(PRODUCTS, EXTRA_SIDE_PRICE);
@@ -252,7 +253,7 @@ const DEFAULT_LIMITS = {
   downloads: [{ max: 200, ms: 3600e3 }],
 };
 
-function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 3600e3 }) {
+function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 3600e3, oauthConfig = {}, oauthFetch }) {
   if (!adminPassword) throw new Error('adminPassword is required');
   const store = new Store(dataDir);
   const app = express();
@@ -497,7 +498,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   const library = new Library(dataDir);
   const libraryCard = (d) => ({
     id: d.id, name: d.name, category: d.category, kind: d.kind, product: d.product, color: d.color,
-    ...(d.kind === 'template' ? { items: d.items } : { preview: `/api/library/${d.id}/preview.png` }),
+    ...(d.kind === 'template' ? { items: d.items, aspect: d.aspect } : { preview: `/api/library/${d.id}/preview.png` }),
   });
   app.get('/api/library', (req, res) => {
     res.set('Cache-Control', 'no-cache');
@@ -1130,11 +1131,88 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (!me) throw new HttpError(401, 'acctSignIn');
     return me;
   };
+  const providers = () => {
+    const cfg = oauth.config(oauthConfig);
+    return Object.fromEntries(oauth.NAMES.map((n) => [n, Boolean(cfg[n])]));
+  };
   app.get('/api/account', (req, res) => {
     res.set('Cache-Control', 'private, no-store');
     const me = currentCustomer(req);
-    res.json({ customer: me ? customers.publicCustomer(me) : null, emailReset: notify.emailReady() });
+    res.json({ customer: me ? customers.publicCustomer(me) : null, emailReset: notify.emailReady(), providers: providers() });
   });
+
+  // Sign in (or sign up) with Google / Facebook: /auth/google?next=cart -> provider -> /auth/google/callback.
+  const origin = (req) => `${isHttps(req) ? 'https' : 'http'}://${req.get('host')}`;
+  const callbackUrl = (req, name) => `${origin(req)}/auth/${name}/callback`;
+  const backTo = (next, extra = '') => (next === 'cart' && !extra ? '/cart' : `/account${extra ? `?oauth=${extra}${next === 'cart' ? '&next=cart' : ''}` : ''}`);
+  app.get('/auth/:provider', (req, res) => {
+    const name = req.params.provider;
+    if (!oauth.NAMES.includes(name)) throw new HttpError(404, 'notFound');
+    const cfg = oauth.config(oauthConfig)[name];
+    const next = req.query.next === 'cart' ? 'cart' : '';
+    if (!cfg) return res.redirect(302, backTo(next, 'unavailable'));
+    rateLimit(req, 'accountLogin');
+    const state = oauth.newState();
+    res.set('Cache-Control', 'no-store');
+    res.set('Set-Cookie', oauth.stateCookie(`${state}.${next}`, { secure: isHttps(req) }));
+    res.redirect(302, oauth.authUrl(name, cfg, callbackUrl(req, name), state));
+  });
+  app.get('/auth/:provider/callback', async (req, res, next) => {
+    try {
+      await oauthCallback(req, res);
+    } catch (e) {
+      next(e);
+    }
+  });
+  async function oauthCallback(req, res) {
+    const name = req.params.provider;
+    if (!oauth.NAMES.includes(name)) throw new HttpError(404, 'notFound');
+    res.set('Cache-Control', 'no-store');
+    const saved = oauth.readStateCookie(req);
+    const next = saved ? saved.next : '';
+    const fail = (why) => {
+      res.append('Set-Cookie', oauth.stateCookie('', { secure: isHttps(req) }));
+      res.redirect(302, backTo(next, why));
+    };
+    const cfg = oauth.config(oauthConfig)[name];
+    if (!cfg) return fail('unavailable');
+    if (req.query.error) return fail('cancelled'); // the customer pressed Cancel
+    if (!saved || !oauth.sameState(saved.state, req.query.state) || !req.query.code) return fail('failed');
+    let prof;
+    try {
+      prof = await oauth.profile(name, cfg, req.query.code, callbackUrl(req, name), oauthFetch);
+    } catch (e) {
+      console.warn(`[account] ${name} sign-in failed:`, e.message);
+      return fail('failed');
+    }
+    const key = `${name}Id`;
+    const cust = store.mutate((db) => {
+      db.customers ||= [];
+      // The same provider account, else an account with the same (verified) email, else a new one.
+      let c = db.customers.find((x) => x[key] === prof.id);
+      if (!c && prof.email) c = db.customers.find((x) => x.email === prof.email);
+      if (c) {
+        c[key] = prof.id;
+        return c;
+      }
+      const fallback = prof.email ? prof.email.split('@')[0] : 'Customer';
+      c = {
+        id: crypto.randomUUID(),
+        name: (prof.name || fallback).replace(/\s+/g, ' ').slice(0, 120).padEnd(2, '.'),
+        phone: '',
+        email: prof.email,
+        [key]: prof.id,
+        pv: 1,
+        createdAt: new Date().toISOString(),
+      };
+      db.customers.push(c);
+      return c;
+    });
+    res.set('Set-Cookie', customers.cookie(customers.sessionToken(auth.customerKey, cust), { secure: isHttps(req) }));
+    res.append('Set-Cookie', oauth.stateCookie('', { secure: isHttps(req) }));
+    // New accounts (no mobile yet) land on the account page to add it; checkout needs it anyway.
+    res.redirect(302, next === 'cart' ? '/cart' : `/account${cust.phone ? '' : '?welcome=1'}`);
+  }
   app.post('/api/account/signup', express.json({ limit: '10kb' }), (req, res) => {
     const { fields, error } = customers.cleanSignup(req.body);
     if (error) throw new HttpError(400, error);
@@ -1173,6 +1251,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const email = String(b.email || '').trim().toLowerCase().slice(0, 200);
     if (name.length < 2) throw new HttpError(400, 'acctName');
     if (email && !EMAIL_RE.test(email)) throw new HttpError(400, 'badEmail');
+    // Mobile number: accounts made with Google/Facebook add it here.
+    const phone = b.phone === undefined || b.phone === null || b.phone === '' ? null : normalizeEgyptMobile(b.phone);
+    if (b.phone && !phone) throw new HttpError(400, 'badPhone');
     let address = null;
     if (b.address && typeof b.address === 'object' && (b.address.address || b.address.city)) {
       const a = b.address;
@@ -1187,7 +1268,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const cust = (db.customers || []).find((x) => x.id === me.id);
       if (!cust) throw new HttpError(401, 'acctSignIn');
       if (email && db.customers.some((x) => x.email === email && x.id !== cust.id)) throw new HttpError(409, 'acctEmailTaken');
+      if (phone && db.customers.some((x) => x.phone === phone && x.id !== cust.id)) throw new HttpError(409, 'acctPhoneTaken');
       Object.assign(cust, { name, email });
+      if (phone) cust.phone = phone;
       if (address) cust.address = address;
       return cust;
     });
@@ -1197,7 +1280,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const me = signedIn(req);
     const { current, password } = req.body || {};
     rateLimit(req, 'accountLoginId', me.id);
-    if (!customers.checkPassword(me, current)) throw new HttpError(401, 'acctWrongCurrent');
+    if (me.passHash && !customers.checkPassword(me, current)) throw new HttpError(401, 'acctWrongCurrent');
     const weak = customers.passwordProblem(String(password || ''));
     if (weak) throw new HttpError(400, weak);
     const { salt, hash } = customers.hashPassword(password);

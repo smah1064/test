@@ -108,7 +108,11 @@ function loginKey(login) {
 
 /** What the customer sees about themselves (never the password hash). */
 function publicCustomer(c) {
-  return { id: c.id, name: c.name, phone: c.phone, email: c.email || '', address: c.address || null, createdAt: c.createdAt };
+  return {
+    id: c.id, name: c.name, phone: c.phone || '', email: c.email || '', address: c.address || null, createdAt: c.createdAt,
+    hasPassword: Boolean(c.passHash),
+    linked: { google: Boolean(c.googleId), facebook: Boolean(c.facebookId) },
+  };
 }
 
 module.exports = {

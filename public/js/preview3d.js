@@ -200,6 +200,28 @@ function buildBlock(color, tex, renderer, product) {
     : mat('paper', { color: m.edge || '#f4f4f2' });
   const mesh = slab(w, h, r, m.depthIn || 0.5, face, edge, m.material || 'plastic');
   const back = product.sides[1];
+  if (!back && (m.plainBack || m.stand)) {
+    // Paper items printed on one side (envelopes, books, banners): a plain back,
+    // not the design showing through; banners stand on a roll-up base.
+    const g = new THREE.Group();
+    g.add(mesh);
+    if (m.plainBack) {
+      const pb = new THREE.Mesh(new THREE.ShapeGeometry(roundedRect(w, h, r), 24), mat(m.material || 'paper', { color: m.plainBack === 'color' ? color : m.plainBack }));
+      pb.rotation.y = Math.PI;
+      pb.position.z = -(m.depthIn || 0.5) / 2 - Math.min(0.06, (m.depthIn || 0.5) / 4) - 0.002;
+      g.add(pb);
+    }
+    if (m.stand) {
+      const bw = w * 1.04;
+      const bh = Math.max(2, h * 0.035);
+      const bd = Math.max(3, w * 0.09);
+      const base = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, bd), new THREE.MeshStandardMaterial({ color: '#b9bec6', metalness: 0.75, roughness: 0.35 }));
+      base.position.set(0, -h / 2 - bh / 2 + bh * 0.25, 0);
+      g.add(base);
+    }
+    g.rotation.y = -0.3;
+    return g;
+  }
   if (!back) {
     mesh.rotation.y = -0.3;
     return mesh;
@@ -216,6 +238,44 @@ function buildBlock(color, tex, renderer, product) {
   backFace.position.z = -(m.depthIn || 0.5) / 2 - Math.min(0.06, (m.depthIn || 0.5) / 4) - 0.002;
   g.add(mesh, backFace);
   g.rotation.y = -0.3;
+  return g;
+}
+
+/**
+ * A folded greeting card standing slightly open: the printed cover in front,
+ * hinged at its left edge (the fold) to the plain back panel behind it.
+ */
+function buildFoldCard(color, tex, renderer, product) {
+  const side = product.sides[0];
+  const w = side.printWidthIn;
+  const h = side.printHeightIn;
+  const t = 0.012; // card thickness
+  const paper = (opts) => mat('paper', { side: THREE.FrontSide, ...opts });
+  const panel = (frontMat, backMat) => {
+    const p = new THREE.Group();
+    const f = new THREE.Mesh(new THREE.PlaneGeometry(w, h), frontMat);
+    f.position.set(w / 2, 0, t / 2);
+    const b = new THREE.Mesh(new THREE.PlaneGeometry(w, h), backMat);
+    b.rotation.y = Math.PI;
+    b.position.set(w / 2, 0, -t / 2);
+    p.add(f, b);
+    return p;
+  };
+  const face = texture(faceCanvas(color, designCrop(tex[side.id]), 1600, Math.round((1600 * h) / w)), renderer);
+  const plain = (shade) => paper({ color: shade, emissive: '#2a2a28' });
+  const cover = panel(paper({ map: face, emissive: '#141412' }), plain('#f7f7f4'));
+  const backPanel = panel(plain('#f4f4f1'), plain('#f1f1ee'));
+  backPanel.position.z = -t * 1.5;
+  backPanel.rotation.y = 1.05; // opened behind the cover, around the fold
+  const card = new THREE.Group();
+  card.add(cover, backPanel);
+  card.position.x = -w * 0.3;
+  const g = new THREE.Group();
+  g.add(card);
+  // Standing open, seen from the front right and a little above: the back
+  // panel shows left of the fold and the top edges show the opening.
+  g.rotation.y = 0.62;
+  g.rotation.x = 0.22;
   return g;
 }
 
@@ -530,6 +590,7 @@ export function mount(container, { product, color, textures, spin = true }) {
   else if (m.type === 'frame') obj = buildFrame(hex, textures, renderer, product);
   else if (m.type === 'pad') obj = buildPad(hex, textures, renderer, product);
   else if (m.type === 'block') obj = buildBlock(hex, textures, renderer, product);
+  else if (m.type === 'foldcard') obj = buildFoldCard(hex, textures, renderer, product);
   else if (m.type === 'case') obj = buildCase(hex, textures, renderer, product);
   else if (m.type === 'notebook') obj = buildNotebook(hex, textures, renderer, product);
   else if (m.type === 'pillow') obj = buildPillow(m, hex, textures, renderer, product);

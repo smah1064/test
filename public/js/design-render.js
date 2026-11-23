@@ -46,7 +46,7 @@
   async function placeDesign(design, product, side, colorHex) {
     const surface = product.surface || colorHex;
     if (design.kind === 'template') {
-      return window.POD_DESIGN.buildTemplate({ id: design.id, items: design.items }, side.printArea, inkFor(surface));
+      return window.POD_DESIGN.buildTemplate({ id: design.id, items: design.items, aspect: design.aspect }, side.printArea, inkFor(surface));
     }
     const objs = remap(design.objects || [], design.area || side.printArea, side.printArea);
     await window.POD_DESIGN.ensureFontsFor(objs);

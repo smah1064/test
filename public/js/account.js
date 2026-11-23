@@ -8,15 +8,38 @@
   const catalog = await POD.loadCatalog().catch(() => ({ governorates: [] }));
   let me = null;
   let orders = null;
+  let providers = {};
 
   async function load() {
     try {
-      me = (await POD.api('/api/account')).customer;
+      const r = await POD.api('/api/account');
+      me = r.customer;
+      providers = r.providers || {};
     } catch (e) {
       me = null;
     }
     try { if (me) localStorage.setItem('pod-acct', '1'); else localStorage.removeItem('pod-acct'); } catch (e) { /* private mode */ }
     render();
+  }
+
+  // Back from Google / Facebook with a problem.
+  const OAUTH_MSG = { failed: 'acct.oauthFailed', cancelled: 'acct.oauthCancelled', unavailable: 'acct.oauthUnavailable' };
+  if (OAUTH_MSG[params.get('oauth')]) {
+    POD.toast(t(OAUTH_MSG[params.get('oauth')]), params.get('oauth') === 'cancelled' ? undefined : 'error');
+    const u = new URL(location.href);
+    u.searchParams.delete('oauth');
+    history.replaceState(null, '', u.pathname + u.search);
+  }
+  function renderSocial() {
+    const next = params.get('next') === 'cart' ? '?next=cart' : '';
+    let any = false;
+    for (const name of ['google', 'facebook']) {
+      const a = $('soc-' + name);
+      a.hidden = !providers[name];
+      a.href = `/auth/${name}${next}`;
+      any ||= Boolean(providers[name]);
+    }
+    $('acct-social').hidden = !any;
   }
 
   // ---------- Signed out ----------
@@ -114,7 +137,7 @@
   }
   function renderProfile() {
     $('pf-name').value = me.name;
-    $('pf-phone').value = me.phone;
+    $('pf-phone').value = me.phone || '';
     $('pf-email').value = me.email || '';
     const a = me.address || {};
     $('pf-gov').innerHTML = `<option value="">${esc(t('checkout.choose'))}</option>` + catalog.governorates.map((g) => `<option value="${g.id}">${esc(tr(g.name))}</option>`).join('');
@@ -126,7 +149,7 @@
   $('v-profile').addEventListener('submit', (e) => {
     e.preventDefault();
     submit($('v-profile'), async () => {
-      me = (await POD.api('/api/account', json('PUT', { name: $('pf-name').value, email: $('pf-email').value, address: { governorate: $('pf-gov').value, city: $('pf-city').value, address: $('pf-address').value, notes: $('pf-notes').value } }))).customer;
+      me = (await POD.api('/api/account', json('PUT', { name: $('pf-name').value, phone: $('pf-phone').value, email: $('pf-email').value, address: { governorate: $('pf-gov').value, city: $('pf-city').value, address: $('pf-address').value, notes: $('pf-notes').value } }))).customer;
       POD.toast(t('houses.saved'));
       render();
     });
@@ -138,12 +161,15 @@
       $('pw-cur').value = '';
       $('pw-new').value = '';
       POD.toast(t('acct.passwordChanged'));
+      me.hasPassword = true;
+      render();
     });
   });
 
   function render() {
     $('acct-out').hidden = Boolean(me);
     $('acct-in').hidden = !me;
+    renderSocial();
     if (!me) {
       if (params.get('reset')) showForm('f-reset');
       else if ($('f-in').hidden && $('f-up').hidden && $('f-forgot').hidden) showForm('f-in');
@@ -154,10 +180,18 @@
     $('v-orders').hidden = view !== 'orders';
     $('v-profile').hidden = view !== 'profile';
     $('v-security').hidden = view !== 'security';
+    // Accounts made with Google/Facebook: no mobile number yet, maybe no password.
+    $('acct-phone-note').hidden = Boolean(me.phone);
+    $('pw-cur-field').hidden = !me.hasPassword;
+    $('pw-submit').textContent = t(me.hasPassword ? 'acct.changePassword' : 'acct.setPassword');
     if (view === 'orders') renderOrders();
     if (view === 'profile') renderProfile();
   }
   if (params.get('mode') === 'signup') showForm('f-up');
+  if (params.get('welcome')) {
+    view = 'profile';
+    history.replaceState(null, '', '/account');
+  }
   document.addEventListener('pod:langchange', render);
   await load();
 })();

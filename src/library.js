@@ -36,7 +36,7 @@ const CATEGORIES = [
   { id: 'motivation', name: { en: 'Motivation', ar: 'تحفيز' } },
 ];
 
-const D = (id, category, en, ar, items, color = 'white') => ({ id, category, name: { en, ar }, kind: 'template', product: 'tshirt', color, items });
+const D = (id, category, en, ar, items, color = 'white') => ({ id, category, name: { en, ar }, kind: 'template', product: 'tshirt', color, items, aspect: 0.75 });
 
 const SEED = [
   // ---------- Funny Egyptian phrases ----------

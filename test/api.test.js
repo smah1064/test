@@ -1182,6 +1182,95 @@ test('customer accounts: sign up, sign in, orders, address, password', async () 
   assert.deepStrictEqual(a, b);
 });
 
+test('sign in with Google: redirect, callback, account linking', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pod-oauth-'));
+  const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  let profileFor = {};
+  const oauthFetch = async (url, opts) => {
+    assert.strictEqual(url, 'https://oauth2.googleapis.com/token');
+    const form = new URLSearchParams(opts.body);
+    assert.strictEqual(form.get('client_secret'), 'sec');
+    const p = profileFor[form.get('code')];
+    if (!p) return new Response(JSON.stringify({ error: 'invalid_grant' }), { status: 400 });
+    const claims = { iss: 'https://accounts.google.com', aud: 'cid', exp: Math.floor(Date.now() / 1000) + 600, email_verified: true, ...p };
+    return new Response(JSON.stringify({ id_token: `${b64({ alg: 'RS256' })}.${b64(claims)}.sig` }), { status: 200 });
+  };
+  const gapp = createApp({ dataDir: dir, adminPassword: 'secret', limits: OPEN_LIMITS, cleanupEvery: 0, oauthConfig: { google: { clientId: 'cid', clientSecret: 'sec' }, facebook: null }, oauthFetch });
+  const srv = await new Promise((resolve) => { const s = gapp.listen(0, () => resolve(s)); });
+  const B = `http://127.0.0.1:${srv.address().port}`;
+  const get = (u, cookie) => fetch(B + u, { redirect: 'manual', headers: cookie ? { cookie } : {} });
+  const cookies = (r) => (r.headers.getSetCookie ? r.headers.getSetCookie() : [r.headers.get('set-cookie')]).map((c) => c.split(';')[0]);
+  try {
+    assert.deepStrictEqual((await (await get('/api/account')).json()).providers, { google: true, facebook: false });
+    assert.strictEqual((await (await fetch(base + '/api/account')).json()).providers.google, false, 'off without keys');
+    // Not set up: back to the account page with a message.
+    let r = await get('/auth/facebook');
+    assert.strictEqual(r.headers.get('location'), '/account?oauth=unavailable');
+    // Start: off to Google with our client id and a state tied to a cookie.
+    r = await get('/auth/google?next=cart');
+    assert.strictEqual(r.status, 302);
+    const to = new URL(r.headers.get('location'));
+    assert.strictEqual(to.origin + to.pathname, 'https://accounts.google.com/o/oauth2/v2/auth');
+    assert.strictEqual(to.searchParams.get('client_id'), 'cid');
+    assert.strictEqual(to.searchParams.get('redirect_uri'), `${B}/auth/google/callback`);
+    const state = to.searchParams.get('state');
+    const sc = cookies(r).find((c) => c.startsWith('pod_o='));
+    // A forged or missing state is refused.
+    r = await get(`/auth/google/callback?code=c1&state=nope`, sc);
+    assert.strictEqual(r.headers.get('location'), '/account?oauth=failed&next=cart');
+    r = await get(`/auth/google/callback?code=c1&state=${state}`);
+    assert.match(r.headers.get('location'), /oauth=failed/);
+    // Cancelled at Google.
+    r = await get(`/auth/google/callback?error=access_denied&state=${state}`, sc);
+    assert.match(r.headers.get('location'), /oauth=cancelled/);
+    // Success: a new account, signed in, back to the cart.
+    profileFor = { c1: { sub: 'g-1', email: 'Nour@Example.com', name: 'Nour Hassan' } };
+    r = await get(`/auth/google/callback?code=c1&state=${state}`, sc);
+    assert.strictEqual(r.headers.get('location'), '/cart');
+    const session = cookies(r).find((c) => c.startsWith('pod_c='));
+    let me = (await (await get('/api/account', session)).json()).customer;
+    assert.strictEqual(me.email, 'nour@example.com');
+    assert.strictEqual(me.name, 'Nour Hassan');
+    assert.strictEqual(me.phone, '');
+    assert.strictEqual(me.hasPassword, false);
+    assert.strictEqual(me.linked.google, true);
+    // Add a mobile number and set a password (no current password needed).
+    r = await fetch(B + '/api/account', { method: 'PUT', headers: { 'Content-Type': 'application/json', cookie: session }, body: JSON.stringify({ name: 'Nour Hassan', email: 'nour@example.com', phone: '01234567890' }) });
+    assert.strictEqual((await r.json()).customer.phone, '01234567890');
+    r = await fetch(B + '/api/account/password', { method: 'POST', headers: { 'Content-Type': 'application/json', cookie: session }, body: JSON.stringify({ password: 'newpassword1' }) });
+    assert.strictEqual(r.status, 200);
+    // The same Google account next time: the same customer.
+    r = await get('/auth/google');
+    const st2 = new URL(r.headers.get('location')).searchParams.get('state');
+    profileFor = { c2: { sub: 'g-1', email: 'nour@example.com', name: 'Nour' } };
+    r = await get(`/auth/google/callback?code=c2&state=${st2}`, cookies(r).find((c) => c.startsWith('pod_o=')));
+    assert.strictEqual(r.headers.get('location'), '/account');
+    me = (await (await get('/api/account', cookies(r).find((c) => c.startsWith('pod_c=')))).json()).customer;
+    assert.strictEqual(me.phone, '01234567890');
+    // An existing password account with the same verified email is linked, not duplicated.
+    await fetch(B + '/api/account/signup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Omar', phone: '01098765432', email: 'omar@example.com', password: 'longenough1' }) });
+    r = await get('/auth/google');
+    const st3 = new URL(r.headers.get('location')).searchParams.get('state');
+    profileFor = { c3: { sub: 'g-2', email: 'omar@example.com', name: 'Omar G' } };
+    r = await get(`/auth/google/callback?code=c3&state=${st3}`, cookies(r).find((c) => c.startsWith('pod_o=')));
+    me = (await (await get('/api/account', cookies(r).find((c) => c.startsWith('pod_c=')))).json()).customer;
+    assert.strictEqual(me.phone, '01098765432');
+    assert.strictEqual(me.linked.google, true);
+    assert.strictEqual(me.hasPassword, true);
+    // An unverified email does not link to someone else's account.
+    r = await get('/auth/google');
+    const st4 = new URL(r.headers.get('location')).searchParams.get('state');
+    profileFor = { c4: { sub: 'g-3', email: 'omar@example.com', email_verified: false, name: 'Mallory' } };
+    r = await get(`/auth/google/callback?code=c4&state=${st4}`, cookies(r).find((c) => c.startsWith('pod_o=')));
+    me = (await (await get('/api/account', cookies(r).find((c) => c.startsWith('pod_c=')))).json()).customer;
+    assert.strictEqual(me.phone, '');
+    assert.strictEqual(me.email, '');
+  } finally {
+    srv.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 const png4 = (w, h) => png(w, h);
 test('two copies of the app on one data folder share orders, sign-ins and edits', async () => {
   const { createApp: make } = require('../src/app');

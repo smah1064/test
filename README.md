@@ -199,6 +199,11 @@ Customers can create an account at `/account` (name, mobile number, optional ema
 - **Password**: change it (this signs out every other device). **Forgot password** sends a link valid for 1 hour by email (when the account has an email and Brevo is set up); otherwise it offers to ask the shop on WhatsApp.
 - Accounts are optional: guests can still order without one.
 
+**Sign in with Google / Facebook** (optional; the buttons appear once set up). New accounts made this way add their mobile number on the account page (checkout asks for it anyway) and can set a password later. An account with the same verified email is linked, not duplicated (`src/oauth.js`).
+
+- Google: [Google Cloud console](https://console.cloud.google.com/apis/credentials) → Create credentials → OAuth client ID → Web application. Authorised redirect URIs: `https://ebda3.me/auth/google/callback` and `https://www.ebda3.me/auth/google/callback`. Put the client ID and secret in the hosting panel as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (OAuth consent screen: app name, support email, then Publish).
+- Facebook: [Meta for Developers](https://developers.facebook.com/apps) → Create app → Facebook Login → Valid OAuth redirect URIs `https://ebda3.me/auth/facebook/callback` (and www). Set `FACEBOOK_APP_ID` and `FACEBOOK_APP_SECRET`.
+
 Passwords are stored as scrypt hashes. The session is a signed, httpOnly cookie (`pod_c`, 60 days) whose key comes from the shop's secret file, so every app copy accepts it (`src/customers.js`).
 
 ## Printing houses

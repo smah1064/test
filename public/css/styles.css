@@ -794,6 +794,13 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 .acct { max-width: 860px; }
 .acct-card { padding: 20px; max-width: 460px; margin: 24px auto; }
 .acct-tabs { margin-bottom: 16px; }
+.acct-social { display: grid; gap: 10px; margin-bottom: 14px; }
+.btn-social { display: flex; align-items: center; justify-content: center; gap: 10px; background: #fff; color: var(--ink, #16181d); border: 1px solid var(--line); font-weight: 700; }
+.btn-social:hover { background: #f6f7f9; }
+.btn-social[hidden] { display: none; }
+.acct-or { display: flex; align-items: center; gap: 10px; color: var(--ink-2); font-size: 13px; margin-top: 2px; }
+.acct-or::before, .acct-or::after { content: ''; flex: 1; border-top: 1px solid var(--line); }
+.acct-phone-note { margin: 0 0 14px; padding: 10px 12px; border-radius: 10px; background: #fff4e6; color: #8a4b00; font-size: 14px; line-height: 1.6; }
 .acct-in-card, #acct-in .acct-card { margin: 0; max-width: 560px; }
 .acct-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .acct-order { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 12px 14px; margin-bottom: 10px; text-decoration: none; color: inherit; }

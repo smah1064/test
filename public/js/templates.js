@@ -377,6 +377,11 @@
    * `ink` is the main text colour that reads well on the product.
    */
   async function buildTemplate(tpl, area, ink) {
+    // A layout drawn for a box of a given shape (tpl.aspect = width / height,
+    // e.g. 0.75 for the ready designs, made on a T-shirt): on wider, shorter
+    // boxes (mugs, envelopes, banners) sizes follow the height instead, so
+    // lines placed by height don't run into each other.
+    const U = tpl.aspect ? Math.min(area.w, area.h * tpl.aspect) : area.w;
     await Promise.all(tpl.items.filter((i) => i.kind === 'text').map((i) => ensureFont(i.font, i.weight || 'normal', 'normal')));
     // Stickers load from SVG, so build them first.
     const SK = window.POD_STICKERS;
@@ -390,18 +395,18 @@
       if (i.kind === 'sticker') {
         o = stickerObjs[idx];
         if (!o) return null;
-        o.scaleToWidth(area.w * i.w);
+        o.scaleToWidth(U * i.w);
         o.set({ angle: i.angle || 0 });
       } else if (i.kind === 'text') {
         const fill = i.fill || ink;
         o = new fabric.IText(i.text, {
           name: 'Text',
           fontFamily: i.font,
-          fontSize: Math.round(area.w * i.size),
+          fontSize: Math.round(U * i.size),
           fontWeight: i.weight || 'normal',
           fill,
           stroke: i.outline ? ink : null,
-          strokeWidth: i.outline ? Math.max(1.5, area.w * 0.008) : 0,
+          strokeWidth: i.outline ? Math.max(1.5, U * 0.008) : 0,
           paintFirst: 'stroke',
           textAlign: 'center',
           charSpacing: ARABIC_RE.test(i.text) ? 0 : i.spacing || 0,
@@ -419,7 +424,7 @@
         const def = SHAPES[i.shape];
         o = def.make(i.stroke ? ink : i.fill || ink);
         o.set({ name: def.name.en, angle: i.angle || 0, opacity: i.opacity ?? 1 });
-        o.scaleToWidth(area.w * i.w);
+        o.scaleToWidth(U * i.w);
       }
       o.set({ originX: 'center', originY: 'center', left: area.x + area.w * i.x, top: area.y + area.h * i.y });
       o.setCoords();
