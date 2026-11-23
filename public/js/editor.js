@@ -148,15 +148,30 @@
 
   // On garments and bags the print area can be moved (st.offsets, in mockup units);
   // sideDef() gives the side with its print area where the customer put it.
+  // Garment sizes: the print is the same size in cm on every size, so on a
+  // bigger garment the print box is smaller (scaled from just below the collar).
   const baseSide = (id = st.side) => st.product.sides.find((s) => s.id === id);
-  const movedSides = new Map();
+  function areaFor(product, sideId, sizeId, offset) {
+    const a = product.sides.find((s) => s.id === sideId).printArea;
+    const size = product.sizes.find((z) => z.id === sizeId);
+    const f = product.photoChestCm && size && size.chestCm ? product.photoChestCm / size.chestCm : 1;
+    const w = f === 1 ? a.w : Math.round(a.w * f * 10) / 10;
+    const h = f === 1 ? a.h : Math.round(a.h * f * 10) / 10;
+    const x = f === 1 ? a.x : Math.round((a.x + a.w / 2 - w / 2) * 10) / 10;
+    return { ...a, x: x + ((offset && offset.dx) || 0), y: a.y + ((offset && offset.dy) || 0), w, h, ...(a.rx && f !== 1 ? { rx: a.rx * f } : {}) };
+  }
+  const sizedSides = new Map();
   const sideDef = (id = st.side) => {
     const s = baseSide(id);
-    const o = s && st.offsets[s.id];
-    if (!o || (!o.dx && !o.dy)) return s;
-    const key = `${st.product.id}:${s.id}:${o.dx}:${o.dy}`;
-    if (!movedSides.has(key)) movedSides.set(key, { ...s, printArea: { ...s.printArea, x: s.printArea.x + o.dx, y: s.printArea.y + o.dy } });
-    return movedSides.get(key);
+    if (!s) return s;
+    const o = st.offsets[s.id];
+    const key = `${st.product.id}:${s.id}:${st.sizeId}:${o ? o.dx : 0}:${o ? o.dy : 0}`;
+    if (!sizedSides.has(key)) {
+      const a = areaFor(st.product, s.id, st.sizeId, o);
+      const same = a.x === s.printArea.x && a.y === s.printArea.y && a.w === s.printArea.w && a.h === s.printArea.h;
+      sizedSides.set(key, same ? s : { ...s, printArea: a });
+    }
+    return sizedSides.get(key);
   };
   const area = (id) => sideDef(id).printArea;
   const color = () => st.product.colors.find((c) => c.id === st.colorId);
@@ -360,12 +375,12 @@
   function zoneOf(id = st.side) {
     return (baseSide(id) && baseSide(id).moveZone) || null;
   }
-  const areaUnitsPerCm = (id = st.side) => { const sd = baseSide(id); return sd.printArea.w / (sd.printWidthIn * 2.54); };
+  const areaUnitsPerCm = (id = st.side) => areaFor(st.product, id, st.sizeId, null).w / (baseSide(id).printWidthIn * 2.54);
   /** Keep the print area inside the side's allowed zone. */
   function clampOffset(dx, dy, id = st.side) {
     const z = zoneOf(id);
     if (!z) return { dx: 0, dy: 0 };
-    const a = baseSide(id).printArea;
+    const a = areaFor(st.product, id, st.sizeId, null);
     const clamp = (v, lo, hi) => Math.round(Math.min(Math.max(v, Math.min(lo, 0)), Math.max(hi, 0)));
     return { dx: clamp(dx, z.x - a.x, z.x + z.w - a.w - a.x), dy: clamp(dy, z.y - a.y, z.y + z.h - a.h - a.y) };
   }
@@ -2195,10 +2210,38 @@
   $('sizes').addEventListener('click', (e) => {
     const b = e.target.closest('[data-size]');
     if (!b) return;
-    st.sizeId = b.dataset.size;
+    if (b.dataset.size !== st.sizeId) changeSize(b.dataset.size);
     renderOptions();
     refreshChrome();
   });
+  /** A different garment size: the print box changes size on the garment, and the design with it. */
+  function changeSize(sizeId) {
+    const prev = st.sizeId;
+    const before = (sid) => areaFor(st.product, sid, prev, st.offsets[sid]);
+    cancelCrop();
+    commit();
+    canvas.discardActiveObject();
+    st.sizeId = sizeId;
+    for (const sd of st.product.sides) {
+      const from = before(sd.id);
+      const o = st.offsets[sd.id];
+      if (o) {
+        const c = clampOffset(o.dx, o.dy, sd.id);
+        if (c.dx || c.dy) st.offsets[sd.id] = c;
+        else delete st.offsets[sd.id];
+      }
+      const to = areaFor(st.product, sd.id, sizeId, st.offsets[sd.id]);
+      if (from.w === to.w && from.x === to.x && from.y === to.y) continue;
+      if (sd.id === st.side) {
+        const objs = remap(serialize(), from, to);
+        st.designs[sd.id] = objs;
+        loadObjects(objs).then(() => { applyClips(); commit(); renderCheck(); });
+      } else if ((st.designs[sd.id] || []).length) {
+        st.designs[sd.id] = remap(st.designs[sd.id], from, to);
+      }
+    }
+    applyClips();
+  }
   $('product-select').addEventListener('change', serial(async (e) => changeProduct(e.target.value)));
 
   /** Switch product, carrying the design across by scaling it into the new print areas. */
@@ -2211,16 +2254,18 @@
     const pending = prev.sides.filter((s) => (st.designs[s.id] || []).length).map((s) => s.id);
     const mapped = {};
     const from = (sid) => sideDef(sid).printArea; // where the customer had moved it
+    const nextSize = next.sizes.some((z) => z.id === st.sizeId) ? st.sizeId : next.sizes[0].id;
+    const to = (s) => areaFor(next, s.id, nextSize, null);
     for (const s of next.sides) {
       if (pending.includes(s.id)) {
-        mapped[s.id] = remap(st.designs[s.id], from(s.id), s.printArea);
+        mapped[s.id] = remap(st.designs[s.id], from(s.id), to(s));
         pending.splice(pending.indexOf(s.id), 1);
       }
     }
     for (const s of next.sides) {
       if (!mapped[s.id] && pending.length) {
         const sid = pending.shift();
-        mapped[s.id] = remap(st.designs[sid], from(sid), s.printArea);
+        mapped[s.id] = remap(st.designs[sid], from(sid), to(s));
       }
     }
     if (pending.length) {
@@ -2232,7 +2277,7 @@
     st.offsets = {}; // the new product starts at its standard print position
     st.history = {};
     if (!next.colors.some((c) => c.id === st.colorId)) st.colorId = next.colors[0].id;
-    if (!next.sizes.some((s) => s.id === st.sizeId)) st.sizeId = next.sizes[0].id;
+    st.sizeId = nextSize;
     st.side = next.sides.find((s) => s.id === st.side)?.id || next.sides[0].id;
     const url = new URL(location.href);
     url.searchParams.set('product', next.id);
@@ -2903,7 +2948,6 @@
       sides.push({
         side: sd,
         rects: rects(sd.id),
-        shift: st.offsets[sd.id] || null,
         design: exportDesignLayer(3),
         designScale: 3,
         hasDesign: canvas.getObjects().length > 0,

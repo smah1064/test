@@ -53,12 +53,12 @@ const C = {
 };
 
 const APPAREL_SIZES = [
-  { id: 'S', label: t('S', 'S'), surcharge: 0 },
-  { id: 'M', label: t('M', 'M'), surcharge: 0 },
-  { id: 'L', label: t('L', 'L'), surcharge: 0 },
-  { id: 'XL', label: t('XL', 'XL'), surcharge: 0 },
-  { id: '2XL', label: t('2XL', '2XL'), surcharge: 50 },
-  { id: '3XL', label: t('3XL', '3XL'), surcharge: 75 },
+  { id: 'S', chestCm: 48, label: t('S', 'S'), surcharge: 0 },
+  { id: 'M', chestCm: 52, label: t('M', 'M'), surcharge: 0 },
+  { id: 'L', chestCm: 56, label: t('L', 'L'), surcharge: 0 },
+  { id: 'XL', chestCm: 60, label: t('XL', 'XL'), surcharge: 0 },
+  { id: '2XL', chestCm: 64, label: t('2XL', '2XL'), surcharge: 50 },
+  { id: '3XL', chestCm: 68, label: t('3XL', '3XL'), surcharge: 75 },
 ];
 
 const FRONT = t('Front', 'الأمام');
@@ -1206,6 +1206,36 @@ function round2(n) {
  * Price of one printed item. `sideCount` is the number of sides that carry
  * a design. Returns null when the size is unknown.
  */
+// Garment sizes in the preview: the print is the same physical size on every
+// size, so it covers more of a small garment than of a big one. chestCm is
+// the half-chest width of each size; photoChestCm the size the product photo
+// shows. The editor scales the print box by photoChestCm / chestCm.
+const CHILD_CHEST = {
+  kidstee: { '2-4': 30, '4-6': 33, '6-8': 36, '8-10': 39, '10-12': 42 },
+  kidshoodie: { '4-6': 34, '6-8': 37, '8-10': 40, '10-12': 43 },
+  onesie: { '0-3': 21, '3-6': 23, '6-12': 25, '12-18': 27 },
+  jersey: { kids: 42 },
+};
+const PHOTO_CHEST = { kidstee: 36, kidshoodie: 38, onesie: 24 };
+for (const p of PRODUCTS) {
+  if (p.category !== 'apparel' || p.sizes.length < 2) continue;
+  const kids = CHILD_CHEST[p.id] || {};
+  p.sizes = p.sizes.map((sz) => (kids[sz.id] ? { ...sz, chestCm: kids[sz.id] } : sz));
+  if (p.sizes.every((sz) => sz.chestCm)) p.photoChestCm = PHOTO_CHEST[p.id] || 52;
+}
+
+/** The print area for a size (same physical print, so smaller on the screen for bigger garments), top edge kept below the collar. */
+function printAreaFor(product, sideId, sizeId) {
+  const side = product.sides.find((s) => s.id === sideId);
+  const a = side.printArea;
+  const size = product.sizes.find((s) => s.id === sizeId);
+  const f = product.photoChestCm && size && size.chestCm ? product.photoChestCm / size.chestCm : 1;
+  if (f === 1) return a;
+  const w = Math.round(a.w * f * 10) / 10;
+  const h = Math.round(a.h * f * 10) / 10;
+  return { ...a, x: Math.round((a.x + a.w / 2 - w / 2) * 10) / 10, y: a.y, w, h, ...(a.rx ? { rx: a.rx * f } : {}) };
+}
+
 // Garments and bags: the customer can move the print area within this zone
 // (mockup units; measured from the product photos, kept clear of collars,
 // hems, zips, plackets and pockets).
@@ -1253,6 +1283,7 @@ function shippingFor(subtotal) {
 
 module.exports = {
   PRODUCTS,
+  printAreaFor,
   CATEGORIES,
   CURRENCY,
   MOCKUP_WIDTH,

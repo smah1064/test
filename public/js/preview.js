@@ -383,10 +383,14 @@
       const trim = entry.rects.trim;
       const aspect = trim.w / trim.h;
       const r = window.POD_PHOTOS.rectFor(cfg, aspect);
-      // A print area the customer moved: shift it on the photo by the same amount.
-      if (entry.shift) {
-        r.x += (entry.shift.dx * r.w) / trim.w;
-        r.y += (entry.shift.dy * r.h) / trim.h;
+      // The photo's print rect matches the side's standard print area; a garment
+      // size or a moved print area puts the print somewhere else on the photo.
+      const std = side.printArea;
+      if (std && (trim.x !== std.x || trim.y !== std.y || trim.w !== std.w || trim.h !== std.h)) {
+        const kx = r.w / std.w;
+        const ky = r.h / std.h;
+        const nr = { x: r.x + (trim.x - std.x) * kx, y: r.y + (trim.y - std.y) * ky, w: trim.w * kx, h: trim.h * ky };
+        Object.assign(r, nr);
       }
       const ds = entry.designScale || S;
       const DW = entry.design.width;

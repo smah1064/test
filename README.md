@@ -176,6 +176,10 @@ Add an entry to `PRODUCTS` in `src/products.js`. Mockups are SVGs in a 500 × 60
 
 On garments and bags (`moveZone` on a side in `src/products.js`, measured from the product photos and kept clear of collars, hems, zips, plackets and pockets) the customer can move the print box: drag the orange "Drag to move" tag under it, or use the arrow buttons (1 cm) in the panel. The design moves with it. The print file size stays the same; the position is saved per side (`offsetCm`, positive = right / lower) and shown to the admin, in the print PDF label and in messages to printing houses ("moved 5 cm lower from the standard position"). The live and realistic previews show the new position.
 
+## Garment sizes in the preview
+
+Each apparel size has a half-chest width (`chestCm` in `src/products.js`) and each garment the size its photo shows (`photoChestCm`). The print is the same size in cm on every size, so the editor and the realistic preview draw the print box (and the design) smaller on a 3XL and bigger on an S, kept just below the collar (`printAreaFor`). Kids sizes (2–4 … 10–12 yrs), baby onesies and kids hoodies have their own widths. Print files are unchanged.
+
 ## Printing houses
 
 Admin → **Printing houses** tab: save each printing house (name, email and/or WhatsApp number, how you usually send), and pick which one prints each product.

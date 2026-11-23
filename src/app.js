@@ -18,6 +18,7 @@ const {
   priceFor,
   shippingFor,
   round2,
+  printAreaFor,
 } = require('./products');
 const { GOVERNORATES, normalizeEgyptMobile } = require('./egypt');
 const { FIELDS, langOf, format } = require('./i18n');
@@ -114,10 +115,10 @@ const heightIn = (side) => round2((side.printWidthIn * side.printArea.h) / side.
  * Where the customer moved the print area (garments and bags with a moveZone),
  * kept inside the zone; { dx, dy } in mockup units, or null for the standard spot.
  */
-function cleanOffset(side, offset) {
+function cleanOffset(product, side, sizeId, offset) {
   const z = side.moveZone;
   if (!z || !offset || typeof offset !== 'object') return null;
-  const a = side.printArea;
+  const a = printAreaFor(product, side.id, sizeId);
   const clamp = (v, lo, hi) => Math.round(Math.min(Math.max(Number(v) || 0, Math.min(lo, 0)), Math.max(hi, 0)));
   const dx = clamp(offset.dx, z.x - a.x, z.x + z.w - a.w - a.x);
   const dy = clamp(offset.dy, z.y - a.y, z.y + z.h - a.h - a.y);
@@ -131,9 +132,9 @@ function placementEn(o) {
   return parts.join(', ');
 }
 /** The same offset in centimetres on the product (positive = right / lower), for the printer. */
-function offsetCm(side, o) {
+function offsetCm(product, side, sizeId, o) {
   if (!o) return null;
-  const perCm = side.printArea.w / (side.printWidthIn * 2.54);
+  const perCm = printAreaFor(product, side.id, sizeId).w / (side.printWidthIn * 2.54);
   const r = (v) => Math.round((v / perCm) * 2) / 2;
   return { x: r(o.dx), y: r(o.dy) };
 }
@@ -341,11 +342,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (!s.editor || typeof s.editor !== 'object' || !Array.isArray(s.editor.objects) || s.editor.objects.length === 0) {
         throw new HttpError(400, 'sideEmpty', { side: side.name });
       }
-      const offset = cleanOffset(side, s.editor.offset);
+      const offset = cleanOffset(product, side, sizeDef.id, s.editor.offset);
       editor[side.id] = { ...s.editor, offset: offset || undefined };
       storedSides.push({
         id: side.id, name: side.name, widthIn: side.printWidthIn, heightIn: heightIn(side), bleedIn: side.bleedIn || 0,
-        ...(offset ? { offsetCm: offsetCm(side, offset) } : {}),
+        ...(offset ? { offsetCm: offsetCm(product, side, sizeDef.id, offset) } : {}),
       });
     }
     const editorJson = JSON.stringify(editor);
@@ -624,7 +625,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     fs.mkdirSync(path.join(sharesDir, id), { recursive: true });
     const editor = {};
     for (const sd of sides) {
-      const offset = cleanOffset(sd, b.sides[sd.id].offset);
+      const offset = cleanOffset(product, sd, size.id, b.sides[sd.id].offset);
       editor[sd.id] = { objects: b.sides[sd.id].objects, ...(offset ? { offset } : {}) };
       const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(String((b.previews || {})[sd.id] || ''));
       const png = m ? Buffer.from(m[1], 'base64') : null;
@@ -1169,7 +1170,6 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const category = DESIGN_CATEGORIES.some((c) => c.id === b.category) ? b.category : DESIGN_CATEGORIES[0].id;
     const product = getProduct(sh.productId);
     const side = sh.sides[0];
-    const sideDef = product.sides.find((x) => x.id === side.id);
     const editor = JSON.parse(fs.readFileSync(shareFile(sh.id, 'editor.json'), 'utf8'));
     const meta = library.addCustom({
       name: { ar: nameAr || nameEn, en: nameEn || nameAr },
@@ -1178,7 +1178,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       color: sh.color.id,
       objects: editor[side.id].objects,
       // A moved print area: the ready design is re-centred on the standard spot.
-      area: editor[side.id].offset ? { ...sideDef.printArea, x: sideDef.printArea.x + editor[side.id].offset.dx, y: sideDef.printArea.y + editor[side.id].offset.dy } : sideDef.printArea,
+      area: (() => {
+        const a = printAreaFor(product, side.id, sh.size.id);
+        const o = editor[side.id].offset;
+        return o ? { ...a, x: a.x + o.dx, y: a.y + o.dy } : a;
+      })(),
       preview: fs.readFileSync(shareFile(sh.id, `${side.id}.png`)),
     });
     res.status(201).json(libraryCard(meta));
