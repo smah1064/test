@@ -3,9 +3,12 @@
   'use strict';
 
   const { esc, money, toast, t, tr } = POD;
-  const KEY = 'pod-admin-password';
+  // The password is sent once to sign in; after that a session token is used.
+  const KEY = 'pod-admin-token';
   const $ = (id) => document.getElementById(id);
-  let password = sessionStorage.getItem(KEY) || '';
+  try { sessionStorage.removeItem('pod-admin-password'); } catch (e) { /* old versions kept the password */ }
+  let token = sessionStorage.getItem(KEY) || '';
+  const authHeader = () => ({ Authorization: 'Bearer ' + token });
   let tab = 'queue';
   let lastQueue = null;
   let lastOrders = null;
@@ -33,7 +36,7 @@
 
   async function adminApi(url, options = {}) {
     try {
-      return await POD.api(url, { ...options, headers: { ...(options.headers || {}), 'x-admin-password': password } });
+      return await POD.api(url, { ...options, headers: { ...(options.headers || {}), ...authHeader() } });
     } catch (e) {
       if (e.status === 401) signOut(e.message);
       throw e;
@@ -41,8 +44,10 @@
   }
 
   function signOut(message) {
-    password = '';
+    if (token) fetch('/api/admin/logout', { method: 'POST', headers: authHeader() }).catch(() => {});
+    token = '';
     sessionStorage.removeItem(KEY);
+    $('weak-pw').hidden = true;
     $('dash').hidden = true;
     $('logout').hidden = true;
     $('login').hidden = false;
@@ -51,12 +56,23 @@
 
   $('login').addEventListener('submit', async (e) => {
     e.preventDefault();
-    password = $('password').value;
+    const btn = $('login').querySelector('button[type=submit]');
+    btn.disabled = true;
     try {
+      const res = await POD.api('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: $('password').value }),
+      });
+      token = res.token;
+      sessionStorage.setItem(KEY, token);
+      $('password').value = '';
+      $('weak-pw').hidden = !res.weakPassword;
       await refresh();
-      sessionStorage.setItem(KEY, password);
     } catch (err) {
-      /* handled in adminApi */
+      toast(err.message, 'error');
+    } finally {
+      btn.disabled = false;
     }
   });
   $('logout').addEventListener('click', () => signOut());
@@ -285,7 +301,7 @@
   });
 
   async function refresh() {
-    if (!password) {
+    if (!token) {
       $('login').hidden = false;
       return;
     }
@@ -320,7 +336,7 @@
     try {
       const res = await fetch('/api/admin/dtf-film', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-password': password, 'x-lang': POD.lang },
+        headers: { 'Content-Type': 'application/json', ...authHeader(), 'x-lang': POD.lang },
         body: JSON.stringify({ itemIds: ids }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Film failed');
@@ -347,7 +363,7 @@
     const dl = e.target.closest('[data-download]');
     if (dl) {
       try {
-        const res = await fetch(dl.dataset.download, { headers: { 'x-admin-password': password } });
+        const res = await fetch(dl.dataset.download, { headers: authHeader() });
         if (!res.ok) throw new Error(t('admin.downloadFailed'));
         const name = /filename="?([^"]+)"?/.exec(res.headers.get('content-disposition') || '')?.[1] || 'print.png';
         const url = URL.createObjectURL(await res.blob());
@@ -392,5 +408,6 @@
   });
 
   refresh().catch(() => {});
-  setInterval(() => !document.hidden && password && refresh().catch(() => {}), 15000);
+  if (token) adminApi('/api/admin/session').then((r) => { $('weak-pw').hidden = !r.weakPassword; }).catch(() => {});
+  setInterval(() => !document.hidden && token && refresh().catch(() => {}), 15000);
 })();

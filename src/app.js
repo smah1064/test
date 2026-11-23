@@ -26,6 +26,7 @@ const thumbs = require('./thumbs');
 const ai = require('./ai');
 const notify = require('./notify');
 const { Library, CATEGORIES: DESIGN_CATEGORIES } = require('./library');
+const security = require('./security');
 let printfilesModule = null;
 const printfiles = new Proxy({}, { get: (_, key) => (printfilesModule ||= require('./printfiles'))[key] });
 
@@ -177,20 +178,39 @@ function adminItem(order, item, index) {
   };
 }
 
-function createApp({ dataDir, adminPassword }) {
+/** Per-visitor limits; tests and special setups can override them. */
+const DEFAULT_LIMITS = {
+  designs: [{ max: 30, ms: 10 * 60e3 }, { max: 200, ms: 24 * 3600e3 }],
+  designsAll: [{ max: 3000, ms: 24 * 3600e3 }],
+  orders: [{ max: 5, ms: 10 * 60e3 }, { max: 20, ms: 24 * 3600e3 }],
+  shares: [{ max: 10, ms: 60e3 }, { max: 60, ms: 24 * 3600e3 }],
+};
+
+function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 3600e3 }) {
   if (!adminPassword) throw new Error('adminPassword is required');
   const store = new Store(dataDir);
   const app = express();
-  const adminHash = crypto.createHash('sha256').update(adminPassword).digest();
+  const auth = new security.AdminAuth(adminPassword);
+  const LIMITS = { ...DEFAULT_LIMITS, ...limits };
+  const limiter = new security.RateLimiter();
+  /** Throws 429 when this visitor (or everyone, for `*` keys) did `what` too often. */
+  const rateLimit = (req, what, key = req.ip) => {
+    const wait = limiter.hit(`${what}:${key}`, LIMITS[what]);
+    if (wait) throw new HttpError(429, wait > 90 ? 'tooManyWait' : 'tooFast', { min: Math.ceil(wait / 60) });
+  };
 
   app.disable('x-powered-by');
   // Hostinger runs the app behind its proxy and CDN: use the visitor's own IP
   // (from X-Forwarded-For) for the per-visitor limits.
-  app.set('trust proxy', process.env.TRUST_PROXY === 'false' ? false : true);
-  app.use((req, res, next) => {
-    res.set('X-Content-Type-Options', 'nosniff');
-    res.set('Referrer-Policy', 'same-origin');
-    next();
+  const tp = process.env.TRUST_PROXY || '';
+  app.set('trust proxy', tp === 'false' ? false : /^\d+$/.test(tp) ? Number(tp) : true);
+  app.use(security.securityHeaders);
+
+  // TEMPORARY: shows how the hosting proxy passes the visitor's address (removed after checking).
+  app.get('/api/ip-check', (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.json({ ip: req.ip, ips: req.ips, xff: req.get('x-forwarded-for') || null, xri: req.get('x-real-ip') || null, socket: req.socket.remoteAddress,
+      other: Object.keys(req.headers).filter((h) => /ip|forward|client|cdn|via/i.test(h)) });
   });
 
   // ---------- Product card pictures ----------
@@ -229,7 +249,12 @@ function createApp({ dataDir, adminPassword }) {
   //   1. POST   /api/designs                      layout + options -> id and upload token
   //   2. PUT    /api/designs/:id/files/:name      each PNG/SVG file
   //   3. POST   /api/designs/:id/complete         checks files, embeds colour profile + DPI
-  app.post('/api/designs', express.json({ limit: '60mb' }), (req, res) => {
+  app.post('/api/designs', (req, res, next) => {
+    // Checked before reading the (large) body.
+    rateLimit(req, 'designs');
+    rateLimit(req, 'designsAll', '*');
+    next();
+  }, express.json({ limit: '60mb' }), (req, res) => {
     const { productId, color, size, sides } = req.body || {};
     const product = getProduct(productId);
     if (!product) throw new HttpError(400, 'unknownProduct');
@@ -291,8 +316,8 @@ function createApp({ dataDir, adminPassword }) {
     const design = uploadingDesign(req);
     const { name } = req.params;
     if (!FILE_RE.test(name) || !(design.expectedFiles || []).includes(name)) throw new HttpError(400, 'notFound');
-    const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
-    checkUpload(name, buf);
+    let buf = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+    if (checkUpload(name, buf) === 'svg') buf = Buffer.from(security.sanitizeSvg(buf.toString('utf8')));
     store.writeDesignFile(design.id, name, buf);
     res.status(204).end();
   });
@@ -486,7 +511,6 @@ function createApp({ dataDir, adminPassword }) {
       feedback: sh.feedback || [],
     };
   };
-  const shareHits = new Map();
   const limitHits = (map, ip, max) => {
     const now = Date.now();
     const hits = (map.get(ip) || []).filter((tm) => now - tm < 60000);
@@ -494,8 +518,10 @@ function createApp({ dataDir, adminPassword }) {
     map.set(ip, [...hits, now]);
     if (map.size > 5000) map.clear();
   };
-  app.post('/api/shares', express.json({ limit: '40mb' }), (req, res) => {
-    limitHits(shareHits, req.ip, 10);
+  app.post('/api/shares', (req, res, next) => {
+    rateLimit(req, 'shares');
+    next();
+  }, express.json({ limit: '40mb' }), (req, res) => {
     const b = req.body || {};
     const product = getProduct(b.productId);
     if (!product) throw new HttpError(400, 'unknownProduct', { id: String(b.productId || '').slice(0, 40) });
@@ -593,6 +619,7 @@ function createApp({ dataDir, adminPassword }) {
 
   // ---------- Orders ----------
   app.post('/api/orders', express.json({ limit: '100kb' }), (req, res) => {
+    rateLimit(req, 'orders');
     const { customer = {}, designIds } = req.body || {};
     const c = {
       name: cleanString(customer.name, 'name', { max: 120 }),
@@ -676,11 +703,26 @@ function createApp({ dataDir, adminPassword }) {
   });
 
   // ---------- Production (admin) ----------
+  // Sign in once with the password; every other admin request carries the
+  // session token (Authorization: Bearer). 5 wrong passwords lock that
+  // visitor out for 15 minutes.
+  app.post('/api/admin/login', express.json({ limit: '2kb' }), (req, res) => {
+    const result = auth.login(req.ip, (req.body || {}).password);
+    if (!result) throw new HttpError(401, 'wrongPassword');
+    if (result.wait) throw new HttpError(429, 'tooManyLogins', { min: Math.ceil(result.wait / 60) });
+    res.set('Cache-Control', 'no-store');
+    res.json({ token: result.token, expiresAt: new Date(result.expiresAt).toISOString(), weakPassword: auth.weak });
+  });
+  app.post('/api/admin/logout', (req, res) => {
+    auth.logout(security.bearer(req));
+    res.status(204).end();
+  });
   const requireAdmin = (req, res, next) => {
-    const given = crypto.createHash('sha256').update(String(req.get('x-admin-password') || '')).digest();
-    if (!crypto.timingSafeEqual(given, adminHash)) throw new HttpError(401, 'wrongPassword');
+    if (!auth.verify(security.bearer(req))) throw new HttpError(401, 'signInAgain');
+    res.set('Cache-Control', 'no-store');
     next();
   };
+  app.get('/api/admin/session', requireAdmin, (req, res) => res.json({ ok: true, weakPassword: auth.weak }));
 
   app.get('/api/admin/notifications', requireAdmin, (req, res) => {
     res.json(notify.status());
@@ -902,8 +944,15 @@ function createApp({ dataDir, adminPassword }) {
       const file = path.join(publicDir, name + '.html');
       const html = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null;
       pages.set(name, html && html.replace(/((?:src|href)=")(\/(?:js|css|vendor|fonts)\/[^"?#]+\.(?:js|css))"/g, `$1$2?v=${assetVersion}"`));
+      if (html) pageCsp.set(name, security.pageCsp(html));
     }
     return pages.get(name);
+  };
+  const pageCsp = new Map();
+  const sendPage = (res, name, html) => {
+    res.set('Cache-Control', 'no-cache');
+    res.set('Content-Security-Policy', pageCsp.get(name));
+    res.type('html').send(html);
   };
   // Short share links: the share page with a link preview (WhatsApp, Facebook).
   app.get('/s/:id', (req, res, next) => {
@@ -923,14 +972,13 @@ function createApp({ dataDir, adminPassword }) {
       '<meta property="og:type" content="website">',
       '<meta name="twitter:card" content="summary_large_image">',
     ].join('\n  ');
-    res.set('Cache-Control', 'no-cache');
-    res.type('html').send(html.replace('</head>', `  ${tags}\n</head>`));
+    sendPage(res, 'share', html.replace('</head>', `  ${tags}\n</head>`));
   });
   app.get(/^\/(?:([a-z0-9-]+)(?:\.html)?)?$/, (req, res, next) => {
-    const html = pageFor(req.params[0] || 'index');
+    const name = req.params[0] || 'index';
+    const html = pageFor(name);
     if (!html) return next();
-    res.set('Cache-Control', 'no-cache');
-    res.type('html').send(html);
+    sendPage(res, name, html);
   });
   app.use(express.static(publicDir, {
     extensions: ['html'],
@@ -946,6 +994,25 @@ function createApp({ dataDir, adminPassword }) {
   }));
 
   app.use('/api', (req, res) => res.status(404).json({ error: format('notFound', {}, langOf(req)) }));
+
+  // ---------- Housekeeping ----------
+  // Unordered designs (abandoned carts) and old share links are removed so
+  // the disk cannot fill up. Ordered designs are kept.
+  const runCleanup = () => {
+    try {
+      return security.cleanup({ store, sharesDir });
+    } catch (e) {
+      console.error('[cleanup]', e.message);
+      return null;
+    }
+  };
+  app.locals.cleanup = runCleanup;
+  app.locals.auth = auth;
+  app.locals.store = store;
+  if (cleanupEvery) {
+    setTimeout(runCleanup, 60e3).unref();
+    setInterval(runCleanup, cleanupEvery).unref();
+  }
 
   // eslint-disable-next-line no-unused-vars
   app.use((err, req, res, next) => {

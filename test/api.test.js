@@ -49,13 +49,15 @@ const PRINT = png(3600, 4800);
 const PREVIEW = png(60, 72);
 const SVG = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10"/></svg>');
 
+const OPEN_LIMITS = { designs: [{ max: 1e6, ms: 1000 }], orders: [{ max: 1e6, ms: 1000 }], shares: [{ max: 1e6, ms: 1000 }] };
 let server;
 let base;
 let dataDir;
+let app;
 
 test.before(async () => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pod-test-'));
-  const app = createApp({ dataDir, adminPassword: 'secret' });
+  app = createApp({ dataDir, adminPassword: 'secret', limits: OPEN_LIMITS, cleanupEvery: 0 });
   await new Promise((resolve) => {
     server = app.listen(0, resolve);
   });
@@ -69,8 +71,15 @@ test.after(() => {
 
 const post = (url, body, headers = {}) =>
   fetch(base + url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
-const admin = (url, options = {}) =>
-  fetch(base + url, { ...options, headers: { 'Content-Type': 'application/json', 'x-admin-password': 'secret', ...(options.headers || {}) } });
+let adminToken = null;
+async function signIn(at = base, password = 'secret') {
+  const res = await fetch(at + '/api/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) });
+  return res.ok ? (await res.json()).token : null;
+}
+const admin = async (url, options = {}) => {
+  adminToken ||= await signIn();
+  return fetch(base + url, { ...options, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}`, ...(options.headers || {}) } });
+};
 
 const CUSTOMER = { name: 'سارة أحمد', phone: '٠١٠ ١٢٣٤ ٥٦٧٨', governorate: 'giza', city: 'الدقي', address: '12 شارع التحرير، الدور 3' };
 
@@ -208,17 +217,121 @@ test('validates checkout details', async () => {
 
 test('admin endpoints require the password', async () => {
   assert.strictEqual((await fetch(base + '/api/admin/queue')).status, 401);
-  assert.strictEqual((await fetch(base + '/api/admin/queue', { headers: { 'x-admin-password': 'wrong' } })).status, 401);
+  assert.strictEqual((await fetch(base + '/api/admin/queue', { headers: { 'x-admin-password': 'secret' } })).status, 401);
+  assert.strictEqual((await fetch(base + '/api/admin/queue', { headers: { Authorization: 'Bearer not-a-real-session-token-123' } })).status, 401);
+});
+
+test('admin sign-in: sessions, sign-out and lockout after 5 wrong passwords', async () => {
+  const { createApp: make } = require('../src/app');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pod-auth-'));
+  const app2 = make({ dataDir: dir, adminPassword: 'Str0ng!Passw0rd-2026', cleanupEvery: 0 });
+  const s2 = await new Promise((resolve) => { const s = app2.listen(0, () => resolve(s)); });
+  const at = `http://127.0.0.1:${s2.address().port}`;
+  try {
+    const login = (password) => fetch(at + '/api/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) });
+    const ok = await login('Str0ng!Passw0rd-2026');
+    assert.strictEqual(ok.status, 200);
+    const { token, weakPassword } = await ok.json();
+    assert.strictEqual(weakPassword, false);
+    const auth = { Authorization: `Bearer ${token}` };
+    assert.strictEqual((await fetch(at + '/api/admin/queue', { headers: auth })).status, 200);
+    await fetch(at + '/api/admin/logout', { method: 'POST', headers: auth });
+    assert.strictEqual((await fetch(at + '/api/admin/queue', { headers: auth })).status, 401, 'token ends at sign-out');
+    for (let i = 0; i < 5; i++) assert.strictEqual((await login('guess' + i)).status, 401);
+    const locked = await login('Str0ng!Passw0rd-2026');
+    assert.strictEqual(locked.status, 429, 'locked even with the right password');
+    assert.match((await locked.json()).error, /15 min/);
+  } finally {
+    s2.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+  assert.strictEqual((await (await post('/api/admin/login', { password: 'secret' })).json()).weakPassword, true);
+});
+
+test('security headers and page Content-Security-Policy', async () => {
+  const page = await fetch(base + '/editor');
+  const csp = page.headers.get('content-security-policy');
+  assert.match(csp, /script-src 'self' 'sha256-/);
+  assert.match(csp, /frame-ancestors 'none'/);
+  assert.match(csp, /object-src 'none'/);
+  assert.doesNotMatch(csp, /unsafe-eval/);
+  assert.strictEqual(page.headers.get('x-frame-options'), 'DENY');
+  assert.strictEqual(page.headers.get('x-content-type-options'), 'nosniff');
+  // Every inline script on every page is allowed by its hash (nothing else).
+  const { inlineScriptHashes } = require('../src/security');
+  for (const f of fs.readdirSync(path.join(__dirname, '..', 'public')).filter((n) => n.endsWith('.html'))) {
+    const name = f.replace(/\.html$/, '');
+    const res = await fetch(base + '/' + (name === 'index' ? '' : name));
+    const html = await res.text();
+    const pol = res.headers.get('content-security-policy');
+    for (const h of inlineScriptHashes(html)) assert.ok(pol.includes(h), `${name}: inline script allowed`);
+    assert.doesNotMatch(html, /\son[a-z]+="/, `${name}: no inline event handlers`);
+  }
+  const api = await fetch(base + '/api/products');
+  assert.match(api.headers.get('content-security-policy'), /default-src 'none'/);
+});
+
+test('rate limits on new designs and orders', async () => {
+  const { createApp: make } = require('../src/app');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pod-limit-'));
+  const app2 = make({ dataDir: dir, adminPassword: 'secret', cleanupEvery: 0, limits: { designs: [{ max: 2, ms: 60e3 }], orders: [{ max: 1, ms: 60e3 }] } });
+  const s2 = await new Promise((resolve) => { const s = app2.listen(0, () => resolve(s)); });
+  const at = `http://127.0.0.1:${s2.address().port}`;
+  try {
+    const mk = () => fetch(at + '/api/designs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ productId: 'tshirt', color: 'white', size: 'M', sides: { front: { editor: { objects: [{ type: 'rect' }] } } } }) });
+    assert.strictEqual((await mk()).status, 201);
+    assert.strictEqual((await mk()).status, 201);
+    const third = await mk();
+    assert.strictEqual(third.status, 429);
+    const order = () => fetch(at + '/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customer: CUSTOMER, designIds: [] }) });
+    assert.strictEqual((await order()).status, 400);
+    assert.strictEqual((await order()).status, 429);
+  } finally {
+    s2.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('uploaded SVGs are cleaned of scripts and outside links', async () => {
+  const { sanitizeSvg } = require('../src/security');
+  const bad = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" onload="alert(1)">
+    <script>alert(2)</script><foreignObject><iframe src="https://evil.example"></iframe></foreignObject>
+    <style>@import url(https://evil.example/x.css); @font-face{src:url("data:font/woff2;base64,AAAA")}</style>
+    <a href="javascript:alert(3)"><text>Hi &lt;script&gt;</text></a>
+    <image xlink:href="https://evil.example/track.png"/><image xlink:href="data:image/png;base64,iVBORw0KGgo="/>
+    <rect fill="url(#grad)" clip-path="url(#c1)" onclick='x()'/></svg>`;
+  const out = sanitizeSvg(bad);
+  assert.doesNotMatch(out, /<script|onload|onclick|foreignObject|iframe|evil\.example|javascript:/i);
+  assert.match(out, /data:font\/woff2/);
+  assert.match(out, /data:image\/png/);
+  assert.match(out, /url\(#grad\)/);
+  assert.match(out, /Hi &lt;script&gt;/);
+});
+
+test('clean-up removes old unordered designs, keeps ordered ones', async () => {
+  const d = await makeDesign();
+  const old = await makeDesign();
+  const ordered = await makeDesign();
+  assert.strictEqual((await post('/api/orders', { customer: CUSTOMER, designIds: [ordered.id] })).status, 201);
+  // Age two designs by 40 days.
+  const longAgo = new Date(Date.now() - 40 * 864e5).toISOString();
+  for (const id of [old.id, ordered.id]) app.locals.store.db.designs[id].createdAt = longAgo;
+  const result = app.locals.cleanup();
+  assert.ok(result.designs >= 1);
+  assert.strictEqual((await fetch(base + '/api/designs/' + old.id)).status, 404);
+  assert.strictEqual((await fetch(base + '/api/designs/' + ordered.id)).status, 200);
+  assert.strictEqual((await fetch(base + '/api/designs/' + d.id)).status, 200);
 });
 
 test('orders and designs survive a restart', async () => {
   const d = await makeDesign();
   await post('/api/orders', { customer: CUSTOMER, designIds: [d.id] });
-  const app2 = createApp({ dataDir, adminPassword: 'secret' });
+  const app2 = createApp({ dataDir, adminPassword: 'secret', limits: OPEN_LIMITS, cleanupEvery: 0 });
   const s2 = await new Promise((resolve) => {
     const s = app2.listen(0, () => resolve(s));
   });
-  const res = await fetch(`http://127.0.0.1:${s2.address().port}/api/admin/orders`, { headers: { 'x-admin-password': 'secret' } });
+  const at = `http://127.0.0.1:${s2.address().port}`;
+  const res = await fetch(`${at}/api/admin/orders`, { headers: { Authorization: `Bearer ${await signIn(at)}` } });
   const { orders } = await res.json();
   s2.close();
   assert.ok(orders.some((o) => o.items.some((i) => i.designId === d.id)));

@@ -2304,7 +2304,13 @@
     const wIn = +(bleed.w / u).toFixed(4);
     const hIn = +(bleed.h / u).toFixed(4);
     fabric.Text.prototype.svgUnitsPerInch = u;
-    const svg = withArtworkOnly(() => canvas.toSVG({ viewBox: { x: bleed.x, y: bleed.y, width: bleed.w, height: bleed.h }, width: `${wIn}in`, height: `${hIn}in` }));
+    let svg = withArtworkOnly(() => canvas.toSVG({ viewBox: { x: bleed.x, y: bleed.y, width: bleed.w, height: bleed.h }, width: `${wIn}in`, height: `${hIn}in` }));
+    // Photos are blob: URLs while editing; embed them so the file works anywhere.
+    const blobs = [...new Set(svg.match(/blob:[^"']+/g) || [])];
+    for (const url of blobs) {
+      if (!inlined.has(url)) inlined.set(url, toDataUrl(url));
+      svg = svg.split(url).join(await inlined.get(url).catch(() => ''));
+    }
     const fonts = await window.POD_FX.fontFaceCss(canvas.getObjects());
     const note = `<!-- OneOff Print artwork: ${side.printWidthIn} x ${side.printHeightIn} in${b ? ` + ${side.bleedIn} in bleed each side` : ''}. sRGB. -->`;
     return svg.replace(/<defs>/, `${note}<defs><style>${fonts}</style>`);

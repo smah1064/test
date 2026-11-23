@@ -19,12 +19,12 @@ Requires Node 18+. There is no database to set up: data is stored under `data/` 
 | Variable         | Default  | Purpose                              |
 | ---------------- | -------- | ------------------------------------ |
 | `PORT`           | `3000`   | HTTP port                            |
-| `ADMIN_PASSWORD` | `admin`  | Password for the production dashboard (set this!) |
+| `ADMIN_PASSWORD` | `admin`  | Password for the production dashboard: use 16+ characters with letters, numbers and symbols |
 | `DATA_DIR`       | `./data` | Where orders, designs and print files are stored |
 | `ANTHROPIC_API_KEY` | (none) | Turns on AI help (slogans, logos) |
 | `AI_DAILY_LIMIT` | `15` | AI requests per visitor per day |
 | `AI_GLOBAL_DAILY_LIMIT` | `300` | AI requests for the whole shop per day |
-| `TRUST_PROXY` | `true` | Use the visitor IP from the proxy (set `false` if not behind one) |
+| `TRUST_PROXY` | `true` | How to read the visitor IP behind a proxy: `true`, a number of proxy hops, or `false` |
 | `CALLMEBOT_PHONE`, `CALLMEBOT_APIKEY` | (none) | WhatsApp alert to the shop owner for each new order ([CallMeBot](https://www.callmebot.com), free, own number only) |
 | `BREVO_API_KEY`, `MAIL_FROM` | (none) | Email via [Brevo](https://www.brevo.com) (free plan); `MAIL_FROM` must be a verified sender |
 | `MAIL_FROM_NAME` | `OneOff Print` | Sender name on emails |
@@ -114,6 +114,7 @@ src/egypt.js         governorates, mobile number validation
 src/thumbs.js        recoloured product-photo card pictures (sharp)
 src/ai.js            AI slogans and logos (Claude Haiku 5.5, structured output)
 src/library.js       ready-made designs: starter designs and the owner's own
+src/security.js      security headers + CSP, rate limits, admin sessions/lockout, SVG clean-up, old-data clean-up
 public/js/design-render.js  places a design on any product; print/preview/SVG without the editor
 public/designs.html, design.html  the ready-made designs shop
 public/share.html    shared-design page (approve / suggest a change)
@@ -145,7 +146,16 @@ Add an entry to `PRODUCTS` in `src/products.js`. Mockups are SVGs in a 500 × 60
 - **Prices** are starting points in `src/products.js` (`basePrice`, size `surcharge`) and the shipping constants at the bottom of that file. Adjust them to your costs.
 - **Online card payments:** orders are cash on delivery. To also take cards, add an Egyptian gateway such as Paymob or Fawry.
 - **Storage:** the JSON store suits a single server. For scale, move metadata into a database and print files into object storage.
-- **Admin auth** is a single shared password sent in a header. Use real accounts if several people run the press.
+- **Admin auth** is a single shared password. Use real accounts if several people run the press.
+
+## Security
+
+- **Admin sign-in:** the password is sent once to `POST /api/admin/login`, which returns a session token (12 hours, kept in the tab's `sessionStorage`, sent as `Authorization: Bearer`). Sign out ends it on the server. 5 wrong passwords lock that visitor out for 15 minutes, and 50 wrong passwords per hour from everyone lock sign-in for the hour. The dashboard warns when `ADMIN_PASSWORD` is easy to guess. Sessions are kept in memory, so a restart or deploy signs you out.
+- **Headers:** every page has a Content-Security-Policy that only runs this site's own scripts (inline scripts allowed by hash, no `eval`, no outside scripts), and blocks framing (clickjacking), plugins and form posts elsewhere. Other responses get a "nothing runs" policy. Also `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy` (no camera/mic/location), `Cross-Origin-Opener-Policy`, and HSTS over HTTPS.
+- **Rate limits (per visitor):** new designs 30 per 10 min / 200 a day (3000 a day for the whole shop), orders 5 per 10 min / 20 a day, share links 10 a minute / 60 a day, plus the existing limits on AI, photo boost, proofs and feedback.
+- **Uploads:** file names, types, sizes and signatures are checked; SVG print files are cleaned of scripts, event handlers, embedded web pages and outside links; image processing has pixel limits. Print files are admin-only downloads.
+- **Clean-up:** every 6 hours, designs that were never ordered are deleted after 30 days (unfinished uploads after 24 hours) and share links after 120 days. Ordered designs are never deleted.
+- **No cookies** are used, so cross-site request forgery doesn't apply; admin requests need the token header.
 
 ## Photo mockups
 
