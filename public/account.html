@@ -8,6 +8,7 @@
   <script>(function(){var l;try{l=localStorage.getItem('pod-lang')}catch(e){}l=l==='en'?'en':'ar';var d=document.documentElement;d.lang=l;d.dir=l==='ar'?'rtl':'ltr'})()</script>
   <link rel="stylesheet" href="/fonts/fonts.css">
   <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/aftercare.css">
 </head>
 <body data-title-key="acct.pageTitle">
   <header class="site-header">
@@ -76,12 +77,14 @@
         <h1 id="acct-hello"></h1>
         <button class="btn btn-sm" type="button" id="logout" data-i18n="acct.signOut"></button>
       </div>
-      <div class="side-tabs acct-tabs" style="margin-bottom:14px">
+      <div class="side-tabs acct-tabs acct-views" style="margin-bottom:14px">
         <button class="side-tab active" type="button" data-acct-view="orders" data-i18n="acct.orders"></button>
+        <button class="side-tab" type="button" data-acct-view="drafts" data-i18n="acct.drafts"></button>
         <button class="side-tab" type="button" data-acct-view="profile" data-i18n="acct.profile"></button>
         <button class="side-tab" type="button" data-acct-view="security" data-i18n="acct.security"></button>
       </div>
       <div id="v-orders"></div>
+      <div id="v-drafts" hidden></div>
       <form class="card acct-card" id="v-profile" novalidate hidden>
         <p class="acct-phone-note" id="acct-phone-note" hidden data-i18n="acct.addPhone"></p>
         <div class="field"><label for="pf-name" data-i18n="checkout.name"></label><input type="text" id="pf-name" autocomplete="name" maxlength="120"></div>
@@ -112,6 +115,7 @@
 
   <footer class="site-footer"><div class="container" data-i18n="footer"></div></footer>
   <script src="/js/i18n.js"></script>
+  <script src="/js/i18n-aftercare.js"></script>
   <script src="/js/common.js"></script>
   <script src="/js/account.js"></script>
 </body>

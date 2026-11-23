@@ -7,6 +7,7 @@
   <script>(function(){var l;try{l=localStorage.getItem('pod-lang')}catch(e){}l=l==='en'?'en':'ar';var d=document.documentElement;d.lang=l;d.dir=l==='ar'?'rtl':'ltr'})()</script>
   <link rel="stylesheet" href="/fonts/fonts.css">
   <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/aftercare.css">
 </head>
 <body data-title-key="order.pageTitle">
   <header class="site-header">
@@ -28,15 +29,27 @@
   <footer class="site-footer"><div class="container" data-i18n="footer"></div></footer>
 
   <script src="/js/i18n.js"></script>
+  <script src="/js/i18n-aftercare.js"></script>
   <script src="/js/common.js"></script>
   <script>
     (async () => {
       const { money, esc, t, tr } = POD;
       const params = new URLSearchParams(location.search);
       const content = document.getElementById('content');
-      const STEPS = ['queued', 'printing', 'printed', 'shipped'];
+      // Per-item print steps; the last one fills when the whole order is delivered.
+      const STEPS = ['queued', 'printing', 'printed', 'shipped', 'delivered'];
+      const TRACK = ['placed', 'production', 'printed', 'shipped', 'delivered'];
+      const ICONS = {
+        placed: '<path d="M6 2h9l5 5v15H6z"/><path d="M9 12h8M9 16h6"/>',
+        production: '<path d="M7 9V3h10v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M7 14h10v7H7z"/>',
+        printed: '<path d="M20 7 9 18l-5-5"/>',
+        shipped: '<path d="M2 6h12v10H2zM14 10h4l4 4v2h-8"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/>',
+        delivered: '<path d="M3 10 12 3l9 7v11H3z"/><path d="m8.5 14.5 2.5 2.5 4.5-5"/>',
+      };
       let order = null;
       let error = null;
+      // "Order again" state, kept across the auto-refresh re-renders.
+      const reo = { busy: false, added: 0, skipped: null, error: null };
       const catalog = await POD.loadCatalog().catch(() => null);
       const shopWa = catalog && catalog.contact && catalog.contact.whatsapp;
       /** A WhatsApp chat with the shop, the order details already typed. */
@@ -44,6 +57,74 @@
         const items = o.items.map((it, i) => `${POD.num(i + 1)}. ${tr(it.productName)} · ${tr(it.color.name)} · ${tr(it.size.label)}${it.copies > 1 ? ` · ${t('cart.copies', { n: POD.num(it.copies) })}` : ''}`).join('\n');
         const text = t('order.waMessage', { n: o.number, items, total: money(o.total), name: o.customer.name });
         return `https://wa.me/${shopWa}?text=${encodeURIComponent(text)}`;
+      }
+      /** 'YYYY-MM-DD' as a calendar day (no time-zone shift). */
+      function day(ymd) {
+        const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(ymd || '');
+        if (!m) return '';
+        return new Date(+m[1], m[2] - 1, +m[3]).toLocaleDateString(POD.lang === 'ar' ? 'ar-EG' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+      }
+      /** The five tracking steps with their times; worked out from the status when the server sends none. */
+      function steps(o) {
+        let list = Array.isArray(o.timeline) && o.timeline.length ? TRACK.map((step) => ({ step, at: (o.timeline.find((s) => s.step === step) || {}).at || null })) : null;
+        let cur;
+        if (list) {
+          cur = list.reduce((m, s, i) => (s.at ? i : m), 0);
+        } else {
+          const printed = o.items.length && o.items.every((i) => ['printed', 'shipped'].includes(i.status));
+          cur = { received: 0, in_production: printed ? 2 : 1, shipped: 3, delivered: 4 }[o.status] || 0;
+          list = TRACK.map((step, i) => ({ step, at: i === 0 ? o.createdAt : null }));
+        }
+        if (o.status === 'delivered') cur = 4;
+        return list.map((s, i) => ({ ...s, done: i <= cur, current: i === cur }));
+      }
+      function timelineHtml(o) {
+        const list = steps(o);
+        const cur = list.find((s) => s.current);
+        return `
+          <section class="card track-card" aria-labelledby="track-h">
+            <h2 id="track-h">${esc(t('track.title'))}</h2>
+            <ol class="track">
+              ${list.map((s, i) => `
+              <li class="${s.done ? 'done' : ''}${s.current ? ' current' : ''}${list[i + 1] && list[i + 1].done ? ' lead' : ''}"${s.current ? ' aria-current="step"' : ''}>
+                <span class="track-dot"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[s.step]}</svg></span>
+                <span class="track-text">
+                  <span class="track-lbl">${esc(t('track.' + s.step))}</span>
+                  <span class="track-when">${s.at ? esc(POD.date(s.at)) : s.done ? '' : esc(t('track.pending'))}</span>
+                </span>
+              </li>`).join('')}
+            </ol>
+            ${cur ? `<p class="track-hint"><strong>${esc(t('track.now'))}:</strong> ${esc(t('track.' + cur.step + '.hint'))}</p>` : ''}
+            ${shipmentHtml(o)}
+          </section>`;
+      }
+      function shipmentHtml(o) {
+        const s = o.shipment;
+        if (!s || !(s.courier || s.trackingNumber || s.trackingUrl || s.eta || s.deliveredAt)) return '';
+        const url = s.trackingUrl && /^https?:\/\//i.test(s.trackingUrl) ? s.trackingUrl : null;
+        const delivered = o.status === 'delivered' || s.deliveredAt;
+        const rows = [
+          s.courier && [t('track.courier'), `<bdi>${esc(s.courier)}</bdi>`],
+          s.trackingNumber && [t('track.number'), `<span class="ship-num"><code dir="ltr">${esc(s.trackingNumber)}</code><button class="btn btn-sm" type="button" data-act="copy">${esc(t('track.copy'))}</button></span>`],
+          delivered && s.deliveredAt ? [t('track.deliveredOn'), esc(POD.date(s.deliveredAt))] : null,
+          !delivered && s.eta && day(s.eta) ? [t('track.eta'), `<strong>${esc(day(s.eta))}</strong>`] : null,
+        ].filter(Boolean);
+        return `
+          <div class="ship-box">
+            <h3>${esc(t('track.shipment'))}</h3>
+            ${rows.length ? `<dl>${rows.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${v}</dd></div>`).join('')}</dl>` : ''}
+            ${url ? `<a class="btn btn-sm btn-dark" href="${esc(url)}" target="_blank" rel="noopener">${esc(t('track.link'))} <span aria-hidden="true">↗</span></a>` : ''}
+          </div>`;
+      }
+      function reorderNotice() {
+        if (reo.error) return `<p class="notice reo-notice reo-bad" role="alert">${esc(reo.error)}</p>`;
+        if (!reo.skipped) return '';
+        return `
+          <div class="notice reo-notice${reo.added ? '' : ' reo-bad'}" role="status">
+            <p>${esc(reo.added ? t('track.reorderPartial', { n: POD.num(reo.added) }) : t('track.reorderNone'))}</p>
+            <ul>${PODAftercare.skippedLines(reo.skipped).map((l) => `<li>${esc(l)}</li>`).join('')}</ul>
+            ${reo.added ? `<a class="btn btn-sm btn-primary" href="/cart?added=1">${esc(t('track.goCart'))}</a>` : ''}
+          </div>`;
       }
 
       function render() {
@@ -53,22 +134,32 @@
         }
         const o = order;
         const place = [o.customer.city, tr(o.customer.governorate)].filter(Boolean).join(POD.lang === 'ar' ? '، ' : ', ');
+        const delivered = o.status === 'delivered';
         content.innerHTML = `
           <div class="page-head">
             ${params.get('new') ? `<p class="notice" style="margin-bottom:16px">${esc(t('order.thanks'))}</p>` : ''}
             <h1>${esc(t('order.title', { n: o.number }))}</h1>
             <p class="muted">${esc(t('order.meta', { status: t('order.' + o.status), date: POD.date(o.createdAt), n: POD.num(o.items.length) }))}</p>
+            <div class="order-actions">
+              <a class="btn" href="/invoice?id=${encodeURIComponent(o.id)}">${esc(t('track.invoice'))}</a>
+              <button class="btn btn-primary" type="button" data-act="reorder"${reo.busy ? ' disabled' : ''}>${esc(t(reo.busy ? 'track.reordering' : 'track.reorder'))}</button>
+              <span class="muted small">${esc(t('track.reorderNote'))}</span>
+            </div>
+            ${reorderNotice()}
           </div>
-          <div class="card order-items">
+          ${timelineHtml(o)}
+          <div class="card order-items" style="margin-top:16px">
             ${o.items.map((item, i) => {
-              const reached = STEPS.indexOf(item.status);
+              const status = delivered ? 'delivered' : item.status;
+              const reached = STEPS.indexOf(status);
+              const pic = item.sides && item.sides[0] && item.sides[0].previewUrl;
               return `
               <div class="cart-item">
-                <img src="${esc(item.sides[0].previewUrl)}" alt="">
+                ${pic ? `<img src="${esc(pic)}" alt="">` : '<span></span>'}
                 <div>
                   <h3>${POD.num(i + 1)}. ${esc(tr(item.productName))}</h3>
-                  <div class="meta">${esc(tr(item.color.name))} · ${esc(tr(item.size.label))} · ${esc(item.sides.map((s) => tr(s.name)).join(' + '))}${item.copies > 1 ? ` · <span class="cart-copies">${esc(t('cart.copies', { n: POD.num(item.copies) }))}</span>` : ''}</div>
-                  <div class="status-label" style="margin-top:10px">${esc(t('item.' + item.status))}</div>
+                  <div class="meta">${esc(tr(item.color.name))} · ${esc(tr(item.size.label))} · ${esc((item.sides || []).map((s) => tr(s.name)).join(' + '))}${item.copies > 1 ? ` · <span class="cart-copies">${esc(t('cart.copies', { n: POD.num(item.copies) }))}</span>` : ''}</div>
+                  <div class="status-label" style="margin-top:10px">${esc(t('item.' + status))}</div>
                   <div class="status-steps">${STEPS.map((s, k) => `<div class="${k <= reached ? 'done' : ''}" title="${esc(t('item.' + s))}"></div>`).join('')}</div>
                 </div>
                 <div class="price">${esc(money(item.price))}</div>
@@ -80,11 +171,52 @@
             ${o.discount ? `<div class="line discount-line"><span>${esc(t('coupon.discount'))} <bdi dir="ltr">${esc(o.coupon || '')}</bdi></span><span>-${esc(money(o.discount))}</span></div>` : ''}
             <div class="line"><span>${esc(t('checkout.shipping'))}</span><span>${o.shipping ? esc(money(o.shipping)) : esc(t('free'))}</span></div>
             <div class="line total"><span>${esc(t('checkout.total'))}</span><span>${esc(money(o.total))}</span></div>
-            ${o.payment && o.payment.method === 'cod' ? `<div class="pay-box"><strong>${esc(t('order.payCod', { amount: money(o.total) }))}</strong><span>${esc(t('checkout.codText'))}</span></div>` : ''}
+            ${o.payment && o.payment.method === 'cod' && o.payment.status !== 'paid' ? `<div class="pay-box"><strong>${esc(t('order.payCod', { amount: money(o.total) }))}</strong><span>${esc(t('checkout.codText'))}</span></div>` : ''}
             <p class="muted small" style="margin-bottom:0;overflow-wrap:anywhere">${esc(t('order.deliverTo', { name: o.customer.name, place }))}</p>
           </div>
           ${shopWa ? `<div class="order-wa"><p>${esc(t('order.waText'))}</p><a class="btn btn-whatsapp" id="order-wa" target="_blank" rel="noopener" href="${esc(whatsappLink(o))}">${esc(t('order.waButton'))}</a></div>` : ''}`;
       }
+
+      async function reorder() {
+        if (reo.busy || !order) return;
+        Object.assign(reo, { busy: true, added: 0, skipped: null, error: null });
+        render();
+        try {
+          const r = await PODAftercare.reorder(order.id);
+          if (r.added && !r.skipped.length) {
+            location.href = '/cart?added=1';
+            return;
+          }
+          Object.assign(reo, { added: r.added, skipped: r.skipped });
+        } catch (e) {
+          reo.error = e.message;
+        }
+        reo.busy = false;
+        render();
+      }
+      async function copyNumber(btn) {
+        const n = order.shipment.trackingNumber;
+        try {
+          await navigator.clipboard.writeText(n);
+          POD.toast(t('track.copied'));
+        } catch (e) {
+          // No clipboard access (http, old browser): select the number for a manual copy.
+          const code = btn.parentElement.querySelector('code');
+          const range = document.createRange();
+          range.selectNodeContents(code);
+          getSelection().removeAllRanges();
+          getSelection().addRange(range);
+          POD.toast(t('track.copyFailed'));
+        }
+      }
+      // A preview whose file is gone: keep the grey box, not a broken-image icon.
+      content.addEventListener('error', (e) => { if (e.target.tagName === 'IMG') e.target.src = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 1 1%22/%3E'; }, true);
+      content.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-act]');
+        if (!b) return;
+        if (b.dataset.act === 'reorder') reorder();
+        if (b.dataset.act === 'copy') copyNumber(b);
+      });
 
       async function load() {
         try {
