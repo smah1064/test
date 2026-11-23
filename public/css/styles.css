@@ -702,3 +702,27 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 .chip-radio.is-off { opacity: 0.55; cursor: not-allowed; }
 .send-panel textarea { width: 100%; }
 .send-history { font-size: 13px; color: var(--ok, #2b8a3e); margin: 6px 0; line-height: 1.6; }
+
+/* Admin: accounts */
+.acc-subtabs { margin: 0 0 14px; }
+.acc-period { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 14px; margin-bottom: 12px; }
+.acc-period .chips { flex: 1 1 auto; }
+.acc-custom { display: flex; gap: 10px; flex-wrap: wrap; }
+.acc-stats { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+.acc-stat small { display: block; margin-top: 4px; font-size: 12px; }
+.acc-stat.pos b, td.pos { color: var(--ok, #2b8a3e); }
+.acc-stat.neg b, td.neg { color: var(--danger, #c0392b); }
+.acc-ship { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 16px; margin: 12px 0; }
+.acc-h { font-size: 17px; margin: 22px 0 8px; }
+.acc-table td, .acc-table th { vertical-align: top; white-space: nowrap; }
+.acc-table td:nth-child(2) { white-space: normal; }
+.acc-table tr.acc-detail td { background: #fafafa; white-space: normal; }
+.acc-cost-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 6px 0; border-bottom: 1px dashed #e5e5e5; }
+.acc-cost-line > span:first-child { font-weight: 600; }
+.acc-cost-line label { margin-inline-start: auto; display: inline-flex; align-items: center; gap: 6px; }
+.acc-cost-line input, .acc-size input { width: 110px; }
+.acc-prices input { width: 96px; padding: 6px 8px; }
+.acc-prices tr.is-edited > td { background: #fff8ef; }
+.acc-sizes { display: flex; flex-wrap: wrap; gap: 10px 18px; }
+.acc-size { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.link-btn { background: none; border: 0; padding: 0; color: var(--brand, #ff5a36); cursor: pointer; text-decoration: underline; }

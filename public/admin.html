@@ -39,6 +39,7 @@
           <button class="btn btn-sm" data-tab="film" data-i18n="admin.tabFilm"></button>
           <button class="btn btn-sm" data-tab="library" data-i18n="lib.tab"></button>
           <button class="btn btn-sm" data-tab="houses" data-i18n="houses.tab"></button>
+          <button class="btn btn-sm" data-tab="accounts" data-i18n="acc.tab"></button>
         </div>
       </div>
 
@@ -107,6 +108,56 @@
           <h2 style="font-size:16px;margin:0 0 4px" data-i18n="houses.mapTitle"></h2>
           <p class="muted small" style="margin:0 0 12px;line-height:1.6" data-i18n="houses.mapHelp"></p>
           <div id="house-map"></div>
+        </div>
+      </section>
+
+      <section id="tab-accounts" hidden>
+        <div class="tabs acc-subtabs">
+          <button class="btn btn-sm active" data-acc-view="overview" data-i18n="acc.overview"></button>
+          <button class="btn btn-sm" data-acc-view="prices" data-i18n="acc.prices"></button>
+          <button class="btn btn-sm" data-acc-view="expenses" data-i18n="acc.expenses"></button>
+        </div>
+
+        <div id="acc-overview">
+          <div class="card acc-period">
+            <div class="chips" id="acc-periods"></div>
+            <div class="acc-custom" id="acc-custom" hidden>
+              <label class="small"><span data-i18n="acc.from"></span> <input type="date" id="acc-from"></label>
+              <label class="small"><span data-i18n="acc.to"></span> <input type="date" id="acc-to"></label>
+            </div>
+            <button class="btn btn-sm" id="acc-csv" data-i18n="acc.csv"></button>
+          </div>
+          <p class="notice" id="acc-missing" hidden style="margin:0 0 12px"></p>
+          <div class="stats acc-stats" id="acc-stats"></div>
+          <div class="card acc-ship">
+            <label for="acc-ship-cost"><strong data-i18n="acc.shipCost"></strong><br><span class="muted small" data-i18n="acc.shipCostHelp"></span></label>
+            <div class="row" style="gap:8px;flex:0 0 auto"><input type="number" id="acc-ship-cost" min="0" step="0.01" style="width:120px" dir="ltr"><button class="btn btn-sm" id="acc-ship-save" data-i18n="houses.save"></button></div>
+          </div>
+          <h2 class="acc-h" data-i18n="acc.byProduct"></h2>
+          <div class="card" style="overflow-x:auto"><table class="orders acc-table" id="acc-products"></table></div>
+          <h2 class="acc-h" data-i18n="acc.ordersTitle"></h2>
+          <p class="muted small" data-i18n="acc.ordersHelp" style="margin:-4px 0 10px"></p>
+          <div class="card" style="overflow-x:auto"><table class="orders acc-table" id="acc-orders"></table></div>
+        </div>
+
+        <div id="acc-prices" hidden>
+          <p class="muted small" style="line-height:1.7;margin:0 0 12px" data-i18n="acc.pricesHelp"></p>
+          <div id="acc-price-list"></div>
+        </div>
+
+        <div id="acc-expenses" hidden>
+          <form class="card acc-exp-form" id="acc-exp-form">
+            <h2 style="font-size:16px;margin:0 0 10px" data-i18n="acc.addExpense"></h2>
+            <div class="lib-form">
+              <div class="field"><label for="exp-date" data-i18n="acc.date"></label><input type="date" id="exp-date" required></div>
+              <div class="field"><label for="exp-cat" data-i18n="acc.category"></label><select id="exp-cat"></select></div>
+              <div class="field"><label for="exp-desc" data-i18n="acc.description"></label><input type="text" id="exp-desc" maxlength="200"></div>
+              <div class="field"><label for="exp-amount" data-i18n="acc.amount"></label><input type="number" id="exp-amount" min="0.01" step="0.01" required dir="ltr"></div>
+            </div>
+            <div class="row" style="gap:10px;align-items:center"><button class="btn btn-primary shrink" type="submit" data-i18n="acc.add"></button><span class="small" id="exp-msg"></span></div>
+          </form>
+          <p class="muted small" id="acc-exp-period" style="margin:14px 0 8px"></p>
+          <div class="card" style="overflow-x:auto"><table class="orders acc-table" id="acc-exp-list"></table></div>
         </div>
       </section>
 

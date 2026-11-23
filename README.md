@@ -183,6 +183,16 @@ On any item in the print queue, **Send to printing house** opens a small form: t
 - Download links (`/dl/...`) are signed, need no sign-in, and stop working after 30 days. The customer's name, phone and address are not sent.
 - Every send is recorded on the item ("Sent to … by … · date").
 
+## Accounts (prices, costs, profit)
+
+Admin → **Accounts** tab:
+
+- **Prices & costs**: for every product, the selling price, the price of each extra side and per-size price additions (these change the shop right away; saved in `db.pricing` over the defaults in `src/products.js`), and what a piece costs you: the blank product (plus extra per size), printing for the first side and for each extra side, and packaging/other. Shows the profit and margin per piece.
+- **Profit & orders**: for this month, last month, this year, all time or chosen dates: sales, product + printing costs, shipping cost (a usual cost per order, changeable per order), gross profit and margin, expenses, net profit, and what was shipped (cash due/collected) vs not shipped yet. Profit by product and by order. Any item's real cost can be entered on the order. Export to CSV for Excel.
+- **Expenses**: rent, ads, salaries… by date and type, counted in net profit.
+
+Each new order item keeps a copy of its costs on the order day, so changing costs later does not rewrite past profit.
+
 ## Security
 
 - **Admin sign-in:** the password is sent once to `POST /api/admin/login`, which returns a session token (12 hours, kept in the tab's `sessionStorage`, sent as `Authorization: Bearer`). Sign out ends it on the server. 5 wrong passwords lock that visitor out for 15 minutes, and 50 wrong passwords per hour from everyone lock sign-in for the hour. The dashboard warns when `ADMIN_PASSWORD` is easy to guess. Sessions are kept in memory, so a restart or deploy signs you out.

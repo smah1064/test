@@ -952,6 +952,70 @@ test('printing houses: per-product default, send by email or WhatsApp with signe
   }
 });
 
+test('accounts: change prices, set costs, profit per order, expenses, CSV', async () => {
+  assert.strictEqual((await fetch(base + '/api/admin/pricing')).status, 401);
+  const pr = await (await admin('/api/admin/pricing')).json();
+  const tee = pr.products.find((p) => p.id === 'tshirt');
+  assert.strictEqual(tee.basePrice, 450);
+  const put = (body) => admin('/api/admin/pricing/tshirt', { method: 'PUT', body: JSON.stringify(body) });
+  try {
+    // New price + 2XL surcharge, and costs.
+    let r = await put({ basePrice: 500, extraSidePrice: 120, sizes: { '2XL': 70 }, costs: { blank: 150, printFirst: 60, printExtra: 40, other: 10, sizes: { '2XL': 20 } } });
+    assert.strictEqual(r.status, 200, await r.clone().text());
+    const row = await r.json();
+    assert.strictEqual(row.basePrice, 500);
+    assert.strictEqual(row.unitCost, 220);
+    assert.strictEqual(row.unitProfit, 280);
+    // The shop shows and charges the new price; other products keep theirs.
+    const shop = await (await fetch(base + '/api/products')).json();
+    assert.strictEqual(shop.products.find((p) => p.id === 'tshirt').basePrice, 500);
+    assert.strictEqual(shop.products.find((p) => p.id === 'tshirt').sizes.find((z) => z.id === '2XL').surcharge, 70);
+    assert.strictEqual(shop.products.find((p) => p.id === 'hoodie').sizes.find((z) => z.id === '2XL').surcharge, 50, 'hoodie keeps its own sizes');
+    assert.strictEqual((await put({ basePrice: -5 })).status, 400);
+
+    const d = await makeDesign({ size: '2XL', sides: { front: SIDE, back: SIDE } });
+    const order = await (await post('/api/orders', { customer: CUSTOMER, designIds: [d.id] })).json();
+    assert.strictEqual(order.items[0].price, 500 + 70 + 120);
+    const today = order.createdAt.slice(0, 10);
+
+    // Later cost changes don't rewrite this order.
+    await put({ basePrice: 500, extraSidePrice: 120, sizes: { '2XL': 70 }, costs: { blank: 999 } });
+    await admin('/api/admin/accounts/settings', { method: 'PUT', body: JSON.stringify({ shippingCost: 45 }) });
+    let rep = await (await admin(`/api/admin/accounts?from=${today}&to=${today}`)).json();
+    let o = rep.orders.find((x) => x.id === order.id);
+    assert.strictEqual(o.itemCost, 150 + 20 + 60 + 40 + 10);
+    assert.strictEqual(o.shippingCost, 45);
+    assert.strictEqual(o.profit, order.total - 280 - 45);
+
+    // Correct the real cost of the item and the real shipping.
+    await admin(`/api/admin/items/${order.items[0].id}/cost`, { method: 'PATCH', body: JSON.stringify({ actualCost: 300 }) });
+    await admin(`/api/admin/orders/${order.id}/shipping-cost`, { method: 'PATCH', body: JSON.stringify({ actualShipping: 60 }) });
+    const e = await (await admin('/api/admin/expenses', { method: 'POST', body: JSON.stringify({ date: today, amount: 1000, category: 'marketing', description: 'Facebook ads' }) })).json();
+    assert.strictEqual((await admin('/api/admin/expenses', { method: 'POST', body: JSON.stringify({ date: 'x', amount: 5 }) })).status, 400);
+    rep = await (await admin(`/api/admin/accounts?from=${today}&to=${today}`)).json();
+    o = rep.orders.find((x) => x.id === order.id);
+    assert.strictEqual(o.itemCost, 300);
+    assert.strictEqual(o.profit, order.total - 300 - 60);
+    assert.strictEqual(rep.totals.expenses, 1000);
+    assert.strictEqual(rep.totals.netProfit, Math.round((rep.totals.grossProfit - 1000) * 100) / 100);
+    assert.ok(rep.products.some((p) => p.productId === 'tshirt' && p.units >= 1));
+    // Nothing in a range with no orders.
+    const empty = await (await admin('/api/admin/accounts?from=2001-01-01&to=2001-01-31')).json();
+    assert.strictEqual(empty.totals.orders, 0);
+
+    const csv = await admin(`/api/admin/accounts.csv?from=${today}&to=${today}`);
+    assert.match(csv.headers.get('content-disposition'), /accounts-.*\.csv/);
+    const text = await csv.text();
+    assert.ok(text.includes(order.number) && text.includes('Facebook ads') && text.includes('Net profit'));
+    await admin(`/api/admin/expenses/${e.id}`, { method: 'DELETE' });
+  } finally {
+    // Back to the built-in prices for the other tests.
+    await put({ basePrice: 450, extraSidePrice: 100, sizes: { '2XL': 50 }, costs: {} });
+  }
+  const back = await (await fetch(base + '/api/products')).json();
+  assert.strictEqual(back.products.find((p) => p.id === 'tshirt').basePrice, 450);
+});
+
 const png4 = (w, h) => png(w, h);
 test('two copies of the app on one data folder share orders, sign-ins and edits', async () => {
   const { createApp: make } = require('../src/app');

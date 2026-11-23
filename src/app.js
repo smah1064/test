@@ -26,6 +26,10 @@ const thumbs = require('./thumbs');
 const ai = require('./ai');
 const notify = require('./notify');
 const dispatch = require('./dispatch');
+const accounting = require('./accounting');
+
+// Prices the owner changed in the admin are laid over the built-in ones.
+accounting.initPricing(PRODUCTS, EXTRA_SIDE_PRICE);
 const { Library, CATEGORIES: DESIGN_CATEGORIES } = require('./library');
 const security = require('./security');
 const books = require('./books');
@@ -230,6 +234,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   // The host may run several copies of the app: start every request from the latest saved data.
   app.use((req, res, next) => {
     store.sync();
+    accounting.applyPricing(PRODUCTS, store.db.pricing);
     next();
   });
 
@@ -1040,6 +1045,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         history: [{ status: 'queued', at: now }],
       };
     });
+    // Keep what each item cost to make today (when the costs are filled in), for the accounts.
+    const costs = store.db.costs || {};
+    for (const it of items) if (costs[it.productId]) it.costAtOrder = accounting.itemCostFrom(costs, it);
     const subtotal = round2(items.reduce((sum, i) => sum + i.price, 0));
     const shipping = shippingFor(subtotal);
     const order = store.createOrder({
@@ -1313,6 +1321,100 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     } catch (e) {
       next(e);
     }
+  });
+
+  // ---------- Accounts: prices, costs, profit, expenses ----------
+  const nameOf = (v) => pickEn(v);
+  function pricingRow(p) {
+    const d = accounting.defaultsFor(p.id);
+    const c = (store.db.costs || {})[p.id] || {};
+    const extra = p.extraSidePrice != null ? p.extraSidePrice : EXTRA_SIDE_PRICE;
+    const unit = accounting.itemCostFrom(store.db.costs, { productId: p.id, size: p.sizes[0], sides: [p.sides[0]] });
+    return {
+      id: p.id, name: p.name, category: p.category, kind: p.kind || 'product', sideCount: p.sides.length,
+      basePrice: p.basePrice, extraSidePrice: extra,
+      sizes: p.sizes.map((sz) => ({ id: sz.id, label: sz.label, surcharge: sz.surcharge || 0, costExtra: (c.sizes && c.sizes[sz.id]) || 0 })),
+      defaults: d, costs: { blank: c.blank || 0, printFirst: c.printFirst || 0, printExtra: c.printExtra || 0, other: c.other || 0 },
+      costsSet: Boolean(store.db.costs && store.db.costs[p.id]),
+      unitCost: unit.total, unitProfit: accounting.round2(p.basePrice + (p.sizes[0].surcharge || 0) - unit.total),
+    };
+  }
+  app.get('/api/admin/pricing', requireAdmin, (req, res) => {
+    res.json({ categories: CATEGORIES, products: PRODUCTS.map(pricingRow), settings: store.db.accountSettings || { shippingCost: 0 }, shippingCharged: SHIPPING_FLAT, freeShippingOver: FREE_SHIPPING_OVER });
+  });
+  app.put('/api/admin/pricing/:productId', requireAdmin, express.json(), (req, res) => {
+    const product = getProduct(req.params.productId);
+    if (!product) throw new HttpError(404, 'unknownProduct');
+    const pr = accounting.cleanPricing(product, req.body || {});
+    if (pr.error) throw new HttpError(400, pr.error);
+    const co = accounting.cleanCosts(product, (req.body || {}).costs || {});
+    if (co.error) throw new HttpError(400, co.error);
+    store.mutate((db) => {
+      db.pricing ||= {};
+      db.costs ||= {};
+      if (Object.keys(pr.pricing).length) db.pricing[product.id] = pr.pricing;
+      else delete db.pricing[product.id];
+      if (Object.keys(co.costs).length) db.costs[product.id] = co.costs;
+      else delete db.costs[product.id];
+    });
+    accounting.applyPricing(PRODUCTS, store.db.pricing);
+    res.json(pricingRow(product));
+  });
+  app.put('/api/admin/accounts/settings', requireAdmin, express.json(), (req, res) => {
+    const ship = accounting.money((req.body || {}).shippingCost);
+    if (ship === undefined) throw new HttpError(400, 'badCost');
+    const settings = store.mutate((db) => (db.accountSettings = { ...(db.accountSettings || {}), shippingCost: ship || 0 }));
+    res.json(settings);
+  });
+  const reportFor = (req) => {
+    const d = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : null);
+    return accounting.report({ orders: store.listOrders(), costs: store.db.costs, expenses: store.db.expenses, settings: store.db.accountSettings, from: d(req.query.from), to: d(req.query.to) });
+  };
+  app.get('/api/admin/accounts', requireAdmin, (req, res) => res.json({ ...reportFor(req), categories: accounting.EXPENSE_CATEGORIES }));
+  app.get('/api/admin/accounts.csv', requireAdmin, (req, res) => {
+    const r = reportFor(req);
+    res.set('Content-Disposition', `attachment; filename="accounts-${r.from || 'start'}-to-${r.to || 'today'}.csv"`);
+    res.type('text/csv; charset=utf-8').send(accounting.reportCsv(r, nameOf));
+  });
+  app.patch('/api/admin/items/:itemId/cost', requireAdmin, express.json(), (req, res) => {
+    const v = accounting.money((req.body || {}).actualCost);
+    if (v === undefined) throw new HttpError(400, 'badCost');
+    store.mutate(() => {
+      const found = store.findItem(req.params.itemId);
+      if (!found) throw new HttpError(404, 'itemNotFound');
+      if (v === null) delete found.item.actualCost;
+      else found.item.actualCost = v;
+    });
+    res.json({ ok: true });
+  });
+  app.patch('/api/admin/orders/:orderId/shipping-cost', requireAdmin, express.json(), (req, res) => {
+    const v = accounting.money((req.body || {}).actualShipping);
+    if (v === undefined) throw new HttpError(400, 'badCost');
+    store.mutate(() => {
+      const order = store.getOrder(req.params.orderId);
+      if (!order) throw new HttpError(404, 'notFound');
+      if (v === null) delete order.actualShipping;
+      else order.actualShipping = v;
+    });
+    res.json({ ok: true });
+  });
+  app.post('/api/admin/expenses', requireAdmin, express.json(), (req, res) => {
+    const { expense, error } = accounting.cleanExpense(req.body || {});
+    if (error) throw new HttpError(400, error);
+    const created = store.mutate((db) => {
+      db.expenses ||= [];
+      if (db.expenses.length >= 5000) throw new HttpError(400, 'badCost');
+      const e = { id: crypto.randomUUID(), ...expense, createdAt: new Date().toISOString() };
+      db.expenses.push(e);
+      return e;
+    });
+    res.status(201).json(created);
+  });
+  app.delete('/api/admin/expenses/:id', requireAdmin, (req, res) => {
+    store.mutate((db) => {
+      db.expenses = (db.expenses || []).filter((e) => e.id !== req.params.id);
+    });
+    res.json({ ok: true });
   });
 
   // ---------- Printing houses: who prints what, and sending them the job ----------

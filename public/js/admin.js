@@ -85,6 +85,7 @@
     $('tab-film').hidden = tab !== 'film';
     $('tab-library').hidden = tab !== 'library';
     $('tab-houses').hidden = tab !== 'houses';
+    $('tab-accounts').hidden = tab !== 'accounts';
     refresh();
   }));
 
@@ -573,6 +574,7 @@
       if (!housesData) housesData = await adminApi('/api/admin/houses').catch(() => null);
       renderQueue((lastQueue = await adminApi('/api/admin/queue')));
     } else if (tab === 'houses') renderHouses((housesData = await adminApi('/api/admin/houses')));
+    else if (tab === 'accounts') await refreshAccounts();
     else if (tab === 'film') renderFilm((lastFilm = (await adminApi('/api/admin/dtf-items')).items));
     else if (tab === 'library') renderLibrary((lastLibrary = await adminApi('/api/admin/library')));
     else { renderOrders((lastOrders = (await adminApi('/api/admin/orders')).orders)); renderNotifyStatus(); }
@@ -587,6 +589,7 @@
     if (tab === 'film' && lastFilm) renderFilm(lastFilm);
     if (tab === 'library' && lastLibrary) renderLibrary(lastLibrary);
     if (tab === 'houses' && housesData) renderHouses(housesData);
+    if (tab === 'accounts') renderAccounts();
   });
 
   $('film-list').addEventListener('change', (e) => {
@@ -624,6 +627,271 @@
     } finally {
       btn.disabled = false;
       btn.textContent = t('admin.filmBuild');
+    }
+  });
+
+  // ---------- Accounts: profit, prices & costs, expenses ----------
+  const acc = { view: 'overview', period: 'month', from: '', to: '', report: null, pricing: null, openOrders: new Set(), openSizes: new Set(), edits: {} };
+  const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  function periodRange(p) {
+    const now = new Date();
+    if (p === 'month') return [ymd(new Date(now.getFullYear(), now.getMonth(), 1)), ymd(now)];
+    if (p === 'lastMonth') return [ymd(new Date(now.getFullYear(), now.getMonth() - 1, 1)), ymd(new Date(now.getFullYear(), now.getMonth(), 0))];
+    if (p === 'year') return [ymd(new Date(now.getFullYear(), 0, 1)), ymd(now)];
+    if (p === 'custom') return [acc.from, acc.to];
+    return ['', ''];
+  }
+  const rangeQuery = () => { const [f, to] = periodRange(acc.period); return `from=${encodeURIComponent(f || '')}&to=${encodeURIComponent(to || '')}`; };
+  const cls = (n) => (n < 0 ? 'neg' : n > 0 ? 'pos' : '');
+  async function refreshAccounts() {
+    // Don't redraw while the admin is typing a price or a cost.
+    const a = document.activeElement;
+    if (a && a.closest && a.closest('#tab-accounts') && /INPUT|SELECT|TEXTAREA/.test(a.tagName) && (acc.report || acc.pricing)) return;
+    if (acc.view === 'prices') acc.pricing = await adminApi('/api/admin/pricing');
+    else {
+      acc.report = await adminApi(`/api/admin/accounts?${rangeQuery()}`);
+      if (!acc.pricing) acc.pricing = await adminApi('/api/admin/pricing');
+    }
+    renderAccounts();
+  }
+  function renderAccounts() {
+    $('acc-overview').hidden = acc.view !== 'overview';
+    $('acc-prices').hidden = acc.view !== 'prices';
+    $('acc-expenses').hidden = acc.view !== 'expenses';
+    document.querySelectorAll('[data-acc-view]').forEach((b) => b.classList.toggle('active', b.dataset.accView === acc.view));
+    if (acc.view === 'prices') renderPrices();
+    else if (acc.report) { renderOverview(); renderExpenses(); }
+  }
+  function renderOverview() {
+    const r = acc.report;
+    const tt = r.totals;
+    $('acc-periods').innerHTML = ['month', 'lastMonth', 'year', 'all', 'custom']
+      .map((p) => `<button class="chip ${acc.period === p ? 'active' : ''}" data-acc-period="${p}" type="button">${esc(t('acc.period.' + p))}</button>`).join('');
+    $('acc-custom').hidden = acc.period !== 'custom';
+    $('acc-missing').hidden = !tt.missingCosts;
+    $('acc-missing').textContent = t('acc.missing', { n: POD.num(tt.missingCosts) });
+    const tile = (label, value, extra, c = '') => `<div class="card stat acc-stat ${c}"><b>${esc(value)}</b><span>${esc(label)}</span>${extra ? `<small class="muted">${esc(extra)}</small>` : ''}</div>`;
+    $('acc-stats').innerHTML = [
+      tile(t('acc.revenue'), money(tt.revenue), t('acc.revenueSub', { orders: POD.num(tt.orders), items: POD.num(tt.items) })),
+      tile(t('acc.itemCost'), money(tt.itemCost), t('acc.itemCostSub')),
+      tile(t('acc.shippingCost'), money(tt.shippingCost), t('acc.shipCharged', { v: money(tt.shippingCharged) })),
+      tile(t('acc.grossProfit'), money(tt.grossProfit), t('acc.margin', { v: POD.num(tt.margin) }), cls(tt.grossProfit)),
+      tile(t('acc.expensesTotal'), money(tt.expenses), ''),
+      tile(t('acc.netProfit'), money(tt.netProfit), '', cls(tt.netProfit)),
+      tile(t('acc.collected'), money(tt.collected), t('acc.pending', { v: money(tt.pending) })),
+    ].join('');
+    if (acc.pricing && document.activeElement !== $('acc-ship-cost')) $('acc-ship-cost').value = acc.pricing.settings.shippingCost || 0;
+    $('acc-products').innerHTML = r.products.length
+      ? `<thead><tr><th>${esc(t('acc.col.product'))}</th><th>${esc(t('acc.col.units'))}</th><th>${esc(t('acc.col.sales'))}</th><th>${esc(t('acc.col.cost'))}</th><th>${esc(t('acc.col.profit'))}</th></tr></thead><tbody>${r.products.map((p) => `
+        <tr><td>${esc(tr(p.productName))}</td><td>${POD.num(p.units)}</td><td>${money(p.sales)}</td><td>${money(p.cost)}</td><td class="${cls(p.profit)}">${money(p.profit)}</td></tr>`).join('')}</tbody>`
+      : `<tbody><tr><td class="muted">${esc(t('acc.noOrders'))}</td></tr></tbody>`;
+    $('acc-orders').innerHTML = r.orders.length
+      ? `<thead><tr><th>${esc(t('admin.col.order'))}</th><th>${esc(t('acc.col.items'))}</th><th>${esc(t('acc.col.total'))}</th><th>${esc(t('acc.col.cost'))}</th><th>${esc(t('acc.col.ship'))}</th><th>${esc(t('acc.col.profit'))}</th><th></th></tr></thead><tbody>${r.orders.map(orderRow).join('')}</tbody>`
+      : `<tbody><tr><td class="muted">${esc(t('acc.noOrders'))}</td></tr></tbody>`;
+  }
+  const SRC = { actual: 'acc.src.actual', order: 'acc.src.order', current: 'acc.src.current' };
+  function orderRow(o) {
+    const open = acc.openOrders.has(o.id);
+    const main = `<tr class="${open ? 'is-open' : ''}">
+      <td><strong>${esc(o.number)}</strong><div class="muted small">${esc(POD.date(o.createdAt))} · ${esc(t(o.status === 'shipped' ? 'acc.shipped' : 'acc.open'))}</div></td>
+      <td>${o.items.map((i) => esc(tr(i.productName))).join('<br>')}</td>
+      <td>${money(o.total)}<div class="muted small">${esc(t('acc.inclShip', { v: money(o.shipping) }))}</div></td>
+      <td>${money(o.itemCost)}</td><td>${money(o.shippingCost)}</td>
+      <td class="${cls(o.profit)}"><strong>${money(o.profit)}</strong></td>
+      <td><button class="btn btn-sm" type="button" data-acc-order="${o.id}">${esc(t(open ? 'acc.close' : 'acc.editCosts'))}</button></td></tr>`;
+    if (!open) return main;
+    const items = o.items.map((i) => `
+      <div class="acc-cost-line">
+        <span>${esc(tr(i.productName))} · ${esc(tr(i.size && i.size.label))}${i.sides > 1 ? ` · ${esc(t('acc.sides', { n: POD.num(i.sides) }))}` : ''} · ${money(i.price)}</span>
+        <span class="muted small">${i.costParts ? esc(t('acc.parts', { blank: money(i.costParts.blank), print: money(i.costParts.print), other: money(i.costParts.other) })) : ''} (${esc(t(SRC[i.costSource]))})</span>
+        <label class="small">${esc(t('acc.realCost'))} <input type="number" min="0" step="0.01" dir="ltr" value="${i.costSource === 'actual' ? i.cost : ''}" placeholder="${i.cost}" data-acc-item-cost="${i.id}"></label>
+      </div>`).join('');
+    return main + `<tr class="acc-detail"><td colspan="7">
+      ${items}
+      <div class="acc-cost-line"><span>${esc(t('acc.col.ship'))}</span><span class="muted small">${esc(t(o.shippingCostSet ? 'acc.src.actual' : 'acc.src.default'))}</span>
+        <label class="small">${esc(t('acc.realShip'))} <input type="number" min="0" step="0.01" dir="ltr" value="${o.shippingCostSet ? o.shippingCost : ''}" placeholder="${o.shippingCost}" data-acc-ship="${o.id}"></label></div>
+      <p class="muted small" style="margin:6px 0 0">${esc(t('acc.realHelp'))}</p>
+    </td></tr>`;
+  }
+  function renderExpenses() {
+    const r = acc.report;
+    const [f, to] = periodRange(acc.period);
+    $('acc-exp-period').textContent = t('acc.expPeriod', { period: t('acc.period.' + acc.period) + (f || to ? ` (${f || '…'} → ${to || '…'})` : ''), total: money(r.totals.expenses) });
+    if (!$('exp-cat').options.length) $('exp-cat').innerHTML = (r.categories || []).map((c) => `<option value="${c}">${esc(t('acc.cat.' + c))}</option>`).join('');
+    else [...$('exp-cat').options].forEach((o) => { o.textContent = t('acc.cat.' + o.value); });
+    if (!$('exp-date').value) $('exp-date').value = ymd(new Date());
+    $('acc-exp-list').innerHTML = r.expenses.length
+      ? `<thead><tr><th>${esc(t('acc.date'))}</th><th>${esc(t('acc.category'))}</th><th>${esc(t('acc.description'))}</th><th>${esc(t('acc.amount'))}</th><th></th></tr></thead><tbody>${r.expenses.map((e) => `
+        <tr><td>${esc(e.date)}</td><td>${esc(t('acc.cat.' + e.category))}</td><td>${esc(e.description)}</td><td>${money(e.amount)}</td><td><button class="btn btn-sm" type="button" data-exp-del="${e.id}">${esc(t('houses.delete'))}</button></td></tr>`).join('')}</tbody>`
+      : `<tbody><tr><td class="muted">${esc(t('acc.noExpenses'))}</td></tr></tbody>`;
+  }
+  function renderPrices() {
+    const d = acc.pricing;
+    if (!d) return;
+    const field = (pid, key, value, extra = '') => `<input type="number" step="0.01" min="0" dir="ltr" value="${value}" data-price-field="${pid}" data-key="${key}" ${extra}>`;
+    $('acc-price-list').innerHTML = d.categories.map((c) => {
+      const prods = d.products.filter((p) => p.category === c.id);
+      if (!prods.length) return '';
+      return `<h3 class="house-map-cat">${esc(tr(c.name))}</h3><div class="card" style="overflow-x:auto"><table class="orders acc-table acc-prices">
+        <thead><tr><th>${esc(t('acc.col.product'))}</th><th>${esc(t('acc.col.price'))}</th><th>${esc(t('acc.col.extraSide'))}</th><th>${esc(t('acc.col.blank'))}</th><th>${esc(t('acc.col.print1'))}</th><th>${esc(t('acc.col.printN'))}</th><th>${esc(t('acc.col.other'))}</th><th>${esc(t('acc.col.unitProfit'))}</th><th></th></tr></thead>
+        <tbody>${prods.map((p) => priceRow(p, field)).join('')}</tbody></table></div>`;
+    }).join('');
+  }
+  function priceRow(p, field) {
+    const e = acc.edits[p.id];
+    const v = (k, def) => (e && e[k] !== undefined ? e[k] : def);
+    const price = Number(v('basePrice', p.basePrice)) + Number(v('size:' + p.sizes[0].id, p.sizes[0].surcharge));
+    const cost = Number(v('blank', p.costs.blank)) + Number(v('sizecost:' + p.sizes[0].id, p.sizes[0].costExtra)) + Number(v('printFirst', p.costs.printFirst)) + Number(v('other', p.costs.other));
+    const profit = price - cost;
+    const margin = price ? Math.round((profit / price) * 1000) / 10 : 0;
+    const multi = p.sideCount > 1;
+    const sizesOpen = acc.openSizes.has(p.id);
+    const changed = e && Object.keys(e).length;
+    let html = `<tr class="${changed ? 'is-edited' : ''}">
+      <td><strong>${esc(tr(p.name))}</strong>${p.costsSet ? '' : `<div class="small" style="color:var(--danger,#c0392b)">${esc(t('acc.noCosts'))}</div>`}
+        ${p.sizes.length > 1 ? `<div><button class="link-btn small" type="button" data-acc-sizes="${p.id}">${esc(t(sizesOpen ? 'acc.hideSizes' : 'acc.sizes', { n: POD.num(p.sizes.length) }))}</button></div>` : ''}</td>
+      <td>${field(p.id, 'basePrice', v('basePrice', p.basePrice), 'min="1"')}</td>
+      <td>${multi ? field(p.id, 'extraSidePrice', v('extraSidePrice', p.extraSidePrice)) : '<span class="muted">—</span>'}</td>
+      <td>${field(p.id, 'blank', v('blank', p.costs.blank))}</td>
+      <td>${field(p.id, 'printFirst', v('printFirst', p.costs.printFirst))}</td>
+      <td>${multi ? field(p.id, 'printExtra', v('printExtra', p.costs.printExtra)) : '<span class="muted">—</span>'}</td>
+      <td>${field(p.id, 'other', v('other', p.costs.other))}</td>
+      <td class="${p.costsSet || changed ? cls(profit) : ''}">${p.costsSet || changed ? `<strong>${money(profit)}</strong><div class="muted small">${esc(t('acc.marginShort', { v: POD.num(margin) }))}</div>` : '<span class="muted">—</span>'}</td>
+      <td><button class="btn btn-sm ${changed ? 'btn-primary' : ''}" type="button" data-price-save="${p.id}" ${changed ? '' : 'disabled'}>${esc(t('houses.save'))}</button></td></tr>`;
+    if (sizesOpen) {
+      html += `<tr class="acc-detail"><td colspan="9"><div class="acc-sizes">${p.sizes.map((sz) => `
+        <div class="acc-size"><strong>${esc(tr(sz.label))}</strong>
+          <label class="small">${esc(t('acc.sizePrice'))} ${field(p.id, 'size:' + sz.id, v('size:' + sz.id, sz.surcharge), 'min="-100000"')}</label>
+          <label class="small">${esc(t('acc.sizeCost'))} ${field(p.id, 'sizecost:' + sz.id, v('sizecost:' + sz.id, sz.costExtra))}</label>
+        </div>`).join('')}</div><p class="muted small" style="margin:6px 0 0">${esc(t('acc.sizesHelp'))}</p></td></tr>`;
+    }
+    return html;
+  }
+
+  document.querySelectorAll('[data-acc-view]').forEach((b) => b.addEventListener('click', () => {
+    acc.view = b.dataset.accView;
+    renderAccounts();
+    refreshAccounts().catch((e) => toast(e.message, 'error'));
+  }));
+  $('tab-accounts').addEventListener('click', async (e) => {
+    const per = e.target.closest('[data-acc-period]');
+    if (per) {
+      acc.period = per.dataset.accPeriod;
+      if (acc.period === 'custom' && !acc.from) { const [f, to] = periodRange('month'); acc.from = f; acc.to = to; $('acc-from').value = f; $('acc-to').value = to; }
+      return refreshAccounts().catch((err) => toast(err.message, 'error'));
+    }
+    const ord = e.target.closest('[data-acc-order]');
+    if (ord) {
+      const id = ord.dataset.accOrder;
+      if (acc.openOrders.has(id)) acc.openOrders.delete(id); else acc.openOrders.add(id);
+      return renderOverview();
+    }
+    const sz = e.target.closest('[data-acc-sizes]');
+    if (sz) {
+      const id = sz.dataset.accSizes;
+      if (acc.openSizes.has(id)) acc.openSizes.delete(id); else acc.openSizes.add(id);
+      return renderPrices();
+    }
+    const save = e.target.closest('[data-price-save]');
+    if (save) {
+      const p = acc.pricing.products.find((x) => x.id === save.dataset.priceSave);
+      const ed = acc.edits[p.id] || {};
+      const v = (k, def) => (ed[k] !== undefined ? ed[k] : def);
+      const body = {
+        basePrice: v('basePrice', p.basePrice), extraSidePrice: v('extraSidePrice', p.extraSidePrice),
+        sizes: Object.fromEntries(p.sizes.map((s) => [s.id, v('size:' + s.id, s.surcharge)])),
+        costs: {
+          blank: v('blank', p.costs.blank), printFirst: v('printFirst', p.costs.printFirst), printExtra: v('printExtra', p.costs.printExtra), other: v('other', p.costs.other),
+          sizes: Object.fromEntries(p.sizes.map((s) => [s.id, v('sizecost:' + s.id, s.costExtra)])),
+        },
+      };
+      save.disabled = true;
+      try {
+        const row = await adminApi(`/api/admin/pricing/${encodeURIComponent(p.id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang }, body: JSON.stringify(body) });
+        Object.assign(p, row);
+        delete acc.edits[p.id];
+        toast(t('acc.savedPrice', { name: tr(p.name) }));
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+      return renderPrices();
+    }
+    const del = e.target.closest('[data-exp-del]');
+    if (del && confirm(t('acc.confirmDelete'))) {
+      try {
+        await adminApi(`/api/admin/expenses/${encodeURIComponent(del.dataset.expDel)}`, { method: 'DELETE' });
+        await refreshAccounts();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+  });
+  $('tab-accounts').addEventListener('input', (e) => {
+    const el = e.target;
+    if (!el.dataset.priceField) return;
+    const pid = el.dataset.priceField;
+    (acc.edits[pid] ||= {})[el.dataset.key] = el.value === '' ? 0 : Number(el.value);
+    // Update just the profit cell and the save button, without losing the cursor.
+    const p = acc.pricing.products.find((x) => x.id === pid);
+    const tr0 = el.closest('tr').classList.contains('acc-detail') ? el.closest('tr').previousElementSibling : el.closest('tr');
+    const tmp = document.createElement('tbody');
+    tmp.innerHTML = priceRow(p, (a, b, c, d = '') => `<input value="${c}" ${d}>`);
+    tr0.cells[7].innerHTML = tmp.rows[0].cells[7].innerHTML;
+    tr0.cells[7].className = tmp.rows[0].cells[7].className;
+    const btn = tr0.querySelector('[data-price-save]');
+    btn.disabled = false;
+    btn.classList.add('btn-primary');
+    tr0.classList.add('is-edited');
+  });
+  $('tab-accounts').addEventListener('change', async (e) => {
+    const el = e.target;
+    if (el.id === 'acc-from' || el.id === 'acc-to') {
+      acc.from = $('acc-from').value;
+      acc.to = $('acc-to').value;
+      return refreshAccounts().catch((err) => toast(err.message, 'error'));
+    }
+    const itemId = el.dataset.accItemCost;
+    const orderId = el.dataset.accShip;
+    if (!itemId && !orderId) return;
+    try {
+      if (itemId) await adminApi(`/api/admin/items/${encodeURIComponent(itemId)}/cost`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang }, body: JSON.stringify({ actualCost: el.value === '' ? null : Number(el.value) }) });
+      else await adminApi(`/api/admin/orders/${encodeURIComponent(orderId)}/shipping-cost`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang }, body: JSON.stringify({ actualShipping: el.value === '' ? null : Number(el.value) }) });
+      el.blur();
+      toast(t('houses.saved'));
+      await refreshAccounts();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  });
+  $('acc-ship-save').addEventListener('click', async () => {
+    try {
+      const st = await adminApi('/api/admin/accounts/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang }, body: JSON.stringify({ shippingCost: Number($('acc-ship-cost').value || 0) }) });
+      if (acc.pricing) acc.pricing.settings = st;
+      toast(t('houses.saved'));
+      await refreshAccounts();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  });
+  $('acc-csv').addEventListener('click', () => {
+    const b = document.createElement('button');
+    b.dataset.download = `/api/admin/accounts.csv?${rangeQuery()}`;
+    b.hidden = true;
+    document.body.appendChild(b);
+    b.click();
+    b.remove();
+  });
+  $('acc-exp-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await adminApi('/api/admin/expenses', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang }, body: JSON.stringify({ date: $('exp-date').value, category: $('exp-cat').value, description: $('exp-desc').value, amount: Number($('exp-amount').value) }) });
+      $('exp-desc').value = '';
+      $('exp-amount').value = '';
+      $('exp-msg').textContent = t('houses.saved');
+      setTimeout(() => { $('exp-msg').textContent = ''; }, 2500);
+      await refreshAccounts();
+    } catch (err) {
+      $('exp-msg').textContent = err.message;
     }
   });
 
