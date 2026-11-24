@@ -92,11 +92,9 @@ test('a team name list with lamination: one laminated pack per person', async ()
   assert.match(d.size.label.ar, /سلوفان لامع/);
 });
 
-test('selling prices: half the list prices, rounded to the nearest 10 EGP', () => {
-  // The suite runs at list prices (PRICE_FACTOR=1); the shop's default is half.
+test('PRICE_FACTOR scales every selling price, rounded to the nearest 10 EGP (here a half-price sale)', () => {
   const { execFileSync } = require('child_process');
-  const env = { ...process.env };
-  delete env.PRICE_FACTOR;
+  const env = { ...process.env, PRICE_FACTOR: '0.5' };
   const sold = JSON.parse(execFileSync(process.execPath, ['-e', "const {PRODUCTS,EXTRA_SIDE_PRICE}=require('./src/products');console.log(JSON.stringify({extra:EXTRA_SIDE_PRICE,p:PRODUCTS.map(p=>({id:p.id,base:p.basePrice,sizes:p.sizes.map(s=>s.surcharge||0),emb:p.embroidery?p.embroidery.surcharge:null}))}))"], { cwd: path.join(__dirname, '..'), env }).toString());
   const r10 = (v) => (v ? Math.max(10, Math.round(v / 2 / 10) * 10) : v);
   const { EXTRA_SIDE_PRICE } = require('../src/products');

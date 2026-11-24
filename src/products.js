@@ -1,9 +1,9 @@
 'use strict';
 
-/** Selling prices = list prices × this (half for now; PRICE_FACTOR=1 in the environment for list prices). */
+/** Selling prices = list prices × this (PRICE_FACTOR in the environment, e.g. 0.5 for a half-price sale; default 1). */
 function PRICE_FACTOR() {
   const f = Number(process.env.PRICE_FACTOR);
-  return Number.isFinite(f) && f > 0 ? f : 0.5;
+  return Number.isFinite(f) && f > 0 ? f : 1;
 }
 
 /**
@@ -1690,9 +1690,9 @@ function optionsPrice(product, options, sizeId) {
 }
 
 // ---------- Selling prices ----------
-// The prices written above are list prices. For now the shop sells at half of them, each
-// rounded to the nearest 10 EGP (PRICE_FACTOR, set it to 1 for the list prices). Prices the
-// owner changes in the admin (Accounts -> Prices) are laid over these and are not scaled.
+// The prices written above are the selling prices. PRICE_FACTOR (environment) scales them all,
+// each rounded to the nearest 10 EGP, e.g. 0.5 for a half-price sale. Prices the owner changes
+// in the admin (Accounts -> Prices) are laid over these and are not scaled.
 function scalePrice(v) {
   const f = PRICE_FACTOR();
   if (!v || f === 1) return v;
