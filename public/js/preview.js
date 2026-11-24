@@ -415,14 +415,32 @@
         mapV = (y) => (y - r.y) / r.h;
       }
       const cyl = cfg.warp === 'cylinder' ? cfg.cyl : null;
+      // A turned model: the print wraps round the torso (an upright elliptical cylinder).
+      // Screen x = cx + R·sin(t + φ), where t is the angle round the body that the
+      // straight-on photo shows at ref.cx + ref.a·sin(t). Scaled to this photo by
+      // its collar-to-hem height, and to its measured torso width.
+      let turn = null;
+      if (cfg.turn) {
+        const T = cfg.turn;
+        const sy = (T.bot - T.top) / (T.ref.bot - T.ref.top);
+        const th = (T.theta * Math.PI) / 180;
+        let A = T.ref.a * sy;
+        let B = T.depth * sy;
+        const k = T.half / Math.hypot(A * Math.cos(th), B * Math.sin(th));
+        A *= k;
+        B *= k;
+        const R = Math.hypot(A * Math.cos(th), B * Math.sin(th));
+        turn = { T, sy, R, phi: Math.atan2(B * Math.sin(th), A * Math.cos(th)) };
+      }
       const fabric = cfg.warp === 'fabric';
       const pillow = cfg.warp === 'pillow';
       const keepDark = cfg.keepDark || 0;
       const pad = 12;
-      const x0 = Math.max(1, Math.floor((cyl ? cyl.cx - cyl.R : r.x) - pad));
-      const x1 = Math.min(W - 2, Math.ceil((cyl ? cyl.cx + cyl.R : r.x + r.w) + pad));
-      const y0 = Math.max(1, Math.floor(r.y - pad));
-      const y1 = Math.min(H - 2, Math.ceil(r.y + r.h + pad));
+      const kk = W / 1000; // photo coordinates are for a 1000-px-wide photo
+      const x0 = Math.max(1, Math.floor((turn ? (turn.T.cx - turn.R) * kk : cyl ? cyl.cx - cyl.R : r.x) - pad));
+      const x1 = Math.min(W - 2, Math.ceil((turn ? (turn.T.cx + turn.R) * kk : cyl ? cyl.cx + cyl.R : r.x + r.w) + pad));
+      const y0 = Math.max(1, Math.floor((turn ? (turn.T.top + (r.y / kk - turn.T.ref.top) * turn.sy) * kk : r.y) - pad));
+      const y1 = Math.min(H - 2, Math.ceil((turn ? (turn.T.top + (r.y / kk + r.h / kk - turn.T.ref.top) * turn.sy) * kk : r.y + r.h) + pad));
       const px = [0, 0, 0, 0];
       const sample = (fx, fy) => {
         const xa = Math.floor(fx);
@@ -454,7 +472,18 @@
           if (m === 0 || lum[i] < keepDark) continue;
           let fx = x;
           let fy = y;
-          if (cyl) {
+          if (turn) {
+            const q = (x / kk - turn.T.cx) / turn.R;
+            if (Math.abs(q) >= 0.995) continue;
+            const t = Math.asin(q) - turn.phi;
+            if (Math.abs(t) >= Math.PI / 2) continue; // round the side: hidden
+            fx = (turn.T.ref.cx + turn.T.ref.a * Math.sin(t)) * kk;
+            fy = (turn.T.ref.top + (y / kk - turn.T.top) / turn.sy) * kk;
+            const gx = (blur[i + 2] - blur[i - 2]) / 4;
+            const gy = (blur[i + 2 * W] - blur[i - 2 * W]) / 4;
+            fx += Math.max(-5, Math.min(5, gx * D));
+            fy += Math.max(-5, Math.min(5, gy * D));
+          } else if (cyl) {
             const t = (x - cyl.cx) / cyl.R;
             if (Math.abs(t) >= 0.999) continue;
             fx = cyl.cx + Math.asin(t) * cyl.R;
@@ -549,6 +578,102 @@
     return cfg ? renderPhoto(state.product, entry, cfg, state.color.hex, false) : null;
   }
 
+  /** The 360° turn photos of a model (POD_TURNS), or null when this model doesn't turn. */
+  const turnsFor = (product, m) => {
+    const make = m && window.POD_TURNS && window.POD_TURNS[`${product.id}:${m.who}`];
+    if (!make) return null;
+    try {
+      return make();
+    } catch (e) {
+      return null;
+    }
+  };
+  /** One turn photo with the design: the front design on front angles, the back design on back angles. */
+  function turnPicture(i) {
+    const f = state.turnFrames[i];
+    const key = `turn:${state.turnKey}:${i}`;
+    if (!state.models[key]) {
+      const own = f.side && state.sides.find((s) => s.side.id === f.side);
+      state.models[key] = renderPhoto(state.product, own || state.sides[0], f, state.color.hex, Boolean(own));
+    }
+    return state.models[key];
+  }
+  /** Draw the current angle into the preview, and get the other angles ready in the background. */
+  async function drawTurn() {
+    const n = state.turnFrames.length;
+    const i = ((state.turnIdx % n) + n) % n;
+    state.turnIdx = i;
+    const bar = $('pv-turn');
+    bar.querySelector('input').value = String(i);
+    bar.querySelector('.pv-turn-deg').textContent = `${POD.num(state.turnFrames[i].deg)}°`;
+    const token = (state.turnToken = (state.turnToken || 0) + 1);
+    const cv = await turnPicture(i);
+    if (!state || token !== state.turnToken || state.tab !== 'model') return;
+    let img = $('pv-body').querySelector('canvas.pv-canvas');
+    if (!img) {
+      setBody('');
+      img = document.createElement('canvas');
+      img.className = 'pv-canvas pv-turning';
+      $('pv-body').appendChild(img);
+    }
+    img.width = cv.width;
+    img.height = cv.height;
+    img.getContext('2d').drawImage(cv, 0, 0);
+    if (!state.turnWarm) {
+      state.turnWarm = true;
+      for (let k = 1; k < n; k++) {
+        await new Promise((res) => setTimeout(res, 30));
+        if (!state || !state.turnFrames) return;
+        await turnPicture((i + k) % n).catch(() => null);
+      }
+    }
+  }
+  /** The turn controls (◀ slider ▶), made once under the picture. */
+  function turnBar() {
+    let bar = $('pv-turn');
+    if (bar) return bar;
+    bar = document.createElement('div');
+    bar.id = 'pv-turn';
+    bar.className = 'pv-turn';
+    bar.hidden = true;
+    bar.innerHTML = `<button type="button" class="btn btn-sm" data-turn="-1" aria-label="${esc(t('pv.turnLeft'))}">◀</button>
+      <input type="range" min="0" max="7" step="1" value="0" aria-label="${esc(t('pv.turn'))}">
+      <button type="button" class="btn btn-sm" data-turn="1" aria-label="${esc(t('pv.turnRight'))}">▶</button>
+      <span class="pv-turn-deg muted small"></span>`;
+    $('pv-body').after(bar);
+    bar.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-turn]');
+      if (!b || !state || !state.turnFrames) return;
+      state.turnIdx += +b.dataset.turn;
+      drawTurn();
+    });
+    bar.querySelector('input').addEventListener('input', (e) => {
+      if (!state || !state.turnFrames) return;
+      state.turnIdx = +e.target.value;
+      drawTurn();
+    });
+    // Drag the picture sideways to turn the model (one angle every 40 px).
+    let drag = null;
+    $('pv-body').addEventListener('pointerdown', (e) => {
+      if (!state || state.tab !== 'model' || !state.turnFrames) return;
+      drag = { x: e.clientX, idx: state.turnIdx };
+      $('pv-body').setPointerCapture(e.pointerId);
+    });
+    $('pv-body').addEventListener('pointermove', (e) => {
+      if (!drag || !state || !state.turnFrames) return;
+      const step = Math.round((e.clientX - drag.x) / 40);
+      const next = drag.idx + step;
+      if (next !== state.turnIdx) {
+        state.turnIdx = next;
+        drawTurn();
+      }
+    });
+    const end = () => { drag = null; };
+    $('pv-body').addEventListener('pointerup', end);
+    $('pv-body').addEventListener('pointercancel', end);
+    return bar;
+  }
+
   /** The design on model photo number `n` of a side (cached per side and model). */
   function modelPicture(sideId, n) {
     const key = `${sideId}:${n}`;
@@ -580,7 +705,22 @@
       $('pv-models').innerHTML = models.map((m, i) => `<button class="side-tab ${i === state.model ? 'active' : ''}" data-pv-model="${i}">${esc(t('pv.who.' + m.who))}</button>`).join('');
     }
     $('pv-spin-wrap').hidden = tab !== '3d';
-    $('pv-hint').textContent = tab === '3d' ? t('pv.drag') : tab === 'proof' ? t('pv.proofNote') : tab === 'model' ? t('pv.modelNote') : '';
+    // A model that turns: the turn controls replace the front/back tabs.
+    const turning = tab === 'model' ? turnsFor(state.product, models[state.model]) : null;
+    turnBar().hidden = !turning;
+    if (turning) {
+      const key = `${state.product.id}:${models[state.model].who}`;
+      if (state.turnKey !== key) {
+        state.turnKey = key;
+        state.turnIdx = sideId === 'back' ? turning.findIndex((f) => f.deg === 180) : 0;
+        state.turnWarm = false;
+      }
+      state.turnFrames = turning;
+      $('pv-sides').hidden = true;
+    } else {
+      state.turnFrames = null;
+    }
+    $('pv-hint').textContent = tab === '3d' ? t('pv.drag') : tab === 'proof' ? t('pv.proofNote') : tab === 'model' ? t(turning ? 'pv.turnNote' : 'pv.modelNote') : '';
     if (three && tab !== '3d') {
       three.dispose();
       three = null;
@@ -596,6 +736,9 @@
         const shown = sizedPicture(cv, state.viewScale);
         shown.className = 'pv-canvas';
         $('pv-body').appendChild(shown);
+      } else if (tab === 'model' && turning) {
+        setBody('');
+        await drawTurn();
       } else if (tab === 'model') {
         const cv = await modelPicture(sideId, state.model);
         if (token !== state.token) return;
@@ -651,6 +794,7 @@
       a.remove();
     };
     if (state.tab === '3d' && three) three.snapshot().then(save);
+    else if (state.tab === 'model' && state.turnFrames) turnPicture(state.turnIdx).then((cv) => cv.toBlob(save, 'image/png'));
     else if (state.tab === 'model') modelPicture(state.sideId, state.model).then((cv) => cv.toBlob(save, 'image/png'));
     else realisticFor(state.sideId).then((cv) => cv.toBlob(save, 'image/png'));
   }

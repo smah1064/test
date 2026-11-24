@@ -212,6 +212,8 @@ The preview window has an **On a model** tab for clothing: photos of people wear
 
 Models: T-shirt, oversized tee, hoodie and sweatshirt (man and woman, front; man back; woman back for the T-shirt), zip hoodie, polo and football jersey (man), kids tee and kids hoodie (boy and girl). The garment masks were made from a background-removed cut-out of each photo plus the garment's colour (neutral white, not skin or hair); print rectangles from the garment's measured width and the collar, then checked by eye.
 
+**Turn the model (360°):** the T-shirt man can be turned all the way round: drag the picture sideways, or use the ◀ slider ▶ under it. Eight photos of the same model every 45° (`tshirt-man-t045` … `t315`, plus the front and back photos) are listed in `POD_TURNS`. The front design shows on the front angles and the back design on the back angles, wrapped round the torso as an upright elliptical cylinder (`turn` in `renderPhoto`): it narrows and moves round the chest as the model turns and is hidden at the side views. Each turned photo's torso centre, width, collar and hem were measured from its mask (`TURN_REF` and the numbers in `POD_TURNS`). To add another model: 6 new angle photos from the front and back photos as references (Nano Banana 2, 2K, 12 credits each), 6 background cut-outs (4 credits each) for the masks, then the measurements.
+
 ## Personalised books
 
 `/book?b=space-hero` and `/book?b=dream-jobs`. The shopper answers the questions, adds a photo and fits the face into the oval guide (hairline to chin, eyes on the line), then flips through every real page before adding to the cart.

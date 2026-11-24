@@ -114,6 +114,50 @@
     'ziphoodie:back': [M('hoodie-man-back', 'man', { cx: 504, top: 495, w: 196 })],
   };
 
+  /*
+   * Turning models (the "On a model" view's 360° turn): the same model photographed
+   * every 45°. The design is wrapped round the torso, taken as an upright elliptical
+   * cylinder: `ref` is the straight-on photo the print rect belongs to (torso centre,
+   * half-width, collar and hem rows), `depth` the torso's half-depth (from the side
+   * views), and each turned photo gives its own torso centre, half-width, collar and
+   * hem plus the turn angle of the printed side (+ = that side faces the picture's right).
+   * Measured from the garment masks.
+   */
+  const TURN_REF = {
+    'tshirt:man': {
+      front: { cx: 506.5, a: 191.5, top: 324, bot: 1023 },
+      back: { cx: 505, a: 172, top: 309, bot: 1027 },
+      depth: 60.25,
+    },
+  };
+  const TF = (key, deg, side, file, m) => {
+    const [pid, who] = key.split(':');
+    const base = POD_MODELS_REF(pid, who, side === 'back' ? 'back' : 'front');
+    return {
+      deg, side, who, warp: 'fabric',
+      src: `/mockups/models/${file}.webp`, mask: `/mockups/models/${file}-mask.png`,
+      rect: base.rect,
+      turn: side ? { ...m, ref: TURN_REF[key][side], depth: TURN_REF[key].depth } : null,
+    };
+  };
+  function POD_MODELS_REF(pid, who, side) {
+    return window.POD_MODELS[`${pid}:${side}`].find((x) => x.who === who);
+  }
+  window.POD_TURNS = {
+    // 0° and 180° are the straight-on photos above; the rest turn the model to the
+    // picture's right (45°: three-quarter front … 315°: three-quarter front facing left).
+    'tshirt:man': () => [
+      { ...POD_MODELS_REF('tshirt', 'man', 'front'), deg: 0, side: 'front' },
+      TF('tshirt:man', 45, 'front', 'tshirt-man-t045', { theta: 45, cx: 504, half: 168, top: 324, bot: 1026 }),
+      TF('tshirt:man', 90, null, 'tshirt-man-t090'),
+      TF('tshirt:man', 135, 'back', 'tshirt-man-t135', { theta: -45, cx: 499.5, half: 167.5, top: 305, bot: 1028 }),
+      { ...POD_MODELS_REF('tshirt', 'man', 'back'), deg: 180, side: 'back' },
+      TF('tshirt:man', 225, 'back', 'tshirt-man-t225', { theta: 45, cx: 514, half: 172, top: 297, bot: 1028 }),
+      TF('tshirt:man', 270, null, 'tshirt-man-t270'),
+      TF('tshirt:man', 315, 'front', 'tshirt-man-t315', { theta: -45, cx: 515.5, half: 162.5, top: 321, bot: 1024 }),
+    ],
+  };
+
   // ---------- Recoloured product photos (cards, editor, thumbnails) ----------
   const loadImg = (src) => new Promise((resolve, reject) => {
     const im = new Image();
