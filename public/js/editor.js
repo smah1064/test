@@ -3340,6 +3340,12 @@
     const n = (id) => (id === st.side ? canvas.getObjects().length : (st.designs[id] || []).length);
     // Booklets: a strip of numbered pages (Cover, 2, 3… Back) that scrolls sideways.
     $('side-tabs').classList.toggle('pages', Boolean(st.product.paged));
+    // Booklets: previous / next page buttons either side of the strip.
+    const list = activeSides();
+    const at = list.findIndex((s) => s.id === hostOf());
+    $('page-prev').hidden = $('page-next').hidden = !st.product.paged;
+    $('page-prev').disabled = at <= 0;
+    $('page-next').disabled = at < 0 || at >= list.length - 1;
     $('side-tabs').innerHTML = activeSides().map((s) => {
       const on = hostOf() === s.id;
       if (st.product.paged) {
@@ -3352,6 +3358,30 @@
       return `<button class="side-tab ${on ? 'active' : ''}" data-side="${s.id}" role="tab" aria-selected="${on}">${esc(tr(s.name))}${how}${count ? '<span class="has"></span>' : ''}</button>`;
     }).join('');
   }
+  /** Booklets: go to the page before / after (dir -1 / 1), keeping it in view in the strip. */
+  const goPage = serial(async (dir) => {
+    if (!st.product.paged) return;
+    const list = activeSides();
+    const to = list[list.findIndex((s) => s.id === hostOf()) + dir];
+    if (!to) return;
+    commit();
+    canvas.discardActiveObject();
+    await showSide(to.id);
+    renderSideTabs();
+    refreshChrome();
+    const tab = $('side-tabs').querySelector(`[data-side="${to.id}"]`);
+    if (tab) tab.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  });
+  $('page-prev').addEventListener('click', () => goPage(-1));
+  $('page-next').addEventListener('click', () => goPage(1));
+  // Page Up / Page Down turn the pages (not while typing).
+  document.addEventListener('keydown', (e) => {
+    if (!st.product.paged || (e.key !== 'PageUp' && e.key !== 'PageDown')) return;
+    if (e.target.closest('input, textarea, select, [contenteditable="true"]') || (canvas.getActiveObject() && canvas.getActiveObject().isEditing)) return;
+    if (!$('pv').hidden) return;
+    e.preventDefault();
+    goPage(e.key === 'PageDown' ? 1 : -1);
+  });
   async function showSide(id) {
     if (st.mergePreview) endMergePreview();
     st.side = id;
@@ -5058,6 +5088,39 @@
     const previewSides = st.product.paged
       ? activeSides().filter((sd, k, all) => k === 0 || k === all.length - 1 || sd.id === original)
       : st.product.sides;
+    // Booklets: every page as the printed page (blank ones stay paper), to flip through.
+    let flip = null;
+    if (st.product.paged) {
+      busy(true, t('pv.loading'));
+      try {
+        const pages = [];
+        for (const sd of activeSides()) {
+          const has = sd.id === st.side ? canvas.getObjects().length : (st.designs[sd.id] || []).length;
+          let img = null;
+          if (has) {
+            if (sd.id !== st.side) await showSide(sd.id);
+            const r = rects(sd.id).trim;
+            const k = 2;
+            const layer = exportDesignLayer(k);
+            const pg = document.createElement('canvas');
+            pg.width = Math.round(r.w * k);
+            pg.height = Math.round(r.h * k);
+            const ctx = pg.getContext('2d');
+            ctx.fillStyle = color().hex;
+            ctx.fillRect(0, 0, pg.width, pg.height);
+            ctx.drawImage(layer, r.x * k, r.y * k, r.w * k, r.h * k, 0, 0, pg.width, pg.height);
+            img = pg.toDataURL('image/jpeg', 0.9);
+          }
+          pages.push({ id: sd.id, name: sd.name, img });
+        }
+        const a = activeSides()[0].printArea;
+        // Which way it opens: its binding (Arabic on the right, English on the left).
+        const bind = (st.product.options || []).find((o) => o.id === 'binding');
+        flip = { pages, rtl: bind ? chosenOption(bind).id !== 'left' : POD.lang === 'ar', aspect: a.w / a.h, paper: color().hex };
+      } finally {
+        busy(false);
+      }
+    }
     for (const sd of previewSides) {
       if (sd.id !== st.side) await showSide(sd.id);
       if (st.pattern) {
@@ -5099,7 +5162,7 @@
     }
     if (st.side !== original) await showSide(original);
     canvas.requestRenderAll();
-    window.POD_PREVIEW.open({ product: st.product, color: color(), sides, startSide: hostOf(original), viewScale: POD.sizeView(st.product, st.sizeId) });
+    window.POD_PREVIEW.open({ product: st.product, color: color(), sides, startSide: hostOf(original), viewScale: POD.sizeView(st.product, st.sizeId), ...(flip ? { flip } : {}) });
   }));
 
   $('preview-open-m').addEventListener('click', () => $('preview-open').click());

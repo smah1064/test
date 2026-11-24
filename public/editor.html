@@ -93,7 +93,9 @@
       <!-- Canvas -->
       <section class="stage-wrap">
         <div class="stage-bar">
+          <button class="btn btn-sm page-nav" id="page-prev" type="button" hidden data-i18n-title="ed.pagePrev" data-i18n-aria="ed.pagePrev"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
           <div class="side-tabs" id="side-tabs" role="tablist"></div>
+          <button class="btn btn-sm page-nav" id="page-next" type="button" hidden data-i18n-title="ed.pageNext" data-i18n-aria="ed.pageNext"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button>
           <button class="check-chip ok" id="check-chip"></button>
           <div class="spacer"></div>
           <div class="zoom-group">
@@ -347,6 +349,7 @@
         <div class="side-tabs pv-tabs">
           <button class="side-tab" data-pv-tab="real" data-i18n="pv.realistic"></button>
           <button class="side-tab" data-pv-tab="model" data-i18n="pv.model" hidden></button>
+          <button class="side-tab" data-pv-tab="flip" data-i18n="pv.flip" hidden></button>
           <button class="side-tab" data-pv-tab="3d" data-i18n="pv.3d"></button>
           <button class="side-tab" data-pv-tab="proof" data-i18n="pv.proof"></button>
         </div>

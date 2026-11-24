@@ -717,6 +717,82 @@
     return state.models[key];
   }
 
+
+  // ---------- Flip the pages (booklets) ----------
+  // An open booklet: the cover alone, then two pages side by side, then the back cover alone.
+  // Arabic (right) binding opens the other way: the cover on the left, page 2 on the right.
+  function flipSpreads(pages, rtl) {
+    const n = pages.length;
+    const out = [{ a: null, b: pages[0], first: 0, last: 0 }];
+    for (let i = 1; i < n - 1; i += 2) out.push({ a: pages[i], b: pages[i + 1] || null, first: i, last: Math.min(i + 1, n - 2) });
+    out.push({ a: pages[n - 1], b: null, first: n - 1, last: n - 1 });
+    // a = the page before the spine in reading order, b = after it: left/right depend on the binding.
+    return out.map((s) => (rtl ? { left: s.b, right: s.a, ...s } : { left: s.a, right: s.b, ...s }));
+  }
+  function pageHtml(pg) {
+    if (!pg) return '';
+    return `<div class="fb-paper" style="background:${esc(state.flip.paper || '#ffffff')}">${pg.img ? `<img src="${pg.img}" alt="${esc(tr(pg.name))}" draggable="false">` : ''}</div>`;
+  }
+  function flipLabel(s) {
+    const pages = state.flip.pages;
+    if (s.first === 0) return t('pv.flipCover');
+    if (s.first === pages.length - 1) return t('pv.flipBack');
+    return s.first === s.last ? t('pv.flipPage', { a: POD.num(s.first + 1) }) : t('pv.flipPages', { a: POD.num(s.first + 1), b: POD.num(s.last + 1) });
+  }
+  function drawFlip() {
+    const f = state.flip;
+    const spreads = flipSpreads(f.pages, f.rtl);
+    f.at = Math.max(0, Math.min(spreads.length - 1, f.at || 0));
+    const s = spreads[f.at];
+    setBody(`<div class="fb" dir="ltr">
+      <div class="fb-book" style="aspect-ratio:${2 * f.aspect};width:min(100%, 820px, calc(62vh * ${2 * f.aspect}))">
+        <div class="fb-page fb-left">${pageHtml(s.left)}</div>
+        <div class="fb-page fb-right">${pageHtml(s.right)}</div>
+        <div class="fb-spine"></div>
+      </div>
+    </div>
+    <div class="fb-bar" dir="${document.documentElement.dir || 'rtl'}">
+      <button type="button" class="btn btn-sm" data-flip="-1" ${f.at === 0 ? 'disabled' : ''} aria-label="${esc(t('pv.flipPrev'))}">${esc(t('pv.flipPrev'))}</button>
+      <span class="fb-label">${esc(flipLabel(s))} <span class="muted">· ${esc(t('pv.flipOf', { n: POD.num(f.pages.length) }))}</span></span>
+      <button type="button" class="btn btn-sm btn-primary" data-flip="1" ${f.at === spreads.length - 1 ? 'disabled' : ''} aria-label="${esc(t('pv.flipNext'))}">${esc(t('pv.flipNext'))}</button>
+    </div>`);
+  }
+  /** Turn one leaf (dir 1 = forward in reading order), with the page turning round the spine. */
+  function turnPage(dir) {
+    const f = state && state.flip;
+    if (!f || f.turning || state.tab !== 'flip') return;
+    const spreads = flipSpreads(f.pages, f.rtl);
+    const next = f.at + dir;
+    if (next < 0 || next >= spreads.length) return;
+    const cur = spreads[f.at];
+    const nx = spreads[next];
+    const book = document.querySelector('.fb-book');
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!book || reduce) {
+      f.at = next;
+      drawFlip();
+      return;
+    }
+    // Forward in a left-bound booklet (or back in a right-bound one) turns the right-hand leaf to the left.
+    const fromRight = (dir > 0) !== f.rtl;
+    f.turning = true;
+    book.querySelector('.fb-left').innerHTML = pageHtml(fromRight ? cur.left : nx.left);
+    book.querySelector('.fb-right').innerHTML = pageHtml(fromRight ? nx.right : cur.right);
+    const leaf = document.createElement('div');
+    leaf.className = `fb-leaf ${fromRight ? 'from-right' : 'from-left'}`;
+    leaf.innerHTML = `<div class="fb-face fb-front">${pageHtml(fromRight ? cur.right : cur.left)}</div><div class="fb-face fb-back">${pageHtml(fromRight ? nx.left : nx.right)}</div>`;
+    book.appendChild(leaf);
+    requestAnimationFrame(() => requestAnimationFrame(() => { leaf.style.transform = `rotateY(${fromRight ? -180 : 180}deg)`; }));
+    const done = () => {
+      if (!f.turning) return;
+      f.turning = false;
+      f.at = next;
+      if (state && state.tab === 'flip') drawFlip();
+    };
+    leaf.addEventListener('transitionend', done, { once: true });
+    setTimeout(done, 900);
+  }
+
   function setBody(html) {
     $('pv-body').innerHTML = html;
   }
@@ -728,7 +804,7 @@
     const sides = tab === 'model' ? state.sides.filter((s) => modelsFor(state.product, s.side.id).length) : state.sides;
     if (!sides.find((s) => s.side.id === state.sideId)) state.sideId = (sides.find((s) => s.hasDesign) || sides[0]).side.id;
     const { sideId } = state;
-    const multi = sides.length > 1 && tab !== '3d';
+    const multi = sides.length > 1 && tab !== '3d' && tab !== 'flip';
     $('pv-sides').hidden = !multi;
     $('pv-sides').innerHTML = sides.map((s) => `<button class="side-tab ${s.side.id === sideId ? 'active' : ''}" data-pv-side="${s.side.id}">${esc(tr(s.side.name))}</button>`).join('');
     const models = tab === 'model' ? modelsFor(state.product, sideId) : [];
@@ -754,13 +830,17 @@
       state.turnFrames = null;
     }
     const zoomHint = t(window.matchMedia('(hover: hover)').matches ? 'pv.zoomHover' : 'pv.zoomTap');
-    $('pv-hint').textContent = tab === '3d' ? t('pv.drag') : tab === 'proof' ? t('pv.proofNote') : tab === 'model' ? (turning ? t('pv.turnNote') : `${t('pv.modelNote')} · ${zoomHint}`) : zoomHint;
+    $('pv-hint').textContent = tab === 'flip' ? t('pv.flipNote') : tab === '3d' ? t('pv.drag') : tab === 'proof' ? t('pv.proofNote') : tab === 'model' ? (turning ? t('pv.turnNote') : `${t('pv.modelNote')} · ${zoomHint}`) : zoomHint;
     if (three && tab !== '3d') {
       three.dispose();
       three = null;
     }
     setBody(`<div class="pv-loading"><div class="spinner"></div>${esc(t('pv.loading'))}</div>`);
     const token = (state.token = (state.token || 0) + 1);
+    if (tab === 'flip' && state.flip) {
+      drawFlip();
+      return;
+    }
     try {
       if (tab === 'real') {
         const cv = await realisticFor(sideId);
@@ -1071,7 +1151,9 @@
   }
 
   function open(data) {
-    state = { ...data, tab: 'real', sideId: data.startSide, real: {}, models: {}, model: 0 };
+    // Booklets open on their pages, to flip through.
+    state = { ...data, tab: data.flip ? 'flip' : 'real', sideId: data.startSide, real: {}, models: {}, model: 0 };
+    document.querySelectorAll('[data-pv-tab="flip"]').forEach((b) => { b.hidden = !data.flip; });
     // The "On a model" tab only for clothing that has model photos.
     const withModels = data.sides.some((s) => modelsFor(data.product, s.side.id).length);
     document.querySelectorAll('[data-pv-tab="model"]').forEach((b) => { b.hidden = !withModels; });
@@ -1087,7 +1169,35 @@
     if (!$('pv')) return; // pages without the preview window only use the renderers
     $('pv-close').addEventListener('click', close);
     $('pv').addEventListener('click', (e) => { if (e.target.id === 'pv') close(); });
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && state) close(); });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && state) close();
+      // Arrow keys turn the pages the way they point (whatever the binding).
+      if (state && state.tab === 'flip' && state.flip && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        e.preventDefault();
+        const towardsLeft = e.key === 'ArrowLeft';
+        turnPage(towardsLeft === state.flip.rtl ? 1 : -1);
+      }
+    });
+    $('pv-body').addEventListener('click', (e) => {
+      if (!state || state.tab !== 'flip') return;
+      const b = e.target.closest('[data-flip]');
+      if (b) return turnPage(Number(b.dataset.flip));
+      // A tap on a page turns it: the right-hand page goes forward in a left-bound booklet.
+      const pg = e.target.closest('.fb-page');
+      if (pg) turnPage((pg.classList.contains('fb-right') !== state.flip.rtl) ? 1 : -1);
+    });
+    // Swipe sideways to turn.
+    let swipe = null;
+    $('pv-body').addEventListener('pointerdown', (e) => { if (state && state.tab === 'flip') swipe = { x: e.clientX, y: e.clientY }; });
+    $('pv-body').addEventListener('pointerup', (e) => {
+      if (!swipe || !state || state.tab !== 'flip') return;
+      const dx = e.clientX - swipe.x;
+      const dy = e.clientY - swipe.y;
+      swipe = null;
+      if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy)) return;
+      // Dragging the page to the left shows what's on the right.
+      turnPage((dx < 0) !== state.flip.rtl ? 1 : -1);
+    });
     document.querySelectorAll('[data-pv-tab]').forEach((b) => b.addEventListener('click', () => {
       if (!state || state.tab === b.dataset.pvTab) return;
       state.tab = b.dataset.pvTab;

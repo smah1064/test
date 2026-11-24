@@ -1292,3 +1292,27 @@ html[dir="rtl"] .hm-arrow { transform: scaleX(-1); }
 .unavail-note { margin: 6px 0 8px; padding: 7px 10px; border-radius: 8px; background: #f3f4f6; color: var(--ink-2); font-size: 13px; line-height: 1.55; }
 .saved-noimg { width: 80px; height: 80px; border-radius: 10px; background: #eef0f3; }
 .site-header nav .nav-off { display: none !important; }
+
+/* ---------- Booklets: page buttons in the editor, flip the pages in the preview ---------- */
+.page-nav { flex: none; padding: 6px 8px; }
+.page-nav[hidden] { display: none; }
+[dir="ltr"] .page-nav svg { transform: scaleX(-1); }
+.fb { display: flex; justify-content: center; align-items: center; padding: 18px 10px 8px; width: 100%; }
+.fb-book { position: relative; perspective: 2200px; display: flex; }
+.fb-page { flex: 1 1 50%; position: relative; cursor: pointer; }
+.fb-paper { position: absolute; inset: 0; box-shadow: 0 6px 22px rgba(0, 0, 0, .18); overflow: hidden; }
+.fb-paper img { width: 100%; height: 100%; object-fit: cover; display: block; user-select: none; }
+.fb-left .fb-paper { border-radius: 4px 0 0 4px; background-image: linear-gradient(to left, rgba(0, 0, 0, .12), rgba(0, 0, 0, 0) 9%); }
+.fb-right .fb-paper { border-radius: 0 4px 4px 0; }
+.fb-left .fb-paper::after, .fb-right .fb-paper::after { content: ""; position: absolute; top: 0; bottom: 0; width: 9%; pointer-events: none; }
+.fb-left .fb-paper::after { right: 0; background: linear-gradient(to left, rgba(0, 0, 0, .14), rgba(0, 0, 0, 0)); }
+.fb-right .fb-paper::after { left: 0; background: linear-gradient(to right, rgba(0, 0, 0, .14), rgba(0, 0, 0, 0)); }
+.fb-spine { position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; transform: translateX(-1px); background: rgba(0, 0, 0, .1); pointer-events: none; }
+.fb-leaf { position: absolute; top: 0; bottom: 0; width: 50%; transform-style: preserve-3d; transition: transform .75s cubic-bezier(.45, .05, .25, 1); z-index: 3; pointer-events: none; }
+.fb-leaf.from-right { left: 50%; transform-origin: left center; }
+.fb-leaf.from-left { left: 0; transform-origin: right center; }
+.fb-face { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.fb-back { transform: rotateY(180deg); }
+.fb-bar { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 10px; flex-wrap: wrap; }
+.fb-label { font-weight: 700; font-size: 14px; min-width: 140px; text-align: center; }
+@media (max-width: 640px) { .fb { padding: 10px 2px 4px; } .fb-label { min-width: 0; } }
