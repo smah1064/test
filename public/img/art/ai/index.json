@@ -1,0 +1,178 @@
+[
+  {
+    "id": "vintage-stork-bike",
+    "theme": "vintage",
+    "desc": "Smiling stork in a flat cap riding a 70s step-through bicycle with a wildflower basket, earth tones, die-cut sticker border",
+    "dark": true,
+    "w": 2048,
+    "h": 2033
+  },
+  {
+    "id": "vintage-70s-sunset",
+    "theme": "vintage",
+    "desc": "Retro 70s arch emblem: striped setting sun over rolling rainbow-stripe hills and wildflowers, earth tones",
+    "dark": true,
+    "w": 1964,
+    "h": 2048
+  },
+  {
+    "id": "vintage-deco-fan",
+    "theme": "vintage",
+    "desc": "1920s Art Deco geometric fan/sunburst ornament in gold and navy",
+    "dark": true,
+    "w": 2048,
+    "h": 1655
+  },
+  {
+    "id": "ai-porthole-dream",
+    "theme": "ai",
+    "desc": "Surreal glowing dreamscape with floating islands, waterfalls and crescent moon inside a brass porthole",
+    "dark": true,
+    "w": 2048,
+    "h": 2044
+  },
+  {
+    "id": "ai-iridescent-fluid",
+    "theme": "ai",
+    "desc": "Abstract swirl of iridescent holographic liquid chrome ribbons and droplets",
+    "dark": true,
+    "w": 2021,
+    "h": 2048
+  },
+  {
+    "id": "ai-koi-dragon",
+    "theme": "ai",
+    "desc": "Mythical koi-dragon with veil fins in coral, gold and turquoise with glowing orbs",
+    "dark": true,
+    "w": 1812,
+    "h": 2048
+  },
+  {
+    "id": "animals-duck-sunglasses",
+    "theme": "animals",
+    "desc": "Cool cartoon duck in hot-pink sunglasses and tropical shirt giving a thumbs-up, sticker style",
+    "dark": true,
+    "w": 1491,
+    "h": 2048
+  },
+  {
+    "id": "animals-chef-cat",
+    "theme": "animals",
+    "desc": "Chubby orange tabby chef cat tossing veggies and an egg in a flaming frying pan, sticker style",
+    "dark": true,
+    "w": 1867,
+    "h": 2048
+  },
+  {
+    "id": "animals-dog-float",
+    "theme": "animals",
+    "desc": "Corgi in sunglasses lounging on a striped pool float with a coconut drink, sticker style",
+    "dark": true,
+    "w": 2048,
+    "h": 1960
+  },
+  {
+    "id": "animals-camel-headphones",
+    "theme": "animals",
+    "desc": "Happy camel wearing headphones and an Egyptian-pattern saddle blanket, sticker style",
+    "dark": true,
+    "w": 1716,
+    "h": 2048
+  },
+  {
+    "id": "workout-boxer-lineart",
+    "theme": "workout",
+    "desc": "Bold black line-art boxer throwing a punch with speed lines (single colour, black ink)",
+    "dark": false,
+    "w": 2048,
+    "h": 1994
+  },
+  {
+    "id": "workout-boxer-lineart-white",
+    "theme": "workout",
+    "desc": "Same boxer line-art in white ink for dark garments",
+    "dark": true,
+    "w": 2048,
+    "h": 1994
+  },
+  {
+    "id": "workout-dumbbell-arm",
+    "theme": "workout",
+    "desc": "Flexed muscular arm curling a dumbbell with motion arcs, lime green and black emblem",
+    "dark": true,
+    "w": 2048,
+    "h": 1842
+  },
+  {
+    "id": "comic-pop-burst",
+    "theme": "comic",
+    "desc": "Pop-art comic collage of explosion bursts, halftone dots, lightning bolt and two empty speech bubbles",
+    "dark": true,
+    "w": 2048,
+    "h": 1838
+  },
+  {
+    "id": "comic-wink-girl",
+    "theme": "comic",
+    "desc": "Original retro pop-art comic girl winking, teal bob and red polka-dot bow, halftone shading",
+    "dark": true,
+    "w": 1492,
+    "h": 2048
+  },
+  {
+    "id": "comic-robot-strip",
+    "theme": "comic",
+    "desc": "Three-panel wordless comic strip: cute robot finds, admires and hugs a flower",
+    "dark": true,
+    "w": 2699,
+    "h": 968
+  },
+  {
+    "id": "maximal-collage-face",
+    "theme": "maximal",
+    "desc": "Maximalist cut-paper collage face of clashing patterns (zebra, leopard, checks, dots, florals)",
+    "dark": true,
+    "w": 1821,
+    "h": 2048
+  },
+  {
+    "id": "maximal-y2k-stickerbomb",
+    "theme": "maximal",
+    "desc": "Y2K sticker-bomb cluster of chrome blobs, puffy hearts, stars, flames, smileys, cherries and butterflies",
+    "dark": true,
+    "w": 2048,
+    "h": 2045
+  },
+  {
+    "id": "maximal-dopamine-floral",
+    "theme": "maximal",
+    "desc": "Dopamine-colour floral explosion: round burst of ultra-saturated stylised flowers and swirls",
+    "dark": true,
+    "w": 2035,
+    "h": 2048
+  },
+  {
+    "id": "art-nouveau-woman",
+    "theme": "art",
+    "desc": "Art Nouveau woman with flowing auburn hair, poppies and lilies before an ornamental halo (Mucha-inspired, original)",
+    "dark": true,
+    "w": 1499,
+    "h": 2048
+  },
+  {
+    "id": "art-watercolour-cat",
+    "theme": "art",
+    "desc": "Loose watercolour sitting cat in teal, violet, ochre and rose washes with splatters",
+    "dark": true,
+    "w": 1679,
+    "h": 2048
+  },
+  {
+    "id": "art-oil-sunflower",
+    "theme": "art",
+    "desc": "Impasto oil-paint sunflower-sun with thick visible brushstrokes, yellow/orange petals and ultramarine centre",
+    "dark": true,
+    "w": 1713,
+    "h": 2048
+  }
+]
