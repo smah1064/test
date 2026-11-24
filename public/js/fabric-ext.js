@@ -16,10 +16,108 @@
   // one text-width to the right and cut off. Clearing the attribute first
   // makes Fabric set the direction (and alignment) itself on every draw.
   const origRenderChars = fabric.Text.prototype._renderChars;
-  fabric.Text.prototype._renderChars = function (method, ctx, ...rest) {
+  fabric.Text.prototype._renderChars = function (method, ctx, line, left, top, lineIndex) {
     if (ctx && ctx.canvas && ctx.canvas.removeAttribute) ctx.canvas.removeAttribute('dir');
-    return origRenderChars.call(this, method, ctx, ...rest);
+    if (mixedStyledLine(this, line, lineIndex)) return renderBidiLine.call(this, method, ctx, line, left, top, lineIndex);
+    return origRenderChars.call(this, method, ctx, line, left, top, lineIndex);
   };
+
+  // ---------- Arabic and English on one line, with a word in another colour ----------
+  // Fabric draws a line that has several colours piece by piece, in the order
+  // the letters were typed. With English and Arabic on one line that puts
+  // words in the wrong places (Arabic reads the other way). Such lines are
+  // laid out here in reading order instead: the line is split into
+  // right-to-left and left-to-right stretches (a simple form of the Unicode
+  // bidi rules: digits go with the letters before them, spaces and marks with
+  // their neighbours, or the text's own direction between the two), the
+  // stretches are placed in the text's direction, and each coloured piece is
+  // drawn in its stretch's direction. A line in one colour keeps the
+  // browser's own layout.
+  const RTL_CH = /[֐-ࣿיִ-﷿ﹰ-ﻼ]/;
+  const LETTER = /\p{L}/u;
+  const DIGIT = /[0-9٠-٩۰-۹]/;
+  function mixedStyledLine(o, line, lineIndex) {
+    if (o.path || o.charSpacing || (o.textAlign || '').includes('justify') || !line || line.length < 2) return false;
+    if (o.isEmptyStyles(lineIndex)) return false;
+    let r = false;
+    let l = false;
+    for (const ch of line) {
+      if (RTL_CH.test(ch)) r = true;
+      else if (LETTER.test(ch) || DIGIT.test(ch)) l = true;
+      if (r && l) return true;
+    }
+    return false;
+  }
+  /** Stretches of one direction, in typing order: [{ rtl, start, end }]. */
+  function bidiRuns(line, baseRtl) {
+    let last = baseRtl ? 'R' : 'L';
+    const cls = line.map((ch) => {
+      if (RTL_CH.test(ch)) return (last = 'R');
+      if (LETTER.test(ch)) return (last = 'L');
+      if (DIGIT.test(ch)) return last; // numbers read with the words before them
+      return 'N';
+    });
+    // Spaces and marks: the direction around them when both sides agree, else the text's own.
+    for (let i = 0; i < cls.length; i++) {
+      if (cls[i] !== 'N') continue;
+      let j = i;
+      while (j < cls.length && cls[j] === 'N') j++;
+      const before = i > 0 ? cls[i - 1] : (baseRtl ? 'R' : 'L');
+      const after = j < cls.length ? cls[j] : (baseRtl ? 'R' : 'L');
+      const d = before === after ? before : (baseRtl ? 'R' : 'L');
+      for (let k = i; k < j; k++) cls[k] = d;
+      i = j - 1;
+    }
+    const runs = [];
+    for (let i = 0; i < cls.length; i++) {
+      const top = runs[runs.length - 1];
+      if (top && top.rtl === (cls[i] === 'R')) top.end = i + 1;
+      else runs.push({ rtl: cls[i] === 'R', start: i, end: i + 1 });
+    }
+    return runs;
+  }
+  function renderBidiLine(method, ctx, line, left, top, lineIndex) {
+    const rtl = this.direction === 'rtl';
+    const lineHeight = this.getHeightOfLine(lineIndex);
+    top -= (lineHeight * this._fontSizeFraction) / this.lineHeight;
+    const runs = bidiRuns(line, rtl);
+    let total = 0;
+    ctx.save();
+    for (const run of runs) {
+      // Pieces of one colour/font inside the stretch, measured as they will be drawn.
+      const pieces = [];
+      let s = run.start;
+      for (let i = run.start; i < run.end; i++) {
+        if (i === run.end - 1 || fabric.util.hasStyleChanged(this.getCompleteStyleDeclaration(lineIndex, i), this.getCompleteStyleDeclaration(lineIndex, i + 1), false)) {
+          const text = line.slice(s, i + 1).join('');
+          ctx.font = this._getFontDeclaration(this.getCompleteStyleDeclaration(lineIndex, i));
+          ctx.direction = run.rtl ? 'rtl' : 'ltr';
+          pieces.push({ text, last: i, w: ctx.measureText(text).width });
+          s = i + 1;
+        }
+      }
+      // A right-to-left stretch shows its first piece on the right.
+      run.pieces = run.rtl ? pieces.reverse() : pieces;
+      run.w = pieces.reduce((n, p) => n + p.w, 0);
+      total += run.w;
+    }
+    ctx.restore();
+    // Fabric gives the line's start: its left edge, or its right edge for right-to-left text.
+    const lineW = this.getLineWidth(lineIndex);
+    const boxLeft = rtl ? left - lineW : left;
+    const align = this.textAlign || 'left';
+    let x = boxLeft + (align.includes('center') ? (lineW - total) / 2 : align.includes('right') ? lineW - total : 0);
+    ctx.save();
+    ctx.textAlign = 'left';
+    for (const run of rtl ? runs.slice().reverse() : runs) {
+      ctx.direction = run.rtl ? 'rtl' : 'ltr';
+      for (const p of run.pieces) {
+        this._renderChar(method, ctx, lineIndex, p.last, p.text, x, top, lineHeight);
+        x += p.w;
+      }
+    }
+    ctx.restore();
+  }
 
   // ---------- Curved text ----------
   // The text is drawn straight into an offscreen canvas at the current
