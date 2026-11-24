@@ -288,3 +288,37 @@ test('bad input is refused with the field named', async () => {
   assert.strictEqual((await r.json()).name.en, 'Mug  b x /b'.replace(/\s+/g, ' '));
   assert.strictEqual((await req('PUT', '/api/admin/catalog/mug', { status: 'live' })).status, 401, 'needs sign-in');
 });
+
+test('the cart warns about stock before checkout, books can be hidden, and hidden products keep their name', async () => {
+  await put('/api/admin/catalog/apron', { status: 'live', stock: 1 });
+  const a = await makeDesign('apron');
+  const b = await makeDesign('apron');
+  const q = await (await post('/api/cart/quote', { designIds: [a.body.id, b.body.id] })).json();
+  assert.ok(q.items.every((i) => i.unavailable === 'notEnoughStock'), JSON.stringify(q.items));
+  assert.match(q.items[0].unavailableText, /1/);
+  const one = await (await post('/api/cart/quote', { designIds: [a.body.id] })).json();
+  assert.strictEqual(one.items[0].unavailable, undefined, 'one piece is fine');
+  await put('/api/admin/catalog/apron', { stock: null });
+  // Books.
+  const book = PRODUCTS.find((p) => p.kind === 'book');
+  const r = await put(`/api/admin/catalog/${book.id}`, { status: 'hidden', hiddenReason: 'season' });
+  assert.strictEqual(r.status, 200, await r.clone().text());
+  assert.ok(!(await shop()).some((p) => p.id === book.id));
+  const made = await post(`/api/books/${book.book}/designs`, {});
+  assert.strictEqual(made.status, 409);
+  await put(`/api/admin/catalog/${book.id}`, { status: 'live' });
+  // A hidden product's name, for saved drafts.
+  await put('/api/admin/catalog/bottle', { status: 'hidden' });
+  const n = await (await fetch(`${base}/api/products/bottle/name`)).json();
+  assert.strictEqual(n.available, false);
+  assert.ok(n.name.ar);
+  assert.strictEqual((await fetch(`${base}/api/products/nope/name`)).status, 404);
+});
+
+test('a product made from another one gets that product\'s photo as its card picture', async () => {
+  await post('/api/admin/catalog', { id: 'big-mug', template: 'mug' }, owner);
+  const own = await fetch(`${base}/api/thumbs/big-mug/white.webp`);
+  const tpl = await fetch(`${base}/api/thumbs/mug/white.webp`);
+  assert.strictEqual(own.status, 200);
+  assert.strictEqual(Buffer.compare(Buffer.from(await own.arrayBuffer()), Buffer.from(await tpl.arrayBuffer())), 0);
+});

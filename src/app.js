@@ -544,7 +544,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (!color) throw new HttpError(404, 'notFound');
       if (product.kind === 'book') return res.redirect(302, `/api/books/${product.book}/sample/0.jpg`);
       if (product.kind === 'photoset') return res.redirect(302, '/mockups/photoprints-card.webp');
-      let img = product.pattern ? await thumbs.patternImage(product, color.hex) : await thumbs.cardImage(product.id, product.sides[0].id, color.hex);
+      let img = product.pattern ? await thumbs.patternImage(product, color.hex) : await thumbs.cardImage(product.base || product.id, product.sides[0].id, color.hex);
       // No product photo yet: the drawn product in its colour, trimmed, on white.
       // Laser products: with a sample engraving (or cut piece) in the material's tone.
       const drawn = product.cardArt ? product.sides[0].svg.replace('</svg>', `${product.cardArt.replace(/\{\{I\}\}/g, color.ink || '#000000')}</svg>`) : product.sides[0].svg;
@@ -575,6 +575,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       // Hidden, removed and sold-out products aren't in the shop (admin → Products).
       products: PRODUCTS.filter(catalog.visible).map((p) => publicProduct(catalog.forShop(p))),
     });
+  });
+
+  // The name of any product, also one hidden from the shop (saved drafts and carts name it).
+  app.get('/api/products/:id/name', (req, res) => {
+    const p = getProduct(req.params.id);
+    if (!p) throw new HttpError(404, 'unknownProduct');
+    res.json({ id: p.id, name: p.name, available: catalog.visible(p) });
   });
 
   // ---------- Designs ----------
@@ -2109,6 +2116,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const book = bookFor(req.params.id);
       if (!book) throw new HttpError(404, 'notFound');
       const product = bookProduct(book);
+      // Hidden in admin → Products.
+      if (!catalog.visible(product)) throw new HttpError(409, 'productUnavailable', { name: product.name[langOf(req)] || product.name.en });
       const token = crypto.randomBytes(24).toString('hex');
       const side = product.sides[0];
       const px = books.PRINT_PX;
@@ -2314,9 +2323,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   // ---------- Orders ----------
   /** Why a design can't be ordered now (product hidden / sold out by the product manager), or null. */
   const designUnavailable = (d) => {
-    if (!d || d.kind === 'gangsheet' || d.kind === 'book') return null;
+    if (!d || d.kind === 'gangsheet') return null;
     const product = getProduct(d.productId);
     if (!product) return null;
+    if (d.kind === 'book') return catalog.unavailable(product);
     if (d.kind === 'photoset') return catalog.unavailable(product, { colorId: d.color && d.color.id });
     const lines = d.quantities && d.quantities.length ? d.quantities : [{ color: d.color, size: d.size }];
     for (const l of lines) {
@@ -2672,6 +2682,20 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const p = why && getProduct(d.productId);
       return { designId: String(id).slice(0, 40), price, gone: price === null, ...(d && d.orderId ? { ordered: true } : {}), ...(why ? { unavailable: why, unavailableText: format(why, { name: p ? p.name[langOf(req)] || p.name.en : '' }, langOf(req)) } : {}) };
     });
+    // Counted stock: the cart says so before checkout when it asks for more pieces than are left.
+    const need = new Map();
+    for (const i of items) {
+      const d = !i.gone && !i.unavailable && store.getDesign(i.designId);
+      if (d && stockPieces(d)) need.set(d.productId, (need.get(d.productId) || 0) + stockPieces(d));
+    }
+    for (const i of items) {
+      const d = !i.gone && !i.unavailable && store.getDesign(i.designId);
+      const p = d && getProduct(d.productId);
+      if (p && typeof p.stock === 'number' && need.get(p.id) > p.stock) {
+        i.unavailable = 'notEnoughStock';
+        i.unavailableText = format('notEnoughStock', { name: p.name[langOf(req)] || p.name.en, left: p.stock }, langOf(req));
+      }
+    }
     const subtotal = round2(items.reduce((n, i) => n + (i.price || 0), 0));
     const lines = items.filter((i) => !i.gone).map((i) => couponLine(store.getDesign(i.designId), i.price));
     const code = coupons.normCode((req.body || {}).couponCode);
@@ -3457,7 +3481,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   });
   app.put('/api/admin/catalog/:id', requireCatalog, express.json({ limit: '200kb' }), (req, res) => {
     const p = getProduct(req.params.id);
-    if (!p || p.kind === 'book') throw new HttpError(404, 'unknownProduct');
+    if (!p) throw new HttpError(404, 'unknownProduct');
     saveProductEdit(req, p, req.body && typeof req.body === 'object' ? req.body : {});
     res.json(adminProduct(getProduct(p.id)));
   });
