@@ -1641,3 +1641,33 @@ test('two copies of the app on one data folder share orders, sign-ins and edits'
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('a book saved while it is being ordered stays as ordered (no second order, no change after approval)', async () => {
+  const sharp = require('sharp');
+  const face = await sharp({ create: { width: 500, height: 500, channels: 3, background: '#c99' } }).jpeg().toBuffer();
+  const dataUrl = 'data:image/jpeg;base64,' + face.toString('base64');
+  const answers = { name: 'Yousef', gender: 'boy', birthday: '2019-03-12', city: 'Cairo', father: 'Ahmed', mother: 'Mona', fruit: 'mango', animal: 'cat', friend: 'Omar' };
+  const d = await (await post('/api/books/space-hero/designs', { answers, face: dataUrl })).json();
+  const proof = await (await fetch(`${base}/api/designs/${d.id}/proof`)).json();
+  const q = await (await post('/api/cart/quote', { designIds: [d.id] })).json();
+  // A slow save (a big new photo, a changed name) and the order at the same time.
+  const big = await sharp({ create: { width: 2400, height: 2400, channels: 3, noise: { type: 'gaussian', mean: 128, sigma: 40 } } }).jpeg({ quality: 80 }).toBuffer();
+  const saving = fetch(`${base}/api/books/designs/${d.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'x-edit-token': d.editToken }, body: JSON.stringify({ answers: { ...answers, name: 'Changed' }, face: 'data:image/jpeg;base64,' + big.toString('base64') }) });
+  await new Promise((r) => setTimeout(r, 40));
+  const o = await post('/api/orders', { customer: CUSTOMER, designIds: [d.id], expectedTotal: q.total, approvals: { [d.id]: { proofHash: proof.proofHash } } });
+  const saved = await saving;
+  if (o.status === 201) {
+    const order = await o.json();
+    // Whatever finished first, the ordered book is the approved one, still ordered, and can't be ordered again.
+    assert.ok([200, 409].includes(saved.status), `save answered ${saved.status}`);
+    const after = await (await fetch(`${base}/api/designs/${d.id}/proof`)).json();
+    assert.strictEqual(after.proofHash, proof.proofHash, 'the ordered book is the one the customer approved');
+    if (saved.status === 409) {
+      const again = await post('/api/orders', { customer: CUSTOMER, designIds: [d.id], expectedTotal: q.total, approvals: { [d.id]: { proofHash: proof.proofHash } } });
+      assert.ok([400, 409].includes(again.status), 'not ordered twice');
+      const p2 = await (await fetch(`${base}/api/designs/${d.id}/proof`)).json();
+      assert.strictEqual(p2.proofHash, proof.proofHash, 'unchanged after approval');
+      assert.strictEqual(order.items[0].approval.proofHash, proof.proofHash);
+    }
+  }
+});

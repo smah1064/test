@@ -1877,9 +1877,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     try {
       await saveBookNow(design, body, ip);
     } catch (e) {
+      // Ordered while this save was running: the book stays ordered (never put back to "not ordered").
+      const fresh = store.getDesign(design.id);
+      const orderId = design.orderId || (fresh && fresh.orderId) || null;
       for (const k of Object.keys(design)) delete design[k];
       Object.assign(design, before);
+      if (orderId) design.orderId = orderId;
       if (oldFace) store.writeDesignFile(design.id, 'face.jpg', oldFace);
+      store.save();
       throw e;
     }
   }
@@ -1910,6 +1915,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (!fs.existsSync(store.designFile(design.id, 'face.jpg'))) throw new HttpError(400, 'bookPhoto');
     // New photo, or the AI choice changed: make (or drop) the cartoon face.
     if (face || consentChanged || (consent && cartoon.enabled() && !(design.cartoon && design.cartoon.status === 'ready'))) await makeCartoon(design, ip);
+    // Ordered while this save was running: the customer approved the book as it was, which is what prints.
+    const fresh = store.getDesign(design.id);
+    if (design.orderId || (fresh && fresh.orderId)) throw new HttpError(409, 'designOrdered');
     design.version = (design.version || 0) + 1;
     fs.rmSync(store.designFile(design.id, 'book-print.pdf'), { force: true });
     fs.rmSync(store.designFile(design.id, 'book-preview.pdf'), { force: true });
