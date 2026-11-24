@@ -408,9 +408,15 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   if (!adminPassword) throw new Error('adminPassword is required');
   const store = new Store(dataDir);
   const app = express();
-  const auth = new security.AdminAuth(adminPassword, { dataDir, store });
+  // Sign-in attempts (customers and admin) are counted in a file shared by every copy of the app,
+  // so guessing passwords gets no extra tries from another copy or a restart.
+  const signinLimiter = new security.SharedLimiter(path.join(dataDir, '.signin-limits.json'));
+  const auth = new security.AdminAuth(adminPassword, { dataDir, store, limiter: signinLimiter });
   const LIMITS = { ...DEFAULT_LIMITS, ...limits };
-  const limiter = new security.RateLimiter();
+  const memoryLimiter = new security.RateLimiter();
+  const SHARED_LIMITS = new Set(['accountLogin', 'accountLoginId']);
+  const limiterFor = (key) => (SHARED_LIMITS.has(String(key).split(':')[0]) ? signinLimiter : memoryLimiter);
+  const limiter = { check: (k, r) => limiterFor(k).check(k, r), hit: (k, r) => limiterFor(k).hit(k, r) };
   /** Throws 429 when this visitor (or everyone, for `*` keys) did `what` too often. */
   /**
    * Shop-wide daily budgets for paid AI (shared by every copy of the app,

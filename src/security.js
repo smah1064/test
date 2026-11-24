@@ -91,10 +91,131 @@ class RateLimiter {
     if (this.hits.size > 20000) this.prune(Math.max(...rules.map((x) => x.ms)));
     return 0;
   }
+  clear(key) {
+    this.hits.delete(key);
+  }
   prune(ms) {
     const now = Date.now();
     for (const [k, list] of this.hits) if (!list.some((tm) => now - tm < ms)) this.hits.delete(k);
     if (this.hits.size > 20000) this.hits.clear();
+  }
+}
+
+const SLEEP = new Int32Array(new SharedArrayBuffer(4));
+
+/**
+ * The same counts as RateLimiter, kept in a small file in the data folder so every
+ * copy of the app (and a restarted one) sees the same sign-in attempts. Keys are
+ * stored hashed (no IP addresses or account ids in the file). If the file can't be
+ * used (disk full, permissions) it falls back to counting in memory.
+ */
+class SharedLimiter {
+  constructor(file) {
+    this.file = file;
+    this.lockPath = file + '.lock';
+    this.memory = new RateLimiter();
+  }
+  key(k) {
+    return sha256(k).toString('base64url').slice(0, 22);
+  }
+  read() {
+    try {
+      const d = JSON.parse(fs.readFileSync(this.file, 'utf8'));
+      return d && typeof d === 'object' && !Array.isArray(d) ? d : {};
+    } catch (e) {
+      return {};
+    }
+  }
+  lock() {
+    const start = Date.now();
+    for (;;) {
+      try {
+        fs.closeSync(fs.openSync(this.lockPath, 'wx'));
+        return true;
+      } catch (e) {
+        if (e.code !== 'EEXIST') throw e;
+        try {
+          if (Date.now() - fs.statSync(this.lockPath).mtimeMs > 5000) {
+            fs.rmSync(this.lockPath, { force: true }); // left behind by a copy that crashed
+            continue;
+          }
+        } catch (e2) {
+          continue;
+        }
+        if (Date.now() - start > 2000) return false; // count anyway rather than block sign-in
+        Atomics.wait(SLEEP, 0, 0, 10);
+      }
+    }
+  }
+  /** Runs fn(data) on the latest file and saves it; nothing else saves in between. */
+  update(fn) {
+    const locked = this.lock();
+    try {
+      const data = this.read();
+      const result = fn(data);
+      // Forget attempts older than a day (the longest window), and keep the file small.
+      const now = Date.now();
+      for (const [k, list] of Object.entries(data)) {
+        const keep = Array.isArray(list) ? list.filter((tm) => typeof tm === 'number' && now - tm < 24 * 3600e3) : [];
+        if (keep.length) data[k] = keep;
+        else delete data[k];
+      }
+      const keys = Object.keys(data);
+      if (keys.length > 20000) {
+        keys.sort((a, b) => data[a][data[a].length - 1] - data[b][data[b].length - 1]);
+        for (const k of keys.slice(0, keys.length - 20000)) delete data[k];
+      }
+      const tmp = `${this.file}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
+      fs.writeFileSync(tmp, JSON.stringify(data));
+      fs.renameSync(tmp, this.file);
+      return result;
+    } finally {
+      if (locked) fs.rmSync(this.lockPath, { force: true });
+    }
+  }
+  static judge(list, rules, now) {
+    for (const r of rules) {
+      const inWindow = list.filter((tm) => now - tm < r.ms);
+      if (inWindow.length >= r.max) return Math.ceil((inWindow[0] + r.ms - now) / 1000);
+    }
+    return 0;
+  }
+  /** Seconds to wait if `key` is over a limit, else { list, now } (like RateLimiter). */
+  check(key, rules) {
+    try {
+      const now = Date.now();
+      const list = (this.read()[this.key(key)] || []).filter((tm) => typeof tm === 'number');
+      const wait = SharedLimiter.judge(list, rules, now);
+      return wait || { list, now };
+    } catch (e) {
+      return this.memory.check(key, rules);
+    }
+  }
+  /** Records one action; returns seconds to wait if it is over a limit (and does not record it). */
+  hit(key, rules) {
+    try {
+      const k = this.key(key);
+      return this.update((data) => {
+        const now = Date.now();
+        const list = (Array.isArray(data[k]) ? data[k] : []).filter((tm) => typeof tm === 'number');
+        const wait = SharedLimiter.judge(list, rules, now);
+        if (wait) return wait;
+        list.push(now);
+        data[k] = list;
+        return 0;
+      });
+    } catch (e) {
+      return this.memory.hit(key, rules);
+    }
+  }
+  clear(key) {
+    try {
+      const k = this.key(key);
+      if (this.read()[k]) this.update((data) => { delete data[k]; });
+    } catch (e) {
+      /* nothing to clear */
+    }
+    this.memory.hits.delete(key);
   }
 }
 
@@ -104,6 +225,8 @@ const SESSION_MS = 12 * 3600e3;
 const LOCK_FAILS = 5;
 const LOCK_MS = 15 * 60e3;
 const GLOBAL_FAILS = 50; // wrong passwords per hour from everyone together
+const ADMIN_IP_RULES = [{ max: LOCK_FAILS, ms: LOCK_MS }];
+const ADMIN_ALL_RULES = [{ max: GLOBAL_FAILS, ms: 3600e3 }];
 
 /** True when the admin password is easy to guess. */
 function weakPassword(pw) {
@@ -119,7 +242,7 @@ function weakPassword(pw) {
  * password, so changing ADMIN_PASSWORD signs everyone out.
  */
 class AdminAuth {
-  constructor(password, { dataDir, store } = {}) {
+  constructor(password, { dataDir, store, limiter } = {}) {
     this.hash = sha256(password);
     this.weak = weakPassword(password);
     this.store = store || null;
@@ -153,17 +276,15 @@ class AdminAuth {
     // Signs customers' sign-in cookies and password-reset links (independent of the admin password).
     this.customerKey = crypto.createHmac('sha256', secret).update('customer-sessions').digest();
     this.sessions = new Map(); // revoked tokens when there is no store
-    this.fails = new Map(); // ip -> [times]
-    this.globalFails = [];
+    // Wrong passwords, counted for every copy of the app together (a file in the data folder).
+    this.fails = limiter || (dataDir ? new SharedLimiter(path.join(dataDir, '.signin-limits.json')) : new RateLimiter());
   }
   /** Seconds until this visitor may try again (0 = allowed). */
   lockedFor(ip) {
-    const now = Date.now();
-    this.globalFails = this.globalFails.filter((tm) => now - tm < 3600e3);
-    if (this.globalFails.length >= GLOBAL_FAILS) return Math.ceil((this.globalFails[0] + 3600e3 - now) / 1000);
-    const list = (this.fails.get(ip) || []).filter((tm) => now - tm < LOCK_MS);
-    this.fails.set(ip, list);
-    return list.length >= LOCK_FAILS ? Math.ceil((list[0] + LOCK_MS - now) / 1000) : 0;
+    const all = this.fails.check('admin:*', ADMIN_ALL_RULES);
+    if (typeof all === 'number') return all;
+    const one = this.fails.check(`admin:${ip}`, ADMIN_IP_RULES);
+    return typeof one === 'number' ? one : 0;
   }
   /** Returns { token, expiresAt } or { wait } / null for a wrong password. */
   login(ip, password) {
@@ -171,15 +292,14 @@ class AdminAuth {
     if (wait) return { wait };
     const ok = crypto.timingSafeEqual(sha256(typeof password === 'string' ? password : ''), this.hash);
     if (!ok) {
-      const now = Date.now();
-      this.fails.get(ip).push(now);
-      this.globalFails.push(now);
-      if (this.fails.size > 20000) this.fails.clear();
-      const left = LOCK_FAILS - this.fails.get(ip).length;
+      this.fails.hit('admin:*', ADMIN_ALL_RULES);
+      this.fails.hit(`admin:${ip}`, ADMIN_IP_RULES);
+      const seen = this.fails.check(`admin:${ip}`, ADMIN_IP_RULES);
+      const left = typeof seen === 'number' ? 0 : LOCK_FAILS - seen.list.filter((tm) => seen.now - tm < LOCK_MS).length;
       console.warn(`[admin] wrong password from ${ip} (${left > 0 ? left + ' tries left' : 'locked for 15 min'})`);
       return null;
     }
-    this.fails.delete(ip);
+    this.fails.clear(`admin:${ip}`);
     const expiresAt = Date.now() + SESSION_MS;
     const body = `${expiresAt.toString(36)}.${crypto.randomBytes(18).toString('base64url')}`;
     const token = `${body}.${this.sign(body)}`;
@@ -396,4 +516,4 @@ function cleanup({ store, sharesDir, designDays = 30, uploadingHours = 24, share
   return { designs, shares };
 }
 
-module.exports = { pageCsp, inlineScriptHashes, securityHeaders, RateLimiter, AdminAuth, weakPassword, bearer, sanitizeSvg, cleanup };
+module.exports = { pageCsp, inlineScriptHashes, securityHeaders, RateLimiter, SharedLimiter, AdminAuth, weakPassword, bearer, sanitizeSvg, cleanup };
