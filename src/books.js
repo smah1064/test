@@ -595,5 +595,5 @@ function publicBook(book) {
 module.exports = {
   BOOKS, TRIM_IN, BLEED_IN, PAGE_IN, PRINT_PX, FRUITS, ANIMALS,
   cleanAnswers, fill, formatDate, renderPage, pageJpeg, bookPdf, lineArt, publicBook, loadFonts,
-  companionPath: (id) => (FRUITS[id] || ANIMALS[id] ? path.join(ASSETS, 'companions', `${id}.png`) : null),
+  companionPath: (id) => (Object.hasOwn(FRUITS, id) || Object.hasOwn(ANIMALS, id) ? path.join(ASSETS, 'companions', `${id}.png`) : null),
 };

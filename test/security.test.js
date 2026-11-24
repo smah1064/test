@@ -210,3 +210,37 @@ test('accounts: a reset email never links to a host the shop does not own', asyn
     mail.close();
   }
 });
+
+test('errors never show raw server messages or paths; odd input types are refused', async () => {
+  {
+    const b = base;
+    const bad = await fetch(b + '/api/cart/quote', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-lang': 'ar' }, body: '{"designIds": [' });
+    assert.strictEqual(bad.status, 400);
+    const body = await bad.json();
+    assert.strictEqual(body.code, 'badRequest');
+    assert.match(body.error, /[\u0600-\u06FF]/, 'in Arabic');
+    for (const id of ['constructor', '__proto__', 'toString']) {
+      const r = await fetch(`${b}/api/books/companion/${id}.png`);
+      assert.strictEqual(r.status, 404);
+      assert.doesNotMatch(await r.text(), /ENOENT|\/src\//);
+    }
+    assert.strictEqual((await fetch(b + '/api/client-error', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: 'null' })).status, 204);
+    const corrupt = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(100, 7)]);
+    const pr = await fetch(b + '/api/proof', { method: 'POST', headers: { 'Content-Type': 'image/png' }, body: corrupt });
+    assert.strictEqual(pr.status, 400);
+    assert.strictEqual((await pr.json()).code, 'badImage');
+    const book = await (await fetch(b + '/api/books/space-hero/designs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })).json().catch(() => ({}));
+    if (book && book.id) assert.strictEqual((await fetch(`${b}/api/designs/${book.id}`)).status, 404);
+  }
+});
+
+test('account fields must be text (no "[object Object]" saved)', async () => {
+  const signup = await post('/api/account/signup', { name: 'Mona Test', phone: '01055566677', password: 'a-long-password-1' });
+  assert.strictEqual(signup.status, 201, await signup.clone().text());
+  const cookie = signup.headers.get('set-cookie').split(';')[0];
+  const put = (body) => fetch(base + '/api/account', { method: 'PUT', headers: { 'Content-Type': 'application/json', cookie }, body: JSON.stringify(body) });
+  assert.strictEqual((await put({ name: { a: 1 } })).status, 400);
+  assert.strictEqual((await put({ name: ['Mo', 'Ali'] })).status, 400);
+  assert.strictEqual((await put({ name: 'Mona', address: { city: {}, address: '1 st' } })).status, 400);
+  assert.strictEqual((await put({ name: 'Mona Ali' })).status, 200);
+});

@@ -118,24 +118,37 @@ function checkUpload(name, buf) {
   if (/^(photo|thumb)-\d{3}\.jpg$/.test(name)) {
     const k = name.startsWith('photo-') ? 'photo' : 'thumb';
     if (buf.length > UPLOAD_LIMITS[k]) throw new HttpError(413, 'uploadTooLarge');
-    if (buf.length < 16 || !SIGNATURES.jpg(buf)) throw new HttpError(400, 'badPng', { label: name });
+    if (buf.length < 16 || !SIGNATURES.jpg(buf)) throw new HttpError(400, 'badImage');
     return k;
   }
   const kind = name.startsWith('src-') ? 'source' : name.endsWith('.svg') ? 'svg' : name.endsWith('-merge.bin') ? 'merge' : name.includes('-print') || name.includes('-merge') ? 'print' : 'preview';
   if (buf.length > UPLOAD_LIMITS[kind]) throw new HttpError(413, 'uploadTooLarge');
   if (kind === 'source') {
     const ext = name.split('.').pop();
-    if (buf.length < 16 || !SIGNATURES[ext](buf)) throw new HttpError(400, 'badPng', { label: name });
+    if (buf.length < 16 || !SIGNATURES[ext](buf)) throw new HttpError(400, 'badImage');
   } else if (kind === 'svg') {
     const head = buf.subarray(0, 512).toString('utf8');
-    if (!/<svg[\s>]/.test(head) && !/^\s*<\?xml/.test(head)) throw new HttpError(400, 'badPng', { label: name });
+    if (!/<svg[\s>]/.test(head) && !/^\s*<\?xml/.test(head)) throw new HttpError(400, 'badImage');
   } else if (buf.length < 24 || !buf.subarray(0, 8).equals(PNG_SIGNATURE)) {
-    throw new HttpError(400, 'badPng', { label: name });
+    throw new HttpError(400, 'badImage');
   }
   return kind;
 }
 
 const sha = (v) => crypto.createHash('sha256').update(String(v)).digest('hex');
+
+/** A JPEG whose header says `dpi` (JFIF density); a JFIF header is added when there is none. */
+function jpegWithDpi(buf, dpi) {
+  const out = Buffer.from(buf);
+  if (out.length > 20 && out[2] === 0xff && out[3] === 0xe0 && out.subarray(6, 11).toString('latin1') === 'JFIF\0') {
+    out[13] = 1; // dots per inch
+    out.writeUInt16BE(dpi, 14);
+    out.writeUInt16BE(dpi, 16);
+    return out;
+  }
+  const app0 = Buffer.from([0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x01, dpi >> 8, dpi & 255, dpi >> 8, dpi & 255, 0x00, 0x00]);
+  return Buffer.concat([out.subarray(0, 2), app0, out.subarray(2)]);
+}
 
 function cleanString(value, field, { max = 200, required = true } = {}) {
   const s = typeof value === 'string' ? value.trim() : '';
@@ -772,7 +785,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (!sd) throw new HttpError(404, 'notFound');
       if (['printing', 'printed', 'shipped'].includes(item.status)) throw new HttpError(409, 'alreadyPrinting');
       const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
-      if (buf.length < 24 || !buf.subarray(0, 8).equals(PNG_SIGNATURE)) throw new HttpError(400, 'badPng', { label: 'PNG' });
+      if (buf.length < 24 || !buf.subarray(0, 8).equals(PNG_SIGNATURE)) throw new HttpError(400, 'badImage');
       if (buf.readUInt32BE(16) !== sd.widthPx || buf.readUInt32BE(20) !== sd.heightPx) throw new HttpError(400, 'replacementSize', { w: sd.widthPx, h: sd.heightPx });
       // The old file stays, so every version that was ever approved can be found again.
       const v = d.version || 1;
@@ -1132,14 +1145,22 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
 
   app.post('/api/designs/:id/complete', async (req, res, next) => {
     try {
+      // A photo set completed already (the answer got lost on the way, e.g. the phone changed networks):
+      // the same token gets the finished set again instead of an error.
+      const prior = UUID_RE.test(req.params.id) && store.getDesign(req.params.id);
+      if (prior && prior.kind === 'photoset' && prior.status === 'ready' && prior.doneTokenHash && prior.doneTokenHash === sha(req.get('x-upload-token') || '')) {
+        const { uploadTokenHash, doneTokenHash, ...pub } = prior; // eslint-disable-line no-unused-vars
+        return res.json({ ...pub, previewUrl: `/files/designs/${prior.id}/front-preview.png` });
+      }
       const design = uploadingDesign(req);
       if (design.kind === 'photoset') {
         await completePhotoset(design);
         await runPreflight(design);
         design.status = 'ready';
+        design.doneTokenHash = design.uploadTokenHash;
         delete design.uploadTokenHash;
         store.save();
-        const { uploadTokenHash, ...pub } = design; // eslint-disable-line no-unused-vars
+        const { uploadTokenHash, doneTokenHash, ...pub } = design; // eslint-disable-line no-unused-vars
         return res.json({ ...pub, previewUrl: `/files/designs/${design.id}/front-preview.png` });
       }
       if (design.kind === 'gangsheet') {
@@ -1222,6 +1243,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       let e = {};
       try {
         e = JSON.parse(req.body || '{}');
+        if (!e || typeof e !== 'object') e = { msg: String(req.body).slice(0, 300) };
       } catch (err) {
         e = { msg: String(req.body).slice(0, 300) };
       }
@@ -1479,7 +1501,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       editor[sd.id] = { objects: b.sides[sd.id].objects, ...(offset ? { offset } : {}) };
       const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(String((b.previews || {})[sd.id] || ''));
       const png = m ? Buffer.from(m[1], 'base64') : null;
-      if (!png || png.length > 4e6 || !png.subarray(0, 8).equals(PNG_SIGNATURE)) throw new HttpError(400, 'badPng', { label: 'preview' });
+      if (!png || png.length > 4e6 || !png.subarray(0, 8).equals(PNG_SIGNATURE)) throw new HttpError(400, 'badImage');
       fs.writeFileSync(shareFile(id, `${sd.id}.png`), png);
     }
     fs.writeFileSync(shareFile(id, 'editor.json'), JSON.stringify(editor));
@@ -1531,12 +1553,18 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     try {
       const now = Date.now();
       const hits = (proofHits.get(req.ip) || []).filter((tm) => now - tm < 60000);
-      if (hits.length >= 30) throw new HttpError(429, 'serverError');
+      if (hits.length >= 30) throw new HttpError(429, 'tooFast');
       proofHits.set(req.ip, [...hits, now]);
       if (proofHits.size > 5000) proofHits.clear();
       const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
-      if (buf.length < 24 || !buf.subarray(0, 8).equals(PNG_SIGNATURE)) throw new HttpError(400, 'badPng', { label: 'preview' });
-      res.type('png').send(await printfiles.cmykProof(buf));
+      if (buf.length < 24 || !buf.subarray(0, 8).equals(PNG_SIGNATURE)) throw new HttpError(400, 'badImage');
+      let out;
+      try {
+        out = await printfiles.cmykProof(buf);
+      } catch (e) {
+        throw new HttpError(400, 'badImage'); // a broken or impossibly large PNG
+      }
+      res.type('png').send(out);
     } catch (e) {
       next(e);
     }
@@ -1545,8 +1573,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   // Re-open a saved design in the editor.
   app.get('/api/designs/:id', (req, res) => {
     const design = UUID_RE.test(req.params.id) && store.getDesign(req.params.id);
-    if (!design) throw new HttpError(404, 'designNotFound');
-    const editor = JSON.parse(fs.readFileSync(store.designFile(design.id, 'editor.json'), 'utf8'));
+    // Books and photo sets are not opened in the editor (a book's answers stay private to its edit token).
+    if (!design || design.kind === 'book' || design.kind === 'photoset' || design.kind === 'gangsheet') throw new HttpError(404, 'designNotFound');
+    let editor;
+    try {
+      editor = JSON.parse(fs.readFileSync(store.designFile(design.id, 'editor.json'), 'utf8'));
+    } catch (e) {
+      throw new HttpError(404, 'designNotFound');
+    }
     const { uploadTokenHash, ...pub } = design; // eslint-disable-line no-unused-vars
     const list = design.merge ? readMergeList(design) : null;
     res.json({ ...pub, editor, ...(list ? { mergeList: list } : {}) });
@@ -1586,7 +1620,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   const pad3 = (n) => String(n).padStart(3, '0');
   /** "12 photos · 18 prints" in both languages. */
   const photoSetLabel = (photos, prints) => {
-    const ar = (n, one, two, few, many) => (n === 1 ? one : n === 2 ? two : n <= 10 ? `${n} ${few}` : `${n} ${many}`);
+    // Arabic counting: 3–10 (and 103–110, 203–210…) take the plural, other numbers the singular.
+    const ar = (n, one, two, few, many) => (n === 1 ? one : n === 2 ? two : n % 100 >= 3 && n % 100 <= 10 ? `${n} ${few}` : `${n} ${many}`);
     return {
       en: `${photos} photo${photos === 1 ? '' : 's'} · ${prints} print${prints === 1 ? '' : 's'}`,
       ar: `${ar(photos, 'صورة واحدة', 'صورتين', 'صور', 'صورة')} · ${ar(prints, 'نسخة واحدة', 'نسختين', 'نسخ', 'نسخة')}`,
@@ -1659,6 +1694,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         throw new HttpError(400, 'photoSize', { n: p.n });
       }
       if (meta.format !== 'jpeg' || meta.width !== p.px[0] || meta.height !== p.px[1]) throw new HttpError(400, 'photoSize', { n: p.n });
+      // Browsers save canvas JPEGs at "72 DPI": mark them 300 DPI so a print shop's software prints them
+      // at their real size (only the header changes, the picture is not re-compressed).
+      const file = store.designFile(design.id, p.file);
+      store.writeDesignFile(design.id, p.file, jpegWithDpi(fs.readFileSync(file), 300));
     }
     const sheet = await photoContactSheet(design);
     store.writeDesignFile(design.id, 'front-preview.png', sheet);
@@ -2261,8 +2300,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   app.put('/api/account', express.json({ limit: '10kb' }), (req, res) => {
     const me = signedIn(req);
     const b = req.body || {};
-    const name = String(b.name || '').trim().replace(/\s+/g, ' ').slice(0, 120);
-    const email = String(b.email || '').trim().toLowerCase().slice(0, 200);
+    // Text fields must be text (an object or a list is refused, not saved as "[object Object]").
+    const text = (v) => (v == null ? '' : typeof v === 'string' ? v : (() => { throw new HttpError(400, 'badRequest'); })());
+    const name = text(b.name).trim().replace(/\s+/g, ' ').slice(0, 120);
+    const email = text(b.email).trim().toLowerCase().slice(0, 200);
     if (name.length < 2) throw new HttpError(400, 'acctName');
     if (email && !EMAIL_RE.test(email)) throw new HttpError(400, 'badEmail');
     // Mobile number: accounts made with Google/Facebook add it here.
@@ -2272,10 +2313,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (b.address && typeof b.address === 'object' && (b.address.address || b.address.city)) {
       const a = b.address;
       address = {
-        governorate: governorate(a.governorate) ? a.governorate : '',
-        city: String(a.city || '').trim().slice(0, 100),
-        address: String(a.address || '').trim().slice(0, 300),
-        notes: String(a.notes || '').trim().slice(0, 500),
+        governorate: typeof a.governorate === 'string' && governorate(a.governorate) ? a.governorate : '',
+        city: text(a.city).trim().slice(0, 100),
+        address: text(a.address).trim().slice(0, 300),
+        notes: text(a.notes).trim().slice(0, 500),
       };
     }
     const updated = store.mutate((db) => {
@@ -2601,7 +2642,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     sizeLabel: d.size.label,
     sides: d.sides.map((sd) => sd.name),
     price: d.price,
-    ...(copiesOf(d) > 1 ? { copies: copiesOf(d) } : {}),
+    // (A photo set's prints are of different sizes and prices: no "price each" in the cart.)
+    ...(copiesOf(d) > 1 && d.kind !== 'photoset' ? { copies: copiesOf(d) } : {}),
     ...(d.quantities ? { quantities: d.quantities } : {}),
     ...(d.merge ? { merge: { count: d.merge.count } } : {}),
     previewUrl: d.kind === 'book' ? `/files/designs/${d.id}/book-preview.png?v=${d.version || 0}` : `/files/designs/${d.id}/${d.sides[0].id}-preview.png`,
@@ -2710,7 +2752,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (preview) writeFileAtomic(path.join(dir, `${product.id}.png`), preview);
     else fs.rmSync(path.join(dir, `${product.id}.png`), { force: true });
     const idx = draftIndex(me);
-    idx[product.id] = { savedAt, colorId: String(b.colorId || '').slice(0, 40), sizeId: String(b.sizeId || '').slice(0, 40), preview: Boolean(preview) };
+    const id40 = (v) => (typeof v === 'string' ? v.slice(0, 40) : '');
+    idx[product.id] = { savedAt, colorId: id40(b.colorId), sizeId: id40(b.sizeId), preview: Boolean(preview) };
     // Keep the newest drafts only.
     const old = Object.entries(idx).sort((x, y) => String(y[1].savedAt).localeCompare(String(x[1].savedAt))).slice(MAX_DRAFTS);
     for (const [pid] of old) {
@@ -3575,8 +3618,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const status = err.status || err.statusCode || 500;
     if (status >= 500) console.error(err);
     let key = err.key;
-    if (!key) key = err.type === 'entity.too.large' ? 'uploadTooLarge' : status >= 500 ? 'serverError' : null;
-    const message = key ? format(key, err.params || {}, lang) : err.message;
+    // Errors without a message of ours (bad JSON, a missing file...): a translated general message,
+    // never the raw text (it can hold server paths).
+    if (!key) key = err.type === 'entity.too.large' ? 'uploadTooLarge' : status >= 500 ? 'serverError' : status === 404 ? 'notFound' : status === 429 ? 'tooFast' : 'badRequest';
+    const message = format(key, err.params || {}, lang);
     res.status(status).json({ error: message, code: key || undefined });
   });
 

@@ -11,6 +11,8 @@ const MESSAGES = {
   unknownSide: { en: 'Unknown side: {side}', ar: 'وجه غير معروف: {side}' },
   notPng: { en: '{label} must be a PNG image', ar: '{label} يجب أن يكون صورة PNG' },
   badPng: { en: '{label} is not a valid PNG', ar: '{label} ليس صورة PNG صالحة' },
+  badImage: { en: 'That picture is not a valid image file. Please try another one.', ar: 'الصورة دي مش ملف صورة سليم. جرّب صورة تانية.' },
+  badRequest: { en: 'Something in the request was not right. Please refresh the page and try again.', ar: 'في حاجة مش مظبوطة في الطلب. حدّث الصفحة وحاول تاني.' },
   tooLarge: { en: '{label} is too large', ar: '{label} كبير جدًا' },
   designTooLarge: { en: 'Design is too large', ar: 'التصميم كبير جدًا' },
   uploadTooLarge: { en: 'Upload is too large', ar: 'الملف المرفوع كبير جدًا' },

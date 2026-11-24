@@ -149,6 +149,7 @@ test('ordered: one item with every photo, a ZIP for the print shop sorted by siz
   assert.match(readme, /10x15 cm: 5 prints/);
   const meta = await sharp(entries.get('13x18/002_13x18_x1.jpg')).metadata();
   assert.deepStrictEqual([meta.width, meta.height], [px(18), px(13)]);
+  assert.strictEqual(meta.density, 300, 'marked 300 DPI so print software prints them at their real size');
   // The default download is the ZIP; the proof picture too.
   assert.strictEqual((await admin(`/api/admin/files/${d.id}/front`)).headers.get('content-type'), 'application/zip');
   assert.strictEqual((await admin(`/api/admin/files/${d.id}/front?format=proof`)).status, 200);
@@ -165,6 +166,7 @@ test('ordered: one item with every photo, a ZIP for the print shop sorted by siz
   assert.strictEqual(again.skipped.length, 0);
   assert.strictEqual(again.items[0].price, item.price);
   assert.strictEqual(again.items[0].sizeLabel.en, item.size.label.en);
+  assert.strictEqual(again.items[0].copies, undefined, 'no "price each" for prints of different sizes');
 });
 
 test('the shop grid shows a picture for photo prints and the editor is not used for them', async () => {
@@ -174,4 +176,20 @@ test('the shop grid shows a picture for photo prints and the editor is not used 
   assert.strictEqual((await fetch(base + '/mockups/photoprints-card.webp')).status, 200);
   // The editor's designs API refuses photo prints (they are ordered on the photos page).
   assert.strictEqual((await post('/api/designs', { productId: 'photoprints', color: 'gloss', size: '10x15', sides: { front: { editor: { objects: [{ type: 'i-text', text: 'x' }] } } } })).status, 400);
+});
+
+test('a lost answer to "complete" can be asked again with the same token; Arabic counts from 101 up', async () => {
+  const many = [{ size: '10x15', copies: 50, orientation: 'portrait', dpi: 300 }, { size: '10x15', copies: 50, orientation: 'portrait', dpi: 300 }, { size: '10x15', copies: 3, orientation: 'portrait', dpi: 300 }];
+  const { created, done } = await makeSet({ photos: many });
+  const d = await done.json();
+  assert.match(d.size.label.ar, /^3 صور · 103 نسخ/);
+  const again = await fetch(`${base}/api/designs/${created.id}/complete`, { method: 'POST', headers: { 'x-upload-token': created.uploadToken } });
+  assert.strictEqual(again.status, 200);
+  const d2 = await again.json();
+  assert.strictEqual(d2.id, d.id);
+  assert.strictEqual(d2.price, d.price);
+  assert.strictEqual(d2.doneTokenHash, undefined);
+  assert.strictEqual(d2.uploadTokenHash, undefined);
+  // Another token gets nothing.
+  assert.strictEqual((await fetch(`${base}/api/designs/${created.id}/complete`, { method: 'POST', headers: { 'x-upload-token': 'nope' } })).status, 403);
 });

@@ -152,7 +152,7 @@
           <tfoot><tr><td colspan="2">${esc(t('adminQty.total'))}</td><td class="qty-n">${esc(POD.num(piecesOf(item)))}</td></tr></tfoot>
         </table>
       </div>
-      ${item.merge ? '' : `<div class="qty-names-note">${esc(t('adminQty.sameArt'))}</div>`}`;
+      ${item.merge || item.kind === 'photoset' ? '' : `<div class="qty-names-note">${esc(t('adminQty.sameArt'))}</div>`}`;
   }
   /** Short form for lists: ● Black: S×2 M×5 L×3 · ● White: M×2. */
   function qtySummary(item) {
@@ -192,7 +192,7 @@
         <dt>${esc(t('admin.spec.order'))}</dt><dd>${esc(item.orderNumber)} · ${esc(t('admin.spec.itemOf', { i: item.position, n: item.of }))}</dd>
         <dt>${esc(t('admin.spec.product'))}</dt><dd>${esc(tr(item.productName))}</dd>
         ${hasQty(item) ? `<dt>${esc(t('adminQty.title'))}</dt><dd class="qty-dd">${qtyTable(item)}</dd>` : `<dt>${esc(t('admin.spec.colourSize'))}</dt><dd>${esc(tr(item.color.name))} <span class="dot" style="display:inline-block;vertical-align:middle;background:${esc(item.color.hex)}"></span> · ${esc(tr(item.size.label))}</dd>`}
-        ${item.sides.map((s) => `<dt>${esc(t('admin.spec.print', { side: tr(s.name) }))}</dt><dd><bdi dir="ltr">${cm(s.widthIn)} × ${cm(s.heightIn)} cm (${s.widthIn} × ${s.heightIn} in)${s.bleedIn ? ' ' + esc(t('admin.bleed', { mm: Math.round(s.bleedIn * 25.4) })) : ''} · ${s.widthPx} × ${s.heightPx} px · ${s.dpi} DPI · sRGB</bdi>${s.offsetCm ? `<div class="placement-note">📍 ${esc(t('admin.placement', { v: placementText(s.offsetCm) }))}</div>` : ''}</dd>`).join('')}
+        ${item.kind === 'photoset' ? `<dt>${esc(t('fmt.photos-zip'))}</dt><dd>${esc(t('admin.photoFiles', { n: POD.num((item.photos || []).length), prints: POD.num((item.photos || []).reduce((n, p) => n + p.copies, 0)) }))} · ${esc(t('admin.photoSpec'))}${item.sides[0] && item.sides[0].dpi && item.sides[0].dpi < 150 ? `<div class="small" style="color:var(--warn);margin-top:4px">⚠ ${esc(t('admin.photoLowRes'))}</div>` : ''}</dd>` : item.sides.map((s) => `<dt>${esc(t('admin.spec.print', { side: tr(s.name) }))}</dt><dd><bdi dir="ltr">${cm(s.widthIn)} × ${cm(s.heightIn)} cm (${s.widthIn} × ${s.heightIn} in)${s.bleedIn ? ' ' + esc(t('admin.bleed', { mm: Math.round(s.bleedIn * 25.4) })) : ''} · ${s.widthPx} × ${s.heightPx} px · ${s.dpi} DPI · sRGB</bdi>${s.offsetCm ? `<div class="placement-note">📍 ${esc(t('admin.placement', { v: placementText(s.offsetCm) }))}</div>` : ''}</dd>`).join('')}
         ${item.emb ? `<dt>${esc(t('admin.emb'))}</dt><dd>
           <div><strong>${esc(t('admin.embSummary', { n: POD.num(item.emb.stitches), c: item.emb.colors.length, w: item.emb.widthMm, h: item.emb.heightMm }))}</strong></div>
           <ol class="emb-threads">${item.emb.colors.map((c) => `<li><span class="dot" style="display:inline-block;vertical-align:middle;background:${esc(c.hex)}"></span> ${esc(c.name)} <span class="muted">(${esc(c.hex)} · ${esc(POD.num(c.stitches))})</span></li>`).join('')}</ol>
@@ -202,7 +202,7 @@
         ${item.pattern ? `<dt>${esc(t('admin.pattern'))}</dt><dd><strong>${esc(t('admin.patternSpec', { tile: item.pattern.tileCm, repeat: t('pat.' + item.pattern.repeat), w: item.pattern.fabricCm[0], h: item.pattern.fabricCm[1] }))}</strong></dd>` : ''}
         ${item.process ? `<dt>${esc(t('admin.method'))}</dt><dd>
           ${(item.methods || []).length > 1 ? `<div class="btn-group" style="max-width:180px;margin-bottom:6px">${item.methods.map((m) => `<button class="btn btn-sm ${m === item.process ? 'active' : ''}" data-item="${item.id}" data-method="${m}">${esc(t('method.' + m))}</button>`).join('')}</div>` : ''}
-          ${esc(t('process.' + item.process))}
+          ${esc(t(item.kind === 'photoset' ? 'process.photo' : 'process.' + item.process))}
           ${item.process === 'dtg' && anyDark(item) ? `<div class="small" style="color:var(--warn);margin-top:4px">${esc(t('admin.darkHint'))}</div>` : ''}
           ${item.filmBatch ? `<div><span class="pill printed">${esc(t('admin.onFilm', { id: item.filmBatch.id }))}</span></div>` : ''}
         </dd>` : ''}

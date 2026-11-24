@@ -207,6 +207,8 @@
     mark($('ph-border'), 'border', state.border);
     const sizes = new Set(state.photos.map((p) => p.size));
     const mixed = sizes.size > 1;
+    // All photos one size (also when set photo by photo): new photos get that size too.
+    if (sizes.size === 1) state.sizeAll = [...sizes][0];
     mark($('ph-sizeall'), 'size', mixed ? null : sizes.size === 1 ? [...sizes][0] : state.sizeAll);
     $('ph-mixed').hidden = !mixed;
     $('ph-sizeall').querySelectorAll('[data-price-for]').forEach((el) => (el.textContent = money(unitPrice(el.dataset.priceFor))));
@@ -226,7 +228,8 @@
     return card ? state.photos.find((p) => p.uid === Number(card.dataset.uid)) : null;
   };
   function cardHtml(p) {
-    const opts = product.sizes.map((s) => `<option value="${esc(s.id)}">${esc(tr(s.label))} · ${esc(money(unitPrice(s.id)))}</option>`).join('');
+    // Short labels ("10×15 · 15 EGP") so the price is never cut off on small phones.
+    const opts = product.sizes.map((s) => `<option value="${esc(s.id)}">${esc(s.cm ? `${s.cm[0]}×${s.cm[1]}` : tr(s.label))} · ${esc(money(unitPrice(s.id)))}</option>`).join('');
     return `
       <div class="ph-thumb">
         <button type="button" class="ph-print" data-act="crop"><span class="ph-area"><img alt="" draggable="false" decoding="async" src="${esc(p.url)}"></span></button>

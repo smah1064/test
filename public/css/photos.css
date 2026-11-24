@@ -137,3 +137,5 @@ html[dir="rtl"] .ph-sheet-head { padding: 12px 18px 12px 14px; }
   .ph-tools .btn { font-size: 12px; gap: 3px; padding-inline: 2px; }
   .ph-tools .btn svg { width: 14px; height: 14px; }
 }
+
+@media (max-width: 360px) { .ph-size { font-size: 12px; padding: 7px 4px; } }
