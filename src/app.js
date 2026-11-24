@@ -2453,7 +2453,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       return round2(sum);
     }
     const u = unit(d.size.id);
-    return u == null ? null : round2(u * copiesOf(d));
+    // A price of nothing (or less) can't be ordered (a mistake in the shop's prices).
+    return u == null || u < 1 ? null : round2(u * copiesOf(d));
   };
   /** Pieces in a design: one per row of its name list, else the quantities asked for, else one. */
   const copiesOf = (d) => (!d ? 1 : d.kind === 'photoset' ? d.photos.reduce((n, p) => n + p.copies, 0) : d.merge ? d.merge.count : d.quantities ? d.quantities.reduce((n, l) => n + l.qty, 0) : 1);
@@ -2974,13 +2975,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         const r = coupons.apply((db.coupons || []).find((x) => x.id === applied.id), { lines, orders: db.orders, phone: c.phone });
         if (!r.ok) throw new HttpError(409, r.reason, r.params || {});
       }
-      // Counted stock goes down by the pieces ordered (checked again with the latest count).
-      for (const [pid, n] of wanted) {
-        const e = db.catalog && db.catalog.products && db.catalog.products[pid];
-        if (!e || typeof e.stock !== 'number') continue;
-        if (e.stock < n) throw new HttpError(409, 'notEnoughStock', { name: getProduct(pid).name[langOf(req)] || pid, left: e.stock });
-        e.stock -= n;
-      }
+      // Counted stock goes down by the pieces ordered (checked again with the latest count, every
+      // product first, so a refused order takes nothing off).
+      const counted = [...wanted].map(([pid, n]) => [db.catalog && db.catalog.products && db.catalog.products[pid], pid, n]).filter(([e]) => e && typeof e.stock === 'number');
+      for (const [e, pid, n] of counted) if (e.stock < n) throw new HttpError(409, 'notEnoughStock', { name: getProduct(pid).name[langOf(req)] || pid, left: e.stock });
+      for (const [e, , n] of counted) e.stock -= n;
     });
     // A signed-in customer without a saved address keeps this one for next time.
     if (me && !me.address) {
@@ -3517,7 +3516,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   };
   /** Save the fields sent for a product (others stay as they were); prices go to the owner's price list. */
   const saveProductEdit = (req, product, body) => {
-    const c = catalog.clean(product, body, { categories: CATEGORIES.map((x) => x.id) });
+    const c = catalog.clean(product, body, { categories: CATEGORIES.map((x) => x.id), prev: catalogEdits()[product.id] || null });
     if (c.error) throw new HttpError(400, c.error, { field: c.field || '' });
     let pricing = null;
     if (body.prices !== undefined) {
@@ -3576,7 +3575,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   app.post('/api/admin/catalog', requireCatalog, express.json({ limit: '200kb' }), (req, res) => {
     const body = req.body && typeof req.body === 'object' ? req.body : {};
     const n = catalog.cleanNew(body, PRODUCTS);
-    if (n.error) throw new HttpError(400, n.error);
+    if (n.error) throw new HttpError(400, n.error, { field: n.field || '' });
     const from = getProduct(n.template);
     store.mutate((db) => {
       db.catalog ||= {};
@@ -3614,6 +3613,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (db.catalog && db.catalog.products) delete db.catalog.products[p.id];
       logCatalog(db, req, p.id, 'reset to the original');
     });
+    // Its uploaded photos went with the changes.
+    fs.rmSync(photoDir(p.id), { recursive: true, force: true });
     syncCatalog();
     res.json(adminProduct(getProduct(p.id)));
   });
@@ -3638,15 +3639,22 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const id = crypto.randomBytes(8).toString('hex');
     fs.mkdirSync(photoDir(p.id), { recursive: true });
     fs.writeFileSync(path.join(photoDir(p.id), `${id}.webp`), webp);
-    store.mutate((db) => {
-      db.catalog ||= {};
-      db.catalog.products ||= {};
-      const e = (db.catalog.products[p.id] ||= {});
-      e.photos = [...(e.photos || []), { id }].slice(0, catalog.MAX_PHOTOS);
-      e.updatedAt = new Date().toISOString();
-      e.updatedBy = req.adminWho.name;
-      logCatalog(db, req, p.id, 'photo added');
-    });
+    try {
+      store.mutate((db) => {
+        db.catalog ||= {};
+        db.catalog.products ||= {};
+        const e = (db.catalog.products[p.id] ||= {});
+        // Checked again under the lock: several photos sent at once can't go past the limit.
+        if ((e.photos || []).length >= catalog.MAX_PHOTOS) throw new HttpError(400, 'tooManyPhotos', { max: catalog.MAX_PHOTOS });
+        e.photos = [...(e.photos || []), { id }];
+        e.updatedAt = new Date().toISOString();
+        e.updatedBy = req.adminWho.name;
+        logCatalog(db, req, p.id, 'photo added');
+      });
+    } catch (e) {
+      fs.rmSync(path.join(photoDir(p.id), `${id}.webp`), { force: true });
+      throw e;
+    }
     syncCatalog();
     res.status(201).json(adminProduct(getProduct(p.id)));
   }));

@@ -226,7 +226,7 @@ function forShop(p) {
     colors: p.colors.filter((c) => !c.off).map(({ added, ...c }) => c),
     sizes: p.sizes.filter((z) => !z.off).map(({ added, ...z }) => z),
     sides: p.sides.filter((s) => !s.off),
-    ...(typeof stock === 'number' && stock > 0 && stock <= (lowStockAt || 5) ? { fewLeft: stock } : {}),
+    ...(typeof stock === 'number' && stock > 0 && stock <= (typeof lowStockAt === 'number' ? lowStockAt : 5) ? { fewLeft: stock } : {}),
   };
 }
 
@@ -234,7 +234,8 @@ function forShop(p) {
 const text = (v, max) => (typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max) : '');
 const longText = (v, max) => (typeof v === 'string' ? v.replace(/[\u0000-\u0008\u000b-\u001f\u007f<>]/g, ' ').trim().slice(0, max) : '');
 function bilingual(v, max, { long = false } = {}) {
-  if (!isObj(v)) return undefined;
+  if (v === null) return undefined; // back to the original
+  if (!isObj(v)) return null; // a list or plain text is not a name in two languages
   const f = long ? longText : text;
   const out = {};
   for (const k of ['en', 'ar']) if (typeof v[k] === 'string') out[k] = f(v[k], max);
@@ -243,6 +244,7 @@ function bilingual(v, max, { long = false } = {}) {
 }
 const num = (v, min, max) => {
   if (v === '' || v === null || v === undefined) return undefined;
+  if (typeof v !== 'number' && typeof v !== 'string') return null; // true is not 1
   const n = Number(v);
   return Number.isFinite(n) && n >= min && n <= max ? n : null;
 };
@@ -253,7 +255,7 @@ const HEX_RE = /^#[0-9a-f]{6}$/i;
  * Check a change from the admin. `body` is the whole new edit for the product
  * (what the edit screen shows); returns { edit } or { error, field }.
  */
-function clean(p, body, { categories = [] } = {}) {
+function clean(p, body, { categories = [], prev = null } = {}) {
   const b = isObj(body) ? body : {};
   const own = base.get(p.base || p.id);
   const out = {};
@@ -309,7 +311,9 @@ function clean(p, body, { categories = [] } = {}) {
     }
     if (list.length) out.addColors = list;
   }
-  const allColors = new Set([...ownColors, ...(out.addColors || []).map((c) => c.id)]);
+  // Colours added before stay when this change doesn't send the list again.
+  const addedColors = b.addColors !== undefined ? (out.addColors || []) : ((prev && prev.addColors) || []);
+  const allColors = new Set([...ownColors, ...addedColors.map((c) => c.id)]);
   if (b.colors !== undefined) {
     if (!isObj(b.colors)) return bad('colors');
     const m = {};
@@ -333,12 +337,14 @@ function clean(p, body, { categories = [] } = {}) {
       if (!label || !label.en || !label.ar) return bad('addSizes');
       const sur = num(z.surcharge, -1e5, 1e6);
       const scale = num(z.printScale, 0.1, 10);
-      if (sur === null || scale === null) return bad('addSizes');
+      // A size never makes the product cost nothing (or less).
+      if (sur === null || scale === null || (Number(p.basePrice) || 0) + (sur || 0) < 1) return bad('addSizes');
       list.push({ id: z.id, label, surcharge: sur || 0, ...(scale && scale !== 1 ? { printScale: scale } : {}) });
     }
     if (list.length) out.addSizes = list;
   }
-  const allSizes = new Set([...ownSizes, ...(out.addSizes || []).map((z) => z.id)]);
+  const addedSizes = b.addSizes !== undefined ? (out.addSizes || []) : ((prev && prev.addSizes) || []);
+  const allSizes = new Set([...ownSizes, ...addedSizes.map((z) => z.id)]);
   if (b.sizes !== undefined) {
     if (!isObj(b.sizes)) return bad('sizes');
     const m = {};
@@ -419,6 +425,7 @@ function clean(p, body, { categories = [] } = {}) {
       const ch = num(e.cm && e.cm[1], 1, 40);
       const sur = num(e.surcharge, 0, 1e5);
       const colors = num(e.maxColors, 1, 15);
+      if (colors != null && !Number.isInteger(colors)) return bad('embroidery');
       if (!at || (at !== 'same' && (!cw || !ch)) || sur === null || sur === undefined || colors === null) return bad('embroidery');
       const spec = { at, cm: at === 'same' ? [0, 0] : [r2(cw), r2(ch)], surcharge: Math.round(sur), maxColors: colors || 6 };
       const was = embSpecs[own.id];
@@ -447,6 +454,11 @@ function cleanNew(body, products) {
   if (!from) return { error: 'unknownProduct' };
   if (from.kind) return { error: 'badTemplate' }; // books and gang sheets have their own pages
   if (products.filter((p) => p.base).length >= MAX_ADDED) return { error: 'tooManyProducts' };
+  // A new product's name in both languages (or none yet: it starts as "<template> (new)").
+  if (b.name !== undefined && b.name !== null) {
+    const n = isObj(b.name) ? b.name : {};
+    if (!text(n.en, 80) || !text(n.ar, 80)) return { error: 'badProductField', field: 'name' };
+  }
   return { id, template: tpl };
 }
 

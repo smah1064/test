@@ -1034,9 +1034,15 @@
   }
 
   let mockupToken = 0;
+  /** Booklets bound on the right (Arabic): the covers drawn with the staples on the other edge. */
+  const rightBound = () => {
+    const bind = (st.product.options || []).find((o) => o.id === 'binding');
+    return Boolean(bind && chosenOption(bind).id === 'right');
+  };
   async function applyMockup(sideId = st.side) {
     const token = ++mockupToken;
-    const side = sideDef(sideId);
+    const plain = sideDef(sideId);
+    const side = plain && plain.rtlArt && rightBound() ? { ...plain, ...plain.rtlArt } : plain;
     const hex = color().hex;
     let bg;
     let ov;
@@ -3244,6 +3250,8 @@
     st.options = { ...(st.options || {}), [b.dataset.opt]: b.dataset.choice };
     renderOptions();
     refreshChrome();
+    // The binding moves the staples on the cover drawing.
+    if (b.dataset.opt === 'binding') applyMockup();
   });
   $('method-chips').addEventListener('click', serial(async (e) => {
     const b = e.target.closest('[data-method]');
@@ -5271,9 +5279,9 @@
         wrap: st.product.model && st.product.model.type === 'canvas' ? exportDesignLayer(3, rects(sd.id).bleed) : null,
         designScale: 3,
         hasDesign: canvas.getObjects().length > 0 || Boolean(ghost.el),
-        base: POD.mockupUrl(sd, color().hex),
+        base: POD.mockupUrl(sd.rtlArt && rightBound() ? { ...sd, ...sd.rtlArt } : sd, color().hex),
         hex: color().hex,
-        overlay: sd.overlay ? POD.mockupUrl(sd, color().hex, 'overlay') : null,
+        overlay: sd.overlay ? POD.mockupUrl(sd.rtlArt && rightBound() ? { ...sd, ...sd.rtlArt } : sd, color().hex, 'overlay') : null,
       });
     }
     if (st.side !== original) await showSide(original);
@@ -5335,6 +5343,7 @@
     if (templatesRendered) renderTemplates();
     refreshChrome();
     renderProps();
+    renderFloatBar(); // the floating bar's labels in the new language
     canvas.requestRenderAll();
   });
 

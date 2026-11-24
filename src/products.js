@@ -2099,9 +2099,10 @@ PRODUCTS.push(
       ],
     }],
     sides: [
-      { id: 'front', name: t('Front cover', 'الغلاف الأمامي'), short: t('Cover', 'الغلاف'), svg: bookletSvg(true), overlay: bookletSpine(true), printArea: { ...BOOKLET }, printWidthIn: cmIn(14.8) },
+      // rtlArt: the drawing for a booklet bound on the right (Arabic): the staples on the cover's right edge.
+      { id: 'front', name: t('Front cover', 'الغلاف الأمامي'), short: t('Cover', 'الغلاف'), svg: bookletSvg(true), overlay: bookletSpine(true), rtlArt: { svg: bookletSvg(false), overlay: bookletSpine(false) }, printArea: { ...BOOKLET }, printWidthIn: cmIn(14.8) },
       ...Array.from({ length: 30 }, (_, k) => ({ id: `p${k + 2}`, name: t(`Page ${k + 2}`, `صفحة ${k + 2}`), short: t(String(k + 2), String(k + 2)), svg: flat(BOOKLET.x, BOOKLET.y, BOOKLET.w, BOOKLET.h), printArea: { ...BOOKLET }, printWidthIn: cmIn(14.8) })),
-      { id: 'back', name: t('Back cover', 'الغلاف الخلفي'), short: t('Back', 'الخلفي'), svg: bookletSvg(false), overlay: bookletSpine(false), printArea: { ...BOOKLET }, printWidthIn: cmIn(14.8) },
+      { id: 'back', name: t('Back cover', 'الغلاف الخلفي'), short: t('Back', 'الخلفي'), svg: bookletSvg(false), overlay: bookletSpine(false), rtlArt: { svg: bookletSvg(true), overlay: bookletSpine(true) }, printArea: { ...BOOKLET }, printWidthIn: cmIn(14.8) },
     ],
     cardArt: withArt(sampleArt(BOOKLET, { bg: '#fff0f6', accent: '#c2255c' }), bookletSpine(true)),
   },

@@ -325,3 +325,39 @@ test('a product made from another one gets that product\'s photo as its card pic
   assert.strictEqual(own.status, 200);
   assert.strictEqual(Buffer.compare(Buffer.from(await own.arrayBuffer()), Buffer.from(await tpl.arrayBuffer())), 0);
 });
+
+test('QA fixes: no free or negative sizes, added colours kept, refused orders take no stock, strict values', async () => {
+  // A size can't make the product cost nothing or less.
+  const neg = await put('/api/admin/catalog/sign', { addSizes: [{ id: 'free', label: { en: 'Free', ar: 'مجاني' }, surcharge: -100000 }] });
+  assert.strictEqual(neg.status, 400);
+  // Colours added earlier can be marked sold out without sending them again.
+  assert.strictEqual((await put('/api/admin/catalog/sign', { addColors: [{ id: 'gold', name: { en: 'Gold', ar: 'دهبي' }, hex: '#d4af37' }] })).status, 200);
+  const sold = await put('/api/admin/catalog/sign', { colors: { gold: { soldOut: true } } });
+  assert.strictEqual(sold.status, 200, await sold.clone().text());
+  assert.ok((await sold.json()).colors.find((c) => c.id === 'gold').soldOut);
+  // Strict values.
+  for (const body of [{ stock: true }, { name: ['a', 'b'] }, { embroidery: { at: 'chest', cm: [9, 9], surcharge: 100, maxColors: 2.5 } }]) {
+    assert.strictEqual((await put('/api/admin/catalog/hoodie', body)).status, 400, JSON.stringify(body));
+  }
+  // lowStockAt 0: never "only n left".
+  await put('/api/admin/catalog/mousepad', { stock: 3, lowStockAt: 0 });
+  assert.strictEqual((await shop()).find((p) => p.id === 'mousepad').fewLeft, undefined);
+  await put('/api/admin/catalog/mousepad', { stock: null, lowStockAt: null });
+  // A new product's name in both languages.
+  const half = await post('/api/admin/catalog', { id: 'retro-tee', template: 'tshirt', name: { en: 'Retro Tee' } }, owner);
+  assert.strictEqual(half.status, 400);
+  assert.strictEqual((await half.json()).field, 'name');
+  // An order refused for stock takes nothing off the other products in it.
+  await put('/api/admin/catalog/keychain', { stock: 5 });
+  await put('/api/admin/catalog/coasters', { stock: 0, status: 'live' });
+  await put('/api/admin/catalog/coasters', { stock: 1 });
+  const k = await makeDesign('keychain');
+  const c1 = await makeDesign('coasters');
+  const c2 = await makeDesign('coasters');
+  const o = await order([k.body.id, c1.body.id, c2.body.id]);
+  assert.strictEqual(o.status, 409);
+  const row = await (await req('GET', '/api/admin/catalog/keychain', undefined, owner)).json();
+  assert.strictEqual(row.stock, 5, 'nothing taken off');
+  await put('/api/admin/catalog/keychain', { stock: null });
+  await put('/api/admin/catalog/coasters', { stock: null });
+});
