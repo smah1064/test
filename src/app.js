@@ -3415,7 +3415,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   const adminProduct = (p) => {
     const row = catalog.forAdmin(p, catalogEdits()[p.id]);
     const pr = (store.db.pricing || {})[p.id] || {};
-    return { ...row, pricesChanged: Boolean(Object.keys(pr).length) };
+    // The built-in prices, so the screen can show what "back to the original" gives.
+    const d = accounting.defaultsFor(p.id);
+    return { ...row, pricesChanged: Boolean(Object.keys(pr).length), original: { ...row.original, ...(d ? { prices: { basePrice: d.basePrice, extraSidePrice: d.extraSidePrice, sizes: d.sizes } } : {}) } };
   };
   // Top-level fields of an edit and the keys each one holds (a field sent with its default value clears it).
   const EDIT_FIELDS = {
@@ -4500,7 +4502,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     // never the raw text (it can hold server paths).
     if (!key) key = err.type === 'entity.too.large' ? 'uploadTooLarge' : status >= 500 ? 'serverError' : status === 404 ? 'notFound' : status === 429 ? 'tooFast' : 'badRequest';
     const message = format(key, err.params || {}, lang);
-    res.status(status).json({ error: message, code: key || undefined });
+    // The field the admin's product screen should point at (admin → Products).
+    const field = err.params && typeof err.params.field === 'string' && err.params.field ? { field: err.params.field } : {};
+    res.status(status).json({ error: message, code: key || undefined, ...field });
   });
 
   return app;

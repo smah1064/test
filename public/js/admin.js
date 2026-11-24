@@ -9,6 +9,13 @@
   try { sessionStorage.removeItem('pod-admin-password'); } catch (e) { /* old versions kept the password */ }
   let token = sessionStorage.getItem(KEY) || '';
   const authHeader = () => ({ Authorization: 'Bearer ' + token });
+  // Who is signed in: the owner, or a product manager ('products', staff: the Products tab only).
+  const ROLE_KEY = 'pod-admin-role';
+  const STAFF_MODE_KEY = 'pod-admin-staff-login';
+  let role = '';
+  let who = '';
+  /** The only admin routes a product manager's token may use (the owner's answer 401 and would sign them out). */
+  const staffRoute = (url) => /^\/api\/admin\/(session|logout|catalog)(\/|\?|$)/.test(url);
   let tab = 'queue';
   let lastQueue = null;
   let lastOrders = null;
@@ -66,6 +73,13 @@
   }
 
   async function adminApi(url, options = {}) {
+    // Until we know who is signed in, and for product managers, owner-only routes are never called.
+    if (role !== 'owner' && !staffRoute(url)) {
+      const err = new Error(t('pm.ownerOnly'));
+      err.status = 403;
+      err.ownerOnly = true;
+      throw err;
+    }
     try {
       return await POD.api(url, { ...options, headers: { ...(options.headers || {}), ...authHeader() } });
     } catch (e) {
@@ -78,7 +92,12 @@
     const wasIn = Boolean(token);
     if (token) fetch('/api/admin/logout', { method: 'POST', headers: authHeader() }).catch(() => {});
     token = '';
+    role = '';
+    who = '';
     sessionStorage.removeItem(KEY);
+    sessionStorage.removeItem(ROLE_KEY);
+    if (window.AdminProducts) AdminProducts.reset();
+    applyRole();
     $('weak-pw').hidden = true;
     $('dash').hidden = true;
     $('logout').hidden = true;
@@ -91,15 +110,18 @@
     const btn = $('login').querySelector('button[type=submit]');
     btn.disabled = true;
     try {
+      const username = staffMode ? $('username').value.trim().toLowerCase() : '';
+      if (staffMode && !username) throw new Error(t('pm.login.needUser'));
       const res = await POD.api('/api/admin/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: $('password').value }),
+        body: JSON.stringify(staffMode ? { username, password: $('password').value } : { password: $('password').value }),
       });
       token = res.token;
       sessionStorage.setItem(KEY, token);
+      setRole(res.role || 'owner', res.name || username);
       $('password').value = '';
-      $('weak-pw').hidden = !res.weakPassword;
+      $('weak-pw').hidden = !(role === 'owner' && res.weakPassword);
       await refresh();
     } catch (err) {
       toast(err.message, 'error');
@@ -107,11 +129,65 @@
       btn.disabled = false;
     }
   });
-  $('logout').addEventListener('click', () => signOut());
+  $('logout').addEventListener('click', () => {
+    if (window.AdminProducts && AdminProducts.busy() && !confirm(t('pm.leaveConfirm'))) return;
+    signOut();
+  });
+
+  // ---------- Staff sign-in (product managers: username + password) ----------
+  let staffMode = false;
+  function setStaffMode(on, focus) {
+    staffMode = on;
+    try { localStorage.setItem(STAFF_MODE_KEY, on ? '1' : ''); } catch (e) { /* not remembered */ }
+    $('username-field').hidden = !on;
+    $('username').required = on;
+    $('login-title').dataset.i18n = on ? 'pm.login.staffTitle' : 'admin.loginTitle';
+    $('login-text').dataset.i18n = on ? 'pm.login.staffText' : 'admin.loginText';
+    $('staff-toggle').dataset.i18n = on ? 'pm.login.ownerLink' : 'pm.login.staffLink';
+    $('staff-toggle').setAttribute('aria-expanded', String(on));
+    POD.applyI18n($('login'));
+    if (focus) (on ? $('username') : $('password')).focus();
+  }
+  $('staff-toggle').addEventListener('click', () => setStaffMode(!staffMode, true));
+  try { if (localStorage.getItem(STAFF_MODE_KEY)) setStaffMode(true); } catch (e) { /* owner form */ }
+
+  function setRole(next, name) {
+    role = next === 'products' ? 'products' : next === 'owner' ? 'owner' : '';
+    who = name || '';
+    if (role) sessionStorage.setItem(ROLE_KEY, role);
+    applyRole();
+  }
+  /** A product manager sees the Products tab only. */
+  function applyRole() {
+    const staff = role === 'products';
+    document.querySelectorAll('[data-tab]').forEach((b) => { b.hidden = staff && b.dataset.tab !== 'products'; });
+    const tabs = document.querySelector('#dash .tabs');
+    if (tabs) tabs.hidden = staff;
+    $('admin-who').hidden = !staff;
+    $('admin-who').textContent = staff ? t('pm.signedInAs', { name: who }) : '';
+    if (staff) {
+      $('weak-pw').hidden = true;
+      if (tab !== 'products') showTab('products');
+    }
+  }
+  /** Who is signed in (the role is kept on the server with the token). */
+  async function loadSession() {
+    const r = await adminApi('/api/admin/session');
+    setRole(r.role || 'owner', r.name);
+    $('weak-pw').hidden = !(role === 'owner' && r.weakPassword);
+  }
 
   document.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => {
-    tab = b.dataset.tab;
-    document.querySelectorAll('[data-tab]').forEach((x) => x.classList.toggle('active', x === b));
+    if (tab === 'products' && b.dataset.tab !== 'products' && window.AdminProducts && AdminProducts.busy() && !confirm(t('pm.leaveConfirm'))) return;
+    showTab(b.dataset.tab);
+    refresh().catch((e) => { if (e && !e.ownerOnly && e.status !== 401) toast(e.message, 'error'); });
+  }));
+  function showTab(next) {
+    tab = next;
+    document.querySelectorAll('[data-tab]').forEach((x) => x.classList.toggle('active', x.dataset.tab === tab));
+    $('tab-products').hidden = tab !== 'products';
+    $('dash-title').dataset.i18n = tab === 'products' ? 'pm.pageTitle' : 'admin.queueTitle';
+    $('dash-title').textContent = t($('dash-title').dataset.i18n);
     $('tab-queue').hidden = tab !== 'queue';
     $('tab-orders').hidden = tab !== 'orders';
     $('tab-review').hidden = tab !== 'review';
@@ -121,8 +197,7 @@
     $('tab-accounts').hidden = tab !== 'accounts';
     $('tab-coupons').hidden = tab !== 'coupons';
     $('tab-customers').hidden = tab !== 'customers';
-    refresh();
-  }));
+  }
 
   const NEXT = {
     queued: { status: 'printing', label: 'admin.start' },
@@ -191,12 +266,14 @@
   const colourSizeText = (item) => (hasQty(item) ? [] : [tr(item.color.name), tr(item.size.label)]);
   const anyDark = (item) => (qtyLines(item).length ? qtyLines(item).some((l) => l.color && isDark(l.color.hex)) : isDark(item.color.hex));
 
+  /** One line the customer typed (Arabic, English or both): its own direction, so it is never scrambled. */
+  const line = (v) => `<bdi dir="auto">${esc(v)}</bdi>`;
   function address(c) {
     if (c.governorate || c.address) {
-      return [c.name, c.address, [c.city, tr(c.governorateName)].filter(Boolean).join('، '), c.notes ? `(${c.notes})` : ''].filter(Boolean).map(esc).join('<br>');
+      return [c.name, c.address, [c.city, tr(c.governorateName)].filter(Boolean).join('، '), c.notes ? `(${c.notes})` : ''].filter(Boolean).map(line).join('<br>');
     }
     // Orders placed before the Egypt checkout.
-    return [c.name, c.address1, c.address2, [c.city, c.region, c.postalCode].filter(Boolean).join(' '), c.country].filter(Boolean).map(esc).join('<br>');
+    return [c.name, c.address1, c.address2, [c.city, c.region, c.postalCode].filter(Boolean).join(' '), c.country].filter(Boolean).map(line).join('<br>');
   }
 
   function redrawLine(item) {
@@ -922,9 +999,18 @@
     }
   });
 
-  async function refresh() {
+  async function refresh({ auto = false } = {}) {
     if (!token) {
       $('login').hidden = false;
+      return;
+    }
+    if (!role) await loadSession();
+    if (role === 'products' && tab !== 'products') showTab('products');
+    if (tab === 'products') {
+      $('login').hidden = true;
+      $('dash').hidden = false;
+      $('logout').hidden = false;
+      await AdminProducts.show({ auto });
       return;
     }
     if (tab === 'queue') {
@@ -954,10 +1040,12 @@
     $('login').hidden = true;
     $('dash').hidden = false;
     $('logout').hidden = false;
-    if (tab !== 'review') loadReviewCount();
+    if (tab !== 'review' && role === 'owner') loadReviewCount();
   }
 
   document.addEventListener('pod:langchange', () => {
+    applyRole();
+    if (tab === 'products' && window.AdminProducts) AdminProducts.onLang();
     if (tab === 'queue' && lastQueue) renderQueue(lastQueue);
     if (tab === 'orders' && lastOrders) { renderOrders(lastOrders); renderNotifyStatus(); }
     if (tab === 'review' && reviewData) renderReview();
@@ -1072,12 +1160,19 @@
 
   // ---------- Accounts: profit, prices & costs, expenses ----------
   const acc = { view: 'overview', period: 'month', from: '', to: '', report: null, pricing: null, openOrders: new Set(), openSizes: new Set(), edits: {} };
-  const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  // The shop's day is Cairo's, whatever the admin's computer clock says (periods, the CSV name, today's date).
+  const CAIRO_DAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Cairo', year: 'numeric', month: '2-digit', day: '2-digit' });
+  const ymd = (d) => CAIRO_DAY.format(d);
   function periodRange(p) {
-    const now = new Date();
-    if (p === 'month') return [ymd(new Date(now.getFullYear(), now.getMonth(), 1)), ymd(now)];
-    if (p === 'lastMonth') return [ymd(new Date(now.getFullYear(), now.getMonth() - 1, 1)), ymd(new Date(now.getFullYear(), now.getMonth(), 0))];
-    if (p === 'year') return [ymd(new Date(now.getFullYear(), 0, 1)), ymd(now)];
+    const today = ymd(new Date());
+    const [Y, M] = today.split('-').map(Number);
+    const p2 = (n) => String(n).padStart(2, '0');
+    if (p === 'month') return [`${Y}-${p2(M)}-01`, today];
+    if (p === 'lastMonth') {
+      const [ly, lm] = M === 1 ? [Y - 1, 12] : [Y, M - 1];
+      return [`${ly}-${p2(lm)}-01`, `${ly}-${p2(lm)}-${p2(new Date(Date.UTC(ly, lm, 0)).getUTCDate())}`];
+    }
+    if (p === 'year') return [`${Y}-01-01`, today];
     if (p === 'custom') return [acc.from, acc.to];
     return ['', ''];
   }
@@ -1143,7 +1238,7 @@
     const items = o.items.map((i) => `
       <div class="acc-cost-line">
         <span>${esc(tr(i.productName))} · ${esc(tr(i.size && i.size.label))}${i.sides > 1 ? ` · ${esc(t('acc.sides', { n: POD.num(i.sides) }))}` : ''} · ${money(i.price)}</span>
-        <span class="muted small">${i.costParts ? esc(t('acc.parts', { blank: money(i.costParts.blank), print: money(i.costParts.print), other: money(i.costParts.other) })) : ''} (${esc(t(SRC[i.costSource]))})</span>
+        <span class="muted small">${i.costParts ? esc(t('acc.parts', { blank: money(i.costParts.blank), print: money(i.costParts.print), other: money(i.costParts.other) }) + (Number(i.costParts.embroidery) ? t('acc.partsEmb', { emb: money(i.costParts.embroidery) }) : '')) : ''} (${esc(t(SRC[i.costSource]))})</span>
         <label class="small">${esc(t('acc.realCost'))} <input type="number" min="0" step="0.01" dir="ltr" value="${i.costSource === 'actual' ? i.cost : ''}" placeholder="${i.cost}" data-acc-item-cost="${i.id}"></label>
       </div>`).join('');
     return main + `<tr class="acc-detail"><td colspan="7">
@@ -1173,7 +1268,7 @@
       const prods = d.products.filter((p) => p.category === c.id);
       if (!prods.length) return '';
       return `<h3 class="house-map-cat">${esc(tr(c.name))}</h3><div class="card" style="overflow-x:auto"><table class="orders acc-table acc-prices">
-        <thead><tr><th>${esc(t('acc.col.product'))}</th><th>${esc(t('acc.col.price'))}</th><th>${esc(t('acc.col.extraSide'))}</th><th>${esc(t('acc.col.blank'))}</th><th>${esc(t('acc.col.print1'))}</th><th>${esc(t('acc.col.printN'))}</th><th>${esc(t('acc.col.other'))}</th><th>${esc(t('acc.col.unitProfit'))}</th><th></th></tr></thead>
+        <thead><tr><th>${esc(t('acc.col.product'))}</th><th>${esc(t('acc.col.price'))}</th><th>${esc(t('acc.col.extraSide'))}</th><th>${esc(t('acc.col.blank'))}</th><th>${esc(t('acc.col.print1'))}</th><th>${esc(t('acc.col.printN'))}</th><th>${esc(t('acc.col.embroidery'))}</th><th>${esc(t('acc.col.other'))}</th><th>${esc(t('acc.col.unitProfit'))}</th><th></th></tr></thead>
         <tbody>${prods.map((p) => priceRow(p, field)).join('')}</tbody></table></div>`;
     }).join('');
   }
@@ -1195,11 +1290,12 @@
       <td>${field(p.id, 'blank', v('blank', p.costs.blank))}</td>
       <td>${field(p.id, 'printFirst', v('printFirst', p.costs.printFirst))}</td>
       <td>${multi ? field(p.id, 'printExtra', v('printExtra', p.costs.printExtra)) : '<span class="muted">—</span>'}</td>
+      <td>${p.embroidered ? field(p.id, 'embroidery', v('embroidery', p.costs.embroidery || 0)) : '<span class="muted">—</span>'}</td>
       <td>${field(p.id, 'other', v('other', p.costs.other))}</td>
       <td class="${p.costsSet || changed ? cls(profit) : ''}">${p.costsSet || changed ? `<strong>${money(profit)}</strong><div class="muted small">${esc(t('acc.marginShort', { v: POD.num(margin) }))}</div>` : '<span class="muted">—</span>'}</td>
       <td><button class="btn btn-sm ${changed ? 'btn-primary' : ''}" type="button" data-price-save="${p.id}" ${changed ? '' : 'disabled'}>${esc(t('houses.save'))}</button></td></tr>`;
     if (sizesOpen) {
-      html += `<tr class="acc-detail"><td colspan="9"><div class="acc-sizes">${p.sizes.map((sz) => `
+      html += `<tr class="acc-detail"><td colspan="10"><div class="acc-sizes">${p.sizes.map((sz) => `
         <div class="acc-size"><strong>${esc(tr(sz.label))}</strong>
           <label class="small">${esc(t('acc.sizePrice'))} ${field(p.id, 'size:' + sz.id, v('size:' + sz.id, sz.surcharge), 'min="-100000"')}</label>
           <label class="small">${esc(t('acc.sizeCost'))} ${field(p.id, 'sizecost:' + sz.id, v('sizecost:' + sz.id, sz.costExtra))}</label>
@@ -1242,6 +1338,7 @@
         sizes: Object.fromEntries(p.sizes.map((s) => [s.id, v('size:' + s.id, s.surcharge)])),
         costs: {
           blank: v('blank', p.costs.blank), printFirst: v('printFirst', p.costs.printFirst), printExtra: v('printExtra', p.costs.printExtra), other: v('other', p.costs.other),
+          ...(p.embroidered ? { embroidery: v('embroidery', p.costs.embroidery || 0) } : {}),
           sizes: Object.fromEntries(p.sizes.map((s) => [s.id, v('sizecost:' + s.id, s.costExtra)])),
         },
       };
@@ -1976,8 +2073,22 @@
     if (!img || !matchMedia('(hover: hover)').matches) { zoom.hidden = true; return; }
     let urls = [];
     try { urls = JSON.parse(img.dataset.zoom); } catch (err) { urls = [img.src]; }
-    zoom.classList.toggle('two', urls.length > 1);
-    zoom.innerHTML = urls.map((u) => `<img src="${esc(u)}" alt="">`).join('');
+    zoom.classList.toggle('two', urls.length === 2);
+    zoom.classList.toggle('many', urls.length > 2);
+    // Booklets: the pages wrap into rows sized to fit the window; past 12, the first 11 and "+N pages".
+    const MAXZ = 12;
+    const shown = urls.length > MAXZ ? urls.slice(0, MAXZ - 1) : urls;
+    const tiles = shown.length + (urls.length > MAXZ ? 1 : 0);
+    if (urls.length > 2) {
+      const cols = Math.min(tiles, Math.max(2, Math.ceil(Math.sqrt(tiles * 1.4))));
+      const rows = Math.ceil(tiles / cols);
+      const w = Math.min(220, (innerWidth * 0.9 - 16 - 8 * (cols - 1)) / cols);
+      const h = Math.min(w * 1.3, (innerHeight * 0.88 - 16 - 8 * (rows - 1)) / rows);
+      zoom.style.setProperty('--zoom-w', `${Math.floor(w)}px`);
+      zoom.style.setProperty('--zoom-h', `${Math.floor(h)}px`);
+      zoom.style.setProperty('--zoom-cols', String(cols));
+    }
+    zoom.innerHTML = shown.map((u) => `<img src="${esc(u)}" alt="">`).join('') + (urls.length > MAXZ ? `<span class="zoom-more">${esc(t('admin.zoomMore', { n: POD.num(urls.length - shown.length) }))}</span>` : '');
     zoom.hidden = false;
     placeZoom(e.clientX, e.clientY);
     zoom.querySelectorAll('img').forEach((im) => im.addEventListener('load', () => zoomFor === img && placeZoom(e.clientX, e.clientY), { once: true }));
@@ -2050,7 +2161,8 @@
     }
   });
 
+  AdminProducts.init({ api: adminApi, role: () => role });
+  // Who is signed in first (a product manager's page must never call the owner's routes), then the tab.
   refresh().catch(() => {});
-  if (token) adminApi('/api/admin/session').then((r) => { $('weak-pw').hidden = !r.weakPassword; }).catch(() => {});
-  setInterval(() => !document.hidden && token && refresh().catch(() => {}), 15000);
+  setInterval(() => !document.hidden && token && refresh({ auto: true }).catch(() => {}), 15000);
 })();

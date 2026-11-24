@@ -467,6 +467,11 @@ function forAdmin(p, edit) {
     embroiderySpec: edit && isObj(edit.embroidery) ? edit.embroidery : p.embroidery ? { ...(embSpecs[own.id] || { at: 'center', cm: [r2(p.embroidery.widthIn * 2.54), r2(p.embroidery.heightIn * 2.54)] }), surcharge: p.embroidery.surcharge, maxColors: p.embroidery.maxColors || 6 } : null,
     original: {
       name: own.name,
+      description: own.description,
+      category: own.category,
+      sizes: own.sizes.map((z) => ({ id: z.id, label: z.label })),
+      colors: own.colors.map((c) => ({ id: c.id, name: c.name, hex: c.hex })),
+      embroiderySpec: own.embroidery ? { ...(embSpecs[own.id] || { at: 'center', cm: [r2(own.embroidery.widthIn * 2.54), r2(own.embroidery.heightIn * 2.54)] }), surcharge: own.embroidery.surcharge, maxColors: own.embroidery.maxColors || 6 } : null,
       process: own.process,
       methods: own.methods,
       sides: own.sides.map((s) => ({ id: s.id, printArea: s.printArea, printWidthCm: r2(s.printWidthIn * 2.54), safeMm: r2((s.safeIn || 0) * 25.4), bleedMm: r2((s.bleedIn || 0) * 25.4) })),

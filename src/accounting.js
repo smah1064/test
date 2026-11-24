@@ -282,6 +282,7 @@ function cleanExpense(body) {
 
 module.exports = {
   catalogChanged,
+  defaultsFor: (id) => (defaults && defaults[id]) || null,
   round2, money, localDay, initPricing, applyPricing, cleanPricing, cleanCosts, itemCostFrom, itemCost, report, reportCsv, cleanExpense, EXPENSE_CATEGORIES,
   defaultsFor: (id) => defaults && defaults[id],
 };

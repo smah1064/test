@@ -14,6 +14,7 @@
   <link rel="stylesheet" href="/fonts/fonts.css">
   <link rel="stylesheet" href="/css/styles.css">
   <link rel="stylesheet" href="/css/review.css">
+  <link rel="stylesheet" href="/css/admin-products.css">
   <style>
     /* Orders: shipping, delivery and payment */
     .pill.delivered { background: #138a4a; color: #fff; }
@@ -67,6 +68,7 @@
       <span class="muted small" data-i18n="admin.production"></span>
       <nav>
         <button class="btn btn-sm lang-toggle" data-lang-toggle data-i18n="lang.other"></button>
+        <span class="small muted pm-who" id="admin-who" hidden></span>
         <button class="btn btn-sm" id="logout" hidden data-i18n="admin.signOut"></button>
       </nav>
     </div>
@@ -74,16 +76,18 @@
 
   <main class="container">
     <form class="card login" id="login" hidden>
-      <h2 data-i18n="admin.loginTitle"></h2>
-      <p class="muted small" data-i18n="admin.loginText"></p>
+      <h2 id="login-title" data-i18n="admin.loginTitle"></h2>
+      <p class="muted small" id="login-text" data-i18n="admin.loginText"></p>
+      <div class="field" id="username-field" hidden><label for="username" data-i18n="pm.login.username"></label><input type="text" id="username" autocomplete="username" dir="ltr" autocapitalize="off" spellcheck="false" maxlength="30"></div>
       <div class="field"><label for="password" data-i18n="admin.password"></label><input type="password" id="password" autocomplete="current-password" dir="ltr" required></div>
       <button class="btn btn-dark btn-block" type="submit" data-i18n="admin.signIn"></button>
+      <p class="pm-login-switch"><button class="link-btn small" type="button" id="staff-toggle" aria-controls="username-field" aria-expanded="false" data-i18n="pm.login.staffLink"></button></p>
     </form>
 
     <div id="dash" hidden>
       <p class="notice" id="weak-pw" hidden data-i18n="admin.weakPw" style="margin:0 0 12px"></p>
       <div class="page-head" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-        <h1 style="margin:0" data-i18n="admin.queueTitle"></h1>
+        <h1 style="margin:0" id="dash-title" data-i18n="admin.queueTitle"></h1>
         <div class="tabs" style="margin:0;margin-inline-start:auto">
           <button class="btn btn-sm active" data-tab="queue" data-i18n="admin.tabQueue"></button>
           <button class="btn btn-sm rv-tab" data-tab="review"><span data-i18n="rv.tab"></span><span class="rv-count" id="rv-count" hidden></span></button>
@@ -94,6 +98,7 @@
           <button class="btn btn-sm" data-tab="accounts" data-i18n="acc.tab"></button>
           <button class="btn btn-sm" data-tab="coupons" data-i18n="cp.tab"></button>
           <button class="btn btn-sm" data-tab="customers" data-i18n="cu.tab"></button>
+          <button class="btn btn-sm" data-tab="products" data-i18n="pm.tab"></button>
         </div>
       </div>
 
@@ -263,6 +268,10 @@
         <div class="queue-list" id="cu-list"></div>
       </section>
 
+      <section id="tab-products" hidden>
+        <div id="pm-root"></div>
+      </section>
+
       <section id="tab-orders" hidden>
         <div class="card notify-card">
           <div class="notify-head">
@@ -286,7 +295,9 @@
   <script src="/js/i18n.js"></script>
   <script src="/js/i18n-admin-shipping.js"></script>
   <script src="/js/i18n-review.js"></script>
+  <script src="/js/i18n-admin-products.js"></script>
   <script src="/js/common.js"></script>
+  <script src="/js/admin-products.js"></script>
   <script src="/js/admin.js"></script>
 </body>
 </html>
