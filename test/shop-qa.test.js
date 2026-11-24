@@ -152,7 +152,8 @@ test('QA batch: sign-in limits count wrong passwords only; drafts saved for anot
   const o = await (await post('/api/orders', { customer: CUSTOMER, designIds: [d.id], expectedTotal: q.total })).json();
   const q2 = await (await post('/api/cart/quote', { designIds: [d.id] })).json();
   assert.strictEqual(q2.items[0].gone, true);
-  assert.strictEqual(q2.items[0].orderedIn, o.id);
+  assert.strictEqual(q2.items[0].ordered, true);
+  assert.strictEqual(q2.items[0].orderedIn, undefined, 'a design id must not lead to its order');
   // A sample first: the expected day moves two business days.
   const plain = await (await post('/api/cart/quote', { designIds: [d.id], delivery: 'express' })).json();
   const sample = await (await post('/api/cart/quote', { designIds: [d.id], delivery: 'express', sample: true })).json();

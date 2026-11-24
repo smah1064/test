@@ -500,14 +500,14 @@
           return;
         }
         const gone = [];
-        let orderedIn = null;
+        let ordered = false;
         let changed = false;
         let synced = false;
         const keep = cart.filter((item, i) => {
           const q = quote.items[i];
           if (!q || q.designId !== item.designId) return true;
-          // Already ordered (the answer to that order got lost, or another tab ordered it): go to that order.
-          if (q.gone && q.orderedIn) { orderedIn = q.orderedIn; return false; }
+          // Already ordered (the answer to that order got lost, or another tab ordered it): not in the cart any more.
+          if (q.gone && (q.ordered || q.orderedIn)) { ordered = true; return false; }
           if (q.gone) { gone.push(tr(item.productName)); return false; }
           if (q.price !== item.price) { item.price = q.price; changed = true; }
           // Newer servers may also send the pieces; they are the ones that will be ordered.
@@ -515,11 +515,11 @@
           if (q.copies != null && (q.copies || 1) !== (item.copies || 1)) { item.copies = q.copies; synced = true; }
           return true;
         });
-        if (gone.length || changed || synced || orderedIn) POD.setCart(keep);
-        if (orderedIn) {
-          try { sessionStorage.removeItem('pod-order-key'); } catch (e) { /* private mode */ }
-          location.href = '/order?id=' + encodeURIComponent(orderedIn) + '&new=1';
-          return;
+        if (gone.length || changed || synced || ordered) POD.setCart(keep);
+        if (ordered) {
+          // Ordered from this tab (its answer got lost): that order, found by this tab's one-time key.
+          if (await showPlacedOrder()) return;
+          POD.toast(t('cart.alreadyOrdered'));
         }
         if (gone.length) POD.toast(t('cart.gone', { list: gone.join(POD.lang === 'ar' ? '، ' : ', ') }), 'error');
         else if (changed && announce) POD.toast(t('cart.pricesUpdated'));

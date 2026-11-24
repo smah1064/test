@@ -383,10 +383,15 @@ const DEFAULT_LIMITS = {
   redrawAll: [{ max: Number(process.env.REDRAW_DAILY_PAGES) || 450, ms: 24 * 3600e3 }],
   // WhatsApp/email alerts for the whole shop, so fake orders cannot flood the owner's phone.
   notify: [{ max: 30, ms: 3600e3 }, { max: 200, ms: 24 * 3600e3 }],
+  couponTry: [{ max: 15, ms: 10 * 60e3 }, { max: 60, ms: 24 * 3600e3 }], // coupon codes that didn't work, per visitor
+  notifyCustomer: [{ max: 5, ms: 3600e3 }, { max: 20, ms: 24 * 3600e3 }], // order confirmations to one email address
+  notifyCustomerAll: [{ max: 500, ms: 24 * 3600e3 }],
   // Illustrator / EPS files turned into pictures for the editor.
   artwork: [{ max: 15, ms: 10 * 60e3 }, { max: 60, ms: 24 * 3600e3 }],
   mergeParse: [{ max: 30, ms: 10 * 60e3 }, { max: 150, ms: 24 * 3600e3 }],
   reorder: [{ max: 20, ms: 10 * 60e3 }, { max: 100, ms: 24 * 3600e3 }],
+  reorderOrder: [{ max: 3, ms: 3600e3 }, { max: 6, ms: 24 * 3600e3 }], // per order
+  reorderMB: 8000, // megabytes of files copied by "Order again", the whole shop, per day
   draftSave: [{ max: 200, ms: 10 * 60e3 }],
   // AI background removal (about 2 s of server time each).
   removeBg: [{ max: 20, ms: 10 * 60e3 }, { max: 80, ms: 24 * 3600e3 }],
@@ -1600,7 +1605,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     } catch (e) {
       throw new HttpError(404, 'designNotFound');
     }
-    const { uploadTokenHash, ...pub } = design; // eslint-disable-line no-unused-vars
+    // A design id is in public picture links: it must not lead to the order (and the customer) it is in.
+    const { uploadTokenHash, orderId, revisionOf, ...pub } = design; // eslint-disable-line no-unused-vars
     const list = design.merge ? readMergeList(design) : null;
     res.json({ ...pub, editor, ...(list ? { mergeList: list } : {}) });
   });
@@ -2328,16 +2334,19 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     await checkCaptcha(req);
     const key = customers.loginKey(login);
     const cust = key && customerList().find((x) => (key.phone ? x.phone === key.phone : x.email === key.email));
-    // The per-account lock counts wrong passwords only (signing in correctly never locks the owner out).
-    if (cust) {
-      const wait = limiter.check(`accountLoginId:${cust.id}`, LIMITS.accountLoginId);
+    // The per-login lock counts wrong passwords only (signing in correctly never locks the owner out).
+    // It is kept for the typed phone / email whether or not there is an account, so a lock doesn't
+    // tell anyone that an account exists.
+    const who = key ? `l:${key.phone || key.email}` : null;
+    if (who) {
+      const wait = limiter.check(`accountLoginId:${who}`, LIMITS.accountLoginId);
       if (typeof wait === 'number') throw new HttpError(429, wait > 90 ? 'tooManyWait' : 'tooFast', { min: Math.ceil(wait / 60) });
     }
     // Same answer whether the account exists or not.
     if (!cust) customers.hashPassword(String(password || '')); // same time as a real check
     if (!cust || !customers.checkPassword(cust, password)) {
       limitHit('accountLogin', req.ip);
-      if (cust) limitHit('accountLoginId', cust.id);
+      if (who) limitHit('accountLoginId', who);
       throw new HttpError(401, 'acctWrong');
     }
     setSession(req, res, cust);
@@ -2463,12 +2472,16 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
 
   // The cart asks for today's prices before the customer orders.
   app.post('/api/cart/quote', express.json({ limit: '20kb' }), (req, res) => {
+    // Coupon codes that don't work count per visitor (codes can't be guessed by trying thousands);
+    // a working code re-checked on every cart visit doesn't.
+    const tryingCode = typeof (req.body || {}).couponCode === 'string' && req.body.couponCode.trim() !== '';
+    if (tryingCode) limitCheck(req, 'couponTry');
     const ids = Array.isArray((req.body || {}).designIds) ? req.body.designIds.slice(0, MAX_ITEMS_PER_ORDER) : [];
     const items = ids.map((id) => {
       const d = typeof id === 'string' && UUID_RE.test(id) ? store.getDesign(id) : null;
       const price = designPrice(d);
       // Already ordered (e.g. the answer to the order got lost): the cart can take the customer to it.
-      return { designId: String(id).slice(0, 40), price, gone: price === null, ...(d && d.orderId ? { orderedIn: d.orderId } : {}) };
+      return { designId: String(id).slice(0, 40), price, gone: price === null, ...(d && d.orderId ? { ordered: true } : {}) };
     });
     const subtotal = round2(items.reduce((n, i) => n + (i.price || 0), 0));
     const lines = items.filter((i) => !i.gone).map((i) => couponLine(store.getDesign(i.designId), i.price));
@@ -2489,6 +2502,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     // `shipping` includes the express fee; `delivery` says how fast and by which day.
     const shipping = round2(baseShipping + (lines.length ? delivery.fee : 0));
     const deliveryOptions = ['standard', 'express'].map((s) => withSampleDays(deliveryFor(s), (req.body || {}).sample === true));
+    if (tryingCode && couponError) limitHit('couponTry', req.ip);
     res.json({ items, subtotal, discount, coupon, couponError, shipping, baseShipping, delivery, deliveryOptions, total: round2(subtotal - discount + shipping), freeShippingOver: FREE_SHIPPING_OVER, shippingFlat: SHIPPING_FLAT });
   });
 
@@ -2660,13 +2674,18 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     // Books: the AI redraws every page with the child, in the background.
     for (const item of order.items) if (item.kind === 'book') queueRedraw(order, item);
     // Tell the shop and the customer, after answering: sending never holds up or fails an order.
-    if (limiter.hit('notify:*', LIMITS.notify)) {
-      console.warn(`[notify] skipped alerts for ${order.number}: too many orders this hour`);
+    // The shop's alerts have an hourly budget for the whole shop; the customer's confirmation is always
+    // sent, with a limit per email address (nobody can use the shop to flood someone's inbox).
+    const toShop = !limiter.hit('notify:*', LIMITS.notify);
+    const email = String(order.customer.email || '').toLowerCase();
+    const toCustomer = !email || (!limiter.hit(`notifyCustomer:${email}`, LIMITS.notifyCustomer) && !limiter.hit('notifyCustomerAll:*', LIMITS.notifyCustomerAll));
+    if (!toShop) console.warn(`[notify] skipped the shop's alerts for ${order.number}: too many orders this hour (the order is in the admin)`);
+    if (!toShop && !toCustomer) {
       order.notifications = { skipped: 'too many orders this hour', at: new Date().toISOString() };
       store.save();
       return;
     }
-    notify.orderPlaced(order, { origin: linkBase(req), lang: order.lang })
+    notify.orderPlaced(order, { origin: linkBase(req), lang: order.lang, admin: toShop, customer: toCustomer })
       .then((result) => {
         order.notifications = { ...result, at: new Date().toISOString() };
         store.save();
@@ -2712,7 +2731,6 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (!item) throw new HttpError(404, 'itemNotFound');
     if (item.status !== 'changes_requested') throw new HttpError(409, 'reviseNotNeeded');
     if (item.kind) throw new HttpError(409, 'reviseNotEditable'); // books, photo sets, film sheets
-    const old = store.getDesign(item.designId);
     const id = (req.body || {}).designId;
     const d = typeof id === 'string' && UUID_RE.test(id) && store.getDesign(id);
     if (!d || d.kind || (d.status && d.status !== 'ready')) throw new HttpError(400, 'designGone');
@@ -2720,22 +2738,31 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (d.productId !== item.productId) throw new HttpError(409, 'reviseOtherProduct');
     const fields = designItemFields(d);
     if (Math.abs(fields.price - item.price) > 0.009) throw new HttpError(409, 'revisePrice', { was: item.price, now: fields.price });
-    const now = new Date().toISOString();
-    // The new design belongs to this order now (it can't be ordered again), as the next version.
-    d.orderId = order.id;
-    d.version = ((old && old.version) || 1) + 1;
-    d.revisionOf = item.designId;
-    // The line now describes the new design (what the old one had and this one hasn't goes).
-    for (const k of ['quantities', 'merge', 'method', 'emb', 'options', 'imports', 'rightsConfirmedAt', 'pattern', 'copies', 'unitPrice']) delete item[k];
-    Object.assign(item, fields);
-    item.preflight = d.preflight ? { status: d.preflight.status, checks: d.preflight.checks } : null;
-    item.status = 'review';
-    item.review = { needed: true, reasons: [...new Set(['revised', ...reviewReasons(d, {})])], status: 'pending' };
-    item.approvals = [...(item.approvals || []), { action: 'revised', by: 'customer', at: now, proofHash: proofHashOf(d), version: d.version }];
-    item.history.push({ status: 'review', at: now });
-    delete item.proofToken;
-    store.save();
-    res.json(publicOrder(order));
+    // Checked again and changed under the store's lock, on the latest data (another copy of the app
+    // may have answered the same item or ordered the same design a moment ago).
+    store.mutate((db) => {
+      const o = db.orders.find((x) => x.id === order.id);
+      const it = o && o.items.find((x) => x.id === item.id);
+      const nd = db.designs[d.id];
+      if (!it || it.status !== 'changes_requested') throw new HttpError(409, 'reviseNotNeeded');
+      if (!nd || nd.orderId) throw new HttpError(409, 'designOrdered');
+      const prev = db.designs[it.designId];
+      const now = new Date().toISOString();
+      // The new design belongs to this order now (it can't be ordered again), as the next version.
+      nd.orderId = o.id;
+      nd.version = ((prev && prev.version) || 1) + 1;
+      nd.revisionOf = it.designId;
+      // The line now describes the new design (what the old one had and this one hasn't goes).
+      for (const k of ['quantities', 'merge', 'method', 'emb', 'options', 'imports', 'rightsConfirmedAt', 'pattern', 'copies', 'unitPrice']) delete it[k];
+      Object.assign(it, fields);
+      it.preflight = nd.preflight ? { status: nd.preflight.status, checks: nd.preflight.checks } : null;
+      it.status = 'review';
+      it.review = { needed: true, reasons: [...new Set(['revised', ...reviewReasons(nd, {})])], status: 'pending' };
+      it.approvals = [...(it.approvals || []), { action: 'revised', by: 'customer', at: now, proofHash: proofHashOf(nd), version: nd.version }];
+      it.history.push({ status: 'review', at: now });
+      delete it.proofToken;
+    });
+    res.json(publicOrder(store.getOrder(order.id)));
   });
 
   app.get('/api/orders/:id', (req, res) => {
@@ -2747,6 +2774,18 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   // ---------- After the order: order again, drafts on the account, shipping ----------
   // Derived files that carry the old order's number or are cheap to make again.
   const STALE_COPY = /^(book-print\.pdf|book-preview\.pdf|preview-v\d+\.pdf|merge-print(-marks)?\.pdf|merge-copies\.zip|photos-v\d+\.zip)$/;
+  /** How many bytes a folder holds (its files, one level of sub-folders deep is plenty here). */
+  function dirBytes(dir, depth = 0) {
+    let n = 0;
+    try {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const f = path.join(dir, e.name);
+        if (e.isFile()) n += fs.statSync(f).size;
+        else if (e.isDirectory() && depth < 2) n += dirBytes(f, depth + 1);
+      }
+    } catch (err) { /* gone */ }
+    return n;
+  }
   /** An exact copy of a saved design (files included), not ordered yet. Returns { design, token }. */
   function copyDesign(src) {
     const token = crypto.randomBytes(24).toString('hex');
@@ -2783,6 +2822,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const order = UUID_RE.test(req.params.id) && store.getOrder(req.params.id);
     if (!order) throw new HttpError(404, 'orderNotFound');
     rateLimit(req, 'reorder');
+    // Each order again copies every file: a few times per order a day, and a shop-wide daily budget of
+    // copied megabytes, so repeated requests can't fill the disk.
+    rateLimit(req, 'reorderOrder', order.id);
+    const mb = Math.ceil(order.items.reduce((n, it) => n + dirBytes(store.designDir(it.designId)), 0) / 1e6);
+    if (!takeShopBudget('reorderMB', LIMITS.reorderMB, Math.max(1, mb))) throw new HttpError(429, 'tooManyWait', { min: 60 });
     const items = [];
     const skipped = [];
     order.items.forEach((it, i) => {
@@ -3042,10 +3086,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   // session token (Authorization: Bearer). 5 wrong passwords lock that
   // visitor out for 15 minutes.
   app.post('/api/admin/login', express.json({ limit: '2kb' }), (req, res) => {
-    const result = auth.login(req.ip, (req.body || {}).password);
+    const mark = (/(?:^|;\s*)pod-admin-device=([^;]+)/.exec(req.get('cookie') || '') || [])[1];
+    const result = auth.login(req.ip, (req.body || {}).password, { knownDevice: auth.knownDevice(mark) });
     if (!result) throw new HttpError(401, 'wrongPassword');
     if (result.wait) throw new HttpError(429, 'tooManyLogins', { min: Math.ceil(result.wait / 60) });
     res.set('Cache-Control', 'no-store');
+    // This browser is now known: a flood of wrong passwords from elsewhere won't lock the owner out of it.
+    res.append('Set-Cookie', `pod-admin-device=${auth.deviceMark()}; Path=/api/admin/login; Max-Age=${180 * 24 * 3600}; HttpOnly; SameSite=Strict${isHttps(req) ? '; Secure' : ''}`);
     res.json({ token: result.token, expiresAt: new Date(result.expiresAt).toISOString(), weakPassword: auth.weak });
   });
   app.post('/api/admin/logout', (req, res) => {

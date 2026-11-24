@@ -215,6 +215,7 @@ window.POD_STRINGS = {
   'msg.network': ['No internet connection. Check your connection and try again.', 'مفيش اتصال بالإنترنت. اتأكد من الاتصال وحاول تاني.'],
   'msg.requestFailed': ['Something went wrong ({status}). Please try again.', 'حصلت مشكلة ({status}). حاول تاني.'],
   'cart.gone': ['Removed from your cart because the design is no longer available: {list}', 'اتشال من السلة لأن التصميم مبقاش متاح: {list}'],
+  'cart.alreadyOrdered': ['An item was already ordered (from another tab or device), so it left the cart. Your orders are on your account page.', 'فيه منتج اتطلب خلاص (من تاب أو جهاز تاني)، فاتشال من السلة. طلباتك في صفحة حسابك.'],
   'cart.pricesUpdated': ['Prices were updated to today’s prices.', 'الأسعار اتحدّثت لأسعار النهارده.'],
   'notFound.title': ['Page not found', 'الصفحة مش موجودة'],
   'notFound.text': ['The link may be old or mistyped. You can start from our products.', 'ممكن يكون الرابط قديم أو فيه غلطة. ابدأ من منتجاتنا.'],

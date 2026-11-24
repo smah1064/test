@@ -393,8 +393,12 @@
         } catch (e) {
           who = null;
         }
-        // Another customer than the last one here: their drafts in this browser go.
-        if (who && owner() && owner() !== who) await raw.clear();
+        // Another customer than the last one here: their drafts and cart in this browser go.
+        if (who && owner() && owner() !== who) {
+          await raw.clear();
+          try { localStorage.removeItem(CART_KEY); localStorage.removeItem('pod-cart-base'); } catch (e) { /* private mode */ }
+          updateCartBadge();
+        }
         if (who !== null) setOwner(who);
         return who;
       })());

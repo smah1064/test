@@ -238,7 +238,7 @@ async function sendWhatsApp(cfg, text) {
 }
 
 /** Send every configured notification for a new order. Returns a result per channel. */
-async function orderPlaced(order, { origin, lang }) {
+async function orderPlaced(order, { origin, lang, admin = true, customer = true }) {
   const cfg = config();
   const base = cfg.siteUrl || origin || '';
   const links = { admin: base ? `${base}/admin` : '', track: base ? `${base}/order?id=${order.id}` : '' };
@@ -257,9 +257,9 @@ async function orderPlaced(order, { origin, lang }) {
   };
   const st = status();
   await Promise.all([
-    run('adminWhatsApp', st.adminWhatsApp, () => sendWhatsApp(cfg, adminWhatsAppText(order, links, adminLang))),
-    run('adminEmail', st.adminEmail, () => sendEmail(cfg, cfg.adminEmail, L[adminLang].adminSubject(order.number, money(order.total, adminLang)), emailHtml(order, links, adminLang, true), emailText(order, links, adminLang, true))),
-    run('customerEmail', st.customerEmail && Boolean(order.customer.email), () => sendEmail(cfg, order.customer.email, L[custLang].thanksSubject(order.number), emailHtml(order, links, custLang, false), emailText(order, links, custLang, false))),
+    run('adminWhatsApp', admin && st.adminWhatsApp, () => sendWhatsApp(cfg, adminWhatsAppText(order, links, adminLang))),
+    run('adminEmail', admin && st.adminEmail, () => sendEmail(cfg, cfg.adminEmail, L[adminLang].adminSubject(order.number, money(order.total, adminLang)), emailHtml(order, links, adminLang, true), emailText(order, links, adminLang, true))),
+    run('customerEmail', customer && st.customerEmail && Boolean(order.customer.email), () => sendEmail(cfg, order.customer.email, L[custLang].thanksSubject(order.number), emailHtml(order, links, custLang, false), emailText(order, links, custLang, false))),
   ]);
   return result;
 }

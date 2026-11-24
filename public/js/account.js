@@ -23,7 +23,12 @@
     try {
       const before = localStorage.getItem('pod-acct');
       // Someone else signed in on this browser: the last customer's drafts kept here go.
-      if (me && before && before !== '1' && before !== me.id) await POD.drafts.clearLocal();
+      if (me && before && before !== '1' && before !== me.id) {
+        await POD.drafts.clearLocal();
+        // …and their cart (it must not join the new customer's account).
+        localStorage.removeItem('pod-cart-base');
+        POD.setCart([]);
+      }
       if (me) localStorage.setItem('pod-acct', me.id);
       else localStorage.removeItem('pod-acct');
     } catch (e) { /* private mode */ }

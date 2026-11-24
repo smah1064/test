@@ -165,8 +165,28 @@ const attr = (tag, name) => {
   return m ? decode(m[2] ?? m[3] ?? m[4] ?? '') : '';
 };
 
+/** The JSON-LD blocks of a page, found by scanning forward (a regular expression over a crafted page could take minutes). */
+function ldJsonBlocks(html) {
+  const out = [];
+  const low = html.toLowerCase();
+  let i = 0;
+  while (out.length < 20) {
+    i = low.indexOf('<script', i);
+    if (i === -1) break;
+    const end = low.indexOf('>', i);
+    if (end === -1) break;
+    const close = low.indexOf('</script', end);
+    if (close === -1) break;
+    if (low.slice(i, end).includes('application/ld+json')) out.push(html.slice(end + 1, close));
+    i = close + 8;
+  }
+  return out;
+}
+
 /** The main pictures of a product page, best first (at most 8), and its title. */
 function pageImages(html, pageUrl) {
+  // Pictures and titles are near the top; the rest of a very big page is not read.
+  html = String(html).slice(0, 600000);
   const found = [];
   const add = (u) => {
     if (!u || typeof u !== 'string' || u.startsWith('data:')) return;
@@ -177,13 +197,13 @@ function pageImages(html, pageUrl) {
     } catch (e) { /* not a link */ }
   };
   // 1. Share pictures (what the shop chose to show in link previews).
-  for (const tag of html.match(/<meta\b[^>]*>/gi) || []) {
+  for (const tag of html.match(/<meta\b[^<>]{0,2000}>/gi) || []) {
     const key = (attr(tag, 'property') || attr(tag, 'name') || attr(tag, 'itemprop')).toLowerCase();
     if (['og:image', 'og:image:secure_url', 'og:image:url', 'twitter:image', 'twitter:image:src', 'image'].includes(key)) add(attr(tag, 'content'));
   }
-  for (const tag of html.match(/<link\b[^>]*>/gi) || []) if (/image_src/i.test(attr(tag, 'rel'))) add(attr(tag, 'href'));
+  for (const tag of html.match(/<link\b[^<>]{0,2000}>/gi) || []) if (/image_src/i.test(attr(tag, 'rel'))) add(attr(tag, 'href'));
   // 2. Product data (schema.org JSON-LD).
-  for (const m of html.matchAll(/<script[^>]+application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)) {
+  for (const block of ldJsonBlocks(html)) {
     try {
       const walk = (v) => {
         if (!v || typeof v !== 'object') return;
@@ -194,11 +214,11 @@ function pageImages(html, pageUrl) {
         else if (img && typeof img === 'object') add(img.url || img.contentUrl);
         for (const k of ['@graph', 'offers', 'hasVariant', 'mainEntity']) walk(v[k]);
       };
-      walk(JSON.parse(m[1].trim()));
+      walk(JSON.parse(block.trim()));
     } catch (e) { /* broken JSON-LD */ }
   }
   // 3. Big pictures in the page (product galleries), skipping icons and sprites.
-  for (const tag of html.match(/<img\b[^>]*>/gi) || []) {
+  for (const tag of html.match(/<img\b[^<>]{0,4000}>/gi) || []) {
     if (found.length >= 8) break;
     const w = Number(attr(tag, 'width')) || 0;
     if (w && w < 200) continue;
@@ -206,8 +226,8 @@ function pageImages(html, pageUrl) {
     if (!src || /sprite|logo|icon|avatar|pixel|badge|\.svg(\?|$)/i.test(src)) continue;
     add(src);
   }
-  const t = /<meta[^>]+property=["']og:title["'][^>]*>/i.exec(html);
-  const title = (t && attr(t[0], 'content')) || ((/<title[^>]*>([^<]*)<\/title>/i.exec(html) || [])[1] || '');
+  const t = (html.match(/<meta\b[^<>]{0,2000}>/gi) || []).find((tag) => attr(tag, 'property').toLowerCase() === 'og:title');
+  const title = (t && attr(t, 'content')) || ((/<title\b[^<>]{0,200}>([^<]{0,1000})<\/title>/i.exec(html) || [])[1] || '');
   return { title: decode(title).trim().slice(0, 200), images: found.slice(0, 8) };
 }
 

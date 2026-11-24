@@ -180,16 +180,20 @@ class SharedLimiter {
     }
     return 0;
   }
-  /** Seconds to wait if `key` is over a limit, else { list, now } (like RateLimiter). */
+  /**
+   * Seconds to wait if `key` is over a limit, else { list, now } (like RateLimiter). Attempts that
+   * couldn't be written to the file (disk full, a broken file) were counted in memory: both count.
+   */
   check(key, rules) {
+    const now = Date.now();
+    let list = [];
     try {
-      const now = Date.now();
-      const list = (this.read()[this.key(key)] || []).filter((tm) => typeof tm === 'number');
-      const wait = SharedLimiter.judge(list, rules, now);
-      return wait || { list, now };
-    } catch (e) {
-      return this.memory.check(key, rules);
-    }
+      list = (this.read()[this.key(key)] || []).filter((tm) => typeof tm === 'number');
+    } catch (e) { /* only the memory counts */ }
+    const mem = (this.memory.hits.get(key) || []).filter((tm) => typeof tm === 'number');
+    const all = [...list, ...mem].sort((a, b) => a - b);
+    const wait = SharedLimiter.judge(all, rules, now);
+    return wait || { list: all, now };
   }
   /** Records one action; returns seconds to wait if it is over a limit (and does not record it). */
   hit(key, rules) {
@@ -205,6 +209,11 @@ class SharedLimiter {
         return 0;
       });
     } catch (e) {
+      if (!this.warned) console.warn(`[limits] can't use ${this.file} (${e.code || e.message}): counting sign-in attempts in memory`);
+      this.warned = true;
+      // Counted in memory, on top of what the file still says.
+      const seen = this.check(key, rules);
+      if (typeof seen === 'number') return seen;
       return this.memory.hit(key, rules);
     }
   }
@@ -280,15 +289,29 @@ class AdminAuth {
     this.fails = limiter || (dataDir ? new SharedLimiter(path.join(dataDir, '.signin-limits.json')) : new RateLimiter());
   }
   /** Seconds until this visitor may try again (0 = allowed). */
-  lockedFor(ip) {
-    const all = this.fails.check('admin:*', ADMIN_ALL_RULES);
+  lockedFor(ip, { knownDevice = false } = {}) {
+    // The shop-wide lock (many wrong passwords from everywhere) doesn't stop the owner on a browser
+    // they signed in from before: otherwise anyone could lock them out for an hour.
+    const all = knownDevice ? 0 : this.fails.check('admin:*', ADMIN_ALL_RULES);
     if (typeof all === 'number') return all;
     const one = this.fails.check(`admin:${ip}`, ADMIN_IP_RULES);
     return typeof one === 'number' ? one : 0;
   }
   /** Returns { token, expiresAt } or { wait } / null for a wrong password. */
-  login(ip, password) {
-    const wait = this.lockedFor(ip);
+  /** A signed "signed in from this browser before" mark (a cookie, 180 days). */
+  deviceMark() {
+    const exp = (Date.now() + 180 * 24 * 3600e3).toString(36);
+    return `${exp}.${this.sign(`device.${exp}`)}`;
+  }
+  knownDevice(mark) {
+    const m = /^([0-9a-z]+)\.([A-Za-z0-9_-]+)$/.exec(mark || '');
+    if (!m || parseInt(m[1], 36) < Date.now()) return false;
+    const good = Buffer.from(this.sign(`device.${m[1]}`));
+    const given = Buffer.from(m[2]);
+    return good.length === given.length && crypto.timingSafeEqual(good, given);
+  }
+  login(ip, password, { knownDevice = false } = {}) {
+    const wait = this.lockedFor(ip, { knownDevice });
     if (wait) return { wait };
     const ok = crypto.timingSafeEqual(sha256(typeof password === 'string' ? password : ''), this.hash);
     if (!ok) {
@@ -459,10 +482,37 @@ function sanitizeSvg(text) {
     emit(`<${name}${kept.join('')}${selfClose ? '/>' : '>'}`);
   }
   // CSS that could load from elsewhere (embedded fonts and images are data: URLs).
-  out = out.replace(/url\(\s*(?!['"]?\s*(?:data:|#))[^)]*\)/gi, 'none');
-  out = out.replace(/@import[^;]*;?/gi, '');
+  out = stripCssLoads(out);
   out = out.replace(/(javascript|vbscript):/gi, '');
   return out;
+}
+
+/**
+ * url(...) that isn't data: or #id becomes none, and @import ...; goes. A forward scan, so a crafted
+ * file ("url(" thousands of times with no ")") takes linear time; an unfinished one drops the rest.
+ */
+function stripCssLoads(s) {
+  const low = s.toLowerCase();
+  let out = '';
+  let i = 0;
+  for (;;) {
+    const u = low.indexOf('url(', i);
+    const m = low.indexOf('@import', i);
+    if (u === -1 && m === -1) break;
+    if (m !== -1 && (u === -1 || m < u)) {
+      const semi = low.indexOf(';', m);
+      out += s.slice(i, m);
+      if (semi === -1) return out;
+      i = semi + 1;
+      continue;
+    }
+    const close = low.indexOf(')', u);
+    if (close === -1) return out + s.slice(i, u) + 'none';
+    const inner = low.slice(u + 4, close).replace(/^\s*['"]?\s*/, '');
+    out += s.slice(i, u) + (inner.startsWith('data:') || inner.startsWith('#') ? s.slice(u, close + 1) : 'none');
+    i = close + 1;
+  }
+  return out + s.slice(i);
 }
 
 // ---------- Clean-up ----------
