@@ -37,6 +37,7 @@ const CATEGORIES = [
   { id: 'business', name: t('Business', 'للأعمال') },
   { id: 'kids', name: t('Kids books', 'كتب أطفال') },
   { id: 'textiles', name: t('Fabric & home textiles', 'أقمشة ومفروشات') },
+  { id: 'photos', name: t('Photo prints', 'طباعة صور') },
 ];
 
 const C = {
@@ -1164,6 +1165,51 @@ PRODUCTS.push(
   },
 );
 
+// ---------- Photo prints: many photos in one order, ordered on the photos page ----------
+// The customer picks photos, each is cropped to its size in the browser and sent as a
+// print-ready JPEG at 300 DPI (border drawn in), with the copies of each. One cart item.
+const PHOTO_SIZES = [
+  { id: '10x15', cm: [10, 15], surcharge: 0 },
+  { id: '13x18', cm: [13, 18], surcharge: 10 },
+  { id: '15x20', cm: [15, 20], surcharge: 20 },
+  { id: '20x30', cm: [20, 30], surcharge: 55 },
+];
+PRODUCTS.push({
+  id: 'photoprints',
+  kind: 'photoset',
+  category: 'photos',
+  name: t('Photo Prints', 'طباعة الصور'),
+  description: t('Your photos printed on glossy or matte photo paper, from 10 × 15 to 20 × 30 cm. Pick many at once from your phone.', 'صورك مطبوعة على ورق فوتوغرافي لامع أو مطفي، من 10 × 15 لحد 20 × 30 سم. اختار صور كتير مرة واحدة من موبايلك.'),
+  basePrice: 15,
+  colorLabel: t('Paper', 'الورق'),
+  colors: [
+    { id: 'gloss', name: t('Glossy', 'لامع'), hex: '#ffffff' },
+    { id: 'matte', name: t('Matte', 'مطفي'), hex: '#f4f4f2' },
+  ],
+  sizes: PHOTO_SIZES.map((z) => ({ id: z.id, label: t(`${z.cm[0]} × ${z.cm[1]} cm`, `${z.cm[0]} × ${z.cm[1]} سم`), surcharge: z.surcharge, cm: z.cm })),
+  options: [{
+    id: 'border',
+    name: t('Border', 'الإطار'),
+    choices: [
+      { id: 'none', name: t('Borderless', 'بدون إطار'), price: 0 },
+      { id: 'white', name: t('White border', 'إطار أبيض'), price: 0 },
+    ],
+  }],
+  photo: { dpi: 300, borderMm: 4, maxPhotos: 100, maxCopies: 50, lowDpi: 150 },
+  sides: [{
+    id: 'front',
+    name: t('Photos', 'الصور'),
+    svg: sv(
+      '<rect x="150" y="120" width="260" height="360" rx="4" fill="#000" opacity=".10" transform="rotate(8 280 300)"/>' +
+        '<rect x="140" y="110" width="260" height="360" rx="4" fill="#ffffff" stroke="{{L}}" stroke-width="2" transform="rotate(8 270 290)"/>' +
+        '<rect x="110" y="130" width="260" height="360" rx="4" fill="#ffffff" stroke="{{L}}" stroke-width="2"/>' +
+        '<rect x="122" y="142" width="236" height="300" fill="#9fd3f4"/><path d="M122 442 L200 340 L260 400 L310 350 L358 410 L358 442 Z" fill="#5aa35a"/><circle cx="310" cy="200" r="26" fill="#ffd54a"/>'
+    ),
+    printArea: { x: 122, y: 142, w: 236, h: 300 },
+    printWidthIn: 3.94,
+  }],
+});
+
 // ---------- Canvas prints (gallery-wrapped on a 1.5 in wooden frame) ----------
 // The print file includes a 1.75 in band round the front (the frame's depth
 // plus the fold at the back). The edge style decides what goes on that band:
@@ -1433,6 +1479,7 @@ const PRODUCTION = {
   paperbags: { process: 'uv', safeIn: 0.2, bleedIn: 0, model: { type: 'card', material: 'paper', depthIn: 3.9 } },
   invoicebook: { process: 'paper', safeIn: 0.2, bleedIn: 0, model: { type: 'block', depthIn: 0.6, radiusIn: 0.02, edge: '#eef0f2', material: 'paper' } },
   idcards: { process: 'uv', safeIn: 0.08, bleedIn: 0, model: { type: 'block', depthIn: 0.03, radiusIn: 0.12, edge: '#f4f5f7', material: 'plastic' } },
+  photoprints: { process: 'paper', safeIn: 0, bleedIn: 0, model: { type: 'block', depthIn: 0.01, radiusIn: 0, edge: '#ffffff', material: 'paper' } },
   storybook: { process: 'paper', safeIn: 0.375, bleedIn: 0.125, model: { type: 'block', depthIn: 0.22, radiusIn: 0.04, edge: '#f3efe6', material: 'paper', plainBack: 'color' } },
   coloringbook: { process: 'paper', safeIn: 0.375, bleedIn: 0.125, model: { type: 'block', depthIn: 0.18, radiusIn: 0.04, edge: '#f3efe6', material: 'paper', plainBack: 'color' } },
 };
@@ -1564,7 +1611,7 @@ for (const [pid, sizes] of Object.entries(SIZE_PRINT_SCALE)) {
 // size is a bigger print (posters, mugs...), not canvas prints (the "colour" is
 // the edge, which is part of the print), not fabric by the metre, not books.
 for (const p of PRODUCTS) {
-  const plain = !p.pattern && p.kind !== 'book';
+  const plain = !p.pattern && !p.kind;
   p.mix = {
     colors: plain && p.colors.length > 1 && !(p.model && p.model.type === 'canvas'),
     sizes: plain && p.sizes.length > 1 && !p.sizes.some((sz) => sz.printScale),

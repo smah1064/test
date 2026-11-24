@@ -55,11 +55,12 @@
     toast(e.message, 'error');
     return;
   }
-  // Books are personalised on their own page, not in the editor.
-  const products = catalog.products.filter((x) => x.kind !== 'book');
+  // Books and photo prints have their own pages, not the editor.
+  const products = catalog.products.filter((x) => !x.kind);
   {
     const asked = catalog.products.find((x) => x.id === new URLSearchParams(location.search).get('product'));
     if (asked && asked.kind === 'book') location.replace('/book?b=' + encodeURIComponent(asked.book));
+    if (asked && asked.kind === 'photoset') location.replace('/photos');
   }
   const params = new URLSearchParams(location.search);
 

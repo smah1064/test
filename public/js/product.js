@@ -18,6 +18,10 @@
     location.replace(`/book?b=${encodeURIComponent(product.book)}`);
     return;
   }
+  if (product && product.kind === 'photoset') {
+    location.replace('/photos');
+    return;
+  }
   if (!product) {
     $('pp-missing').hidden = false;
     return;

@@ -109,6 +109,10 @@ function cleanCosts(product, body) {
 
 /** What one order item costs to make, from the product's costs. */
 function itemCostFrom(costs, item) {
+  // Photo prints: each photo's copies at its size's cost (one printed side each).
+  if (item.kind === 'photoset' && Array.isArray(item.photos)) {
+    return itemCostFrom(costs, { ...item, kind: null, photos: null, sides: [{}], quantities: item.photos.map((p) => ({ size: p.size, qty: p.copies })) });
+  }
   // Several colours / sizes: each line costs what its size's blank costs.
   if (item.quantities && item.quantities.length) {
     const parts = item.quantities.map((l) => ({ ...itemCostFrom(costs, { ...item, quantities: null, copies: 1, size: l.size }), qty: l.qty }));

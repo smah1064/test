@@ -54,6 +54,7 @@ Object.assign(window.POD_STRINGS, {
   'pf.outsideSafe.edge': ['The design touches the edge of the print area, so it may look cut off.', 'التصميم لازق في حافة مساحة الطباعة، فممكن يبان مقصوص.'],
   'pf.semiTransparent': ['About {percent}% of the design is see-through (soft shadows, faded edges). Those parts can print patchy.', 'حوالي {percent}% من التصميم شفاف جزئيًا (ظلال ناعمة، أطراف باهتة). الأجزاء دي ممكن تطلع مبقّعة.'],
   'pf.fontFallback': ['A font did not load when the file was made ({fonts}), so the text may use a different font. Check the lettering.', 'خط ما اتحمّلش وقت تجهيز الملف ({fonts})، فممكن الكلام يطلع بخط تاني. راجع شكل الكتابة.'],
+  'pf.photoLowRes': ['{count} photo(s) are low resolution for their print size and may look blurry (photo no. {photos}).', '{count} من الصور دقتها قليلة على مقاس الطباعة وممكن تطلع مش واضحة (صورة رقم {photos}).'],
   'pf.lowResImage': ['The picture “{name}” is only {dpi} DPI at its printed size and may print blurry.', 'الصورة «{name}» دقتها {dpi} نقطة/بوصة بس بالمقاس المطبوع، وممكن تطلع مغبّشة.'],
   'pf.tinyText': ['The text “{name}” is {pt} pt, which is too small to read once printed.', 'الكلام «{name}» حجمه {pt} نقطة، وده أصغر من إنه يتقري بعد الطباعة.'],
   'pf.fileType': ['This artwork was converted from a {type} file. Check the details carefully.', 'التصميم ده اتحوّل من ملف {type}. راجع التفاصيل كويس.'],

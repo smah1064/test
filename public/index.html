@@ -47,6 +47,12 @@
       <span class="btn btn-primary" data-i18n="home.designsCta"></span>
     </a>
 
+    <a class="card promo promo-photos" href="/photos" style="text-decoration:none">
+      <div class="promo-art" aria-hidden="true">📸</div>
+      <div><h2 data-i18n="home.photosTitle"></h2><p data-i18n="home.photosText"></p></div>
+      <span class="btn btn-primary" data-i18n="home.photosCta"></span>
+    </a>
+
     <section id="products">
       <div class="section-title">
         <h2 data-i18n="home.pick"></h2>
@@ -111,7 +117,7 @@
           .map((c) => `<button class="chip ${c.id === cat ? 'active' : ''}" data-cat="${c.id}">${esc(c.name ? tr(c.name) : t('cat.all'))}</button>`)
           .join('');
         grid.innerHTML = products.filter((p) => cat === 'all' || p.category === cat).map((p) => `
-          <a class="card product-card" href="${p.kind === 'book' ? `/book?b=${encodeURIComponent(p.book)}` : `/product?id=${p.id}`}">
+          <a class="card product-card" href="${p.kind === 'book' ? `/book?b=${encodeURIComponent(p.book)}` : p.kind === 'photoset' ? '/photos' : `/product?id=${p.id}`}">
             <div class="thumb">${cardThumb(p)}</div>
             <div class="body">
               <h3>${esc(tr(p.name))}</h3>

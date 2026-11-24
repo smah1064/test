@@ -86,8 +86,8 @@ const REVIEW_STATUSES = ['review', 'awaiting_approval', 'changes_requested'];
 
 const MAX_EDITOR_JSON_BYTES = 40 * 1024 * 1024;
 // merge: a name list's pictures, one per copy (up to 1,000 of them).
-const UPLOAD_LIMITS = { print: 60 * 1024 * 1024, preview: 8 * 1024 * 1024, svg: 40 * 1024 * 1024, source: 60 * 1024 * 1024, merge: 150 * 1024 * 1024 };
-const FILE_RE = /^(front|back)-(print|preview|merge-base)\.png$|^(front|back)-design\.svg$|^(front|back)-merge\.bin$|^src-\d{1,2}\.(png|jpg|webp)$/;
+const UPLOAD_LIMITS = { print: 60 * 1024 * 1024, preview: 8 * 1024 * 1024, svg: 40 * 1024 * 1024, source: 60 * 1024 * 1024, merge: 150 * 1024 * 1024, photo: 15 * 1024 * 1024, thumb: 300 * 1024 };
+const FILE_RE = /^(front|back)-(print|preview|merge-base)\.png$|^(front|back)-design\.svg$|^(front|back)-merge\.bin$|^src-\d{1,2}\.(png|jpg|webp)$|^(photo|thumb)-\d{3}\.jpg$/;
 const SIGNATURES = {
   png: (b) => b.subarray(0, 8).equals(PNG_SIGNATURE),
   jpg: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
@@ -114,6 +114,13 @@ const FILE_LABELS = { print: t('print file', 'ملف الطباعة'), preview: 
 /** Check an uploaded file's type and size; returns its kind. */
 function checkUpload(name, buf) {
   // Name lists: the background and the names (many PNGs back to back) are print files too.
+  // Photo prints: the print-ready JPEG of each photo and its small picture.
+  if (/^(photo|thumb)-\d{3}\.jpg$/.test(name)) {
+    const k = name.startsWith('photo-') ? 'photo' : 'thumb';
+    if (buf.length > UPLOAD_LIMITS[k]) throw new HttpError(413, 'uploadTooLarge');
+    if (buf.length < 16 || !SIGNATURES.jpg(buf)) throw new HttpError(400, 'badPng', { label: name });
+    return k;
+  }
   const kind = name.startsWith('src-') ? 'source' : name.endsWith('.svg') ? 'svg' : name.endsWith('-merge.bin') ? 'merge' : name.includes('-print') || name.includes('-merge') ? 'print' : 'preview';
   if (buf.length > UPLOAD_LIMITS[kind]) throw new HttpError(413, 'uploadTooLarge');
   if (kind === 'source') {
@@ -210,6 +217,7 @@ function publicItem(item) {
     process: item.process || getProduct(item.productId)?.process,
     methods: item.method === 'embroidery' ? ['embroidery'] : getProduct(item.productId)?.methods || [item.process || 'dtf'],
     kind: item.kind || 'product',
+    ...(item.photos ? { photos: item.photos } : {}),
     pieces: item.pieces,
     filmBatch: item.filmBatch || null,
     pattern: item.pattern || null,
@@ -449,6 +457,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const color = product && product.colors.find((c) => c.id === req.params.colorId);
       if (!color) throw new HttpError(404, 'notFound');
       if (product.kind === 'book') return res.redirect(302, `/api/books/${product.book}/sample/0.jpg`);
+      if (product.kind === 'photoset') return res.redirect(302, '/mockups/photoprints-card.webp');
       let img = product.pattern ? await thumbs.patternImage(product, color.hex) : await thumbs.cardImage(product.id, product.sides[0].id, color.hex);
       // No product photo yet: the drawn product in its colour, trimmed, on white.
       if (!img && product.sides[0].svg) img = await drawnThumb(product.sides[0].svg, color.hex);
@@ -514,13 +523,22 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (d.merge) r.push('nameList');
     if (d.method === 'embroidery') r.push('embroidery');
     if (d.imports && d.imports.length) r.push('imported');
-    if (copiesOf(d) >= LARGE_ORDER) r.push('bulk');
+    // Photo sets are many prints by nature: no check by hand just for the number.
+    if (copiesOf(d) >= LARGE_ORDER && d.kind !== 'photoset') r.push('bulk');
     if (sample) r.push('sample');
     return r;
   }
   /** The automatic checks of a design's print files (and the editor's own report), kept on the design. */
   async function runPreflight(d) {
     const mod = pf();
+    if (d.kind === 'photoset') {
+      // Photos too small for their print size (worked out by the photos page from the original).
+      const product = getProduct(d.productId);
+      const min = (product && product.photo && product.photo.lowDpi) || 150;
+      const low = d.photos.filter((p) => p.dpi && p.dpi < min);
+      d.preflight = { status: low.length ? 'warn' : 'pass', checks: low.length ? [{ id: 'photoLowRes', level: 'warn', params: { count: low.length, photos: low.map((p) => p.n).join(', ') } }] : [], at: new Date().toISOString() };
+      return d.preflight;
+    }
     if (!mod || d.kind === 'book' || d.kind === 'gangsheet') {
       d.preflight = { status: 'pass', checks: [], at: new Date().toISOString() };
       return d.preflight;
@@ -537,7 +555,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   }
   /** A small picture of each side's production file (the artwork exactly as printed) for proofs. */
   async function makeProofImages(d) {
-    if (d.kind === 'book' || d.kind === 'gangsheet') return;
+    if (d.kind === 'book' || d.kind === 'gangsheet' || d.kind === 'photoset') return;
     for (const sd of d.sides) {
       try {
         const out = await sharp()(fs.readFileSync(store.designFile(d.id, `${sd.id}-print.png`)), { limitInputPixels: 130e6 })
@@ -577,6 +595,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       sides: d.kind === 'book' ? [] : d.sides.map(side),
       ...(d.kind === 'book' ? { pages: bookFor(d.bookId).pages.map((_, i) => `/api/books/designs/${d.id}/pages/${i}.jpg?v=${d.version || 0}`) } : {}),
       ...(list ? { merge: { count: d.merge.count, columns: list.columns, sample: list.rows.slice(0, 3) } } : {}),
+      ...(d.kind === 'photoset' ? { photos: d.photos.map((p) => ({ n: p.n, size: p.size, copies: p.copies, orientation: p.orientation, dpi: p.dpi, url: `/files/designs/${d.id}/photos/${p.n}.jpg` })), options: d.options || null } : {}),
       preflight: d.preflight ? { status: d.preflight.status, checks: d.preflight.checks } : { status: 'pass', checks: [] },
       review: { needed: reviewReasons(d).length > 0, reasons: reviewReasons(d) },
     };
@@ -987,7 +1006,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   }, express.json({ limit: '60mb' }), (req, res) => {
     const { productId, color, size, sides } = req.body || {};
     const product = getProduct(productId);
-    if (!product) throw new HttpError(400, 'unknownProduct');
+    // Photo prints are ordered on the photos page (POST /api/photosets).
+    if (!product || product.kind === 'photoset') throw new HttpError(400, 'unknownProduct');
     const colorDef = product.colors.find((c) => c.id === color);
     if (!colorDef) throw new HttpError(400, 'unknownColor');
     const sizeDef = product.sizes.find((s) => s.id === size);
@@ -1113,6 +1133,15 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   app.post('/api/designs/:id/complete', async (req, res, next) => {
     try {
       const design = uploadingDesign(req);
+      if (design.kind === 'photoset') {
+        await completePhotoset(design);
+        await runPreflight(design);
+        design.status = 'ready';
+        delete design.uploadTokenHash;
+        store.save();
+        const { uploadTokenHash, ...pub } = design; // eslint-disable-line no-unused-vars
+        return res.json({ ...pub, previewUrl: `/files/designs/${design.id}/front-preview.png` });
+      }
       if (design.kind === 'gangsheet') {
         for (const name of design.expectedFiles) {
           if (!fs.existsSync(store.designFile(design.id, name))) throw new HttpError(400, 'gangMissingFile');
@@ -1549,6 +1578,148 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     res.sendFile(f);
   });
 
+  // ---------- Photo prints: many photos, one cart item ----------
+  // The photos page crops each photo in the browser and uploads a print-ready JPEG at 300 DPI
+  // (border drawn in) plus a small picture; the set is a design of kind "photoset".
+  const photoProduct = () => PRODUCTS.find((p) => p.kind === 'photoset') || null;
+  const photoPx = (cm, dpi) => Math.round((cm / 2.54) * dpi);
+  const pad3 = (n) => String(n).padStart(3, '0');
+  /** "12 photos · 18 prints" in both languages. */
+  const photoSetLabel = (photos, prints) => {
+    const ar = (n, one, two, few, many) => (n === 1 ? one : n === 2 ? two : n <= 10 ? `${n} ${few}` : `${n} ${many}`);
+    return {
+      en: `${photos} photo${photos === 1 ? '' : 's'} · ${prints} print${prints === 1 ? '' : 's'}`,
+      ar: `${ar(photos, 'صورة واحدة', 'صورتين', 'صور', 'صورة')} · ${ar(prints, 'نسخة واحدة', 'نسختين', 'نسخ', 'نسخة')}`,
+    };
+  };
+  app.post('/api/photosets', (req, res, next) => {
+    rateLimit(req, 'designs');
+    rateLimit(req, 'designsAll', '*');
+    next();
+  }, express.json({ limit: '200kb' }), (req, res) => {
+    const product = photoProduct();
+    if (!product) throw new HttpError(404, 'unknownProduct');
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const colorDef = product.colors.find((c) => c.id === body.color);
+    if (!colorDef) throw new HttpError(400, 'unknownColor');
+    const picked = cleanOptions(product, body.options);
+    if (picked.error) throw new HttpError(400, 'badOption');
+    const cfg = product.photo;
+    const asked = Array.isArray(body.photos) ? body.photos : [];
+    if (!asked.length || asked.length > cfg.maxPhotos) throw new HttpError(400, 'photosCount', { max: cfg.maxPhotos });
+    const photos = asked.map((ph, i) => {
+      const p = ph && typeof ph === 'object' ? ph : {};
+      const sizeDef = product.sizes.find((z) => z.id === p.size);
+      if (!sizeDef) throw new HttpError(400, 'unknownSize');
+      const copies = Number(p.copies);
+      if (!Number.isInteger(copies) || copies < 1 || copies > cfg.maxCopies) throw new HttpError(400, 'photoCopies', { max: cfg.maxCopies });
+      const orientation = p.orientation === 'landscape' ? 'landscape' : 'portrait';
+      const [a, b] = [photoPx(sizeDef.cm[0], cfg.dpi), photoPx(sizeDef.cm[1], cfg.dpi)];
+      const dpi = Number.isFinite(Number(p.dpi)) && Number(p.dpi) > 0 ? Math.min(10000, Math.round(Number(p.dpi))) : null;
+      const n = i + 1;
+      return { n, file: `photo-${pad3(n)}.jpg`, thumb: `thumb-${pad3(n)}.jpg`, size: { id: sizeDef.id, label: sizeDef.label }, copies, orientation, px: orientation === 'landscape' ? [b, a] : [a, b], dpi };
+    });
+    const prints = photos.reduce((n, p) => n + p.copies, 0);
+    const token = crypto.randomBytes(24).toString('hex');
+    const design = {
+      id: crypto.randomUUID(),
+      kind: 'photoset',
+      createdAt: new Date().toISOString(),
+      status: 'uploading',
+      uploadTokenHash: sha(token),
+      productId: product.id,
+      productName: product.name,
+      process: product.process,
+      ...(picked.options ? { options: picked.options } : {}),
+      color: { id: colorDef.id, name: colorDef.name, hex: colorDef.hex },
+      size: { id: 'set', label: withOptions(photoSetLabel(photos.length, prints), picked.options) },
+      sides: [{ id: 'front', name: product.sides[0].name }],
+      photos,
+      copies: prints,
+      price: 0,
+      version: 1,
+      currency: CURRENCY,
+      orderId: null,
+    };
+    design.price = designPrice({ ...design, status: 'ready' });
+    if (design.price == null) throw new HttpError(400, 'unknownSize');
+    const files = photos.flatMap((p) => [p.file, p.thumb]);
+    design.expectedFiles = files;
+    store.createDesign(design, { 'editor.json': '{}' });
+    res.status(201).json({ id: design.id, uploadToken: token, files, price: design.price });
+  });
+  /** On /complete: every photo the exact size, then the contact sheet shown in the cart, proof and admin. */
+  async function completePhotoset(design) {
+    for (const p of design.photos) {
+      for (const name of [p.file, p.thumb]) if (!fs.existsSync(store.designFile(design.id, name))) throw new HttpError(400, 'photoMissing', { n: p.n });
+      let meta;
+      try {
+        meta = await sharp()(store.designFile(design.id, p.file)).metadata();
+      } catch (e) {
+        throw new HttpError(400, 'photoSize', { n: p.n });
+      }
+      if (meta.format !== 'jpeg' || meta.width !== p.px[0] || meta.height !== p.px[1]) throw new HttpError(400, 'photoSize', { n: p.n });
+    }
+    const sheet = await photoContactSheet(design);
+    store.writeDesignFile(design.id, 'front-preview.png', sheet);
+    store.writeDesignFile(design.id, 'front-proof.png', sheet);
+    const dpis = design.photos.map((p) => p.dpi).filter(Boolean);
+    design.sides[0].dpi = dpis.length ? Math.min(...dpis) : 300;
+  }
+  /** The photos side by side (at most 36; "+N" for the rest), each with its size and copies. */
+  async function photoContactSheet(design) {
+    const CELL = 240;
+    const shown = design.photos.slice(0, design.photos.length > 36 ? 35 : 36);
+    const more = design.photos.length - shown.length;
+    const count = shown.length + (more ? 1 : 0);
+    const cols = Math.min(6, count);
+    const rows = Math.ceil(count / cols);
+    const tiles = [];
+    for (const [k, p] of shown.entries()) {
+      const x = (k % cols) * CELL;
+      const y = Math.floor(k / cols) * CELL;
+      const pic = await sharp()(store.designFile(design.id, p.thumb)).resize(196, 186, { fit: 'inside' }).toBuffer({ resolveWithObject: true });
+      tiles.push({ input: pic.data, left: x + Math.round((CELL - pic.info.width) / 2), top: y + 8 + Math.round((186 - pic.info.height) / 2) });
+      const label = `${p.n}. ${p.size.id.replace('x', '×')}${p.copies > 1 ? ` ×${p.copies}` : ''}`;
+      tiles.push({ input: Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${CELL}" height="36"><text x="${CELL / 2}" y="24" text-anchor="middle" font-family="sans-serif" font-size="18" fill="#333">${label}</text></svg>`), left: x, top: y + 198 });
+    }
+    if (more) {
+      const k = shown.length;
+      tiles.push({ input: Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${CELL}" height="${CELL}"><rect x="22" y="8" width="196" height="186" rx="8" fill="#e9ecef"/><text x="${CELL / 2}" y="112" text-anchor="middle" font-family="sans-serif" font-size="40" font-weight="700" fill="#555">+${more}</text></svg>`), left: (k % cols) * CELL, top: Math.floor(k / cols) * CELL });
+    }
+    return sharp()({ create: { width: cols * CELL, height: rows * CELL, channels: 3, background: '#f7f7f8' } }).composite(tiles).png({ compressionLevel: 8 }).toBuffer();
+  }
+  // One photo's small picture (for the proof and the admin): private, like the previews.
+  app.get('/files/designs/:id/photos/:n.jpg', (req, res) => {
+    const design = UUID_RE.test(req.params.id) && store.getDesign(req.params.id);
+    const p = design && design.kind === 'photoset' && design.photos.find((x) => String(x.n) === req.params.n);
+    if (!p || design.status !== 'ready') throw new HttpError(404, 'notFound');
+    res.set('Cache-Control', 'private, max-age=3600');
+    res.sendFile(store.designFile(design.id, p.thumb));
+  });
+  /** The print shop's download: every photo, named by size and copies, sorted by size, with a list. */
+  async function photosZip(design, base) {
+    const target = store.designFile(design.id, `photos-v${design.version || 1}.zip`);
+    if (!fs.existsSync(target)) {
+      const product = getProduct(design.productId);
+      const order = (product && product.sizes.map((z) => z.id)) || [];
+      const sorted = [...design.photos].sort((a, b) => order.indexOf(a.size.id) - order.indexOf(b.size.id) || a.n - b.n);
+      const paper = pickEn(design.color.name);
+      const border = design.options && design.options.border ? pickEn(design.options.border.name) : 'Borderless';
+      const list = ['Photo,Size (cm),Copies,Orientation,File', ...sorted.map((p) => [p.n, p.size.id, p.copies, p.orientation, `${p.size.id}/${pad3(p.n)}_${p.size.id}_x${p.copies}.jpg`].join(','))];
+      const totals = order.map((id) => [id, sorted.filter((p) => p.size.id === id).reduce((n, p) => n + p.copies, 0)]).filter(([, n]) => n);
+      const readme = `${base}\r\nPaper: ${paper} · ${border} · 300 DPI, print at 100%\r\n${totals.map(([id, n]) => `${id} cm: ${n} print${n === 1 ? '' : 's'}`).join('\r\n')}\r\n`;
+      async function* gen() {
+        yield { name: 'README.txt', data: Buffer.from(readme) };
+        yield { name: 'list.csv', data: Buffer.from(list.join('\r\n') + '\r\n') };
+        for (const p of sorted) yield { name: `${p.size.id}/${pad3(p.n)}_${p.size.id}_x${p.copies}.jpg`, data: fs.readFileSync(store.designFile(design.id, p.file)) };
+      }
+      // Up to 100 photos of up to 15 MB each (ZIP files stay under 4 GB).
+      await merge.writeZip(target, gen(), { maxBytes: 3.5e9 });
+    }
+    return { path: target, name: `${base}-photos.zip` };
+  }
+
   // ---------- Personalised children's books ----------
   // A book is a design of kind "book": the answers and the child's photo are
   // kept with it, and every page (previews and the print PDF) is drawn on the
@@ -1910,6 +2081,16 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (d.kind === 'gangsheet') return d.price;
     const product = getProduct(d.productId);
     if (!product) return null;
+    if (d.kind === 'photoset') {
+      // Each photo: its size's price (prices the owner changed apply) times its copies.
+      let sum = 0;
+      for (const p of d.photos) {
+        const u = priceFor(product, p.size.id, 1);
+        if (u == null) return null;
+        sum += (u + optionsPrice(product, d.options, p.size.id)) * p.copies;
+      }
+      return round2(sum);
+    }
     const unit = (sizeId) => {
       const p = priceFor(product, sizeId, d.sides.length);
       return p == null ? null : p + embExtra(product, d, sizeId);
@@ -1928,7 +2109,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     return u == null ? null : round2(u * copiesOf(d));
   };
   /** Pieces in a design: one per row of its name list, else the quantities asked for, else one. */
-  const copiesOf = (d) => (!d ? 1 : d.merge ? d.merge.count : d.quantities ? d.quantities.reduce((n, l) => n + l.qty, 0) : 1);
+  const copiesOf = (d) => (!d ? 1 : d.kind === 'photoset' ? d.photos.reduce((n, p) => n + p.copies, 0) : d.merge ? d.merge.count : d.quantities ? d.quantities.reduce((n, l) => n + l.qty, 0) : 1);
   /** A size label followed by the chosen options ({ en, ar }). */
   const withOptions = (label, options) => {
     if (!options) return label;
@@ -2247,6 +2428,22 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const now = new Date().toISOString();
     // One order line per design, always quantity 1: every item is its own print job.
     const items = designs.map((d) => {
+      if (d.kind === 'photoset') {
+        const product = getProduct(d.productId);
+        return {
+          id: crypto.randomUUID(), designId: d.id, kind: 'photoset', productId: d.productId, productName: d.productName,
+          color: d.color, size: d.size, sides: d.sides, process: d.process, price: designPrice({ ...d, status: 'ready', orderId: null }),
+          copies: copiesOf(d), photos: d.photos.map((p) => ({ n: p.n, size: p.size, copies: p.copies, orientation: p.orientation })),
+          // Prints per size (invoice, order page, admin and printing-house messages show them like any multi-size item).
+          quantities: product.sizes.map((z) => ({
+            color: { id: d.color.id, name: d.color.name, hex: d.color.hex }, size: { id: z.id, label: z.label },
+            qty: d.photos.filter((p) => p.size.id === z.id).reduce((n, p) => n + p.copies, 0),
+            unitPrice: round2(priceFor(product, z.id, 1) + optionsPrice(product, d.options, z.id)),
+          })).filter((l) => l.qty),
+          ...(d.options ? { options: JSON.parse(JSON.stringify(d.options)) } : {}),
+          status: 'queued', history: [{ status: 'queued', at: now }],
+        };
+      }
       if (d.kind === 'gangsheet') {
         return {
           id: crypto.randomUUID(), designId: d.id, kind: 'gangsheet', productId: d.productId, productName: d.productName,
@@ -2381,7 +2578,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
 
   // ---------- After the order: order again, drafts on the account, shipping ----------
   // Derived files that carry the old order's number or are cheap to make again.
-  const STALE_COPY = /^(book-print\.pdf|book-preview\.pdf|preview-v\d+\.pdf|merge-print(-marks)?\.pdf|merge-copies\.zip)$/;
+  const STALE_COPY = /^(book-print\.pdf|book-preview\.pdf|preview-v\d+\.pdf|merge-print(-marks)?\.pdf|merge-copies\.zip|photos-v\d+\.zip)$/;
   /** An exact copy of a saved design (files included), not ordered yet. Returns { design, token }. */
   function copyDesign(src) {
     const token = crypto.randomBytes(24).toString('hex');
@@ -2423,7 +2620,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const product = getProduct(it.productId);
       let reason = null;
       if (!d || !fs.existsSync(store.designDir(d.id))) reason = 'filesGone';
-      else if (d.kind !== 'gangsheet' && (!product || !product.colors.some((c) => c.id === d.color.id) || !product.sizes.some((z) => z.id === d.size.id))) reason = 'productGone';
+      else if (d.kind !== 'gangsheet' && (!product || !product.colors.some((c) => c.id === d.color.id) || (d.kind === 'photoset' ? !d.photos.every((p) => product.sizes.some((z) => z.id === p.size.id)) : !product.sizes.some((z) => z.id === d.size.id)))) reason = 'productGone';
       else if (d.photoRemoved) reason = 'photoGone';
       if (reason) {
         skipped.push({ position: i + 1, productName: it.productName, reason });
@@ -2436,7 +2633,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         return;
       }
       design.price = price;
-      if (product) Object.assign(design, pieceInfo(product, design));
+      if (product && d.kind !== 'photoset') Object.assign(design, pieceInfo(product, design));
       store.save();
       items.push(cartEntry(design, token));
     });
@@ -2845,6 +3042,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const target = store.designFile(designId, 'book-print.pdf');
       if (!fs.existsSync(target)) store.writeDesignFile(designId, 'book-print.pdf', await books.bookPdf(bookData(design), { title }));
       return { path: target, name: `${title}.pdf` };
+    }
+    if (design.kind === 'photoset') {
+      const f = format || 'photos-zip';
+      if (f === 'proof') return { path: store.designFile(designId, 'front-proof.png'), name: `${base}-proof.png` };
+      if (f !== 'photos-zip') throw new HttpError(404, 'notFound');
+      return photosZip(design, base);
     }
     if (design.kind === 'gangsheet') {
       const f = format || 'sheet-pdf';
