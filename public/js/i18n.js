@@ -977,6 +977,7 @@ window.POD_STRINGS = {
   'process.uv': ['UV printing. Use the print-ready PDF (or the transparent PNG).', 'طباعة UV. استخدم ملف PDF الجاهز (أو PNG الشفاف).'],
   'process.canvas': ['Canvas printing (latex, eco-solvent or UV). The print file includes the 1.75 in band that wraps round the 1.5 in frame (edge style already applied); stretch it with the front centred.', 'طباعة كانفاس (لاتكس أو إيكو سولفنت أو UV). ملف الطباعة فيه شريط 1.75 بوصة بيلف حوالين الإطار (عمقه 1.5 بوصة) ومطبّق عليه شكل الجوانب؛ اشدّه والواجهة في النص.'],
   'method.canvas': ['Canvas', 'كانفاس'],
+  'process.book': ['Printed book: use the Book PDF (every page with bleed, in order); bind as the cover shows.', 'كتاب مطبوع: استخدم ملف الكتاب PDF (كل الصفحات بالترتيب وبهامش القص)، وجلّده حسب نوع الغلاف.'],
   'process.photo': ['Photo prints on photo paper (glossy or matte, as ordered). Use the ZIP: one folder per size, the copies in each file name.', 'طباعة صور على ورق فوتوغرافي (لامع أو مطفي حسب الطلب). استخدم ملف ZIP: فولدر لكل مقاس، وعدد النسخ في اسم كل ملف.'],
   'admin.photoSpec': ['each photo exactly its size at 300 DPI, border included', 'كل صورة بمقاسها بالظبط على 300 نقطة/بوصة، والإطار جواها'],
   'admin.photoLowRes': ['Some photos are low resolution (the customer was warned): see the proof.', 'في صور دقتها قليلة (العميل اتنبّه): شوف البروفة.'],

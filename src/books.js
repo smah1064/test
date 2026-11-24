@@ -222,7 +222,9 @@ function formatDate(iso, lang, withYear = true) {
   const s = `${d} ${MONTHS[lang][mo - 1]}${withYear ? ` ${y}` : ''}`;
   return lang === 'ar' ? arDigits(s) : s;
 }
-const clean = (v, max) => String(v == null ? '' : v).replace(/[\u0000-\u001f\u007f<>{}\[\]|]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
+// Text answers must be text; invisible direction marks (pasted from chat apps) would turn names backwards.
+const INVISIBLE = /[\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/g;
+const clean = (v, max) => (typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '').replace(INVISIBLE, '').replace(/[\u0000-\u001f\u007f<>{}\[\]|]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
 
 /** Checks and tidies a customer's answers; throws a {field} error for anything missing. */
 function cleanAnswers(book, input) {
@@ -239,7 +241,7 @@ function cleanAnswers(book, input) {
         err.field = q.label;
         throw err;
       }
-    } else if (q.type === 'textarea') v = String(v || '').replace(/[\u0000-\u0009\u000b-\u001f\u007f<>{}\[\]|]/g, ' ').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim().slice(0, q.max);
+    } else if (q.type === 'textarea') v = (typeof v === 'string' ? v : '').replace(INVISIBLE, '').replace(/[\u0000-\u0009\u000b-\u001f\u007f<>{}\[\]|]/g, ' ').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim().slice(0, q.max);
     else v = clean(v, q.max || 40);
     // The books are printed in English: Arabic letters would scramble the sentences.
     if (typeof v === 'string' && /[\u0600-\u06ff\u0750-\u077f\ufb50-\ufdff\ufe70-\ufeff]/.test(v)) {
