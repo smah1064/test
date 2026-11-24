@@ -36,7 +36,7 @@
     <div class="cart-layout" id="cart-layout" hidden>
       <div>
         <div class="card" id="items"></div>
-        <p class="muted small" style="margin-top:12px" data-i18n-html="cart.note"></p>
+        <p class="muted small" style="margin-top:12px" id="cart-note" data-i18n-html="cart.note"></p>
       </div>
 
       <form class="card summary" id="checkout" novalidate>
@@ -269,6 +269,8 @@
         const cart = POD.getCart();
         const focused = document.activeElement && document.activeElement.closest && document.activeElement.closest('#items') ? document.activeElement.id : null;
         document.getElementById('empty').hidden = cart.length > 0;
+        // The note about editing quantities and duplicating designs doesn't apply to photo sets.
+        document.getElementById('cart-note').hidden = cart.length > 0 && cart.every((it) => it.productId === 'photoprints');
         document.getElementById('cart-layout').hidden = cart.length === 0;
         document.getElementById('items').innerHTML = cart.map((item, i) => `
           <div class="cart-entry">

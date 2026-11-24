@@ -37,6 +37,9 @@
     if (c.id === 'exportSize' && params.error) key = 'pf.exportSize.error';
     if (c.id === 'outsideSafe' && !Number(params.mm)) key = 'pf.outsideSafe.edge';
     if (Array.isArray(params.fonts)) params.fonts = params.fonts.join(POD.lang === 'ar' ? '، ' : ', ');
+    // Photo numbers ("4, 8, 12") in the page's digits and list commas.
+    if (typeof params.photos === 'string') params.photos = params.photos.split(/\s*,\s*/).filter(Boolean).map((n) => POD.num(Number(n))).join(POD.lang === 'ar' ? '، ' : ', ');
+    if (typeof params.count === 'number') params.count = POD.num(params.count);
     for (const k of ['dpi', 'mm', 'percent', 'pt', 'widthPx', 'heightPx', 'expectedW', 'expectedH', 'minDpi']) {
       if (typeof params[k] === 'number') params[k] = POD.num(params[k]);
     }
@@ -187,7 +190,7 @@
         ${pages ? pagesHtml(pages) : `
           <h4 class="proof-h">${esc(t('proof.sides'))}</h4>
           <div class="proof-sides">${sides.map((s) => sideHtml(proof, s)).join('')}</div>
-          <p class="proof-legend"><span class="proof-chk" aria-hidden="true"></span>${esc(t('proof.checker'))}${anyBleed ? ` ${esc(t('proof.trimLegend'))}` : ''}</p>`}
+          ${proof.photos ? '' : `<p class="proof-legend"><span class="proof-chk" aria-hidden="true"></span>${esc(t('proof.checker'))}${anyBleed ? ` ${esc(t('proof.trimLegend'))}` : ''}</p>`}`}
         ${mergeHtml(proof.merge)}
       </div>`;
   }

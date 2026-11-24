@@ -408,7 +408,7 @@
     // Option prices may differ: the size lists show prices.
     state.photos.forEach((p) => {
       const card = cardOf(p);
-      if (card) card.querySelectorAll('.ph-size option').forEach((o) => (o.textContent = `${tr(sizeById(o.value).label)} · ${money(unitPrice(o.value))}`));
+      if (card) card.querySelectorAll('.ph-size option').forEach((o) => { const z = sizeById(o.value); o.textContent = `${z.cm ? `${z.cm[0]}×${z.cm[1]}` : tr(z.label)} · ${money(unitPrice(o.value))}`; });
     });
     repaintAll();
     update();

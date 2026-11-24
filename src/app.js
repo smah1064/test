@@ -1627,7 +1627,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   /** "12 photos · 18 prints" in both languages. */
   const photoSetLabel = (photos, prints) => {
     // Arabic counting: 3–10 (and 103–110, 203–210…) take the plural, other numbers the singular.
-    const ar = (n, one, two, few, many) => (n === 1 ? one : n === 2 ? two : n % 100 >= 3 && n % 100 <= 10 ? `${n} ${few}` : `${n} ${many}`);
+    const arN = (n) => String(n).replace(/\d/g, (d) => '٠١٢٣٤٥٦٧٨٩'[d]);
+    const ar = (n, one, two, few, many) => (n === 1 ? one : n === 2 ? two : n % 100 >= 3 && n % 100 <= 10 ? `${arN(n)} ${few}` : `${arN(n)} ${many}`);
     return {
       en: `${photos} photo${photos === 1 ? '' : 's'} · ${prints} print${prints === 1 ? '' : 's'}`,
       ar: `${ar(photos, 'صورة واحدة', 'صورتين', 'صور', 'صورة')} · ${ar(prints, 'نسخة واحدة', 'نسختين', 'نسخ', 'نسخة')}`,
@@ -2533,7 +2534,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
           copies: copiesOf(d), photos: d.photos.map((p) => ({ n: p.n, size: p.size, copies: p.copies, orientation: p.orientation })),
           // Prints per size (invoice, order page, admin and printing-house messages show them like any multi-size item).
           quantities: product.sizes.map((z) => ({
-            color: { id: d.color.id, name: d.color.name, hex: d.color.hex }, size: { id: z.id, label: z.label },
+            // The border (white / none) goes with each size, as it does with the set's own label.
+            color: { id: d.color.id, name: d.color.name, hex: d.color.hex }, size: { id: z.id, label: withOptions(z.label, d.options) },
             qty: d.photos.filter((p) => p.size.id === z.id).reduce((n, p) => n + p.copies, 0),
             unitPrice: round2(priceFor(product, z.id, 1) + optionsPrice(product, d.options, z.id)),
           })).filter((l) => l.qty),

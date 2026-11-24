@@ -101,7 +101,7 @@ test('a finished set: price per photo and copies, contact sheet, proof with a lo
   assert.strictEqual(d.price, 125);
   assert.strictEqual(d.copies, 4);
   assert.strictEqual(d.size.label.en.startsWith('3 photos · 4 prints'), true);
-  assert.match(d.size.label.ar, /^3 صور · 4 نسخ/);
+  assert.match(d.size.label.ar, /^٣ صور · ٤ نسخ/);
   assert.match(d.size.label.en, /White border/);
   const sheet = await fetch(base + d.previewUrl);
   assert.strictEqual(sheet.status, 200);
@@ -137,7 +137,7 @@ test('ordered: one item with every photo, a ZIP for the print shop sorted by siz
   const dispatch = require('../src/dispatch');
   const msg = dispatch.whatsappText({ house: { name: 'X' }, order: { number: order.number, items: [{}] }, item: { ...item, position: 1 }, design: { sides: [] }, files: [], lang: 'en', expires: '2026-12-24T00:00:00Z' });
   assert.match(msg, /\*Quantity:\* 7/);
-  assert.match(msg, /10 × 15 cm ×5/);
+  assert.match(msg, /10 × 15 cm · White border ×5/, 'the border goes with each size');
   // The print shop's ZIP: by size, then photo number, named with the copies; a list and a readme.
   const zip = await admin(`/api/admin/files/${d.id}/front?format=photos-zip`);
   assert.strictEqual(zip.status, 200, await zip.clone().text());
@@ -182,7 +182,7 @@ test('a lost answer to "complete" can be asked again with the same token; Arabic
   const many = [{ size: '10x15', copies: 50, orientation: 'portrait', dpi: 300 }, { size: '10x15', copies: 50, orientation: 'portrait', dpi: 300 }, { size: '10x15', copies: 3, orientation: 'portrait', dpi: 300 }];
   const { created, done } = await makeSet({ photos: many });
   const d = await done.json();
-  assert.match(d.size.label.ar, /^3 صور · 103 نسخ/);
+  assert.match(d.size.label.ar, /^٣ صور · ١٠٣ نسخ/);
   const again = await fetch(`${base}/api/designs/${created.id}/complete`, { method: 'POST', headers: { 'x-upload-token': created.uploadToken } });
   assert.strictEqual(again.status, 200);
   const d2 = await again.json();

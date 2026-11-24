@@ -192,7 +192,7 @@
         <dt>${esc(t('admin.spec.order'))}</dt><dd>${esc(item.orderNumber)} · ${esc(t('admin.spec.itemOf', { i: item.position, n: item.of }))}</dd>
         <dt>${esc(t('admin.spec.product'))}</dt><dd>${esc(tr(item.productName))}</dd>
         ${hasQty(item) ? `<dt>${esc(t('adminQty.title'))}</dt><dd class="qty-dd">${qtyTable(item)}</dd>` : `<dt>${esc(t('admin.spec.colourSize'))}</dt><dd>${esc(tr(item.color.name))} <span class="dot" style="display:inline-block;vertical-align:middle;background:${esc(item.color.hex)}"></span> · ${esc(tr(item.size.label))}</dd>`}
-        ${item.kind === 'photoset' ? `<dt>${esc(t('fmt.photos-zip'))}</dt><dd>${esc(t('admin.photoFiles', { n: POD.num((item.photos || []).length), prints: POD.num((item.photos || []).reduce((n, p) => n + p.copies, 0)) }))} · ${esc(t('admin.photoSpec'))}${item.sides[0] && item.sides[0].dpi && item.sides[0].dpi < 150 ? `<div class="small" style="color:var(--warn);margin-top:4px">⚠ ${esc(t('admin.photoLowRes'))}</div>` : ''}</dd>` : item.sides.map((s) => `<dt>${esc(t('admin.spec.print', { side: tr(s.name) }))}</dt><dd><bdi dir="ltr">${cm(s.widthIn)} × ${cm(s.heightIn)} cm (${s.widthIn} × ${s.heightIn} in)${s.bleedIn ? ' ' + esc(t('admin.bleed', { mm: Math.round(s.bleedIn * 25.4) })) : ''} · ${s.widthPx} × ${s.heightPx} px · ${s.dpi} DPI · sRGB</bdi>${s.offsetCm ? `<div class="placement-note">📍 ${esc(t('admin.placement', { v: placementText(s.offsetCm) }))}</div>` : ''}</dd>`).join('')}
+        ${item.kind === 'photoset' ? `<dt>${esc(t('fmt.photos-zip'))}</dt><dd>${esc(t('admin.photoFiles', { n: counted('admin.photos', (item.photos || []).length), prints: counted('admin.prints', (item.photos || []).reduce((n, p) => n + p.copies, 0)) }))} · ${esc(t('admin.photoSpec'))}${item.sides[0] && item.sides[0].dpi && item.sides[0].dpi < 150 ? `<div class="small" style="color:var(--warn);margin-top:4px">⚠ ${esc(t('admin.photoLowRes'))}</div>` : ''}</dd>` : item.sides.map((s) => `<dt>${esc(t('admin.spec.print', { side: tr(s.name) }))}</dt><dd><bdi dir="ltr">${cm(s.widthIn)} × ${cm(s.heightIn)} cm (${s.widthIn} × ${s.heightIn} in)${s.bleedIn ? ' ' + esc(t('admin.bleed', { mm: Math.round(s.bleedIn * 25.4) })) : ''} · ${s.widthPx} × ${s.heightPx} px · ${s.dpi} DPI · sRGB</bdi>${s.offsetCm ? `<div class="placement-note">📍 ${esc(t('admin.placement', { v: placementText(s.offsetCm) }))}</div>` : ''}</dd>`).join('')}
         ${item.emb ? `<dt>${esc(t('admin.emb'))}</dt><dd>
           <div><strong>${esc(t('admin.embSummary', { n: POD.num(item.emb.stitches), c: item.emb.colors.length, w: item.emb.widthMm, h: item.emb.heightMm }))}</strong></div>
           <ol class="emb-threads">${item.emb.colors.map((c) => `<li><span class="dot" style="display:inline-block;vertical-align:middle;background:${esc(c.hex)}"></span> ${esc(c.name)} <span class="muted">(${esc(c.hex)} · ${esc(POD.num(c.stitches))})</span></li>`).join('')}</ol>
@@ -241,7 +241,7 @@
     if (item.kind === 'photoset') {
       const prints = (item.photos || []).reduce((n, p) => n + p.copies, 0);
       return `
-        <div class="print-files-block"><div class="small muted" style="font-weight:700;margin-bottom:6px">${esc(t('admin.photoFiles', { n: POD.num((item.photos || []).length), prints: POD.num(prints) }))}</div><div class="print-files">
+        <div class="print-files-block"><div class="small muted" style="font-weight:700;margin-bottom:6px">${esc(t('admin.photoFiles', { n: counted('admin.photos', (item.photos || []).length), prints: counted('admin.prints', prints) }))}</div><div class="print-files">
           ${['photos-zip', 'proof'].map((f, k) => `<button class="btn btn-sm ${k === 0 ? 'btn-primary' : ''}" data-download="${esc(s.printUrl)}?format=${f}">⬇ ${esc(t('fmt.' + f))}${k === 0 ? ` <span class="rec">· ${esc(t('admin.recommended'))}</span>` : ''}</button>`).join('')}
         </div></div>`;
     }
@@ -279,6 +279,11 @@
   /** Name-list files; garments (DTF / DTG) also get the names alone, to print over a plain base. */
   function mergeFormats(item) {
     return ['merge-pdf-marks', 'merge-pdf', 'merge-zip', 'merge-csv', ...(['dtf', 'dtg'].includes(item.process) ? ['merge-names-zip'] : [])];
+  }
+  /** "3 صور", "11 نسخة", "1 photo" (Arabic: 1, 2, 3–10, the rest). */
+  function counted(base, n) {
+    const k = n % 100;
+    return t(`${base}.${n === 1 ? 'one' : n === 2 ? 'two' : k >= 3 && k <= 10 ? 'few' : 'many'}`, { n: POD.num(n) });
   }
   function sendFormats(item) {
     if (item.kind === 'book') return ['book-pdf', 'preview-pdf', 'proof'];
