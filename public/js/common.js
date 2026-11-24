@@ -393,11 +393,11 @@
         } catch (e) {
           who = null;
         }
-        // Another customer than the last one here: their drafts and cart in this browser go.
-        if (who && owner() && owner() !== who) {
+        // Another customer than the last one here, or their session ended without signing out (a shared
+        // phone): nothing of theirs stays in this browser for the next person.
+        if (who !== null && owner() && owner() !== who) {
           await raw.clear();
-          try { localStorage.removeItem(CART_KEY); localStorage.removeItem('pod-cart-base'); } catch (e) { /* private mode */ }
-          updateCartBadge();
+          forgetPersonal();
         }
         if (who !== null) setOwner(who);
         return who;
@@ -522,6 +522,8 @@
         if (who) fetch(url(productId), { method: 'DELETE', credentials: 'same-origin' }).catch(() => {});
       },
       all: local.all,
+      /** Who is signed in ('' a guest, null when the shop couldn't be asked). */
+      whoami: identify,
       /** Forget every draft kept in this browser (signing out, another customer signing in). */
       clearLocal: () => {
         for (const [, job] of timers) clearTimeout(job.timer);
@@ -531,6 +533,21 @@
       },
     };
   })();
+
+  /**
+   * Forget what a customer left in this browser: cart, checkout choices, photos picked for printing and
+   * a storybook's answers (signing out, a session that ended, another customer signing in).
+   */
+  function forgetPersonal() {
+    try {
+      localStorage.removeItem(CART_KEY);
+      localStorage.removeItem('pod-cart-base');
+      for (const k of Object.keys(localStorage)) if (k.startsWith('pod-book-')) localStorage.removeItem(k);
+    } catch (e) { /* private mode */ }
+    try { for (const k of ['pod-proof-ok', 'pod-coupon', 'pod-order-key', 'pod-delivery']) sessionStorage.removeItem(k); } catch (e) { /* private mode */ }
+    try { indexedDB.deleteDatabase('pod-photos'); } catch (e) { /* blocked */ }
+    updateCartBadge();
+  }
 
   // ---------- The cart on the account ----------
   // Signed in: the cart is also kept on the account, so a design put in the cart on the laptop is in
@@ -560,12 +577,26 @@
   let cartMerging = false;
   async function pushCart(acct) {
     cartTimer = null;
+    if (!acct) return;
     const items = getCart();
-    const body = JSON.stringify({ items: items.map((i) => ({ designId: i.designId, addedAt: i.addedAt, ...(i.editToken ? { editToken: i.editToken } : {}) })) });
+    // With what this device last agreed with the account: the server merges (another device may have
+    // added or removed items since this page was opened) and answers with the merged cart.
+    const body = JSON.stringify({ items: items.map((i) => ({ designId: i.designId, addedAt: i.addedAt, ...(i.editToken ? { editToken: i.editToken } : {}) })), base: [...cartBase(acct)] });
     try {
       const res = await fetch('/api/account/cart', { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Account': acct }, body, keepalive: body.length < 60000 });
-      if (res.ok && cartAcct() === acct) setCartBase(acct, items);
-    } catch (e) { /* offline: sent with the next change or visit */ }
+      if (!res.ok || cartAcct() !== acct) return;
+      const merged = (await res.json()).items || [];
+      const now = getCart();
+      const byId = new Map(now.map((i) => [i.designId, i]));
+      const out = merged.map((m) => byId.get(m.designId) || m);
+      if (out.map((i) => i.designId).join(',') !== now.map((i) => i.designId).join(',')) {
+        cartMerging = true;
+        setCart(out);
+        cartMerging = false;
+        document.dispatchEvent(new CustomEvent('pod:cartsynced'));
+      }
+      setCartBase(acct, out);
+    } catch (e) { /* offline (or the page closed first): sent with the next change or visit */ }
   }
   function cartToAccount() {
     if (cartMerging) return;
@@ -583,8 +614,11 @@
   });
   /** Bring this browser's cart and the account's together (on every page, when signed in). */
   async function mergeAccountCart() {
+    if (!cartAcct()) return;
+    // Who is signed in now (an ended session clears what the last customer left here).
+    const me = await drafts.whoami();
     const acct = cartAcct();
-    if (!acct) return;
+    if (!me || me !== acct) return;
     let remote;
     try {
       const c = new AbortController();
@@ -749,7 +783,7 @@
     t, tr, setLang, applyI18n,
     loadCatalog, fillMockup, mockupUrl, svgDataUrl, luminance,
     money, date, day, num, captcha,
-    getCart, setCart, putFile, updateCartBadge, toast, esc, api, drafts,
+    getCart, setCart, putFile, updateCartBadge, toast, esc, api, drafts, forgetPersonal,
     sizedArea, sizeView, canvasEdges, drawPattern, wrapOffsets, fabricCm,
   };
 })();

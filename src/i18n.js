@@ -71,7 +71,7 @@ const MESSAGES = {
   badDate: { en: 'Enter a valid date', ar: 'اكتب تاريخًا صحيحًا' },
   houseName: { en: 'Enter the printing house name', ar: 'اكتب اسم المطبعة' },
   houseEmail: { en: 'That email address does not look right', ar: 'البريد الإلكتروني غير صحيح' },
-  houseWhatsApp: { en: 'That WhatsApp number does not look right (e.g. 01012345678 or +971501234567)', ar: 'رقم الواتساب غير صحيح (مثال: 01012345678 أو +971501234567)' },
+  houseWhatsApp: { en: 'That WhatsApp number does not look right. Use a mobile number (e.g. 01012345678) or a number abroad with its country code (+971501234567). Landlines can\'t receive WhatsApp.', ar: 'رقم الواتساب ده مش مظبوط. اكتب رقم موبايل (مثلًا 01012345678) أو رقم برة مصر بكود البلد (+971501234567). الأرضي مبيستقبلش واتساب.' },
   houseContact: { en: 'Add an email or a WhatsApp number', ar: 'أضف بريدًا إلكترونيًا أو رقم واتساب' },
   houseMany: { en: 'You can save up to 50 printing houses', ar: 'يمكنك حفظ 50 مطبعة كحد أقصى' },
   houseNotFound: { en: 'Printing house not found', ar: 'المطبعة غير موجودة' },
@@ -185,13 +185,20 @@ function format(key, params, lang) {
     const v = params[k];
     // Amounts of money as the pages show them ("EGP 1,000" / "١٬٠٠٠ ج.م."); other numbers in the page's digits.
     if (typeof v === 'number' && (k === 'amount' || k === 'was' || k === 'now')) return money(v, lang);
+    // A calendar day (2026-12-25) as words in the page's language: "25 December 2026" / "٢٥ ديسمبر ٢٠٢٦".
+    if (k === 'date' && typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
+      try {
+        return new Date(`${v}T12:00:00Z`).toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+      } catch (e) { /* as it is */ }
+    }
     if (typeof v === 'number' && lang === 'ar') return new Intl.NumberFormat('ar-EG', { useGrouping: false }).format(v);
     return pick(v, lang) ?? '';
   });
 }
 function money(n, lang) {
   try {
-    return new Intl.NumberFormat(lang === 'ar' ? 'ar-EG' : 'en-EG', { style: 'currency', currency: 'EGP', maximumFractionDigits: 2 }).format(n);
+    // Whole pounds without ".00", as the pages show money.
+    return new Intl.NumberFormat(lang === 'ar' ? 'ar-EG' : 'en-EG', { style: 'currency', currency: 'EGP', minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 }).format(n);
   } catch (e) {
     return `${n} EGP`;
   }

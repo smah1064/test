@@ -137,8 +137,7 @@
       const shared = await POD.api('/api/shares/' + encodeURIComponent(params.get('share')) + '/design');
       st.product = products.find((p) => p.id === shared.productId) || st.product;
       st.colorId = shared.color;
-      st.sizeId = shared.size;
-      st.sizePicked = true;
+      st.sizeId = shared.size; // (the size is still asked: the friend may not have chosen one)
       for (const [sideId, data] of Object.entries(shared.editor || {})) {
         if (st.product.sides.some((sd) => sd.id === sideId)) {
           st.designs[sideId] = await blobifyImages(data.objects || []);
@@ -160,6 +159,18 @@
   // again brings back the customer's own version instead of the original.
   st.libraryId = null;
   let draft = draftMode && !fromShare ? await POD.drafts.get(st.product.id) : null;
+  // A quick copy written while leaving the page (the browser may close before the real save finishes):
+  // used when it is newer than the saved draft and belongs to the same customer.
+  if (draftMode && !fromShare) {
+    try {
+      const raw = localStorage.getItem('pod-rescue:' + st.product.id);
+      const r = raw && JSON.parse(raw);
+      let me = '';
+      try { const v = localStorage.getItem('pod-acct'); me = v && v !== '1' ? v : ''; } catch (e) { /* private mode */ }
+      if (r && r.designs && r.acct === me && (!draft || !(Date.parse(draft.savedAt) >= r.at))) draft = { ...r, savedAt: new Date(r.at).toISOString() };
+      else if (r) localStorage.removeItem('pod-rescue:' + st.product.id);
+    } catch (e) { /* unreadable: ignored */ }
+  }
   if (!(draft && draft.designs && Object.values(draft.designs).some((o) => o && o.length))) draft = null;
   if (draft && libraryDesign) {
     if (draft.library && draft.library === params.get('library')) libraryDesign = null;
@@ -685,6 +696,7 @@
       draftTimer = null;
       await draftSaving.catch(() => null);
       await POD.drafts.remove(st.product.id);
+      try { localStorage.removeItem('pod-rescue:' + st.product.id); } catch (err) { /* private mode */ }
       const u = new URL(location.href);
       u.searchParams.delete('cart');
       location.replace(u.toString());
@@ -919,7 +931,9 @@
   function fixArabic(o) {
     if (!isText(o)) return;
     const arabic = D.ARABIC_RE.test(o.text);
-    const props = { direction: arabic ? 'rtl' : 'ltr' };
+    // The direction follows the first letter (as the text box shows it): "I love مصر 2026" stays left to right.
+    const first = /[A-Za-z\u00c0-\u024f\u0590-\u08ff\ufb1d-\ufdff\ufe70-\ufefc]/.exec(o.text || '');
+    const props = { direction: first && /[\u0590-\u08ff\ufb1d-\ufdff\ufe70-\ufefc]/.test(first[0]) ? 'rtl' : 'ltr' };
     if (arabic && o.charSpacing) props.charSpacing = 0;
     if (arabic && D.FONTS.english.includes(o.fontFamily)) {
       props.fontFamily = 'Cairo';
@@ -2856,7 +2870,9 @@
     refreshChrome();
   });
   /** A different garment size: the print box changes size on the garment, and the design with it. */
+  /** Returns a promise that settles once the design on screen has been redrawn for the new size. */
   function changeSize(sizeId) {
+    let redrawn = Promise.resolve();
     const prev = st.sizeId;
     const before = (sid) => areaFor(st.product, sid, prev, st.offsets[sid]);
     cancelCrop();
@@ -2877,7 +2893,7 @@
       if (sd.id === st.side) {
         const objs = remap(serialize(), from, to);
         st.designs[sd.id] = objs;
-        loadObjects(objs).then(() => { applyClips(); seedHistory(); commit(); renderCheck(); });
+        redrawn = loadObjects(objs).then(() => { applyClips(); seedHistory(); commit(); renderCheck(); });
       } else if ((st.designs[sd.id] || []).length) {
         st.designs[sd.id] = remap(st.designs[sd.id], from, to);
       }
@@ -2887,6 +2903,7 @@
     applyClips();
     fit(); // the garment is drawn at this size's scale
     schedulePatternPreview(0);
+    return redrawn;
   }
   $('product-select').addEventListener('change', serial(async (e) => changeProduct(e.target.value)));
 
@@ -3050,6 +3067,10 @@
       else if (i.key === 'check.okres') out.push({ id: 'lowResImage', level: 'warn', side: sideId, params: { name: short(i.params.name), dpi: i.params.dpi } });
       else if (i.key === 'check.tiny') out.push({ id: 'tinyText', level: 'warn', side: sideId, params: { name: short(i.params.name), pt: i.params.pt } });
       else if (i.key === 'check.safe') out.push({ id: 'outsideSafe', level: 'warn', side: sideId, params: { name: short(i.params.name) } });
+      // What the customer was warned about must show on the proof too (not "ready to print").
+      else if (i.key === 'check.hidden') out.push({ id: 'hiddenText', level: 'fail', side: sideId, params: { name: short(i.params.name) } });
+      else if (i.key === 'check.inkOnColour') out.push({ id: 'inkOnColour', level: 'warn', side: sideId, params: { name: short(i.params.name), colour: short(i.params.colour) } });
+      else if (i.key === 'check.fieldText') out.push({ id: 'fieldText', level: 'fail', side: sideId, params: { name: short(i.params.name) } });
     }
     const missing = new Set();
     for (const o of canvas.getObjects()) {
@@ -3141,14 +3162,26 @@
     const objs = canvas.getObjects().filter((o) => o.name !== '__cropper' && o.visible !== false);
     objs.forEach((o, i) => {
       if (!isText(o)) return;
-      const above = objs.slice(i + 1).filter((x) => x.type === 'image');
+      // Pictures (solid where their pixels are) and shapes / stickers with a fill (solid inside their outline).
+      const above = objs.slice(i + 1).filter((x) => !isText(x));
       if (!above.length) return;
       const r = absRect(o);
       const pts = [];
       for (let gx = 1; gx <= 5; gx++) for (let gy = 1; gy <= 3; gy++) pts.push(new fabric.Point(r.left + (r.width * gx) / 6, r.top + (r.height * gy) / 4));
-      const hidden = pts.filter((pt) => above.some((img) => solidAt(img, pt))).length;
+      const solid = (x, pt) => {
+        if (x.type === 'image') return solidAt(x, pt);
+        if ((x.opacity != null && x.opacity < 0.6) || !x.containsPoint) return false;
+        const fill = x.type === 'group' ? 'group' : x.fill;
+        if (!fill || fill === 'transparent' || /^rgba?\([^)]*,\s*0(\.\d+)?\s*\)$/.test(String(fill))) return false;
+        return x.containsPoint(pt, null, true);
+      };
+      const hidden = pts.filter((pt) => above.some((x) => solid(x, pt))).length;
       if (hidden >= pts.length * 0.6) issues.push({ level: 'error', key: 'check.hidden', obj: o, params: { name: layerName(o) } });
     });
+    // A name-list field ({Name}) on a product without name lists would print as it is.
+    if (!st.product.merge) {
+      for (const o of objs) if (isText(o) && /\{[^{}\n]{1,40}\}/.test(o.text || '')) issues.push({ level: 'error', key: 'check.fieldText', obj: o, params: { name: layerName(o) } });
+    }
     // Several garment colours in one order (name list colours or the quantities): words that disappear on one of them.
     if (!st.product.surface && !emb()) {
       const ids = new Set(Object.entries(qtyGrid()).filter(([, row]) => Object.values(row).some((n) => n > 0)).map(([c]) => c));
@@ -3157,7 +3190,7 @@
         if (vc.color >= 0) st.mergeList.rows.forEach((r) => { const c = matchColorId(r[vc.color]); if (c) ids.add(c); });
       }
       const garments = st.product.colors.filter((c) => ids.has(c.id) && c.hex);
-      if (garments.length > 1) {
+      if (garments.length >= 1) {
         const ratio = (a, b) => { const x = POD.luminance(a); const y = POD.luminance(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
         for (const o of objs) {
           if (!isText(o)) continue;
@@ -3370,7 +3403,7 @@
     // A name list: every row is one piece (its size from a Size column if there is one).
     if (p.merge && st.mergeList) {
       const vc = mergeVariantCols();
-      box.innerHTML = `<label>${esc(t('qty.title'))}</label><p class="muted small" style="margin:0;line-height:1.5">${esc(t(vc.size >= 0 ? 'qty.fromListSizes' : 'qty.fromList', { n: POD.num(mergeCount()) }))}</p>`;
+      box.innerHTML = `<label>${esc(t('qty.title'))}</label><p class="muted small" style="margin:0;line-height:1.5">${esc(vc.size >= 0 ? t('qty.fromListSizes', { n: POD.num(mergeCount()) }) : plural('qty.fromList', mergeCount()))}</p>`;
       return;
     }
     const g = qtyGrid();
@@ -3501,7 +3534,9 @@
     const bad = [];
     if (!st.mergeList) return bad;
     st.mergeList.rows.forEach((r, i) => {
-      if ((vc.size >= 0 && !matchSizeId(r[vc.size])) || (vc.color >= 0 && !matchColorId(r[vc.color]))) bad.push(i);
+      // A blank cell takes the size / colour chosen above (as the server does).
+      const filled = (k) => String(r[k] || '').trim() !== '';
+      if ((vc.size >= 0 && filled(vc.size) && !matchSizeId(r[vc.size])) || (vc.color >= 0 && filled(vc.color) && !matchColorId(r[vc.color]))) bad.push(i);
     });
     return bad;
   }
@@ -3689,7 +3724,7 @@
       // A design without fields yet: start one with the first column, ready to style.
       if (!mergeObjects().length && !designedSides().some((s) => s.id !== st.side && fieldSides().some((x) => x.id === s.id))) await addFieldText(0);
       refreshChrome();
-      toast(t('merge.loaded', { n: POD.num(data.rows.length) }), 'success');
+      toast(plural('merge.loaded', data.rows.length), 'success');
     } finally {
       busy(false);
     }
@@ -4332,7 +4367,9 @@
       for (const [id, objs] of Object.entries(designs)) inl[id] = await inlineImages(objs);
       const blob = preview ? await preview.catch(() => null) : lastPreview;
       if (blob) lastPreview = blob;
-      return POD.drafts.set(productId, { ...meta, designs: inl, preview: blob, savedAt: new Date().toISOString() });
+      const ok = await POD.drafts.set(productId, { ...meta, designs: inl, preview: blob, savedAt: new Date().toISOString() });
+      if (ok && !rescueWritten) try { localStorage.removeItem('pod-rescue:' + productId); } catch (e) { /* private mode */ }
+      return ok;
     });
     return draftSaving;
   }
@@ -4341,11 +4378,32 @@
     clearTimeout(draftTimer);
     draftTimer = setTimeout(saveDraft, 600);
   }
-  // Leaving right after a change: save it now (quickly, without a new thumbnail), not after the short wait.
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden' && draftTimer) saveDraft({ quick: true });
-  });
-  window.addEventListener('pagehide', () => { if (draftTimer) saveDraft({ quick: true }); });
+  // Leaving right after a change: save it now (quickly, without a new thumbnail), not after the short wait,
+  // and keep a small copy in localStorage at once (written before the page goes; the real save may not finish).
+  let rescueWritten = false;
+  function rescueCopy() {
+    // Only unsaved changes (not after adding to the cart, saving or sending: st.dirty is cleared then).
+    if (!draftMode || st.exporting || startingOver || !st.product || !st.dirty) return;
+    try {
+      const designs = {};
+      for (const sd of st.product.sides) designs[sd.id] = sd.id === st.side ? serialize() : (st.designs[sd.id] || []);
+      if (!Object.values(designs).some((o) => o.length)) return;
+      let acct = '';
+      try { const v = localStorage.getItem('pod-acct'); acct = v && v !== '1' ? v : ''; } catch (e) { /* private mode */ }
+      const json = JSON.stringify({ at: Date.now(), acct, productId: st.product.id, colorId: st.colorId, sizeId: st.sizeId, side: st.side, offsets: st.offsets, pattern: st.pattern || null, method: st.method, options: st.options || {}, qty: st.qty || null, library: st.libraryId || null, sizePicked: Boolean(st.sizePicked), designs });
+      // Pictures live in the browser's memory only while the page is open: those designs rely on the real save.
+      if (json.includes('"blob:') || json.length > 1500000) return;
+      localStorage.setItem('pod-rescue:' + st.product.id, json);
+      rescueWritten = true;
+    } catch (e) { console.warn('[draft] quick copy:', e.message); }
+  }
+  const leaving = () => {
+    if (commitTimer) commit(); // typing that hasn't been taken in yet
+    rescueCopy();
+    if (draftTimer) saveDraft({ quick: true });
+  };
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') leaving(); else rescueWritten = false; });
+  window.addEventListener('pagehide', leaving);
   // A link in the shop tapped right after a change: finish saving first, then go.
   document.addEventListener('click', (e) => {
     const a = e.target.closest && e.target.closest('a[href]');
@@ -4381,21 +4439,19 @@
     if (first) first.focus();
   }
   if ($('size-ask')) {
-    $('size-ask').addEventListener('click', (e) => {
+    $('size-ask').addEventListener('click', async (e) => {
       if (e.target.id === 'size-ask' || e.target.closest('#size-ask-cancel')) { $('size-ask').hidden = true; return; }
       const b = e.target.closest('[data-ask-size]');
       if (!b) return;
-      const lines = qtyLines();
-      const qty = lines.reduce((m, l) => m + l.qty, 0) || 1;
-      if (b.dataset.askSize !== st.sizeId) {
-        const fromSize = st.sizeId;
-        changeSize(b.dataset.askSize);
-        qtyFollow(st.colorId, fromSize);
-      }
-      // All the pieces in the size picked (one colour, one size so far).
-      st.qty = { [st.colorId]: { [st.sizeId]: qty } };
-      st.sizePicked = true;
+      // Every colour keeps its number of pieces, all in the size picked.
+      const perColour = {};
+      for (const l of qtyLines()) perColour[l.color] = (perColour[l.color] || 0) + l.qty;
+      if (!Object.keys(perColour).length) perColour[st.colorId] = 1;
       $('size-ask').hidden = true;
+      // The design is redrawn for the new size before it is saved.
+      if (b.dataset.askSize !== st.sizeId) await changeSize(b.dataset.askSize);
+      st.qty = Object.fromEntries(Object.entries(perColour).map(([c, n]) => [c, { [st.sizeId]: n }]));
+      st.sizePicked = true;
       renderOptions();
       refreshChrome();
       scheduleDraft();
@@ -4414,6 +4470,15 @@
     }
     // Clothes: the size is asked once (never ordered silently in the first size).
     if (needsSize()) return askSize();
+    // Only other colours ordered than the one on screen (e.g. white set to 0, black 3): show an ordered
+    // colour, so the preview, the proof and the checks are of what will really be printed.
+    const orderedColours = [...new Set(qtyLines().map((l) => l.color))];
+    if (orderedColours.length && !orderedColours.includes(st.colorId) && st.product.colors.some((c) => c.id === orderedColours[0])) {
+      st.colorId = orderedColours[0];
+      renderOptions();
+      await applyMockup();
+      renderCheck();
+    }
     // Name list: the fields must match the list's columns (and a list needs a field).
     if (st.mergePreview) endMergePreview();
     const mergeSides = st.product.merge ? fieldSides() : [];
@@ -4490,7 +4555,7 @@
       await showSide(original);
       if (problems.length) {
         busy(false);
-        if (!confirm(t('check.confirm', { list: problems.join('\n') }))) return;
+        if (!confirm(t(st.revise ? 'revise.confirm' : 'check.confirm', { list: problems.join('\n') }))) return;
         busy(true, t('busy.saving'));
       }
 
@@ -4549,6 +4614,7 @@
         clearTimeout(draftTimer);
         await draftSaving;
         await POD.drafts.remove(st.product.id);
+        try { localStorage.removeItem('pod-rescue:' + st.product.id); } catch (err) { /* private mode */ }
       }
       location.href = '/cart?added=1';
     } catch (e) {
@@ -4721,8 +4787,27 @@
   }
   if (fromShare) { toast(t('share.loaded')); scheduleDraft(); }
   if (st.revise) {
-    toast(t('revise.hint'));
     if ($('save-draft')) $('save-draft').hidden = true; // one way out: send the new version
+    // Still waiting for a new version? (Back after sending, or the shop has moved on): if not, back to the order.
+    POD.api('/api/orders/' + encodeURIComponent(st.revise.orderId)).then((order) => {
+      const item = (order.items || []).find((it) => it.id === st.revise.itemId);
+      if (!item || item.status !== 'changes_requested') {
+        toast(t('revise.done'));
+        st.dirty = false;
+        setTimeout(() => { location.href = '/order?id=' + encodeURIComponent(st.revise.orderId); }, 2500);
+        return;
+      }
+      // The shop's note, kept in view while the customer makes the change.
+      const hist = Array.isArray(item.approvals) ? item.approvals : [];
+      const last = [...hist].reverse().find((h) => h && (h.action === 'changes' || h.action === 'rejected'));
+      const note = (last && last.note) || '';
+      const bar = document.createElement('div');
+      bar.className = 'draft-bar revise-bar';
+      bar.setAttribute('role', 'status');
+      bar.innerHTML = `<span>${esc(note ? t(last.by === 'customer' ? 'revise.yourNote' : 'revise.shopNote', { note }) : t('revise.hint'))}</span><button type="button" class="fly-close" aria-label="${esc(t('draft.keep'))}">✕</button>`;
+      bar.querySelector('button').addEventListener('click', () => bar.remove());
+      document.body.appendChild(bar);
+    }).catch(() => toast(t('revise.hint')));
   }
   if (libraryDesign) {
     if (libraryDesign.kind === 'template') {
@@ -4737,5 +4822,5 @@
     scheduleDraft();
   }
   schedulePatternPreview(0);
-  window.__editor = { canvas, st, rects, checkIssues, exportSvg, exportPrint, exportTile, exportPreview }; // handy for debugging in the console
+  window.__editor = { canvas, st, rects, checkIssues, exportSvg, exportPrint, exportTile, exportPreview, rescueCopy }; // handy for debugging in the console
 })();

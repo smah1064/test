@@ -43,16 +43,25 @@ function readLink(key, token) {
 }
 
 // ---------- Printing houses ----------
-/** WhatsApp number in international digits (Egyptian 01… becomes 201…), or null. */
+/**
+ * WhatsApp number in international digits for wa.me, '' when empty, or null when it can't be a
+ * WhatsApp mobile. Egyptian mobiles (010/011/012/015, with or without the 0, +20 or 0020, Arabic
+ * digits, spaces, dashes) become 201XXXXXXXXX. Egyptian landlines (02…, 03…, +20 2…) and local
+ * numbers without a country code are refused; other countries need their code (+971…, 00966…).
+ */
 function whatsappDigits(input) {
-  const raw = normalizeDigits(String(input || '')).trim();
-  if (!raw) return '';
-  const eg = normalizeEgyptMobile(raw);
+  // Spaces, dashes, brackets and the invisible direction marks phones add when a number is copied.
+  let d = normalizeDigits(String(input || '')).replace(/[\s\-().\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff\u061c\u00a0\u2010-\u2015\u2212]/g, '');
+  if (!d) return '';
+  const eg = normalizeEgyptMobile(d) || (/^1[0125]\d{8}$/.test(d) ? '0' + d : null); // 1001234567: the 0 left out
   if (eg) return '20' + eg.slice(1);
-  let d = raw.replace(/[\s\-().]/g, '');
-  if (d.startsWith('+')) d = d.slice(1);
-  else if (d.startsWith('00')) d = d.slice(2);
-  return /^\d{8,15}$/.test(d) ? d : null;
+  let international = false;
+  if (d.startsWith('+')) [d, international] = [d.slice(1), true];
+  else if (d.startsWith('00')) [d, international] = [d.slice(2), true];
+  if (!/^[1-9]\d{7,14}$/.test(d)) return null;
+  if (d.startsWith('20')) return null; // Egypt, but not a mobile (a landline or a digit missing / extra)
+  if (!international && d.length < 11) return null; // a local number without its country code
+  return d;
 }
 
 /** Checks and cleans a printing house from the admin form; returns { house } or { error }. */
@@ -80,6 +89,7 @@ const T = {
     note: 'Note', files: 'Files', attached: 'attached to this email', expires: (d) => `Download links work until ${d}.`,
     thanks: 'Thank you!', subject: (o, p) => `Print job ${o} · ${p}`,
     express: (d) => `⚡ Express order: the customer expects it by ${d}`,
+    sample: '🧪 Sample first: print ONE piece first and send us a photo of it. Print the rest only after we confirm.',
   },
   ar: {
     dir: 'rtl', hello: (n) => `أهلًا ${n}،`, intro: 'من فضلك اطبعوا الشغل ده لـ ون أوف برنت:',
@@ -88,6 +98,7 @@ const T = {
     note: 'ملاحظة', files: 'الملفات', attached: 'مرفقة في الإيميل ده', expires: (d) => `روابط التحميل شغالة لحد ${d}.`,
     thanks: 'شكرًا!', subject: (o, p) => `شغل طباعة ${o} · ${p}`,
     express: (d) => `⚡ طلب سريع: لازم يوصل للعميل لحد ${d}`,
+    sample: '🧪 عينة الأول: اطبعوا قطعة واحدة بس الأول وابعتولنا صورتها، والباقي يتطبع بعد ما نأكد عليكم.',
   },
 };
 /** Print methods by their names (the process ids of src/products.js PRODUCTION / METHODS). */
@@ -118,6 +129,8 @@ function dayText(ymd, lang) {
   }
 }
 const isExpress = (order) => Boolean(order && order.delivery && order.delivery.speed === 'express');
+/** The customer asked for one sample to be printed (and checked) before the rest. */
+const wantsSample = (item) => Boolean(item && (item.sample === true || (item.approval && item.approval.sample === true)));
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const cm = (inches) => Math.round(inches * 2.54 * 10) / 10;
 /** Digits in the message language: Arabic-Indic in Arabic, Latin in English. */
@@ -159,6 +172,7 @@ function whatsappText({ house, order, item, design, files, note, lang, expires }
     t.intro,
     '',
     ...(isExpress(order) ? [`*${t.express(dayText(order.delivery.by, lang))}*`, ''] : []),
+    ...(wantsSample(item) ? [`*${t.sample}*`, ''] : []),
     ...jobLines(order, item, design, lang).map(([k, v]) => `*${k}:* ${v}`),
     ...(note ? ['', `*${t.note}:* ${note}`] : []),
     '',
@@ -177,6 +191,7 @@ function emailBody({ house, order, item, design, files, note, lang, expires, att
   const html = `<div dir="${t.dir}" style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;color:#111">
 <p>${esc(t.hello(house.name))}</p><p>${esc(t.intro)}</p>
 ${isExpress(order) ? `<p style="background:#fff3bf;color:#7a5800;padding:6px 10px;border-radius:6px;font-weight:700">${esc(t.express(dayText(order.delivery.by, lang)))}</p>` : ''}
+${wantsSample(item) ? `<p style="background:#e7f5ff;color:#0b4f71;padding:6px 10px;border-radius:6px;font-weight:700">${esc(t.sample)}</p>` : ''}
 <table style="border-collapse:collapse;margin:8px 0 14px">${rows}</table>
 ${note ? `<p><strong>${esc(t.note)}:</strong> ${esc(note)}</p>` : ''}
 <p style="margin-bottom:4px"><strong>${esc(t.files)}</strong>${attached ? ` (${esc(t.attached)})` : ''}:</p><ul style="margin-top:0">${list}</ul>
@@ -184,6 +199,7 @@ ${note ? `<p><strong>${esc(t.note)}:</strong> ${esc(note)}</p>` : ''}
   const text = [
     t.hello(house.name), t.intro, '',
     ...(isExpress(order) ? [t.express(dayText(order.delivery.by, lang)), ''] : []),
+    ...(wantsSample(item) ? [t.sample, ''] : []),
     ...jobLines(order, item, design, lang).map(([k, v]) => `${k}: ${v}`),
     ...(note ? ['', `${t.note}: ${note}`] : []),
     '', `${t.files}${attached ? ` (${t.attached})` : ''}:`,

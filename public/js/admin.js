@@ -25,6 +25,11 @@
     if (!d || d.speed !== 'express') return '';
     return ` <span class="pill dlv-express-pill" title="${esc(t('delivery.by', { date: POD.day(d.by) }))}">${esc(d.by ? t('admin.expressBy', { date: day(d.by) }) : t('delivery.express'))}</span>`;
   }
+  /** The customer asked at checkout for one sample first (printed and checked before the rest). */
+  const wantsSample = (item) => Boolean(item && (item.sample === true || (item.approval && item.approval.sample === true)));
+  function samplePill(item) {
+    return wantsSample(item) ? ` <span class="pill sample-pill" title="${esc(t('admin.sampleHelp'))}">${esc(t('admin.samplePill'))}</span>` : '';
+  }
   /** Job lists don't carry the order's delivery: read the orders once (again when a new order shows up). */
   async function ensureOrders(items) {
     const known = new Set((lastOrders || []).map((o) => o.id));
@@ -48,7 +53,7 @@
           <input type="checkbox" data-film="${it.id}" ${filmPicked.has(it.id) || (!it.filmBatch && !filmSeen.has(it.id)) ? 'checked' : ''}>
           <img src="${esc(it.sides[0].previewUrl)}" alt="" ${zoomAttr(it)}>
           <div>
-            <strong>${esc(tr(it.productName))}</strong> ${pill(it.status)}${expressPill(it)}${piecesPill(it)} ${it.filmBatch ? `<span class="pill printed">${esc(t('admin.onFilm', { id: it.filmBatch.id }))}</span>` : ''}
+            <strong>${esc(tr(it.productName))}</strong> ${pill(it.status)}${expressPill(it)}${samplePill(it)}${piecesPill(it)} ${it.filmBatch ? `<span class="pill printed">${esc(t('admin.onFilm', { id: it.filmBatch.id }))}</span>` : ''}
             <div class="muted small">${esc([it.orderNumber, t('admin.spec.itemOf', { i: it.position, n: it.of }), ...colourSizeText(it), it.sides.map((sd) => `${tr(sd.name)} ${t('admin.cmSize', { w: POD.num(sd.widthIn * 2.54), h: POD.num(sd.heightIn * 2.54) })}`).join(' + ')].join(' · '))}</div>
             ${hasQty(it) ? qtySummary(it) : ''}
           </div>
@@ -320,7 +325,9 @@
   function sendDefaults(item) {
     const houseId = (housesData && (housesData.productHouses[item.productId] || (housesData.houses[0] && housesData.houses[0].id))) || '';
     const house = findHouse(houseId);
-    return { houseId, channel: house ? house.prefer : 'email', formats: new Set([printPdfKey(item), 'preview-pdf']), note: '', msg: '', busy: false };
+    // Only files offered for this item (photo sets have no preview PDF).
+    const offered = sendFormats(item);
+    return { houseId, channel: house ? house.prefer : 'email', formats: new Set([printPdfKey(item), 'preview-pdf'].filter((f) => offered.includes(f))), note: '', msg: '', busy: false };
   }
   const when = (iso) => new Date(iso).toLocaleString(POD.lang === 'ar' ? 'ar-EG' : 'en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   function sendHistory(item) {
@@ -389,7 +396,7 @@
       const r = await adminApi(`/api/admin/items/${id}/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang },
-        body: JSON.stringify({ houseId: st.houseId, channel: st.channel, formats: [...st.formats], note: st.note }),
+        body: JSON.stringify({ houseId: st.houseId, channel: st.channel, formats: [...st.formats].filter((f) => sendFormats(item).includes(f)), note: st.note }),
       });
       item.sends = r.item.sends;
       const house = findHouse(st.houseId);
@@ -429,6 +436,17 @@
   });
 
   // ---------- Printing houses tab ----------
+  // WhatsApp needs a mobile number with its country code. The server checks it (src/dispatch.js
+  // whatsappDigits); here the form says what's wrong with the usual mistakes.
+  function waProblem(v) {
+    const d = String(v || '').replace(/[٠-٩۰-۹]/g, (c) => String(c.charCodeAt(0) & 0xf)).replace(/[^\d+]/g, '');
+    if (!d) return '';
+    if (/^(?:0|(?:\+|00)?200?)[2-9]\d{7,8}$/.test(d) && !/^(?:\+|00)?20?0?1[0125]\d{8}$/.test(d)) return 'landline'; // 02…, 03…, +20 2…
+    if (/^[2-9]\d{6,9}$/.test(d)) return 'local'; // no country code
+    return '';
+  }
+  /** A number saved before the check (e.g. 1001234567, 0225551234): wa.me can't open it. */
+  const waSavedBad = (digits) => Boolean(digits) && (!/^[1-9]\d{7,14}$/.test(digits) || /^1[0125]\d{8}$/.test(digits) || (/^20/.test(digits) && !/^201[0125]\d{8}$/.test(digits)));
   function renderHouses(d) {
     $('houses-email-off').hidden = d.email;
     const uses = (id) => Object.values(d.productHouses).filter((h) => h === id).length;
@@ -437,7 +455,7 @@
         <div class="card house-row">
           <div>
             <strong>${esc(h.name)}</strong> <span class="pill queued">${esc(t(h.prefer === 'email' ? 'houses.byEmail' : 'houses.byWhatsApp'))}</span>
-            <div class="muted small">${[h.email ? `✉️ <bdi dir="ltr">${esc(h.email)}</bdi>` : '', h.whatsapp ? `💬 <bdi dir="ltr">+${esc(h.whatsapp)}</bdi>` : '', esc(t(uses(h.id) === 1 ? 'houses.product1' : 'houses.products', { n: POD.num(uses(h.id)) }))].filter(Boolean).join(' · ')}</div>
+            <div class="muted small">${[h.email ? `✉️ <bdi dir="ltr">${esc(h.email)}</bdi>` : '', h.whatsapp ? `💬 <bdi dir="ltr">+${esc(h.whatsapp)}</bdi>${waSavedBad(h.whatsapp) ? ` <span class="pill wa-bad-pill">${esc(t('houses.waCheck'))}</span>` : ''}` : '', esc(t(uses(h.id) === 1 ? 'houses.product1' : 'houses.products', { n: POD.num(uses(h.id)) }))].filter(Boolean).join(' · ')}</div>
             ${h.notes ? `<div class="muted small">${esc(h.notes)}</div>` : ''}
           </div>
           <div class="row" style="gap:8px;flex:0 0 auto">
@@ -464,6 +482,12 @@
     e.preventDefault();
     const id = $('house-id').value;
     const body = { name: $('house-name').value, email: $('house-email').value, whatsapp: $('house-wa').value, prefer: $('house-prefer').value, notes: $('house-notes').value };
+    const wa = waProblem(body.whatsapp);
+    if (wa) {
+      $('house-msg').textContent = t(wa === 'landline' ? 'houses.waLandline' : 'houses.waLocal');
+      $('house-wa').focus();
+      return;
+    }
     $('house-save').disabled = true;
     try {
       await adminApi(id ? `/api/admin/houses/${encodeURIComponent(id)}` : '/api/admin/houses', { method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang }, body: JSON.stringify(body) });
@@ -487,7 +511,8 @@
       $('house-id').value = h.id;
       $('house-name').value = h.name;
       $('house-email').value = h.email || '';
-      $('house-wa').value = h.whatsapp ? '+' + h.whatsapp : '';
+      // A number saved before the check goes back without the "+", so saving turns it into a proper one (or says what's wrong).
+      $('house-wa').value = h.whatsapp ? (waSavedBad(h.whatsapp) ? '' : '+') + h.whatsapp : '';
       $('house-prefer').value = h.prefer;
       $('house-notes').value = h.notes || '';
       $('house-cancel').hidden = false;
@@ -540,7 +565,7 @@
       <div class="card now-printing">
         <div class="previews">${item.sides.map((s) => `<img src="${esc(s.previewUrl)}" alt="${esc(tr(s.name))}" data-zoom="${esc(JSON.stringify([s.previewUrl]))}">`).join('')}</div>
         <div>
-          ${pill(item.status)}${expressPill(item)}${importBadge(item)}${piecesPill(item)}
+          ${pill(item.status)}${expressPill(item)}${samplePill(item)}${importBadge(item)}${piecesPill(item)}
           ${spec(item)}
           ${importInfo(item)}
           ${item.sides.map((s) => printFiles(item, s)).join('')}
@@ -570,7 +595,7 @@
       <div class="card queue-row ${isOpen ? 'is-open' : ''}">
         <img src="${esc(item.sides[0].previewUrl)}" alt="" ${zoomAttr(item)}>
         <div>
-          <strong>${esc(tr(item.productName))}</strong> ${pill(item.status)}${expressPill(item)}${importBadge(item)}${piecesPill(item)}
+          <strong>${esc(tr(item.productName))}</strong> ${pill(item.status)}${expressPill(item)}${samplePill(item)}${importBadge(item)}${piecesPill(item)}
           <div class="muted small">${esc([item.orderNumber, t('admin.spec.itemOf', { i: item.position, n: item.of }), ...colourSizeText(item), item.sides.map((s) => tr(s.name)).join(' + ')].join(' · '))}</div>
           ${hasQty(item) ? qtySummary(item) : ''}
         </div>
@@ -1295,13 +1320,30 @@
   // ---------- Coupons ----------
   let couponData = null;
   const cpPicked = new Set();
+  // The form has no product picker: a coupon limited to some products keeps that list when edited.
+  let cpProducts = [];
+  const cpList = (ids, from) => ids.map((id) => tr((from.find((x) => x.id === id) || {}).name || id)).join(POD.lang === 'ar' ? '، ' : ', ');
+  function cpProductsNote() {
+    let el = $('cp-prod-note');
+    if (!el) {
+      el = document.createElement('p');
+      el.id = 'cp-prod-note';
+      el.className = 'notice small';
+      el.style.margin = '6px 0 0';
+      $('cp-cats').parentNode.appendChild(el);
+    }
+    el.hidden = !cpProducts.length;
+    el.textContent = cpProducts.length && couponData ? t('cp.keepProducts', { list: cpList(cpProducts, couponData.products) }) : '';
+  }
   function couponSummary(c) {
     const parts = [c.type === 'percent' ? t('cp.sumPercent', { v: POD.num(c.value) }) : c.type === 'fixed' ? t('cp.sumFixed', { v: money(c.value) }) : t('cp.freeship')];
     if (c.maxDiscount) parts.push(t('cp.sumMax', { v: money(c.maxDiscount) }));
     if (c.minOrder) parts.push(t('cp.sumMin', { v: money(c.minOrder) }));
     if (c.startsOn || c.endsOn) parts.push(`${c.startsOn || '…'} → ${c.endsOn || '…'}`);
     if (c.perCustomer) parts.push(t('cp.sumPer', { n: POD.num(c.perCustomer) }));
-    if (c.categories.length) parts.push(c.categories.map((id) => tr((couponData.categories.find((x) => x.id === id) || {}).name || id)).join('، '));
+    // Limited to some products and / or categories: name them in the page language.
+    const only = [(c.products || []).length ? cpList(c.products, couponData.products) : '', c.categories.length ? cpList(c.categories, couponData.categories) : ''].filter(Boolean);
+    if (only.length) parts.push(t('cp.sumOnly', { list: only.join(POD.lang === 'ar' ? '، ' : ', ') }));
     return parts.join(' · ');
   }
   function renderCoupons(d) {
@@ -1329,6 +1371,7 @@
         </div>
       </div>`;
     }).join('') : `<p class="muted">${esc(t('cp.empty'))}</p>`;
+    cpProductsNote();
     cpTypeChanged();
   }
   function cpTypeChanged() {
@@ -1345,6 +1388,8 @@
     $('cp-active').checked = true;
     cpPicked.clear();
     $('cp-cats').querySelectorAll('input').forEach((i) => { i.checked = false; });
+    cpProducts = [];
+    cpProductsNote();
     $('cp-cancel').hidden = true;
     $('cp-form-title').textContent = t('cp.addTitle');
     cpTypeChanged();
@@ -1357,7 +1402,7 @@
     const body = {
       code: $('cp-code').value, type: $('cp-type').value, value: $('cp-value').value, maxDiscount: $('cp-max').value, minOrder: $('cp-min').value,
       maxUses: $('cp-uses').value, perCustomer: $('cp-per').value, startsOn: $('cp-start').value, endsOn: $('cp-end').value,
-      categories: [...cpPicked], active: $('cp-active').checked, note: $('cp-note').value,
+      categories: [...cpPicked], products: id ? cpProducts : [], active: $('cp-active').checked, note: $('cp-note').value,
     };
     try {
       await adminApi(id ? `/api/admin/coupons/${encodeURIComponent(id)}` : '/api/admin/coupons', { method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang }, body: JSON.stringify(body) });
@@ -1392,6 +1437,8 @@
         cpPicked.clear();
         c.categories.forEach((x) => cpPicked.add(x));
         $('cp-cats').querySelectorAll('input').forEach((i) => { i.checked = cpPicked.has(i.value); });
+        cpProducts = (c.products || []).slice();
+        cpProductsNote();
         $('cp-cancel').hidden = false;
         $('cp-form-title').textContent = t('cp.editTitle');
         cpTypeChanged();
@@ -1477,7 +1524,7 @@
       <div class="card queue-row rv-qrow">
         <img src="${esc(item.sides[0].previewUrl)}" alt="" ${zoomAttr(item)}>
         <div>
-          <strong>${esc(tr(item.productName))}</strong> ${pill(item.status)} <span class="pill rv-noprint">${esc(t('rv.notPrintable'))}</span>${expressPill(item)}${piecesPill(item)}
+          <strong>${esc(tr(item.productName))}</strong> ${pill(item.status)} <span class="pill rv-noprint">${esc(t('rv.notPrintable'))}</span>${expressPill(item)}${samplePill(item)}${piecesPill(item)}
           <div class="muted small">${esc([item.orderNumber, t('admin.spec.itemOf', { i: item.position, n: item.of }), ...colourSizeText(item)].join(' · '))}</div>
         </div>
         <div class="queue-actions"><button class="btn btn-sm" type="button" data-rv-goto="${esc(item.id)}">${esc(t('rv.goReview'))}</button></div>
@@ -1521,7 +1568,7 @@
         <div class="rv-head">
           ${thumb ? `<img class="rv-thumb" src="${esc(thumb)}" alt="" ${item.sides ? zoomAttr(item) : ''}>` : '<span class="rv-thumb"></span>'}
           <div class="rv-sum">
-            <div class="rv-line"><strong>${esc(item.orderNumber || '')}</strong> <span class="muted small">${esc(t('admin.spec.itemOf', { i: item.position, n: item.of }))}</span> ${pill(item.status)}${expressPill(item)}</div>
+            <div class="rv-line"><strong>${esc(item.orderNumber || '')}</strong> <span class="muted small">${esc(t('admin.spec.itemOf', { i: item.position, n: item.of }))}</span> ${pill(item.status)}${expressPill(item)}${samplePill(item)}</div>
             <div class="rv-line"><b>${esc(tr(item.productName))}</b> · ${esc(m && m.count ? t('rv.copies', { n: POD.num(m.count) }) : piecesText(piecesOf(item)))}</div>
             <div class="rv-line small">${esc(c.name || '')} ${c.phone || c.email ? `<bdi dir="ltr" class="muted">${esc(c.phone || c.email)}</bdi>` : ''}</div>
             <ul class="rv-reasons">${rvReasons(item).map((r) => `<li class="rv-reason rv-r-${esc(r)}">${esc(reasonText(item, r))}</li>`).join('')}</ul>

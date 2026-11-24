@@ -975,6 +975,8 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 .dlv-days { margin: 2px 0 0; }
 .dlv-expected { margin: 10px 0 0; font-weight: 600; }
 .dlv-express-pill { background: #fff3bf; color: #7a5800; font-size: 11px; vertical-align: middle; text-transform: none; }
+.sample-pill { background: #e7f5ff; color: #0b4f71; font-size: 11px; vertical-align: middle; text-transform: none; }
+.wa-bad-pill { background: #ffe3e3; color: #a51111; font-size: 11px; vertical-align: middle; text-transform: none; }
 @media (max-width: 340px) { .site-header nav a[href="/designs"] { display: none; } }
 @media (max-width: 300px) { .site-header nav a[href="/photos"] { display: none; } }
 /* Menu with the kids' books link ("Stories"): one line at every width, Products and Cart always shown. */

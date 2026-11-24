@@ -226,7 +226,7 @@ function publicItem(item) {
     productName: item.productName,
     color: item.color,
     size: item.size,
-    sides: item.sides.map((s) => ({ id: s.id, name: s.name, previewUrl: `/files/designs/${item.designId}/${s.id}-preview.png` })),
+    sides: item.sides.map((s) => ({ id: s.id, name: s.name, previewUrl: sidePreview(item, s) })),
     price: item.price,
     status: item.status,
     history: item.history,
@@ -259,6 +259,8 @@ function publicOrder(order) {
     id: order.id,
     number: order.number,
     createdAt: order.createdAt,
+    // Placed by a signed-in customer (it's on their account); otherwise a guest's order.
+    account: Boolean(order.customerId),
     status: orderStatus(order),
     currency: order.currency || CURRENCY,
     customer: { name: c.name, city: c.city, governorate: governorate(c.governorate)?.name || c.country || null },
@@ -317,8 +319,22 @@ function shopInfo() {
   };
 }
 
+/** A name for searching: Arabic spelling variants (أ إ آ ٱ → ا, ة → ه, ى → ي, ؤ ئ), short vowels and tatweel ignored. */
+function looseName(v) {
+  return String(v || '').toLowerCase().normalize('NFKC')
+    .replace(/[\u064b-\u065f\u0670\u0640]/g, '')
+    .replace(/[أإآٱ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/ؤ/g, 'و').replace(/ئ/g, 'ي')
+    .replace(/\s+/g, ' ').trim();
+}
+
 function adminCustomer(c) {
   return { ...c, governorateName: governorate(c.governorate)?.name || null };
+}
+
+/** A side's picture: the product mockup, or the corrected print file once the shop replaced it. */
+function sidePreview(item, s) {
+  const v = item.replaced && item.replaced[s.id];
+  return v ? `/files/designs/${item.designId}/${s.id}-proof.png?v=${v}` : `/files/designs/${item.designId}/${s.id}-preview.png`;
 }
 
 function adminItem(order, item, index) {
@@ -326,11 +342,13 @@ function adminItem(order, item, index) {
     ...publicItem(item),
     sides: item.sides.map((s) => ({
       ...s,
-      previewUrl: `/files/designs/${item.designId}/${s.id}-preview.png`,
+      previewUrl: sidePreview(item, s),
       printUrl: `/api/admin/files/${item.designId}/${s.id}`,
     })),
     orderId: order.id,
     orderNumber: order.number,
+    // The customer asked for one printed sample first (at checkout).
+    sample: Boolean(item.sampleWanted || (item.approval && item.approval.sample)),
     position: index + 1,
     of: order.items.length,
     orderedAt: order.createdAt,
@@ -730,7 +748,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const now = new Date().toISOString();
     if (b.decision === 'approve') {
       if (b.proofHash && b.proofHash !== proofHashOf(d)) throw new HttpError(409, 'proofChanged', { designId: d.id });
-      recordApproval(item, d, { via: 'proof-link', note: comment || null });
+      // A sample asked for at checkout stays asked for with the new approval.
+      recordApproval(item, d, { via: 'proof-link', note: comment || null, sample: Boolean(item.sampleWanted || (item.approval && item.approval.sample)) });
       item.status = 'queued';
       item.review = { ...(item.review || { needed: false, reasons: [] }), status: 'done' };
     } else if (b.decision === 'reject') {
@@ -826,8 +845,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         // DTF film and DTG underbase are made from the print file too.
         if (name.startsWith(`${sd.id}-dtf-`) || name.startsWith(`${sd.id}-dtg-`)) fs.rmSync(store.designFile(d.id, name), { force: true });
         if (/^preview-v\d+\.pdf$/.test(name)) fs.rmSync(store.designFile(d.id, name), { force: true });
+        // …and the embroidery stitch file and the name-list print files.
+        if (name.startsWith(`${sd.id}-stitches.`) || /^merge-(print(-marks)?\.pdf|copies\.zip|names\.zip)$/.test(name)) fs.rmSync(store.designFile(d.id, name), { force: true });
       }
       d.version = v + 1;
+      // Embroidery: stitched again from the new artwork (thread colours and stitch count with it).
+      if (d.method === 'embroidery' && sd.id === d.sides[0].id) item.emb = await makeEmbroidery(d);
       // The customer's vector file shows the old artwork: it stays on disk but is no longer offered.
       sd.hasSvg = false;
       // The product mockup still shows the old artwork: proofs show only the print file for this side.
@@ -835,6 +858,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       await makeProofImages(d);
       await runPreflight(d);
       const now = new Date().toISOString();
+      // A printed sample first, if asked for at checkout, stays asked for.
+      if (item.approval && item.approval.sample) item.sampleWanted = true;
+      item.replaced = { ...(item.replaced || {}), [sd.id]: d.version };
       item.approval = null;
       item.status = 'awaiting_approval';
       item.approvals = [...(item.approvals || []), { action: 'changes', by: 'shop', at: now, replaced: true, proofHash: proofHashOf(d), version: d.version, side: sd.id }];
@@ -909,8 +935,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const useColor = vc.color >= 0 && product.mix && product.mix.colors;
     const counts = new Map();
     rows.forEach((r, i) => {
-      const sz = useSize ? matchSize(product, r[vc.size]) : sizeDef;
-      const co = useColor ? matchColor(product, r[vc.color]) : colorDef;
+      // A blank size / colour cell: the size / colour chosen for the design.
+      const sz = useSize && String(r[vc.size] || '').trim() ? matchSize(product, r[vc.size]) : sizeDef;
+      const co = useColor && String(r[vc.color] || '').trim() ? matchColor(product, r[vc.color]) : colorDef;
       if (!sz) throw new HttpError(400, 'mergeBadSize', { row: i + 1, value: r[vc.size] || '—', list: product.sizes.map((x) => x.id).join(', ') });
       if (!co) throw new HttpError(400, 'mergeBadColor', { row: i + 1, value: r[vc.color] || '—', list: product.colors.map((x) => pickEn(x.name)).join(', ') });
       const key = `${co.id}|${sz.id}`;
@@ -2498,7 +2525,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const discount = coupon ? coupon.discount : 0;
     // "Print one sample first" adds about 2 business days to the promised day.
     const delivery = withSampleDays(deliveryFor((req.body || {}).delivery), (req.body || {}).sample === true);
-    const baseShipping = !lines.length || (coupon && coupon.freeShipping) ? 0 : shippingFor(round2(subtotal - discount));
+    // Free shipping is judged on the items before any coupon: a coupon never makes the order cost more.
+    const baseShipping = !lines.length || (coupon && coupon.freeShipping) ? 0 : shippingFor(subtotal);
     // `shipping` includes the express fee; `delivery` says how fast and by which day.
     const shipping = round2(baseShipping + (lines.length ? delivery.fee : 0));
     const deliveryOptions = ['standard', 'express'].map((s) => withSampleDays(deliveryFor(s), (req.body || {}).sample === true));
@@ -2622,7 +2650,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (body.delivery !== undefined && body.delivery !== 'standard' && body.delivery !== 'express') throw new HttpError(400, 'badDelivery');
     const anySample = designs.some((d) => approvals[d.id] && approvals[d.id].sample === true && copiesOf(d) > 1);
     const delivery = withSampleDays(deliveryFor(body.delivery, new Date(now)), anySample, new Date(now));
-    const shipping = round2((applied && applied.freeShipping ? 0 : shippingFor(round2(subtotal - discount))) + delivery.fee);
+    const shipping = round2((applied && applied.freeShipping ? 0 : shippingFor(subtotal)) + delivery.fee);
     const total = round2(subtotal - discount + shipping);
     // The customer must have seen this total: if a price changed since, show them the new one first.
     if (expectedTotal !== undefined && !(Math.abs(Number(expectedTotal) - total) <= 0.009)) {
@@ -2737,7 +2765,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (d.orderId) throw new HttpError(409, 'designOrdered');
     if (d.productId !== item.productId) throw new HttpError(409, 'reviseOtherProduct');
     const fields = designItemFields(d);
-    if (Math.abs(fields.price - item.price) > 0.009) throw new HttpError(409, 'revisePrice', { was: item.price, now: fields.price });
+    // Same pieces and options as before: the old and new designs at today's prices (the shop may have
+    // changed its prices since the order); the customer keeps the price agreed at checkout.
+    const old = store.getDesign(item.designId);
+    const oldToday = old ? designPrice({ ...old, status: 'ready', orderId: null }) : item.price;
+    if (oldToday === null || Math.abs(fields.price - oldToday) > 0.009) throw new HttpError(409, 'revisePrice', { was: oldToday ?? item.price, now: fields.price });
     // Checked again and changed under the store's lock, on the latest data (another copy of the app
     // may have answered the same item or ordered the same design a moment ago).
     store.mutate((db) => {
@@ -2752,12 +2784,23 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       nd.orderId = o.id;
       nd.version = ((prev && prev.version) || 1) + 1;
       nd.revisionOf = it.designId;
+      // A printed sample first, if the customer asked for one at checkout, stays asked for.
+      const sample = Boolean(it.sampleWanted || (it.approval && it.approval.sample));
+      const agreed = { price: it.price, unitPrice: it.unitPrice, lines: new Map((it.quantities || []).map((l) => [`${l.color && l.color.id}|${l.size && l.size.id}`, l.unitPrice])) };
       // The line now describes the new design (what the old one had and this one hasn't goes).
       for (const k of ['quantities', 'merge', 'method', 'emb', 'options', 'imports', 'rightsConfirmedAt', 'pattern', 'copies', 'unitPrice']) delete it[k];
       Object.assign(it, fields);
+      // …at the prices agreed at checkout.
+      it.price = agreed.price;
+      if (agreed.unitPrice !== undefined) it.unitPrice = agreed.unitPrice;
+      if (Array.isArray(it.quantities)) for (const l of it.quantities) { const p = agreed.lines.get(`${l.color && l.color.id}|${l.size && l.size.id}`); if (p !== undefined) l.unitPrice = p; }
+      if (sample) it.sampleWanted = true;
+      // The approval was for the old version: the new one gets its own proof to approve.
+      delete it.approval;
+      delete it.replaced;
       it.preflight = nd.preflight ? { status: nd.preflight.status, checks: nd.preflight.checks } : null;
       it.status = 'review';
-      it.review = { needed: true, reasons: [...new Set(['revised', ...reviewReasons(nd, {})])], status: 'pending' };
+      it.review = { needed: true, reasons: [...new Set(['revised', ...reviewReasons(nd, { sample })])], status: 'pending' };
       it.approvals = [...(it.approvals || []), { action: 'revised', by: 'customer', at: now, proofHash: proofHashOf(nd), version: nd.version }];
       it.history.push({ status: 'review', at: now });
       delete it.proofToken;
@@ -2906,9 +2949,23 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const at = typeof it.addedAt === 'string' && !Number.isNaN(Date.parse(it.addedAt)) ? new Date(it.addedAt).toISOString() : new Date().toISOString();
       items.push({ designId: it.designId, addedAt: at, ...(d.kind === 'book' && BOOK_TOKEN_RE.test(it.editToken || '') ? { editToken: it.editToken } : {}) });
     }
+    // With `base` (the ids this device last agreed with the account): merged with what the account has
+    // now, so a device with an old page open can't drop items added elsewhere or bring back removed ones.
+    // Kept: in both, or added on this device since; added elsewhere since: kept too.
+    const baseIds = Array.isArray((req.body || {}).base) ? new Set(req.body.base.filter((x) => typeof x === 'string').slice(0, 200)) : null;
+    let result = items;
+    if (baseIds) {
+      const stored = readAccountCart(me).items.filter((r) => r && UUID_RE.test(r.designId || ''));
+      const mine = new Set(items.map((r) => r.designId));
+      const theirs = new Set(stored.map((r) => r.designId));
+      result = [
+        ...items.filter((r) => theirs.has(r.designId) || !baseIds.has(r.designId)),
+        ...stored.filter((r) => !mine.has(r.designId) && !baseIds.has(r.designId)),
+      ].slice(0, MAX_CART);
+    }
     fs.mkdirSync(path.dirname(cartFile(me)), { recursive: true });
     const updatedAt = new Date().toISOString();
-    writeFileAtomic(cartFile(me), JSON.stringify({ items, updatedAt }));
+    writeFileAtomic(cartFile(me), JSON.stringify({ items: result, updatedAt }));
     res.set('X-Account', me.id);
     res.json(accountCartEntries(me));
   });
@@ -3292,7 +3349,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
           for (let i = 0; i < book.pages.length; i++) pages.push({ img: await books.pageJpeg(data, i, 900, 85), label: `Page ${i + 1}` });
         } else {
           pages = design.sides
-            .map((sd) => ({ file: store.designFile(designId, `${sd.id}-preview.png`), label: pickEn(sd.name) || sd.id }))
+            // A side the shop replaced: its corrected print file (the mockup shows the old artwork).
+            .map((sd) => ({ file: store.designFile(designId, design.replaced && design.replaced[sd.id] ? `${sd.id}-proof.png` : `${sd.id}-preview.png`), label: pickEn(sd.name) || sd.id }))
             .filter((pg) => fs.existsSync(pg.file))
             .map((pg) => ({ img: fs.readFileSync(pg.file), label: pg.label }));
         }
@@ -3385,7 +3443,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     digits = digits.replace(/^(00)?20(?=1)/, '0');
     const orders = store.listOrders();
     const list = customerList()
-      .filter((c) => !q || String(c.name || '').toLowerCase().includes(q) || (c.email || '').includes(q) || (digits.length >= 3 && String(c.phone || '').includes(digits)))
+      .filter((c) => !q || looseName(c.name).includes(looseName(q)) || (c.email || '').includes(q) || (digits.length >= 3 && String(c.phone || '').includes(digits)))
       .slice()
       .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
       .slice(0, 200)
@@ -3610,7 +3668,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (!house) throw new HttpError(404, 'houseNotFound');
       if (channel !== 'email' && channel !== 'whatsapp') throw new HttpError(400, 'houseChannel');
       if (channel === 'email' && !house.email) throw new HttpError(400, 'houseNoEmail');
-      if (channel === 'whatsapp' && !house.whatsapp) throw new HttpError(400, 'houseNoWhatsApp');
+      // Numbers saved before they were checked (e.g. a mobile without its 0): put right when sending.
+      const wa = house.whatsapp ? dispatch.whatsappDigits(house.whatsapp) : null;
+      if (channel === 'whatsapp' && !wa) throw new HttpError(400, house.whatsapp ? 'houseWhatsApp' : 'houseNoWhatsApp');
       if (channel === 'email' && !notify.emailReady()) throw new HttpError(400, 'emailOff');
       const wanted = [...new Set(Array.isArray(formats) ? formats.map(String) : [])].filter((f) => SEND_FORMATS.has(f));
       if (!wanted.length) throw new HttpError(400, 'houseNoFiles');
@@ -3657,11 +3717,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         result = { status: 'sent', attached: attach };
       } else {
         const text = dispatch.whatsappText(msg);
-        result = { status: 'opened', whatsappUrl: `https://wa.me/${house.whatsapp}?text=${encodeURIComponent(text)}` };
+        result = { status: 'opened', whatsappUrl: `https://wa.me/${wa}?text=${encodeURIComponent(text)}` };
       }
       const record = {
         id: crypto.randomUUID(), houseId: house.id, houseName: house.name, channel,
-        to: channel === 'email' ? house.email : `+${house.whatsapp}`, files: files.map((f) => f.label), at: new Date().toISOString(), status: result.status,
+        to: channel === 'email' ? house.email : `+${wa}`, files: files.map((f) => f.label), at: new Date().toISOString(), status: result.status,
       };
       store.mutate(() => {
         item.sends = [...(item.sends || []), record].slice(-20);

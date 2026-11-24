@@ -23,11 +23,11 @@
     try {
       const before = localStorage.getItem('pod-acct');
       // Someone else signed in on this browser: the last customer's drafts kept here go.
-      if (me && before && before !== '1' && before !== me.id) {
+      // Someone else signed in, or the last customer's session ended without signing out (a shared
+      // phone): nothing of theirs stays here (drafts, cart, photos, a storybook's answers).
+      if (before && before !== '1' && (!me || before !== me.id)) {
         await POD.drafts.clearLocal();
-        // …and their cart (it must not join the new customer's account).
-        localStorage.removeItem('pod-cart-base');
-        POD.setCart([]);
+        POD.forgetPersonal();
       }
       if (me) localStorage.setItem('pod-acct', me.id);
       else localStorage.removeItem('pod-acct');
@@ -141,11 +141,10 @@
     drafts = null;
     try { localStorage.removeItem('pod-acct'); localStorage.removeItem('pod-cart-base'); } catch (e) { /* private mode */ }
     // Their drafts are on their account; nothing of theirs stays in this browser
-    // (a shared family phone): no drafts, no cart, no checkout choices, nothing typed in the forms.
+    // (a shared family phone): no drafts, no cart, no checkout choices, no photos or storybook answers,
+    // nothing typed in the forms.
     await POD.drafts.clearLocal();
-    POD.setCart([]);
-    try { for (const k of ['pod-proof-ok', 'pod-coupon', 'pod-order-key', 'pod-delivery']) sessionStorage.removeItem(k); } catch (e) { /* private mode */ }
-    if (POD.updateCartBadge) POD.updateCartBadge();
+    POD.forgetPersonal();
     document.querySelectorAll('#acct-out input').forEach((i) => { if (i.type !== 'checkbox' && i.type !== 'hidden') i.value = ''; });
     const toasts = document.getElementById('toast-root');
     if (toasts) toasts.innerHTML = '';

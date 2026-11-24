@@ -152,8 +152,25 @@ async function filmPdf(pieces, { rollWidthIn = 22, gapIn = 0.25, mirror = true, 
     let img = sharp(await hardAlpha(piece.png), { limitInputPixels: 80e6 });
     if (pl.rotated) img = img.rotate(90);
     if (mirror) img = img.flop();
-    return { pl, piece, png: await img.png().toBuffer() };
+    return { pl, piece, png: await img.png().toBuffer(), label: labels && piece.label ? labelSpot(pl, piece) : null };
   }));
+  // Each label is drawn once, on a page where its piece is printed: right under the piece, or right
+  // above it when the space under it is cut off by a page break (e.g. a piece ending exactly at the break).
+  function labelSpot(pl, piece) {
+    const y = margin + pl.y;
+    const ih = pl.rotated ? piece.widthIn : piece.heightIn;
+    const lineIn = (6 / 72) * 1.2; // one 6 pt line
+    const pageOf = (v) => Math.min(pages - 1, Math.max(0, Math.floor(v / maxPageIn)));
+    const fits = (top) => top >= 0 && top + lineIn <= lengthIn && pageOf(top) === pageOf(top + lineIn - 1e-6);
+    const under = y + ih + 0.02;
+    const above = y - 0.02 - lineIn;
+    const bottomPage = pageOf(y + ih - 1e-6);
+    const topPage = pageOf(y);
+    if (fits(under) && pageOf(under) === bottomPage) return { y: under, page: bottomPage };
+    if (fits(above) && pageOf(above) === topPage) return { y: above, page: topPage };
+    // A piece filling its pages from top to bottom: the label goes on the first line of its last page.
+    return { y: fits(under) ? under : bottomPage * maxPageIn, page: fits(under) ? pageOf(under) : bottomPage };
+  }
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ autoFirstPage: false, margin: 0, info: { Title: title, Creator: 'OneOff Print' } });
     const chunks = [];
@@ -164,16 +181,15 @@ async function filmPdf(pieces, { rollWidthIn = 22, gapIn = 0.25, mirror = true, 
       const top = pg * maxPageIn;
       const h = Math.min(maxPageIn, lengthIn - top);
       doc.addPage({ size: [rollWidthIn * pt, h * pt], margin: 0 });
-      for (const { pl, piece, png } of prepared) {
+      for (const { pl, piece, png, label } of prepared) {
         const y = margin + pl.y;
-        if (y + pl.h <= top || y >= top + h) continue;
         const w = pl.rotated ? piece.heightIn : piece.widthIn;
         const ih = pl.rotated ? piece.widthIn : piece.heightIn;
         // On mirrored film, positions are mirrored too so the whole sheet reads correctly after pressing.
         const x = mirror ? rollWidthIn - margin - pl.x - w : margin + pl.x;
-        doc.image(png, x * pt, (y - top) * pt, { width: w * pt, height: ih * pt });
-        if (labels && piece.label) {
-          doc.font('Helvetica').fontSize(6).fillColor('#9aa0a6').text(piece.label, x * pt, (y - top + ih + 0.02) * pt, { lineBreak: false });
+        if (y + ih > top && y < top + h) doc.image(png, x * pt, (y - top) * pt, { width: w * pt, height: ih * pt });
+        if (label && label.page === pg) {
+          doc.font('Helvetica').fontSize(6).fillColor('#9aa0a6').text(piece.label, x * pt, (label.y - top) * pt, { lineBreak: false });
         }
       }
     }
