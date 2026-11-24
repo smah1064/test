@@ -31,8 +31,8 @@
   Object.assign(fabric.Object.prototype, {
     transparentCorners: false,
     cornerColor: '#ffffff',
-    cornerStrokeColor: '#ff5a36',
-    borderColor: '#ff5a36',
+    cornerStrokeColor: '#ca3d1a',
+    borderColor: '#ca3d1a',
     cornerSize: 12,
     touchCornerSize: 28,
     cornerStyle: 'circle',
