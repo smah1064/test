@@ -1077,6 +1077,9 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 /* Brand: the إبداع logo (Arabic pages) or ebda3 (English pages), with its magenta corner marks. */
 .brand-logo { display: block; height: 40px; width: auto; }
 html[lang="ar"] .brand-en, html:not([lang="ar"]) .brand-ar { display: none; }
+.brand-mark-logo { display: none; }
+/* English pages on phones: the compact ع mark from the brand kit (the wide 'ebda3' word pushed the header off screen). */
+@media (max-width: 480px) { html:not([lang="ar"]) .brand-en { display: none; } html:not([lang="ar"]) .brand-mark-logo { display: block; } }
 @media (max-width: 640px) { .brand-logo { height: 34px; } }
 @media (max-width: 400px) { .brand-logo { height: 26px; } }
 
