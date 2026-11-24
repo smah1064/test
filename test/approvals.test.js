@@ -240,3 +240,54 @@ test('proof emails go in the customer\'s language and never throw', async () => 
   const r2 = await notify.proofMessage(null, null, {});
   assert.strictEqual(r2.email, 'skipped');
 });
+
+test('a replaced print file also renews the DTF film and DTG files, and the old vector file is no longer offered', async () => {
+  const d = await makeDesign({ quantities: [{ color: 'white', size: '11oz', qty: 60 }] });
+  const o = await (await order([d.id], { [d.id]: { proofHash: (await proofOf(d.id)).proofHash } })).json();
+  const it = o.items[0];
+  assert.strictEqual((await adminJson(`/api/admin/items/${it.id}/review`, { action: 'approve' })).status, 200);
+  const get = async (fmt) => admin(`/api/admin/files/${d.id}/front?format=${fmt}`);
+  const before = {};
+  for (const f of ['dtf-film', 'dtg-white']) {
+    const r = await get(f);
+    assert.strictEqual(r.status, 200, f);
+    before[f] = Buffer.from(await r.arrayBuffer());
+  }
+  assert.strictEqual((await get('svg')).status, 200);
+  // A different colour and shape (the DTG white layer follows the shape).
+  const fresh = await sharp({ create: { width: MUG.w, height: MUG.h, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+    .composite([{ input: { create: { width: 300, height: 300, channels: 4, background: { r: 10, g: 60, b: 220, alpha: 1 } } }, left: 450, top: 375 }]).png().toBuffer();
+  assert.strictEqual((await admin(`/api/admin/items/${it.id}/replacement/front`, { method: 'PUT', body: fresh })).status, 200);
+  const re = await (await adminJson(`/api/admin/items/${it.id}/resend-proof`, {})).json();
+  const t = re.proofLink.split('t=')[1];
+  assert.strictEqual((await post(`/api/proofs/${t}`, { decision: 'approve', proofHash: (await proofOf(d.id)).proofHash })).status, 200);
+  for (const f of ['dtf-film', 'dtg-white']) {
+    const r = await get(f);
+    assert.strictEqual(r.status, 200, f);
+    assert.ok(!before[f].equals(Buffer.from(await r.arrayBuffer())), `${f} made again from the new file`);
+  }
+  assert.strictEqual((await get('svg')).status, 404);
+  const side = (await (await admin('/api/admin/orders')).json()).orders.find((x) => x.id === o.id).items[0].sides[0];
+  assert.strictEqual(side.hasSvg, false);
+});
+
+test('printing houses are told every size and the number of pieces', () => {
+  const dispatch = require('../src/dispatch');
+  const order = { number: 'POD-1003', items: [{}] };
+  const base = { position: 1, productName: { en: 'T-shirt', ar: 'تيشيرت' }, process: 'dtf', color: { name: { en: 'Black', ar: 'أسود' } }, size: { label: { en: 'M', ar: 'M' } } };
+  const args = { house: { name: 'X' }, order, design: { sides: [] }, files: [], lang: 'en', expires: '2026-12-24T00:00:00Z' };
+  const mixed = dispatch.whatsappText({ ...args, item: { ...base, copies: 3, quantities: [{ color: { name: { en: 'Black' } }, size: { label: { en: 'S' } }, qty: 2 }, { color: { name: { en: 'Black' } }, size: { label: { en: '2XL' } }, qty: 1 }] } });
+  assert.match(mixed, /Black · S ×2، Black · 2XL ×1/);
+  assert.match(mixed, /\*Quantity:\* 3/);
+  assert.doesNotMatch(mixed, /Black · M/);
+  assert.match(dispatch.whatsappText({ ...args, item: { ...base, copies: 4 } }), /\*Quantity:\* 4/);
+  assert.match(dispatch.whatsappText({ ...args, item: base }), /\*Quantity:\* 1/);
+});
+
+test('accounts: "sold" counts pieces, not order lines', () => {
+  const accounting = require('../src/accounting');
+  const it = (id, extra) => ({ id, productId: 'tshirt', productName: { en: 'T' }, price: 100, status: 'queued', sides: [{}], ...extra });
+  const orders = [{ id: 'o1', number: 1, createdAt: new Date().toISOString(), customer: { name: 'x' }, items: [it('a'), it('b', { copies: 5, quantities: [{ size: { id: 'S' }, qty: 2 }, { size: { id: 'L' }, qty: 3 }] }), it('c', { copies: 3 })], subtotal: 300, shipping: 0, total: 300 }];
+  const r = accounting.report({ orders, costs: {}, expenses: [], settings: {} });
+  assert.strictEqual(r.products.find((p) => p.productId === 'tshirt').units, 9);
+});

@@ -753,9 +753,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       // Files made from the old version are out of date.
       for (const name of fs.readdirSync(store.designDir(d.id))) {
         if (name.startsWith(`${sd.id}-print`) && name !== `${sd.id}-print.png` && !/\.v\d+\.png$/.test(name)) fs.rmSync(store.designFile(d.id, name), { force: true });
+        // DTF film and DTG underbase are made from the print file too.
+        if (name.startsWith(`${sd.id}-dtf-`) || name.startsWith(`${sd.id}-dtg-`)) fs.rmSync(store.designFile(d.id, name), { force: true });
         if (/^preview-v\d+\.pdf$/.test(name)) fs.rmSync(store.designFile(d.id, name), { force: true });
       }
       d.version = v + 1;
+      // The customer's vector file shows the old artwork: it stays on disk but is no longer offered.
+      sd.hasSvg = false;
       // The product mockup still shows the old artwork: proofs show only the print file for this side.
       d.replaced = { ...(d.replaced || {}), [sd.id]: d.version };
       await makeProofImages(d);
@@ -2833,6 +2837,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     }
     const fmt = Object.hasOwn(FORMATS, format || 'png') ? FORMATS[format || 'png'] : null;
     if (!side || !fmt) throw new HttpError(404, 'notFound');
+    if (format === 'svg' && design.replaced && design.replaced[sideId]) throw new HttpError(404, 'notFound');
     const target = store.designFile(designId, fmt.file(sideId));
     if (!fs.existsSync(target)) {
       const png = fs.readFileSync(store.designFile(designId, `${sideId}-print.png`));
@@ -3187,13 +3192,20 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (!chosen.length) throw new HttpError(400, 'itemNotFound');
       const pieces = [];
       for (const it of chosen) {
+        // One transfer per piece: an item of several sizes / colours gets one per piece, labelled with its size.
+        const lines = Array.isArray(it.quantities) && it.quantities.length ? it.quantities.map((l) => ({ label: [pickEn(l.color && l.color.name), pickEn(l.size.label)].filter(Boolean).join(' '), qty: l.qty })) : [{ label: pickEn(it.size.label), qty: 1 }];
         for (const sd of it.sides) {
-          pieces.push({
-            png: fs.readFileSync(store.designFile(it.designId, `${sd.id}-print.png`)),
-            widthIn: sd.widthIn + 2 * (sd.bleedIn || 0),
-            heightIn: sd.heightIn + 2 * (sd.bleedIn || 0),
-            label: `${it.orderNumber} #${it.position} · ${pickEn(it.productName)} · ${pickEn(sd.name)} · ${pickEn(it.size.label)}`,
-          });
+          const png = fs.readFileSync(store.designFile(it.designId, `${sd.id}-print.png`));
+          for (const line of lines) {
+            for (let k = 0; k < line.qty; k++) {
+              pieces.push({
+                png,
+                widthIn: sd.widthIn + 2 * (sd.bleedIn || 0),
+                heightIn: sd.heightIn + 2 * (sd.bleedIn || 0),
+                label: `${it.orderNumber} #${it.position} · ${pickEn(it.productName)} · ${pickEn(sd.name)} · ${line.label}`,
+              });
+            }
+          }
         }
       }
       const film = await printfiles.filmPdf(pieces, { title: 'DTF film' });

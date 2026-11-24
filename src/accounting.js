@@ -170,7 +170,8 @@ function report({ orders, costs, expenses, settings, from, to }) {
       if (c.source !== 'actual' && !c.set) t.missingCosts++;
       const pk = it.productId;
       const p = byProduct.get(pk) || { productId: pk, productName: it.productName, units: 0, sales: 0, cost: 0 };
-      p.units++;
+      // Pieces, not order lines: an item of 5 T-shirts sold 5.
+      p.units += Array.isArray(it.quantities) && it.quantities.length ? it.quantities.reduce((n, l) => n + (l.qty || 0), 0) : it.copies || 1;
       // Sales after the coupon: the order's discount is shared over its items by price.
       p.sales = round2(p.sales + it.price - share[idx]);
       p.cost = round2(p.cost + c.total);

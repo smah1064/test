@@ -492,6 +492,22 @@ test('items can switch between DTG and DTF; DTF/DTG files and the shared film ar
   assert.match(after.filmBatch.id, /^F\d+$/);
 });
 
+test('the DTF film holds one transfer per piece of an item', async () => {
+  const filmFor = async (body) => {
+    const d = await makeDesign({ productId: 'polo', color: 'black', size: 'L', sides: { front: SIDE }, ...body });
+    const order = await (await post('/api/orders', { customer: CUSTOMER, designIds: [d.id] })).json();
+    const itemId = order.items[0].id;
+    assert.strictEqual((await admin(`/api/admin/items/${itemId}`, { method: 'PATCH', body: JSON.stringify({ process: 'dtf' }) })).status, 200);
+    const film = await admin('/api/admin/dtf-film', { method: 'POST', body: JSON.stringify({ itemIds: [itemId] }) });
+    assert.strictEqual(film.status, 200);
+    const pdf = Buffer.from(await film.arrayBuffer()).toString('latin1');
+    return { length: Number(film.headers.get('x-film-length-in')), labels: (pdf.match(/ · Front · /g) || []).length };
+  };
+  const one = await filmFor({});
+  const six = await filmFor({ quantities: [{ color: 'black', size: 'L', qty: 2 }, { color: 'black', size: 'XL', qty: 4 }] });
+  assert.ok(six.length > one.length, `${six.length} in for 6 pieces vs ${one.length} in for 1`);
+});
+
 test('product card pictures are recoloured photos', async () => {
   const res = await fetch(base + '/api/thumbs/hoodie/black.webp');
   assert.strictEqual(res.status, 200);
