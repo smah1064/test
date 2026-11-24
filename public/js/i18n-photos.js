@@ -58,7 +58,7 @@ Object.assign(window.POD_STRINGS, {
   // Delivery terms (marketing rule: express only; standard is chosen at checkout)
   'photos.dlvExpress': ['⚡ Express delivery within {days}: +{fee}', '⚡ توصيل سريع خلال {days}: +{fee}'],
   'photos.dlvStandard': ['Standard delivery available at checkout · shipping {fee}', 'التوصيل العادي متاح عند الدفع · الشحن {fee}'],
-  'photos.dlvFree': ['free over {price}', 'مجاني فوق {price}'],
+  'photos.dlvFree': ['free from {price}', 'مجاني من {price}'],
   'photos.dlvCod': ['💵 Cash on delivery available', '💵 الدفع عند الاستلام متاح'],
   'photos.days.one': ['1 business day', 'يوم عمل واحد'],
   'photos.days.two': ['2 business days', 'يومين عمل'],

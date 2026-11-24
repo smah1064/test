@@ -751,7 +751,7 @@ window.POD_STRINGS = {
   'delivery.line': ['{speed} delivery, expected by {date}', 'توصيل {speed}، الاستلام المتوقع: {date}'],
   'admin.expressBy': ['⚡ Express · deliver by {date}', '⚡ سريع · يوصل لحد {date}'],
   'rv.replaceNamesNote': ['Name-list items have no replacement upload: the customer corrects the names or the design from the proof link (ask for changes).', 'منتجات قوائم الأسماء مالهاش رفع ملف بديل: العميل بيصلّح الأسماء أو التصميم من رابط المعاينة (اطلب تعديل).'],
-  'checkout.freeOver': ['Free shipping on orders over {price}', 'شحن مجاني للطلبات فوق {price}'],
+  'checkout.freeOver': ['Free shipping on orders of {price} or more', 'شحن مجاني للطلبات من {price} أو أكتر'],
   'checkout.cod': ['Cash on delivery', 'الدفع عند الاستلام'],
   'checkout.codText': ['Pay the courier in cash when your order arrives.', 'ادفع للمندوب كاش عند استلام الطلب.'],
   'checkout.place': ['Place order', 'تأكيد الطلب'],
