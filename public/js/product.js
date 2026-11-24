@@ -62,6 +62,7 @@
     $('pp-img').src = `/api/thumbs/${encodeURIComponent(product.id)}/${encodeURIComponent(color.id)}.webp`;
     $('pp-img').alt = tr(product.name);
     $('pp-color-name').textContent = tr(color.name);
+    $('pp-color-label').textContent = product.colorLabel ? `${tr(product.colorLabel)}:` : t('panel.colour');
     $('pp-swatches').innerHTML = product.colors.map((c) => `<button type="button" class="swatch ${c.id === color.id ? 'active' : ''}" data-color="${esc(c.id)}" title="${esc(tr(c.name))}" aria-label="${esc(tr(c.name))}" style="background:${esc(c.hex)}"></button>`).join('');
     $('pp-scratch').href = `/editor?${q()}`;
     // Embroidery on garments, caps, totes and aprons.

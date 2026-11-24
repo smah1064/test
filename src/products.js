@@ -976,7 +976,19 @@ PRODUCTS.push(
     description: t('Thick 350 gsm cards, 9 × 5.5 cm, printed on one or both sides.', 'كروت 350 جرام سميكة، 9 × 5.5 سم، طباعة وجه أو وجهين.'),
     basePrice: 150,
     extraSidePrice: 50,
+    colorLabel: t('Paper', 'الورق'),
     colors: PAPER_FINISH,
+    // Cellophane lamination (سلوفان) on both sides: priced per pack, so it grows with the number of cards.
+    options: [{
+      id: 'lamination',
+      name: t('Lamination', 'سلوفان'),
+      help: t('A thin film over the print that protects the cards and makes them feel stronger.', 'طبقة رقيقة فوق الطباعة بتحمي الكروت وبتخليها أتقل في الإيد.'),
+      choices: [
+        { id: 'none', name: t('No lamination', 'بدون سلوفان'), price: 0 },
+        { id: 'matte', name: t('Matte lamination', 'سلوفان مط'), price: { 100: 60, 250: 120, 500: 200, 1000: 350 } },
+        { id: 'gloss', name: t('Glossy lamination', 'سلوفان لامع'), price: { 100: 60, 250: 120, 500: 200, 1000: 350 } },
+      ],
+    }],
     sizes: qty([['100', '100 cards', '100 كارت', 0], ['250', '250 cards', '250 كارت', 120], ['500', '500 cards', '500 كارت', 250], ['1000', '1000 cards', '1000 كارت', 450]]),
     sides: [
       { id: 'front', name: FRONT, svg: flat(70, 220, 360, 220, 4), printArea: { x: 70, y: 220, w: 360, h: 220 }, printWidthIn: 3.54 },
@@ -1639,6 +1651,37 @@ for (const [key, zone] of Object.entries(MOVE_ZONES)) {
   if (side) side.moveZone = zone;
 }
 
+/**
+ * Product options (e.g. business-card lamination): { optionId: choiceId } -> the choices
+ * kept on a design ({ lamination: { id, name } }), or null for "none / the first choice".
+ * Unknown options or choices are refused (null + error).
+ */
+function cleanOptions(product, raw) {
+  if (!product.options || !raw || typeof raw !== 'object') return { options: null };
+  const out = {};
+  for (const opt of product.options) {
+    const want = raw[opt.id];
+    if (want == null || want === '') continue;
+    const choice = opt.choices.find((c) => c.id === String(want));
+    if (!choice) return { error: true };
+    if (choice === opt.choices[0]) continue; // the default (no lamination) isn't kept
+    out[opt.id] = { id: choice.id, name: choice.name, optionName: opt.name };
+  }
+  return { options: Object.keys(out).length ? out : null };
+}
+/** What the chosen options add to one piece (one pack) of a size. */
+function optionsPrice(product, options, sizeId) {
+  if (!product.options || !options) return 0;
+  let sum = 0;
+  for (const opt of product.options) {
+    const chosen = options[opt.id];
+    const choice = chosen && opt.choices.find((c) => c.id === chosen.id);
+    if (!choice) continue;
+    sum += typeof choice.price === 'number' ? choice.price : (choice.price && choice.price[sizeId]) || 0;
+  }
+  return sum;
+}
+
 function priceFor(product, sizeId, sideCount) {
   const size = product.sizes.find((s) => s.id === sizeId);
   if (!size) return null;
@@ -1668,6 +1711,8 @@ module.exports = {
   FREE_SHIPPING_OVER,
   getProduct,
   priceFor,
+  cleanOptions,
+  optionsPrice,
   shippingFor,
   round2,
 };

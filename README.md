@@ -198,6 +198,8 @@ The design keeps `quantities: [{ color, size, qty, unitPrice }]`; orders, the ca
 
 For invitations, certificates, greeting cards, ID cards, **business cards**, name labels and sticker sheets (and the team-kit garments below), the editor has **Print a list of names**. It is easy to find: a **Names** button in the editor's tool bar (only on these products) opens it, the product page has a "Print a list of names" card that opens the editor right there (`/editor?product=…&names=1`), and on phones the chip under the price shows the number of names.
 
+**Business card paper and lamination:** the card's paper is chosen as matte, glossy or kraft (shown as "Paper / الورق" instead of "Colour"), and **lamination (سلوفان)** as none, matte or glossy. Lamination is priced per pack (60 / 120 / 200 / 350 EGP for 100 / 250 / 500 / 1000 cards; change in `options` of `bizcards` in `src/products.js`) and appears with the size everywhere ("500 cards · Matte lamination"): price, cart, order, invoice, admin and print labels. Other products can get options the same way (`product.options`).
+
 **Business cards for a whole team:** each row is one person's pack (100, 250… cards) with their own name, position, phone, email or any other column, priced per pack. Ready layouts with the fields in place ({الاسم} {الوظيفة} {الموبايل} {الإيميل} or {Name} {Position} {Phone} {Email}) are in Templates → Business & teams (`src/library-packs/cards.js`), and the example file has those columns. The shop prints each page of the PDF as one pack.
 
 

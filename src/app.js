@@ -16,6 +16,8 @@ const {
   FREE_SHIPPING_OVER,
   getProduct,
   priceFor,
+  cleanOptions,
+  optionsPrice,
   shippingFor,
   round2,
   printAreaFor,
@@ -869,7 +871,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   }
   /** Total pieces and per-line prices of a design (for the cart, order and invoice). */
   function pieceInfo(product, d) {
-    const unit = (sizeId) => priceFor(product, sizeId, d.sides.length) + embExtra(product, d);
+    const unit = (sizeId) => priceFor(product, sizeId, d.sides.length) + embExtra(product, d, sizeId);
     if (d.quantities) {
       for (const l of d.quantities) l.unitPrice = round2(unit(l.size.id));
       const prices = new Set(d.quantities.map((l) => l.unitPrice));
@@ -976,6 +978,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
 
     // Embroidery instead of print: one area (left chest, cap front...), stitched from the print file.
     const emb = (req.body || {}).method === 'embroidery' && product.embroidery ? product.embroidery : null;
+    // Product options (business-card lamination…).
+    const picked = cleanOptions(product, (req.body || {}).options);
+    if (picked.error) throw new HttpError(400, 'badOption');
     if (emb && sideIds.some((id) => id !== emb.side)) throw new HttpError(400, 'embOneSide');
     const editor = {};
     const storedSides = [];
@@ -1039,12 +1044,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       productName: product.name,
       process: emb ? 'embroidery' : product.process,
       ...(emb ? { method: 'embroidery' } : {}),
+      ...(picked.options ? { options: picked.options } : {}),
       color: { id: colorDef.id, name: colorDef.name, hex: colorDef.hex },
-      size: { id: sizeDef.id, label: sizeDef.label },
+      // Options are shown with the size everywhere ("100 cards · Matte lamination"): cart, order, invoice, admin, labels.
+      size: { id: sizeDef.id, label: withOptions(sizeDef.label, picked.options) },
       sides: storedSides,
       price: 0, // set below from the pieces
       ...(mergeList ? { merge: { count: mergeList.count, columns: mergeList.columns, sides: mergeList.sides, ...(mergeList.variantCols ? { variantCols: mergeList.variantCols } : {}) } } : {}),
-      ...(lines ? { quantities: lines } : {}),
+      ...(lines ? { quantities: lines.map((l) => (picked.options ? { ...l, size: { ...l.size, label: withOptions(l.size.label, picked.options) } } : l)) } : {}),
       // The editor's own findings (fonts that didn't load, low-resolution photos, tiny text), checked again at /complete.
       ...(Array.isArray((req.body || {}).clientChecks) && JSON.stringify(req.body.clientChecks).length < 20000 ? { clientChecks: req.body.clientChecks.slice(0, 50) } : {}),
       version: 1,
@@ -1882,7 +1889,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (!product) return null;
     const unit = (sizeId) => {
       const p = priceFor(product, sizeId, d.sides.length);
-      return p == null ? null : p + embExtra(product, d);
+      return p == null ? null : p + embExtra(product, d, sizeId);
     };
     // Several colours / sizes: each line at its size's price.
     if (d.quantities && d.quantities.length) {
@@ -1899,8 +1906,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   };
   /** Pieces in a design: one per row of its name list, else the quantities asked for, else one. */
   const copiesOf = (d) => (!d ? 1 : d.merge ? d.merge.count : d.quantities ? d.quantities.reduce((n, l) => n + l.qty, 0) : 1);
-  /** The embroidery charge on top of the product price. */
-  const embExtra = (product, d) => (d.method === 'embroidery' && product.embroidery ? product.embroidery.surcharge : 0);
+  /** A size label followed by the chosen options ({ en, ar }). */
+  const withOptions = (label, options) => {
+    if (!options) return label;
+    const names = Object.values(options).map((o) => o.name);
+    return { en: [label.en, ...names.map((n) => n.en)].join(' · '), ar: [label.ar, ...names.map((n) => n.ar)].join(' · ') };
+  };
+  /** What comes on top of the product price: embroidery, and options such as lamination (per piece of that size). */
+  const embExtra = (product, d, sizeId = d.size && d.size.id) => (d.method === 'embroidery' && product.embroidery ? product.embroidery.surcharge : 0) + optionsPrice(product, d.options, sizeId);
   // ---------- Customer accounts ----------
   const customerList = () => store.db.customers || [];
   const findCustomer = (id) => customerList().find((x) => x.id === id) || null;
@@ -2223,9 +2236,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         process: d.process || product.process,
         price: designPrice({ ...d, status: 'ready', orderId: null }),
         ...(copiesOf(d) > 1 || d.quantities ? pieceInfo(product, JSON.parse(JSON.stringify(d))) : {}),
-        ...(d.quantities ? { quantities: JSON.parse(JSON.stringify(d.quantities)).map((l) => ({ ...l, unitPrice: round2(priceFor(product, l.size.id, d.sides.length) + embExtra(product, d)) })) } : {}),
+        ...(d.quantities ? { quantities: JSON.parse(JSON.stringify(d.quantities)).map((l) => ({ ...l, unitPrice: round2(priceFor(product, l.size.id, d.sides.length) + embExtra(product, d, l.size.id)) })) } : {}),
         ...(d.merge ? { merge: { count: d.merge.count, columns: d.merge.columns } } : {}),
         ...(d.method === 'embroidery' ? { method: 'embroidery', emb: d.emb || null } : {}),
+        ...(d.options ? { options: JSON.parse(JSON.stringify(d.options)) } : {}),
         ...(d.imports ? { imports: d.imports, rightsConfirmedAt: d.rightsConfirmedAt } : {}),
         ...(d.pattern ? { pattern: d.pattern } : {}),
         status: 'queued',

@@ -107,6 +107,7 @@ const MESSAGES = {
   embOneSide: { en: 'Embroidery is on the front only', ar: 'التطريز على الوش بس' },
   badTrackingUrl: { en: 'The tracking link must start with http:// or https://', ar: 'رابط التتبع لازم يبدأ بـ http:// أو https://' },
   badDate: { en: 'Use a date like 2026-12-31.', ar: 'اكتب التاريخ بالشكل ده 2026-12-31.' },
+  badOption: { en: 'That option isn\'t available for this product.', ar: 'الاختيار ده مش متاح للمنتج ده.' },
   approvalRequired: { en: 'Please check and approve each item\'s proof before ordering.', ar: 'راجع البروفة ووافق عليها لكل منتج قبل إتمام الطلب.' },
   proofChanged: { en: 'A design changed since you approved it. Please check the new proof.', ar: 'تغيّر أحد التصاميم بعد موافقتك عليه. راجع البروفة الجديدة.' },
   notApproved: { en: 'This job isn\'t cleared for printing: it needs review or the customer\'s approval of the current files.', ar: 'هذه المهمة غير جاهزة للطباعة: تحتاج إلى مراجعة أو إلى موافقة العميل على الملفات الحالية.' },

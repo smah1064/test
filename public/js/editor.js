@@ -65,6 +65,7 @@
 
   const st = {
     product: products.find((p) => p.id === params.get('product')) || products[0],
+    options: {}, // product options such as business-card lamination: { optionId: choiceId }
     colorId: null,
     sizeId: null,
     side: null,
@@ -93,6 +94,7 @@
       st.colorId = saved.color.id;
       st.sizeId = saved.size.id;
       if (saved.method === 'embroidery') st.method = 'embroidery';
+      if (saved.options) st.options = Object.fromEntries(Object.entries(saved.options).map(([k, v]) => [k, v.id]));
       if (saved.quantities) st.qty = Object.fromEntries([...new Set(saved.quantities.map((l) => l.color.id))].map((c) => [c, Object.fromEntries(saved.quantities.filter((l) => l.color.id === c).map((l) => [l.size.id, l.qty]))]));
       if (saved.mergeList) st.mergeList = { columns: saved.mergeList.columns, rows: saved.mergeList.rows, total: saved.mergeList.rows.length, truncated: false, fileName: '' };
       for (const [sideId, data] of Object.entries(saved.editor)) {
@@ -152,6 +154,7 @@
       for (const [sideId, o] of Object.entries(draft.offsets || {})) if (st.product.sides.some((s) => s.id === sideId)) st.offsets[sideId] = o;
       if (draft.pattern) st.pattern = draft.pattern;
       if (draft.method === 'embroidery') st.method = 'embroidery';
+      if (draft.options && typeof draft.options === 'object') st.options = { ...draft.options };
       if (draft.mergeList && draft.mergeList.columns && draft.mergeList.rows) st.mergeList = draft.mergeList;
       if (draft.qty && typeof draft.qty === 'object') st.qty = draft.qty;
       restoredDraft = true;
@@ -2650,6 +2653,14 @@
     $('product-select').innerHTML = products.map((x) => `<option value="${x.id}" ${x === p ? 'selected' : ''}>${esc(tr(x.name))}</option>`).join('');
     $('swatches').innerHTML = p.colors.map((c) => `<button class="swatch ${c.id === st.colorId ? 'active' : ''}" data-color="${c.id}" title="${esc(tr(c.name))}" aria-label="${esc(tr(c.name))}" style="background:${c.hex}"></button>`).join('');
     $('color-name').textContent = tr(color().name);
+    $('color-label').textContent = p.colorLabel ? `${tr(p.colorLabel)}:` : t('panel.colour');
+    // Options such as lamination (business cards), with what each adds to the chosen size.
+    $('prod-options').innerHTML = (p.options || []).map((opt) => {
+      const cur = chosenOption(opt);
+      return `<div class="field"><label>${esc(tr(opt.name))}</label>
+        <div class="chips">${opt.choices.map((c) => { const pr = choicePrice(c, st.sizeId); return `<button class="chip ${c === cur ? 'active' : ''}" data-opt="${esc(opt.id)}" data-choice="${esc(c.id)}">${esc(tr(c.name))}${pr ? ` <span style="opacity:.7">+${esc(money(pr))}</span>` : ''}</button>`; }).join('')}</div>
+        ${opt.help ? `<p class="muted small" style="margin:6px 0 0;line-height:1.5">${esc(tr(opt.help))}</p>` : ''}</div>`;
+    }).join('');
     $('sizes').innerHTML = p.sizes.map((s) => `<button class="chip ${s.id === st.sizeId ? 'active' : ''}" data-size="${s.id}">${esc(tr(s.label))}${s.surcharge ? ` <span style="opacity:.7">+${esc(money(s.surcharge))}</span>` : ''}</button>`).join('');
     // Print or embroidery (garments, caps, totes, aprons).
     $('method-field').hidden = !p.embroidery;
@@ -2664,6 +2675,13 @@
       $('pat-tiles').innerHTML = p.pattern.tiles.map((cm) => `<button class="chip ${cm === st.pattern.tileCm ? 'active' : ''}" data-tile="${cm}">${esc(POD.num(cm))} ${esc(t('pat.cm'))}</button>`).join('');
     }
   }
+  $('prod-options').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-opt]');
+    if (!b) return;
+    st.options = { ...(st.options || {}), [b.dataset.opt]: b.dataset.choice };
+    renderOptions();
+    refreshChrome();
+  });
   $('method-chips').addEventListener('click', serial(async (e) => {
     const b = e.target.closest('[data-method]');
     if (!b || b.dataset.method === st.method || !st.product.embroidery) return;
@@ -2791,6 +2809,7 @@
   async function changeProduct(id) {
     const next = products.find((p) => p.id === id);
     if (!next || next === st.product) return;
+    st.options = {}; // options belong to a product
     cancelCrop();
     commit();
     const prev = st.product;
@@ -3161,7 +3180,16 @@
     const size = p.sizes.find((s) => s.id === sizeId) || p.sizes[0];
     const n = designedSides().length;
     const perSide = p.extraSidePrice != null ? p.extraSidePrice : catalog.pricing.extraSide;
-    return p.basePrice + size.surcharge + Math.max(0, n - 1) * perSide + (emb() ? emb().surcharge : 0);
+    return p.basePrice + size.surcharge + Math.max(0, n - 1) * perSide + (emb() ? emb().surcharge : 0) + optionsPrice(size.id);
+  }
+  /** Product options (business-card lamination…): what the chosen ones add to one piece of a size. */
+  function chosenOption(opt) {
+    const id = st.options && st.options[opt.id];
+    return opt.choices.find((c) => c.id === id) || opt.choices[0];
+  }
+  const choicePrice = (choice, sizeId) => (typeof choice.price === 'number' ? choice.price : (choice.price && choice.price[sizeId]) || 0);
+  function optionsPrice(sizeId) {
+    return (st.product.options || []).reduce((sum, opt) => sum + choicePrice(chosenOption(opt), sizeId), 0);
   }
   function renderQty() {
     const box = $('qty-field');
@@ -4094,7 +4122,7 @@
     for (const s of st.product.sides) designs[s.id] = s.id === st.side ? serialize() : (st.designs[s.id] || []);
     const empty = !Object.values(designs).some((o) => o.length);
     const productId = st.product.id;
-    const meta = { productId, colorId: st.colorId, sizeId: st.sizeId, side: st.side, offsets: { ...st.offsets }, ...(st.pattern ? { pattern: { ...st.pattern } } : {}), method: st.method, mergeList: st.mergeList || null, qty: st.qty || null };
+    const meta = { productId, colorId: st.colorId, sizeId: st.sizeId, side: st.side, offsets: { ...st.offsets }, ...(st.pattern ? { pattern: { ...st.pattern } } : {}), method: st.method, options: st.options || {}, mergeList: st.mergeList || null, qty: st.qty || null };
     let preview = null;
     if (!empty) {
       try {
@@ -4225,7 +4253,7 @@
       const created = await POD.api('/api/designs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productId: st.product.id, color: st.colorId, size: st.sizeId, sides: sidesPayload, clientChecks: clientChecks.slice(0, 50), ...(imported ? { rightsConfirmed: true } : {}), ...(emb() ? { method: 'embroidery' } : {}), ...(useMerge ? { merge: { columns: st.mergeList.columns, rows: st.mergeList.rows, sides: mergeSidesPayload } } : { quantities: qtyLines() }) }),
+        body: JSON.stringify({ productId: st.product.id, color: st.colorId, size: st.sizeId, sides: sidesPayload, clientChecks: clientChecks.slice(0, 50), ...(imported ? { rightsConfirmed: true } : {}), ...(emb() ? { method: 'embroidery' } : {}), ...(st.product.options ? { options: st.options || {} } : {}), ...(useMerge ? { merge: { columns: st.mergeList.columns, rows: st.mergeList.rows, sides: mergeSidesPayload } } : { quantities: qtyLines() }) }),
       });
       let done = 0;
       busy(true, t('busy.uploading', { n: 0, total: created.files.length }));
