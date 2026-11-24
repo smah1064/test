@@ -3330,7 +3330,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (!nameAr && !nameEn) throw new HttpError(400, 'fieldRequired', { field: { en: 'Name', ar: 'الاسم' } });
     const category = DESIGN_CATEGORIES.some((c) => c.id === b.category) ? b.category : DESIGN_CATEGORIES[0].id;
     const product = getProduct(sh.productId);
-    const side = sh.sides[0];
+    // A printed side first; a design that is only embroidery keeps the embroidery's own spot.
+    const side = sh.sides.find((sd) => sd.id !== EMB) || sh.sides[0];
     const editor = JSON.parse(fs.readFileSync(shareFile(sh.id, 'editor.json'), 'utf8'));
     const meta = library.addCustom({
       name: { ar: nameAr || nameEn, en: nameEn || nameAr },
@@ -3340,7 +3341,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       objects: editor[side.id].objects,
       // A moved print area: the ready design is re-centred on the standard spot.
       area: (() => {
-        const a = printAreaFor(product, side.id, sh.size.id);
+        const a = side.id === EMB && product.embroidery ? product.embroidery.area : printAreaFor(product, side.id, sh.size.id);
         const o = editor[side.id].offset;
         return o ? { ...a, x: a.x + o.dx, y: a.y + o.dy } : a;
       })(),

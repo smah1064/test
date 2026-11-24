@@ -719,6 +719,10 @@ test('ready-made designs: starter catalog, owner adds from a share link, hides a
   assert.strictEqual((await fetch(base + '/api/library/' + added.id)).status, 404);
   assert.strictEqual((await fetch(base + '/api/library')).status, 200);
   assert.strictEqual((await fetch(base + '/api/admin/library')).status, 401);
+  // A design that is only embroidery (the 'emb' layer) can be added too [QA 20:01].
+  const shEmb = await (await post('/api/shares', { productId: 'tshirt', color: 'white', size: 'M', sides: { emb: { objects: [{ type: 'i-text', text: 'Logo', left: 300, top: 220 }] } }, previews: { emb: preview } })).json();
+  const addedEmb = await admin('/api/admin/library', { method: 'POST', body: JSON.stringify({ share: `https://shop.example/s/${shEmb.id}`, nameEn: 'Chest logo', category: 'business' }) });
+  assert.strictEqual(addedEmb.status, 201, await addedEmb.clone().text());
 });
 
 test('personalised books: create, preview pages, edit, order, print PDF', async () => {
