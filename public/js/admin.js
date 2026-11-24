@@ -17,6 +17,29 @@
   const filmSeen = new Set();
   let filmMsg = '';
 
+  /** Express orders: the order's delivery (on the item, else from the orders list), and a small pill for job cards. */
+  let ordersFetchedAt = 0;
+  const deliveryOf = (item) => item.delivery || (lastOrders && (lastOrders.find((o) => o.id === item.orderId) || {}).delivery) || null;
+  function expressPill(item) {
+    const d = deliveryOf(item);
+    if (!d || d.speed !== 'express') return '';
+    return ` <span class="pill dlv-express-pill" title="${esc(t('delivery.by', { date: POD.day(d.by) }))}">${esc(d.by ? t('admin.expressBy', { date: day(d.by) }) : t('delivery.express'))}</span>`;
+  }
+  /** Job lists don't carry the order's delivery: read the orders once (again when a new order shows up). */
+  async function ensureOrders(items) {
+    const known = new Set((lastOrders || []).map((o) => o.id));
+    if (lastOrders && items.every((i) => !i || !i.orderId || known.has(i.orderId))) return false;
+    if (Date.now() - ordersFetchedAt < 30000) return false;
+    ordersFetchedAt = Date.now();
+    try {
+      lastOrders = (await adminApi('/api/admin/orders')).orders;
+      return true;
+    } catch (e) {
+      if (e.status === 401) throw e;
+      return false;
+    }
+  }
+
   function renderFilm(items) {
     for (const id of [...filmPicked]) if (!items.some((i) => i.id === id)) filmPicked.delete(id);
     $('film-list').innerHTML = items.length
@@ -25,7 +48,7 @@
           <input type="checkbox" data-film="${it.id}" ${filmPicked.has(it.id) || (!it.filmBatch && !filmSeen.has(it.id)) ? 'checked' : ''}>
           <img src="${esc(it.sides[0].previewUrl)}" alt="" ${zoomAttr(it)}>
           <div>
-            <strong>${esc(tr(it.productName))}</strong> ${pill(it.status)}${piecesPill(it)} ${it.filmBatch ? `<span class="pill printed">${esc(t('admin.onFilm', { id: it.filmBatch.id }))}</span>` : ''}
+            <strong>${esc(tr(it.productName))}</strong> ${pill(it.status)}${expressPill(it)}${piecesPill(it)} ${it.filmBatch ? `<span class="pill printed">${esc(t('admin.onFilm', { id: it.filmBatch.id }))}</span>` : ''}
             <div class="muted small">${esc([it.orderNumber, t('admin.spec.itemOf', { i: it.position, n: it.of }), ...colourSizeText(it), it.sides.map((sd) => `${tr(sd.name)} ${t('admin.cmSize', { w: POD.num(sd.widthIn * 2.54), h: POD.num(sd.heightIn * 2.54) })}`).join(' + ')].join(' · '))}</div>
             ${hasQty(it) ? qtySummary(it) : ''}
           </div>
@@ -211,7 +234,8 @@
         <dt>${esc(t('admin.spec.shipTo'))}</dt><dd>${address(c)}</dd>
         ${c.phone ? `<dt>${esc(t('admin.spec.phone'))}</dt><dd><a href="tel:${esc(c.phone)}" dir="ltr">${esc(c.phone)}</a></dd>` : ''}
         ${c.email ? `<dt>${esc(t('admin.spec.email'))}</dt><dd>${esc(c.email)}</dd>` : ''}
-        ${item.payment && item.payment.method === 'cod' ? `<dt>${esc(t('admin.spec.payment'))}</dt><dd>${esc(t('admin.collect', { amount: money(item.orderTotal) }))}</dd>` : ''}
+        ${item.payment && item.payment.status === 'paid' ? `<dt>${esc(t('admin.spec.payment'))}</dt><dd><span class="pill pay-paid">${esc(t('admin.paidPill'))}</span> ${esc(t('admin.paidNothing', { amount: money(item.orderTotal) }))}</dd>`
+    : item.payment && item.payment.method === 'cod' ? `<dt>${esc(t('admin.spec.payment'))}</dt><dd>${esc(t('admin.collect', { amount: money(item.orderTotal) }))}</dd>` : ''}
         ${item.coupon ? `<dt>${esc(t('coupon.discount'))}</dt><dd><bdi dir="ltr">${esc(item.coupon.code)}</bdi> · -${esc(money(item.coupon.discount))}</dd>` : ''}
       </dl>`;
   }
@@ -516,7 +540,7 @@
       <div class="card now-printing">
         <div class="previews">${item.sides.map((s) => `<img src="${esc(s.previewUrl)}" alt="${esc(tr(s.name))}" data-zoom="${esc(JSON.stringify([s.previewUrl]))}">`).join('')}</div>
         <div>
-          ${pill(item.status)}${importBadge(item)}${piecesPill(item)}
+          ${pill(item.status)}${expressPill(item)}${importBadge(item)}${piecesPill(item)}
           ${spec(item)}
           ${importInfo(item)}
           ${item.sides.map((s) => printFiles(item, s)).join('')}
@@ -546,7 +570,7 @@
       <div class="card queue-row ${isOpen ? 'is-open' : ''}">
         <img src="${esc(item.sides[0].previewUrl)}" alt="" ${zoomAttr(item)}>
         <div>
-          <strong>${esc(tr(item.productName))}</strong> ${pill(item.status)}${importBadge(item)}${piecesPill(item)}
+          <strong>${esc(tr(item.productName))}</strong> ${pill(item.status)}${expressPill(item)}${importBadge(item)}${piecesPill(item)}
           <div class="muted small">${esc([item.orderNumber, t('admin.spec.itemOf', { i: item.position, n: item.of }), ...colourSizeText(item), item.sides.map((s) => tr(s.name)).join(' + ')].join(' · '))}</div>
           ${hasQty(item) ? qtySummary(item) : ''}
         </div>
@@ -864,13 +888,19 @@
       // Don't redraw while the admin is typing in a send form.
       if (document.activeElement && document.activeElement.closest && document.activeElement.closest('.send-panel') && lastQueue) return;
       if (!housesData) housesData = await adminApi('/api/admin/houses').catch(() => null);
-      renderQueue((lastQueue = await adminApi('/api/admin/queue')));
+      const q = await adminApi('/api/admin/queue');
+      await ensureOrders([...q.printing, ...q.waiting, ...q.toShip]);
+      renderQueue((lastQueue = q));
     } else if (tab === 'review') await loadReview();
     else if (tab === 'houses') renderHouses((housesData = await adminApi('/api/admin/houses')));
     else if (tab === 'accounts') await refreshAccounts({ auto: true });
     else if (tab === 'coupons') renderCoupons((couponData = await adminApi('/api/admin/coupons')));
     else if (tab === 'customers') await loadCustomers();
-    else if (tab === 'film') renderFilm((lastFilm = (await adminApi('/api/admin/dtf-items')).items));
+    else if (tab === 'film') {
+      const items = (await adminApi('/api/admin/dtf-items')).items;
+      await ensureOrders(items);
+      renderFilm((lastFilm = items));
+    }
     else if (tab === 'library') renderLibrary((lastLibrary = await adminApi('/api/admin/library')));
     else {
       // Don't redraw while the admin is typing in a shipping box.
@@ -1408,7 +1438,9 @@
     const ae = document.activeElement;
     if (reviewData && ae && ae.closest && ae.closest('#rv-list') && ae.tagName === 'TEXTAREA') return;
     try {
-      setReview((await adminApi('/api/admin/review')).items || []);
+      const items = (await adminApi('/api/admin/review')).items || [];
+      await ensureOrders(items);
+      setReview(items);
       reviewError = '';
     } catch (err) {
       if (err.status === 401) throw err;
@@ -1445,7 +1477,7 @@
       <div class="card queue-row rv-qrow">
         <img src="${esc(item.sides[0].previewUrl)}" alt="" ${zoomAttr(item)}>
         <div>
-          <strong>${esc(tr(item.productName))}</strong> ${pill(item.status)} <span class="pill rv-noprint">${esc(t('rv.notPrintable'))}</span>${piecesPill(item)}
+          <strong>${esc(tr(item.productName))}</strong> ${pill(item.status)} <span class="pill rv-noprint">${esc(t('rv.notPrintable'))}</span>${expressPill(item)}${piecesPill(item)}
           <div class="muted small">${esc([item.orderNumber, t('admin.spec.itemOf', { i: item.position, n: item.of }), ...colourSizeText(item)].join(' · '))}</div>
         </div>
         <div class="queue-actions"><button class="btn btn-sm" type="button" data-rv-goto="${esc(item.id)}">${esc(t('rv.goReview'))}</button></div>
@@ -1489,7 +1521,7 @@
         <div class="rv-head">
           ${thumb ? `<img class="rv-thumb" src="${esc(thumb)}" alt="" ${item.sides ? zoomAttr(item) : ''}>` : '<span class="rv-thumb"></span>'}
           <div class="rv-sum">
-            <div class="rv-line"><strong>${esc(item.orderNumber || '')}</strong> <span class="muted small">${esc(t('admin.spec.itemOf', { i: item.position, n: item.of }))}</span> ${pill(item.status)}</div>
+            <div class="rv-line"><strong>${esc(item.orderNumber || '')}</strong> <span class="muted small">${esc(t('admin.spec.itemOf', { i: item.position, n: item.of }))}</span> ${pill(item.status)}${expressPill(item)}</div>
             <div class="rv-line"><b>${esc(tr(item.productName))}</b> · ${esc(m && m.count ? t('rv.copies', { n: POD.num(m.count) }) : piecesText(piecesOf(item)))}</div>
             <div class="rv-line small">${esc(c.name || '')} ${c.phone || c.email ? `<bdi dir="ltr" class="muted">${esc(c.phone || c.email)}</bdi>` : ''}</div>
             <ul class="rv-reasons">${rvReasons(item).map((r) => `<li class="rv-reason rv-r-${esc(r)}">${esc(reasonText(item, r))}</li>`).join('')}</ul>
@@ -1671,6 +1703,15 @@
     if (item.kind === 'gangsheet') return '';
     const sides = rvSides(item).filter((s) => s.widthPx && s.heightPx);
     if (!sides.length) return '';
+    // Name lists: the item data doesn't say which sides carry the names (the server refuses those),
+    // so no replacement upload at all; the customer corrects the list or the design.
+    if (proofOf(item).merge || item.merge) {
+      return `
+      <section class="rv-box">
+        <h3>${esc(t('rv.replace'))}</h3>
+        <p class="muted small rv-replace-names" style="margin:0">${esc(t('rv.replaceNamesNote'))}</p>
+      </section>`;
+    }
     const busy = rvBusy.has(item.id);
     return `
       <section class="rv-box">

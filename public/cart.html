@@ -4,6 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>OneOff Print</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <script>(function(){var l;try{l=localStorage.getItem('pod-lang')}catch(e){}l=l==='en'?'en':'ar';var d=document.documentElement;d.lang=l;d.dir=l==='ar'?'rtl':'ltr'})()</script>
   <link rel="stylesheet" href="/fonts/fonts.css">
   <link rel="stylesheet" href="/css/styles.css">
@@ -332,17 +335,20 @@
         const cart = POD.getCart();
         if (!cart.length) { quote = null; return; }
         try {
-          quote = await POD.api('/api/cart/quote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ designIds: cart.map((i) => i.designId), couponCode, delivery, phone: (document.getElementById('phone') || {}).value || undefined }) });
+          quote = await POD.api('/api/cart/quote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ designIds: cart.map((i) => i.designId), couponCode, delivery, sample: [...approvals.values()].some((a) => a && a.sample), phone: (document.getElementById('phone') || {}).value || undefined }) });
         } catch (e) {
           quote = null;
           return;
         }
         const gone = [];
+        let orderedIn = null;
         let changed = false;
         let synced = false;
         const keep = cart.filter((item, i) => {
           const q = quote.items[i];
           if (!q || q.designId !== item.designId) return true;
+          // Already ordered (the answer to that order got lost, or another tab ordered it): go to that order.
+          if (q.gone && q.orderedIn) { orderedIn = q.orderedIn; return false; }
           if (q.gone) { gone.push(tr(item.productName)); return false; }
           if (q.price !== item.price) { item.price = q.price; changed = true; }
           // Newer servers may also send the pieces; they are the ones that will be ordered.
@@ -350,7 +356,12 @@
           if (q.copies != null && (q.copies || 1) !== (item.copies || 1)) { item.copies = q.copies; synced = true; }
           return true;
         });
-        if (gone.length || changed || synced) POD.setCart(keep);
+        if (gone.length || changed || synced || orderedIn) POD.setCart(keep);
+        if (orderedIn) {
+          try { sessionStorage.removeItem('pod-order-key'); } catch (e) { /* private mode */ }
+          location.href = '/order?id=' + encodeURIComponent(orderedIn) + '&new=1';
+          return;
+        }
         if (gone.length) POD.toast(t('cart.gone', { list: gone.join(POD.lang === 'ar' ? '، ' : ', ') }), 'error');
         else if (changed && announce) POD.toast(t('cart.pricesUpdated'));
         if (gone.length) return refreshPrices();
@@ -428,6 +439,8 @@
           goToOrder(order);
         } catch (err) {
           orderCaptcha.reset();
+          // The shop answered (a wrong phone, a changed price…): that try placed nothing, so its key is done.
+          if (!err.network) { try { sessionStorage.removeItem('pod-order-key'); } catch (e) { /* private mode */ } }
           if (err.code === 'priceChanged' || err.code === 'designGone' || err.code === 'designOrdered' || /^coupon/.test(err.code || '')) {
             await refreshPrices();
             render();
@@ -471,10 +484,12 @@
         try { k = sessionStorage.getItem(KEY); } catch (e) { k = null; }
         if (!k) return false;
         try {
-          goToOrder(await POD.api('/api/orders/by-key/' + encodeURIComponent(k)));
+          const order = await POD.api('/api/orders/by-key/' + encodeURIComponent(k));
+          if (!order) return false; // not placed: carry on
+          goToOrder(order);
           return true;
         } catch (e) {
-          return false; // not placed (or still offline): carry on
+          return false; // still offline: carry on
         }
       }
 

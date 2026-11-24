@@ -61,7 +61,7 @@ const MESSAGES = {
   couponExpired: { en: 'This coupon has expired', ar: 'الكوبون ده انتهى' },
   couponUsedUp: { en: 'This coupon has been fully used', ar: 'الكوبون ده خلص' },
   couponUsedByYou: { en: 'You have already used this coupon', ar: 'انت استخدمت الكوبون ده قبل كده' },
-  couponMinOrder: { en: 'This coupon needs an order of at least {amount} EGP', ar: 'الكوبون ده محتاج طلب بـ {amount} ج.م على الأقل' },
+  couponMinOrder: { en: 'This coupon needs an order of at least {amount}', ar: 'الكوبون ده محتاج طلب بـ {amount} على الأقل' },
   couponNoItems: { en: 'This coupon does not apply to the items in your cart', ar: 'الكوبون ده مش على المنتجات اللي في السلة' },
   badAmount: { en: 'Enter an amount more than 0', ar: 'اكتب مبلغ أكبر من صفر' },
   badDate: { en: 'Enter a valid date', ar: 'اكتب تاريخًا صحيحًا' },
@@ -177,7 +177,20 @@ function pick(value, lang) {
 function format(key, params, lang) {
   const m = MESSAGES[key];
   if (!m) return key;
-  return m[lang].replace(/\{(\w+)\}/g, (_, k) => pick(params[k], lang) ?? '');
+  return m[lang].replace(/\{(\w+)\}/g, (_, k) => {
+    const v = params[k];
+    // Amounts of money as the pages show them ("EGP 1,000" / "١٬٠٠٠ ج.م."); other numbers in the page's digits.
+    if (typeof v === 'number' && k === 'amount') return money(v, lang);
+    if (typeof v === 'number' && lang === 'ar') return new Intl.NumberFormat('ar-EG', { useGrouping: false }).format(v);
+    return pick(v, lang) ?? '';
+  });
+}
+function money(n, lang) {
+  try {
+    return new Intl.NumberFormat(lang === 'ar' ? 'ar-EG' : 'en-EG', { style: 'currency', currency: 'EGP', maximumFractionDigits: 2 }).format(n);
+  } catch (e) {
+    return `${n} EGP`;
+  }
 }
 
 module.exports = { MESSAGES, FIELDS, langOf, pick, format };

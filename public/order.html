@@ -4,6 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>OneOff Print</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <script>(function(){var l;try{l=localStorage.getItem('pod-lang')}catch(e){}l=l==='en'?'en':'ar';var d=document.documentElement;d.lang=l;d.dir=l==='ar'?'rtl':'ltr'})()</script>
   <link rel="stylesheet" href="/fonts/fonts.css">
   <link rel="stylesheet" href="/css/styles.css">
@@ -172,7 +175,8 @@
 
       function render() {
         if (error) {
-          content.innerHTML = `<div class="card empty"><h2>${esc(t('order.notFound'))}</h2><p class="muted">${esc(error)}</p><a class="btn" href="/">${esc(t('order.back'))}</a></div>`;
+          // A missing order: the heading already says so; other errors (no connection…) show their message.
+          content.innerHTML = `<div class="card empty" style="margin:40px auto;max-width:560px"><h2>${esc(t('order.notFound'))}</h2>${error.status === 404 ? '' : `<p class="muted">${esc(error.message)}</p>`}<a class="btn" href="/">${esc(t('order.back'))}</a></div>`;
           return;
         }
         const o = order;
@@ -276,7 +280,7 @@
         } catch (e) {
           // A failed refresh (weak signal) keeps showing the order already loaded.
           if (order && e.status !== 404) return;
-          error = e.message;
+          error = { status: e.status, message: e.message };
         }
         render();
       }

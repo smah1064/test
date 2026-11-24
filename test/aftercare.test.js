@@ -152,11 +152,11 @@ test('drafts kept on the account (open on another device)', async () => {
   const other = await json('POST', '/api/account/signup', { name: 'Youssef', phone: '01055556660', password: 'longenough1' });
   const oc = other.headers.getSetCookie().map((c) => c.split(';')[0]).find((c) => c.startsWith('pod_c='));
   assert.strictEqual((await (await json('GET', '/api/account/drafts', undefined, { Cookie: oc })).json()).drafts.length, 0);
-  assert.strictEqual((await json('GET', '/api/account/drafts/tshirt', undefined, { Cookie: oc })).status, 404);
+  assert.strictEqual((await json('GET', '/api/account/drafts/tshirt', undefined, { Cookie: oc })).status, 204, 'no draft: an empty answer');
   // Deleted (when it goes into the cart, or by the customer).
   assert.strictEqual((await json('DELETE', '/api/account/drafts/tshirt', undefined, H)).status, 204);
   assert.strictEqual((await (await json('GET', '/api/account/drafts', undefined, H)).json()).drafts.length, 0);
-  assert.strictEqual((await json('GET', '/api/account/drafts/tshirt', undefined, H)).status, 404);
+  assert.strictEqual((await json('GET', '/api/account/drafts/tshirt', undefined, H)).status, 204);
 });
 
 test('admin: an order still in review cannot be marked shipped; delivery dates must be real; Arabic digits find customers', async () => {

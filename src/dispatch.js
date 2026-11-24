@@ -79,6 +79,7 @@ const T = {
     placement: (v) => `moved ${v} from the standard position, see the preview PDF`,
     note: 'Note', files: 'Files', attached: 'attached to this email', expires: (d) => `Download links work until ${d}.`,
     thanks: 'Thank you!', subject: (o, p) => `Print job ${o} · ${p}`,
+    express: (d) => `⚡ Express order: the customer expects it by ${d}`,
   },
   ar: {
     dir: 'rtl', hello: (n) => `أهلًا ${n}،`, intro: 'من فضلك اطبعوا الشغل ده لـ ون أوف برنت:',
@@ -86,8 +87,37 @@ const T = {
     placement: (v) => `متحرك ${v} عن المكان القياسي، شوف ملف المعاينة`,
     note: 'ملاحظة', files: 'الملفات', attached: 'مرفقة في الإيميل ده', expires: (d) => `روابط التحميل شغالة لحد ${d}.`,
     thanks: 'شكرًا!', subject: (o, p) => `شغل طباعة ${o} · ${p}`,
+    express: (d) => `⚡ طلب سريع: لازم يوصل للعميل لحد ${d}`,
   },
 };
+/** Print methods by their names (the process ids of src/products.js PRODUCTION / METHODS). */
+const METHOD_NAMES = {
+  dtg: { en: 'DTG (direct to garment)', ar: 'DTG (طباعة مباشرة على القماش)' },
+  dtf: { en: 'DTF transfer', ar: 'DTF (نقل حراري)' },
+  sublimation: { en: 'Sublimation', ar: 'تسامي (سبليميشن)' },
+  paper: { en: 'Paper printing', ar: 'طباعة على الورق' },
+  uv: { en: 'UV printing', ar: 'طباعة UV' },
+  canvas: { en: 'Canvas printing', ar: 'طباعة كانفاس' },
+  textile: { en: 'Textile roll printing', ar: 'طباعة أقمشة (رول)' },
+  embroidery: { en: 'Embroidery', ar: 'تطريز' },
+  photo: { en: 'Photo prints (photo paper)', ar: 'طباعة صور (ورق فوتوغرافي)' },
+  book: { en: 'Printed book', ar: 'كتاب مطبوع' },
+};
+function methodName(item, lang) {
+  const id = item.kind === 'photoset' ? 'photo' : item.kind === 'book' ? 'book' : item.method === 'embroidery' ? 'embroidery' : String(item.process || '').toLowerCase();
+  if (!id) return '';
+  return METHOD_NAMES[id] ? METHOD_NAMES[id][lang] || METHOD_NAMES[id].en : id.toUpperCase();
+}
+/** A calendar day (YYYY-MM-DD) in the message language: "Thursday 26 November" / "الخميس ٢٦ نوفمبر". */
+function dayText(ymd, lang) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(ymd || ''))) return digits(ymd || '', lang);
+  try {
+    return digits(new Date(ymd + 'T12:00:00Z').toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }), lang);
+  } catch (e) {
+    return digits(ymd, lang);
+  }
+}
+const isExpress = (order) => Boolean(order && order.delivery && order.delivery.speed === 'express');
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const cm = (inches) => Math.round(inches * 2.54 * 10) / 10;
 /** Digits in the message language: Arabic-Indic in Arabic, Latin in English. */
@@ -116,7 +146,7 @@ function jobLines(order, item, design, lang) {
     [t.colour, Array.isArray(item.quantities) && item.quantities.length
       ? item.quantities.map((l) => `${[pick(l.color && l.color.name, lang), pick(l.size && l.size.label, lang)].filter(Boolean).join(' · ')} ×${digits(l.qty, lang)}`).join(lang === 'ar' ? '، ' : ', ')
       : [pick(item.color && item.color.name, lang), pick(item.size && item.size.label, lang)].filter(Boolean).join(' · ')],
-    [t.method, String(item.process || '').toUpperCase()],
+    [t.method, methodName(item, lang)],
     ...(sides ? [[t.sides, sides]] : []),
     [t.qty, digits(Array.isArray(item.quantities) && item.quantities.length ? item.quantities.reduce((n, l) => n + (l.qty || 0), 0) : item.copies || 1, lang)],
   ].filter(([, v]) => v);
@@ -128,6 +158,7 @@ function whatsappText({ house, order, item, design, files, note, lang, expires }
     t.hello(house.name),
     t.intro,
     '',
+    ...(isExpress(order) ? [`*${t.express(dayText(order.delivery.by, lang))}*`, ''] : []),
     ...jobLines(order, item, design, lang).map(([k, v]) => `*${k}:* ${v}`),
     ...(note ? ['', `*${t.note}:* ${note}`] : []),
     '',
@@ -145,12 +176,14 @@ function emailBody({ house, order, item, design, files, note, lang, expires, att
   const list = files.map((f) => `<li style="margin:4px 0"><a href="${esc(f.url)}">${esc(f.label)}</a> <span style="color:#888">(${esc(f.name)})</span></li>`).join('');
   const html = `<div dir="${t.dir}" style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;color:#111">
 <p>${esc(t.hello(house.name))}</p><p>${esc(t.intro)}</p>
+${isExpress(order) ? `<p style="background:#fff3bf;color:#7a5800;padding:6px 10px;border-radius:6px;font-weight:700">${esc(t.express(dayText(order.delivery.by, lang)))}</p>` : ''}
 <table style="border-collapse:collapse;margin:8px 0 14px">${rows}</table>
 ${note ? `<p><strong>${esc(t.note)}:</strong> ${esc(note)}</p>` : ''}
 <p style="margin-bottom:4px"><strong>${esc(t.files)}</strong>${attached ? ` (${esc(t.attached)})` : ''}:</p><ul style="margin-top:0">${list}</ul>
 <p style="color:#666;font-size:13px">${esc(t.expires(digits(expires.slice(0, 10), lang)))}</p><p>${esc(t.thanks)}</p></div>`;
   const text = [
     t.hello(house.name), t.intro, '',
+    ...(isExpress(order) ? [t.express(dayText(order.delivery.by, lang)), ''] : []),
     ...jobLines(order, item, design, lang).map(([k, v]) => `${k}: ${v}`),
     ...(note ? ['', `${t.note}: ${note}`] : []),
     '', `${t.files}${attached ? ` (${t.attached})` : ''}:`,

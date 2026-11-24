@@ -164,19 +164,23 @@
 
   /** Add a ready-made design on a product to the cart: same upload steps as the editor. */
   async function addToCart({ design, product, color, size, onProgress = () => {} }) {
-    const side = product.sides[0];
-    const st = await stage(design, product, side, color, size.id);
-    onProgress('render');
-    const files = {
-      [`${side.id}-print.png`]: await printBlob(st),
-      [`${side.id}-preview.png`]: await previewBlob(st),
-      [`${side.id}-design.svg`]: new Blob([await svgText(st)], { type: 'image/svg+xml' }),
-    };
+    // A pair whose second piece costs nothing extra (couple mugs): the design goes on both pieces.
+    const printSides = product.extraSidePrice === 0 && product.sides.length > 1 ? product.sides : [product.sides[0]];
+    const files = {};
+    const sidesBody = {};
+    for (const side of printSides) {
+      const st = await stage(design, product, side, color, size.id);
+      onProgress('render');
+      files[`${side.id}-print.png`] = await printBlob(st);
+      files[`${side.id}-preview.png`] = await previewBlob(st);
+      files[`${side.id}-design.svg`] = new Blob([await svgText(st)], { type: 'image/svg+xml' });
+      sidesBody[side.id] = { editor: { version: fabric.version, objects: serialize(st), library: design.id } };
+    }
     onProgress('upload');
     const created = await POD.api('/api/designs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ productId: product.id, color: color.id, size: size.id, sides: { [side.id]: { editor: { version: fabric.version, objects: serialize(st), library: design.id } } } }),
+      body: JSON.stringify({ productId: product.id, color: color.id, size: size.id, sides: sidesBody }),
     });
     await Promise.all(created.files.map(async (name) => {
       const res = await POD.putFile(`/api/designs/${created.id}/files/${encodeURIComponent(name)}`, created.uploadToken, files[name]);

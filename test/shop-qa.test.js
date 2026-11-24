@@ -102,7 +102,7 @@ test('accounts: correct sign-ins never lock the owner out; text-only names; clea
   const cleared = await (await put({ name: 'Sara Ali', address: { governorate: '', city: '', address: '' } })).json();
   assert.strictEqual(cleared.customer.address, null);
   const draft = await fetch(base + '/api/account/drafts/tshirt', { headers: { cookie } });
-  assert.strictEqual(draft.status, 404);
+  assert.strictEqual(draft.status, 204, 'no draft: an empty answer');
   assert.strictEqual(draft.headers.get('x-account'), me.id);
 });
 
@@ -131,6 +131,42 @@ test('an order sent again with its one-time key gives the same order (the first 
   const o2 = await found.json();
   assert.strictEqual(o2.id, o1.id);
   assert.strictEqual(o2.orderKey, undefined, 'the key is not shown back');
-  assert.strictEqual((await fetch(`${base}/api/orders/by-key/k-not-a-real-key-000000`)).status, 404);
-  assert.strictEqual((await fetch(`${base}/api/orders/by-key/short`)).status, 404);
+  assert.strictEqual((await fetch(`${base}/api/orders/by-key/k-not-a-real-key-000000`)).status, 204, 'not placed: an empty answer');
+  assert.strictEqual((await fetch(`${base}/api/orders/by-key/short`)).status, 204);
+});
+
+test('QA batch: sign-in limits count wrong passwords only; drafts saved for another account are refused; ordered items and sample days in the quote', async () => {
+  const user = { name: 'Nour Ali', phone: '01077788899', password: 'a-long-password-1' };
+  assert.strictEqual((await post('/api/account/signup', user)).status, 201);
+  // 12 correct sign-ins from one address: never locked.
+  for (let i = 0; i < 12; i++) assert.strictEqual((await post('/api/account/login', { login: user.phone, password: user.password }, { 'X-Forwarded-For': '10.7.7.7' })).status, 200, `sign-in ${i + 1}`);
+  const login = await post('/api/account/login', { login: user.phone, password: user.password });
+  const cookie = login.headers.get('set-cookie').split(';')[0];
+  const me = (await login.json()).customer;
+  const put = (who) => fetch(base + '/api/account/drafts/tshirt', { method: 'PUT', headers: { 'Content-Type': 'application/json', cookie, ...(who ? { 'X-Account': who } : {}) }, body: JSON.stringify({ designs: { front: [] }, savedAt: new Date().toISOString() }) });
+  assert.strictEqual((await put('someone-else')).status, 409);
+  assert.ok([200, 204].includes((await put(me.id)).status));
+  // An ordered design in the cart: the quote says which order it went into.
+  const d = await makeDesign({ productId: 'mug', color: 'white', size: '11oz', sides: { front: { editor: { objects: [{ type: 'i-text', text: 'x' }] } } } });
+  const q = await (await post('/api/cart/quote', { designIds: [d.id] })).json();
+  const o = await (await post('/api/orders', { customer: CUSTOMER, designIds: [d.id], expectedTotal: q.total })).json();
+  const q2 = await (await post('/api/cart/quote', { designIds: [d.id] })).json();
+  assert.strictEqual(q2.items[0].gone, true);
+  assert.strictEqual(q2.items[0].orderedIn, o.id);
+  // A sample first: the expected day moves two business days.
+  const plain = await (await post('/api/cart/quote', { designIds: [d.id], delivery: 'express' })).json();
+  const sample = await (await post('/api/cart/quote', { designIds: [d.id], delivery: 'express', sample: true })).json();
+  assert.ok(sample.delivery.by > plain.delivery.by, `${sample.delivery.by} after ${plain.delivery.by}`);
+  assert.strictEqual(sample.delivery.sampleDays, 2);
+});
+
+test('QA batch: phone marks and dashes, +20 customer search, money in messages', async () => {
+  for (const v of ['؜01012345678', '010–1234—5678', '010‑1234−5678']) assert.strictEqual(normalizeEgyptMobile(v), '01012345678', JSON.stringify(v));
+  const { format } = require('../src/i18n');
+  assert.match(format('couponMinOrder', { amount: 1000 }, 'en'), /EGP\s?1,000/);
+  assert.match(format('couponMinOrder', { amount: 1000 }, 'ar'), /١٬?٠٠٠/);
+  token = token || (await (await post('/api/admin/login', { password: 'secret' })).json()).token;
+  assert.strictEqual((await post('/api/account/signup', { name: 'Search Me', phone: '01005556677', password: 'a-long-password-1' })).status, 201);
+  const found = await (await fetch(`${base}/api/admin/customers?q=${encodeURIComponent('+20 100 555 6677')}`, { headers: { Authorization: `Bearer ${token}` } })).json();
+  assert.ok((found.customers || []).some((c) => c.phone === '01005556677'));
 });

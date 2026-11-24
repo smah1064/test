@@ -5,6 +5,8 @@
   'use strict';
   const S = window.POD_STRINGS || (window.POD_STRINGS = {});
   Object.assign(S, {
+    // Account: a password-reset link opened while already signed in
+    'acct.resetKeep': ['Cancel and go to my account', 'إلغاء والرجوع لحسابي'],
     // Tracking timeline
     'track.title': ['Tracking', 'تتبّع الطلب'],
     'track.placed': ['Order placed', 'تم الطلب'],

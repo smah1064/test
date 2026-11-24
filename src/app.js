@@ -22,6 +22,7 @@ const {
   DELIVERY_DAYS,
   expressFee,
   deliveryFor,
+  businessDaysAfter,
   round2,
   printAreaFor,
   printWidthFor,
@@ -432,6 +433,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const r = await captchaMod.verify(captcha, (req.body || {}).captchaToken, req.ip, captchaFetch ? { fetchImpl: captchaFetch } : {});
     if (!r.ok) throw new HttpError(400, 'captchaFailed');
   };
+  /** Over the limit already? (nothing recorded) — for limits that count failures only. */
+  const limitCheck = (req, what, key = req.ip) => {
+    const wait = limiter.check(`${what}:${key}`, LIMITS[what]);
+    if (typeof wait === 'number') throw new HttpError(429, wait > 90 ? 'tooManyWait' : 'tooFast', { min: Math.ceil(wait / 60) });
+  };
+  const limitHit = (what, key) => limiter.hit(`${what}:${key}`, LIMITS[what]);
   const rateLimit = (req, what, key = req.ip) => {
     const wait = limiter.hit(`${what}:${key}`, LIMITS[what]);
     if (wait) throw new HttpError(429, wait > 90 ? 'tooManyWait' : 'tooFast', { min: Math.ceil(wait / 60) });
@@ -994,7 +1001,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         // Each piece's size / colour from the list (team kits), else the design's.
         const vc = design.merge.variantCols || { size: -1, color: -1 };
         const variant = (r) => [vc.size >= 0 ? (list.rows[r] || [])[vc.size] : '', vc.color >= 0 ? (list.rows[r] || [])[vc.color] : ''].filter(Boolean).join(' ');
-        const label = (r) => [(list.rows[r] || []).filter(Boolean).slice(0, 2).join(' / '), variant(r)].filter(Boolean).join(' · ');
+        const label = (r) => [(list.rows[r] || []).filter((v, k) => v && k !== vc.size && k !== vc.color).slice(0, 2).join(' / '), variant(r)].filter(Boolean).join(' · ');
         if (format === 'merge-names-zip') {
           await merge.writeZipOfNames(design, read, list.rows, target, { extra: variant });
           return { path: target, name: `${base}-${n}-names-only.zip` };
@@ -2310,7 +2317,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   }));
   app.post('/api/account/login', express.json({ limit: '10kb' }), asyncRoute(async (req, res) => {
     const { login, password } = req.body || {};
-    rateLimit(req, 'accountLogin');
+    // Wrong passwords count toward the limits (per visitor and per account); signing in correctly doesn't.
+    limitCheck(req, 'accountLogin');
     await checkCaptcha(req);
     const key = customers.loginKey(login);
     const cust = key && customerList().find((x) => (key.phone ? x.phone === key.phone : x.email === key.email));
@@ -2322,7 +2330,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     // Same answer whether the account exists or not.
     if (!cust) customers.hashPassword(String(password || '')); // same time as a real check
     if (!cust || !customers.checkPassword(cust, password)) {
-      if (cust) limiter.hit(`accountLoginId:${cust.id}`, LIMITS.accountLoginId);
+      limitHit('accountLogin', req.ip);
+      if (cust) limitHit('accountLoginId', cust.id);
       throw new HttpError(401, 'acctWrong');
     }
     setSession(req, res, cust);
@@ -2341,7 +2350,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const b = req.body || {};
     // Text fields must be text (an object or a list is refused, not saved as "[object Object]").
     const text = (v) => (v == null ? '' : typeof v === 'string' ? v : (() => { throw new HttpError(400, 'badRequest'); })());
-    const name = text(b.name).trim().replace(/\s+/g, ' ').slice(0, 120);
+    // (Invisible characters don't count, as at sign-up.)
+    const name = text(b.name).replace(/[\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/g, '').trim().replace(/\s+/g, ' ').slice(0, 120);
     const email = text(b.email).trim().toLowerCase().slice(0, 200);
     if (name.length < 2) throw new HttpError(400, 'acctName');
     if (email && !EMAIL_RE.test(email)) throw new HttpError(400, 'badEmail');
@@ -2351,7 +2361,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     let address = null;
     // An address with every field emptied: the saved one is removed.
     const clearAddress = Boolean(b.address && typeof b.address === 'object' && !text(b.address.address).trim() && !text(b.address.city).trim());
-    if (b.address && typeof b.address === 'object' && (b.address.address || b.address.city)) {
+    if (b.address && typeof b.address === 'object' && !clearAddress) {
       const a = b.address;
       address = {
         governorate: typeof a.governorate === 'string' && governorate(a.governorate) ? a.governorate : '',
@@ -2378,8 +2388,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   app.post('/api/account/password', express.json({ limit: '10kb' }), (req, res) => {
     const me = signedIn(req);
     const { current, password } = req.body || {};
-    rateLimit(req, 'accountLoginId', me.id);
-    if (me.passHash && !customers.checkPassword(me, current)) throw new HttpError(401, 'acctWrongCurrent');
+    limitCheck(req, 'accountLoginId', me.id);
+    if (me.passHash && !customers.checkPassword(me, current)) {
+      limitHit('accountLoginId', me.id);
+      throw new HttpError(401, 'acctWrongCurrent');
+    }
     const weak = customers.passwordProblem(String(password || ''));
     if (weak) throw new HttpError(400, weak);
     const { salt, hash } = customers.hashPassword(password);
@@ -2448,7 +2461,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const items = ids.map((id) => {
       const d = typeof id === 'string' && UUID_RE.test(id) ? store.getDesign(id) : null;
       const price = designPrice(d);
-      return { designId: String(id).slice(0, 40), price, gone: price === null };
+      // Already ordered (e.g. the answer to the order got lost): the cart can take the customer to it.
+      return { designId: String(id).slice(0, 40), price, gone: price === null, ...(d && d.orderId ? { orderedIn: d.orderId } : {}) };
     });
     const subtotal = round2(items.reduce((n, i) => n + (i.price || 0), 0));
     const lines = items.filter((i) => !i.gone).map((i) => couponLine(store.getDesign(i.designId), i.price));
@@ -2463,22 +2477,26 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       else couponError = format(r.reason, r.params || {}, langOf(req));
     }
     const discount = coupon ? coupon.discount : 0;
-    const delivery = deliveryFor((req.body || {}).delivery);
+    // "Print one sample first" adds about 2 business days to the promised day.
+    const delivery = withSampleDays(deliveryFor((req.body || {}).delivery), (req.body || {}).sample === true);
     const baseShipping = !lines.length || (coupon && coupon.freeShipping) ? 0 : shippingFor(round2(subtotal - discount));
     // `shipping` includes the express fee; `delivery` says how fast and by which day.
     const shipping = round2(baseShipping + (lines.length ? delivery.fee : 0));
-    const deliveryOptions = ['standard', 'express'].map((s) => deliveryFor(s));
+    const deliveryOptions = ['standard', 'express'].map((s) => withSampleDays(deliveryFor(s), (req.body || {}).sample === true));
     res.json({ items, subtotal, discount, coupon, couponError, shipping, baseShipping, delivery, deliveryOptions, total: round2(subtotal - discount + shipping), freeShippingOver: FREE_SHIPPING_OVER, shippingFlat: SHIPPING_FLAT });
   });
 
+  /** A sample printed and checked first: the expected day moves 2 business days later. */
+  const withSampleDays = (d, sample, at = new Date()) => (sample ? { ...d, sampleDays: 2, by: businessDaysAfter(at, d.days + 2) } : d);
   // The order's one-time key from the cart: when the answer to an order got lost on the way (the phone
   // lost its connection), sending it again (or asking with the key) gives the same order, not an error.
   const ORDER_KEY_RE = /^[A-Za-z0-9-]{16,64}$/;
   const orderByKey = (key) => (ORDER_KEY_RE.test(String(key || '')) ? store.listOrders().find((o) => o.orderKey === key) || null : null);
   app.get('/api/orders/by-key/:key', (req, res) => {
     const order = orderByKey(req.params.key);
-    if (!order) throw new HttpError(404, 'orderNotFound');
     res.set('Cache-Control', 'no-store');
+    // Not placed: an empty answer (the cart asks this on every visit while it has a key).
+    if (!order) return res.status(204).end();
     res.json(publicOrder(order));
   });
   app.post('/api/orders', express.json({ limit: '100kb' }), asyncRoute(async (req, res) => {
@@ -2603,7 +2621,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const discount = applied ? applied.discount : 0;
     // Standard (5 business days) or express (2, for a fee added to the shipping).
     if (body.delivery !== undefined && body.delivery !== 'standard' && body.delivery !== 'express') throw new HttpError(400, 'badDelivery');
-    const delivery = deliveryFor(body.delivery, new Date(now));
+    const anySample = designs.some((d) => approvals[d.id] && approvals[d.id].sample === true && copiesOf(d) > 1);
+    const delivery = withSampleDays(deliveryFor(body.delivery, new Date(now)), anySample, new Date(now));
     const shipping = round2((applied && applied.freeShipping ? 0 : shippingFor(round2(subtotal - discount))) + delivery.fee);
     const total = round2(subtotal - discount + shipping);
     // The customer must have seen this total: if a price changed since, show them the new one first.
@@ -2705,7 +2724,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     ...(copiesOf(d) > 1 && d.kind !== 'photoset' ? { copies: copiesOf(d) } : {}),
     ...(d.quantities ? { quantities: d.quantities } : {}),
     ...(d.merge ? { merge: { count: d.merge.count } } : {}),
-    previewUrl: d.kind === 'book' ? `/files/designs/${d.id}/book-preview.png?v=${d.version || 0}` : `/files/designs/${d.id}/${d.sides[0].id}-preview.png`,
+    // A side whose print file the shop replaced: its old mockup is out of date, the print file's picture is shown.
+    previewUrl: d.kind === 'book' ? `/files/designs/${d.id}/book-preview.png?v=${d.version || 0}` : d.replaced && d.replaced[d.sides[0].id] ? `/files/designs/${d.id}/${d.sides[0].id}-proof.png?v=${d.version || 1}` : `/files/designs/${d.id}/${d.sides[0].id}-preview.png`,
     addedAt: new Date().toISOString(),
   });
 
@@ -2780,7 +2800,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const product = draftProduct(req);
     const file = path.join(draftDir(me), `${product.id}.json`);
     res.set('Cache-Control', 'private, no-store');
-    if (!fs.existsSync(file)) throw new HttpError(404, 'notFound');
+    // No draft: an empty answer (not an error the browser logs on every page).
+    if (!fs.existsSync(file)) return res.status(204).end();
     res.type('application/json').send(fs.readFileSync(file));
   });
   app.get('/api/account/drafts/:productId/preview.png', (req, res) => {
@@ -2796,6 +2817,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     next();
   }, express.json({ limit: '25mb' }), (req, res) => {
     const me = signedIn(req);
+    // Saved for another account than the one signed in now (signed out / switched in between): refused.
+    if (req.get('x-account') && req.get('x-account') !== me.id) throw new HttpError(409, 'acctSignIn');
     const product = draftProduct(req);
     const b = req.body;
     if (!b || typeof b !== 'object' || !b.designs || typeof b.designs !== 'object' || Array.isArray(b.designs)) throw new HttpError(400, 'notFound');
@@ -3031,6 +3054,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (item.status !== status) {
       item.status = status;
       item.history.push({ status, at: new Date().toISOString() });
+      // Sent back from "shipped" (a mistake, or a reprint): the order isn't on its way any more.
+      if (status !== 'shipped' && order.shipment && order.shipment.shippedAt && !order.shipment.deliveredAt) order.shipment = { ...order.shipment, shippedAt: null };
       // The last item shipped: the order is on its way (the customer is told once).
       const first = order.items.every((it) => it.status === 'shipped') && markShipped(order, req);
       store.save();
@@ -3200,7 +3225,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   // ---------- Customers (admin): find a customer, help with a forgotten password ----------
   app.get('/api/admin/customers', requireAdmin, (req, res) => {
     const q = String(req.query.q || '').trim().toLowerCase().slice(0, 80);
-    const digits = q.replace(/[\u0660-\u0669]/g, (c) => String(c.charCodeAt(0) - 0x0660)).replace(/[\u06f0-\u06f9]/g, (c) => String(c.charCodeAt(0) - 0x06f0)).replace(/\D/g, '');
+    let digits = q.replace(/[\u0660-\u0669]/g, (c) => String(c.charCodeAt(0) - 0x0660)).replace(/[\u06f0-\u06f9]/g, (c) => String(c.charCodeAt(0) - 0x06f0)).replace(/\D/g, '');
+    // +20 100 … / 0020 100 … / 20100…: the Egyptian number as stored (0100…).
+    digits = digits.replace(/^(00)?20(?=1)/, '0');
     const orders = store.listOrders();
     const list = customerList()
       .filter((c) => !q || String(c.name || '').toLowerCase().includes(q) || (c.email || '').includes(q) || (digits.length >= 3 && String(c.phone || '').includes(digits)))
@@ -3541,7 +3568,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
                 const name = await sharp()(lay.overlays[r]).resize(Math.max(1, Math.round(bx.w)), Math.max(1, Math.round(bx.h)), { fit: 'fill' }).png().toBuffer();
                 png = await sharp()(lay.base, { limitInputPixels: 130e6 }).composite([{ input: name, left: Math.round(bx.x), top: Math.round(bx.y) }]).png().toBuffer();
               }
-              const who = ((list && list.rows[r]) || []).filter(Boolean).slice(0, 2).join(' / ');
+              // Film labels use a Latin font: Latin text only, plus the row's size so each name goes on the right garment.
+              const row = (list && list.rows[r]) || [];
+              const vc = design.merge.variantCols || {};
+              const size = vc.size >= 0 ? row[vc.size] : pickEn(it.size.label);
+              const who = [row.filter((v, k) => v && k !== vc.size && k !== vc.color).slice(0, 2).join(' / ').replace(/[^\x20-\x7e]+/g, '').trim(), size && `size ${String(size).replace(/[^\x20-\x7e]+/g, '')}`].filter(Boolean).join(' · ');
               pieces.push({
                 png,
                 widthIn: sd.widthIn + 2 * (sd.bleedIn || 0),

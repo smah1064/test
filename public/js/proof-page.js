@@ -4,8 +4,9 @@
   const { esc, t, tr } = POD;
   const content = document.getElementById('content');
   const token = new URLSearchParams(location.search).get('t') || '';
-  // view: 'loading' | 'gone' | 'proof' | 'done'
-  const st = { view: 'loading', data: null, error: null, rejecting: false, sending: false, result: null, formError: '', ok: false, comment: '' };
+  // view: 'loading' | 'gone' | 'replaced' | 'proof' | 'done'
+  // 'replaced': the shop sent a newer proof while this page was open, so the answer could not be sent.
+  const st = { view: 'loading', data: null, error: null, rejecting: false, sending: false, result: null, formError: '', ok: false, comment: '', unsent: '' };
 
   const icon = (d) => `<svg class="pf-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
   const orderLink = (d) => (d && d.order && d.order.id ? `<a class="btn btn-primary" href="/order?id=${encodeURIComponent(d.order.id)}">${esc(t('proofPage.toOrder'))}</a>` : '');
@@ -17,6 +18,28 @@
         <h1 style="font-size:22px">${esc(t('proofPage.gone'))}</h1>
         <p class="muted">${esc(text || t('proofPage.goneText'))}</p>
         <a class="btn" href="/">${esc(t('proofPage.home'))}</a>
+      </div>`;
+  }
+
+  /** The answer could not be sent because this link was replaced by a newer proof:
+   *  say so, keep what they typed (to copy), and lead to the order page. */
+  function replacedHtml() {
+    const d = st.data;
+    const orderId = d && d.order && d.order.id;
+    return `
+      <div class="card" role="alert" style="margin:40px auto;max-width:620px;padding:24px;display:grid;gap:12px">
+        <h1 style="font-size:22px;margin:0">${esc(t('proofPage.replaced'))}</h1>
+        <p class="muted" style="margin:0;line-height:1.6">${esc(t(orderId ? 'proofPage.replacedText' : 'proofPage.replacedTextNoOrder'))}</p>
+        ${st.unsent ? `
+        <div style="display:grid;gap:6px">
+          <label for="unsent" style="font-weight:600;font-size:14px">${esc(t('proofPage.unsent'))}</label>
+          <textarea id="unsent" rows="4" readonly dir="auto">${esc(st.unsent)}</textarea>
+          <div><button class="btn btn-sm" type="button" data-act="copy">${esc(t('proofPage.copy'))}</button></div>
+        </div>` : ''}
+        <div class="row-btns" style="display:flex;gap:8px;flex-wrap:wrap">
+          ${orderLink(d)}
+          <a class="btn" href="/">${esc(t('proofPage.home'))}</a>
+        </div>
       </div>`;
   }
 
@@ -46,6 +69,10 @@
     if (st.view === 'loading') return;
     if (st.view === 'gone') {
       content.innerHTML = goneHtml(st.error);
+      return;
+    }
+    if (st.view === 'replaced') {
+      content.innerHTML = replacedHtml();
       return;
     }
     const d = st.data;
@@ -95,7 +122,9 @@
       Object.assign(st, { view: 'done', result: decision, sending: false });
     } catch (e) {
       st.sending = false;
-      if (e.status === 404 || e.status === 410) Object.assign(st, { view: 'gone', error: null });
+      // The link stopped working while the page was open (a newer proof replaced it):
+      // keep what they typed and point them to the order page.
+      if (e.status === 404 || e.status === 410) Object.assign(st, { view: 'replaced', unsent: decision === 'reject' ? comment : '' });
       else if (e.status === 409) {
         // A newer proof was made meanwhile (or it was already decided): show what is current.
         POD.toast(e.message, 'error');
@@ -109,6 +138,10 @@
   content.addEventListener('click', (e) => {
     const b = e.target.closest('[data-act]');
     if (!b || st.sending) return;
+    if (b.dataset.act === 'copy') {
+      copyUnsent();
+      return;
+    }
     if (b.dataset.act === 'approve') {
       if (!st.ok) {
         st.formError = t('proofPage.needOk');
@@ -128,6 +161,18 @@
       if (r) r.focus();
     }
   });
+  async function copyUnsent() {
+    const box = document.getElementById('unsent');
+    try {
+      await navigator.clipboard.writeText(st.unsent);
+      POD.toast(t('proofPage.copied'));
+    } catch (err) {
+      // No clipboard access (http, old browser): select the text for a manual copy.
+      box.focus();
+      box.select();
+      POD.toast(t('proofPage.copyFailed'), 'error');
+    }
+  }
   content.addEventListener('change', (e) => {
     if (e.target.id === 'ok') {
       st.ok = e.target.checked;

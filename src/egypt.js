@@ -42,7 +42,7 @@ function normalizeDigits(s) {
  */
 function normalizeEgyptMobile(input) {
   // Phones add invisible direction marks when a number is copied from contacts or WhatsApp.
-  let s = normalizeDigits(input || '').replace(/[\s\-().\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/g, '');
+  let s = normalizeDigits(input || '').replace(/[\s\-().\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff\u061c\u00a0\u2010-\u2015\u2212]/g, '');
   if (s.startsWith('+20')) s = '0' + s.slice(3);
   else if (s.startsWith('0020')) s = '0' + s.slice(4);
   // "+20 010…": the leading 0 written after the country code.

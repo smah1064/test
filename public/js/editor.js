@@ -421,7 +421,7 @@
       const hx = a.x + a.w / 2 - hw / 2;
       const hy = Math.min(a.y + a.h + 8 * px, H - hh - 2 * px);
       st.handleRect = { x: hx, y: hy, w: hw, h: hh };
-      ctx.fillStyle = st.movingArea ? '#d9480f' : 'rgba(255, 90, 54, .95)';
+      ctx.fillStyle = st.movingArea ? '#a8320f' : '#ca3d1a';
       ctx.beginPath();
       if (ctx.roundRect) ctx.roundRect(hx, hy, hw, hh, hh / 2); else ctx.rect(hx, hy, hw, hh);
       ctx.fill();
@@ -432,7 +432,7 @@
     }
     const s = sideDef();
     ctx.font = `600 ${11 * px}px Cairo, system-ui, sans-serif`;
-    ctx.fillStyle = 'rgba(255, 90, 54, .95)';
+    ctx.fillStyle = '#ca3d1a';
     const dims = { w: POD.num(s.printWidthIn * 2.54), h: POD.num(s.printHeightIn * 2.54) };
     let label = t('printArea', dims);
     if (ctx.measureText(label).width > a.w + 30 * px) label = t('printAreaShort', dims);
@@ -1047,7 +1047,9 @@
     $('tpl-cats').innerHTML = tplState.cats.map((c) => `<button type="button" class="tpl-cat ${c.id === tplState.cat ? 'active' : ''}" data-tplcat="${esc(c.id)}" role="tab" aria-selected="${c.id === tplState.cat}">${esc(tr(c.name))}</button>`).join('');
     const words = normQ(tplState.q).split(/\s+/).filter(Boolean);
     const catNames = Object.fromEntries(tplState.cats.map((c) => [c.id, [c.name.en, c.name.ar]]));
-    const shown = list.filter((x) => (tplState.cat === 'all' || x.cat === tplState.cat)
+    // Templates with {fields} (team business cards…) only where a name list can fill them.
+    const fieldy = (x) => /\{[^{}"\\\n]{1,40}\}/.test(JSON.stringify((x.tpl && x.tpl.items) || (x.design && (x.design.items || x.design.objects)) || ''));
+    const shown = list.filter((x) => (st.product.merge || !fieldy(x)) && (tplState.cat === 'all' || x.cat === tplState.cat)
       && words.every((w) => [x.name.en, x.name.ar, ...(catNames[x.cat] || [])].some((n) => normQ(n).includes(w))));
     $('tpl-status').hidden = shown.length > 0;
     $('tpl-status').textContent = shown.length ? '' : t('lib.none');
@@ -1117,7 +1119,7 @@
     if (file.size > MAX_VECTOR_BYTES) throw new Error(t('msg.tooBigVector'));
     busy(true, t('busy.artwork'));
     try {
-      const res = await fetch('/api/artwork', {
+      const res = await netFetch('/api/artwork', {
         method: 'POST',
         headers: { 'x-lang': POD.lang, 'x-max-px': String(MAX_UPLOAD_PX), 'Content-Type': 'application/octet-stream' },
         body: file,
@@ -1163,7 +1165,7 @@
       fimg.scale(Math.min((a.w * 0.8) / fimg.width, (a.h * 0.8) / fimg.height));
       addObject(fimg);
       const dpi = imageDpi(fimg);
-      if (dpi < dpiLimits().fail) toast(t('msg.lowResToast', { dpi }), 'error');
+      if (dpi < dpiLimits().fail) toast(t('msg.lowResToast', { dpi: POD.num(dpi) }), 'error');
       // "Remove the background of my photos" is ticked in the upload panel.
       if ($('auto-bg') && $('auto-bg').checked && !/\.png$/i.test(file.name || '')) await removeImageBackground(fimg);
     } catch (e) {
@@ -1194,7 +1196,7 @@
     if (!b) return;
     busy(true, t('imp.adding'));
     try {
-      const res = await fetch(`/api/import/image?url=${encodeURIComponent(b.dataset.src)}`, { headers: { 'x-lang': POD.lang, 'x-max-px': String(MAX_UPLOAD_PX) } });
+      const res = await netFetch(`/api/import/image?url=${encodeURIComponent(b.dataset.src)}`, { headers: { 'x-lang': POD.lang, 'x-max-px': String(MAX_UPLOAD_PX) } });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || t('msg.badImage'));
       const blob = await res.blob();
       const file = new File([blob], 'Imported.' + (blob.type === 'image/png' ? 'png' : 'jpg'), { type: blob.type });
@@ -2074,6 +2076,16 @@
     commitNow ? commit() : scheduleCommit();
   }
 
+  /** fetch, with the shop's own message (not the browser's "Failed to fetch") when the connection drops. */
+  async function netFetch(url, opts) {
+    try {
+      return await fetch(url, opts);
+    } catch (e) {
+      const err = new Error(t('msg.network'));
+      err.network = true;
+      throw err;
+    }
+  }
   /** A number for a slider (values in a shared or saved design are never put into the page as they are). */
   function numv(v, fallback = 0) { const n = Number(v); return Number.isFinite(n) ? n : fallback; }
 
@@ -2208,7 +2220,7 @@
     ctx.fillRect(0, 0, w, h);
     ctx.drawImage(el, 0, 0, w, h);
     const jpg = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.93));
-    const res = await fetch('/api/remove-bg', { method: 'POST', headers: { 'Content-Type': 'image/jpeg', 'x-lang': POD.lang, 'x-max-px': String(Math.max(w, h)) }, body: jpg });
+    const res = await netFetch('/api/remove-bg', { method: 'POST', headers: { 'Content-Type': 'image/jpeg', 'x-lang': POD.lang, 'x-max-px': String(Math.max(w, h)) }, body: jpg });
     if (!res.ok) {
       const body = res.headers.get('content-type')?.includes('json') ? await res.json().catch(() => null) : null;
       const err = new Error((body && body.error) || t('msg.removeBgNone'));
@@ -2589,13 +2601,20 @@
   var pressIn = null; // eslint-disable-line no-var
   var deferred = new Map(); // eslint-disable-line no-var
   document.addEventListener('pointerdown', (e) => { pressIn = ['layers', 'side-tabs'].find((id) => $(id) && $(id).contains(e.target)) || null; }, true);
-  function endPress() {
+  // The hold lasts until the click has been handled: on phones the field loses focus after the finger
+  // lifts (when the browser sends its mouse events), just before the click.
+  var pressTimer = null; // eslint-disable-line no-var
+  function endPress(ms) {
     if (!pressIn) return;
-    pressIn = null;
-    setTimeout(() => { for (const [id, fn] of [...deferred]) { deferred.delete(id); fn(); } }, 0);
+    clearTimeout(pressTimer);
+    pressTimer = setTimeout(() => {
+      pressIn = null;
+      for (const [id, fn] of [...deferred]) { deferred.delete(id); fn(); }
+    }, ms);
   }
-  document.addEventListener('pointerup', endPress, true);
-  document.addEventListener('pointercancel', endPress, true);
+  document.addEventListener('click', () => endPress(0), true);
+  document.addEventListener('pointerup', () => endPress(700), true);
+  document.addEventListener('pointercancel', () => endPress(0), true);
   function heldOff(id, fn) {
     if (!pressIn || pressIn !== id) return false;
     (deferred || (deferred = new Map())).set(id, fn);
@@ -2701,7 +2720,7 @@
     $('method-field').hidden = !p.embroidery;
     if (p.embroidery) {
       $('method-chips').innerHTML = ['print', 'embroidery'].map((m) => `<button class="chip ${m === st.method ? 'active' : ''}" data-method="${m}">${esc(t('emb.' + m))}${m === 'embroidery' ? ` <span style="opacity:.7">+${esc(money(p.embroidery.surcharge))}</span>` : ''}</button>`).join('');
-      $('method-note').textContent = st.method === 'embroidery' ? t('emb.note', { w: POD.num(Math.round(p.embroidery.widthIn * 25.4) / 10), h: POD.num(Math.round(p.embroidery.heightIn * 25.4) / 10), n: p.embroidery.maxColors }) : '';
+      $('method-note').textContent = st.method === 'embroidery' ? t('emb.note', { w: POD.num(Math.round(p.embroidery.widthIn * 25.4) / 10), h: POD.num(Math.round(p.embroidery.heightIn * 25.4) / 10), n: POD.num(p.embroidery.maxColors) }) : '';
     }
     // Fabric: how the tile repeats and how big it prints.
     $('pattern-field').hidden = !st.pattern;
@@ -3069,7 +3088,7 @@
         }
         if (isText(o) && o.fontSize * Math.abs(o.scaleY || 1) * 0.7 < 5 * ppmm) issues.push({ level: 'warn', key: 'check.embSmallText', obj: o, params: { name } });
       }
-      if (colours.size > emb().maxColors) issues.push({ level: 'warn', key: 'check.embColors', obj: null, params: { n: colours.size, max: emb().maxColors } });
+      if (colours.size > emb().maxColors) issues.push({ level: 'warn', key: 'check.embColors', obj: null, params: { n: POD.num(colours.size), max: POD.num(emb().maxColors) } });
     }
     issues.sort((x, y) => (x.level === y.level ? 0 : x.level === 'error' ? -1 : 1));
     return issues.map((i) => ({ ...i, side: sd }));
@@ -3141,12 +3160,12 @@
       total = lines.reduce((a, l) => a + unitPrice(l.size) * l.qty, 0);
     }
     $('price').textContent = money(total);
-    if (notes && pieces > 1) notes.push(t('qty.priceNote', { n: POD.num(pieces) }));
+    if (notes && pieces > 1) notes.push(plural('qty.priceNote', pieces));
     // Phones: the number of pieces under the price; tapping it opens the quantities.
     const chip = $('qty-chip');
     if (chip) {
       chip.hidden = p.kind === 'book';
-      chip.textContent = t(p.merge && st.mergeList ? 'qty.chipNames' : 'qty.chip', { n: POD.num(pieces) });
+      chip.textContent = plural(p.merge && st.mergeList ? 'qty.chipNames' : 'qty.chip', pieces);
     }
   }
   if ($('qty-chip')) {
@@ -3228,9 +3247,16 @@
     return (st.product.options || []).reduce((sum, opt) => sum + choicePrice(chosenOption(opt), sizeId), 0);
   }
   /** "1 piece in total", "6 قطع", "12 قطعة" (Arabic: 3–10 take the plural). */
+  /** A count with its Arabic form: key.one / key.two / key.few when the strings have them, else key. */
+  function plural(key, n) {
+    const k = n % 100;
+    const form = n === 1 ? 'one' : n === 2 ? 'two' : k >= 3 && k <= 10 ? 'few' : null;
+    const v = form ? t(`${key}.${form}`, { n: POD.num(n) }) : null;
+    return v && v !== `${key}.${form}` ? v : t(key, { n: POD.num(n) });
+  }
   /** Arabic: 3–10 (and 103–110…) take the plural form. */
   const few = (n) => n % 100 >= 3 && n % 100 <= 10;
-  const qtyTotalText = (n) => (n === 1 ? t('qty.totalOne') : t(n % 100 >= 3 && n % 100 <= 10 ? 'qty.totalFew' : 'qty.total', { n: POD.num(n) }));
+  const qtyTotalText = (n) => (n === 1 ? t('qty.totalOne') : n === 2 ? t('qty.total.two') : t(n % 100 >= 3 && n % 100 <= 10 ? 'qty.totalFew' : 'qty.total', { n: POD.num(n) }));
   function renderQty() {
     const box = $('qty-field');
     if (!box) return;
@@ -3551,7 +3577,7 @@
     if (file.size > 5 * 1024 * 1024) throw new Error(t('merge.tooBig'));
     busy(true, t('merge.reading'));
     try {
-      const res = await fetch('/api/merge/parse', { method: 'POST', headers: { 'Content-Type': 'application/octet-stream', 'x-lang': POD.lang }, body: file });
+      const res = await netFetch('/api/merge/parse', { method: 'POST', headers: { 'Content-Type': 'application/octet-stream', 'x-lang': POD.lang }, body: file });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || t('merge.readFailed'));
       endMergePreview();
@@ -3615,13 +3641,17 @@
       rows[0].forEach((h, i) => samples.set(h, rows.slice(1).map((r) => r[i])));
       const EN = { Name: ['Ahmed Ali', 'Mona Hassan', 'Omar Khaled'], Position: ['Sales Manager', 'Engineer', 'Designer'], Title: ['Manager', 'Engineer', 'Designer'], Phone: ['01012345678', '01198765432', '01255511122'], Email: ['ahmed@example.com', 'mona@example.com', 'omar@example.com'], Number: ['10', '7', '9'], Size: ['L', 'M', 'XL'] };
       const AR = { 'الاسم': ['أحمد علي', 'منى حسن', 'عمر خالد'], 'الوظيفة': ['مدير المبيعات', 'مهندسة', 'مصمم'], 'الموبايل': EN.Phone, 'الإيميل': EN.Email, 'الرقم': EN.Number, 'المقاس': EN.Size };
-      const sample = (f) => samples.get(f) || EN[f] || AR[f] || [`${f} 1`, `${f} 2`, `${f} 3`];
+      // A bilingual design (Arabic and English fields): each field gets names in its own language on every row.
+      const bilingual = used.some((f) => D.ARABIC_RE.test(f)) && used.some((f) => /[A-Za-z]/.test(f) && !D.ARABIC_RE.test(f));
+      const sample = (f) => (bilingual && (AR[f] || EN[f])) || samples.get(f) || EN[f] || AR[f] || [`${f} 1`, `${f} 2`, `${f} 3`];
       rows.length = 0;
       rows.push(used, ...[0, 1, 2].map((i) => used.map((f) => sample(f)[i] || '')));
       // A size column for team kits even when the design doesn't show the size.
       if (st.product.category === 'apparel' && !used.some((f) => ['Size', 'المقاس'].includes(f))) {
         rows[0].push(ar ? 'المقاس' : 'Size');
-        ['L', 'M', 'XL'].forEach((z, i) => rows[i + 1].push(z));
+        // Sizes this product really has (kids garments have their own).
+        const zs = st.product.sizes.map((z) => tr(z.label));
+        [0, 1, 2].forEach((i) => rows[i + 1].push(zs[Math.min(i + Math.floor(zs.length / 3), zs.length - 1)] || zs[0] || ''));
       }
     }
     const csv = '﻿' + rows.map((r) => r.map((v) => (/[",\n]/.test(v) ? `"${String(v).replace(/"/g, '""')}"` : v)).join(',')).join('\r\n') + '\r\n';
@@ -3945,7 +3975,7 @@
     try {
       const blob = await (await fetch(o.getSrc())).blob();
       const type = /^image\/(png|jpeg|webp)$/.test(blob.type) ? blob.type : 'image/png';
-      const res = await fetch('/api/enhance', { method: 'POST', headers: { 'Content-Type': type, 'x-scale': k0.toFixed(3), 'x-lang': POD.lang }, body: blob });
+      const res = await netFetch('/api/enhance', { method: 'POST', headers: { 'Content-Type': type, 'x-scale': k0.toFixed(3), 'x-lang': POD.lang }, body: blob });
       if (!res.ok) throw new Error(((await res.json().catch(() => ({}))).error) || t('msg.badImage'));
       const k = Number(res.headers.get('X-Scale')) || k0;
       const url = URL.createObjectURL(await res.blob());
@@ -4433,6 +4463,10 @@
 
   $('save-draft').addEventListener('click', serial(async () => {
     commit();
+    // Editing a cart item: saving means updating the cart (there is no separate draft for it).
+    if (st.editingCartIndex !== null) return $('add-to-cart').click();
+    // Drafts are off here (the browser blocks site data, or a shared design): say so, keep the customer here.
+    if (!draftMode) return toast(t('draft.saveOff'), 'error');
     busy(true, t('busy.saving'));
     const ok = await saveDraft();
     busy(false);

@@ -103,6 +103,9 @@
     e.preventDefault();
     submit($('f-reset'), async () => {
       await POD.api('/api/account/reset', json('POST', { token: params.get('reset'), password: $('rs-pass').value }));
+      $('rs-pass').value = '';
+      // The link is used up: back to the account page (signed in now, with the new password).
+      params.delete('reset');
       history.replaceState(null, '', '/account');
       POD.toast(t('acct.passwordChanged'));
       await afterSignIn();
@@ -325,11 +328,34 @@
   });
 
   function render() {
-    $('acct-out').hidden = Boolean(me);
-    $('acct-in').hidden = !me;
+    // A reset link opens the "choose a new password" form, also when someone is already
+    // signed in on this browser (the link may even be for another account).
+    const resetting = Boolean(params.get('reset'));
+    $('acct-out').hidden = Boolean(me) && !resetting;
+    $('acct-in').hidden = !me || resetting;
     renderSocial();
-    if (!me) {
-      if (params.get('reset')) showForm('f-reset');
+    // Signed in: no "sign in / create an account" choices around the reset form.
+    document.querySelector('#acct-out .acct-tabs').hidden = Boolean(me && resetting);
+    if (me && resetting) $('acct-social').hidden = true;
+    let keep = $('rs-keep');
+    if (me && resetting && !keep) {
+      keep = Object.assign(document.createElement('button'), { type: 'button', id: 'rs-keep', className: 'link-btn small' });
+      keep.style.marginTop = '10px';
+      keep.addEventListener('click', () => {
+        params.delete('reset');
+        const u = new URL(location.href);
+        u.searchParams.delete('reset');
+        history.replaceState(null, '', u.pathname + u.search);
+        render();
+      });
+      $('f-reset').append(keep);
+    }
+    if (keep) {
+      keep.hidden = !(me && resetting);
+      keep.textContent = t('acct.resetKeep');
+    }
+    if (!me || resetting) {
+      if (resetting) showForm('f-reset');
       else if ($('f-in').hidden && $('f-up').hidden && $('f-forgot').hidden) showForm('f-in');
       return;
     }

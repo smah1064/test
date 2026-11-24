@@ -111,6 +111,14 @@ Object.assign(window.POD_STRINGS, {
   'proofPage.noToken': ['This page needs the link from your email or WhatsApp message.', 'الصفحة دي محتاجة اللينك اللي في الإيميل أو رسالة الواتساب.'],
   'proofPage.notWaiting': ['This proof does not need your decision right now. Status: {status}', 'البروفة دي مش محتاجة قرارك دلوقتي. الحالة: {status}'],
   'proofPage.home': ['Back to the shop', 'العودة للمتجر'],
+  // The link was replaced by a newer proof while the page was open
+  'proofPage.replaced': ['We sent you a newer proof', 'بعتنالك بروفة أحدث'],
+  'proofPage.replacedText': ['While this page was open, our team sent a newer version of this proof, so this link stopped working and your answer was not sent. Open your order page, or the link in our latest message, to see the new proof and answer there.', 'وإنت فاتح الصفحة دي، فريقنا بعت نسخة أحدث من البروفة، علشان كده اللينك ده وقف وردّك ماتبعتش. افتح صفحة طلبك، أو اللينك اللي في آخر رسالة مننا، علشان تشوف البروفة الجديدة وترد عليها هناك.'],
+  'proofPage.replacedTextNoOrder': ['While this page was open, our team sent a newer version of this proof, so this link stopped working and your answer was not sent. Open the link in our latest message to see the new proof and answer there.', 'وإنت فاتح الصفحة دي، فريقنا بعت نسخة أحدث من البروفة، علشان كده اللينك ده وقف وردّك ماتبعتش. افتح اللينك اللي في آخر رسالة مننا علشان تشوف البروفة الجديدة وترد عليها هناك.'],
+  'proofPage.unsent': ['Your message (not sent). Copy it to send it with the new proof if it still applies:', 'رسالتك (ماتبعتتش). انسخها علشان تبعتها مع البروفة الجديدة لو لسه محتاجها:'],
+  'proofPage.copy': ['Copy my message', 'انسخ رسالتي'],
+  'proofPage.copied': ['Message copied ✓', 'تم نسخ الرسالة ✓'],
+  'proofPage.copyFailed': ["Couldn't copy. Select the text and copy it.", 'معرفناش ننسخ. حدّد الكلام وانسخه.'],
 
   // ---------- Order page ----------
   'order.in_review': ['Being checked', 'تحت المراجعة'],

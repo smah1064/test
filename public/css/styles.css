@@ -642,6 +642,10 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 .lib-add { padding: 16px; margin-bottom: 14px; }
 .lib-form { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 10px; }
 @media (max-width: 860px) { .lib-form { grid-template-columns: 1fr 1fr; } .lib-form .field:first-child { grid-column: 1 / -1; } }
+/* Inputs (dates especially) shrink with their column instead of pushing the form off a phone screen. */
+.lib-form > * { min-width: 0; }
+.lib-form input, .lib-form select { min-width: 0; width: 100%; max-width: 100%; }
+@media (max-width: 420px) { .lib-form { grid-template-columns: minmax(0, 1fr); } }
 .lib-row { display: grid; grid-template-columns: 56px 1fr auto; gap: 12px; align-items: center; }
 .lib-row.is-hidden { opacity: .55; }
 .lib-thumb { width: 56px; height: 56px; border-radius: 10px; background: #f1f3f6; display: grid; place-items: center; overflow: hidden; font-weight: 800; color: var(--muted); }
@@ -712,6 +716,12 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 .check-chip, .chip-radio { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 999px; background: #fff; font-size: 13px; cursor: pointer; }
 .chip-radio.is-off { opacity: 0.55; cursor: not-allowed; }
 .send-panel textarea { width: 100%; }
+/* Long file names ("Names only (ZIP of PNGs…)") wrap inside their chip on phones. */
+.send-grid { grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); }
+.send-panel .field, .send-grid > * { min-width: 0; }
+.send-panel select { max-width: 100%; }
+.check-chip, .chip-radio { max-width: 100%; white-space: normal; overflow-wrap: anywhere; line-height: 1.35; border-radius: 16px; }
+.check-chip input, .chip-radio input { flex: none; }
 .send-history { font-size: 13px; color: var(--ok, #2b8a3e); margin: 6px 0; line-height: 1.6; }
 
 /* Admin: accounts */
@@ -777,6 +787,24 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 }
 /* Menu links with a shorter name for phones ("Designs", "Photos"). */
 .site-header .nav-short { display: none; }
+/* Never break a menu link or the shop name over two lines. */
+.site-header .brand { white-space: nowrap; flex: none; }
+.site-header nav a { white-space: nowrap; }
+/* Tablets (iPad portrait 768, 820…): the short names keep the menu on one line next to the shop name. */
+@media (max-width: 900px) {
+  .site-header .inner { gap: 16px; }
+  .site-header nav { gap: 14px; min-width: 0; }
+  .site-header .nav-long { display: none; }
+  .site-header .nav-short { display: inline; }
+}
+@media (max-width: 700px) {
+  .site-header .inner { gap: 12px; }
+  .site-header nav { gap: 11px; }
+  .site-header .brand { font-size: 18px; gap: 6px; }
+  .site-header .lang-toggle { padding: 4px 9px; }
+}
+/* Narrow tablets / big phones in landscape: the account link keeps its icon only (as on phones). */
+@media (max-width: 660px) { .site-header .acct-link span { display: none; } }
 /* With a cart count the links no longer fit next to the shop name: the logo mark alone stays. */
 @media (max-width: 600px) {
   .site-header .brand { font-size: 0; gap: 0; }
@@ -825,6 +853,9 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 .acct-phone-note { margin: 0 0 14px; padding: 10px 12px; border-radius: 10px; background: #fff4e6; color: #8a4b00; font-size: 14px; line-height: 1.6; }
 .acct-in-card, #acct-in .acct-card { margin: 0; max-width: 560px; }
 .acct-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+/* A long one-word name wraps instead of pushing "Sign out" off a phone screen. */
+.acct-head h1 { min-width: 0; overflow-wrap: anywhere; }
+.acct-head > .btn { flex: none; }
 .acct-order { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 12px 14px; margin-bottom: 10px; text-decoration: none; color: inherit; }
 .acct-order:hover { border-color: var(--accent); }
 .acct-order-pics { display: flex; gap: 4px; }
@@ -915,6 +946,16 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
   .panel-foot #preview-open-m { padding: 10px 11px; }
   .panel-foot .price-line { flex: 1 0 auto; }
 }
+/* Very narrow phones (320–360, Arabic prices are wider): tighter footer so it stays on the screen */
+@media (max-width: 360px) {
+  .panel-foot { gap: 6px; padding-inline: 8px; }
+  .panel-foot .price-line { flex: 1 1 auto; }
+  .panel-foot .amount { font-size: 16px; }
+  .panel-foot .qty-chip { padding: 2px 7px; font-size: 12px; }
+  .panel-foot .foot-actions { gap: 5px; }
+  .panel-foot #add-to-cart, .panel-foot #save-draft { padding: 10px 9px; font-size: 13.5px; }
+  .panel-foot #preview-open-m { padding: 10px 9px; }
+}
 
 /* Name-list section: a short highlight when opened from the toolbar or the product page */
 @keyframes sec-flash { 0% { box-shadow: 0 0 0 3px var(--accent); } 100% { box-shadow: 0 0 0 3px transparent; } }
@@ -933,7 +974,7 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 .dlv-fee { white-space: nowrap; font-weight: 700; color: var(--ink-2); }
 .dlv-days { margin: 2px 0 0; }
 .dlv-expected { margin: 10px 0 0; font-weight: 600; }
-.dlv-express-pill { background: #fff3bf; color: #7a5800; font-size: 11px; vertical-align: middle; }
+.dlv-express-pill { background: #fff3bf; color: #7a5800; font-size: 11px; vertical-align: middle; text-transform: none; }
 @media (max-width: 340px) { .site-header nav a[href="/designs"] { display: none; } }
 @media (max-width: 300px) { .site-header nav a[href="/photos"] { display: none; } }
 

@@ -239,8 +239,10 @@ async function writeZipOfNames(design, read, rows, file, { extra = () => '' } = 
     const pics = splitPngs(read(`${id}-merge.bin`), { max: design.merge.count });
     const side = design.sides.find((s) => s.id === id);
     const dpi = side && side.dpi ? side.dpi : 300;
+    // The size / colour columns are added once by `extra` (not again as part of the name).
+    const vc = design.merge.variantCols || {};
     for (let r = 0; r < pics.length; r++) {
-      const who = fileSlug((rows[r] || []).filter(Boolean).slice(0, 2).join(' '));
+      const who = fileSlug((rows[r] || []).filter((v, k) => v && k !== vc.size && k !== vc.color).slice(0, 2).join(' '));
       const data = await sharp()(pics[r]).withDensity(dpi).png().toBuffer();
       entries.push({ name: `${Object.keys(design.merge.sides).length > 1 ? `${id}/` : ''}${String(r + 1).padStart(4, '0')}${who ? `-${who}` : ''}${extra(r) ? `-${fileSlug(extra(r), 20)}` : ''}.png`, data });
     }
