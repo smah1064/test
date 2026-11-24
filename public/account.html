@@ -46,6 +46,7 @@
         <form id="f-in" novalidate>
           <div class="field"><label for="in-login" data-i18n="acct.login"></label><input type="text" id="in-login" autocomplete="username" dir="ltr" maxlength="200" required></div>
           <div class="field"><label for="in-pass" data-i18n="acct.password"></label><input id="in-pass" type="password" autocomplete="current-password" maxlength="200" required></div>
+          <div class="captcha-box" id="cap-in"></div>
           <button class="btn btn-primary btn-block" type="submit" data-i18n="acct.signIn"></button>
           <button class="link-btn small" type="button" id="forgot-open" style="margin-top:10px" data-i18n="acct.forgot"></button>
         </form>
@@ -54,12 +55,14 @@
           <div class="field"><label for="up-phone" data-i18n="checkout.phone"></label><input id="up-phone" type="tel" inputmode="tel" autocomplete="tel" dir="ltr" placeholder="01xxxxxxxxx" maxlength="30" required></div>
           <div class="field"><label for="up-email" data-i18n="acct.emailOptional"></label><input id="up-email" type="email" autocomplete="email" dir="ltr" maxlength="200"></div>
           <div class="field"><label for="up-pass" data-i18n="acct.newPassword"></label><input id="up-pass" type="password" autocomplete="new-password" minlength="8" maxlength="200" required></div>
+          <div class="captcha-box" id="cap-up"></div>
           <button class="btn btn-primary btn-block" type="submit" data-i18n="acct.create"></button>
           <p class="muted small" style="margin:10px 0 0;line-height:1.6" data-i18n="acct.why"></p>
         </form>
         <form id="f-forgot" novalidate hidden>
           <p class="muted small" style="margin:0 0 10px;line-height:1.6" data-i18n="acct.forgotText"></p>
           <div class="field"><label for="fg-login" data-i18n="acct.login"></label><input type="text" id="fg-login" dir="ltr" maxlength="200" required></div>
+          <div class="captcha-box" id="cap-fg"></div>
           <button class="btn btn-primary btn-block" type="submit" data-i18n="acct.sendLink"></button>
           <p class="small" id="fg-msg" style="margin:10px 0 0;line-height:1.6"></p>
         </form>

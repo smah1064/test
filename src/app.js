@@ -52,6 +52,7 @@ const { Library, CATEGORIES: DESIGN_CATEGORIES } = require('./library');
 const security = require('./security');
 const books = require('./books');
 const cartoon = require('./cartoon');
+const captchaMod = require('./captcha');
 let sharpModule = null;
 const sharp = () => (sharpModule ||= require('sharp'));
 let printfilesModule = null;
@@ -379,7 +380,7 @@ const DEFAULT_LIMITS = {
   downloads: [{ max: 200, ms: 3600e3 }],
 };
 
-function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 3600e3, oauthConfig = {}, oauthFetch, importGet, requireApproval = true }) {
+function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 3600e3, oauthConfig = {}, oauthFetch, importGet, requireApproval = true, captcha = captchaMod.fromEnv(), captchaFetch }) {
   if (!adminPassword) throw new Error('adminPassword is required');
   const store = new Store(dataDir);
   const app = express();
@@ -400,6 +401,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     db.usage[name] = { day, n: u.n + n };
     return true;
   });
+  // Express 4 doesn't catch errors of async handlers: pass them on.
+  const asyncRoute = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+  /** The CAPTCHA token sent with a form (when the CAPTCHA is on). */
+  const checkCaptcha = async (req) => {
+    if (!captcha) return;
+    const r = await captchaMod.verify(captcha, (req.body || {}).captchaToken, req.ip, captchaFetch ? { fetchImpl: captchaFetch } : {});
+    if (!r.ok) throw new HttpError(400, 'captchaFailed');
+  };
   const rateLimit = (req, what, key = req.ip) => {
     const wait = limiter.hit(`${what}:${key}`, LIMITS[what]);
     if (wait) throw new HttpError(429, wait > 90 ? 'tooManyWait' : 'tooFast', { min: Math.ceil(wait / 60) });
@@ -452,6 +461,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   });
 
   // ---------- Catalog ----------
+  // CAPTCHA (Cloudflare Turnstile, see src/captcha.js): the site key for the forms, null when off.
+  app.get('/api/captcha', (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.json({ siteKey: captcha ? captcha.siteKey : null });
+  });
   app.get('/api/products', (req, res) => {
     res.json({
       currency: CURRENCY,
@@ -2029,10 +2043,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     // New accounts (no mobile yet) land on the account page to add it; checkout needs it anyway.
     res.redirect(302, next === 'cart' ? '/cart' : `/account${cust.phone ? '' : '?welcome=1'}`);
   }
-  app.post('/api/account/signup', express.json({ limit: '10kb' }), (req, res) => {
+  app.post('/api/account/signup', express.json({ limit: '10kb' }), asyncRoute(async (req, res) => {
     const { fields, error } = customers.cleanSignup(req.body);
     if (error) throw new HttpError(400, error);
     rateLimit(req, 'accountSignup');
+    await checkCaptcha(req);
     const { salt, hash } = customers.hashPassword(fields.password);
     const created = store.mutate((db) => {
       db.customers ||= [];
@@ -2044,10 +2059,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     });
     setSession(req, res, created);
     res.status(201).json({ customer: customers.publicCustomer(created) });
-  });
-  app.post('/api/account/login', express.json({ limit: '10kb' }), (req, res) => {
+  }));
+  app.post('/api/account/login', express.json({ limit: '10kb' }), asyncRoute(async (req, res) => {
     const { login, password } = req.body || {};
     rateLimit(req, 'accountLogin');
+    await checkCaptcha(req);
     const key = customers.loginKey(login);
     const cust = key && customerList().find((x) => (key.phone ? x.phone === key.phone : x.email === key.email));
     if (cust) rateLimit(req, 'accountLoginId', cust.id);
@@ -2056,7 +2072,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (!cust || !customers.checkPassword(cust, password)) throw new HttpError(401, 'acctWrong');
     setSession(req, res, cust);
     res.json({ customer: customers.publicCustomer(cust) });
-  });
+  }));
   app.post('/api/account/logout', (req, res) => {
     setSession(req, res, null);
     res.json({ ok: true });
@@ -2119,6 +2135,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   app.post('/api/account/forgot', express.json({ limit: '10kb' }), async (req, res, next) => {
     try {
       rateLimit(req, 'accountForgot');
+      // A signed-in customer asking for a link from their account page is already checked.
+      if (!currentCustomer(req)) await checkCaptcha(req);
       const key = customers.loginKey((req.body || {}).login);
       const cust = key && customerList().find((x) => (key.phone ? x.phone === key.phone : x.email === key.email));
       const lang = langOf(req);
@@ -2187,7 +2205,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     res.json({ items, subtotal, discount, coupon, couponError, shipping, baseShipping, delivery, deliveryOptions, total: round2(subtotal - discount + shipping), freeShippingOver: FREE_SHIPPING_OVER, shippingFlat: SHIPPING_FLAT });
   });
 
-  app.post('/api/orders', express.json({ limit: '100kb' }), (req, res) => {
+  app.post('/api/orders', express.json({ limit: '100kb' }), asyncRoute(async (req, res) => {
     const body = req.body && typeof req.body === 'object' ? req.body : {};
     const { designIds, expectedTotal } = body;
     const customer = body.customer && typeof body.customer === 'object' ? body.customer : {};
@@ -2299,6 +2317,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     // Only orders that passed every check (coupon, prices) count towards the limit,
     // so a typo or a changed price doesn't lock a customer out.
     rateLimit(req, 'orders');
+    // The CAPTCHA last: a token works once, so earlier mistakes (a changed price) don't use it up.
+    await checkCaptcha(req);
     const me = currentCustomer(req);
     const order = store.createOrder({
       id: crypto.randomUUID(),
@@ -2351,7 +2371,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         store.save();
       })
       .catch((e) => console.warn('[notify]', e.message));
-  });
+  }));
 
   app.get('/api/orders/:id', (req, res) => {
     const order = UUID_RE.test(req.params.id) && store.getOrder(req.params.id);
@@ -3241,11 +3261,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const file = path.join(publicDir, name + '.html');
       const html = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null;
       pages.set(name, html && html.replace(/((?:src|href)=")(\/(?:js|css|vendor|fonts)\/[^"?#]+\.(?:js|css))"/g, `$1$2?v=${assetVersion}"`));
-      if (html) pageCsp.set(name, security.pageCsp(html));
+      if (html) pageCsp.set(name, security.pageCsp(html, { captcha: Boolean(captcha) && CAPTCHA_PAGES.has(name) }));
     }
     return pages.get(name);
   };
   const pageCsp = new Map();
+  // Pages with a CAPTCHA widget may load Cloudflare's script and frame.
+  const CAPTCHA_PAGES = new Set(['cart', 'account']);
   const sendPage = (res, name, html) => {
     res.set('Cache-Control', 'no-cache');
     res.set('Content-Security-Policy', pageCsp.get(name));

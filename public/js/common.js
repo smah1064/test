@@ -124,6 +124,69 @@
   function date(iso) {
     return new Date(iso).toLocaleString(lang === 'ar' ? 'ar-EG' : 'en-GB', { dateStyle: 'medium', timeStyle: 'short' });
   }
+  /*
+   * CAPTCHA (Cloudflare Turnstile) for a form: captcha(boxElement) gives { prepare, token, reset }.
+   * The widget is only shown when Cloudflare needs the customer to tick a box; usually it checks
+   * silently. Nothing happens when the shop has no CAPTCHA keys (token() is then null).
+   */
+  let captchaKey;
+  let captchaScript;
+  const captchaSiteKey = async () => {
+    if (captchaKey === undefined) {
+      try { captchaKey = (await api('/api/captcha')).siteKey || null; } catch (e) { captchaKey = null; }
+    }
+    return captchaKey;
+  };
+  const loadTurnstile = () => (captchaScript ||= new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+    s.async = true;
+    s.onload = () => (window.turnstile ? resolve(window.turnstile) : reject(new Error('captcha')));
+    s.onerror = () => { captchaScript = null; reject(new Error('captcha')); };
+    document.head.appendChild(s);
+  }));
+  function captcha(box) {
+    let widget = null;
+    let current = null;
+    let waiting = [];
+    let starting = null;
+    const done = (tok) => { current = tok; waiting.splice(0).forEach((w) => w(tok)); };
+    const start = () => (starting ||= (async () => {
+      const key = await captchaSiteKey();
+      if (!key) return null;
+      const ts = await loadTurnstile();
+      widget = ts.render(box, {
+        sitekey: key,
+        language: lang,
+        appearance: 'interaction-only',
+        size: 'flexible',
+        callback: done,
+        'expired-callback': () => { current = null; },
+        'error-callback': () => { current = null; },
+      });
+      return ts;
+    })().catch(() => { starting = null; return null; }));
+    return {
+      /** Start the check early (e.g. when the customer starts typing). */
+      prepare() { start(); },
+      /** The token for the next request (waits for Cloudflare; null when the CAPTCHA is off). */
+      async token() {
+        const ts = await start();
+        if (!ts) return captchaKey ? '' : null;
+        if (current) return current;
+        return new Promise((resolve) => {
+          waiting.push(resolve);
+          setTimeout(() => { waiting = waiting.filter((w) => w !== resolve); resolve(current || ''); }, 30000);
+        });
+      },
+      /** A token works once: get a fresh one after each request. */
+      reset() {
+        current = null;
+        if (widget != null && window.turnstile) try { window.turnstile.reset(widget); } catch (e) { /* gone */ }
+      },
+    };
+  }
+
   /** A calendar day (YYYY-MM-DD) as "Thursday 26 November". */
   function day(ymd) {
     try {
@@ -475,7 +538,7 @@
     },
     t, tr, setLang, applyI18n,
     loadCatalog, fillMockup, mockupUrl, svgDataUrl, luminance,
-    money, date, day, num,
+    money, date, day, num, captcha,
     getCart, setCart, updateCartBadge, toast, esc, api, drafts,
     sizedArea, sizeView, canvasEdges, drawPattern, wrapOffsets, fabricCm,
   };

@@ -23,15 +23,17 @@ function inlineScriptHashes(html) {
 }
 
 /** Content-Security-Policy for an HTML page: only this site's own scripts run. */
-function pageCsp(html) {
+const TURNSTILE = 'https://challenges.cloudflare.com';
+function pageCsp(html, { captcha = false } = {}) {
   return [
     "default-src 'self'",
-    `script-src 'self' ${inlineScriptHashes(html).join(' ')}`.trim(),
+    `script-src 'self' ${inlineScriptHashes(html).join(' ')}${captcha ? ' ' + TURNSTILE : ''}`.trim(),
+    ...(captcha ? [`frame-src ${TURNSTILE}`] : []),
     // Inline style attributes are used for colours and positions; they cannot run code.
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self' data:",
-    "connect-src 'self' data: blob:",
+    `connect-src 'self' data: blob:${captcha ? ' ' + TURNSTILE : ''}`,
     "worker-src 'self' blob:",
     "media-src 'self' blob:",
     "object-src 'none'",

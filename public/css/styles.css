@@ -927,3 +927,7 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 .dlv-expected { margin: 10px 0 0; font-weight: 600; }
 .dlv-express-pill { background: #fff3bf; color: #7a5800; font-size: 11px; vertical-align: middle; }
 @media (max-width: 340px) { .site-header nav a[href="/designs"] { display: none; } }
+
+/* CAPTCHA (Cloudflare Turnstile): takes no room unless Cloudflare asks the customer to tick a box. */
+.captcha-box:empty { display: none; }
+.captcha-box { margin: 4px 0 10px; }

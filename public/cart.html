@@ -75,6 +75,7 @@
         <div class="line total"><span data-i18n="checkout.total"></span><span id="total"></span></div>
         <p class="muted small" id="free-note" style="margin:6px 0 0"></p>
         <div class="pay-box"><strong data-i18n="checkout.cod"></strong><span data-i18n="checkout.codText"></span></div>
+        <div class="captcha-box" id="cap-order"></div>
         <p class="approve-status" id="approve-status" aria-live="polite"></p>
         <button class="btn btn-primary btn-lg btn-block" id="place-order" type="submit" data-i18n="checkout.place" disabled aria-describedby="approve-status"></button>
       </form>
@@ -397,6 +398,7 @@
         try {
           const customer = Object.fromEntries(new FormData(form));
           delete customer.delivery;
+          const captchaToken = await orderCaptcha.token();
           // Check prices again right before ordering: the customer must see what they will pay.
           const before = render.total;
           await refreshPrices();
@@ -412,13 +414,14 @@
           const order = await POD.api('/api/orders', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ customer, designIds: cartNow.map((i) => i.designId), expectedTotal: render.total, delivery, approvals: approvalsBody, ...(quote && quote.coupon && couponCode ? { couponCode } : {}) }),
+            body: JSON.stringify({ customer, designIds: cartNow.map((i) => i.designId), expectedTotal: render.total, delivery, approvals: approvalsBody, ...(captchaToken ? { captchaToken } : {}), ...(quote && quote.coupon && couponCode ? { couponCode } : {}) }),
           });
           POD.setCart([]);
           approvals.clear();
           saveApprovals();
           location.href = '/order?id=' + encodeURIComponent(order.id) + '&new=1';
         } catch (err) {
+          orderCaptcha.reset();
           if (err.code === 'priceChanged' || err.code === 'designGone' || err.code === 'designOrdered' || /^coupon/.test(err.code || '')) {
             await refreshPrices();
             render();
@@ -438,6 +441,9 @@
         }
       });
 
+      // CAPTCHA: checked silently while the customer fills in the form (a box only if Cloudflare asks).
+      const orderCaptcha = POD.captcha(document.getElementById('cap-order'));
+      form.addEventListener('focusin', () => orderCaptcha.prepare(), { once: true });
       document.querySelectorAll('input[name="delivery"]').forEach((r) => r.addEventListener('change', () => {
         if (!r.checked) return;
         delivery = r.value === 'express' ? 'express' : 'standard';

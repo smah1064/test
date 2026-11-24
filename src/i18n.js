@@ -38,6 +38,7 @@ const MESSAGES = {
   acctPasswordLong: { en: 'That password is too long', ar: 'كلمة المرور طويلة جدًا' },
   acctPhoneTaken: { en: 'There is already an account with this mobile number. Sign in instead.', ar: 'في حساب بالرقم ده. سجّل دخول بدل كده.' },
   acctEmailTaken: { en: 'There is already an account with this email', ar: 'في حساب بالإيميل ده' },
+  captchaFailed: { en: 'Please complete the security check and try again', ar: 'من فضلك كمّل خطوة التحقق الأمني وحاول تاني' },
   acctWrong: { en: 'Wrong mobile number / email or password', ar: 'رقم الموبايل / الإيميل أو كلمة المرور غلط' },
   acctWrongCurrent: { en: 'Your current password is not right', ar: 'كلمة المرور الحالية مش صحيحة' },
   acctSignIn: { en: 'Please sign in', ar: 'سجّل دخول من فضلك' },

@@ -52,28 +52,34 @@
   document.querySelectorAll('[data-acct-tab]').forEach((b) => b.addEventListener('click', () => showForm(b.dataset.acctTab === 'up' ? 'f-up' : 'f-in')));
   $('forgot-open').addEventListener('click', () => { $('fg-login').value = $('in-login').value; showForm('f-forgot'); });
   const busy = (form, on) => form.querySelectorAll('button').forEach((b) => { b.disabled = on; });
+  // The CAPTCHA of each form starts when the customer starts filling it in.
+  const caps = { 'f-in': POD.captcha($('cap-in')), 'f-up': POD.captcha($('cap-up')), 'f-forgot': POD.captcha($('cap-fg')) };
+  for (const [id, cap] of Object.entries(caps)) $(id).addEventListener('focusin', () => cap.prepare(), { once: true });
   async function submit(form, fn) {
     busy(form, true);
+    const cap = caps[form.id];
     try {
-      await fn();
+      const captchaToken = cap ? await cap.token() : null;
+      await fn(captchaToken ? { captchaToken } : {});
     } catch (e) {
       POD.toast(e.message, 'error');
     } finally {
+      if (cap) cap.reset();
       busy(form, false);
     }
   }
   $('f-in').addEventListener('submit', (e) => {
     e.preventDefault();
-    submit($('f-in'), async () => {
-      await POD.api('/api/account/login', json('POST', { login: $('in-login').value, password: $('in-pass').value }));
+    submit($('f-in'), async (cap) => {
+      await POD.api('/api/account/login', json('POST', { login: $('in-login').value, password: $('in-pass').value, ...cap }));
       $('in-pass').value = '';
       await afterSignIn();
     });
   });
   $('f-up').addEventListener('submit', (e) => {
     e.preventDefault();
-    submit($('f-up'), async () => {
-      await POD.api('/api/account/signup', json('POST', { name: $('up-name').value, phone: $('up-phone').value, email: $('up-email').value, password: $('up-pass').value }));
+    submit($('f-up'), async (cap) => {
+      await POD.api('/api/account/signup', json('POST', { name: $('up-name').value, phone: $('up-phone').value, email: $('up-email').value, password: $('up-pass').value, ...cap }));
       $('up-pass').value = '';
       POD.toast(t('acct.welcome'));
       await afterSignIn();
@@ -81,8 +87,8 @@
   });
   $('f-forgot').addEventListener('submit', (e) => {
     e.preventDefault();
-    submit($('f-forgot'), async () => {
-      const r = await POD.api('/api/account/forgot', json('POST', { login: $('fg-login').value }));
+    submit($('f-forgot'), async (cap) => {
+      const r = await POD.api('/api/account/forgot', json('POST', { login: $('fg-login').value, ...cap }));
       const wa = r.whatsapp ? `https://wa.me/${r.whatsapp}?text=${encodeURIComponent(t('acct.waReset', { login: $('fg-login').value }))}` : '';
       $('fg-msg').innerHTML = `${esc(t(r.byEmail ? 'acct.linkSent' : 'acct.noEmail'))}${wa ? ` <a class="btn btn-sm btn-whatsapp" target="_blank" rel="noopener" href="${esc(wa)}">${esc(t('acct.askWhatsApp'))}</a>` : ''}`;
     });
