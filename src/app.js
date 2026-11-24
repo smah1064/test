@@ -2684,7 +2684,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (code) {
       const r = coupons.apply(findCoupon(code), { lines, orders: store.listOrders(), phone: c.phone });
       if (!r.ok) throw new HttpError(409, r.reason, r.params || {});
-      applied = { id: findCoupon(code).id, code, type: findCoupon(code).type, discount: r.discount, freeShipping: r.freeShipping };
+      // The items it came off (a coupon for one product): the accounts charge the discount to those.
+      applied = { id: findCoupon(code).id, code, type: findCoupon(code).type, discount: r.discount, freeShipping: r.freeShipping, items: r.lines.map((i) => items[i].id) };
     }
     const discount = applied ? applied.discount : 0;
     // Standard (5 business days) or express (2, for a fee added to the shipping).

@@ -139,12 +139,14 @@ function itemCost(costs, item) {
 }
 
 /**
- * An order's coupon discount shared over its items in proportion to their
- * prices (in piastres, so the shares add up exactly to the discount).
+ * An order's coupon discount shared over the items it came off (all items for
+ * orders saved before that was kept) in proportion to their prices (in
+ * piastres, so the shares add up exactly to the discount).
  */
 function discountShares(o) {
   const total = Math.round((o.discount || 0) * 100);
-  const prices = o.items.map((it) => Math.round((it.price || 0) * 100));
+  const only = o.coupon && Array.isArray(o.coupon.items) && o.coupon.items.length ? new Set(o.coupon.items) : null;
+  const prices = o.items.map((it) => (only && !only.has(it.id) ? 0 : Math.round((it.price || 0) * 100)));
   const sum = prices.reduce((a, b) => a + b, 0);
   if (!total || !sum) return prices.map(() => 0);
   const raw = prices.map((p) => (total * p) / sum);

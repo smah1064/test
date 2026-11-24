@@ -71,7 +71,7 @@ const usesBy = (orders, coupon, phone) => orders.filter((o) => usedOn(o, coupon)
 
 /**
  * What a coupon takes off this cart. `lines` = [{ productId, category, price }].
- * Returns { ok: true, discount, freeShipping, eligible } or { ok: false, reason, params }.
+ * Returns { ok: true, discount, freeShipping, eligible, lines } or { ok: false, reason, params }.
  */
 function apply(coupon, { lines, orders = [], phone = null }) {
   if (!coupon || !coupon.active) return { ok: false, reason: 'couponNotFound' };
@@ -83,13 +83,16 @@ function apply(coupon, { lines, orders = [], phone = null }) {
   const subtotal = round2(lines.reduce((n, l) => n + l.price, 0));
   if (coupon.minOrder && subtotal < coupon.minOrder) return { ok: false, reason: 'couponMinOrder', params: { amount: coupon.minOrder } };
   const limited = coupon.products.length || coupon.categories.length;
-  const eligible = round2(lines.filter((l) => !limited || coupon.products.includes(l.productId) || coupon.categories.includes(l.category)).reduce((n, l) => n + l.price, 0));
+  const fits = lines.map((l) => !limited || coupon.products.includes(l.productId) || coupon.categories.includes(l.category));
+  const eligible = round2(lines.filter((l, i) => fits[i]).reduce((n, l) => n + l.price, 0));
   if (!eligible && coupon.type !== 'freeship') return { ok: false, reason: 'couponNoItems' };
   let discount = 0;
   if (coupon.type === 'percent') discount = round2((eligible * coupon.value) / 100);
   if (coupon.type === 'fixed') discount = Math.min(eligible, coupon.value);
   if (coupon.maxDiscount) discount = Math.min(discount, coupon.maxDiscount);
-  return { ok: true, discount: round2(discount), freeShipping: coupon.type === 'freeship', eligible };
+  // Which lines the discount came off (by index), so reports can charge it to those products only.
+  const lineIdx = fits.map((f, i) => (f ? i : -1)).filter((i) => i >= 0);
+  return { ok: true, discount: round2(discount), freeShipping: coupon.type === 'freeship', eligible, lines: lineIdx };
 }
 
 module.exports = { cleanCoupon, apply, normCode, usesOf, usedOn, TYPES };
