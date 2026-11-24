@@ -18,7 +18,7 @@ const fs = require('fs');
 const { fork } = require('child_process');
 const sharp = require('sharp');
 
-const MAX_JOBS = 1;
+const MAX_JOBS = 2; // two at once: one slow (or looping) PostScript file doesn't block everyone else
 // Ghostscript's WebAssembly memory isn't capped by worker limits: watch the process and stop a job that grows too big.
 const MAX_EXTRA_MB = Number(process.env.ARTWORK_MAX_MB) || 700;
 let running = 0;

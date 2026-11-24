@@ -1044,3 +1044,21 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
   .biz-head .promo-art { width: 48px; height: 48px; font-size: 24px; }
   .biz-more { width: 100%; }
 }
+
+/* Phones held sideways (a short, wide screen): the shop menu steps aside, the tools are icons only and
+   the stage toolbar keeps to one row, so the product fills the screen instead of starting below it. */
+@media (orientation: landscape) and (max-height: 520px) {
+  body.editor-page .site-header { display: none; }
+  body.editor-page .tools { padding: 2px 6px; }
+  body.editor-page .tool { font-size: 0; gap: 0; padding: 6px 4px; min-width: 44px; }
+  body.editor-page .tool svg { width: 20px; height: 20px; }
+  body.editor-page .stage-bar { padding: 4px 8px; gap: 4px; flex-wrap: nowrap; overflow-x: auto; flex: none; min-height: 42px; align-items: center; }
+  body.editor-page .stage-bar .btn-label { display: none; }
+  body.editor-page .stage-bar .btn { padding: 6px 9px; }
+  body.editor-page .stage { min-height: 0; }
+}
+/* …and on the stacked (tablet-width) layout the stage is exactly the screen's height left, so the
+   product fits in view (the settings follow below it). */
+@media (orientation: landscape) and (max-height: 520px) and (min-width: 821px) {
+  body.editor-page .stage { height: calc(100dvh - 96px); flex: none; }
+}

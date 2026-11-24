@@ -604,6 +604,20 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     }
     return d.preflight;
   }
+  // Big pictures take a lot of memory while they are read: at most two such jobs at a time.
+  let heavyRunning = 0;
+  const heavyWaiting = [];
+  async function heavy(fn) {
+    while (heavyRunning >= 2) await new Promise((resolve) => heavyWaiting.push(resolve));
+    heavyRunning++;
+    try {
+      return await fn();
+    } finally {
+      heavyRunning--;
+      const next = heavyWaiting.shift();
+      if (next) next();
+    }
+  }
   /** A small picture of each side's production file (the artwork exactly as printed) for proofs. */
   async function makeProofImages(d) {
     if (d.kind === 'book' || d.kind === 'gangsheet' || d.kind === 'photoset') return;
@@ -1260,8 +1274,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       }
       if (design.merge) checkMergeFiles(design);
       if (design.method === 'embroidery') await makeEmbroidery(design);
-      await makeProofImages(design);
-      await runPreflight(design);
+      await heavy(async () => {
+        await makeProofImages(design);
+        await runPreflight(design);
+      });
       design.status = 'ready';
       delete design.uploadTokenHash;
       store.save();
@@ -1536,7 +1552,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   app.post('/api/shares', (req, res, next) => {
     rateLimit(req, 'shares');
     next();
-  }, express.json({ limit: '40mb' }), (req, res) => {
+  }, express.json({ limit: '15mb' }), (req, res) => {
     const b = req.body || {};
     const product = getProduct(b.productId);
     if (!product) throw new HttpError(400, 'unknownProduct', { id: String(b.productId || '').slice(0, 40) });
@@ -2234,7 +2250,16 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   // ---------- Customer accounts ----------
   const customerList = () => store.db.customers || [];
   const findCustomer = (id) => customerList().find((x) => x.id === id) || null;
-  const currentCustomer = (req) => customers.readSession(auth.customerKey, customers.tokenFrom(req), findCustomer);
+  // Sessions signed out: a fingerprint of the token until it would have expired anyway (a copied
+  // cookie stops working at sign-out; the customer's other devices stay signed in).
+  const sessionPrint = (tok) => crypto.createHash('sha256').update(String(tok)).digest('base64url').slice(0, 32);
+  const currentCustomer = (req) => {
+    const tok = customers.tokenFrom(req);
+    if (!tok) return null;
+    const out = store.db.signedOut;
+    if (out && Object.prototype.hasOwnProperty.call(out, sessionPrint(tok))) return null;
+    return customers.readSession(auth.customerKey, tok, findCustomer);
+  };
   const isHttps = (req) => String(req.get('x-forwarded-proto') || req.protocol).split(',')[0].trim() === 'https';
   const setSession = (req, res, cust) => res.set('Set-Cookie', customers.cookie(cust ? customers.sessionToken(auth.customerKey, cust) : '', { secure: isHttps(req) }));
   const signedIn = (req) => {
@@ -2384,6 +2409,18 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (req.get('sec-fetch-site') === 'cross-site') throw new HttpError(403, 'notFound');
     const origin = req.get('origin');
     if (origin && origin !== 'null' && linkBase(req) && origin !== linkBase(req) && !SHOP_HOSTS.some((h) => origin.endsWith('//' + h))) throw new HttpError(403, 'notFound');
+    // This session ends on the server too (a copy of the cookie made before stops working).
+    const tok = customers.tokenFrom(req);
+    if (tok && customers.readSession(auth.customerKey, tok, findCustomer)) {
+      const exp = parseInt(String(tok).split('.')[1], 36) * 1000 || Date.now() + 61 * 86400e3;
+      store.mutate((db) => {
+        const now = Date.now();
+        const out = db.signedOut && typeof db.signedOut === 'object' ? db.signedOut : {};
+        for (const [k, until] of Object.entries(out)) if (!(until > now)) delete out[k];
+        out[sessionPrint(tok)] = exp;
+        db.signedOut = out;
+      });
+    }
     setSession(req, res, null);
     res.json({ ok: true });
   });
@@ -2808,7 +2845,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       it.history.push({ status: 'review', at: now });
       delete it.proofToken;
     });
-    res.json(publicOrder(store.getOrder(order.id)));
+    const saved = store.getOrder(order.id);
+    res.json(publicOrder(saved));
+    // Tell the shop a new version is waiting in Review (after answering; it never holds up the customer).
+    if (!limiter.hit('notify:*', LIMITS.notify)) {
+      const it = saved.items.find((x) => x.id === item.id);
+      notify.revisionSent(saved, it, { origin: linkBase(req) }).catch((e) => console.warn('[notify]', e.message));
+    }
   });
 
   app.get('/api/orders/:id', (req, res) => {
@@ -2975,7 +3018,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
 
   // Drafts saved to the customer's account, so a design started on the phone opens on the laptop.
   const draftDir = (cust) => path.join(store.dataDir, 'accounts', cust.id, 'drafts');
-  const MAX_DRAFTS = 40;
+  const MAX_DRAFTS = 20;
+  const DRAFT_DAYS = 120; // drafts not touched for this long are forgotten
   const writeFileAtomic = (file, data) => {
     const tmp = `${file}.tmp-${process.pid}-${crypto.randomBytes(4).toString('hex')}`;
     fs.writeFileSync(tmp, data);
@@ -3027,7 +3071,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   app.put('/api/account/drafts/:productId', (req, res, next) => {
     rateLimit(req, 'draftSave');
     next();
-  }, express.json({ limit: '25mb' }), (req, res) => {
+  }, express.json({ limit: '15mb' }), (req, res) => {
     const me = signedIn(req);
     // Saved for another account than the one signed in now (signed out / switched in between): refused.
     if (req.get('x-account') && req.get('x-account') !== me.id) throw new HttpError(409, 'acctSignIn');
@@ -3052,8 +3096,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const idx = draftIndex(me);
     const id40 = (v) => (typeof v === 'string' ? v.slice(0, 40) : '');
     idx[product.id] = { savedAt, colorId: id40(b.colorId), sizeId: id40(b.sizeId), preview: Boolean(preview) };
-    // Keep the newest drafts only.
-    const old = Object.entries(idx).sort((x, y) => String(y[1].savedAt).localeCompare(String(x[1].savedAt))).slice(MAX_DRAFTS);
+    // Keep the newest drafts only, and none older than DRAFT_DAYS.
+    const cutoff = new Date(Date.now() - DRAFT_DAYS * 86400e3).toISOString();
+    const sorted = Object.entries(idx).sort((x, y) => String(y[1].savedAt).localeCompare(String(x[1].savedAt)));
+    const old = [...sorted.slice(MAX_DRAFTS), ...sorted.slice(0, MAX_DRAFTS).filter(([, m]) => String(m.savedAt) < cutoff)];
     for (const [pid] of old) {
       delete idx[pid];
       for (const ext of ['json', 'png']) fs.rmSync(path.join(dir, `${pid}.${ext}`), { force: true });

@@ -187,6 +187,39 @@ function buildPad(color, tex, renderer, product) {
   return mesh;
 }
 
+/**
+ * Clear acrylic (plaques, keychains): a see-through sheet with only the design
+ * printed on it; where there is no ink you see through to the background.
+ */
+function clearBlock(w, h, r, m, t, renderer) {
+  const depth = m.depthIn || 0.2;
+  const bevel = Math.min(0.03, depth / 6);
+  const g = new THREE.Group();
+  const geo = new THREE.ExtrudeGeometry(roundedRect(w, h, r), { depth, bevelEnabled: true, bevelThickness: bevel, bevelSize: Math.min(0.03, r / 3), bevelSegments: 3, curveSegments: 24 });
+  geo.translate(0, 0, -depth / 2);
+  const glass = (opacity, color) => new THREE.MeshPhysicalMaterial({ color, roughness: 0.04, metalness: 0, transparent: true, opacity, clearcoat: 1, clearcoatRoughness: 0.03, depthWrite: false, side: THREE.DoubleSide });
+  // Faces nearly invisible; the cut edges catch the light with acrylic's slight green-blue tint.
+  const sheet = new THREE.Mesh(geo, [glass(0.1, '#f4fbfd'), glass(0.55, '#cfe6e4')]);
+  sheet.renderOrder = 2;
+  g.add(sheet);
+  const crop = designCrop(t);
+  if (crop) {
+    const c = canvas(1600, Math.round((1600 * h) / w));
+    c.getContext('2d').drawImage(crop, 0, 0, c.width, c.height);
+    const tx = texture(c, renderer);
+    const ink = new THREE.Mesh(new THREE.ShapeGeometry(roundedRect(w, h, r), 24), mat('plastic', { map: tx, transparent: true, alphaTest: 0.02, roughness: 0.35, side: THREE.DoubleSide }));
+    const uv = ink.geometry.attributes.uv;
+    const pos = ink.geometry.attributes.position;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, pos.getX(i) / w + 0.5, pos.getY(i) / h + 0.5);
+    // Printed on the back of the sheet, seen through the front (as UV prints on acrylic are).
+    ink.position.z = -depth / 2 + 0.004;
+    ink.renderOrder = 1;
+    g.add(ink);
+  }
+  g.rotation.y = -0.3;
+  return g;
+}
+
 /** An upright block: acrylic photo blocks and keychains (clear edges) or foam-board signs. */
 function buildBlock(color, tex, renderer, product) {
   const side = product.sides[0];
@@ -194,6 +227,7 @@ function buildBlock(color, tex, renderer, product) {
   const w = side.printWidthIn;
   const h = side.printHeightIn;
   const r = Math.min(m.radiusIn != null ? m.radiusIn : 0.1, w / 2 - 0.001, h / 2 - 0.001);
+  if (m.clear) return clearBlock(w, h, r, m, tex[side.id], renderer);
   const face = texture(faceCanvas(m.clear ? '#f7f9fb' : color, designCrop(tex[side.id]), 1600, (1600 * h) / w), renderer);
   const edge = m.clear
     ? new THREE.MeshPhysicalMaterial({ color: '#dfeaf0', roughness: 0.05, metalness: 0, transmission: 0.6, transparent: true, opacity: 0.55, thickness: 0.5 })

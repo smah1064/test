@@ -841,7 +841,7 @@ PRODUCTS.push(
     id: 'plaque',
     category: 'occasions',
     name: t('Acrylic Photo Plaque', 'بلاك أكريليك للصور'),
-    description: t('Thick crystal-clear acrylic block that stands on its own. For weddings, graduation and memories.', 'بلوك أكريليك شفاف وسميك بيقف لوحده. للأفراح والتخرج والذكريات.'),
+    description: t('Thin crystal-clear acrylic plaque. For weddings, graduation and memories.', 'بلاك أكريليك شفاف ورفيع. للأفراح والتخرج والذكريات.'),
     basePrice: 450,
     colors: [{ id: 'clear', name: t('Crystal clear', 'شفاف كريستال'), hex: '#ffffff' }],
     sizes: [
@@ -1461,7 +1461,7 @@ const PRODUCTION = {
   greetingcard: { process: 'paper', safeIn: 0.15, bleedIn: 0.08, model: { type: 'foldcard', material: 'paper' } },
   invitations: { process: 'paper', safeIn: 0.15, bleedIn: 0.08, model: { type: 'block', depthIn: 0.03, radiusIn: 0.02, edge: '#f6f6f4', material: 'paper' } },
   certificates: { process: 'paper', safeIn: 0.3, bleedIn: 0.08, model: { type: 'block', depthIn: 0.02, radiusIn: 0.02, edge: '#f6f6f4', material: 'paper' } },
-  plaque: { process: 'uv', safeIn: 0.15, bleedIn: 0, model: { type: 'block', depthIn: 0.8, radiusIn: 0.05, material: 'plastic', clear: true } },
+  plaque: { process: 'uv', safeIn: 0.15, bleedIn: 0, model: { type: 'block', depthIn: 0.2, radiusIn: 0.05, material: 'plastic', clear: true } },
   sign: { process: 'uv', safeIn: 0.5, bleedIn: 0, model: { type: 'block', depthIn: 0.2, radiusIn: 0.02, edge: '#f4f4f2', material: 'paper' } },
   deskmat: { process: 'sublimation', safeIn: 0.4, bleedIn: 0.125, model: { type: 'pad', depthIn: 0.12, radiusIn: 0.5, material: 'fabric' } },
   keychain: { process: 'uv', safeIn: 0.08, bleedIn: 0, model: { type: 'block', depthIn: 0.2, radiusIn: 0.2, material: 'plastic', clear: true } },

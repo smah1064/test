@@ -264,6 +264,35 @@ async function orderPlaced(order, { origin, lang, admin = true, customer = true 
   return result;
 }
 
+/** The shop's message when a customer sends a new version of an item after a change request. */
+function revisionText(order, item, links, lang) {
+  const pos = order.items.findIndex((it) => it.id === item.id) + 1;
+  const name = tr(item.productName, lang) || '';
+  return lang === 'en'
+    ? `✏️ ${order.number}: the customer sent a new version of item ${pos} (${name}) after your change request. Check it in Review, then approve to send them its proof.${links.admin ? `\n${links.admin}` : ''}`
+    : `✏️ ${order.number}: العميل بعت نسخة جديدة من القطعة ${num(pos, lang)} (${name}) بعد طلب التعديل. راجعها في تبويب المراجعة، ووافق عشان تتبعتله البروفة.${links.admin ? `\n${links.admin}` : ''}`;
+}
+/** Tell the shop (WhatsApp and email, as for new orders) that a revised design is waiting in Review. */
+async function revisionSent(order, item, { origin } = {}) {
+  const cfg = config();
+  const base = cfg.siteUrl || origin || '';
+  const links = { admin: base ? `${base}/admin` : '' };
+  const lang = cfg.adminLang;
+  const text = revisionText(order, item, links, lang);
+  const st = status();
+  const subject = lang === 'en' ? `New version for ${order.number}` : `نسخة جديدة للطلب ${order.number}`;
+  const result = {};
+  const run = async (key, enabled, fn) => {
+    if (!enabled) { result[key] = 'off'; return; }
+    try { await fn(); result[key] = 'sent'; } catch (e) { result[key] = 'failed'; console.warn(`[notify] ${key} (revision ${order.number}) failed: ${e.message}`); }
+  };
+  await Promise.all([
+    run('adminWhatsApp', st.adminWhatsApp, () => sendWhatsApp(cfg, text)),
+    run('adminEmail', st.adminEmail, () => sendEmail(cfg, cfg.adminEmail, subject, `<p dir="${lang === 'ar' ? 'rtl' : 'ltr'}" style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6">${esc(text).replace(/\n/g, '<br>')}</p>`, text)),
+  ]);
+  return result;
+}
+
 /** A test message to the admin on every configured admin channel. */
 async function adminTest() {
   const cfg = config();
@@ -425,4 +454,4 @@ async function proofMessage(order, item, { kind = 'proof', note = '', link = '' 
   }
 }
 
-module.exports = { status, orderPlaced, orderShipped, proofMessage, adminTest, emailReady, emailTo, shopWhatsApp: () => config().shopWhatsApp, siteUrl: () => config().siteUrl };
+module.exports = { status, orderPlaced, orderShipped, proofMessage, adminTest, revisionSent, revisionText, emailReady, emailTo, shopWhatsApp: () => config().shopWhatsApp, siteUrl: () => config().siteUrl };
