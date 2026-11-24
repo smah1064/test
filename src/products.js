@@ -2368,7 +2368,7 @@ const PRODUCTION = {
   postcards: { process: 'paper', safeIn: 0.15, bleedIn: 0.08, model: { type: 'block', depthIn: 0.03, radiusIn: 0.02, edge: '#f6f6f4', material: 'paper' } },
   foldedcards: { process: 'paper', safeIn: 0.15, bleedIn: 0.08, model: { type: 'foldcard', material: 'paper' } },
   giftvouchers: { process: 'paper', safeIn: 0.15, bleedIn: 0.08, model: { type: 'block', depthIn: 0.03, radiusIn: 0.04, edge: '#f6f6f4', material: 'paper' } },
-  bookmarks: { process: 'paper', safeIn: 0.12, bleedIn: 0.08, model: { type: 'block', depthIn: 0.03, radiusIn: 0.04, edge: '#f6f6f4', material: 'paper' } },
+  bookmarks: { process: 'paper', safeIn: 0.12, bleedIn: 0.08, model: { type: 'bookmark', depthIn: 0.03, radiusIn: 0.04, edge: '#f6f6f4', material: 'paper' } },
   brochures: { process: 'paper', safeIn: 0.2, bleedIn: 0.08, model: { type: 'block', depthIn: 0.02, radiusIn: 0.02, edge: '#f6f6f4', material: 'paper' } },
   menus: { process: 'paper', safeIn: 0.2, bleedIn: 0.08, model: { type: 'block', depthIn: 0.03, radiusIn: 0.06, edge: '#f6f6f4', material: 'paper' } },
   notepads: { process: 'paper', safeIn: 0.2, bleedIn: 0.08, model: { type: 'pad', depthIn: 0.25, radiusIn: 0.02, edge: '#f2f2ee', material: 'paper' } },
@@ -2377,13 +2377,13 @@ const PRODUCTION = {
   labels: { process: 'paper', safeIn: 0.08, bleedIn: 0.04, model: { type: 'pad', depthIn: 0.02, radiusIn: 0.08, edge: '#f2f3f5', material: 'paper' } },
   wrappingpaper: { process: 'paper', safeIn: 0, bleedIn: 0, model: { type: 'cloth', material: 'paper' } },
   windowstickers: { process: 'uv', safeIn: 0.3, bleedIn: 0.08, model: { type: 'pad', depthIn: 0.02, radiusIn: 0.1, edge: '#eef1f4', material: 'plastic' } },
-  calendar: { process: 'paper', safeIn: 0.25, bleedIn: 0.08, model: { type: 'block', depthIn: 0.06, radiusIn: 0.02, edge: '#f6f6f4', material: 'paper', plainBack: '#f6f6f4' } },
-  deskcalendar: { process: 'paper', safeIn: 0.3, bleedIn: 0.08, model: { type: 'block', depthIn: 0.03, radiusIn: 0.02, edge: '#f6f6f4', material: 'paper', plainBack: '#f6f6f4' } },
+  calendar: { process: 'paper', safeIn: 0.25, bleedIn: 0.08, model: { type: 'wallcal', depthIn: 0.06, radiusIn: 0.02, edge: '#f6f6f4', material: 'paper', plainBack: '#f6f6f4' } },
+  deskcalendar: { process: 'paper', safeIn: 0.3, bleedIn: 0.08, model: { type: 'deskcal', depthIn: 0.03, radiusIn: 0.02, edge: '#f6f6f4', material: 'paper', plainBack: '#f6f6f4' } },
   photobook: { process: 'paper', safeIn: 0.3, bleedIn: 0.125, model: { type: 'block', depthIn: 1.2, radiusIn: 0.06, edge: '#f3efe6', material: 'paper', plainBack: 'color' } },
   magnets: { process: 'paper', safeIn: 0.12, bleedIn: 0.08, model: { type: 'block', depthIn: 0.04, radiusIn: 0.2, edge: '#2b2c30', material: 'paper', plainBack: '#2b2c30' } },
-  banners: { process: 'uv', safeIn: 1.2, bleedIn: 0, model: { type: 'block', depthIn: 0.03, radiusIn: 0.01, edge: '#f2f2f2', material: 'paper', plainBack: '#e9eaec' } },
-  tablenumbers: { process: 'paper', safeIn: 0.15, bleedIn: 0.08, model: { type: 'block', depthIn: 0.03, radiusIn: 0.02, edge: '#f6f6f4', material: 'paper' } },
-  placecards: { process: 'paper', safeIn: 0.1, bleedIn: 0.06, model: { type: 'block', depthIn: 0.03, radiusIn: 0.02, edge: '#f6f6f4', material: 'paper' } },
+  banners: { process: 'uv', safeIn: 1.2, bleedIn: 0, model: { type: 'banner', depthIn: 0.03, radiusIn: 0.01, edge: '#f2f2f2', material: 'paper', plainBack: '#e9eaec' } },
+  tablenumbers: { process: 'paper', safeIn: 0.15, bleedIn: 0.08, model: { type: 'tent', depthIn: 0.03, radiusIn: 0.02, edge: '#f6f6f4', material: 'paper' } },
+  placecards: { process: 'paper', safeIn: 0.1, bleedIn: 0.06, model: { type: 'tent', depthIn: 0.03, radiusIn: 0.02, edge: '#f6f6f4', material: 'paper' } },
 };
 /** Garments can be printed either way; the shop picks per order item. */
 const GARMENT_METHODS = ['dtg', 'dtf'];

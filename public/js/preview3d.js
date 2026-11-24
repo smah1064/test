@@ -291,6 +291,207 @@ function buildBlock(color, tex, renderer, product) {
   return g;
 }
 
+/** A month page (12 small rows of days), drawn on a canvas, for calendar models. */
+function monthCanvas(w, h, accent) {
+  const c = canvas(w, h);
+  const x = c.getContext('2d');
+  x.fillStyle = '#ffffff';
+  x.fillRect(0, 0, c.width, c.height);
+  x.fillStyle = accent;
+  x.fillRect(c.width * 0.08, c.height * 0.07, c.width * 0.84, c.height * 0.1);
+  const cols = 7;
+  const rows = 5;
+  for (let r = 0; r < rows; r++) {
+    for (let k = 0; k < cols; k++) {
+      if (r === rows - 1 && k > 2) break;
+      x.fillStyle = k === cols - 1 ? accent : '#8d939b';
+      const cx = c.width * (0.12 + (k * 0.76) / (cols - 1));
+      const cy = c.height * (0.3 + (r * 0.6) / (rows - 1));
+      x.fillRect(cx - c.width * 0.03, cy - c.height * 0.018, c.width * 0.06, c.height * 0.036);
+    }
+  }
+  return c;
+}
+const metal = () => new THREE.MeshStandardMaterial({ color: '#9aa0a8', metalness: 0.8, roughness: 0.3 });
+/** A thin card panel (front texture + plain back), hinged at its top edge, hanging down. */
+function hangingPanel(w, h, frontMat, backMat, t = 0.014) {
+  const p = new THREE.Group();
+  const f = new THREE.Mesh(new THREE.PlaneGeometry(w, h), frontMat);
+  f.position.set(0, -h / 2, t / 2);
+  const b = new THREE.Mesh(new THREE.PlaneGeometry(w, h), backMat);
+  b.rotation.y = Math.PI;
+  b.position.set(0, -h / 2, -t / 2);
+  p.add(f, b);
+  return p;
+}
+
+/** Tent cards (table numbers, place cards): two faces leaning together, folded along the top. */
+function buildTent(color, tex, renderer, product) {
+  const [front, backSide] = product.sides;
+  const w = front.printWidthIn;
+  const h = front.printHeightIn;
+  const lean = 0.36; // each face, from upright
+  const paper = (opts) => mat('paper', { side: THREE.FrontSide, ...opts });
+  const faceMat = (sd) => paper({ map: texture(faceCanvas(color, designCrop(sd && tex[sd.id]), 1600, Math.round((1600 * h) / w)), renderer), emissive: '#141412' });
+  const inside = paper({ color: '#efefeb' });
+  const a = hangingPanel(w, h, faceMat(front), inside);
+  a.rotation.x = -lean;
+  const b = hangingPanel(w, h, faceMat(backSide), inside);
+  b.rotation.y = Math.PI;
+  b.rotation.x = 0;
+  const bWrap = new THREE.Group();
+  bWrap.add(b);
+  bWrap.rotation.x = lean;
+  const g = new THREE.Group();
+  g.add(a, bWrap);
+  g.position.y = (h * Math.cos(lean)) / 2;
+  const out = new THREE.Group();
+  out.add(g);
+  out.rotation.y = -0.45;
+  out.rotation.x = 0.12;
+  return out;
+}
+
+/** Desk calendar: wire-bound sheets on a card stand; the design on the left half, the month on the right. */
+function buildDeskCal(color, tex, renderer, product) {
+  const side = product.sides[0];
+  const w = side.printWidthIn * 2; // the sheet: design half + month half
+  const h = side.printHeightIn;
+  const lean = 0.32;
+  const c = canvas(2000, Math.round((2000 * h) / w));
+  const ctx = c.getContext('2d');
+  ctx.drawImage(faceCanvas(color, designCrop(tex[side.id]), c.width / 2, c.height), 0, 0);
+  ctx.drawImage(monthCanvas(c.width / 2, c.height, '#1c7ed6'), c.width / 2, 0);
+  const sheet = hangingPanel(w, h, mat('paper', { map: texture(c, renderer), emissive: '#141412' }), mat('paper', { color: '#efefeb' }));
+  sheet.rotation.x = -lean;
+  const stand = hangingPanel(w, h, mat('paper', { color: '#2f3237' }), mat('paper', { color: '#2f3237' }), 0.03);
+  stand.rotation.x = lean;
+  stand.position.z = -0.03;
+  const g = new THREE.Group();
+  g.add(sheet, stand);
+  // Wire rings along the top.
+  const ring = new THREE.TorusGeometry(0.11, 0.018, 8, 18);
+  const n = Math.round(w / 0.33);
+  for (let i = 0; i < n; i++) {
+    const r = new THREE.Mesh(ring, metal());
+    r.rotation.y = Math.PI / 2;
+    r.position.set(-w / 2 + (w * (i + 0.5)) / n, 0, 0);
+    g.add(r);
+  }
+  g.position.y = (h * Math.cos(lean)) / 2;
+  const out = new THREE.Group();
+  out.add(g);
+  out.rotation.y = -0.35;
+  out.rotation.x = 0.1;
+  return out;
+}
+
+/** Wall calendar: the printed card, a pad of month sheets stapled on its lower half and a hanger. */
+function buildWallCal(color, tex, renderer, product) {
+  const side = product.sides[0];
+  const w = side.printWidthIn;
+  const h = side.printHeightIn;
+  const g = new THREE.Group();
+  const card = buildBlock(color, tex, renderer, { ...product, model: { ...product.model, plainBack: '#f6f6f4' } });
+  card.rotation.y = 0;
+  g.add(card);
+  const depth = (product.model.depthIn || 0.06) / 2 + 0.02;
+  // The month pad: 244 × 184 of the 290 × 410 sheet, its top at 51% of the height.
+  const pw = w * (244 / 290);
+  const ph = h * (184 / 410);
+  const padEdge = mat('paper', { color: '#cfd2d7' });
+  const pad = new THREE.Mesh(new THREE.BoxGeometry(pw, ph, 0.08), [
+    padEdge, padEdge, padEdge, padEdge,
+    mat('paper', { map: texture(monthCanvas(1200, Math.round((1200 * ph) / pw), '#d9480f'), renderer) }), mat('paper', { color: '#e9eaec' }),
+  ]);
+  const top = h / 2 - h * ((250 - 40) / 410);
+  pad.position.set(w * ((128 + 122 - 250) / 290), top - ph / 2, depth + 0.04);
+  g.add(pad);
+  // Hanger: a metal strip on the top edge and a cord to a nail.
+  const strip = new THREE.Mesh(new THREE.BoxGeometry(w * 1.03, 0.35, 0.12), metal());
+  strip.position.set(0, h / 2 + 0.05, 0);
+  const cordMat = new THREE.MeshStandardMaterial({ color: '#7b8088', roughness: 0.6 });
+  const rise = h * 0.08;
+  for (const sgn of [-1, 1]) {
+    const len = Math.hypot(w * 0.34, rise);
+    const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, len, 6), cordMat);
+    cord.position.set((sgn * w * 0.34) / 2, h / 2 + 0.2 + rise / 2, 0);
+    cord.rotation.z = sgn * Math.atan2(w * 0.34, rise);
+    g.add(cord);
+  }
+  const nail = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 8), metal());
+  nail.position.set(0, h / 2 + 0.2 + rise, 0);
+  g.add(strip, nail);
+  g.rotation.y = -0.3;
+  return g;
+}
+
+/** Banner: the flex sheet with metal eyelets round the hem. */
+function buildBanner(color, tex, renderer, product) {
+  const side = product.sides[0];
+  const w = side.printWidthIn;
+  const h = side.printHeightIn;
+  const g = new THREE.Group();
+  const sheet = buildBlock(color, tex, renderer, product);
+  sheet.rotation.y = 0;
+  g.add(sheet);
+  const eyelets = [[41, 201], [145.5, 201], [250, 201], [354.5, 201], [459, 201], [41, 399], [145.5, 399], [250, 399], [354.5, 399], [459, 399], [41, 300], [459, 300]];
+  const r = Math.max(0.25, w * 0.012);
+  const ringGeo = new THREE.TorusGeometry(r, r * 0.35, 10, 24);
+  const z = (product.model.depthIn || 0.03) / 2 + 0.03;
+  for (const [x, y] of eyelets) {
+    const px = ((x - 30) / 440 - 0.5) * w;
+    const py = (0.5 - (y - 190) / 220) * h;
+    for (const sz of [z, -z]) {
+      const e = new THREE.Mesh(ringGeo, metal());
+      e.position.set(px, py, sz);
+      g.add(e);
+    }
+    const hole = new THREE.Mesh(new THREE.CircleGeometry(r * 0.7, 18), new THREE.MeshBasicMaterial({ color: '#4b5058' }));
+    hole.position.set(px, py, z + 0.001);
+    g.add(hole);
+  }
+  g.rotation.y = -0.3;
+  return g;
+}
+
+/** Bookmark: a punched hole near the top with a gold tassel. */
+function buildBookmark(color, tex, renderer, product) {
+  const side = product.sides[0];
+  const w = side.printWidthIn;
+  const h = side.printHeightIn;
+  const g = new THREE.Group();
+  const card = buildBlock(color, tex, renderer, product);
+  card.rotation.y = 0;
+  g.add(card);
+  const hy = h / 2 - h * (22 / 420);
+  const hr = w * (7 / 140);
+  const z = (product.model.depthIn || 0.03) / 2 + 0.01;
+  for (const sz of [z, -z]) {
+    const hole = new THREE.Mesh(new THREE.CircleGeometry(hr, 20), new THREE.MeshBasicMaterial({ color: '#e9ecef' }));
+    hole.position.set(0, hy, sz);
+    if (sz < 0) hole.rotation.y = Math.PI;
+    g.add(hole);
+  }
+  const gold = new THREE.MeshStandardMaterial({ color: '#c9a227', metalness: 0.35, roughness: 0.45 });
+  // The cord loops over the top and hangs down the left side.
+  const curve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0, hy, 0), new THREE.Vector3(0, h / 2 + w * 0.35, 0.05), new THREE.Vector3(-w * 0.45, h / 2 + w * 0.25, 0.12), new THREE.Vector3(-w * 0.62, h / 2 - w * 0.2, 0.15),
+  ]);
+  g.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 24, 0.03, 6, false), gold));
+  const knot = new THREE.Mesh(new THREE.SphereGeometry(0.09, 12, 8), gold);
+  knot.position.copy(curve.getPoint(1));
+  // Tassel: a cap under the knot and loose threads fanning out below it.
+  const end = curve.getPoint(1);
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.14, 12), new THREE.MeshStandardMaterial({ color: '#a8820f', metalness: 0.4, roughness: 0.4 }));
+  cap.position.copy(end).add(new THREE.Vector3(0, -0.12, 0));
+  const tassel = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.15, w * 0.55, 14, 1, true), gold);
+  tassel.position.copy(end).add(new THREE.Vector3(0, -0.19 - w * 0.275, 0));
+  g.add(knot, cap, tassel);
+  g.rotation.y = -0.3;
+  return g;
+}
+
 /**
  * Printed fabric: a piece of cloth with soft folds, the pattern repeated at
  * its real size (long rolls show their first 1.5 m).
@@ -1914,6 +2115,11 @@ export function mount(container, { product, color, textures, spin = true, viewSc
   else if (m.type === 'bottle') obj = buildBottle(m, hex, textures, renderer, product);
   else if (m.type === 'frame') obj = buildFrame(hex, textures, renderer, product);
   else if (m.type === 'pad') obj = buildPad(hex, textures, renderer, product);
+  else if (m.type === 'tent') obj = buildTent(hex, textures, renderer, product);
+  else if (m.type === 'deskcal') obj = buildDeskCal(hex, textures, renderer, product);
+  else if (m.type === 'wallcal') obj = buildWallCal(hex, textures, renderer, product);
+  else if (m.type === 'banner') obj = buildBanner(hex, textures, renderer, product);
+  else if (m.type === 'bookmark') obj = buildBookmark(hex, textures, renderer, product);
   else if (m.type === 'block') obj = buildBlock(hex, textures, renderer, product);
   else if (m.type === 'foldcard') obj = buildFoldCard(hex, textures, renderer, product);
   else if (m.type === 'canvas') obj = buildCanvas(color && color.id, textures, renderer, product);
