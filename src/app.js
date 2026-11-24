@@ -1961,8 +1961,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const { answers, face, size, aiConsent } = body && typeof body === 'object' ? body : {};
     const book = bookFor(design.bookId);
     const product = bookProduct(book);
+    // AI-redrawn pages show this child as described: a new photo or new answers (boy/girl...) make them out of date.
+    const answersBefore = JSON.stringify(design.answers || null);
+    let answersChanged = false;
     try {
       design.answers = books.cleanAnswers(book, answers);
+      answersChanged = JSON.stringify(design.answers) !== answersBefore;
     } catch (e) {
       if (e.message === 'bookMissing') throw new HttpError(400, 'fieldRequired', { field: e.field });
       if (e.message === 'bookLatin') throw new HttpError(400, 'bookLatin', { field: e.field });
@@ -1982,6 +1986,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (book.kind === 'coloring') store.writeDesignFile(design.id, 'face-line.png', await books.lineArt(jpg));
     }
     if (!fs.existsSync(store.designFile(design.id, 'face.jpg'))) throw new HttpError(400, 'bookPhoto');
+    if (face || answersChanged) {
+      for (const f of fs.readdirSync(store.designDir(design.id))) if (/^redraw-\d+\.jpg$/.test(f)) fs.rmSync(store.designFile(design.id, f), { force: true });
+    }
     // New photo, or the AI choice changed: make (or drop) the cartoon face.
     if (face || consentChanged || (consent && cartoon.enabled() && !(design.cartoon && design.cartoon.status === 'ready'))) await makeCartoon(design, ip);
     // Ordered while this save was running: the customer approved the book as it was, which is what prints.

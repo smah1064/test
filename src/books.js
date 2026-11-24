@@ -290,14 +290,15 @@ function loadFonts() {
 }
 
 /** Text as a transparent image, wrapped to `width`, shrunk until it fits `maxH`. */
-async function textImage(text, { font = 'Cairo Bold', pt = 14, px, width, maxH, color = '#1b2740', align = 'centre' }) {
+async function textImage(text, { font = 'Cairo Bold', pt = 14, px, width, maxH, color = '#1b2740', align = 'centre', lineHeight = 0 }) {
   await loadFonts();
   const dpi = px / PAGE_IN; // points stay the same physical size at any render size
   // Shrink until the text fits the width (a long single word can't wrap) and the height.
   let out = null;
   for (let size = pt; ; size = Math.max(6, size - 0.75)) {
     const img = await sharp({
-      text: { text: `<span foreground="${color}">${escapeMarkup(text)}</span>`, font: `${font} ${size}`, width: Math.round(width), align, rgba: true, wrap: 'word', dpi: Math.round(dpi), spacing: Math.round(size * dpi / 72 * 0.25) },
+      // lineHeight: a factor for fonts whose built-in lines are very tall (Lalezar: a wrapped title had a blank line between).
+      text: { text: `<span foreground="${color}"${lineHeight ? ` line_height="${lineHeight}"` : ''}>${escapeMarkup(text)}</span>`, font: `${font} ${size}`, width: Math.round(width), align, rgba: true, wrap: 'word', dpi: Math.round(dpi), spacing: Math.round(size * dpi / 72 * 0.25) },
     }).png().toBuffer();
     const m = await sharp(img).metadata();
     out = { img, w: m.width, h: m.height };
@@ -517,7 +518,12 @@ async function renderPage({ book, answers, face, faceLine, redrawn }, index, px,
   if (noText) return sharp(base).composite(layers).flatten({ background: '#ffffff' });
 
   if (page.type === 'cover') {
-    const big = await textImage(fill(page.title[lang], answers, lang), { font: 'Lalezar', pt: 96, px, width: px * 0.9, maxH: px * 0.2, color: coloring ? '#e4572e' : '#ffd166' });
+    const titleOpts = { font: 'Lalezar', pt: 96, px, width: px * 0.9, maxH: px * 0.2, color: coloring ? '#e4572e' : '#ffd166' };
+    let big = await textImage(fill(page.title[lang], answers, lang), titleOpts);
+    // A long name wraps the title: Lalezar's own lines are very tall (a blank line between them),
+    // so a wrapped title is drawn with tighter lines and the subtitle a little further down.
+    const wrapped = big.h > px * 0.11;
+    if (wrapped) big = await textImage(fill(page.title[lang], answers, lang), { ...titleOpts, maxH: px * 0.15, lineHeight: 0.5 });
     const sub = await textImage(fill(page.subtitle[lang], answers, lang), { font: 'Cairo Bold', pt: 30, px, width: px * 0.86, maxH: px * 0.08, color: coloring ? '#1b2740' : '#ffffff' });
     const top = px * 0.035;
     if (!coloring) {
@@ -526,7 +532,7 @@ async function renderPage({ book, answers, face, faceLine, redrawn }, index, px,
       layers.push({ input: sh, left: Math.round(px / 2 - big.w / 2 + px * 0.004), top: Math.round(top + px * 0.006) });
     }
     put(big, px / 2, top);
-    put(sub, px / 2, top + big.h + px * 0.005);
+    put(sub, px / 2, top + big.h + px * (wrapped ? 0.012 : 0.005));
   } else if (page.type === 'dedication') {
     const txt = await textImage(fill(page.text[lang], answers, lang), { font: 'Cairo Bold', pt: 22, px, width: px * 0.78, maxH: px * 0.6, color: '#1c2a55' });
     put(txt, px / 2, px * 0.6 - txt.h / 2);
