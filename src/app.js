@@ -2795,6 +2795,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (agreed.unitPrice !== undefined) it.unitPrice = agreed.unitPrice;
       if (Array.isArray(it.quantities)) for (const l of it.quantities) { const p = agreed.lines.get(`${l.color && l.color.id}|${l.size && l.size.id}`); if (p !== undefined) l.unitPrice = p; }
       if (sample) it.sampleWanted = true;
+      // What it costs to make follows the new version (another size or extra sides cost differently).
+      const costs = db.costs || {};
+      if (costs[it.productId]) it.costAtOrder = accounting.itemCostFrom(costs, it);
       // The approval was for the old version: the new one gets its own proof to approve.
       delete it.approval;
       delete it.replaced;
