@@ -107,7 +107,16 @@ function buildMug(m, color, tex, renderer, product, side = product.sides[0]) {
   handle.rotation.z = -Math.PI / 2;
   handle.position.set(r - 0.05, 0.05, 0);
   g.add(body, inner, innerBottom, base, rim);
-  if (m.handle !== false) g.add(handle);
+  if (m.handle !== false) {
+    // A print all the way round is centred opposite the handle, its two ends meeting at the
+    // handle: the handle goes behind, so the mug first shows the middle of the print.
+    if (side.wrap) {
+      const back = new THREE.Group();
+      back.add(handle);
+      back.rotation.y = Math.PI / 2;
+      g.add(back);
+    } else g.add(handle);
+  }
   if (m.lid) {
     // Travel lid: a white cap with a steel band.
     const band = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.005, r * 1.005, 0.18, 96), mat('metal', { color: '#c9ccd1' }));

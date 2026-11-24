@@ -842,7 +842,8 @@
     const hex = color().hex;
     let bg;
     let ov;
-    const photo = window.POD_PHOTOS && window.POD_PHOTOS.forSide ? window.POD_PHOTOS.forSide(st.product.id, side.id) : null;
+    // A print all the way round (mugs) is shown unrolled: the drawing, not the photo of one side.
+    const photo = !side.wrap && window.POD_PHOTOS && window.POD_PHOTOS.forSide ? window.POD_PHOTOS.forSide(st.product.id, side.id) : null;
     if (photo) {
       try {
         [bg, ov] = await photoMockup(photo, side, hex);
@@ -4777,6 +4778,7 @@
         designScale: 3,
         hasDesign: canvas.getObjects().length > 0,
         base: POD.mockupUrl(sd, color().hex),
+        hex: color().hex,
         overlay: sd.overlay ? POD.mockupUrl(sd, color().hex, 'overlay') : null,
       });
     }

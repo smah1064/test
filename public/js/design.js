@@ -43,6 +43,7 @@
         designScale: 3,
         hasDesign: true,
         base: POD.mockupUrl(side, color.hex),
+        hex: color.hex,
         overlay: side.overlay ? POD.mockupUrl(side, color.hex, 'overlay') : null,
       };
       const cfg = window.POD_PREVIEW.photoFor(product, side.id);

@@ -63,7 +63,7 @@
   /** The product picture behind the design: the recoloured photo, or the drawn mockup. */
   async function background(product, side, hex) {
     const P = window.POD_PHOTOS;
-    const cfg = P && P.forSide ? P.forSide(product.id, side.id) : null;
+    const cfg = !side.wrap && P && P.forSide ? P.forSide(product.id, side.id) : null; // all-round prints: unrolled
     if (cfg) {
       try {
         const at = P.placement(cfg, side.printArea);

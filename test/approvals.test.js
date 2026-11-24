@@ -37,8 +37,8 @@ async function admin(url, opts = {}) {
 }
 const adminJson = (url, body) => admin(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
-// Mug wrap: 4 in x 3.5 in, no bleed. At 300 DPI: 1200 x 1050.
-const MUG = { w: 1200, h: 1050 };
+// Mug wrap (all the way round): 8.634 in x 3.497 in, no bleed. At 300 DPI: 2590 x 1049.
+const MUG = { w: 2590, h: 1049 };
 /** Clear print file with an opaque block well inside the safe area. */
 const art = (w, h, rgb = { r: 200, g: 40, b: 40 }) => sharp({ create: { width: w, height: h, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
   .composite([{ input: { create: { width: Math.round(w / 2), height: Math.round(h / 2), channels: 4, background: { ...rgb, alpha: 1 } } }, left: Math.round(w / 4), top: Math.round(h / 4) }])
@@ -78,7 +78,7 @@ test('the proof shows product, size, sides with physical size, the artwork and t
   assert.strictEqual(s.widthPx, MUG.w);
   assert.strictEqual(s.heightPx, MUG.h);
   assert.strictEqual(s.dpi, 300);
-  assert.ok(Math.abs(s.widthIn - 4) < 0.01);
+  assert.ok(Math.abs(s.widthIn - 8.634) < 0.01); // all the way round, short of the handle
   // The artwork is the production file itself (scaled down), transparent where nothing prints.
   const pic = await fetch(base + s.artworkUrl);
   assert.strictEqual(pic.status, 200);

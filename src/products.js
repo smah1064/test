@@ -76,6 +76,27 @@ const BACK = t('Back', 'الخلف');
 const sv = (inner) =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="${MOCKUP_WIDTH}" height="${MOCKUP_HEIGHT}" viewBox="0 0 ${MOCKUP_WIDTH} ${MOCKUP_HEIGHT}">${inner}</svg>`;
 
+// Mugs print all the way round, stopping 1 cm before each side of the handle (its base is
+// about 2 cm wide): 25.9 cm round an 11 oz mug, less 2 cm and 2 × 1 cm = 21.9 cm, 8.9 cm high.
+// The editor shows the print unrolled, with the handle at both ends; the previews wrap it round
+// the mug, its middle (opposite the handle) facing you (`wrap.view`: the mug seen from there).
+const MUG_WRAP_IN = Math.round((21.93 / 2.54) * 1000) / 1000; // 3.25 in × π = 25.93 cm round, less 4 cm
+const MUG_WRAP_SVG = sv(
+  '<rect x="19" y="219" width="474" height="176" rx="8" fill="#000" opacity=".08"/>' +
+    '<rect x="13" y="212" width="474" height="176" rx="8" fill="{{C}}" stroke="{{L}}" stroke-width="3"/>' +
+    // Where the handle is (both ends meet there): nothing printed in these strips.
+    '<rect x="14.5" y="213.5" width="35.5" height="173" rx="7" fill="#000" opacity=".07"/><rect x="450" y="213.5" width="35.5" height="173" rx="7" fill="#000" opacity=".07"/>' +
+    '<path d="M32 262 q-14 38 0 76 M468 262 q14 38 0 76" fill="none" stroke="{{L}}" stroke-width="6" stroke-linecap="round" opacity=".55"/>' +
+    // The middle of the print: opposite the handle.
+    '<path d="M250 216 v168" stroke="{{L}}" stroke-width="1.5" stroke-dasharray="3 7" opacity=".45"/>'
+);
+const MUG_VIEW_SVG = sv(
+  '<ellipse cx="236" cy="482" rx="140" ry="18" fill="#000" opacity=".08"/>' +
+    '<path d="M120 150 L340 150 L340 468 Q230 490 120 468 Z" fill="{{C}}" stroke="{{L}}" stroke-width="3" stroke-linejoin="round"/>' +
+    '<ellipse cx="230" cy="150" rx="110" ry="18" fill="{{S}}" stroke="{{L}}" stroke-width="3"/>'
+);
+const mugWrapSide = (id, name) => ({ id, name, svg: MUG_WRAP_SVG, printArea: { x: 50, y: 219, w: 400, h: 162 }, printWidthIn: MUG_WRAP_IN, wrap: { view: MUG_VIEW_SVG } });
+
 // ---------- Shared garment drawings ----------
 const TEE_BODY =
   '<path d="M150 88 L205 66 Q250 96 295 66 L350 88 L452 150 L412 246 L370 226 L372 548 Q250 562 128 548 L130 226 L88 246 L48 150 Z" fill="{{C}}" stroke="{{L}}" stroke-width="3" stroke-linejoin="round"/>' +
@@ -233,31 +254,14 @@ const PRODUCTS = [
     id: 'mug',
     category: 'home',
     name: t('Ceramic Mug', 'مج سيراميك'),
-    description: t('Glossy ceramic, dishwasher and microwave safe.', 'سيراميك لامع، آمن في غسالة الأطباق والميكروويف.'),
+    description: t('Glossy ceramic, printed all the way round. Dishwasher and microwave safe.', 'سيراميك لامع، مطبوع لفّة كاملة حوالين المج. آمن في غسالة الأطباق والميكروويف.'),
     basePrice: 250,
     colors: [{ ...C.white }, { ...C.black, hex: '#202124' }, C.sky, C.blush],
     sizes: [
       { id: '11oz', label: t('11 oz (325 ml)', '325 مل'), surcharge: 0 },
       { id: '15oz', label: t('15 oz (440 ml)', '440 مل'), surcharge: 60 },
     ],
-    sides: [
-      {
-        id: 'front',
-        name: FRONT,
-        svg: sv(
-          '<ellipse cx="236" cy="482" rx="140" ry="18" fill="#000" opacity=".08"/>' +
-            '<path d="M340 205 Q428 205 428 300 Q428 395 340 395 L340 360 Q394 360 394 300 Q394 240 340 240 Z" fill="{{C}}" stroke="{{L}}" stroke-width="3" stroke-linejoin="round"/>' +
-            '<path d="M120 150 L340 150 L340 468 Q230 490 120 468 Z" fill="{{C}}" stroke="{{L}}" stroke-width="3" stroke-linejoin="round"/>' +
-            '<ellipse cx="230" cy="150" rx="110" ry="18" fill="{{S}}" stroke="{{L}}" stroke-width="3"/>'
-        ),
-        overlay: sv(
-          '<path d="M134 172 L150 174 L150 462 L134 458 Z" fill="#fff" opacity=".28"/>' +
-            '<path d="M312 174 L326 172 L326 458 L312 462 Z" fill="#000" opacity=".06"/>'
-        ),
-        printArea: { x: 146, y: 225, w: 168, h: 147 },
-        printWidthIn: 4,
-      },
-    ],
+    sides: [mugWrapSide('front', FRONT)],
   },
   {
     id: 'cushion',
@@ -678,13 +682,6 @@ const flat = (x, y, w, h, rx = 0) => sv(shadowRect(x, y, w, h, rx) + `<rect x="$
 const JERSEY_BODY =
   '<path d="M150 92 L205 70 L250 84 L295 70 L350 92 L440 160 L404 236 L362 214 L364 540 Q250 552 136 540 L138 214 L96 236 L60 160 Z" fill="{{C}}" stroke="{{L}}" stroke-width="3" stroke-linejoin="round"/>' +
   '<path d="M150 92 L118 200 M350 92 L382 200" fill="none" stroke="{{L}}" stroke-width="2" opacity=".45"/>';
-const MUG_SVG = sv(
-  '<ellipse cx="236" cy="482" rx="140" ry="18" fill="#000" opacity=".08"/>' +
-    '<path d="M340 205 Q428 205 428 300 Q428 395 340 395 L340 360 Q394 360 394 300 Q394 240 340 240 Z" fill="{{C}}" stroke="{{L}}" stroke-width="3" stroke-linejoin="round"/>' +
-    '<path d="M120 150 L340 150 L340 468 Q230 490 120 468 Z" fill="{{C}}" stroke="{{L}}" stroke-width="3" stroke-linejoin="round"/>' +
-    '<ellipse cx="230" cy="150" rx="110" ry="18" fill="{{S}}" stroke="{{L}}" stroke-width="3"/>'
-);
-const MUG_AREA = { x: 146, y: 225, w: 168, h: 147 };
 
 PRODUCTS.push(
   {
@@ -711,7 +708,7 @@ PRODUCTS.push(
     basePrice: 350,
     colors: [{ ...C.black, hex: '#1c1d20', name: t('Black (turns white when hot)', 'أسود (يتحول أبيض مع السخونة)') }],
     sizes: [{ id: '11oz', label: t('11 oz (325 ml)', '325 مل'), surcharge: 0 }],
-    sides: [{ id: 'front', name: FRONT, svg: MUG_SVG, printArea: { ...MUG_AREA }, printWidthIn: 4 }],
+    sides: [mugWrapSide('front', FRONT)],
   },
   {
     id: 'couplemugs',
@@ -723,8 +720,8 @@ PRODUCTS.push(
     colors: [{ ...C.white }, { ...C.black, hex: '#202124' }, C.blush],
     sizes: [{ id: '11oz', label: t('2 × 11 oz (325 ml)', '2 × 325 مل'), surcharge: 0 }],
     sides: [
-      { id: 'mug1', name: t('Mug 1', 'المج الأول'), svg: MUG_SVG, printArea: { ...MUG_AREA }, printWidthIn: 4 },
-      { id: 'mug2', name: t('Mug 2', 'المج الثاني'), svg: MUG_SVG, printArea: { ...MUG_AREA }, printWidthIn: 4 },
+      mugWrapSide('mug1', t('Mug 1', 'المج الأول')),
+      mugWrapSide('mug2', t('Mug 2', 'المج الثاني')),
     ],
   },
   {

@@ -758,7 +758,7 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 /* Product page: start from scratch or from a ready design */
 .pp-hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 28px; align-items: start; margin: 18px 0 30px; }
 .pp-photo { padding: 0; overflow: hidden; aspect-ratio: 5 / 6; display: grid; place-items: center; background: #f4f5f7; }
-.pp-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pp-photo img { width: 100%; height: 100%; object-fit: contain; padding: 4%; box-sizing: border-box; display: block; } /* the whole product, never cropped */
 .pp-info h1 { margin: 6px 0 8px; }
 .pp-price { margin: 6px 0 14px; }
 .pp-price .amount { font-size: 22px; font-weight: 800; }

@@ -166,7 +166,29 @@
   }
 
   /** Render the design on the product with folds/curvature, lighting and texture. */
+  /**
+   * A mug printed all the way round: the editor's print is the unrolled wrap. The flat
+   * previews show the mug from the side opposite the handle, so the half of the wrap
+   * facing you is cut out and laid on the mug's front view, at the same scale.
+   */
+  function wrapFront(product, entry) {
+    const a = entry.rects.trim;
+    const halfIn = (Math.PI * ((product.model && product.model.diameterIn) || 3.25)) / 2;
+    const half = halfIn * entry.rects.u; // half the way round, in the editor's units
+    const R = 110; // the front view's mug (see surfaceFor): 230 ± 110
+    const wView = Math.PI * R; // what surfaceFor spreads over the visible half
+    const k = wView / half;
+    const trim = { x: 230 - wView / 2, y: 310 - (a.h * k) / 2, w: wView, h: a.h * k };
+    const ds = entry.designScale || 3;
+    const c = document.createElement('canvas');
+    c.width = entry.design.width;
+    c.height = entry.design.height;
+    c.getContext('2d').drawImage(entry.design, (a.x + a.w / 2 - half / 2) * ds, a.y * ds, half * ds, a.h * ds, trim.x * ds, trim.y * ds, trim.w * ds, trim.h * ds);
+    const view = { ...entry.side, svg: entry.side.wrap.view, overlay: null };
+    return { ...entry, side: view, base: POD.mockupUrl(view, entry.hex || '#ffffff'), overlay: null, design: c, designScale: ds, rects: { ...entry.rects, trim, bleed: trim, u: entry.rects.u * k } };
+  }
   async function renderRealistic(product, entry) {
+    if (entry.side && entry.side.wrap) entry = wrapFront(product, entry);
     const [baseImg, overImg] = await Promise.all([loadImg(entry.base), entry.overlay ? loadImg(entry.overlay) : null]);
     const Wd = W * S;
     const Hd = H * S;
@@ -546,7 +568,8 @@
     }
     return out;
   }
-  const photoFor = (product, sideId) => (window.POD_PHOTOS ? window.POD_PHOTOS[`${product.id}:${sideId}`] : null);
+  // Not for a print that goes all the way round (the photo shows the mug from the handle's side).
+  const photoFor = (product, sideId) => (window.POD_PHOTOS && !(product.sides.find((s) => s.id === sideId) || {}).wrap ? window.POD_PHOTOS[`${product.id}:${sideId}`] : null);
   /** Model photos for a product side ("On a model" view); [] if none. */
   const modelsFor = (product, sideId) => (window.POD_MODELS && window.POD_MODELS[`${product.id}:${sideId}`]) || [];
 
