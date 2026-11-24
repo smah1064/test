@@ -135,8 +135,16 @@
     orders = null;
     drafts = null;
     try { localStorage.removeItem('pod-acct'); } catch (e) { /* private mode */ }
-    // Their drafts are on their account; nothing of theirs stays in this browser.
+    // Their drafts are on their account; nothing of theirs stays in this browser
+    // (a shared family phone): no drafts, no cart, no checkout choices, nothing typed in the forms.
     await POD.drafts.clearLocal();
+    POD.setCart([]);
+    try { for (const k of ['pod-proof-ok', 'pod-coupon', 'pod-order-key', 'pod-delivery']) sessionStorage.removeItem(k); } catch (e) { /* private mode */ }
+    if (POD.updateCartBadge) POD.updateCartBadge();
+    document.querySelectorAll('#acct-out input').forEach((i) => { if (i.type !== 'checkbox' && i.type !== 'hidden') i.value = ''; });
+    const toasts = document.getElementById('toast-root');
+    if (toasts) toasts.innerHTML = '';
+    showForm('f-in');
     render();
   });
   const STATUS = { received: 'queued', in_production: 'printing', shipped: 'shipped', delivered: 'delivered' };

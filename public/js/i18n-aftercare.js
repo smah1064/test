@@ -106,6 +106,9 @@
     rememberOrder(order) {
       try {
         if (!order || !order.id || !order.number) return;
+        // Signed in: the order is on the account (and the next person on a shared phone must not see it here).
+        const acct = localStorage.getItem('pod-acct');
+        if (acct && acct !== '1') return;
         const link = '/order?id=' + encodeURIComponent(order.id);
         if (!LINK_RE.test(link)) return;
         const entry = { number: String(order.number), link, date: order.createdAt || new Date().toISOString(), total: Number(order.total) || 0 };
