@@ -881,3 +881,9 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 #cu-q { width: 100%; max-width: 360px; }
 
 .emb-threads { margin: 6px 0; padding-inline-start: 20px; line-height: 1.8; }
+
+/* "Your saved design is back" with the choice to start a new one */
+.draft-bar { position: fixed; z-index: 60; left: 50%; transform: translateX(-50%); bottom: calc(96px + env(safe-area-inset-bottom)); width: max-content; max-width: calc(100% - 32px); display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 16px; border-radius: 14px; background: #16181d; color: #fff; box-shadow: 0 8px 28px rgba(0,0,0,.25); font-size: 14px; line-height: 1.5; }
+.draft-bar .btn { white-space: nowrap; background: #fff; color: #16181d; border-color: #fff; }
+.draft-bar .fly-close { color: #fff; background: transparent; }
+@media (max-width: 520px) { .draft-bar { flex-wrap: wrap; bottom: calc(150px + env(safe-area-inset-bottom)); } .draft-bar span { flex: 1 1 100%; } }

@@ -609,7 +609,75 @@
     }
     if (dx || dy) o.setPositionByOrigin(new fabric.Point(c.x + dx, c.y + dy), 'center', 'center');
     st.guides = guides.v.length || guides.h.length ? guides : null;
+    // Never let an element go completely out of the print area (it would vanish and
+    // couldn't be grabbed again): a part of it always stays inside.
+    keepReachable(o);
   });
+  function keepReachable(o) {
+    const R = rects();
+    const E = R.b ? R.bleed : R.trim;
+    const b = o.getBoundingRect(true, true);
+    const kx = Math.min(b.width, Math.max(b.width * 0.3, 16), E.w * 0.25);
+    const ky = Math.min(b.height, Math.max(b.height * 0.3, 16), E.h * 0.25);
+    let mx = 0;
+    let my = 0;
+    if (b.left > E.x + E.w - kx) mx = E.x + E.w - kx - b.left;
+    else if (b.left + b.width < E.x + kx) mx = E.x + kx - (b.left + b.width);
+    if (b.top > E.y + E.h - ky) my = E.y + E.h - ky - b.top;
+    else if (b.top + b.height < E.y + ky) my = E.y + ky - (b.top + b.height);
+    if (!mx && !my) return false;
+    o.set({ left: o.left + mx, top: o.top + my });
+    o.setCoords();
+    return true;
+  }
+  /**
+   * A saved design was opened: say so, and offer to start a new design instead
+   * (the saved one is deleted after a confirmation).
+   */
+  function draftChoice(fixed) {
+    const bar = document.createElement('div');
+    bar.className = 'draft-bar';
+    bar.setAttribute('role', 'status');
+    bar.innerHTML = `<span>${esc(t('draft.restored'))}${fixed ? ' ' + esc(t('draft.fixedOutside', { n: POD.num(fixed) })) : ''}</span>
+      <button type="button" class="btn btn-sm" data-draft="new">${esc(t('draft.startNew'))}</button>
+      <button type="button" class="fly-close" data-draft="keep" aria-label="${esc(t('draft.keep'))}">✕</button>`;
+    document.body.appendChild(bar);
+    const hide = () => bar.remove();
+    const timer = setTimeout(hide, 12000);
+    bar.addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-draft]');
+      if (!b) return;
+      clearTimeout(timer);
+      if (b.dataset.draft === 'keep') return hide();
+      if (!confirm(t('draft.startNewConfirm'))) return;
+      startingOver = true; // no autosave while starting over
+      clearTimeout(draftTimer);
+      draftTimer = null;
+      await draftSaving.catch(() => null);
+      await POD.drafts.remove(st.product.id);
+      const u = new URL(location.href);
+      u.searchParams.delete('cart');
+      location.replace(u.toString());
+    });
+  }
+  /** Bring an element that is outside the print area back in (shrunk to fit if it is bigger). */
+  function bringInside(o) {
+    const R = rects();
+    const T = R.safe && R.safe.w > 20 && R.safe.h > 20 ? R.safe : R.trim; // inside the safe margin, not on the edge
+    let b = o.getBoundingRect(true, true);
+    const k = Math.min(1, (T.w * 0.9) / b.width, (T.h * 0.9) / b.height);
+    if (k < 1) {
+      o.set({ scaleX: o.scaleX * k, scaleY: o.scaleY * k });
+      o.setCoords();
+      b = o.getBoundingRect(true, true);
+    }
+    const nx = Math.min(Math.max(b.left, T.x), T.x + T.w - b.width);
+    const ny = Math.min(Math.max(b.top, T.y), T.y + T.h - b.height);
+    o.set({ left: o.left + nx - b.left, top: o.top + ny - b.top });
+    o.setCoords();
+  }
+  /** Elements lying completely outside the print area (invisible, can't be printed). */
+  const outsideObjects = () => checkIssues().filter((i) => i.key === 'check.outside').map((i) => i.obj);
   canvas.on('mouse:up', () => {
     if (st.guides) {
       st.guides = null;
@@ -2893,6 +2961,12 @@
     const li = e.target.closest('[data-issue]');
     const issue = li && st.issues[Number(li.dataset.issue)];
     if (!issue || !canvas.contains(issue.obj) || issue.obj.selectable === false) return;
+    if (issue.key === 'check.outside') {
+      bringInside(issue.obj);
+      commit();
+      renderCheck();
+      toast(t('check.broughtBack'));
+    }
     canvas.setActiveObject(issue.obj);
     canvas.requestRenderAll();
   });
@@ -3886,10 +3960,11 @@
   // ---------- Saved design (draft) ----------
   let draftTimer = null;
   let draftSaving = Promise.resolve(true);
+  let startingOver = false; // "Start a new design": nothing is saved while the page reloads
   /** Save the current design for this product in the browser (or forget it when empty). */
   function saveDraft() {
     clearTimeout(draftTimer);
-    if (!draftMode || st.exporting) return draftSaving;
+    if (!draftMode || st.exporting || startingOver) return draftSaving;
     const designs = {};
     for (const s of st.product.sides) designs[s.id] = s.id === st.side ? serialize() : (st.designs[s.id] || []);
     const empty = !Object.values(designs).some((o) => o.length);
@@ -4217,7 +4292,15 @@
       } catch (e) { /* diagnostics only */ }
     }, 1500);
   }
-  if (restoredDraft) toast(t('draft.restored'));
+  if (restoredDraft) {
+    const lost = outsideObjects();
+    if (lost.length) {
+      lost.forEach(bringInside);
+      commit();
+      renderCheck();
+    }
+    draftChoice(lost.length);
+  }
   if (fromShare) { toast(t('share.loaded')); scheduleDraft(); }
   if (libraryDesign) {
     if (libraryDesign.kind === 'template') {
