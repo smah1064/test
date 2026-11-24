@@ -64,7 +64,7 @@
         <a href="/#products" data-i18n="nav.products"></a>
         <a href="/designs"><span class="nav-long" data-i18n="nav.designs"></span><span class="nav-short" data-i18n="nav.designsShort"></span></a>
         <a href="/photos"><span class="nav-long" data-i18n="nav.photos"></span><span class="nav-short" data-i18n="nav.photosShort"></span></a>
-        <a class="nav-books" href="/book?b=space-hero"><span class="nav-long" data-i18n="nav.books"></span><span class="nav-short" data-i18n="nav.booksShort"></span></a>
+        <a class="nav-books" href="/?cat=kids#products"><span class="nav-long" data-i18n="nav.books"></span><span class="nav-short" data-i18n="nav.booksShort"></span></a>
         <a class="cart-link" href="/cart"><span data-i18n="nav.cart"></span> <span class="badge" data-cart-count hidden>0</span></a>
         <button class="btn btn-sm lang-toggle" data-lang-toggle data-i18n="lang.other"></button>
       </nav>
@@ -131,12 +131,8 @@
       </form>
     </div>
 
-    <!-- Items kept out of this order, to order later -->
-    <section class="card saved-box" id="saved" hidden aria-labelledby="saved-title">
-      <h2 id="saved-title" class="saved-title"></h2>
-      <p class="muted small" data-i18n="cart.savedNote"></p>
-      <div id="saved-items"></div>
-    </section>
+    <!-- My saved designs: ones kept out of this order and ones not finished yet (public/js/saved-designs.js) -->
+    <section class="card saved-box" id="saved" hidden></section>
   </main>
 
   <!-- Phones: the total and the way to the order form, always at hand on a long cart -->
@@ -153,6 +149,7 @@
   <script src="/js/i18n-proof.js"></script>
   <script src="/js/common.js"></script>
   <script src="/js/proof-ui.js"></script>
+  <script src="/js/saved-designs.js"></script>
   <script>
     (async () => {
       const { money, esc, t, tr } = POD;
@@ -428,26 +425,18 @@
         if (box) box.focus({ preventScroll: true });
       }
 
-      /** "Saved for later": shown under the cart (also when the cart itself is empty). */
+      /** "My saved designs" under the cart (also when the cart itself is empty): kept out of this order, or not finished yet. */
       function renderSaved() {
-        const saved = POD.getSaved();
-        const box = document.getElementById('saved');
-        box.hidden = !saved.length;
-        if (!saved.length) return;
-        document.getElementById('saved-title').textContent = t('cart.savedTitle', { n: POD.num(saved.length) });
-        document.getElementById('saved-items').innerHTML = saved.map((item) => `
-          <div class="cart-item saved-item">
-            <img src="${esc(item.previewUrl)}" alt="${esc(t('cart.preview', { product: tr(item.productName) }))}">
-            <div>
-              <h3>${esc(tr(item.productName))}</h3>
-              <div class="meta">${itemMeta(item)}</div>
-              <div class="actions">
-                <button class="btn btn-sm btn-primary" data-to-cart="${esc(item.designId)}">${esc(t('cart.moveToCart'))}</button>
-                <button class="btn btn-sm btn-danger" data-saved-remove="${esc(item.designId)}">${esc(t('cart.remove'))}</button>
-              </div>
-            </div>
-            <div class="price">${itemPrice(item)}</div>
-          </div>`).join('');
+        PODSaved.render(document.getElementById('saved'), {
+          meta: itemMeta,
+          price: itemPrice,
+          onToCart: () => {
+            render();
+            refreshPrices().then(render);
+            document.getElementById('items').scrollIntoView({ behavior: 'smooth', block: 'start' });
+          },
+          onChange: render,
+        });
       }
       /** Saved items: today's prices, and ones that were ordered or are gone dropped. */
       async function refreshSaved() {
@@ -944,20 +933,6 @@
         btn.focus({ preventScroll: true });
       });
 
-      // The saved list sits outside the cart's own box (it stays when the cart is empty).
-      document.getElementById('saved').addEventListener('click', (e) => {
-        const back = e.target.closest('[data-to-cart]');
-        const del = e.target.closest('[data-saved-remove]');
-        if (back) {
-          POD.moveItem(back.dataset.toCart, false);
-          render();
-          refreshPrices().then(render);
-          document.getElementById('items').scrollIntoView({ behavior: 'smooth', block: 'start' });
-        } else if (del) {
-          POD.setSaved(POD.getSaved().filter((it) => it.designId !== del.dataset.savedRemove));
-          render();
-        }
-      });
       renderGovernorates();
       render();
       prefillAccount();

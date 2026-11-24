@@ -548,6 +548,28 @@
         if (who) fetch(url(productId), { method: 'DELETE', credentials: 'same-origin' }).catch(() => {});
       },
       all: local.all,
+      /**
+       * Every unfinished design to list ("My saved designs"): the ones in this browser and,
+       * when signed in, the ones on the account (the newest copy of each product), newest first.
+       */
+      async list() {
+        const has = (d) => d && d.designs && Object.values(d.designs).some((objs) => Array.isArray(objs) && objs.length);
+        const map = new Map();
+        for (const d of await local.all()) {
+          if (d && d.productId && has(d)) map.set(d.productId, { productId: d.productId, colorId: d.colorId, sizeId: d.sizeId, savedAt: d.savedAt || '', preview: d.preview instanceof Blob ? d.preview : null });
+        }
+        if (await identify()) {
+          try {
+            const res = await fetch('/api/account/drafts', { credentials: 'same-origin', signal: withTimeout(8000) });
+            const body = res.ok ? await res.json() : null;
+            for (const a of (body && body.drafts) || []) {
+              const m = map.get(a.productId);
+              if (!m || String(a.savedAt || '') > String(m.savedAt || '')) map.set(a.productId, { productId: a.productId, colorId: a.colorId, sizeId: a.sizeId, savedAt: a.savedAt || '', previewUrl: a.previewUrl || null, preview: (m && m.preview) || null });
+            }
+          } catch (e) { /* offline: this browser's only */ }
+        }
+        return [...map.values()].sort((x, y) => String(y.savedAt).localeCompare(String(x.savedAt)));
+      },
       /** Who is signed in ('' a guest, null when the shop couldn't be asked). */
       whoami: identify,
       /** Forget every draft kept in this browser (signing out, another customer signing in). */

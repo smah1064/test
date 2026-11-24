@@ -64,7 +64,7 @@
     'track.skip.filesGone': ['{n}. {name}: the design files are no longer kept', '{n}. {name}: ملفات التصميم مبقتش محفوظة'],
     'track.skip.other': ['{n}. {name}: cannot be ordered again', '{n}. {name}: مينفعش يتطلب تاني'],
     // Account: orders and drafts
-    'acct.drafts': ['My drafts', 'مسوداتي'],
+    'acct.drafts': ['My saved designs', 'تصميماتي المحفوظة'],
     'acct.draftsNote': ['Designs you started while signed in are saved to your account, so you can finish them on any phone or computer.', 'التصميمات اللي بدأتها وانت مسجّل دخول بتتحفظ في حسابك، فتقدر تكمّلها من أي موبايل أو كمبيوتر.'],
     'acct.noDrafts': ['No drafts yet', 'لسه مفيش مسودات'],
     'acct.noDraftsText': ['Designs you start while signed in are saved to your account automatically, so you can open them on any phone or computer and carry on.', 'أي تصميم تبدأه وانت مسجّل دخول بيتحفظ في حسابك لوحده، فتقدر تفتحه من أي موبايل أو كمبيوتر وتكمّل.'],

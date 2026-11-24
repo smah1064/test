@@ -222,76 +222,19 @@
   });
 
   // ---------- Drafts saved to the account ----------
-  /** The product drawn in the draft's colour, when the saved preview is missing. */
-  function mockupFor(d) {
-    const p = (catalog.products || []).find((x) => x.id === d.productId);
-    if (!p || !p.sides || !p.sides[0]) return '';
-    const c = (p.colors || []).find((x) => x.id === d.colorId) || (p.colors || [])[0];
-    try { return POD.mockupUrl(p.sides[0], c ? c.hex : '#ffffff', 'full') || ''; } catch (e) { return ''; }
-  }
   async function renderDrafts() {
+    // "My saved designs": the same list as under the cart (ready to order, and not finished yet).
     const box = $('v-drafts');
+    box.classList.add('card', 'saved-box', 'acct-saved');
     if (!drafts) {
       box.innerHTML = `<div class="pv-loading"><div class="spinner"></div></div>`;
-      try {
-        drafts = (await POD.api('/api/account/drafts')).drafts || [];
-      } catch (e) {
-        box.innerHTML = `<p class="muted">${esc(e.message)}</p>`;
-        return;
-      }
+      await PODSaved.loadDrafts(true);
+      drafts = [];
       if (view !== 'drafts') return;
     }
-    if (!drafts.length) {
-      box.innerHTML = `<div class="card empty drafts-empty"><h3>${esc(t('acct.noDrafts'))}</h3><p class="muted">${esc(t('acct.noDraftsText'))}</p><a class="btn btn-primary" href="/#products">${esc(t('home.start'))}</a></div>`;
-      return;
-    }
-    box.innerHTML = `
-      <p class="acct-note">${esc(t('acct.draftsNote'))}</p>
-      <div class="drafts-grid">${drafts.map((d) => {
-        const edit = `/editor?product=${encodeURIComponent(d.productId)}`;
-        const fallback = mockupFor(d);
-        const src = d.previewUrl ? (d.previewUrl.includes('?') ? d.previewUrl : `${d.previewUrl}?v=${encodeURIComponent(d.savedAt || '')}`) : fallback;
-        return `
-        <div class="card draft-card">
-          <a class="draft-pic" href="${esc(edit)}" tabindex="-1" aria-hidden="true">${src ? `<img src="${esc(src)}" alt="" loading="lazy" data-fallback="${esc(fallback)}">` : ''}</a>
-          <div class="draft-body">
-            <strong>${esc(tr(d.productName) || d.productId)}</strong>
-            <span class="muted small">${d.savedAt ? esc(t('acct.draftSaved', { date: POD.date(d.savedAt) })) : ''}</span>
-            <div class="draft-actions">
-              <a class="btn btn-sm btn-primary" href="${esc(edit)}">${esc(t('acct.continue'))}</a>
-              <button class="btn btn-sm btn-danger" type="button" data-del-draft="${esc(d.productId)}">${esc(t('acct.deleteDraft'))}</button>
-            </div>
-          </div>
-        </div>`;
-      }).join('')}</div>`;
+    await PODSaved.render(box, { showEmpty: true, note: 'saved.noteAccount', onToCart: () => { location.href = '/cart'; }, onChange: renderDrafts });
+    box.hidden = view !== 'drafts';
   }
-  // A preview that no longer loads: show the plain product instead.
-  $('v-drafts').addEventListener('error', (e) => {
-    const img = e.target;
-    if (img.tagName !== 'IMG') return;
-    const fb = img.dataset.fallback;
-    img.dataset.fallback = '';
-    if (fb) img.src = fb; else img.remove();
-  }, true);
-  $('v-drafts').addEventListener('click', async (e) => {
-    const b = e.target.closest('[data-del-draft]');
-    if (!b) return;
-    const id = b.dataset.delDraft;
-    const d = drafts.find((x) => x.productId === id);
-    if (!confirm(t('acct.deleteDraftConfirm', { name: d ? tr(d.productName) : id }))) return;
-    b.disabled = true;
-    try {
-      await POD.api(`/api/account/drafts/${encodeURIComponent(id)}`, { method: 'DELETE' });
-      // The copy kept in this browser goes too, or the editor would bring it back.
-      await POD.drafts.remove(id);
-      drafts = drafts.filter((x) => x.productId !== id);
-      POD.toast(t('acct.draftDeleted'));
-      renderDrafts();
-    } catch (err) {
-      POD.toast(err.message, 'error');
-      b.disabled = false;
-    }
-  });
   function renderProfile() {
     $('pf-name').value = me.name;
     $('pf-phone').value = me.phone || '';

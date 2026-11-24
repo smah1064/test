@@ -1099,3 +1099,15 @@ html[lang="ar"] .brand-en, html:not([lang="ar"]) .brand-ar { display: none; }
 .overview-all { border: 0; background: var(--bg-2, #f2f1ee); font: inherit; font-size: 12px; font-weight: 600; color: var(--ink); padding: 4px 10px; border-radius: 6px; cursor: pointer; width: 100%; }
 .overview-all:hover { background: var(--line); }
 @media (max-width: 900px) { .overview { bottom: 10px; padding: 4px; } .overview-all { font-size: 11px; padding: 3px 6px; } }
+/* My saved designs (cart and account): ready to order, and not finished yet. */
+.saved-box .saved-group { font-size: 13px; font-weight: 700; color: var(--ink-2); margin: 14px 0 0; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+.saved-box .saved-item + .saved-group { margin-top: 18px; }
+.saved-box .saved-item:first-of-type { border-top: 0; }
+.saved-state { display: inline-block; vertical-align: middle; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; margin-inline-start: 6px; }
+.saved-state.ready { background: #e6f5ec; color: #1a7a43; }
+.saved-state.draft { background: #fff3e0; color: #a35a00; }
+.saved-box .saved-empty { text-align: center; padding: 20px 8px; }
+/* Kids' books: story book / colouring book switch above the book. */
+.bk-books { display: inline-flex; margin: 16px 0 12px; flex-wrap: wrap; }
+.bk-books[hidden] { display: none; }
+.bk-books .side-tab { text-decoration: none; font-size: 14px; padding: 8px 16px; }

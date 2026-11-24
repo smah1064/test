@@ -15,6 +15,14 @@
   }
   const product = catalog.products.find((p) => p.kind === 'book' && p.book === book.id);
   $('bk').hidden = false;
+  // Every kids' book (story, colouring): one tap to the other.
+  const allBooks = catalog.products.filter((p) => p.kind === 'book');
+  function renderBookTabs() {
+    $('bk-books').hidden = allBooks.length < 2;
+    $('bk-books').innerHTML = allBooks.map((p) => `<a class="side-tab ${p.book === book.id ? 'active' : ''}" href="/book?b=${encodeURIComponent(p.book)}"${p.book === book.id ? ' aria-current="page"' : ''}>${esc(tr(p.name))}</a>`).join('');
+  }
+  renderBookTabs();
+  document.addEventListener('pod:langchange', renderBookTabs);
 
   // ---------- State ----------
   const KEY = 'pod-book-' + book.id;
