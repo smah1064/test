@@ -21,6 +21,7 @@
   const designShape = (d) => d.aspect || shapeOf(productById(d.product));
   function fits(d, p) {
     if (Array.isArray(d.products)) return d.products.includes(p.id);
+    if (p.laser) return false; // laser products: only designs made for them
     if (d.product === p.id) return true;
     if (hasNameFields(d) && !p.merge) return false;
     const r = shapeOf(p) / designShape(d);

@@ -1328,6 +1328,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   const library = new Library(dataDir);
   const libraryCard = (d) => ({
     id: d.id, name: d.name, category: d.category, kind: d.kind, product: d.product, color: d.color,
+    // Made for certain products only (laser designs: one tone, cut pieces joined up).
+    ...(Array.isArray(d.products) ? { products: d.products } : {}),
     ...(d.kind === 'template' ? { items: d.items, aspect: d.aspect } : { preview: `/api/library/${d.id}/preview.png` }),
   });
   app.get('/api/library', (req, res) => {

@@ -234,6 +234,8 @@
     const ids = new Set(items.map((it) => it.designId));
     return writeRaw([...getCart().filter((it) => !ids.has(it.designId)), ...items.map((it) => ({ ...it, later: true }))]);
   }
+  /** Can this ready design go on this product? Designs made for certain products go on those only; laser products take only their own. */
+  const designFor = (d, p) => (Array.isArray(d.products) ? d.products.includes(p.id) : !p.laser);
   /** Move one item out of the order to "saved for later" (later = true) or back into the cart. */
   function moveItem(designId, later) {
     const now = new Date().toISOString();
@@ -809,7 +811,7 @@
     t, tr, setLang, applyI18n,
     loadCatalog, fillMockup, mockupUrl, svgDataUrl, luminance,
     money, date, day, num, captcha,
-    getCart, setCart, getSaved, setSaved, moveItem, putFile, updateCartBadge, toast, esc, api, drafts, forgetPersonal,
+    getCart, setCart, getSaved, setSaved, moveItem, designFor, putFile, updateCartBadge, toast, esc, api, drafts, forgetPersonal,
     sizedArea, sizeView, canvasEdges, drawPattern, wrapOffsets, fabricCm,
   };
 })();

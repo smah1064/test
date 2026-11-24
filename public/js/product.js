@@ -9,6 +9,8 @@
   let lib;
   try {
     [catalog, lib] = await Promise.all([POD.loadCatalog(), POD.api('/api/library')]);
+    const forThis = catalog.products.find((p) => p.id === params.get('id'));
+    if (forThis) lib.designs = lib.designs.filter((d) => POD.designFor(d, forThis));
   } catch (e) {
     $('pp-missing').hidden = false;
     return;

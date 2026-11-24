@@ -256,6 +256,9 @@
       }
     }
     ctx.putImageData(base, 0, 0);
+    // Laser-cut pieces (cake toppers, hanging decorations) are the product themselves, not printed on it:
+    // shown whole, also where the drawing has nothing behind them.
+    if (product.laser && product.laser.kind === 'cut') ctx.drawImage(designCv, 0, 0, Wd, Hd);
     if (overImg) ctx.drawImage(overImg, 0, 0, Wd, Hd);
     out.pxPerIn = (entry.rects.u || 1) * S;
     return out;

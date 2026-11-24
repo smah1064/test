@@ -191,11 +191,12 @@ function buildPad(color, tex, renderer, product) {
  * Clear acrylic (plaques, keychains): a see-through sheet with only the design
  * printed on it; where there is no ink you see through to the background.
  */
-function clearBlock(w, h, r, m, t, renderer) {
+function clearBlock(w, h, r, m, t, renderer, opts = {}) {
   const depth = m.depthIn || 0.2;
   const bevel = Math.min(0.03, depth / 6);
   const g = new THREE.Group();
-  const geo = new THREE.ExtrudeGeometry(roundedRect(w, h, r), { depth, bevelEnabled: true, bevelThickness: bevel, bevelSize: Math.min(0.03, r / 3), bevelSegments: 3, curveSegments: 24 });
+  const outline = () => opts.shape || roundedRect(w, h, r);
+  const geo = new THREE.ExtrudeGeometry(outline(), { depth, bevelEnabled: true, bevelThickness: bevel, bevelSize: Math.min(0.03, r / 3), bevelSegments: 3, curveSegments: opts.shape ? 48 : 24 });
   geo.translate(0, 0, -depth / 2);
   const glass = (opacity, color) => new THREE.MeshPhysicalMaterial({ color, roughness: 0.04, metalness: 0, transparent: true, opacity, clearcoat: 1, clearcoatRoughness: 0.03, depthWrite: false, side: THREE.DoubleSide });
   // Faces nearly invisible; the cut edges catch the light with acrylic's slight green-blue tint.
@@ -216,7 +217,13 @@ function clearBlock(w, h, r, m, t, renderer) {
     ink.renderOrder = 1;
     g.add(ink);
   }
-  g.rotation.y = -0.3;
+  if (opts.engraved) {
+    // Laser engraving: frosted into the front surface.
+    const e = engraving(opts.engraved, w, h, renderer, { shape: outline(), frosted: '#a3aeb4' });
+    e.position.z = depth / 2 + bevel + 0.003;
+    g.add(e);
+  }
+  if (opts.turn !== false) g.rotation.y = -0.3;
   return g;
 }
 
@@ -860,6 +867,987 @@ function bagWalls(img, w, h, depth, m, renderer) {
   return walls;
 }
 
+// ---------- Laser engraving and cutting ----------
+// Wood, slate, leather and acrylic, each with its own look. Engraved items carry
+// the design as a see-through layer on the material (the editor draws it in the
+// material's engrave tone); cut items take the design's outline as their shape.
+
+/** A small seeded random, so the procedural textures are the same every time. */
+function seeded(seed) {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6d2b79f5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function rgbOf(hex) {
+  const n = parseInt(String(hex).replace('#', '').slice(0, 6), 16) || 0;
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+/** Smooth noise (0..1) that tiles over an N x N square: `cx` blobs across, `cy` down. */
+function tileNoise(N, cx, rnd, cy = cx) {
+  const g = Array.from({ length: cx * cy }, rnd);
+  const out = new Float32Array(N * N);
+  const sm = (t) => t * t * (3 - 2 * t);
+  const at = (i, j) => g[(j % cy) * cx + (i % cx)];
+  for (let y = 0; y < N; y++) {
+    const fy = (y / N) * cy;
+    const y0 = Math.floor(fy);
+    const ty = sm(fy - y0);
+    for (let x = 0; x < N; x++) {
+      const fx = (x / N) * cx;
+      const x0 = Math.floor(fx);
+      const tx = sm(fx - x0);
+      const a = at(x0, y0) + (at(x0 + 1, y0) - at(x0, y0)) * tx;
+      const b = at(x0, y0 + 1) + (at(x0 + 1, y0 + 1) - at(x0, y0 + 1)) * tx;
+      out[y * N + x] = a + (b - a) * ty;
+    }
+  }
+  return out;
+}
+/** Paint an N x N texture: `shade(x, y)` gives the brightness factor (and bump height). */
+function paintTexture(hex, N, shade) {
+  const [r, g, b] = rgbOf(hex);
+  const c = canvas(N, N);
+  const bump = canvas(N, N);
+  const ctx = c.getContext('2d');
+  const bctx = bump.getContext('2d');
+  const img = ctx.createImageData(N, N);
+  const bimg = bctx.createImageData(N, N);
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      const [k, hgt] = shade(x, y);
+      const i = (y * N + x) * 4;
+      img.data[i] = Math.min(255, r * k);
+      img.data[i + 1] = Math.min(255, g * k);
+      img.data[i + 2] = Math.min(255, b * k);
+      img.data[i + 3] = 255;
+      bimg.data[i] = bimg.data[i + 1] = bimg.data[i + 2] = Math.max(0, Math.min(255, Math.round(255 * hgt)));
+      bimg.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  bctx.putImageData(bimg, 0, 0);
+  return [c, bump];
+}
+/** Wood: fine streaky grain along x with a few soft growth lines (painted wood: just a hint). */
+function woodCanvas(hex, painted) {
+  const N = 512;
+  const rnd = seeded(11);
+  const warp = tileNoise(N, 2, rnd, 6);
+  const blotch = tileNoise(N, 3, rnd, 14); // long, soft patches along the grain
+  const fibre = tileNoise(N, 6, rnd, 160); // fine streaks
+  const fibre2 = tileNoise(N, 12, rnd, 300);
+  const TAU = Math.PI * 2;
+  return paintTexture(hex, N, (x, y) => {
+    const i = y * N + x;
+    const fy = y / N;
+    const yy = fy + 0.012 * Math.sin(TAU * (x / N + fy)) + 0.035 * (warp[i] - 0.5);
+    const ring = 0.5 + 0.5 * Math.cos(TAU * (yy * 9 + 0.35 * Math.sin(TAU * yy * 2)));
+    const line = ring ** 16;
+    const f = 0.6 * (fibre[i] - 0.5) + 0.4 * (fibre2[i] - 0.5);
+    const b = blotch[i] - 0.5;
+    const k = painted
+      ? 1 - 0.02 * line - 0.05 * f - 0.02 * b
+      : 1.04 - 0.17 * line - 0.05 * ring - 0.28 * f - 0.12 * b + 0.025 * (rnd() - 0.5);
+    return [k, 0.5 + 0.8 * f - 0.2 * line];
+  });
+}
+/** Slate: dark matte stone with fine speckle and faint layering. */
+function slateCanvas(hex) {
+  const N = 256;
+  const rnd = seeded(5);
+  const a = tileNoise(N, 6, rnd);
+  const b = tileNoise(N, 32, rnd);
+  return paintTexture(hex, N, (x, y) => {
+    const s = rnd();
+    const n = 0.55 * a[y * N + x] + 0.45 * b[y * N + x];
+    return [0.86 + 0.24 * n + 0.08 * (s - 0.5), n * 0.7 + 0.3 * s];
+  });
+}
+/** Leather: a fine pebbled grain. */
+function leatherCanvas(hex) {
+  const N = 256;
+  const rnd = seeded(3);
+  const a = tileNoise(N, 40, rnd);
+  const b = tileNoise(N, 90, rnd);
+  const c = tileNoise(N, 5, rnd);
+  return paintTexture(hex, N, (x, y) => {
+    const i = y * N + x;
+    const n = 0.6 * a[i] + 0.4 * b[i];
+    return [0.9 + 0.14 * n + 0.08 * (c[i] - 0.5), n];
+  });
+}
+/** A repeating texture whose UVs are in inches; one tile covers `inches`. */
+function tiled(cv, renderer, inches, color = true) {
+  const tx = color ? texture(cv, renderer) : new THREE.CanvasTexture(cv);
+  tx.wrapS = tx.wrapT = THREE.RepeatWrapping;
+  tx.repeat.set(1 / inches, 1 / inches);
+  return tx;
+}
+
+/** What the laser material looks like: wood, slate, leather, mirror or plain acrylic, or clear. */
+function laserLook(color, product) {
+  const id = color.id;
+  const m = product.model || {};
+  if (m.type === 'cardholder') return 'leather';
+  if (id === 'clear' || m.clear) return 'clear';
+  if (id === 'slate') return 'slate';
+  if (['gold', 'silver', 'rosegold'].includes(id)) return 'mirror';
+  const name = JSON.stringify(color.name || '').toLowerCase();
+  if (['natural', 'wood', 'walnut'].includes(id) || name.includes('wood')) return 'wood';
+  return 'acrylic';
+}
+/** The face and cut-edge materials for a look (laser-cut wood edges come out darkened). */
+function laserMats(look, hex, renderer, painted) {
+  const std = (o) => new THREE.MeshStandardMaterial({ metalness: 0, ...o });
+  if (look === 'wood') {
+    const [cv, bp] = woodCanvas(hex, painted);
+    const map = tiled(cv, renderer, 10);
+    const bump = tiled(bp, renderer, 10, false);
+    return {
+      // (Painted white is toned down a little so the lit top doesn't burn out to plain white.)
+      face: std({ map, bumpMap: bump, bumpScale: painted ? 0.12 : 0.4, color: painted ? '#dcd9d4' : '#ffffff', roughness: painted ? 0.62 : 0.74, envMapIntensity: 0.45 }),
+      edge: std({ map, color: painted ? '#c6b6a4' : '#7a5338', roughness: 0.9, envMapIntensity: 0.3 }),
+    };
+  }
+  if (look === 'slate') {
+    const [cv, bp] = slateCanvas(hex);
+    const map = tiled(cv, renderer, 4);
+    const bump = tiled(bp, renderer, 4, false);
+    return {
+      face: std({ map, bumpMap: bump, bumpScale: 0.8, roughness: 0.88, envMapIntensity: 0.35 }),
+      edge: std({ map, bumpMap: bump, bumpScale: 2, color: '#d8d8d8', roughness: 0.95, envMapIntensity: 0.3 }),
+    };
+  }
+  if (look === 'leather') {
+    const [cv, bp] = leatherCanvas(hex);
+    const map = tiled(cv, renderer, 1.6);
+    const bump = tiled(bp, renderer, 1.6, false);
+    return {
+      face: new THREE.MeshPhysicalMaterial({ map, bumpMap: bump, bumpScale: 1.2, roughness: 0.55, metalness: 0, clearcoat: 0.25, clearcoatRoughness: 0.55, sheen: 0.5, sheenRoughness: 0.6, sheenColor: new THREE.Color(hex).lerp(new THREE.Color('#ffffff'), 0.25), envMapIntensity: 0.5 }),
+      edge: std({ color: new THREE.Color(hex).multiplyScalar(0.7), roughness: 0.4, envMapIntensity: 0.5 }),
+    };
+  }
+  if (look === 'mirror') {
+    return {
+      face: std({ color: new THREE.Color(hex).lerp(new THREE.Color('#ffffff'), 0.2), metalness: 1, roughness: 0.1, envMapIntensity: 1.6 }),
+      edge: std({ color: new THREE.Color(hex).multiplyScalar(0.85), metalness: 0.6, roughness: 0.3, envMapIntensity: 1 }),
+    };
+  }
+  // Black or white acrylic: glossy plastic (white a shade down, or its lit faces burn out).
+  const light = new THREE.Color(hex).getHSL({}).l > 0.8;
+  const base = light ? new THREE.Color(hex).multiplyScalar(0.66) : new THREE.Color(hex);
+  const gloss = new THREE.MeshPhysicalMaterial({ color: base, roughness: 0.14, metalness: 0, clearcoat: light ? 0.5 : 1, clearcoatRoughness: 0.06, envMapIntensity: light ? 0.5 : 0.7 });
+  return { face: gloss, edge: new THREE.MeshPhysicalMaterial({ color: light ? base.clone().multiplyScalar(0.88) : base, roughness: 0.3, metalness: 0, envMapIntensity: 0.6 }) };
+}
+
+/** The print area's real size in inches at the chosen size (k: how much bigger than the standard size). */
+function printSize(side, t) {
+  const r = t && t.rects && t.rects.trim;
+  const u = r && (t.rects.u || r.w / side.printWidthIn);
+  const w = r ? r.w / u : side.printWidthIn;
+  const h = r ? r.h / u : side.printHeightIn || side.printWidthIn;
+  return { w, h, k: w / side.printWidthIn };
+}
+/** Map a flat geometry's UVs to its x / y across a w x h box centred on (cx, cy). */
+function boxUV(geo, w, h, cx = 0, cy = 0) {
+  const uv = geo.attributes.uv;
+  const pos = geo.attributes.position;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, (pos.getX(i) - cx) / w + 0.5, (pos.getY(i) - cy) / h + 0.5);
+  uv.needsUpdate = true;
+}
+/** UVs in inches from each face's position, so wood grain keeps its real size on any box. */
+function inchUV(geo, alongY = false) {
+  const p = geo.attributes.position;
+  const n = geo.attributes.normal;
+  const uv = geo.attributes.uv;
+  for (let i = 0; i < p.count; i++) {
+    const ax = Math.abs(n.getX(i));
+    const ay = Math.abs(n.getY(i));
+    const az = Math.abs(n.getZ(i));
+    let u;
+    let v;
+    if (ax >= ay && ax >= az) [u, v] = alongY ? [p.getY(i), p.getZ(i)] : [p.getZ(i), p.getY(i)];
+    else if (ay >= az) [u, v] = [p.getX(i), p.getZ(i)];
+    else [u, v] = alongY ? [p.getY(i), p.getX(i)] : [p.getX(i), p.getY(i)];
+    uv.setXY(i, u, v);
+  }
+  uv.needsUpdate = true;
+  return geo;
+}
+/** A sheet cut to `shape`, `depth` thick, front face at z = depth / 2 (laser-cut: square edges). */
+function cutSheet(shape, depth, mats, bevel = 0) {
+  const geo = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 2, curveSegments: 48 });
+  geo.translate(0, 0, -depth / 2);
+  return new THREE.Mesh(geo, [mats.face, mats.edge]);
+}
+/**
+ * The engraving: the design (already in the engrave tone, on a transparent
+ * background) laid on the surface, so the material shows around it. Covers a
+ * w x h box (or `shape` within it), centred on the origin and facing +z.
+ */
+function engraving(crop, w, h, renderer, opts = {}) {
+  const tx = texture(crop, renderer);
+  const geo = opts.shape ? new THREE.ShapeGeometry(opts.shape, 48) : new THREE.PlaneGeometry(w, h);
+  if (opts.shape) boxUV(geo, w, h);
+  const m = new THREE.MeshStandardMaterial({
+    map: tx, transparent: true, alphaTest: 0.04, depthWrite: false, metalness: 0,
+    roughness: opts.frosted ? 0.95 : 0.88, envMapIntensity: opts.frosted ? 0.9 : 0.4,
+    ...(opts.frosted ? { color: opts.frosted === true ? '#e6ecef' : opts.frosted } : {}),
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+  });
+  const mesh = new THREE.Mesh(geo, m);
+  mesh.renderOrder = 3;
+  return mesh;
+}
+/** An arch: straight sides and bottom, the top a semicircle across the whole width. */
+function archShape(w, h) {
+  const R = w / 2;
+  const cy = h / 2 - R;
+  const s = new THREE.Shape();
+  s.moveTo(-w / 2, -h / 2);
+  s.lineTo(w / 2, -h / 2);
+  s.lineTo(w / 2, cy);
+  s.absarc(0, cy, R, 0, Math.PI, false);
+  s.lineTo(-w / 2, -h / 2);
+  return s;
+}
+/** A wooden stick or board between two points (a box of section sw x sd), grain along it. */
+function beam(a, b, sw, sd, material) {
+  const dir = new THREE.Vector3().subVectors(b, a);
+  const len = dir.length();
+  const mesh = new THREE.Mesh(inchUV(new THREE.BoxGeometry(sw, len, sd), true), material);
+  mesh.position.copy(a).addScaledVector(dir, 0.5);
+  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+  return mesh;
+}
+
+/** Signs and plaques: a board cut rounded or as an arch, engraved; plaques on a wooden stand, signs on an easel. */
+function laserBlock(look, mats, crop, w, h, m, renderer) {
+  const arch = m.shape === 'arch';
+  const r = Math.min(m.radiusIn != null ? m.radiusIn : 0.1, w / 2 - 0.001, h / 2 - 0.001);
+  const shape = arch ? archShape(w, h) : roundedRect(w, h, r);
+  const depth = m.depthIn || 0.2;
+  let board;
+  if (look === 'clear') {
+    board = clearBlock(w, h, r, m, null, renderer, { shape, engraved: crop, turn: false });
+  } else {
+    board = new THREE.Group();
+    board.add(cutSheet(shape, depth, mats));
+    if (crop) {
+      const e = engraving(crop, w, h, renderer, { shape, frosted: look === 'acrylic' });
+      e.position.z = depth / 2 + 0.004;
+      board.add(e);
+    }
+  }
+  const g = new THREE.Group();
+  if (m.base === 'wood') {
+    // A ready-made wooden stand with a slot; the acrylic stands in it.
+    const bw = w + 0.7;
+    const bd = Math.max(1.5, depth * 7);
+    const bh = 0.75;
+    const sunk = 0.3;
+    const wood = laserMats('wood', '#c99a66', renderer, false);
+    const geo = new THREE.ExtrudeGeometry(roundedRect(bw, bd, 0.12), { depth: bh - 0.08, bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.04, bevelSegments: 3, curveSegments: 12 });
+    geo.rotateX(-Math.PI / 2);
+    const base = new THREE.Mesh(geo, [wood.face, wood.face]);
+    base.position.y = -h / 2 + sunk - bh + 0.04;
+    base.position.z = -0.15;
+    g.add(board, base);
+  } else if (m.easel) {
+    // Leaning back on a wooden easel, standing on the ledge across its front legs.
+    const a = 0.1;
+    const yL = h * 0.42;
+    const top = yL + h * 0.95;
+    const wood = laserMats('wood', '#b98d5e', renderer, false).face;
+    const back = (y) => -Math.tan(a) * y;
+    const legW = 0.9;
+    const legD = 0.6;
+    for (const s of [-1, 1]) {
+      g.add(beam(new THREE.Vector3(s * w * 0.46, 0, 0), new THREE.Vector3(s * w * 0.12, top, back(top)), legW, legD, wood));
+    }
+    g.add(beam(new THREE.Vector3(0, top - 0.6, back(top) - legD), new THREE.Vector3(0, 0, -top * 0.42), legW, legD, wood));
+    const ledgeD = depth + 1.1;
+    const ledge = new THREE.Mesh(inchUV(new THREE.BoxGeometry(w * 0.98, 0.6, ledgeD)), wood);
+    ledge.position.set(0, yL - 0.3, back(yL) + legD / 2 + ledgeD / 2 - 0.05);
+    const lip = new THREE.Mesh(inchUV(new THREE.BoxGeometry(w * 0.98, 0.45, 0.25)), wood);
+    lip.position.set(0, yL + 0.2, ledge.position.z + ledgeD / 2 - 0.125);
+    board.rotation.x = -a;
+    board.position.set(0, yL + (h / 2) * Math.cos(a), back(yL + h / 2) + legD / 2 + depth / 2 + 0.02);
+    g.add(board, ledge, lip);
+  } else {
+    g.add(board);
+  }
+  g.rotation.y = -0.3;
+  return g;
+}
+
+/** Things lying on a table are first seen from above and in front. */
+const LOOK_DOWN = new THREE.Vector3(0.2, 0.95, 0.85).normalize();
+
+/** Coasters: a stack of the set, the top one engraved. */
+function laserCoasters(mats, crop, w, h, m, renderer) {
+  const depth = m.depthIn || 0.2;
+  const r = Math.min(m.radiusIn != null ? m.radiusIn : 0.25, w / 2 - 0.001);
+  const shape = roundedRect(w, h, r);
+  const g = new THREE.Group();
+  [0.0, 0.16, -0.12, 0.07].forEach((turn, i) => {
+    const c = cutSheet(shape, depth, mats, 0.012);
+    c.position.set(i ? 0.05 * i : 0, i ? -0.04 * i : 0, -i * (depth + 0.026));
+    c.rotation.z = turn;
+    g.add(c);
+  });
+  if (crop) {
+    const e = engraving(crop, w, h, renderer);
+    e.position.z = depth / 2 + 0.012 + 0.004;
+    g.add(e);
+  }
+  g.rotation.set(-Math.PI / 2, 0, 0.3);
+  g.userData.viewDir = LOOK_DOWN;
+  return g;
+}
+
+/** The engagement tray: a floor, low walls and taller ends with cut-out handles; the design on the floor. */
+function laserTray(mats, crop, w, h, m, k, renderer) {
+  const [W, D] = (m.outerIn || [13.8, 9.84]).map((v) => v * k);
+  const t = (m.wallIn || 0.4) * Math.min(1, k);
+  const rim = (m.rimIn || 1.4) * k;
+  const floor = 0.25;
+  const g = new THREE.Group(); // built lying face up in +z (the floor is the x-y plane)
+  const f = new THREE.Mesh(new THREE.ExtrudeGeometry(roundedRect(W, D, 0.2), { depth: floor, bevelEnabled: false, curveSegments: 16 }), [mats.face, mats.edge]);
+  g.add(f);
+  // Long walls.
+  for (const s of [-1, 1]) {
+    const geo = new THREE.ExtrudeGeometry(roundedRect(W - 2 * t, rim, 0.05), { depth: t, bevelEnabled: false, curveSegments: 6 });
+    // Shape in x / z, thickness along -y (a rotation, so the faces still point outwards).
+    geo.applyMatrix4(new THREE.Matrix4().set(1, 0, 0, 0, 0, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, 1));
+    geo.translate(0, s > 0 ? D / 2 : -D / 2 + t, floor + rim / 2);
+    g.add(new THREE.Mesh(geo, [mats.face, mats.edge]));
+  }
+  // End walls: rise in a gentle hump with a rounded slot for the hands.
+  const endH = rim + (m.handles === false ? 0 : 1.25 * k);
+  const end = new THREE.Shape();
+  end.moveTo(-D / 2, 0);
+  end.lineTo(D / 2, 0);
+  end.lineTo(D / 2, rim);
+  if (m.handles === false) end.lineTo(-D / 2, rim);
+  else {
+    end.bezierCurveTo(D * 0.36, rim, D * 0.3, endH, D * 0.16, endH);
+    end.lineTo(-D * 0.16, endH);
+    end.bezierCurveTo(-D * 0.3, endH, -D * 0.36, rim, -D / 2, rim);
+    const sw = Math.min(3.8 * k, D * 0.38);
+    const sh = 0.8 * k;
+    const cy = endH - 0.3 * k - sh / 2;
+    const hole = new THREE.Path();
+    hole.moveTo(-sw / 2 + sh / 2, cy - sh / 2);
+    hole.lineTo(sw / 2 - sh / 2, cy - sh / 2);
+    hole.absarc(sw / 2 - sh / 2, cy, sh / 2, -Math.PI / 2, Math.PI / 2, false);
+    hole.lineTo(-sw / 2 + sh / 2, cy + sh / 2);
+    hole.absarc(-sw / 2 + sh / 2, cy, sh / 2, Math.PI / 2, Math.PI * 1.5, false);
+    end.holes.push(hole);
+  }
+  end.lineTo(-D / 2, 0);
+  for (const s of [-1, 1]) {
+    const geo = new THREE.ExtrudeGeometry(end, { depth: t, bevelEnabled: false, curveSegments: 24 });
+    // Shape (u, v) -> (y, z), thickness along x.
+    geo.applyMatrix4(new THREE.Matrix4().set(0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1));
+    geo.translate(s > 0 ? W / 2 - t : -W / 2, 0, floor);
+    g.add(new THREE.Mesh(geo, [mats.face, mats.edge]));
+  }
+  if (crop) {
+    const e = engraving(crop, w, h, renderer);
+    e.position.z = floor + 0.004;
+    g.add(e);
+  }
+  g.rotation.set(-Math.PI / 2, 0, 0.12);
+  g.userData.viewDir = LOOK_DOWN;
+  return g;
+}
+
+/** A soft placeholder photo for the frame's window. */
+function placeholderPhoto(renderer, w, h) {
+  const c = canvas(512, Math.round((512 * h) / w));
+  const ctx = c.getContext('2d');
+  const W = c.width;
+  const H = c.height;
+  const sky = ctx.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0, '#a9c4d8');
+  sky.addColorStop(0.6, '#e9ddd0');
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#f6efe4';
+  ctx.beginPath();
+  ctx.arc(W * 0.68, H * 0.3, W * 0.09, 0, Math.PI * 2);
+  ctx.fill();
+  const hill = (y, amp, col) => {
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.moveTo(0, H);
+    for (let x = 0; x <= W; x += 8) ctx.lineTo(x, y + amp * Math.sin((x / W) * Math.PI * 1.6 + y));
+    ctx.lineTo(W, H);
+    ctx.fill();
+  };
+  hill(H * 0.62, H * 0.05, '#93ab9a');
+  hill(H * 0.74, H * 0.04, '#728f7b');
+  // Two figures, the way a couple's photo would be.
+  ctx.fillStyle = '#4f5d62';
+  for (const [x, s] of [[0.42, 1], [0.56, 0.92]]) {
+    ctx.beginPath();
+    ctx.arc(W * x, H * (0.6 - 0.12 * s), W * 0.05 * s, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(W * x, H * 0.82, W * 0.1 * s, H * 0.22 * s, 0, Math.PI, 0);
+    ctx.fill();
+  }
+  return texture(c, renderer);
+}
+
+/** The photo frame: a front board with the window, the photo behind it, a back and a stand; the design on the wide bottom. */
+function laserFrame(mats, crop, w, h, m, k, renderer) {
+  const [W, H] = (m.outerIn || [8.66, 11.4]).map((v) => v * k);
+  const [ww, wh] = (m.windowIn || [5.12, 7.09]).map((v) => v * k);
+  const top = (m.windowTopIn || 0.9) * k;
+  const D = m.depthIn || 0.6;
+  const front = D * 0.4;
+  const mid = D * 0.2;
+  const backT = D - front - mid;
+  const wy = H / 2 - top - wh / 2; // the window's centre
+  const g = new THREE.Group();
+  const outline = () => roundedRect(W, H, 0.08 * k);
+  const rectHole = (rw, rh, cy) => {
+    const p = new THREE.Path();
+    p.moveTo(-rw / 2, cy - rh / 2);
+    p.lineTo(-rw / 2, cy + rh / 2);
+    p.lineTo(rw / 2, cy + rh / 2);
+    p.lineTo(rw / 2, cy - rh / 2);
+    p.lineTo(-rw / 2, cy - rh / 2);
+    return p;
+  };
+  const fs = outline();
+  fs.holes.push(rectHole(ww, wh, wy));
+  const fb = cutSheet(fs, front, mats);
+  fb.position.z = mid + front / 2;
+  const ms = outline();
+  ms.holes.push(rectHole(ww + 0.6 * k, wh + 0.6 * k, wy));
+  const mb = cutSheet(ms, mid, mats);
+  mb.position.z = mid / 2;
+  const bb = cutSheet(outline(), backT, mats);
+  bb.position.z = -backT / 2;
+  const photo = new THREE.Mesh(new THREE.PlaneGeometry(ww + 0.5 * k, wh + 0.5 * k), new THREE.MeshStandardMaterial({ map: placeholderPhoto(renderer, ww, wh), roughness: 0.5, metalness: 0, envMapIntensity: 0.4 }));
+  photo.position.set(0, wy, 0.03);
+  g.add(fb, mb, bb, photo);
+  // The stand behind: a strut from the back down to the table.
+  const sh = H * 0.62;
+  g.add(beam(new THREE.Vector3(0, -H / 2 + sh, -backT - 0.1), new THREE.Vector3(0, -H / 2 + 0.06, -backT - H * 0.36), 1.2 * k, 0.2, mats.face));
+  if (crop) {
+    // The design sits in the middle of the band under the window.
+    const bandTop = wy - wh / 2;
+    const e = engraving(crop, w, h, renderer);
+    e.position.set(0, (bandTop + -H / 2) / 2, mid + front + 0.004);
+    g.add(e);
+  }
+  g.rotation.y = -0.3;
+  return g;
+}
+
+/** Stitches along a path: short thread dashes, `pitch` apart, on a face at z. */
+function stitches(path, z, pitch, colorHex) {
+  const len = path.getLength();
+  const n = Math.max(2, Math.round(len / pitch));
+  const pts = path.getSpacedPoints(n * 2);
+  const geo = new THREE.BoxGeometry(1, 0.022, 0.012);
+  const mesh = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.7, metalness: 0 }), n);
+  const o = new THREE.Object3D();
+  let count = 0;
+  for (let i = 0; i + 1 < pts.length && count < n; i += 2) {
+    const a = pts[i];
+    const b = pts[i + 1];
+    o.position.set((a.x + b.x) / 2, (a.y + b.y) / 2, z);
+    o.rotation.set(0, 0, Math.atan2(b.y - a.y, b.x - a.x));
+    o.scale.set(Math.max(0.01, a.distanceTo(b) * 0.85), 1, 1);
+    o.updateMatrix();
+    mesh.setMatrixAt(count++, o.matrix);
+  }
+  mesh.count = count;
+  return mesh;
+}
+/** A business card sticking out of the holder. */
+function cardFace(renderer) {
+  const c = canvas(420, 240);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#f7f6f2';
+  ctx.fillRect(0, 0, c.width, c.height);
+  ctx.fillStyle = '#2f3a45';
+  ctx.fillRect(28, 26, 150, 16);
+  ctx.fillStyle = '#9aa3ab';
+  ctx.fillRect(28, 52, 100, 9);
+  ctx.fillStyle = '#c33d3d';
+  ctx.fillRect(c.width - 64, 24, 36, 36);
+  return texture(c, renderer);
+}
+/** A slim leather card holder: back panel, a business card, the front pocket with a thumb cut, stitching. */
+function laserCardholder(mats, crop, w, h, m, k, renderer, color) {
+  const [W, H] = m.outerIn || [3.94, 2.76];
+  const D = m.depthIn || 0.18;
+  const layer = D * 0.38;
+  const r = 0.26;
+  const g = new THREE.Group();
+  const back = cutSheet(roundedRect(W, H, r), layer, mats, 0.008);
+  back.position.z = -D / 2 + layer / 2;
+  // Front pocket: lower than the back, with a semicircle thumb cut in its top edge.
+  const pocketTop = H / 2 - 0.36;
+  const thumb = 0.42;
+  const fs = new THREE.Shape();
+  fs.moveTo(-W / 2, pocketTop);
+  fs.lineTo(-W / 2, -H / 2 + r);
+  fs.quadraticCurveTo(-W / 2, -H / 2, -W / 2 + r, -H / 2);
+  fs.lineTo(W / 2 - r, -H / 2);
+  fs.quadraticCurveTo(W / 2, -H / 2, W / 2, -H / 2 + r);
+  fs.lineTo(W / 2, pocketTop);
+  fs.lineTo(thumb, pocketTop);
+  fs.absarc(0, pocketTop, thumb, 0, Math.PI, true);
+  fs.lineTo(-W / 2, pocketTop);
+  const front = cutSheet(fs, layer, mats, 0.008);
+  front.position.z = D / 2 - layer / 2;
+  // The card: 3.5 x 2 in, its top 0.4 in above the holder.
+  const cw = 3.5;
+  const ch = 2;
+  const card = new THREE.Mesh(new THREE.ExtrudeGeometry(roundedRect(cw, ch, 0.08), { depth: 0.016, bevelEnabled: false, curveSegments: 8 }), [mat('paper', { map: (() => { const tx = cardFace(renderer); tx.repeat.set(1 / cw, 1 / ch); tx.offset.set(0.5, 0.5); return tx; })() }), mat('paper', { color: '#f2f1ec' })]);
+  card.position.set(0, H / 2 + 0.4 - ch / 2, -0.008);
+  g.add(back, front, card);
+  const thread = color.id === 'black' ? '#77726c' : '#efe4cc';
+  const inset = 0.1;
+  const ri = r - inset;
+  const u = new THREE.Path();
+  u.moveTo(-W / 2 + inset, pocketTop - inset);
+  u.lineTo(-W / 2 + inset, -H / 2 + inset + ri);
+  u.absarc(-W / 2 + inset + ri, -H / 2 + inset + ri, ri, Math.PI, Math.PI * 1.5, false);
+  u.lineTo(W / 2 - inset - ri, -H / 2 + inset);
+  u.absarc(W / 2 - inset - ri, -H / 2 + inset + ri, ri, Math.PI * 1.5, Math.PI * 2, false);
+  u.lineTo(W / 2 - inset, pocketTop - inset);
+  g.add(stitches(u, D / 2 + 0.012, 0.11, thread));
+  const all = new THREE.Path();
+  const ar = roundedRect(W - 2 * inset, H - 2 * inset, ri).getPoints(12);
+  all.setFromPoints(ar.concat([ar[0]]));
+  g.add(stitches(all, -D / 2 - 0.012, 0.11, thread));
+  if (crop) {
+    const e = engraving(crop, w, h, renderer);
+    e.position.set(0, (pocketTop + -H / 2) / 2 - 0.05, D / 2 + 0.012);
+    g.add(e);
+  }
+  g.rotation.set(-Math.PI / 2, 0, 0.18);
+  g.userData.viewDir = LOOK_DOWN;
+  return g;
+}
+
+// --- Cut pieces: the design's own outline ---
+let traceLoading = null;
+/** The outline tracer (public/js/trace.js), loaded once when first needed. */
+function loadTrace() {
+  if (window.POD_TRACE) return Promise.resolve(window.POD_TRACE);
+  if (!traceLoading) {
+    traceLoading = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = '/js/trace.js';
+      s.async = true;
+      s.onload = () => (window.POD_TRACE ? resolve(window.POD_TRACE) : reject(new Error('trace.js did not load')));
+      s.onerror = () => reject(new Error('trace.js did not load'));
+      document.head.appendChild(s);
+    }).catch((e) => {
+      traceLoading = null;
+      throw e;
+    });
+  }
+  return traceLoading;
+}
+function traceFailed(e) {
+  console.warn('3D preview: could not trace the design', e);
+  return null;
+}
+function polyArea(pts) {
+  let a = 0;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) a += pts[j].x * pts[i].y - pts[i].x * pts[j].y;
+  return a / 2;
+}
+function inside(p, pts) {
+  let c = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const a = pts[i];
+    const b = pts[j];
+    if ((a.y > p.y) !== (b.y > p.y) && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) c = !c;
+  }
+  return c;
+}
+/**
+ * Even out the pixel steps a traced outline keeps on slopes and curves (they
+ * show as stripes on a shiny cut edge), keeping real corners: sharp turns
+ * between two long sides. `px` is one pixel in the outline's units.
+ */
+function smoothOutline(pts, px) {
+  const n = pts.length;
+  if (n < 5) return pts;
+  // A corner: the outline turns sharply when looked at 4 px either side.
+  const reach = 4 * px;
+  const far = (i, step) => {
+    let j = i;
+    for (let k = 0; k < n - 1; k++) {
+      j = (j + step + n) % n;
+      if (pts[j].distanceTo(pts[i]) >= reach) break;
+    }
+    return pts[j];
+  };
+  const corner = pts.map((p, i) => {
+    const a = far(i, -1);
+    const b = far(i, 1);
+    const ax = p.x - a.x;
+    const ay = p.y - a.y;
+    const bx = b.x - p.x;
+    const by = b.y - p.y;
+    return (ax * bx + ay * by) / (Math.hypot(ax, ay) * Math.hypot(bx, by) || 1) < Math.cos(0.85);
+  });
+  const next = pts.map((p) => p.clone());
+  for (let pass = 0; pass < 3; pass++) {
+    for (let i = 0; i < n; i++) {
+      if (corner[i]) continue;
+      const a = pts[(i + n - 1) % n];
+      const b = pts[(i + 1) % n];
+      next[i].set(pts[i].x * 0.5 + (a.x + b.x) * 0.25, pts[i].y * 0.5 + (a.y + b.y) * 0.25);
+    }
+    for (let i = 0; i < n; i++) pts[i].copy(next[i]);
+  }
+  return pts;
+}
+/**
+ * The design's outline in inches (centred on the print area, y up): contours
+ * nested by containment (even depth = solid, odd = a hole), plus the
+ * downsampled alpha for finding edges. Null when the design is empty.
+ */
+async function designOutline(crop, wIn) {
+  if (!crop) return null;
+  const sc = Math.min(1, 600 / Math.max(crop.width, crop.height));
+  const cw = Math.max(2, Math.round(crop.width * sc));
+  const ch = Math.max(2, Math.round(crop.height * sc));
+  const c = canvas(cw, ch);
+  const ctx = c.getContext('2d');
+  ctx.drawImage(crop, 0, 0, cw, ch);
+  const data = ctx.getImageData(0, 0, cw, ch).data;
+  const alpha = new Uint8Array(cw * ch);
+  let any = false;
+  for (let i = 0; i < alpha.length; i++) {
+    alpha[i] = data[i * 4 + 3];
+    if (alpha[i] >= 128) any = true;
+  }
+  if (!any) return null;
+  const T = await loadTrace();
+  const res = T.trace(alpha, cw, ch, { threshold: 128, simplify: 1 });
+  const s = wIn / cw; // inches per pixel
+  const list = [];
+  for (const ct of (res && res.contours) || []) {
+    const pts = [];
+    for (const pt of ct.points || []) {
+      const x = Array.isArray(pt) ? pt[0] : pt.x;
+      const y = Array.isArray(pt) ? pt[1] : pt.y;
+      const v = new THREE.Vector2((x - cw / 2) * s, (ch / 2 - y) * s);
+      const last = pts[pts.length - 1];
+      if (!last || last.distanceToSquared(v) > 1e-10) pts.push(v);
+    }
+    if (pts.length > 2 && pts[0].distanceToSquared(pts[pts.length - 1]) < 1e-10) pts.pop();
+    smoothOutline(pts, s);
+    const area = Math.abs(polyArea(pts));
+    if (pts.length < 3 || area < 4 * s * s) continue; // specks
+    list.push({ pts, area, parent: null, depth: 0, children: [] });
+  }
+  if (!list.length) return null;
+  // Nesting: each contour's parent is the smallest bigger contour around it.
+  for (const a of list) {
+    const probes = [0, 0.33, 0.66].map((f) => {
+      const i = Math.floor(f * a.pts.length);
+      const p = a.pts[i];
+      const q = a.pts[(i + 1) % a.pts.length];
+      return new THREE.Vector2((p.x + q.x) / 2, (p.y + q.y) / 2);
+    });
+    for (const b of list) {
+      if (b === a || b.area <= a.area) continue;
+      if (probes.filter((p) => inside(p, b.pts)).length >= 2 && (!a.parent || b.area < a.parent.area)) a.parent = b;
+    }
+  }
+  for (const a of list) {
+    for (let p = a.parent; p; p = p.parent) a.depth++;
+    if (a.parent) a.parent.children.push(a);
+  }
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const a of list) {
+    if (a.depth) continue;
+    for (const p of a.pts) {
+      minX = Math.min(minX, p.x);
+      maxX = Math.max(maxX, p.x);
+      minY = Math.min(minY, p.y);
+      maxY = Math.max(maxY, p.y);
+    }
+  }
+  return { list, s, cw, ch, alpha, box: { minX, minY, maxX, maxY } };
+}
+/** THREE shapes for the solid parts (even depth), each with its holes. */
+function solidShapes(contours) {
+  return contours.filter((c) => c.depth % 2 === 0).map((c) => {
+    const sh = new THREE.Shape(c.pts);
+    for (const h of c.children) sh.holes.push(new THREE.Path(h.pts));
+    return sh;
+  });
+}
+/**
+ * Smooth the shading of an extrusion's cut edge where neighbouring wall faces
+ * meet at a shallow angle (a traced outline's many short segments), keeping
+ * real corners sharp.
+ */
+function creaseEdges(geo, maxAngle = 0.6) {
+  const grp = geo.groups.find((gr) => gr.materialIndex === 1);
+  if (!grp) return geo;
+  const pos = geo.attributes.position;
+  const nrm = geo.attributes.normal;
+  const orig = nrm.array.slice();
+  const key = (i) => `${Math.round(pos.getX(i) * 1e4)},${Math.round(pos.getY(i) * 1e4)},${Math.round(pos.getZ(i) * 1e4)}`;
+  const at = new Map();
+  const end = Math.min(pos.count, grp.start + grp.count);
+  for (let i = grp.start; i < end; i++) {
+    const k = key(i);
+    if (!at.has(k)) at.set(k, []);
+    at.get(k).push(i);
+  }
+  const cos = Math.cos(maxAngle);
+  const n = new THREE.Vector3();
+  for (let i = grp.start; i < end; i++) {
+    const [ax, ay, az] = [orig[i * 3], orig[i * 3 + 1], orig[i * 3 + 2]];
+    n.set(0, 0, 0);
+    for (const j of at.get(key(i))) {
+      const [bx, by, bz] = [orig[j * 3], orig[j * 3 + 1], orig[j * 3 + 2]];
+      if (ax * bx + ay * by + az * bz >= cos) n.add(new THREE.Vector3(bx, by, bz));
+    }
+    n.normalize();
+    nrm.setXYZ(i, n.x, n.y, n.z);
+  }
+  nrm.needsUpdate = true;
+  return geo;
+}
+function extrudeShapes(shapes, depth, mats) {
+  const geo = creaseEdges(new THREE.ExtrudeGeometry(shapes, { depth, bevelEnabled: false, curveSegments: 1 }));
+  geo.translate(0, 0, -depth / 2);
+  return new THREE.Mesh(geo, [mats.face, mats.edge]);
+}
+/**
+ * Where a stick can join the piece near column x (inches): the column whose
+ * solid part reaches lowest, the y of that bottom and how far up it stays solid.
+ */
+function stickSpot(o, xIn) {
+  const col = Math.round(xIn / o.s + o.cw / 2);
+  const span = Math.max(2, Math.round(o.cw * 0.08));
+  let best = null;
+  for (let x = Math.max(0, col - span); x <= Math.min(o.cw - 1, col + span); x++) {
+    let y = o.ch - 1;
+    while (y >= 0 && o.alpha[y * o.cw + x] < 128) y--;
+    if (y < 0) continue;
+    let run = 0;
+    while (y - run >= 0 && o.alpha[(y - run) * o.cw + x] >= 128) run++;
+    const score = y * 4 - Math.abs(x - col); // lowest first, then nearest
+    if (!best || score > best.score) best = { score, x, y, run };
+  }
+  if (!best) return null;
+  return { x: (best.x + 0.5 - o.cw / 2) * o.s, y: (o.ch / 2 - best.y - 1) * o.s, run: best.run * o.s };
+}
+/** The highest solid point near the middle (for the hanging loop). */
+function topPoint(o) {
+  const cx = Math.round(((o.box.minX + o.box.maxX) / 2) / o.s + o.cw / 2);
+  const span = Math.max(3, Math.round(o.cw * 0.12));
+  let best = { y: o.ch, x: cx };
+  for (let x = Math.max(0, cx - span); x <= Math.min(o.cw - 1, cx + span); x++) {
+    for (let y = 0; y < best.y; y++) {
+      if (o.alpha[y * o.cw + x] >= 128) {
+        if (y < best.y || (y === best.y && Math.abs(x - cx) < Math.abs(best.x - cx))) best = { x, y };
+        break;
+      }
+    }
+  }
+  if (best.y >= o.ch) return { x: (o.box.minX + o.box.maxX) / 2, y: o.box.maxY };
+  return { x: (best.x + 0.5 - o.cw / 2) * o.s, y: (o.ch / 2 - best.y) * o.s };
+}
+
+/** A simple round cake on a plate, its top at y = 0. */
+function cake(radius) {
+  const g = new THREE.Group();
+  const hgt = Math.max(3.2, radius * 0.85);
+  const fondant = new THREE.MeshPhysicalMaterial({ color: '#f6dde5', roughness: 0.6, metalness: 0, sheen: 0.4, sheenColor: new THREE.Color('#ffffff'), envMapIntensity: 0.5 });
+  const cream = new THREE.MeshStandardMaterial({ color: '#fcf1f4', roughness: 0.55, metalness: 0, envMapIntensity: 0.5 });
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, hgt, 96), fondant);
+  body.position.y = -hgt / 2;
+  const pipe = (y, r, tube) => {
+    const t = new THREE.Mesh(new THREE.TorusGeometry(r, tube, 12, 96), cream);
+    t.rotation.x = Math.PI / 2;
+    t.position.y = y;
+    return t;
+  };
+  // Pearls round the top edge and a piped border at the bottom.
+  const pearls = new THREE.InstancedMesh(new THREE.SphereGeometry(0.2, 12, 8), cream, 64);
+  const o = new THREE.Object3D();
+  for (let i = 0; i < 64; i++) {
+    const a = (i / 64) * Math.PI * 2;
+    o.position.set(Math.cos(a) * (radius - 0.05), 0.02, Math.sin(a) * (radius - 0.05));
+    o.updateMatrix();
+    pearls.setMatrixAt(i, o.matrix);
+  }
+  const plate = new THREE.Mesh(new THREE.CylinderGeometry(radius + 1.3, radius + 1.1, 0.25, 96), new THREE.MeshPhysicalMaterial({ color: '#fbfbfa', roughness: 0.15, clearcoat: 1, metalness: 0 }));
+  plate.position.y = -hgt - 0.125;
+  g.add(body, pearls, pipe(-hgt + 0.2, radius + 0.04, 0.22), plate);
+  return g;
+}
+
+/**
+ * Cut pieces (cake toppers, hanging decorations): the design's outline cut
+ * out of the sheet, standing on a cake or hanging on a string.
+ */
+async function laserCutout(mats, crop, w, h, m, renderer) {
+  const depth = m.depthIn || 0.12;
+  const o = await designOutline(crop, w).catch(traceFailed);
+  const g = new THREE.Group();
+  let piece;
+  let box;
+  if (o) {
+    piece = extrudeShapes(solidShapes(o.list), depth, mats);
+    box = o.box;
+  } else {
+    // Nothing designed yet: a plain blank of the material.
+    piece = cutSheet(roundedRect(w * 0.8, h * 0.5, 0.3), depth, mats);
+    box = { minX: -w * 0.4, maxX: w * 0.4, minY: -h * 0.25, maxY: h * 0.25 };
+  }
+  const bw = box.maxX - box.minX;
+  if (m.scene === 'cake') {
+    // Stood on the cake on two sticks cut with it, pushed in.
+    const R = Math.max(3, Math.min(5.5, bw * 0.6));
+    const lift = 1.5;
+    piece.position.y = -box.minY + lift;
+    const stickW = Math.max(0.16, Math.min(0.26, bw * 0.03));
+    for (const f of [0.28, 0.72]) {
+      const spot = (o && stickSpot(o, box.minX + bw * f)) || { x: box.minX + bw * f, y: box.minY, run: 0.3 };
+      // Joined a little way up into the piece (no further than it stays solid).
+      const y0 = spot.y - box.minY + lift + Math.max(0.02, Math.min(0.3, spot.run - 0.02));
+      const st = new THREE.Mesh(new THREE.BoxGeometry(stickW, y0 + 1.6, depth * 0.96), mats.face);
+      st.position.set(spot.x, (y0 - 1.6) / 2, 0);
+      g.add(st);
+    }
+    g.add(piece, cake(R));
+    g.rotation.y = -0.25;
+    return g;
+  }
+  g.add(piece);
+  if (m.hang) {
+    // A small ring through the top and a cord up to where it hangs.
+    const top = o ? topPoint(o) : { x: 0, y: box.maxY };
+    const ringR = Math.max(0.16, bw * 0.02);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(ringR, 0.03, 10, 32), new THREE.MeshStandardMaterial({ color: '#c8a456', metalness: 1, roughness: 0.25 }));
+    ring.rotation.y = Math.PI / 2;
+    ring.position.set(top.x, top.y + ringR * 0.55, 0);
+    const len = Math.max(3, (box.maxY - box.minY) * 0.45);
+    const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, len, 8), new THREE.MeshStandardMaterial({ color: '#b39a6a', roughness: 0.8, metalness: 0 }));
+    cord.position.set(top.x, top.y + ringR * 1.5 + len / 2, 0);
+    g.add(ring, cord);
+  }
+  g.rotation.y = -0.3;
+  return g;
+}
+
+/** The name puzzle: a board with the letters as thick pieces in matching holes, one lifted out. */
+async function laserPuzzle(color, crop, w, h, m, renderer) {
+  const T = m.depthIn || 0.35;
+  const baseT = 0.12;
+  const board = laserMats('wood', color.hex, renderer, false);
+  const o = await designOutline(crop, w).catch(traceFailed);
+  const g = new THREE.Group(); // built face up in +z
+  const margin = 0.3;
+  const outer = () => roundedRect(w + 2 * margin, h + 2 * margin, 0.3);
+  const base = cutSheet(outer(), baseT, board);
+  base.position.z = -baseT / 2;
+  g.add(base);
+  const topShape = outer();
+  if (o) for (const c of o.list) if (c.depth === 0) topShape.holes.push(new THREE.Path(c.pts));
+  const top = cutSheet(topShape, T, board);
+  top.position.z = T / 2;
+  g.add(top);
+  if (o) {
+    // Islands of the board inside the letters (the middle of an O or A).
+    const islands = o.list.filter((c) => c.depth % 2 === 1).map((c) => {
+      const sh = new THREE.Shape(c.pts);
+      for (const ch of c.children) sh.holes.push(new THREE.Path(ch.pts));
+      return sh;
+    });
+    if (islands.length) {
+      const isl = extrudeShapes(islands, T, board);
+      isl.position.z = T / 2;
+      g.add(isl);
+    }
+    const palette = ['#e03131', '#f08c00', '#fab005', '#2f9e44', '#1c7ed6', '#7048e8', '#e64980', '#0ca678'];
+    const paint = (hex) => {
+      const p = new THREE.MeshStandardMaterial({ color: hex, roughness: 0.45, metalness: 0, envMapIntensity: 0.55 });
+      return { face: p, edge: p };
+    };
+    const lettersWood = color.id === 'natural' ? laserMats('wood', color.ink || color.hex, renderer, false) : null;
+    const centreX = (c) => c.pts.reduce((sum, p) => sum + p.x, 0) / c.pts.length;
+    const pieces = o.list.filter((c) => c.depth % 2 === 0).sort((a, b) => centreX(a) - centreX(b));
+    // The piece lifted out: the rightmost of the big ones (not a dot).
+    const biggest = Math.max(...pieces.map((c) => c.area));
+    let lifted = -1;
+    if (pieces.length > 1) pieces.forEach((c, i) => { if (c.area >= biggest * 0.4) lifted = i; });
+    pieces.forEach((c, i) => {
+      const sh = new THREE.Shape(c.pts);
+      for (const hl of c.children) sh.holes.push(new THREE.Path(hl.pts));
+      const mats = lettersWood || paint(color.id === 'rainbow' ? palette[i % palette.length] : color.ink || color.hex);
+      const lt = T - 0.03;
+      const piece = extrudeShapes([sh], lt, mats);
+      piece.position.z = lt / 2 + 0.001;
+      if (i === lifted) {
+        // Lifted up and tilted, as if a child just picked it out.
+        let cx = 0;
+        let cy = 0;
+        for (const p of c.pts) { cx += p.x; cy += p.y; }
+        cx /= c.pts.length;
+        cy /= c.pts.length;
+        const pivot = new THREE.Group();
+        pivot.position.set(cx, cy, T * 2.2);
+        piece.position.set(-cx, -cy, 0);
+        pivot.rotation.set(0.28, -0.22, 0.08);
+        pivot.add(piece);
+        g.add(pivot);
+      } else g.add(piece);
+    });
+  }
+  g.rotation.set(-Math.PI / 2, 0, 0.1);
+  g.userData.viewDir = LOOK_DOWN;
+  return g;
+}
+
+/** Every laser product (engraved or cut); cut ones come back as a promise (the outline is traced). */
+function buildLaser(m, color, tex, renderer, product) {
+  const side = product.sides[0];
+  const t = tex[side.id];
+  const { w, h, k } = printSize(side, t);
+  const look = laserLook(color, product);
+  const painted = look === 'wood' && color.id === 'white';
+  const crop = designCrop(t);
+  if (m.type === 'puzzle') return laserPuzzle(color, crop, w, h, m, renderer);
+  const mats = look === 'clear' ? null : laserMats(look, color.hex, renderer, painted);
+  if (m.type === 'cutout') return laserCutout(mats || laserMats('acrylic', color.hex, renderer), crop, w, h, m, renderer);
+  if (m.type === 'pad') return laserCoasters(mats, crop, w, h, m, renderer);
+  if (m.type === 'tray') return laserTray(mats, crop, w, h, m, k, renderer);
+  if (m.type === 'frame') return laserFrame(mats, crop, w, h, m, k, renderer);
+  if (m.type === 'cardholder') return laserCardholder(mats, crop, w, h, m, k, renderer, color);
+  return laserBlock(look, mats, crop, w, h, m, renderer);
+}
+
 function contactShadow(width, y) {
   const c = canvas(256, 256);
   const ctx = c.getContext('2d');
@@ -902,7 +1890,9 @@ export function mount(container, { product, color, textures, spin = true }) {
   const m = product.model;
   const hex = color.hex;
   let obj;
-  if (m.type === 'mug' && product.sides.length > 1) {
+  // Laser products (cut ones come back as a promise: their outline is traced first).
+  if (m.material === 'laser' || product.laser) obj = buildLaser(m, color, textures, renderer, product);
+  else if (m.type === 'mug' && product.sides.length > 1) {
     // A set of mugs (couple mugs): one per side, side by side.
     obj = new THREE.Group();
     product.sides.forEach((sd, i) => {
@@ -923,21 +1913,14 @@ export function mount(container, { product, color, textures, spin = true }) {
   else if (m.type === 'notebook') obj = buildNotebook(hex, textures, renderer, product);
   else if (m.type === 'pillow') obj = buildPillow(m, hex, textures, renderer, product);
   else obj = buildCard(hex, textures, renderer, product);
-  scene.add(obj);
-
-  const box = new THREE.Box3().setFromObject(obj);
-  const size = box.getSize(new THREE.Vector3());
-  const center = box.getCenter(new THREE.Vector3());
-  obj.position.sub(center);
-  scene.add(contactShadow(Math.max(size.x, size.z) * 1.6, -size.y / 2 - 0.05));
 
   // Fit the whole product in view on any screen shape (phones are narrow, so
   // the horizontal field of view often decides), and keep the depth range
   // tight: many phones have a 16-bit depth buffer, and a wide near/far range
   // makes nearby surfaces flicker into stripes (z-fighting).
-  const radius = Math.max(size.x, size.y, size.z) * 0.62;
+  let radius = 1;
   const camera = new THREE.PerspectiveCamera(32, 1, 1, 100);
-  const viewDir = new THREE.Vector3(0.18, 0.16, 0.97).normalize();
+  let viewDir = new THREE.Vector3(0.18, 0.16, 0.97).normalize();
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.enablePan = false;
@@ -968,11 +1951,32 @@ export function mount(container, { product, color, textures, spin = true }) {
     camera.updateProjectionMatrix();
     controls.update();
   };
+  let disposed = false;
+  const place = (o) => {
+    if (disposed || !o) return;
+    scene.add(o);
+    const box = new THREE.Box3().setFromObject(o);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    o.position.sub(center);
+    scene.add(contactShadow(Math.max(size.x, size.z) * 1.6, -size.y / 2 - 0.05));
+    radius = Math.max(size.x, size.y, size.z) * 0.62;
+    if (o.userData.viewDir) viewDir = o.userData.viewDir;
+    fitted = 0;
+    resize();
+  };
   const ro = new ResizeObserver(resize);
   ro.observe(container);
-  resize();
+  let ready;
+  if (obj && typeof obj.then === 'function') {
+    resize();
+    ready = obj.then(place, (e) => console.warn('3D preview:', e));
+  } else {
+    place(obj);
+    ready = Promise.resolve();
+  }
 
-  container.__pod3d = { camera, controls }; // for tests and debugging
+  container.__pod3d = { camera, controls, ready }; // for tests and debugging
   let raf = 0;
   const loop = () => {
     raf = requestAnimationFrame(loop);
@@ -990,6 +1994,7 @@ export function mount(container, { product, color, textures, spin = true }) {
       return new Promise((resolve) => renderer.domElement.toBlob(resolve, 'image/png'));
     },
     dispose() {
+      disposed = true;
       cancelAnimationFrame(raf);
       ro.disconnect();
       controls.dispose();

@@ -581,5 +581,50 @@
   });
   fabric.Image.filters.Engrave.fromObject = fabric.Image.filters.BaseFilter.fromObject;
 
-  window.POD_FX = { maskPath, roundRectPath, removeBackground, fontFaceCss };
+  /**
+   * Laser products: an element drawn in the material's one tone (`ink`), as the
+   * laser makes it: no colours, shadows or boxes behind words; photos through
+   * the Engrave filter; for cut pieces (`bridge` > 0, in canvas units) text gets
+   * an outline of the same tone (at most `bridge`) so its letters (and Arabic dots) join up.
+   */
+  const solidPaint = (v) => v != null && v !== '' && v !== 'transparent' && v !== 'none' && !(typeof v === 'string' && /^rgba?\([^)]*,\s*0(\.0+)?\s*\)$/.test(v));
+  const isTextObj = (x) => x && (x.type === 'i-text' || x.type === 'text' || x.type === 'textbox');
+  function laserTone(o, { ink, light = false, bridge = 0, images = true }) {
+    const paint = (x) => {
+      if (x.type === 'image') {
+        if (!images) return;
+        x.filters = [...(x.filters || []).filter((f) => f && !['Engrave', 'Grayscale', 'Sepia'].includes(f.type)), new fabric.Image.filters.Engrave({ ink, light })];
+        x.applyFilters();
+        if (x.maskBorderColor) x.set('maskBorderColor', ink);
+        return;
+      }
+      if (x.type === 'group' && x._objects) {
+        x._objects.forEach(paint);
+        return;
+      }
+      if (solidPaint(x.fill) || (x.fill && typeof x.fill === 'object')) x.set('fill', ink);
+      if (solidPaint(x.stroke) && x.strokeWidth) x.set('stroke', ink);
+      if (x.shadow) x.set('shadow', null);
+      // A box behind the words would be engraved (or cut) as one solid block, hiding them.
+      if (x.backgroundColor) x.set('backgroundColor', '');
+      if (x.textFx) x.set({ textFx: null, fxBase: null });
+      if (x.styles) {
+        for (const line of Object.values(x.styles)) for (const ch of Object.values(line || {})) {
+          delete ch.fill;
+          delete ch.stroke;
+          delete ch.textBackgroundColor;
+        }
+      }
+      // As thick as needed to join letters and dots, but thinner on small words so they stay readable.
+      if (bridge && isTextObj(x)) {
+        const w = Math.min(bridge, (x.fontSize || 40) * Math.abs((x.scaleY || 1) * ((o !== x && o.scaleY) || 1)) * 0.09);
+        x.set({ stroke: ink, strokeWidth: w, strokeUniform: true, paintFirst: 'stroke', strokeLineJoin: 'round' });
+      }
+      x.dirty = true;
+    };
+    paint(o);
+    o.dirty = true;
+  }
+
+  window.POD_FX = { laserTone, maskPath, roundRectPath, removeBackground, fontFaceCss };
 })();

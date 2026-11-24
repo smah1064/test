@@ -269,7 +269,6 @@
   const laser = () => st.product.laser || null;
   const inkOf = () => (color() && color().ink) || '#000000';
   const lightEngrave = () => POD.luminance(inkOf()) > POD.luminance((color() && color().hex) || '#ffffff');
-  const solidPaint = (v) => v != null && v !== '' && v !== 'transparent' && v !== 'none' && !(typeof v === 'string' && /^rgba?\([^)]*,\s*0(\.0+)?\s*\)$/.test(v));
   function engraveFilters(o) {
     const keep = (o.filters || []).filter((f) => f && !['Engrave', 'Grayscale', 'Sepia'].includes(f.type));
     return [...keep, new fabric.Image.filters.Engrave({ ink: inkOf(), light: lightEngrave() })];
@@ -277,40 +276,8 @@
   function laserTone(o, { images = true } = {}) {
     const L = laser();
     if (!L || !o || o.name === '__cropper') return;
-    const ink = inkOf();
-    const paint = (x) => {
-      if (x.type === 'image') {
-        if (!images) return;
-        x.filters = engraveFilters(x);
-        x.applyFilters();
-        if (x.maskBorderColor) x.set('maskBorderColor', ink);
-        return;
-      }
-      if (x.type === 'group' && x._objects) {
-        x._objects.forEach(paint);
-        return;
-      }
-      if (solidPaint(x.fill) || (x.fill && typeof x.fill === 'object')) x.set('fill', ink);
-      if (solidPaint(x.stroke) && x.strokeWidth) x.set('stroke', ink);
-      if (x.shadow) x.set('shadow', null);
-      // A box behind the words would be engraved (or cut) as one solid block, hiding them.
-      if (x.backgroundColor) x.set('backgroundColor', '');
-      if (x.textFx) x.set({ textFx: null, fxBase: null });
-      if (x.styles) {
-        for (const line of Object.values(x.styles)) for (const ch of Object.values(line || {})) {
-          delete ch.fill;
-          delete ch.stroke;
-          delete ch.textBackgroundColor;
-        }
-      }
-      if (L.kind === 'cut' && isText(x)) {
-        const sw = ((L.bridgeMm || 0) / 25.4) * rects().u;
-        x.set({ stroke: sw ? ink : null, strokeWidth: sw, strokeUniform: true, paintFirst: 'stroke', strokeLineJoin: 'round' });
-      }
-      x.dirty = true;
-    };
-    paint(o);
-    o.dirty = true;
+    const bridge = L.kind === 'cut' ? ((L.bridgeMm || 0) / 25.4) * rects().u : 0;
+    window.POD_FX.laserTone(o, { ink: inkOf(), light: lightEngrave(), bridge, images });
   }
   /** After the material changes: everything takes the new tone. */
   function retoneAll() {
@@ -1203,12 +1170,16 @@
   }
   async function renderTemplates() {
     const list = await loadTemplateList();
-    $('tpl-cats').innerHTML = tplState.cats.map((c) => `<button type="button" class="tpl-cat ${c.id === tplState.cat ? 'active' : ''}" data-tplcat="${esc(c.id)}" role="tab" aria-selected="${c.id === tplState.cat}">${esc(tr(c.name))}</button>`).join('');
+    // Only the subjects that have designs for this product (laser products have their own designs).
+    const fitsNow = list.filter((x) => !x.design || POD.designFor(x.design, st.product));
+    const cats = tplState.cats.filter((c) => c.id === 'all' || fitsNow.some((x) => x.cat === c.id));
+    if (!cats.some((c) => c.id === tplState.cat)) tplState.cat = 'all';
+    $('tpl-cats').innerHTML = cats.map((c) => `<button type="button" class="tpl-cat ${c.id === tplState.cat ? 'active' : ''}" data-tplcat="${esc(c.id)}" role="tab" aria-selected="${c.id === tplState.cat}">${esc(tr(c.name))}</button>`).join('');
     const words = normQ(tplState.q).split(/\s+/).filter(Boolean);
     const catNames = Object.fromEntries(tplState.cats.map((c) => [c.id, [c.name.en, c.name.ar]]));
     // Templates with {fields} (team business cards…) only where a name list can fill them.
     const fieldy = (x) => /\{[^{}"\\\n]{1,40}\}/.test(JSON.stringify((x.tpl && x.tpl.items) || (x.design && (x.design.items || x.design.objects)) || ''));
-    const shown = list.filter((x) => (st.product.merge || !fieldy(x)) && (tplState.cat === 'all' || x.cat === tplState.cat)
+    const shown = fitsNow.filter((x) => (st.product.merge || !fieldy(x)) && (tplState.cat === 'all' || x.cat === tplState.cat)
       && words.every((w) => [x.name.en, x.name.ar, ...(catNames[x.cat] || [])].some((n) => normQ(n).includes(w))));
     $('tpl-status').hidden = shown.length > 0;
     $('tpl-status').textContent = shown.length ? '' : t('lib.none');
@@ -1511,7 +1482,7 @@
     const words = norm(q).split(/\s+/).filter(Boolean);
     const hit = (names) => !words.length || words.every((w) => names.some((n) => norm(n).includes(w)));
     const tpls = D.TEMPLATES.filter((x) => hit([x.name.en, x.name.ar])).map((x) => ({ kind: 'tpl', id: 'tpl:' + x.id, tpl: x, name: x.name }));
-    const ready = lib.designs.filter((d) => hit([d.name.en, d.name.ar, d.category])).map((d) => ({ kind: 'ready', id: 'lib:' + d.id, design: d, name: d.name }));
+    const ready = lib.designs.filter((d) => POD.designFor(d, st.product) && hit([d.name.en, d.name.ar, d.category])).map((d) => ({ kind: 'ready', id: 'lib:' + d.id, design: d, name: d.name }));
     return [...ready, ...tpls];
   }
   async function libSearch(more) {

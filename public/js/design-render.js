@@ -92,6 +92,12 @@
     const sized = sizeId ? { ...side, printArea: POD.sizedArea(product, side, sizeId), printWidthIn: side.printWidthIn * k, ...(side.printHeightIn ? { printHeightIn: side.printHeightIn * k } : {}) } : side;
     const canvas = new fabric.StaticCanvas(null, { width: W, height: H, enableRetinaScaling: false, renderOnAddRemove: false });
     const objects = await placeDesign(design, product, sized, color.hex);
+    // Laser products: in the material's tone, cut text joined up (as the editor shows it).
+    if (product.laser) {
+      const ink = color.ink || '#000000';
+      const bridge = product.laser.kind === 'cut' ? ((product.laser.bridgeMm || 0) / 25.4) * rects(sized).u : 0;
+      objects.forEach((o) => window.POD_FX.laserTone(o, { ink, light: POD.luminance(ink) > POD.luminance(color.hex), bridge }));
+    }
     objects.forEach((o) => canvas.add(o));
     const pics = await background(product, side, color.hex); // the photo sits on the standard print area
     return { canvas, product, side: sized, color, objects, pics, R: rects(sized) };
