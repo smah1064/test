@@ -1559,7 +1559,7 @@ test('embroidery: DST encoding is exact, logos are digitised, orders get the DST
   assert.strictEqual(emb.method, 'embroidery');
   assert.ok(emb.emb && Array.isArray(emb.emb.colors), 'digitised when the design was saved');
   assert.ok(emb.emb.warnings.includes('empty'), 'the blank test print has nothing to stitch');
-  assert.strictEqual((await post('/api/designs', { productId: 'tshirt', color: 'white', size: 'M', method: 'embroidery', sides: { back: SIDE } })).status, 400, 'front only');
+  assert.strictEqual((await post('/api/designs', { productId: 'tshirt', color: 'white', size: 'M', method: 'embroidery', sides: { back: SIDE } })).status, 400, 'the stitched chest cannot be empty');
   // The embroidery box can be moved from the left chest, kept on the garment's printable zone; the shop gets the cm.
   const moved = await makeDesign({ productId: 'tshirt', color: 'white', size: 'M', method: 'embroidery', sides: { front: { editor: { ...SIDE.editor, offset: { dx: -40, dy: 30 } } } } });
   const mf = moved.sides.find((x) => x.id === 'front');
@@ -1577,6 +1577,28 @@ test('embroidery: DST encoding is exact, logos are digitised, orders get the DST
   assert.strictEqual(r.status, 200);
   assert.match(r.headers.get('content-disposition'), /embroidery\.dst/);
   assert.strictEqual((await admin(`/api/admin/files/${plain.id}/front?format=dst`)).status, 404);
+
+  // Embroidered chest with a printed back: the chest is stitched (DST), the back prints as usual (DTF film).
+  const both = await makeDesign({ productId: 'tshirt', color: 'white', size: 'M', method: 'embroidery', sides: { front: SIDE, back: SIDE } });
+  const tee = PRODUCTS_BY_ID.tshirt;
+  const plainBoth = await makeDesign({ productId: 'tshirt', color: 'white', size: 'M', sides: { front: SIDE, back: SIDE } });
+  assert.strictEqual(both.price, plainBoth.price + tee.embroidery.surcharge, 'two-sided price plus the embroidery');
+  assert.strictEqual(both.embSide, 'front');
+  const bf = both.sides.find((x) => x.id === 'front');
+  const bb = both.sides.find((x) => x.id === 'back');
+  assert.strictEqual(bf.process, 'embroidery');
+  assert.strictEqual(bf.widthIn, tee.embroidery.widthIn, 'the chest is the embroidery size');
+  assert.strictEqual(bb.process, tee.process, 'the back prints');
+  assert.strictEqual(bb.widthIn, tee.sides.find((x) => x.id === 'back').printWidthIn, 'the back is the full print size');
+  const proof = await (await fetch(`${base}/api/designs/${both.id}/proof`)).json();
+  assert.strictEqual(proof.embSide, 'front');
+  assert.deepStrictEqual(proof.sides.map((x) => x.process), ['embroidery', tee.process]);
+  const o2 = await (await post('/api/orders', { customer: CUSTOMER, designIds: [both.id] })).json();
+  const it2 = (await (await admin('/api/admin/orders')).json()).orders.find((o) => o.id === o2.id).items[0];
+  assert.deepStrictEqual(it2.sides.map((x) => x.process), ['embroidery', tee.process]);
+  assert.strictEqual((await admin(`/api/admin/files/${both.id}/front?format=dst`)).status, 200, 'stitches for the chest');
+  assert.strictEqual((await admin(`/api/admin/files/${both.id}/back?format=dst`)).status, 404, 'no stitches for the printed back');
+  assert.strictEqual((await admin(`/api/admin/files/${both.id}/back?format=png`)).status, 200, 'print file for the back');
 });
 
 test('a print file far too small for the product is refused', async () => {

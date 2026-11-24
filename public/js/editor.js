@@ -214,9 +214,10 @@
   if (params.get('method') === 'embroidery') st.method = 'embroidery';
   if (!st.product.embroidery) st.method = 'print';
   const emb = () => (st.method === 'embroidery' && st.product.embroidery) || null;
-  /** The sides that can carry a design now (embroidery: the front only). */
-  const activeSides = () => (emb() ? st.product.sides.filter((x) => x.id === emb().side) : st.product.sides);
-  if (emb() && !activeSides().some((x) => x.id === st.side)) st.side = emb().side;
+  /** The sides that can carry a design (with embroidery too: the chest is stitched, the other sides print as usual). */
+  const activeSides = () => st.product.sides;
+  /** Is this side embroidered (rather than printed)? */
+  const embHere = (id = st.side) => Boolean(emb() && emb().side === id);
 
   // On garments and bags the print area can be moved (st.offsets, in mockup units);
   // sideDef() gives the side with its print area where the customer put it.
@@ -396,18 +397,111 @@
     setZoom((st.zoom * want) / now);
     centerOnPrint();
   }
-  /** A print area that is small on screen: start zoomed in on it (⤢ shows the whole product). */
+  /**
+   * A print area that is small on screen: start a little closer to it, but
+   * not so close that the product round it is lost (at most 3x: the corner
+   * picture and ⤢ show the whole item).
+   */
   function autoFocusPrint() {
     const stage = $('stage');
     const a = area();
     const vt = canvas.viewportTransform;
-    if (Math.max(a.w * vt[0], a.h * vt[3]) < Math.min(stage.clientWidth, stage.clientHeight) * 0.22) zoomToPrint();
+    const now = vt[0] || 1;
+    const short = Math.min(stage.clientWidth, stage.clientHeight);
+    if (Math.max(a.w * vt[0], a.h * vt[3]) >= short * 0.22) return;
+    const want = Math.min(((stage.clientWidth - 48) * 0.3) / a.w, ((stage.clientHeight - 48) * 0.3) / a.h);
+    setZoom(Math.min(3, (st.zoom * want) / now));
+    centerOnPrint();
   }
   // +/-: zoom round the print area, which stays in the middle.
   $('zoom-in').addEventListener('click', () => { setZoom(st.zoom * 1.25); centerOnPrint(); });
   $('zoom-out').addEventListener('click', () => { setZoom(st.zoom / 1.25); centerOnPrint(); });
   $('zoom-fit').addEventListener('click', () => setZoom(1));
   $('zoom-print').addEventListener('click', zoomToPrint);
+
+  // ---------- The whole item in the corner while zoomed in ----------
+  const overview = { busy: false, timer: null, scale: 1 };
+  /** Is part of the product off screen (zoomed in)? */
+  const zoomedIn = () => {
+    const stage = $('stage');
+    return canvas.getWidth() > stage.clientWidth + 2 || canvas.getHeight() > stage.clientHeight + 2;
+  };
+  /** The part of the canvas on screen, in canvas pixels. */
+  function visiblePart() {
+    const stage = $('stage');
+    const r = canvas.wrapperEl.getBoundingClientRect();
+    const s = stage.getBoundingClientRect();
+    const x = Math.max(0, s.left + stage.clientLeft - r.left);
+    const y = Math.max(0, s.top + stage.clientTop - r.top);
+    return { x, y, w: Math.min(canvas.getWidth() - x, stage.clientWidth), h: Math.min(canvas.getHeight() - y, stage.clientHeight) };
+  }
+  function overviewFrame() {
+    const box = $('overview');
+    if (box.hidden) return;
+    const v = visiblePart();
+    const k = overview.scale;
+    Object.assign($('overview-view').style, { left: `${v.x * k}px`, top: `${v.y * k}px`, width: `${v.w * k}px`, height: `${v.h * k}px` });
+  }
+  function drawOverview() {
+    const box = $('overview');
+    // (Not on a phone while a panel is open: the canvas is small then and shows the print area close up.)
+    const show = zoomedIn() && !st.preview && !(MOBILE.matches && st.sheet);
+    box.hidden = !show;
+    if (!show) return;
+    const max = MOBILE.matches ? 96 : 150;
+    const k = Math.min(max / canvas.getWidth(), max / canvas.getHeight());
+    overview.scale = k;
+    overview.busy = true;
+    let pic;
+    try {
+      // The whole canvas (product, design, print-area guides), small.
+      pic = canvas.toCanvasElement(k);
+    } finally {
+      overview.busy = false;
+    }
+    const cv = $('overview-canvas');
+    cv.width = pic.width;
+    cv.height = pic.height;
+    const c2 = cv.getContext('2d');
+    c2.drawImage(pic, 0, 0);
+    // Where the design goes (the print area), so it can be found on the whole item.
+    const a = area();
+    const vt = canvas.viewportTransform;
+    c2.strokeStyle = '#d6451f';
+    c2.lineWidth = 1;
+    c2.setLineDash([3, 2]);
+    c2.strokeRect(Math.round((a.x * vt[0] + vt[4]) * k) + 0.5, Math.round((a.y * vt[3] + vt[5]) * k) + 0.5, Math.max(2, Math.round(a.w * vt[0] * k)), Math.max(2, Math.round(a.h * vt[3] * k)));
+    overviewFrame();
+  }
+  const scheduleOverview = () => {
+    clearTimeout(overview.timer);
+    overview.timer = setTimeout(drawOverview, 250);
+  };
+  canvas.on('after:render', () => { if (!overview.busy) scheduleOverview(); });
+  $('stage').addEventListener('scroll', overviewFrame, { passive: true });
+  /** Click or drag on the small picture: that spot comes to the middle of the screen. */
+  function overviewGo(e) {
+    const r = $('overview-canvas').getBoundingClientRect();
+    const stage = $('stage');
+    const v = visiblePart();
+    const cx = (e.clientX - r.left) / overview.scale;
+    const cy = (e.clientY - r.top) / overview.scale;
+    stage.scrollLeft += cx - (v.x + v.w / 2);
+    stage.scrollTop += cy - (v.y + v.h / 2);
+    overviewFrame();
+  }
+  $('overview-pic').addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    const pic = $('overview-pic');
+    pic.setPointerCapture(e.pointerId);
+    overviewGo(e);
+    const move = (ev) => overviewGo(ev);
+    const up = () => { pic.removeEventListener('pointermove', move); pic.removeEventListener('pointerup', up); pic.removeEventListener('pointercancel', up); };
+    pic.addEventListener('pointermove', move);
+    pic.addEventListener('pointerup', up);
+    pic.addEventListener('pointercancel', up);
+  });
+  $('overview-all').addEventListener('click', () => setZoom(1));
 
   function clipRect(a) {
     // An arch-topped board (welcome signs): straight sides, a half circle on top.
@@ -455,7 +549,7 @@
 
   // Print-area guide and snap lines, drawn on top while editing.
   canvas.on('after:render', (opt) => {
-    if (st.preview || st.exporting) return;
+    if (st.preview || st.exporting || overview.busy) return;
     const ctx = (opt && opt.ctx) || canvas.contextContainer;
     const a = area();
     const vt = canvas.viewportTransform;
@@ -591,11 +685,11 @@
   function zoneOf(id = st.side) {
     const s = baseSide(id);
     // Embroidery moves anywhere on the side's printable zone (on caps and totes: the whole print area).
-    if (emb()) return emb().side === id && s ? s.moveZone || s.printArea : null;
+    if (embHere(id)) return s ? s.moveZone || s.printArea : null;
     return (s && s.moveZone) || null;
   }
   /** The print box at its standard spot (embroidery: the standard embroidery spot). */
-  const baseArea = (id = st.side) => (emb() && emb().side === id ? emb().area : areaFor(st.product, id, st.sizeId, null));
+  const baseArea = (id = st.side) => (embHere(id) ? emb().area : areaFor(st.product, id, st.sizeId, null));
   const areaUnitsPerCm = (id = st.side) => baseArea(id).w / (sideDef(id).printWidthIn * 2.54);
   /** Keep the print area inside the side's allowed zone. */
   function clampOffset(dx, dy, id = st.side) {
@@ -2898,7 +2992,7 @@
     $('method-field').hidden = !p.embroidery;
     if (p.embroidery) {
       $('method-chips').innerHTML = ['print', 'embroidery'].map((m) => `<button class="chip ${m === st.method ? 'active' : ''}" data-method="${m}">${esc(t('emb.' + m))}${m === 'embroidery' ? ` <span style="opacity:.7">+${esc(money(p.embroidery.surcharge))}</span>` : ''}</button>`).join('');
-      $('method-note').textContent = st.method === 'embroidery' ? t('emb.note', { w: POD.num(Math.round(p.embroidery.widthIn * 25.4) / 10), h: POD.num(Math.round(p.embroidery.heightIn * 25.4) / 10), n: POD.num(p.embroidery.maxColors) }) : '';
+      $('method-note').textContent = st.method === 'embroidery' ? t('emb.note', { w: POD.num(Math.round(p.embroidery.widthIn * 25.4) / 10), h: POD.num(Math.round(p.embroidery.heightIn * 25.4) / 10), n: POD.num(p.embroidery.maxColors) }) + (p.sides.length > 1 ? ' ' + t('emb.backPrint') : '') : '';
     }
     // Fabric: how the tile repeats and how big it prints.
     $('pattern-field').hidden = !st.pattern;
@@ -2938,8 +3032,6 @@
     st.zoom = 1;
     fit();
     autoFocusPrint();
-    const back = st.product.sides.some((x) => x.id !== side && (st.designs[x.id] || []).length);
-    if (st.method === 'embroidery' && back) toast(t('emb.frontOnly'));
   }));
   $('pat-repeats').addEventListener('click', (e) => {
     const b = e.target.closest('[data-repeat]');
@@ -3113,7 +3205,9 @@
     if (heldOff('side-tabs', renderSideTabs)) return;
     $('side-tabs').innerHTML = activeSides().map((s) => {
       const count = s.id === st.side ? canvas.getObjects().length : (st.designs[s.id] || []).length;
-      return `<button class="side-tab ${s.id === st.side ? 'active' : ''}" data-side="${s.id}" role="tab" aria-selected="${s.id === st.side}">${esc(tr(s.name))}${count ? '<span class="has"></span>' : ''}</button>`;
+      // Embroidered chest with a printed back: say which side is stitched.
+      const how = emb() ? ` <span class="side-how">· ${esc(t(embHere(s.id) ? 'emb.embroidery' : 'emb.print'))}</span>` : '';
+      return `<button class="side-tab ${s.id === st.side ? 'active' : ''}" data-side="${s.id}" role="tab" aria-selected="${s.id === st.side}">${esc(tr(s.name))}${how}${count ? '<span class="has"></span>' : ''}</button>`;
     }).join('');
   }
   async function showSide(id) {
@@ -3324,7 +3418,7 @@
       for (const o of objs) if (isText(o) && /\{[^{}\n]{1,40}\}/.test(o.text || '')) issues.push({ level: 'error', key: 'check.fieldText', obj: o, params: { name: layerName(o) } });
     }
     // Several garment colours in one order (name list colours or the quantities): words that disappear on one of them.
-    if (!st.product.surface && !emb() && !laser()) {
+    if (!st.product.surface && !embHere() && !laser()) {
       const ids = new Set(Object.entries(qtyGrid()).filter(([, row]) => Object.values(row).some((n) => n > 0)).map(([c]) => c));
       if (st.mergeList) {
         const vc = mergeVariantCols();
@@ -3345,8 +3439,8 @@
         }
       }
     }
-    // Embroidery: no photos or gradients, at most 6 thread colours, text big enough to stitch.
-    if (emb()) {
+    // Embroidery (the stitched side only): no photos or gradients, at most 6 thread colours, text big enough to stitch.
+    if (embHere()) {
       const colours = new Set();
       const ppmm = R.u / 25.4; // mockup units per mm
       for (const o of canvas.getObjects()) {

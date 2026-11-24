@@ -115,9 +115,10 @@
       if (n > 1 && !names) rows.push([t('proof.pieces'), esc(POD.num(n))]);
     }
     if (names) rows.push([t('proof.copies'), esc(namesText(names))]);
-    const proc = proof.method === 'embroidery' ? 'embroidery' : proof.process;
-    const procKey = 'proof.process.' + proc;
-    if (proc && t(procKey) !== procKey) rows.push([t('proof.method'), esc(t(procKey))]);
+    // Embroidered chest with a printed back: both ways are listed.
+    const procs = [...new Set([proof.method === 'embroidery' ? 'embroidery' : proof.process, ...(proof.sides || []).map((s) => s.process)].filter(Boolean))]
+      .map((p) => 'proof.process.' + p).filter((k) => t(k) !== k);
+    if (procs.length) rows.push([t('proof.method'), esc(procs.map((k) => t(k)).join(' + '))]);
     return `<dl class="proof-spec">${rows.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${v}</dd></div>`).join('')}</dl>`;
   }
 
@@ -127,7 +128,8 @@
     const h = Number(s.heightIn) || 0;
     const fullW = w + 2 * b;
     const fullH = h + 2 * b;
-    const emb = proof.method === 'embroidery';
+    // Only the embroidered side is stitched; a printed back is sized like any print.
+    const emb = proof.method === 'embroidery' && (s.process ? s.process === 'embroidery' : !proof.embSide || s.id === proof.embSide);
     const name = tr(s.name);
     const product = tr(proof.product && proof.product.name);
     // Trim and safe lines only for edge-to-edge products (paper, cards): elsewhere the edge isn't cut.

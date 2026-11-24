@@ -119,6 +119,7 @@ const MESSAGES = {
   takedownMissing: { en: 'Please fill in your name, how to reach you and the details', ar: 'من فضلك اكتب اسمك وطريقة التواصل والتفاصيل' },
   printTooSmall: { en: 'The print file is far too small for this product. Please try again.', ar: 'ملف الطباعة صغير جدًا على المنتج ده. جرّب تاني.' },
   embOneSide: { en: 'Embroidery is on the front only', ar: 'التطريز على الوش بس' },
+  embEmpty: { en: 'The embroidery spot is empty: put your design there', ar: 'مكان التطريز فاضي: حط تصميمك فيه' },
   badTrackingUrl: { en: 'The tracking link must start with http:// or https://', ar: 'رابط التتبع لازم يبدأ بـ http:// أو https://' },
   badDate: { en: 'Use a date like 2026-12-31.', ar: 'اكتب التاريخ بالشكل ده 2026-12-31.' },
   badOption: { en: 'That option isn\'t available for this product.', ar: 'الاختيار ده مش متاح للمنتج ده.' },

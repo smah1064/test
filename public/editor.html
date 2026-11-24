@@ -116,6 +116,11 @@
         <div class="stage" id="stage">
           <canvas id="design-canvas"></canvas>
         </div>
+        <!-- Zoomed in: the whole item, with the part on screen marked (click or drag to move there). -->
+        <div class="overview" id="overview" hidden>
+          <div class="overview-pic" id="overview-pic"><canvas id="overview-canvas"></canvas><span class="overview-view" id="overview-view"></span></div>
+          <button type="button" class="overview-all" id="overview-all" data-i18n="bar.wholeItem"></button>
+        </div>
         <div class="stage-hint" id="stage-hint" data-i18n="editor.hint" hidden></div>
         <div class="float-bar" id="float-bar" role="toolbar" hidden></div>
 

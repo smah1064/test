@@ -255,7 +255,9 @@ async function checkSide(design, side, { readFile, product }) {
 
   const grid = sampleAlpha(alpha);
   alpha = null; // let the full-size buffer go
-  const embroidery = design.method === 'embroidery' || design.process === 'embroidery';
+  // Embroidered chest with a printed back: only the stitched side skips the print checks.
+  const embSide = design.embSide || (design.sides && design.sides[0] && design.sides[0].id);
+  const embroidery = side.process ? side.process === 'embroidery' : (design.method === 'embroidery' || design.process === 'embroidery') && side.id === embSide;
   const methods = (product && Array.isArray(product.methods) ? product.methods : [product && product.process]).filter(Boolean);
   const garment = !embroidery && methods.some((m) => GARMENT.includes(m));
   const productSide = product && Array.isArray(product.sides) ? product.sides.find((s) => s.id === side.id) : null;

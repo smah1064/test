@@ -282,8 +282,10 @@
           ${['sheet-pdf', 'sheet-pdf-plain', 'proof'].map((f, k) => `<button class="btn btn-sm ${k === 0 ? 'btn-primary' : ''}" data-download="${esc(s.printUrl)}?format=${f}">⬇ ${esc(t('fmt.' + f))}${k === 0 ? ` <span class="rec">· ${esc(t('admin.recommended'))}</span>` : ''}</button>`).join('')}
         </div></div>`;
     }
-    const rec = RECOMMENDED[item.process] || 'png';
-    const formats = (FORMATS_BY_METHOD[item.process] || ['png', 'pdf', 'pdf-marks', 'png-mirror', 'tiff']).concat(s.hasSvg ? ['svg'] : []);
+    // Embroidered chest with a printed back: each side gets the files for how it is made.
+    const proc = s.process || item.process;
+    const rec = RECOMMENDED[proc] || 'png';
+    const formats = (FORMATS_BY_METHOD[proc] || ['png', 'pdf', 'pdf-marks', 'png-mirror', 'tiff']).concat(s.hasSvg ? ['svg'] : []);
     // Name list: every copy with its own name. Shown once (with the first side); the side files below show copy 1.
     const mergeBlock = item.merge && item.sides[0] === s ? `
       <div class="print-files-block">
@@ -321,7 +323,8 @@
     if (item.merge) return [...mergeFormats(item), 'preview-pdf'];
     if (item.kind === 'photoset') return ['photos-zip', 'proof'];
     if (item.kind === 'gangsheet') return ['sheet-pdf', 'sheet-pdf-plain', 'preview-pdf', 'proof'];
-    const more = (FORMATS_BY_METHOD[item.process] || ['png', 'pdf-marks', 'png-mirror', 'tiff']).concat(item.sides.some((sd) => sd.hasSvg) ? ['svg'] : []);
+    const procs = [...new Set([item.process, ...item.sides.map((sd) => sd.process)].filter(Boolean))];
+    const more = procs.flatMap((p) => FORMATS_BY_METHOD[p] || ['png', 'pdf-marks', 'png-mirror', 'tiff']).concat(item.sides.some((sd) => sd.hasSvg) ? ['svg'] : []);
     return [...new Set(['pdf', 'preview-pdf', ...more, ...(item.pattern ? ['repeat'] : [])])];
   }
   function sendDefaults(item) {

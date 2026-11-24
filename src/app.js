@@ -177,6 +177,10 @@ function cleanOffset(product, side, sizeId, offset) {
   return dx || dy ? { dx, dy } : null;
 }
 /** Embroidery: the stitch box moved from its standard spot, kept on the side's printable zone. */
+/** The side that is embroidered (the others print as usual); null for printed designs. Older designs had only that side. */
+function embSideOf(d) {
+  return d && d.method === 'embroidery' ? d.embSide || (d.sides && d.sides[0] && d.sides[0].id) || null : null;
+}
 function cleanEmbOffset(side, emb, offset) {
   const z = side.moveZone || side.printArea;
   if (!offset || typeof offset !== 'object') return null;
@@ -648,6 +652,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const def = product && product.sides.find((x) => x.id === sd.id);
       return {
         id: sd.id, name: sd.name, widthIn: sd.widthIn, heightIn: sd.heightIn, bleedIn: sd.bleedIn || 0, safeIn: def ? def.safeIn || 0 : 0,
+        ...(sd.process ? { process: sd.process } : {}),
         dpi: sd.dpi || null, widthPx: sd.widthPx || null, heightPx: sd.heightPx || null,
         artworkUrl: d.kind === 'gangsheet' ? `/files/designs/${d.id}/front-preview.png` : `/files/designs/${d.id}/${sd.id}-proof.png?v=${d.version || 1}`,
         previewUrl: d.kind === 'book' ? `/files/designs/${d.id}/book-preview.png?v=${d.version || 0}`
@@ -661,6 +666,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       product: product ? { id: product.id, name: product.name, ...(product.colorLabel ? { colorLabel: product.colorLabel } : {}) } : { id: d.productId, name: d.productName },
       color: d.color, size: d.size, quantities: d.quantities || null, copies: copiesOf(d),
       method: d.method || 'print', process: d.process || (product && product.process) || null,
+      ...(embSideOf(d) ? { embSide: embSideOf(d) } : {}),
       sides: d.kind === 'book' ? [] : d.sides.map(side),
       ...(d.kind === 'book' ? { pages: bookFor(d.bookId).pages.map((_, i) => `/api/books/designs/${d.id}/pages/${i}.jpg?v=${d.version || 0}`) } : {}),
       ...(list ? { merge: { count: d.merge.count, columns: list.columns, sample: list.rows.slice(0, 3) } } : {}),
@@ -868,7 +874,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       }
       d.version = v + 1;
       // Embroidery: stitched again from the new artwork (thread colours and stitch count with it).
-      if (d.method === 'embroidery' && sd.id === d.sides[0].id) item.emb = await makeEmbroidery(d);
+      if (sd.id === embSideOf(d)) item.emb = await makeEmbroidery(d);
       // The customer's vector file shows the old artwork: it stays on disk but is no longer offered.
       sd.hasSvg = false;
       // The product mockup still shows the old artwork: proofs show only the print file for this side.
@@ -1101,12 +1107,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const unknown = sideIds.filter((id) => !product.sides.some((s) => s.id === id));
     if (unknown.length) throw new HttpError(400, 'unknownSide', { side: unknown.join(', ') });
 
-    // Embroidery instead of print: one area (left chest, cap front...), stitched from the print file.
+    // Embroidery instead of print on one area (left chest, cap front...), stitched from the print file;
+    // the product's other sides (a printed back) print as usual.
     const emb = (req.body || {}).method === 'embroidery' && product.embroidery ? product.embroidery : null;
     // Product options (business-card lamination…).
     const picked = cleanOptions(product, (req.body || {}).options);
     if (picked.error) throw new HttpError(400, 'badOption');
-    if (emb && sideIds.some((id) => id !== emb.side)) throw new HttpError(400, 'embOneSide');
+    if (emb && !sideIds.includes(emb.side)) throw new HttpError(400, 'embEmpty');
     const editor = {};
     const storedSides = [];
     // Fabric: how the tile repeats and how big it prints (the tile is the print file).
@@ -1129,12 +1136,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       }
       const offset = cleanOffset(product, side, sizeDef.id, s.editor.offset);
       editor[side.id] = { ...s.editor, offset: offset || undefined, ...(pattern ? { pattern: { repeat: pattern.repeat, tileCm: pattern.tileCm } } : {}) };
-      if (emb) {
+      if (emb && side.id === emb.side) {
         const eo = cleanEmbOffset(side, emb, s.editor.offset);
         editor[side.id] = { ...s.editor, offset: eo || undefined };
         const perCm = emb.area.w / (emb.widthIn * 2.54);
         const cm = (v) => Math.round((v / perCm) * 2) / 2;
-        storedSides.push({ id: side.id, name: side.name, widthIn: emb.widthIn, heightIn: emb.heightIn, bleedIn: 0, ...(eo ? { offsetCm: { x: cm(eo.dx), y: cm(eo.dy) } } : {}) });
+        storedSides.push({ id: side.id, name: side.name, widthIn: emb.widthIn, heightIn: emb.heightIn, bleedIn: 0, process: 'embroidery', ...(eo ? { offsetCm: { x: cm(eo.dx), y: cm(eo.dy) } } : {}) });
         continue;
       }
       if (pattern) {
@@ -1145,6 +1152,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       storedSides.push({
         // The physical size for the chosen size (a 30 x 40 poster prints smaller than a 45 x 60 one).
         id: side.id, name: side.name, widthIn: printWidthFor(product, side, sizeDef.id), heightIn: round2((heightIn(side) * printWidthFor(product, side, sizeDef.id)) / side.printWidthIn), bleedIn: side.bleedIn || 0,
+        // Embroidered with a printed back: this side is printed (DTF / DTG files, not stitches).
+        ...(emb ? { process: product.process } : {}),
         ...(offset ? { offsetCm: offsetCm(product, side, sizeDef.id, offset) } : {}),
       });
     }
@@ -1168,7 +1177,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       productId: product.id,
       productName: product.name,
       process: emb ? 'embroidery' : product.process,
-      ...(emb ? { method: 'embroidery' } : {}),
+      ...(emb ? { method: 'embroidery', embSide: emb.side } : {}),
       ...(picked.options ? { options: picked.options } : {}),
       color: { id: colorDef.id, name: colorDef.name, hex: colorDef.hex },
       // Options are shown with the size everywhere ("100 cards · Matte lamination"): cart, order, invoice, admin, labels.
@@ -3415,7 +3424,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
    */
   /** Embroidery: the stitches (DST), a picture of them and the thread list, from the print file. */
   async function makeEmbroidery(design) {
-    const sd = design.sides[0];
+    const sd = design.sides.find((x) => x.id === embSideOf(design)) || design.sides[0];
     try {
       const d = await embroidery.digitize(fs.readFileSync(store.designFile(design.id, `${sd.id}-print.png`)), sd.widthIn * 25.4, sd.heightIn * 25.4);
       const dst = embroidery.toDst(d, `EBDA3 ${design.id.slice(0, 6)}`);
@@ -3470,8 +3479,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     }
     if (format && format.startsWith('merge-')) return makeMergeFile(design, format, base.replace(`-${sideId}`, ''));
     if (format === 'dst' || format === 'stitches') {
-      if (design.method !== 'embroidery') throw new HttpError(404, 'notFound');
-      const sd = design.sides[0];
+      // Only the embroidered side has stitches (a printed back has print files).
+      if (design.method !== 'embroidery' || sideId !== embSideOf(design)) throw new HttpError(404, 'notFound');
+      const sd = side;
       const file = store.designFile(designId, `${sd.id}-stitches.${format === 'dst' ? 'dst' : 'png'}`);
       if (!fs.existsSync(file)) await makeEmbroidery(design);
       if (!fs.existsSync(file)) throw new HttpError(404, 'notFound');
@@ -3794,7 +3804,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const files = [];
       let expires = '';
       for (const format of wanted) {
-        const sideIds = ONCE.has(format) ? [design.sides[0].id] : design.sides.map((sd) => sd.id);
+        // Embroidered chest with a printed back: stitches for the stitched side, film for the printed ones.
+        const embSide = embSideOf(design);
+        const sideIds = ONCE.has(format) ? [design.sides[0].id]
+          : ['dst', 'stitches'].includes(format) ? [embSide].filter(Boolean)
+            : embSide && ['dtf-film', 'dtf-pdf', 'dtg-white', 'png-mirror'].includes(format) ? design.sides.map((sd) => sd.id).filter((id) => id !== embSide)
+              : design.sides.map((sd) => sd.id);
         for (const sideId of sideIds) {
           let f;
           try {
