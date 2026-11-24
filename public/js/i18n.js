@@ -43,6 +43,7 @@ window.POD_STRINGS = {
   'bar.zoomIn': ['Zoom in', 'تكبير'],
   'bar.zoomOut': ['Zoom out', 'تصغير'],
   'bar.zoomFit': ['Fit to screen', 'ملاءمة الشاشة'],
+  'bar.zoomPrint': ['Zoom to the print area (Ctrl + scroll zooms too)', 'كبّر على مكان الطباعة (أو Ctrl + عجلة الماوس)'],
   'bar.preview': ['Preview', 'معاينة'],
   'bar.preview.title': ['Hide guides to preview the finished product', 'إخفاء الخطوط الإرشادية لمعاينة المنتج النهائي'],
   'bar.clear': ['Clear side', 'مسح الوجه'],

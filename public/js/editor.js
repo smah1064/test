@@ -373,12 +373,41 @@
   }
   new ResizeObserver(() => fit()).observe($('stage'));
   const setZoom = (z) => {
-    st.zoom = Math.min(4, Math.max(0.5, z));
+    st.zoom = Math.min(8, Math.max(0.5, z));
     fit();
   };
-  $('zoom-in').addEventListener('click', () => setZoom(st.zoom * 1.25));
-  $('zoom-out').addEventListener('click', () => setZoom(st.zoom / 1.25));
+  /** Scroll so the middle of the print area is in the middle of the screen. */
+  function centerOnPrint() {
+    const stage = $('stage');
+    const a = area();
+    const vt = canvas.viewportTransform;
+    const r = canvas.wrapperEl.getBoundingClientRect();
+    const s = stage.getBoundingClientRect();
+    stage.scrollLeft += r.left + (a.x + a.w / 2) * vt[0] + vt[4] - (s.left + stage.clientWidth / 2);
+    stage.scrollTop += r.top + (a.y + a.h / 2) * vt[3] + vt[5] - (s.top + stage.clientHeight / 2);
+  }
+  /** Zoom so the print area fills most of the screen (small prints: chest embroidery, a polo's chest...). */
+  function zoomToPrint() {
+    const stage = $('stage');
+    const a = area();
+    const now = canvas.viewportTransform[0] || 1; // screen pixels per unit now
+    // About half the screen: big enough to work on, with the product round it still in view.
+    const want = Math.min(((stage.clientWidth - 48) * 0.5) / a.w, ((stage.clientHeight - 48) * 0.5) / a.h);
+    setZoom((st.zoom * want) / now);
+    centerOnPrint();
+  }
+  /** A print area that is small on screen: start zoomed in on it (⤢ shows the whole product). */
+  function autoFocusPrint() {
+    const stage = $('stage');
+    const a = area();
+    const vt = canvas.viewportTransform;
+    if (Math.max(a.w * vt[0], a.h * vt[3]) < Math.min(stage.clientWidth, stage.clientHeight) * 0.22) zoomToPrint();
+  }
+  // +/-: zoom round the print area, which stays in the middle.
+  $('zoom-in').addEventListener('click', () => { setZoom(st.zoom * 1.25); centerOnPrint(); });
+  $('zoom-out').addEventListener('click', () => { setZoom(st.zoom / 1.25); centerOnPrint(); });
   $('zoom-fit').addEventListener('click', () => setZoom(1));
+  $('zoom-print').addEventListener('click', zoomToPrint);
 
   function clipRect(a) {
     // An arch-topped board (welcome signs): straight sides, a half circle on top.
@@ -1650,6 +1679,18 @@
     e.stopPropagation();
     if (e.touches.length === 0) pinch = null;
   };
+  // Ctrl/⌘ + mouse wheel (and a trackpad pinch, which sends the same): zoom on the spot under the pointer.
+  stageEl.addEventListener('wheel', (e) => {
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    const r0 = canvas.wrapperEl.getBoundingClientRect();
+    const fx = (e.clientX - r0.left) / (r0.width || 1);
+    const fy = (e.clientY - r0.top) / (r0.height || 1);
+    setZoom(st.zoom * Math.exp(-Math.max(-60, Math.min(60, e.deltaY)) * 0.006));
+    const r = canvas.wrapperEl.getBoundingClientRect();
+    stageEl.scrollLeft += r.left + fx * r.width - e.clientX;
+    stageEl.scrollTop += r.top + fy * r.height - e.clientY;
+  }, { passive: false });
   stageEl.addEventListener('touchend', endPinch, { capture: true });
   stageEl.addEventListener('touchcancel', endPinch, { capture: true });
 
@@ -2894,7 +2935,9 @@
     commit();
     renderOptions();
     renderCheck();
+    st.zoom = 1;
     fit();
+    autoFocusPrint();
     const back = st.product.sides.some((x) => x.id !== side && (st.designs[x.id] || []).length);
     if (st.method === 'embroidery' && back) toast(t('emb.frontOnly'));
   }));
@@ -3044,7 +3087,9 @@
     history.replaceState(null, '', url);
     renderOptions();
     await Promise.all([applyMockup(), loadObjects(st.designs[st.side])]);
+    st.zoom = 1;
     fit();
+    autoFocusPrint();
     schedulePatternPreview();
     seedHistory();
     refreshChrome();
@@ -4856,6 +4901,7 @@
   refreshChrome();
   renderProps();
   renderCheck();
+  autoFocusPrint();
   bootDone = true;
   // Report the phone's real screen measurements once (sizes only) so the
   // layout can be fitted to phones that draw pages behind system bars.
