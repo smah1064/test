@@ -20,7 +20,7 @@ let dataDir;
 
 test.before(async () => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pod-qty-'));
-  const app = createApp({ dataDir, adminPassword: 'secret', limits: LIMITS, cleanupEvery: 0 });
+  const app = createApp({ dataDir, adminPassword: 'secret', limits: LIMITS, cleanupEvery: 0, requireApproval: false });
   await new Promise((resolve) => { server = app.listen(0, resolve); });
   base = `http://127.0.0.1:${server.address().port}`;
 });

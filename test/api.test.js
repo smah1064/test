@@ -57,7 +57,7 @@ let app;
 
 test.before(async () => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pod-test-'));
-  app = createApp({ dataDir, adminPassword: 'secret', limits: OPEN_LIMITS, cleanupEvery: 0 });
+  app = createApp({ dataDir, adminPassword: 'secret', limits: OPEN_LIMITS, cleanupEvery: 0, requireApproval: false });
   await new Promise((resolve) => {
     server = app.listen(0, resolve);
   });
@@ -224,7 +224,7 @@ test('admin endpoints require the password', async () => {
 test('admin sign-in: sessions, sign-out and lockout after 5 wrong passwords', async () => {
   const { createApp: make } = require('../src/app');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pod-auth-'));
-  const app2 = make({ dataDir: dir, adminPassword: 'Str0ng!Passw0rd-2026', cleanupEvery: 0 });
+  const app2 = make({ dataDir: dir, adminPassword: 'Str0ng!Passw0rd-2026', cleanupEvery: 0, requireApproval: false });
   const s2 = await new Promise((resolve) => { const s = app2.listen(0, () => resolve(s)); });
   const at = `http://127.0.0.1:${s2.address().port}`;
   try {
@@ -274,7 +274,7 @@ test('security headers and page Content-Security-Policy', async () => {
 test('rate limits on new designs and orders', async () => {
   const { createApp: make } = require('../src/app');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pod-limit-'));
-  const app2 = make({ dataDir: dir, adminPassword: 'secret', cleanupEvery: 0, limits: { designs: [{ max: 2, ms: 60e3 }], orders: [{ max: 1, ms: 60e3 }] } });
+  const app2 = make({ dataDir: dir, adminPassword: 'secret', cleanupEvery: 0, requireApproval: false, limits: { designs: [{ max: 2, ms: 60e3 }], orders: [{ max: 1, ms: 60e3 }] } });
   const s2 = await new Promise((resolve) => { const s = app2.listen(0, () => resolve(s)); });
   const at = `http://127.0.0.1:${s2.address().port}`;
   try {
@@ -351,7 +351,7 @@ test('clean-up removes old unordered designs, keeps ordered ones', async () => {
 test('orders and designs survive a restart', async () => {
   const d = await makeDesign();
   await post('/api/orders', { customer: CUSTOMER, designIds: [d.id] });
-  const app2 = createApp({ dataDir, adminPassword: 'secret', limits: OPEN_LIMITS, cleanupEvery: 0 });
+  const app2 = createApp({ dataDir, adminPassword: 'secret', limits: OPEN_LIMITS, cleanupEvery: 0, requireApproval: false });
   const s2 = await new Promise((resolve) => {
     const s = app2.listen(0, () => resolve(s));
   });
@@ -1242,7 +1242,7 @@ test('sign in with Google: redirect, callback, account linking', async () => {
     const claims = { iss: 'https://accounts.google.com', aud: 'cid', exp: Math.floor(Date.now() / 1000) + 600, email_verified: true, ...p };
     return new Response(JSON.stringify({ id_token: `${b64({ alg: 'RS256' })}.${b64(claims)}.sig` }), { status: 200 });
   };
-  const gapp = createApp({ dataDir: dir, adminPassword: 'secret', limits: OPEN_LIMITS, cleanupEvery: 0, oauthConfig: { google: { clientId: 'cid', clientSecret: 'sec' }, facebook: null }, oauthFetch });
+  const gapp = createApp({ dataDir: dir, adminPassword: 'secret', limits: OPEN_LIMITS, cleanupEvery: 0, requireApproval: false, oauthConfig: { google: { clientId: 'cid', clientSecret: 'sec' }, facebook: null }, oauthFetch });
   const srv = await new Promise((resolve) => { const s = gapp.listen(0, () => resolve(s)); });
   const B = `http://127.0.0.1:${srv.address().port}`;
   const get = (u, cookie) => fetch(B + u, { redirect: 'manual', headers: cookie ? { cookie } : {} });
@@ -1388,7 +1388,7 @@ test('import a design from a link: pictures found, unsafe links refused, rights 
     if (!p) throw new importer.ImportError('importFailed', '404');
     return { url, ...p };
   };
-  const iapp = createApp({ dataDir: dir, adminPassword: 'secret', limits: OPEN_LIMITS, cleanupEvery: 0, importGet });
+  const iapp = createApp({ dataDir: dir, adminPassword: 'secret', limits: OPEN_LIMITS, cleanupEvery: 0, requireApproval: false, importGet });
   const srv = await new Promise((resolve) => { const s = iapp.listen(0, () => resolve(s)); });
   const B = `http://127.0.0.1:${srv.address().port}`;
   try {
@@ -1556,8 +1556,8 @@ test('two copies of the app on one data folder share orders, sign-ins and edits'
   const { createApp: make } = require('../src/app');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pod-two-'));
   const start = (a) => new Promise((resolve) => { const s = a.listen(0, () => resolve(s)); });
-  const A = await start(make({ dataDir: dir, adminPassword: 'Str0ng!Passw0rd-2026', limits: OPEN_LIMITS, cleanupEvery: 0 }));
-  const B = await start(make({ dataDir: dir, adminPassword: 'Str0ng!Passw0rd-2026', limits: OPEN_LIMITS, cleanupEvery: 0 }));
+  const A = await start(make({ dataDir: dir, adminPassword: 'Str0ng!Passw0rd-2026', limits: OPEN_LIMITS, cleanupEvery: 0, requireApproval: false }));
+  const B = await start(make({ dataDir: dir, adminPassword: 'Str0ng!Passw0rd-2026', limits: OPEN_LIMITS, cleanupEvery: 0, requireApproval: false }));
   const at = (s) => `http://127.0.0.1:${s.address().port}`;
   const j = (url, body, headers = {}) => fetch(url, { method: body ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json', ...headers }, body: body && JSON.stringify(body) });
   try {

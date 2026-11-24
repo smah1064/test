@@ -162,6 +162,20 @@ Add an entry to `PRODUCTS` in `src/products.js`. Mockups are SVGs in a 500 × 60
 - **Storage:** the JSON store suits a single server. For scale, move metadata into a database and print files into object storage.
 - **Admin auth** is a single shared password. Use real accounts if several people run the press.
 
+## Proofs, approval and file review
+
+Every order item is printed only from files the customer approved, and complex or flagged jobs are checked by a person first (modelled on the usual print-shop file review and proof process).
+
+- **The proof** (`GET /api/designs/:id/proof`): product, colour, size, pieces, print method, every printed side with its physical size, bleed, safe margin, DPI and pixels, the print file itself on a checkerboard (transparent areas show as squares), the product mockup, the first rows of a name list, and the results of the automatic checks in plain words.
+- **Approval at checkout:** standard orders approve each item's proof in the cart (one checkbox per item). The order sends `approvals: { designId: { proofHash, sample? } }`; the server refuses an order without them (`approvalRequired`) or when the design changed since (`proofChanged`, the customer sees the new proof).
+- **Recorded against a version:** `proofHash` is a SHA-256 of the order spec (product, colour, size, pieces, sides, method) and every production file. The item keeps `approval { proofHash, version, at, via, sample }`, the fingerprint of each approved file, and a history (`approvals`) of every approval, rejection, review and change.
+- **The exact production file is kept:** admin print downloads refuse (409) while a job is in review or when the files on disk no longer match the approved fingerprints. A corrected file from the shop is kept as a new version; the old one stays as `<side>-print.v<n>.png`.
+- **Material change → new approval:** a corrected file from the shop (`PUT /api/admin/items/:id/replacement/:side`, same pixel size) or a redrawn book page puts the item in **Waiting for approval** and emails the customer a link (`/proof?t=…`) to approve or ask for changes.
+- **Human review only where needed:** jobs go to **Review** (admin tab with a count) when the checks failed, for name lists, embroidery, designs imported from links, 50 or more pieces, or when the customer asked for a printed sample first. Everything else goes straight to the print queue. The shop can approve, ask for changes (the customer is emailed the note), upload a corrected file, or resend the proof link.
+- **Automatic checks** (`src/preflight.js`, on every finished design): resolution at final print size (up to 24 in: fail below 100 DPI, warning below 150; up to 48 in: 72 / 110; bigger prints seen from further away, such as roll-ups and tablecloths: 40 / 60), export dimensions against the physical size, empty files, artwork too close to the cut (paper, cards, mugs…) or touching the edge (garments), and half-transparent areas that DTF/DTG print badly. The editor adds what only the browser can see: photos too small for their printed size, tiny text, text near the edge, and fonts that did not load (the text would print in a fallback font).
+- **Screen proofs are not colour proofs:** the proof and the editor's **Print colours** view are screen estimates. Screens show light (RGB); prints are ink, and every screen differs. Customers who need exact colours on several pieces can ask for a printed sample first, which also sends the job to review.
+- **Tests:** `npm test` covers the approval flow (`test/approvals.test.js`) and the checks (`test/preflight.test.js`); `npm run test:e2e` renders real designs in the browser editor and checks export size, image resolution at final size, font rendering (including Arabic), transparency, accepted file types, and that the uploaded print file is exactly what was exported.
+
 ## One artwork, many pieces (families, schools, teams, businesses)
 
 The customer makes the artwork once, then says how many pieces they want; the price shown is for all of them. Three cases stay distinct:

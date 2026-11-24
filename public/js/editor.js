@@ -210,7 +210,7 @@
       // Sizes that print bigger or smaller (posters, cards, signs): same drawing area, different inches.
       const size = st.product.sizes.find((z) => z.id === st.sizeId);
       // Fabric patterns: the tile prints at the chosen size (cm).
-      const k = ((size && size.printScale) || 1) * (st.pattern ? st.pattern.tileCm / st.product.pattern.tile : 1);
+      const k = ((size && size.printScale) || 1) * (st.pattern ? st.pattern.tileCm / 2.54 / s.printWidthIn : 1);
       const physical = k === 1 ? {} : { printWidthIn: s.printWidthIn * k, printHeightIn: (s.printHeightIn || 0) * k };
       sizedSides.set(key, same && k === 1 ? s : { ...s, ...physical, printArea: same ? s.printArea : a });
     }
@@ -949,7 +949,8 @@
     });
   }
   // Illustrator and EPS files: the server draws them to a transparent PNG first.
-  const isVectorFile = (file) => /\.(ai|eps|epsf|ps)$/i.test(file.name || '') || /postscript|illustrator/.test(file.type || '');
+  const isVectorFile = (file) => /\.(ai|eps|epsf|ps|pdf)$/i.test(file.name || '') || /postscript|illustrator|application\/pdf/.test(file.type || '');
+  const isSvgFile = (file) => file.type === 'image/svg+xml' || /\.svg$/i.test(file.name || '');
   async function convertVectorFile(file) {
     if (file.size > MAX_VECTOR_BYTES) throw new Error(t('msg.tooBigVector'));
     busy(true, t('busy.artwork'));
@@ -978,12 +979,16 @@
         return toast(e.message, 'error');
       }
     }
-    if (!/^image\/(png|jpeg|webp|gif)$/.test(file.type) && !/\.(jpe?g)$/i.test(file.name || '')) return toast(t('msg.badType'), 'error');
+    const svg = isSvgFile(file);
+    if (!svg && !/^image\/(png|jpeg|webp|gif)$/.test(file.type) && !/\.(jpe?g)$/i.test(file.name || '')) return toast(t('msg.badType'), 'error');
     if (file.size > MAX_UPLOAD_BYTES) return toast(t('msg.tooBig'), 'error');
+    // SVG: the browser draws it as a picture (no scripts, no outside files) at full upload size.
+    if (svg && file.type !== 'image/svg+xml') file = new File([file], file.name, { type: 'image/svg+xml' });
     const srcUrl = URL.createObjectURL(file);
     try {
       const img = await loadHtmlImage(srcUrl);
-      const scale = Math.min(1, MAX_UPLOAD_PX / Math.max(img.naturalWidth, img.naturalHeight));
+      if (!img.naturalWidth || !img.naturalHeight) throw new Error(t('msg.badImage'));
+      const scale = svg ? MAX_UPLOAD_PX / Math.max(img.naturalWidth, img.naturalHeight) : Math.min(1, MAX_UPLOAD_PX / Math.max(img.naturalWidth, img.naturalHeight));
       const c = document.createElement('canvas');
       c.width = Math.round(img.naturalWidth * scale);
       c.height = Math.round(img.naturalHeight * scale);
@@ -996,7 +1001,7 @@
       fimg.scale(Math.min((a.w * 0.8) / fimg.width, (a.h * 0.8) / fimg.height));
       addObject(fimg);
       const dpi = imageDpi(fimg);
-      if (dpi < 100) toast(t('msg.lowResToast', { dpi }), 'error');
+      if (dpi < dpiLimits().fail) toast(t('msg.lowResToast', { dpi }), 'error');
       // "Remove the background of my photos" is ticked in the upload panel.
       if ($('auto-bg') && $('auto-bg').checked && !/\.png$/i.test(file.name || '')) await removeImageBackground(fimg);
     } catch (e) {
@@ -1075,6 +1080,14 @@
   $('stage').addEventListener('dragover', (e) => e.preventDefault());
   $('stage').addEventListener('drop', (e) => { e.preventDefault(); addImageFile(e.dataTransfer.files[0]); });
 
+  /** Resolution a print needs at its size: big prints are seen from further away (same tiers as the server's checks). */
+  function dpiLimits(sideId = st.side) {
+    const s = sideDef(sideId);
+    const longIn = Math.max(s.printWidthIn, (s.printWidthIn * s.printArea.h) / s.printArea.w);
+    if (longIn > 48) return { fail: 40, warn: 60 };
+    if (longIn > 24) return { fail: 72, warn: 110 };
+    return { fail: 100, warn: 150 };
+  }
   function imageDpi(o, sideId = st.side) {
     const s = sideDef(sideId);
     const widthIn = ((o.width * Math.abs(o.scaleX || 1)) / s.printArea.w) * s.printWidthIn;
@@ -2765,6 +2778,32 @@
     return { left: Math.min(...xs), top: Math.min(...ys), width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys) };
   }
   /** Problems that would make the print blurry, cut off or hard to read. */
+  /**
+   * The editor's checks of one side in the server's words (see preflight.js): photos too small
+   * for their printed size, tiny text, text close to the cut, and fonts that did not load
+   * (the text would print in a fallback font).
+   */
+  function reportChecks(sideId, issues) {
+    const short = (v) => String(v || '').slice(0, 60);
+    const out = [];
+    for (const i of issues) {
+      if (i.key === 'check.lowres') out.push({ id: 'lowResImage', level: 'fail', side: sideId, params: { name: short(i.params.name), dpi: i.params.dpi } });
+      else if (i.key === 'check.okres') out.push({ id: 'lowResImage', level: 'warn', side: sideId, params: { name: short(i.params.name), dpi: i.params.dpi } });
+      else if (i.key === 'check.tiny') out.push({ id: 'tinyText', level: 'warn', side: sideId, params: { name: short(i.params.name), pt: i.params.pt } });
+      else if (i.key === 'check.safe') out.push({ id: 'outsideSafe', level: 'warn', side: sideId, params: { name: short(i.params.name) } });
+    }
+    const missing = new Set();
+    for (const o of canvas.getObjects()) {
+      if (!isText(o) || o.visible === false || !o.fontFamily) continue;
+      const family = String(o.fontFamily).split(',')[0].replace(/["']/g, '').trim();
+      try {
+        if (family && document.fonts && !document.fonts.check(`16px "${family}"`, String(o.text || 'a').slice(0, 50) || 'a')) missing.add(short(family));
+      } catch (e) { /* an odd font name: nothing to report */ }
+    }
+    if (missing.size) out.push({ id: 'fontFallback', level: 'warn', side: sideId, params: { fonts: [...missing].slice(0, 10) } });
+    return out;
+  }
+
   function checkIssues() {
     const R = rects();
     const sd = sideDef();
@@ -2788,8 +2827,9 @@
       if (!cut && important && unsafe) issues.push({ level: 'warn', key: 'check.safe', obj: o, params: { name } });
       if (o.type === 'image') {
         const dpi = imageDpi(o);
-        if (dpi < 100) issues.push({ level: 'error', key: 'check.lowres', obj: o, params: { name, dpi } });
-        else if (dpi < 150) issues.push({ level: 'warn', key: 'check.okres', obj: o, params: { name, dpi } });
+        const lim = dpiLimits();
+        if (dpi < lim.fail) issues.push({ level: 'error', key: 'check.lowres', obj: o, params: { name, dpi } });
+        else if (dpi < lim.warn) issues.push({ level: 'warn', key: 'check.okres', obj: o, params: { name, dpi } });
       }
       if (isText(o)) {
         const pt = Math.round(((o.fontSize * Math.abs(o.scaleY)) / R.u) * 72 * 0.7); // cap height ≈ 70% of font size
@@ -3468,10 +3508,23 @@
   const canvasBlob = (el, type = 'image/png') => new Promise((resolve, reject) => el.toBlob((b) => (b ? resolve(b) : reject(new Error('Export failed'))), type));
 
   /** Transparent print file: artwork + bleed at up to 300 DPI. */
+  function exactSize(el, w, h) {
+    if (!w || !h || (el.width === w && el.height === h)) return el;
+    const out = document.createElement('canvas');
+    out.width = w;
+    out.height = h;
+    const ctx = out.getContext('2d');
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(el, 0, 0, w, h);
+    return out;
+  }
   function exportPrint(side) {
     const { bleed, u, b } = rects(side.id);
     const mult = Math.min(TARGET_DPI / u, Math.sqrt(MAX_PRINT_PIXELS / (bleed.w * bleed.h)), MAX_PRINT_SIDE / Math.max(bleed.w, bleed.h));
-    const el = st.pattern ? exportTile(mult) : withArtworkOnly(() => canvas.toCanvasElement(mult, { left: bleed.x, top: bleed.y, width: bleed.w, height: bleed.h }));
+    // The browser drops the fraction of width × scale, which can leave the file a pixel short of its
+    // physical size × DPI: draw it again at the exact size (a change of well under 0.1%).
+    const box = st.pattern ? rects(side.id).trim : bleed;
+    const el = exactSize(st.pattern ? exportTile(mult) : withArtworkOnly(() => canvas.toCanvasElement(mult, { left: bleed.x, top: bleed.y, width: bleed.w, height: bleed.h })), Math.round(box.w * mult), Math.round(box.h * mult));
     // Canvas prints: the band round the front becomes the chosen edge (mirror, white, black).
     if (st.product.model && st.product.model.type === 'canvas') POD.canvasEdges(el, b * mult, st.colorId);
     return canvasBlob(el);
@@ -3922,9 +3975,12 @@
       const mergeSidesPayload = {};
       const files = {};
       const problems = [];
+      const clientChecks = []; // the same checks, kept with the design for the proof and the shop
       for (const s of sides) {
         await showSide(s.id);
-        checkIssues().forEach((i) => problems.push(`• ${tr(s.name)}: ${t(i.key, { ...i.params, dpi: i.params.dpi, pt: i.params.pt })}`));
+        const issues = checkIssues();
+        issues.forEach((i) => problems.push(`• ${tr(s.name)}: ${t(i.key, { ...i.params, dpi: i.params.dpi, pt: i.params.pt })}`));
+        clientChecks.push(...reportChecks(s.id, issues));
         sidesPayload[s.id] = { editor: { version: fabric.version, objects: await inlineImages(st.designs[s.id]), ...(st.offsets[s.id] ? { offset: st.offsets[s.id] } : {}), ...(st.pattern ? { pattern: { ...st.pattern } } : {}) } };
         const withFields = useMerge && mergeSides.some((x) => x.id === s.id);
         if (withFields) {
@@ -3961,7 +4017,7 @@
       const created = await POD.api('/api/designs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productId: st.product.id, color: st.colorId, size: st.sizeId, sides: sidesPayload, ...(imported ? { rightsConfirmed: true } : {}), ...(emb() ? { method: 'embroidery' } : {}), ...(useMerge ? { merge: { columns: st.mergeList.columns, rows: st.mergeList.rows, sides: mergeSidesPayload } } : { quantities: qtyLines() }) }),
+        body: JSON.stringify({ productId: st.product.id, color: st.colorId, size: st.sizeId, sides: sidesPayload, clientChecks: clientChecks.slice(0, 50), ...(imported ? { rightsConfirmed: true } : {}), ...(emb() ? { method: 'embroidery' } : {}), ...(useMerge ? { merge: { columns: st.mergeList.columns, rows: st.mergeList.rows, sides: mergeSidesPayload } } : { quantities: qtyLines() }) }),
       });
       let done = 0;
       busy(true, t('busy.uploading', { n: 0, total: created.files.length }));

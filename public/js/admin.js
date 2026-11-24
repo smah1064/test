@@ -86,6 +86,7 @@
     document.querySelectorAll('[data-tab]').forEach((x) => x.classList.toggle('active', x === b));
     $('tab-queue').hidden = tab !== 'queue';
     $('tab-orders').hidden = tab !== 'orders';
+    $('tab-review').hidden = tab !== 'review';
     $('tab-film').hidden = tab !== 'film';
     $('tab-library').hidden = tab !== 'library';
     $('tab-houses').hidden = tab !== 'houses';
@@ -100,6 +101,8 @@
     printing: { status: 'printed', label: 'admin.markPrinted' },
     printed: { status: 'shipped', label: 'admin.markShipped' },
   };
+  // Items the shop or the customer still has to approve: never printable.
+  const IN_REVIEW = new Set(['review', 'awaiting_approval', 'changes_requested']);
   const pill = (status) => `<span class="pill ${status}">${esc(t('admin.status.' + status))}</span>`;
   // Production sizes in Western digits with a dot, like the inches, DPI and pixels next to them
   // (Arabic digits and the Arabic decimal mark are easy to misread on the print floor).
@@ -489,6 +492,7 @@
   // Items whose details are open in the waiting list (kept across refreshes).
   const open = new Set();
   function card(item) {
+    if (IN_REVIEW.has(item.status)) return row(item);
     const next = NEXT[item.status];
     return `
       <div class="card now-printing">
@@ -517,6 +521,7 @@
     : '');
 
   function row(item) {
+    if (IN_REVIEW.has(item.status)) return reviewQueueRow(item);
     const next = NEXT[item.status];
     const isOpen = open.has(item.id);
     return `
@@ -546,6 +551,7 @@
       : `<div class="card empty"><h3>${esc(t(nothing ? 'admin.clearTitle' : 'admin.pressIdle'))}</h3><p class="muted">${esc(t(nothing ? 'admin.clearText' : 'admin.pressIdleText'))}</p></div>`;
     $('up-next').innerHTML = q.waiting.length ? q.waiting.map(row).join('') : `<p class="muted">${esc(t('admin.nothingWaiting'))}</p>`;
     $('to-ship').innerHTML = q.toShip.length ? q.toShip.map(row).join('') : `<p class="muted">${esc(t('admin.nothingToShip'))}</p>`;
+    renderReviewNotice();
   }
   document.addEventListener('click', (e) => {
     const b = e.target.closest('[data-toggle-item]');
@@ -566,7 +572,7 @@
   const isDelivered = (o) => o.status === 'delivered' || Boolean(o.shipment && o.shipment.deliveredAt);
   const isShipped = (o) => isDelivered(o) || o.status === 'shipped' || Boolean(o.shipment && o.shipment.shippedAt);
   const orderState = (o) => (isDelivered(o) ? 'delivered' : o.status);
-  const statusPill = (s) => `<span class="pill ${s === 'delivered' ? 'delivered' : s === 'shipped' ? 'shipped' : s === 'received' ? 'queued' : 'printing'}">${esc(t('ship.status.' + s))}</span>`;
+  const statusPill = (s) => `<span class="pill ${s === 'delivered' ? 'delivered' : s === 'shipped' ? 'shipped' : s === 'received' ? 'queued' : s === 'in_review' ? 'review' : 'printing'}">${esc(t('ship.status.' + s))}</span>`;
   const isPaid = (o) => Boolean(o.payment && o.payment.status === 'paid');
   const payPill = (o) => `<span class="pill ${isPaid(o) ? 'pay-paid' : 'pay-pending'}">${esc(t(isPaid(o) ? 'ship.paid' : 'ship.unpaid'))}</span>`;
   const day = (ymd) => {
@@ -640,7 +646,9 @@
       <tr class="order-row ${shipOpen.has(o.id) ? 'open' : ''}">
         <td data-label="${col('order')}"><strong>${esc(o.number)}</strong><div class="muted small">${esc(POD.date(o.createdAt))}</div></td>
         <td data-label="${col('customer')}">${esc(o.customer.name)}<div class="muted small"><bdi dir="ltr">${esc(o.customer.phone || o.customer.email || '')}</bdi></div><div class="muted small">${esc(tr(o.customer.governorateName) || '')}</div></td>
-        <td data-label="${col('items')}"><div class="mini-items">${o.items.map((i) => `<img src="${esc(i.sides[0].previewUrl)}" title="${esc(tr(i.productName))}: ${esc(t('admin.status.' + i.status))}" alt="" ${zoomAttr(i)}>`).join('')}</div>${orderQty(o)}</td>
+        <td data-label="${col('items')}"><div class="mini-items">${o.items.map((i) => IN_REVIEW.has(i.status)
+          ? `<span class="rv-mini" title="${esc(tr(i.productName))}: ${esc(t('admin.status.' + i.status))}"><img src="${esc(i.sides[0].previewUrl)}" alt="" ${zoomAttr(i)}><span class="rv-mini-flag" aria-hidden="true">!</span></span>`
+          : `<img src="${esc(i.sides[0].previewUrl)}" title="${esc(tr(i.productName))}: ${esc(t('admin.status.' + i.status))}" alt="" ${zoomAttr(i)}>`).join('')}</div>${orderReview(o)}${orderQty(o)}</td>
         <td data-label="${col('total')}">${esc(money(o.total))}</td>
         <td data-label="${col('status')}"><div class="order-state">${statusPill(orderState(o))} ${payPill(o)}${shipNote(o)}</div>
           <button class="btn btn-sm ship-toggle" data-ship-toggle="${esc(o.id)}" aria-expanded="${shipOpen.has(o.id)}">${esc(t('ship.manage'))} ${shipOpen.has(o.id) ? '▴' : '▾'}</button></td>
@@ -839,7 +847,8 @@
       if (document.activeElement && document.activeElement.closest && document.activeElement.closest('.send-panel') && lastQueue) return;
       if (!housesData) housesData = await adminApi('/api/admin/houses').catch(() => null);
       renderQueue((lastQueue = await adminApi('/api/admin/queue')));
-    } else if (tab === 'houses') renderHouses((housesData = await adminApi('/api/admin/houses')));
+    } else if (tab === 'review') await loadReview();
+    else if (tab === 'houses') renderHouses((housesData = await adminApi('/api/admin/houses')));
     else if (tab === 'accounts') await refreshAccounts({ auto: true });
     else if (tab === 'coupons') renderCoupons((couponData = await adminApi('/api/admin/coupons')));
     else if (tab === 'customers') await loadCustomers();
@@ -854,11 +863,14 @@
     $('login').hidden = true;
     $('dash').hidden = false;
     $('logout').hidden = false;
+    if (tab !== 'review') loadReviewCount();
   }
 
   document.addEventListener('pod:langchange', () => {
     if (tab === 'queue' && lastQueue) renderQueue(lastQueue);
     if (tab === 'orders' && lastOrders) { renderOrders(lastOrders); renderNotifyStatus(); }
+    if (tab === 'review' && reviewData) renderReview();
+    renderReviewCount();
     if (tab === 'film' && lastFilm) renderFilm(lastFilm);
     if (tab === 'library' && lastLibrary) renderLibrary(lastLibrary);
     if (tab === 'houses' && housesData) renderHouses(housesData);
@@ -1349,6 +1361,474 @@
     }
   });
 
+  // ---------- Review: complex or flagged jobs, checked by the shop before printing ----------
+  let reviewData = null; // { items } from GET /api/admin/review, oldest first
+  let reviewCount = null; // null until the list has loaded once
+  let reviewError = '';
+  let rvScrollTo = null;
+  const rvOpen = new Set(); // item ids whose details are open
+  const rvNote = {}; // item id -> unsent note to the customer
+  const rvMsg = {}; // item id -> { text, ok }
+  const rvSideMsg = {}; // `${item id}:${side id}` -> { text, ok }
+  const rvLink = {}; // item id -> proof link returned by "resend"
+  const rvBusy = new Set();
+  const hasStr = (k) => Boolean(window.POD_STRINGS[k]);
+  const byAgeRv = (a, b) => String(a.orderedAt || '').localeCompare(String(b.orderedAt || '')) || (a.position || 0) - (b.position || 0);
+  const proofOf = (item) => (item && item.proof) || {};
+  const rvSides = (item) => (proofOf(item).sides && proofOf(item).sides.length ? proofOf(item).sides : (item && item.sides) || []);
+  const rvReasons = (item) => [...new Set([...((item.review && item.review.reasons) || []), ...((proofOf(item).review && proofOf(item).review.reasons) || [])])];
+  const rvFind = (id) => reviewData && reviewData.items.find((i) => i.id === id);
+  const mm = (inches) => Math.round(inches * 25.4 * 10) / 10;
+  const absLink = (link) => { try { return new URL(link, location.origin).href; } catch (e) { return link; } };
+
+  function setReview(items) {
+    reviewData = { items: items.slice().sort(byAgeRv) };
+    reviewCount = reviewData.items.length;
+  }
+  async function loadReview() {
+    // Don't redraw while the admin is typing a note.
+    const ae = document.activeElement;
+    if (reviewData && ae && ae.closest && ae.closest('#rv-list') && ae.tagName === 'TEXTAREA') return;
+    try {
+      setReview((await adminApi('/api/admin/review')).items || []);
+      reviewError = '';
+    } catch (err) {
+      if (err.status === 401) throw err;
+      reviewError = err.message || t('rv.loadFailed');
+    }
+    renderReview();
+    renderReviewCount();
+  }
+  async function loadReviewCount() {
+    try {
+      setReview((await adminApi('/api/admin/review')).items || []);
+    } catch (e) { /* not available or signed out: no badge */ }
+    renderReviewCount();
+    renderReviewNotice();
+  }
+  function renderReviewCount() {
+    const el = $('rv-count');
+    if (!el) return;
+    el.hidden = !reviewCount;
+    el.textContent = reviewCount ? POD.num(reviewCount) : '';
+    el.title = reviewCount ? t('rv.count', { n: POD.num(reviewCount) }) : '';
+  }
+  /** On the print queue: how many jobs wait for review (they are not in the queue until approved). */
+  function renderReviewNotice() {
+    const el = $('rv-queue-note');
+    if (!el) return;
+    el.innerHTML = reviewCount
+      ? `<div class="notice rv-queue-notice"><span>${esc(t('rv.queueNotice', { n: POD.num(reviewCount) }))}</span><button class="btn btn-sm" type="button" data-go-tab="review">${esc(t('rv.goReview'))}</button></div>`
+      : '';
+  }
+  /** An item in the print queue that still needs approval: a badge and a link, no print buttons. */
+  function reviewQueueRow(item) {
+    return `
+      <div class="card queue-row rv-qrow">
+        <img src="${esc(item.sides[0].previewUrl)}" alt="" ${zoomAttr(item)}>
+        <div>
+          <strong>${esc(tr(item.productName))}</strong> ${pill(item.status)} <span class="pill rv-noprint">${esc(t('rv.notPrintable'))}</span>${piecesPill(item)}
+          <div class="muted small">${esc([item.orderNumber, t('admin.spec.itemOf', { i: item.position, n: item.of }), ...colourSizeText(item)].join(' · '))}</div>
+        </div>
+        <div class="queue-actions"><button class="btn btn-sm" type="button" data-rv-goto="${esc(item.id)}">${esc(t('rv.goReview'))}</button></div>
+      </div>`;
+  }
+  /** Orders table: items waiting for review or the customer's approval. */
+  function orderReview(o) {
+    const waiting = o.items.filter((i) => IN_REVIEW.has(i.status));
+    if (!waiting.length) return '';
+    return `<div class="rv-order-note">${waiting.map((i) => `<span class="rv-order-item"><span class="pill ${esc(i.status)}">${o.items.length > 1 ? esc(POD.num(i.position)) + '. ' : ''}${esc(t('admin.status.' + i.status))}</span><button class="btn btn-sm" type="button" data-rv-goto="${esc(i.id)}">${esc(t('rv.goReview'))}</button></span>`).join('')}</div>`;
+  }
+
+  function reasonText(item, r) {
+    const m = proofOf(item).merge || item.merge;
+    if (r === 'nameList' && m && m.count) return `${t('rv.reason.nameList')} · ${t('rv.copies', { n: POD.num(m.count) })}`;
+    if (r === 'bulk') return `${t('rv.reason.bulk')} · ${piecesText(piecesOf(item))}`;
+    return hasStr('rv.reason.' + r) ? t('rv.reason.' + r) : r;
+  }
+  function renderReview() {
+    const el = $('rv-list');
+    if (!reviewData) {
+      el.innerHTML = reviewError ? `<p class="notice">${esc(reviewError)}</p>` : '';
+      return;
+    }
+    const items = reviewData.items;
+    el.innerHTML = (reviewError ? `<p class="notice small">${esc(reviewError)}</p>` : '')
+      + (items.length ? items.map(rvRow).join('') : `<div class="card empty rv-empty"><p class="muted">${esc(t('rv.empty'))}</p></div>`);
+    if (rvScrollTo) {
+      const target = document.getElementById('rv-' + rvScrollTo);
+      if (target) target.scrollIntoView({ block: 'start' });
+      rvScrollTo = null;
+    }
+  }
+  function rvRow(item) {
+    const isOpen = rvOpen.has(item.id);
+    const c = item.customer || {};
+    const thumb = (rvSides(item)[0] || {}).previewUrl || (item.sides && item.sides[0] && item.sides[0].previewUrl) || '';
+    const m = proofOf(item).merge || item.merge;
+    return `
+      <article class="card rv-item ${isOpen ? 'is-open' : ''}" id="rv-${esc(item.id)}">
+        <div class="rv-head">
+          ${thumb ? `<img class="rv-thumb" src="${esc(thumb)}" alt="" ${item.sides ? zoomAttr(item) : ''}>` : '<span class="rv-thumb"></span>'}
+          <div class="rv-sum">
+            <div class="rv-line"><strong>${esc(item.orderNumber || '')}</strong> <span class="muted small">${esc(t('admin.spec.itemOf', { i: item.position, n: item.of }))}</span> ${pill(item.status)}</div>
+            <div class="rv-line"><b>${esc(tr(item.productName))}</b> · ${esc(m && m.count ? t('rv.copies', { n: POD.num(m.count) }) : piecesText(piecesOf(item)))}</div>
+            <div class="rv-line small">${esc(c.name || '')} ${c.phone || c.email ? `<bdi dir="ltr" class="muted">${esc(c.phone || c.email)}</bdi>` : ''}</div>
+            <ul class="rv-reasons">${rvReasons(item).map((r) => `<li class="rv-reason rv-r-${esc(r)}">${esc(reasonText(item, r))}</li>`).join('')}</ul>
+            <div class="muted small">${esc(t('rv.ordered', { date: when(item.orderedAt) }))}</div>
+          </div>
+          <button class="btn btn-sm rv-toggle" type="button" data-rv-toggle="${esc(item.id)}" aria-expanded="${isOpen}">${esc(t(isOpen ? 'rv.close' : 'rv.open'))} ${isOpen ? '▴' : '▾'}</button>
+        </div>
+        ${isOpen ? rvDetail(item) : ''}
+      </article>`;
+  }
+
+  function rvDetail(item) {
+    const proof = proofOf(item);
+    const sides = rvSides(item);
+    const color = proof.color || item.color || {};
+    const size = proof.size || item.size || {};
+    const process = proof.process || item.process;
+    const facts = [
+      [t('rv.product'), esc(tr((proof.product && proof.product.name) || item.productName))],
+      hasQty(item) ? [t('adminQty.title'), qtySummary(item)] : [t('rv.colourSize'), `${color.hex ? `<span class="qty-dot" style="background:${esc(color.hex)}"></span>` : ''}${esc(tr(color.name))} · ${esc(tr(size.label))}`],
+      process && hasStr('process.' + process) ? [t('rv.method'), esc(t('process.' + process))] : null,
+    ].filter(Boolean);
+    return `
+      <div class="rv-detail">
+        <p class="rv-status-help rv-st-${esc(item.status)}">${esc(hasStr('rv.statusHelp.' + item.status) ? t('rv.statusHelp.' + item.status) : '')}</p>
+        ${rvComment(item)}
+        <div class="rv-grid">
+          <section class="rv-proof">
+            <h3>${esc(t('rv.proof'))} ${proof.version ? `<span class="pill queued">${esc(t('rv.version', { v: proof.version }))}</span>` : ''}</h3>
+            <dl class="rv-facts">${facts.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('')}</dl>
+            ${proof.pages && proof.pages.length ? rvPages(proof.pages) : ''}
+            <div class="rv-mockups">${sides.filter((s) => s.previewUrl).map((s) => `<figure><img src="${esc(s.previewUrl)}" alt="" loading="lazy" data-zoom="${esc(JSON.stringify([s.previewUrl]))}"><figcaption>${esc(t('rv.mockup'))} · ${esc(tr(s.name))}</figcaption></figure>`).join('')}</div>
+            ${sides.map((s) => rvArtwork(s)).join('')}
+            <p class="rv-screen-note small">${esc(t('rv.screenNote'))}</p>
+          </section>
+          <div class="rv-aside">
+            ${rvChecks(item)}
+            ${proof.merge || item.merge ? rvNames(item) : ''}
+            ${rvHistory(item)}
+            ${rvActions(item)}
+            ${item.kind === 'book' || proof.pages ? '' : rvReplace(item)}
+            ${rvLinkBox(item)}
+          </div>
+        </div>
+      </div>`;
+  }
+  function rvPages(pages) {
+    const shown = pages.slice(0, 12);
+    return `<div class="rv-pages-wrap"><div class="small muted" style="font-weight:700;margin-bottom:6px">${esc(t('rv.pages'))}</div>
+      <div class="rv-pages">${shown.map((u, k) => `<figure><img src="${esc(u)}" alt="" loading="lazy" data-zoom="${esc(JSON.stringify([u]))}"><figcaption>${esc(POD.num(k + 1))}</figcaption></figure>`).join('')}</div>
+      ${pages.length > shown.length ? `<div class="muted small">${esc(t('rv.morePages', { n: POD.num(pages.length - shown.length) }))}</div>` : ''}</div>`;
+  }
+  /** One printed side: the print file on a checkerboard with the trim and safe lines, then its sizes. */
+  function rvArtwork(s) {
+    const b = Number(s.bleedIn) || 0;
+    const safe = Number(s.safeIn) || 0;
+    const w = Number(s.widthIn) || 0;
+    const h = Number(s.heightIn) || 0;
+    const W = w + 2 * b || 1;
+    const H = h + 2 * b || 1;
+    const r = (x, y, rw, rh, cls) => `<rect class="${cls}" x="${x}" y="${y}" width="${Math.max(0, rw)}" height="${Math.max(0, rh)}" vector-effect="non-scaling-stroke"/>`;
+    const board = s.artworkUrl ? `
+      <div class="rv-board" style="aspect-ratio:${W} / ${H};width:min(100%, ${Math.max(120, Math.round((340 * W) / H))}px)">
+        <img src="${esc(s.artworkUrl)}" alt="${esc(t('rv.artwork', { side: tr(s.name) }))}" loading="lazy">
+        <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">${r(b, b, w, h, 'rv-trim')}${safe ? r(b + safe, b + safe, w - 2 * safe, h - 2 * safe, 'rv-safe') : ''}</svg>
+      </div>
+      <div class="rv-legend small"><span><i class="rv-key rv-key-trim"></i>${esc(t('rv.legendTrim'))}</span>${safe ? `<span><i class="rv-key rv-key-safe"></i>${esc(t('rv.legendSafe'))}</span>` : ''}</div>` : '';
+    const extra = [b ? t('rv.bleed', { mm: mm(b) }) : '', safe ? t('rv.safe', { mm: mm(safe) }) : ''].filter(Boolean).join(' · ');
+    return `
+      <figure class="rv-art">
+        <figcaption><b>${esc(t('rv.artwork', { side: tr(s.name) }))}</b></figcaption>
+        ${board}
+        <dl class="rv-dims small">
+          <dt>${esc(t('rv.size'))}</dt><dd><bdi dir="ltr">${cm(w)} × ${cm(h)} cm (${w} × ${h} in)</bdi>${extra ? `<div class="muted">${esc(extra)}</div>` : ''}</dd>
+          ${s.dpi || s.widthPx ? `<dt>DPI · px</dt><dd><bdi dir="ltr">${esc(t('rv.resolution', { dpi: s.dpi || '?', w: s.widthPx || '?', h: s.heightPx || '?' }))}</bdi></dd>` : ''}
+        </dl>
+      </figure>`;
+  }
+  function checkText(c) {
+    const p = {};
+    for (const [k, v] of Object.entries(c.params || {})) p[k] = Array.isArray(v) ? v.join(', ') : typeof v === 'number' ? String(Math.round(v * 10) / 10) : v;
+    return hasStr('pf.' + c.id) ? t('pf.' + c.id, p) : t('pf.unknown', { id: c.id });
+  }
+  function rvChecks(item) {
+    const pf = item.preflight || proofOf(item).preflight;
+    const checks = (pf && pf.checks) || [];
+    const rank = { fail: 0, warn: 1, info: 2 };
+    const list = checks.slice().sort((a, b) => (rank[a.level] ?? 3) - (rank[b.level] ?? 3));
+    const sideName = (id) => { const s = rvSides(item).find((x) => x.id === id); return s ? tr(s.name) : id; };
+    return `
+      <section class="rv-box">
+        <h3>${esc(t('rv.checks'))} ${pf && pf.status ? `<span class="rv-pf rv-pf-${esc(pf.status)}">${esc(t('rv.pf.' + pf.status))}</span>` : ''}</h3>
+        ${!pf ? `<p class="muted small">${esc(t('rv.checksNone'))}</p>` : !list.length ? `<p class="small rv-ok">✓ ${esc(t('rv.checksPass'))}</p>` : `
+        <ul class="rv-checks">${list.map((c) => `
+          <li class="rv-check rv-lv-${esc(c.level)}"><span class="rv-lv">${esc(hasStr('rv.level.' + c.level) ? t('rv.level.' + c.level) : c.level)}</span><span class="rv-check-text">${c.side ? `<b>${esc(sideName(c.side))}:</b> ` : ''}${esc(checkText(c))}</span></li>`).join('')}
+        </ul>`}
+      </section>`;
+  }
+  /** The newest note: the customer's comment when they asked for changes, or the shop's note to them. */
+  function rvLastNote(item) {
+    const list = item.approvals || [];
+    for (let i = list.length - 1; i >= 0; i--) {
+      const a = list[i] || {};
+      if (a.by === 'customer' && a.action === 'rejected') return a.note ? { who: 'customer', note: a.note, at: a.at } : null;
+      if (a.by === 'shop' && a.action === 'changes' && a.note && !a.side) return { who: 'shop', note: a.note, at: a.at };
+      if (a.action === 'approved') return null;
+    }
+    return null;
+  }
+  function rvComment(item) {
+    const n = rvLastNote(item);
+    if (!n) return '';
+    return `<blockquote class="rv-comment rv-comment-${n.who}"><div class="small"><b>${esc(t(n.who === 'customer' ? 'rv.customerComment' : 'rv.shopNote'))}</b>${n.at ? ` · <span class="muted">${esc(when(n.at))}</span>` : ''}</div><p dir="auto">${esc(n.note)}</p></blockquote>`;
+  }
+  function rvHistory(item) {
+    const list = (item.approvals || []).slice().reverse();
+    const isReplace = (a) => a.by === 'shop' && a.action === 'changes' && a.side;
+    const sideName = (id) => { const s = rvSides(item).find((x) => x.id === id); return s ? tr(s.name) : id; };
+    const what = (a) => (isReplace(a) ? `${t('rv.action.replaced')} · ${sideName(a.side)}` : hasStr('rv.action.' + a.action) ? t('rv.action.' + a.action) : a.action || '');
+    const by = (a) => [hasStr('rv.by.' + a.by) ? t('rv.by.' + a.by) : a.by || '', a.via && hasStr('rv.via.' + a.via) ? t('rv.via.' + a.via) : ''].filter(Boolean).join(' ');
+    return `
+      <section class="rv-box">
+        <h3>${esc(t('rv.history'))}</h3>
+        ${list.length ? `
+        <table class="rv-history">
+          <thead><tr><th>${esc(t('rv.col.action'))}</th><th>${esc(t('rv.col.by'))}</th><th>${esc(t('rv.col.when'))}</th><th>${esc(t('rv.col.version'))}</th><th>${esc(t('rv.col.note'))}</th></tr></thead>
+          <tbody>${list.map((a) => `
+            <tr class="rv-h-${esc(a.action)}">
+              <td data-label="${esc(t('rv.col.action'))}"><span><b>${esc(what(a))}</b>${a.sample ? ` <span class="pill rv-sample">${esc(t('rv.sampleAsked'))}</span>` : ''}</span></td>
+              <td data-label="${esc(t('rv.col.by'))}"><span>${esc(by(a))}</span></td>
+              <td data-label="${esc(t('rv.col.when'))}"><span>${a.at ? esc(when(a.at)) : '—'}</span></td>
+              <td data-label="${esc(t('rv.col.version'))}"><span>${a.version != null ? esc(String(a.version)) : '—'}</span></td>
+              <td data-label="${esc(t('rv.col.note'))}"><span dir="auto">${a.note && !isReplace(a) ? esc(a.note) : '<span class="muted">—</span>'}</span></td>
+            </tr>`).join('')}
+          </tbody>
+        </table>` : `<p class="muted small">${esc(t('rv.historyNone'))}</p>`}
+      </section>`;
+  }
+  function rvNames(item) {
+    const m = { ...(item.merge || {}), ...(proofOf(item).merge || {}) };
+    const cols = m.columns || [];
+    const rows = (m.sample || []).slice(0, 3);
+    const cell = (row, col, k) => (Array.isArray(row) ? row[k] : row && typeof row === 'object' ? row[col] : k === 0 ? row : '');
+    const printUrl = item.sides && item.sides[0] && item.sides[0].printUrl;
+    return `
+      <section class="rv-box">
+        <h3>${esc(t('rv.nameList'))}</h3>
+        <p class="small" style="margin:0 0 8px">${esc(t('rv.nameListInfo', { n: POD.num(m.count || 0), cols: cols.join(', ') }))}</p>
+        ${rows.length && cols.length ? `
+        <div class="rv-names-wrap"><div class="muted small">${esc(t('rv.nameListFirst'))}</div>
+          <table class="rv-names"><thead><tr><th>#</th>${cols.map((c) => `<th dir="auto">${esc(c)}</th>`).join('')}</tr></thead>
+          <tbody>${rows.map((row, i) => `<tr><td>${esc(POD.num(i + 1))}</td>${cols.map((c, k) => `<td dir="auto">${esc(cell(row, c, k) ?? '')}</td>`).join('')}</tr>`).join('')}</tbody></table>
+        </div>` : ''}
+        ${printUrl ? `<button class="btn btn-sm" type="button" data-download="${esc(printUrl)}?format=merge-csv">⬇ ${esc(t('rv.csv'))}</button>` : ''}
+      </section>`;
+  }
+  const msgHtml = (m) => (m ? `<p class="rv-msg ${m.ok ? 'ok' : 'bad'}" aria-live="polite">${esc(m.text)}</p>` : '<p class="rv-msg" aria-live="polite"></p>');
+  function rvActions(item) {
+    const id = esc(item.id);
+    const busy = rvBusy.has(item.id);
+    const v = proofOf(item).version;
+    return `
+      <section class="rv-box rv-decide">
+        <h3>${esc(t('rv.actions'))}</h3>
+        ${item.status === 'awaiting_approval' ? `<p class="muted small">${esc(t('rv.awaitingNote', { v: v || '' }))}</p>` : ''}
+        ${item.status !== 'awaiting_approval' && !customerApproved(item) ? `<p class="rv-hint small">${esc(t('rv.notYetApproved'))}</p>` : ''}
+        <label class="small" for="rv-note-${id}"><b>${esc(t('rv.note'))}</b></label>
+        <textarea id="rv-note-${id}" data-rv-note="${id}" rows="3" maxlength="1000" dir="auto" placeholder="${esc(t('rv.notePh'))}">${esc(rvNote[item.id] || '')}</textarea>
+        <div class="rv-btns">
+          <button class="btn btn-primary" type="button" data-rv-act="approve" data-rv-id="${id}" ${busy ? 'disabled' : ''}>✓ ${esc(t('rv.approve'))}</button>
+          <button class="btn" type="button" data-rv-act="changes" data-rv-id="${id}" ${busy ? 'disabled' : ''}>✎ ${esc(t('rv.askChanges'))}</button>
+        </div>
+        ${msgHtml(rvMsg[item.id])}
+      </section>`;
+  }
+  /** Did the customer approve exactly the files that are there now? (Else approving sends them the proof first.) */
+  const customerApproved = (item) => Boolean(item.approval && item.filesMatchApproval !== false && (!proofOf(item).proofHash || item.approval.proofHash === proofOf(item).proofHash));
+  function rvReplace(item) {
+    if (item.kind === 'gangsheet') return '';
+    const sides = rvSides(item).filter((s) => s.widthPx && s.heightPx);
+    if (!sides.length) return '';
+    const busy = rvBusy.has(item.id);
+    return `
+      <section class="rv-box">
+        <h3>${esc(t('rv.replace'))}</h3>
+        <p class="muted small" style="margin:0 0 8px">${esc(t('rv.replaceHelp'))}</p>
+        ${sides.map((s) => `
+          <div class="rv-up">
+            <label class="btn btn-sm rv-file ${busy ? 'is-busy' : ''}">
+              <input class="rv-file-input" type="file" accept="image/png" data-rv-file="${esc(item.id)}" data-rv-side="${esc(s.id)}" ${busy ? 'disabled' : ''}>
+              ⬆ ${esc(t('rv.replaceSide', { side: tr(s.name), w: s.widthPx, h: s.heightPx }))}
+            </label>
+            ${rvSideMsg[item.id + ':' + s.id] ? msgHtml(rvSideMsg[item.id + ':' + s.id]) : ''}
+          </div>`).join('')}
+      </section>`;
+  }
+  function rvLinkBox(item) {
+    const id = esc(item.id);
+    const link = rvLink[item.id] || item.proofLink;
+    return `
+      <section class="rv-box">
+        <h3>${esc(t('rv.link'))}</h3>
+        ${link ? `<div class="rv-link"><input type="text" readonly dir="ltr" id="rv-link-${id}" value="${esc(absLink(link))}" aria-label="${esc(t('rv.link'))}"><button class="btn btn-sm" type="button" data-rv-copy="${id}">${esc(t('rv.copy'))}</button></div>` : `<p class="muted small">${esc(t('rv.linkNone'))}</p>`}
+        ${item.status === 'awaiting_approval'
+          ? `<button class="btn btn-sm" type="button" data-rv-act="resend" data-rv-id="${id}" ${rvBusy.has(item.id) ? 'disabled' : ''}>↻ ${esc(t('rv.resend'))}</button>`
+          : `<p class="muted small" style="margin:0">${esc(t('rv.resendWhen'))}</p>`}
+        ${rvMsg['link:' + item.id] ? msgHtml(rvMsg['link:' + item.id]) : ''}
+      </section>`;
+  }
+
+  /** Put an item from an action's answer into the list (it leaves the list once printable). */
+  function rvApply(id, r) {
+    const fresh = r && (r.item && r.item.id ? r.item : r.id ? r : null);
+    if (!fresh || !reviewData) return false;
+    const list = reviewData.items;
+    const k = list.findIndex((i) => i.id === id);
+    if (!IN_REVIEW.has(fresh.status)) {
+      if (k >= 0) list.splice(k, 1);
+      rvOpen.delete(id);
+    } else if (k >= 0) list[k] = { ...list[k], ...fresh };
+    else list.push(fresh);
+    reviewCount = list.length;
+    return true;
+  }
+  async function rvAfter(id, r) {
+    if (!rvApply(id, r)) {
+      // The answer was only a status: read the list again.
+      try { setReview((await adminApi('/api/admin/review')).items || []); } catch (e) { /* keep what we have */ }
+    }
+    renderReviewCount();
+  }
+  async function rvAction(id, act) {
+    const note = (rvNote[id] || '').trim();
+    const msgKey = act === 'resend' ? 'link:' + id : id;
+    if (act === 'changes' && !note) {
+      rvMsg[id] = { text: t('rv.noteRequired'), ok: false };
+      renderReview();
+      const ta = document.getElementById('rv-note-' + id);
+      if (ta) ta.focus();
+      return;
+    }
+    rvBusy.add(id);
+    rvMsg[msgKey] = { text: t('rv.working'), ok: true };
+    renderReview();
+    try {
+      if (act === 'resend') {
+        const r = await adminApi(`/api/admin/items/${encodeURIComponent(id)}/resend-proof`, { method: 'POST', headers: { 'x-lang': POD.lang } });
+        if (r && r.proofLink) {
+          rvLink[id] = r.proofLink;
+          const it = rvFind(id);
+          if (it) it.proofLink = r.proofLink;
+        }
+        rvMsg[msgKey] = { text: t('rv.resent'), ok: true };
+      } else {
+        const r = await adminApi(`/api/admin/items/${encodeURIComponent(id)}/review`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang },
+          body: JSON.stringify({ action: act, ...(note ? { note } : {}) }),
+        });
+        await rvAfter(id, r);
+        delete rvNote[id];
+        // Approving files the customer has not approved sends them the proof first.
+        const done = t(act === 'changes' ? 'rv.changesSent' : r && r.status === 'awaiting_approval' ? 'rv.approvedProofSent' : 'rv.approved');
+        rvMsg[msgKey] = { text: done, ok: true };
+        toast(done);
+      }
+    } catch (err) {
+      rvMsg[msgKey] = { text: err.message, ok: false };
+    }
+    rvBusy.delete(id);
+    renderReview();
+  }
+  /** Width and height from a PNG's header (no need to decode a big print file). */
+  async function pngSize(file) {
+    const head = new Uint8Array(await file.slice(0, 24).arrayBuffer());
+    const sig = [137, 80, 78, 71, 13, 10, 26, 10];
+    if (head.length < 24 || !sig.every((x, i) => head[i] === x)) return null;
+    const dv = new DataView(head.buffer);
+    return { w: dv.getUint32(16), h: dv.getUint32(20) };
+  }
+  async function rvUpload(input) {
+    const id = input.dataset.rvFile;
+    const sideId = input.dataset.rvSide;
+    const file = input.files && input.files[0];
+    input.value = '';
+    const item = rvFind(id);
+    const side = item && rvSides(item).find((s) => s.id === sideId);
+    if (!file || !side) return;
+    const key = id + ':' + sideId;
+    const fail = (text) => { rvSideMsg[key] = { text, ok: false }; renderReview(); };
+    let size = null;
+    try { size = await pngSize(file); } catch (e) { return fail(t('rv.replaceUnreadable')); }
+    if (!size) return fail(t('rv.replaceNotPng'));
+    if (size.w !== Number(side.widthPx) || size.h !== Number(side.heightPx)) {
+      return fail(t('rv.replaceBadSize', { w: size.w, h: size.h, side: tr(side.name), ew: side.widthPx, eh: side.heightPx }));
+    }
+    const nextV = (Number(proofOf(item).version) || 0) + 1;
+    if (!confirm(t('rv.replaceConfirm', { v: nextV }))) { delete rvSideMsg[key]; renderReview(); return; }
+    rvBusy.add(id);
+    rvSideMsg[key] = { text: t('rv.replaceUploading'), ok: true };
+    renderReview();
+    try {
+      const r = await adminApi(`/api/admin/items/${encodeURIComponent(id)}/replacement/${encodeURIComponent(sideId)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'image/png', 'x-lang': POD.lang },
+        body: file,
+      });
+      await rvAfter(id, r);
+      const v = proofOf(rvFind(id)).version || nextV;
+      rvSideMsg[key] = { text: t('rv.replaceDone', { v }), ok: true };
+      toast(t('rv.replaceDone', { v }));
+    } catch (err) {
+      rvSideMsg[key] = { text: err.message, ok: false };
+    }
+    rvBusy.delete(id);
+    renderReview();
+  }
+  $('rv-list').addEventListener('click', async (e) => {
+    const tog = e.target.closest('[data-rv-toggle]');
+    if (tog) {
+      const id = tog.dataset.rvToggle;
+      if (rvOpen.has(id)) rvOpen.delete(id);
+      else rvOpen.add(id);
+      renderReview();
+      return;
+    }
+    const act = e.target.closest('[data-rv-act]');
+    if (act) return rvAction(act.dataset.rvId, act.dataset.rvAct);
+    const copy = e.target.closest('[data-rv-copy]');
+    if (copy) {
+      const input = document.getElementById('rv-link-' + copy.dataset.rvCopy);
+      if (!input) return;
+      try {
+        await navigator.clipboard.writeText(input.value);
+      } catch (err) {
+        input.select();
+        document.execCommand('copy');
+      }
+      toast(t('rv.copied'));
+    }
+  });
+  $('rv-list').addEventListener('input', (e) => {
+    const id = e.target.dataset && e.target.dataset.rvNote;
+    if (id) rvNote[id] = e.target.value;
+  });
+  $('rv-list').addEventListener('change', (e) => {
+    if (e.target.matches('[data-rv-file]')) rvUpload(e.target);
+  });
+  // "Open in Review" from the print queue and the orders table.
+  document.addEventListener('click', (e) => {
+    const go = e.target.closest('[data-rv-goto]');
+    if (!go) return;
+    rvOpen.add(go.dataset.rvGoto);
+    rvScrollTo = go.dataset.rvGoto;
+    document.querySelector('[data-tab="review"]').click();
+  });
+
   // ---------- Large preview on hover ----------
   const zoom = document.createElement('div');
   zoom.className = 'zoom-pop';
@@ -1385,8 +1865,12 @@
     const dl = e.target.closest('[data-download]');
     if (dl) {
       try {
-        const res = await fetch(dl.dataset.download, { headers: authHeader() });
-        if (!res.ok) throw new Error(t('admin.downloadFailed'));
+        const res = await fetch(dl.dataset.download, { headers: { ...authHeader(), 'x-lang': POD.lang } });
+        if (!res.ok) {
+          // 409 notApproved: the file is not (or no longer) the one the customer approved.
+          const body = (res.headers.get('content-type') || '').includes('json') ? await res.json().catch(() => null) : null;
+          throw new Error((body && body.error) || t(res.status === 409 ? 'rv.notApproved' : 'admin.downloadFailed'));
+        }
         const name = /filename="?([^"]+)"?/.exec(res.headers.get('content-disposition') || '')?.[1] || 'print.png';
         const url = URL.createObjectURL(await res.blob());
         const a = Object.assign(document.createElement('a'), { href: url, download: name });

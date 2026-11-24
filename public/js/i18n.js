@@ -552,7 +552,7 @@ window.POD_STRINGS = {
   'msg.addFirst': ['Add some text, an image or a shape first.', 'أضف نصًا أو صورة أو شكلًا أولًا.'],
   'msg.lowResConfirm': ['These images are low resolution and may print blurry:\n\n{list}\n\nAdd to cart anyway?', 'هذه الصور دقتها منخفضة وقد تُطبع غير واضحة:\n\n{list}\n\nهل تريد الإضافة إلى السلة على أي حال؟'],
   'msg.lowResToast': ['Heads up: this image is low resolution ({dpi} DPI at this size) and may print blurry.', 'تنبيه: دقة هذه الصورة منخفضة ({dpi} DPI بهذا الحجم) وقد تُطبع غير واضحة.'],
-  'msg.badType': ['Please choose a JPG, JPEG, PNG, AI, EPS, WebP or GIF file', 'من فضلك اختر ملف JPG أو JPEG أو PNG أو AI أو EPS أو WebP أو GIF'],
+  'msg.badType': ['Please choose a JPG, PNG, WebP, GIF, SVG, PDF, AI or EPS file', 'من فضلك اختر ملف JPG أو PNG أو WebP أو GIF أو SVG أو PDF أو AI أو EPS'],
   'msg.tooBigVector': ['That AI/EPS file is larger than 40 MB', 'حجم ملف AI/EPS أكبر من 40 ميجابايت'],
   'busy.artwork': ['Opening your design file…', 'جارٍ فتح ملف التصميم…'],
   'msg.tooBig': ['That image is larger than 25 MB', 'حجم الصورة أكبر من 25 ميجابايت'],
@@ -651,7 +651,7 @@ window.POD_STRINGS = {
   'pv.no3d': ['3D preview isn’t supported on this device.', 'المعاينة ثلاثية الأبعاد غير مدعومة على هذا الجهاز.'],
   'pv.screen': ['On screen (RGB)', 'على الشاشة (RGB)'],
   'pv.print': ['Printed estimate (CMYK)', 'تقدير الطباعة (CMYK)'],
-  'pv.proofNote': ['Screens show more vivid colours than ink can print. Very bright neon colours usually print a little duller.', 'الشاشات تعرض ألوانًا أكثر حيوية مما يمكن طباعته. الألوان الفسفورية الزاهية تُطبع عادةً أهدأ قليلًا.'],
+  'pv.proofNote': ['A screen estimate of the printed colours, not a printed colour proof: every screen shows colour differently, and very bright or neon colours usually print a little duller. Ordering several pieces and need exact colours? Ask for a printed sample first at checkout.', 'تقدير على الشاشة لألوان الطباعة، وليس بروفة ألوان مطبوعة: تعرض كل شاشة الألوان بشكل مختلف، والألوان الزاهية أو الفسفورية تُطبع عادةً أهدأ قليلًا. تطلب عدة قطع وتحتاج ألوانًا دقيقة؟ اطلب عينة مطبوعة أولًا عند إتمام الطلب.'],
   'pv.proofFailed': ['Could not create the colour preview.', 'تعذّر إنشاء معاينة الألوان.'],
 
   // Text presets

@@ -323,4 +323,48 @@ async function orderShipped(order, { siteUrl } = {}) {
   }
 }
 
-module.exports = { status, orderPlaced, orderShipped, adminTest, emailReady, emailTo, shopWhatsApp: () => config().shopWhatsApp, siteUrl: () => config().siteUrl };
+/**
+ * Email the customer about a proof: a new proof to approve (kind 'proof') or
+ * the shop asking for changes (kind 'changes'), with the shop's note and the
+ * link. In the customer's language. Never throws. Returns like orderShipped.
+ */
+async function proofMessage(order, item, { kind = 'proof', note = '', link = '' } = {}) {
+  try {
+    const cfg = config();
+    const to = order && order.customer && String(order.customer.email || '').trim();
+    if (!to) return { email: 'skipped', reason: 'noEmail' };
+    if (!emailReady()) return { email: 'skipped', reason: 'emailOff' };
+    const ar = order.lang !== 'en';
+    const h = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const product = item && item.productName ? (ar ? item.productName.ar : item.productName.en) || '' : '';
+    const T = ar
+      ? {
+        subject: kind === 'proof' ? `طلبك ${order.number}: نحتاج موافقتك على البروفة` : `طلبك ${order.number}: مطلوب تعديل قبل الطباعة`,
+        lead: kind === 'proof' ? `جهّزنا بروفة جديدة لـ ${product}. راجعها ووافق عليها لنبدأ الطباعة.` : `راجعنا ${product} ونحتاج إلى تعديل قبل الطباعة.`,
+        button: kind === 'proof' ? 'راجع البروفة' : 'افتح الطلب',
+        noteLabel: 'رسالة من المطبعة:',
+        screen: 'هذه بروفة على الشاشة؛ قد تختلف الألوان المطبوعة قليلًا عمّا تراه على شاشتك.',
+      }
+      : {
+        subject: kind === 'proof' ? `Order ${order.number}: please approve your proof` : `Order ${order.number}: a change is needed before printing`,
+        lead: kind === 'proof' ? `We have a new proof for your ${product}. Please check and approve it so we can print.` : `We checked your ${product} and something needs changing before we print.`,
+        button: kind === 'proof' ? 'Check the proof' : 'Open your order',
+        noteLabel: 'Message from the print shop:',
+        screen: 'This is a screen proof; printed colours can look a little different from your screen.',
+      };
+    const dir = ar ? 'rtl' : 'ltr';
+    const html = `<div dir="${dir}" style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;color:#1b1f27">
+      <p>${h(T.lead)}</p>
+      ${note ? `<p><strong>${h(T.noteLabel)}</strong><br>${h(note).replace(/\n/g, '<br>')}</p>` : ''}
+      ${/^https?:\/\//.test(link) ? `<p><a href="${h(link)}" style="display:inline-block;background:#ff5a36;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:bold">${h(T.button)}</a></p>` : ''}
+      <p style="color:#666;font-size:13px">${h(T.screen)}</p></div>`;
+    const text = [T.lead, note ? `${T.noteLabel} ${note}` : '', link, T.screen].filter(Boolean).join('\n\n');
+    await sendEmail(cfg, to, T.subject, html, text);
+    return { email: 'sent' };
+  } catch (e) {
+    console.warn(`[notify] proof email for ${order && order.number} failed: ${e.message}`);
+    return { email: 'failed', error: String(e.message || e).slice(0, 200) };
+  }
+}
+
+module.exports = { status, orderPlaced, orderShipped, proofMessage, adminTest, emailReady, emailTo, shopWhatsApp: () => config().shopWhatsApp, siteUrl: () => config().siteUrl };

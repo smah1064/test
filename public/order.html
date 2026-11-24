@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="/fonts/fonts.css">
   <link rel="stylesheet" href="/css/styles.css">
   <link rel="stylesheet" href="/css/aftercare.css">
+  <link rel="stylesheet" href="/css/proof.css">
 </head>
 <body data-title-key="order.pageTitle">
   <header class="site-header">
@@ -30,6 +31,7 @@
 
   <script src="/js/i18n.js"></script>
   <script src="/js/i18n-aftercare.js"></script>
+  <script src="/js/i18n-proof.js"></script>
   <script src="/js/common.js"></script>
   <script>
     (async () => {
@@ -135,6 +137,38 @@
           </div>`;
       }
 
+      // Items the shop checks first, or that wait for the customer's OK on a new proof.
+      const REVIEW_STATES = ['review', 'awaiting_approval', 'changes_requested'];
+      /** The newest note about changes: the shop's request or the customer's own. */
+      function changesNote(item) {
+        const hist = Array.isArray(item.approvals) ? item.approvals : [];
+        for (let k = hist.length - 1; k >= 0; k--) {
+          const h = hist[k];
+          if (h && (h.action === 'changes' || h.action === 'rejected')) return h.note ? { note: h.note, mine: h.by === 'customer' } : null;
+        }
+        return item.review && item.review.note ? { note: item.review.note, mine: false } : null;
+      }
+      function proofStateHtml(item) {
+        if (!REVIEW_STATES.includes(item.status)) return '';
+        let body = '';
+        if (item.status === 'review') {
+          body = `<p>${esc(t('item.reviewHint'))}</p>`;
+        } else if (item.status === 'awaiting_approval') {
+          const url = item.proofUrl || item.proofLink;
+          const link = typeof url === 'string' && /^\/proof\?t=[\w-]+$/.test(url) ? url : null;
+          body = `<p>${esc(t('item.awaitingHint'))}</p>${link ? `<a class="btn btn-sm btn-primary" href="${esc(link)}">${esc(t('item.openProof'))}</a>` : `<p>${esc(t('item.awaitingLinkSent'))}</p>`}`;
+        } else {
+          const n = changesNote(item);
+          body = `${n ? `<p><strong>${esc(t(n.mine ? 'item.yourNote' : 'item.shopNote', { note: '\u2063' })).replace('\u2063', `<bdi>${esc(n.note)}</bdi>`)}</strong></p>` : ''}<p>${esc(t('item.changesHint'))}</p>`;
+        }
+        return `<div class="item-proof-state ${item.status}">${body}</div>`;
+      }
+      function approvalHtml(item) {
+        const a = item.approval;
+        if (!a || !a.at) return '';
+        return `<div class="item-approved"><span>✓ ${esc(t('item.approvedOn', { date: POD.date(a.at), v: POD.num(a.version || 1) }))}</span>${a.sample ? `<span class="item-sample">${esc(t('item.sampleFirst'))}</span>` : ''}</div>`;
+      }
+
       function render() {
         if (error) {
           content.innerHTML = `<div class="card empty"><h2>${esc(t('order.notFound'))}</h2><p class="muted">${esc(error)}</p><a class="btn" href="/">${esc(t('order.back'))}</a></div>`;
@@ -172,7 +206,9 @@
                   <h3>${POD.num(i + 1)}. ${esc(tr(item.productName))}</h3>
                   <div class="meta">${breakdown ? '' : `${esc(tr(item.color.name))} · ${esc(tr(item.size.label))} · `}${esc((item.sides || []).map((s) => tr(s.name)).join(' + '))}${names ? ` · <span class="cart-copies">${esc(t('cart.copies', { n: POD.num(pieces) }))}</span>` : ''}</div>
                   ${breakdown ? PODAftercare.qtyHtml(item) : ''}
-                  <div class="status-label" style="margin-top:10px">${esc(t('item.' + status))}</div>
+                  <div class="status-label st-${esc(status)}" style="margin-top:10px">${esc(t('item.' + status))}</div>
+                  ${delivered ? '' : proofStateHtml(item)}
+                  ${approvalHtml(item)}
                   <div class="status-steps">${STEPS.map((s, k) => `<div class="${k <= reached ? 'done' : ''}" title="${esc(t('item.' + s))}"></div>`).join('')}</div>
                 </div>
                 <div class="price">${esc(money(item.price))}${pieces > 1 && item.unitPrice ? `<div class="qty-each">${esc(t('qty.each', { price: money(item.unitPrice) }))}</div>` : ''}</div>

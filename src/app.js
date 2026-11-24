@@ -75,6 +75,8 @@ function siteVersion(dir) {
 
 /** Production steps every single item moves through, in order. */
 const ITEM_STATUSES = ['queued', 'printing', 'printed', 'shipped'];
+/** Before production: the shop checks it, the customer approves a new proof, or changes are needed. */
+const REVIEW_STATUSES = ['review', 'awaiting_approval', 'changes_requested'];
 
 const MAX_EDITOR_JSON_BYTES = 40 * 1024 * 1024;
 // merge: a name list's pictures, one per copy (up to 1,000 of them).
@@ -165,6 +167,7 @@ function publicProduct(p) {
 function orderStatus(order) {
   const statuses = order.items.map((i) => i.status);
   if (order.shipment && order.shipment.deliveredAt) return 'delivered';
+  if (order.items.some((i) => REVIEW_STATUSES.includes(i.status))) return 'in_review';
   if (statuses.every((s) => s === 'shipped')) return 'shipped';
   if (statuses.every((s) => s === 'queued')) return 'received';
   return 'in_production';
@@ -200,6 +203,12 @@ function publicItem(item) {
     // One price per piece when every piece costs the same; null when sizes are priced differently (see quantities).
     unitPrice: item.unitPrice != null ? item.unitPrice : item.quantities && new Set(item.quantities.map((l) => l.unitPrice)).size > 1 ? null : round2(item.price / (item.copies || 1)),
     quantities: item.quantities || null,
+    approval: item.approval || null,
+    approvals: item.approvals || [],
+    review: item.review ? { needed: item.review.needed, reasons: item.review.reasons, status: item.review.status, note: item.review.note || null } : null,
+    preflight: item.preflight ? { status: item.preflight.status, checks: item.preflight.checks } : null,
+    // The order id is the customer's key: a waiting proof can be opened from the order page.
+    proofUrl: item.status === 'awaiting_approval' && item.proofToken ? `/proof?t=${item.proofToken}` : null,
     merge: item.merge ? { count: item.merge.count, columns: item.merge.columns } : null,
   };
 }
@@ -353,7 +362,7 @@ const DEFAULT_LIMITS = {
   downloads: [{ max: 200, ms: 3600e3 }],
 };
 
-function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 3600e3, oauthConfig = {}, oauthFetch, importGet }) {
+function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 3600e3, oauthConfig = {}, oauthFetch, importGet, requireApproval = true }) {
   if (!adminPassword) throw new Error('adminPassword is required');
   const store = new Store(dataDir);
   const app = express();
@@ -445,6 +454,345 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   //   1. POST   /api/designs                      layout + options -> id and upload token
   //   2. PUT    /api/designs/:id/files/:name      each PNG/SVG file
   //   3. POST   /api/designs/:id/complete         checks files, embeds colour profile + DPI
+  // ---------- Proofs, approval and review ----------
+  // A proof is what the customer approves: product, colour, size, pieces,
+  // every printed side at its physical size and the production file itself.
+  // The approval is recorded against a fingerprint (proofHash) of all of it;
+  // production files are refused if they no longer match, and any change
+  // after approval needs a new approval.
+  let preflightModule = null;
+  const pf = () => {
+    try {
+      return (preflightModule ||= require('./preflight'));
+    } catch (e) {
+      return null;
+    }
+  };
+  const fileHash = (designId, name) => {
+    try {
+      return crypto.createHash('sha256').update(fs.readFileSync(store.designFile(designId, name))).digest('hex');
+    } catch (e) {
+      return null;
+    }
+  };
+  /** The files that are printed (what the approval covers). */
+  function productionFiles(d) {
+    if (d.kind === 'gangsheet') return (d.sheet && d.sheet.items ? d.sheet.items.map((it) => it.file) : []);
+    if (d.kind === 'book') {
+      let names = [];
+      try {
+        names = fs.readdirSync(store.designDir(d.id)).filter((n) => /^redraw-\d+\.jpg$/.test(n)).sort();
+      } catch (e) { /* no files */ }
+      return names;
+    }
+    const names = [];
+    for (const sd of d.sides) {
+      names.push(`${sd.id}-print.png`);
+      if (d.merge && d.merge.sides && d.merge.sides[sd.id]) names.push(`${sd.id}-merge-base.png`, `${sd.id}-merge.bin`);
+    }
+    if (d.merge) names.push('merge.json');
+    return names;
+  }
+  const fileHashes = (d) => Object.fromEntries(productionFiles(d).map((n) => [n, fileHash(d.id, n)]));
+  /** Everything that, if changed, means the customer must approve again. */
+  function proofSpec(d) {
+    return {
+      productId: d.productId,
+      kind: d.kind || 'product',
+      color: d.color && d.color.id,
+      size: d.size && d.size.id,
+      quantities: d.quantities ? d.quantities.map((l) => [l.color.id, l.size.id, l.qty]) : null,
+      sides: d.sides.map((sd) => [sd.id, sd.widthIn, sd.heightIn, sd.bleedIn || 0, sd.offsetCm || null]),
+      method: d.method || 'print',
+      pattern: d.pattern || null,
+      book: d.kind === 'book' ? { bookId: d.bookId, version: d.version || 0, answers: d.answers || null } : null,
+    };
+  }
+  const proofHashOf = (d) => crypto.createHash('sha256').update(JSON.stringify({ spec: proofSpec(d), files: fileHashes(d) })).digest('hex');
+  const LARGE_ORDER = 50;
+  /** Why a design needs the shop to look at it before printing (empty: approval at checkout is enough). */
+  function reviewReasons(d, { sample = false } = {}) {
+    const r = [];
+    if (d.preflight && d.preflight.status === 'fail') r.push('preflight');
+    if (d.merge) r.push('nameList');
+    if (d.method === 'embroidery') r.push('embroidery');
+    if (d.imports && d.imports.length) r.push('imported');
+    if (copiesOf(d) >= LARGE_ORDER) r.push('bulk');
+    if (sample) r.push('sample');
+    return r;
+  }
+  /** The automatic checks of a design's print files (and the editor's own report), kept on the design. */
+  async function runPreflight(d) {
+    const mod = pf();
+    if (!mod || d.kind === 'book' || d.kind === 'gangsheet') {
+      d.preflight = { status: 'pass', checks: [], at: new Date().toISOString() };
+      return d.preflight;
+    }
+    try {
+      let result = await mod.preflight(d, { readFile: (name) => fs.readFileSync(store.designFile(d.id, name)), product: getProduct(d.productId) });
+      if (d.clientChecks && mod.mergeClientChecks) result = mod.mergeClientChecks(result, d.clientChecks);
+      d.preflight = { ...result, at: new Date().toISOString() };
+    } catch (e) {
+      console.warn('[preflight]', d.id, e.message);
+      d.preflight = { status: 'warn', checks: [{ id: 'checkFailed', level: 'warn', params: {} }], at: new Date().toISOString() };
+    }
+    return d.preflight;
+  }
+  /** A small picture of each side's production file (the artwork exactly as printed) for proofs. */
+  async function makeProofImages(d) {
+    if (d.kind === 'book' || d.kind === 'gangsheet') return;
+    for (const sd of d.sides) {
+      try {
+        const out = await sharp()(fs.readFileSync(store.designFile(d.id, `${sd.id}-print.png`)), { limitInputPixels: 130e6 })
+          .resize(1400, 1400, { fit: 'inside', withoutEnlargement: true }).png({ compressionLevel: 8 }).toBuffer();
+        store.writeDesignFile(d.id, `${sd.id}-proof.png`, out);
+      } catch (e) {
+        console.warn('[proof image]', d.id, sd.id, e.message);
+      }
+    }
+  }
+  /** The proof as the customer and the shop see it (see the shared contract). */
+  async function proofFor(d) {
+    const product = getProduct(d.productId);
+    if (!d.preflight && d.kind !== 'book') {
+      await runPreflight(d);
+      store.save();
+    }
+    if (d.kind !== 'book' && d.kind !== 'gangsheet' && !fs.existsSync(store.designFile(d.id, `${d.sides[0].id}-proof.png`))) await makeProofImages(d);
+    const list = d.merge ? readMergeList(d) : null;
+    const side = (sd) => {
+      const def = product && product.sides.find((x) => x.id === sd.id);
+      return {
+        id: sd.id, name: sd.name, widthIn: sd.widthIn, heightIn: sd.heightIn, bleedIn: sd.bleedIn || 0, safeIn: def ? def.safeIn || 0 : 0,
+        dpi: sd.dpi || null, widthPx: sd.widthPx || null, heightPx: sd.heightPx || null,
+        artworkUrl: d.kind === 'gangsheet' ? `/files/designs/${d.id}/front-preview.png` : `/files/designs/${d.id}/${sd.id}-proof.png?v=${d.version || 1}`,
+        previewUrl: d.kind === 'book' ? `/files/designs/${d.id}/book-preview.png?v=${d.version || 0}`
+          : d.replaced && d.replaced[sd.id] ? null : `/files/designs/${d.id}/${sd.id}-preview.png`,
+      };
+    };
+    return {
+      designId: d.id,
+      version: d.version || 1,
+      proofHash: proofHashOf(d),
+      product: product ? { id: product.id, name: product.name } : { id: d.productId, name: d.productName },
+      color: d.color, size: d.size, quantities: d.quantities || null, copies: copiesOf(d),
+      method: d.method || 'print', process: d.process || (product && product.process) || null,
+      sides: d.kind === 'book' ? [] : d.sides.map(side),
+      ...(d.kind === 'book' ? { pages: bookFor(d.bookId).pages.map((_, i) => `/api/books/designs/${d.id}/pages/${i}.jpg?v=${d.version || 0}`) } : {}),
+      ...(list ? { merge: { count: d.merge.count, columns: list.columns, sample: list.rows.slice(0, 3) } } : {}),
+      preflight: d.preflight ? { status: d.preflight.status, checks: d.preflight.checks } : { status: 'pass', checks: [] },
+      review: { needed: reviewReasons(d).length > 0, reasons: reviewReasons(d) },
+    };
+  }
+  app.get('/api/designs/:id/proof', async (req, res, next) => {
+    try {
+      const d = UUID_RE.test(req.params.id) && store.getDesign(req.params.id);
+      if (!d || (d.status && d.status !== 'ready')) throw new HttpError(404, 'designNotFound');
+      res.set('Cache-Control', 'no-store');
+      res.json(await proofFor(d));
+    } catch (e) {
+      next(e);
+    }
+  });
+  /** The approval as recorded on an order item, and its history entry. */
+  function recordApproval(item, d, { via, sample = false, note = null }) {
+    const now = new Date().toISOString();
+    const proofHash = proofHashOf(d);
+    item.approval = { proofHash, version: d.version || 1, at: now, by: 'customer', via, sample: Boolean(sample) };
+    item.approvedFiles = fileHashes(d);
+    item.approvals = [...(item.approvals || []), { action: 'approved', by: 'customer', via, at: now, proofHash, version: d.version || 1, ...(note ? { note } : {}) }];
+  }
+  /** Do the files on disk still match what the customer approved? */
+  function approvedFilesMatch(item, d) {
+    if (!item.approval) return true; // orders from before approvals existed
+    if (d.kind === 'book') return proofHashOf(d) === item.approval.proofHash;
+    const want = item.approvedFiles || {};
+    return Object.entries(want).every(([name, h]) => !h || fileHash(d.id, name) === h);
+  }
+  /** A link the customer can open to approve a new proof (kept on the item until used). */
+  function newProofLink(item) {
+    item.proofToken = crypto.randomBytes(18).toString('base64url');
+    item.proofTokenAt = new Date().toISOString();
+    return `/proof?t=${item.proofToken}`;
+  }
+  function findByProofToken(token) {
+    if (!/^[A-Za-z0-9_-]{20,40}$/.test(String(token || ''))) return null;
+    for (const order of store.listOrders()) {
+      for (const item of order.items) {
+        if (item.proofToken && item.proofToken.length === token.length && crypto.timingSafeEqual(Buffer.from(item.proofToken), Buffer.from(token))) return { order, item };
+      }
+    }
+    return null;
+  }
+  const siteOf = (req) => notify.siteUrl() || `${isHttps(req) ? 'https' : 'http'}://${req.get('host')}`;
+  /** Email the customer a proof to approve, or the shop's request for changes (never blocks the request). */
+  function tellCustomer(order, item, kind, note, req) {
+    if (typeof notify.proofMessage !== 'function') return;
+    const link = item.proofToken ? `${siteOf(req)}/proof?t=${item.proofToken}` : `${siteOf(req)}/order?id=${order.id}`;
+    Promise.resolve().then(() => notify.proofMessage(order, item, { kind, note, link, siteUrl: siteOf(req) }))
+      .then((r) => {
+        item.proofEmails = [...(item.proofEmails || []), { kind, at: new Date().toISOString(), ...(r || {}) }].slice(-10);
+        store.save();
+      })
+      .catch((e) => console.warn('[notify] proof email failed:', e.message));
+  }
+  /** Admin view of an item with its proof. */
+  async function reviewItem(order, item) {
+    const d = store.getDesign(item.designId);
+    return {
+      ...adminItem(order, item, order.items.indexOf(item)),
+      proof: d ? await proofFor(d) : null,
+      proofLink: item.proofToken ? `/proof?t=${item.proofToken}` : null,
+      filesMatchApproval: d ? approvedFilesMatch(item, d) : false,
+    };
+  }
+
+  // Customer: open a proof link, approve it or ask for changes.
+  app.get('/api/proofs/:token', async (req, res, next) => {
+    try {
+      const found = findByProofToken(req.params.token);
+      if (!found) throw new HttpError(404, 'proofNotFound');
+      const { order, item } = found;
+      const d = store.getDesign(item.designId);
+      if (!d) throw new HttpError(404, 'proofNotFound');
+      res.set('Cache-Control', 'no-store');
+      res.json({ order: { id: order.id, number: order.number }, item: { id: item.id, position: order.items.indexOf(item) + 1, productName: item.productName }, proof: await proofFor(d), note: (item.review && item.review.note) || null, status: item.status });
+    } catch (e) {
+      next(e);
+    }
+  });
+  app.post('/api/proofs/:token', express.json({ limit: '8kb' }), (req, res) => {
+    const found = findByProofToken(req.params.token);
+    if (!found) throw new HttpError(404, 'proofNotFound');
+    const { order, item } = found;
+    if (item.status !== 'awaiting_approval') throw new HttpError(409, 'proofDone');
+    const d = store.getDesign(item.designId);
+    const b = req.body || {};
+    const comment = String(b.comment || '').replace(/[\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 1000);
+    const now = new Date().toISOString();
+    if (b.decision === 'approve') {
+      if (b.proofHash && b.proofHash !== proofHashOf(d)) throw new HttpError(409, 'proofChanged', { designId: d.id });
+      recordApproval(item, d, { via: 'proof-link', note: comment || null });
+      item.status = 'queued';
+      item.review = { ...(item.review || { needed: false, reasons: [] }), status: 'done' };
+    } else if (b.decision === 'reject') {
+      item.status = 'changes_requested';
+      item.approvals = [...(item.approvals || []), { action: 'rejected', by: 'customer', at: now, proofHash: proofHashOf(d), version: d.version || 1, note: comment || null }];
+    } else {
+      throw new HttpError(400, 'badDecision');
+    }
+    item.history.push({ status: item.status, at: now });
+    delete item.proofToken;
+    store.save();
+    res.json({ status: item.status, orderId: order.id });
+  });
+
+  // Shop: the jobs that need a person, and what they can do with them.
+  const adminOnly = (req, res, next) => requireAdmin(req, res, next);
+  app.get('/api/admin/review', adminOnly, async (req, res, next) => {
+    try {
+      const items = [];
+      for (const order of store.listOrders()) {
+        for (const item of order.items) if (REVIEW_STATUSES.includes(item.status)) items.push(await reviewItem(order, item));
+      }
+      items.sort((a, b) => a.orderedAt.localeCompare(b.orderedAt) || a.position - b.position);
+      res.json({ items });
+    } catch (e) {
+      next(e);
+    }
+  });
+  app.post('/api/admin/items/:itemId/review', adminOnly, express.json({ limit: '8kb' }), async (req, res, next) => {
+    try {
+      const found = store.findItem(req.params.itemId);
+      if (!found) throw new HttpError(404, 'itemNotFound');
+      const { order, item } = found;
+      const d = store.getDesign(item.designId);
+      const b = req.body || {};
+      const note = String(b.note || '').trim().slice(0, 2000);
+      const now = new Date().toISOString();
+      if (b.action === 'approve') {
+        // Printed only from what the customer approved; otherwise they get the proof first.
+        if (item.approval && d && approvedFilesMatch(item, d) && item.approval.proofHash === proofHashOf(d)) item.status = 'queued';
+        else {
+          item.status = 'awaiting_approval';
+          newProofLink(item);
+          tellCustomer(order, item, 'proof', note, req);
+        }
+        item.review = { ...(item.review || { reasons: [] }), needed: true, status: 'done', ...(note ? { note } : {}) };
+        item.approvals = [...(item.approvals || []), { action: 'reviewed', by: 'shop', at: now, proofHash: d ? proofHashOf(d) : null, version: d ? d.version || 1 : null, ...(note ? { note } : {}) }];
+      } else if (b.action === 'changes') {
+        if (!note) throw new HttpError(400, 'noteRequired');
+        item.status = 'changes_requested';
+        item.review = { ...(item.review || { reasons: [] }), needed: true, status: 'pending', note };
+        item.approvals = [...(item.approvals || []), { action: 'changes', by: 'shop', at: now, note, proofHash: d ? proofHashOf(d) : null, version: d ? d.version || 1 : null }];
+        tellCustomer(order, item, 'changes', note, req);
+      } else {
+        throw new HttpError(400, 'badDecision');
+      }
+      item.history.push({ status: item.status, at: now });
+      store.save();
+      res.json(await reviewItem(order, item));
+    } catch (e) {
+      next(e);
+    }
+  });
+  // The shop fixes the artwork: a corrected print file (same size), kept as a new version; the customer approves it.
+  app.put('/api/admin/items/:itemId/replacement/:side', adminOnly, express.raw({ type: () => true, limit: '60mb' }), async (req, res, next) => {
+    try {
+      const found = store.findItem(req.params.itemId);
+      if (!found) throw new HttpError(404, 'itemNotFound');
+      const { order, item } = found;
+      const d = store.getDesign(item.designId);
+      const sd = d && d.kind !== 'book' && d.kind !== 'gangsheet' && d.sides.find((x) => x.id === req.params.side);
+      if (!sd) throw new HttpError(404, 'notFound');
+      if (['printing', 'printed', 'shipped'].includes(item.status)) throw new HttpError(409, 'alreadyPrinting');
+      const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+      if (buf.length < 24 || !buf.subarray(0, 8).equals(PNG_SIGNATURE)) throw new HttpError(400, 'badPng', { label: 'PNG' });
+      if (buf.readUInt32BE(16) !== sd.widthPx || buf.readUInt32BE(20) !== sd.heightPx) throw new HttpError(400, 'replacementSize', { w: sd.widthPx, h: sd.heightPx });
+      // The old file stays, so every version that was ever approved can be found again.
+      const v = d.version || 1;
+      const cur = store.designFile(d.id, `${sd.id}-print.png`);
+      if (fs.existsSync(cur)) fs.copyFileSync(cur, store.designFile(d.id, `${sd.id}-print.v${v}.png`));
+      let png = buf;
+      try {
+        png = await printfiles.finalizePrintPng(buf, sd.dpi);
+      } catch (e) { /* keep as sent */ }
+      store.writeDesignFile(d.id, `${sd.id}-print.png`, png);
+      // Files made from the old version are out of date.
+      for (const name of fs.readdirSync(store.designDir(d.id))) {
+        if (name.startsWith(`${sd.id}-print`) && name !== `${sd.id}-print.png` && !/\.v\d+\.png$/.test(name)) fs.rmSync(store.designFile(d.id, name), { force: true });
+        if (/^preview-v\d+\.pdf$/.test(name)) fs.rmSync(store.designFile(d.id, name), { force: true });
+      }
+      d.version = v + 1;
+      // The product mockup still shows the old artwork: proofs show only the print file for this side.
+      d.replaced = { ...(d.replaced || {}), [sd.id]: d.version };
+      await makeProofImages(d);
+      await runPreflight(d);
+      const now = new Date().toISOString();
+      item.approval = null;
+      item.status = 'awaiting_approval';
+      item.approvals = [...(item.approvals || []), { action: 'changes', by: 'shop', at: now, replaced: true, proofHash: proofHashOf(d), version: d.version, side: sd.id }];
+      item.preflight = d.preflight;
+      item.history.push({ status: item.status, at: now });
+      newProofLink(item);
+      store.save();
+      tellCustomer(order, item, 'proof', (item.review && item.review.note) || '', req);
+      res.json(await reviewItem(order, item));
+    } catch (e) {
+      next(e);
+    }
+  });
+  app.post('/api/admin/items/:itemId/resend-proof', adminOnly, (req, res) => {
+    const found = store.findItem(req.params.itemId);
+    if (!found) throw new HttpError(404, 'itemNotFound');
+    const { order, item } = found;
+    if (item.status !== 'awaiting_approval') throw new HttpError(409, 'proofDone');
+    if (!item.proofToken) newProofLink(item);
+    store.save();
+    tellCustomer(order, item, 'proof', (item.review && item.review.note) || '', req);
+    res.json({ proofLink: `/proof?t=${item.proofToken}` });
+  });
+
   // ---------- Name lists (variable data) ----------
   // The customer's spreadsheet (Excel or CSV) read into columns and rows; the
   // editor fills {Column} fields with each row (see src/merge.js).
@@ -709,6 +1057,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       price: 0, // set below from the pieces
       ...(mergeList ? { merge: { count: mergeList.count, columns: mergeList.columns, sides: mergeList.sides, ...(mergeList.variantCols ? { variantCols: mergeList.variantCols } : {}) } } : {}),
       ...(lines ? { quantities: lines } : {}),
+      // The editor's own findings (fonts that didn't load, low-resolution photos, tiny text), checked again at /complete.
+      ...(Array.isArray((req.body || {}).clientChecks) && JSON.stringify(req.body.clientChecks).length < 20000 ? { clientChecks: req.body.clientChecks.slice(0, 50) } : {}),
+      version: 1,
       currency: CURRENCY,
       orderId: null,
       ...(imported.length ? { imports: imported, rightsConfirmedAt: new Date().toISOString() } : {}),
@@ -790,6 +1141,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       }
       if (design.merge) checkMergeFiles(design);
       if (design.method === 'embroidery') await makeEmbroidery(design);
+      await makeProofImages(design);
+      await runPreflight(design);
       design.status = 'ready';
       delete design.uploadTokenHash;
       store.save();
@@ -1159,6 +1512,17 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     res.sendFile(store.designFile(id, `${side}-preview.png`));
   });
 
+  // The production file as the customer approves it (a smaller copy, transparent background).
+  app.get('/files/designs/:id/:side-proof.png', (req, res) => {
+    const { id, side } = req.params;
+    const design = UUID_RE.test(id) && store.getDesign(id);
+    if (!design || design.kind === 'book' || !design.sides.some((s) => s.id === side)) throw new HttpError(404, 'notFound');
+    const f = store.designFile(id, `${side}-proof.png`);
+    if (!fs.existsSync(f)) throw new HttpError(404, 'notFound');
+    res.set('Cache-Control', 'public, max-age=300');
+    res.sendFile(f);
+  });
+
   // ---------- Personalised children's books ----------
   // A book is a design of kind "book": the answers and the child's photo are
   // kept with it, and every page (previews and the print PDF) is drawn on the
@@ -1477,6 +1841,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         item.redraw.finishedAt = new Date().toISOString();
         store.writeDesignFile(design.id, 'book-preview.png', await (await books.renderPage(bookData(design), 0, 600)).png().toBuffer());
         design.version = (design.version || 0) + 1;
+        // The pages changed after the customer approved them: they approve the redrawn book before it is printed.
+        if (item.approval && item.redraw.done && !['printing', 'printed', 'shipped'].includes(item.status)) {
+          item.status = 'awaiting_approval';
+          item.history.push({ status: item.status, at: new Date().toISOString() });
+          newProofLink(item);
+          const ord = store.getOrder(design.orderId);
+          if (ord) tellCustomer(ord, item, 'proof', '', { get: () => '', protocol: 'https' });
+        }
         store.save();
         console.log(`[redraw] ${design.id}: ${item.redraw.done}/${item.redraw.total} pages redrawn${item.redraw.failed.length ? `, ${item.redraw.failed.length} kept as preview` : ''}`);
         redrawQueue.shift();
@@ -1818,6 +2190,17 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       return d;
     });
 
+    // Every item approved by the customer against its current proof (see /api/designs/:id/proof).
+    const approvals = body.approvals && typeof body.approvals === 'object' ? body.approvals : {};
+    for (const d of designs) {
+      const a = approvals[d.id];
+      if (!a) {
+        if (requireApproval) throw new HttpError(400, 'approvalRequired');
+        continue;
+      }
+      if (a.proofHash !== proofHashOf(d)) throw new HttpError(409, 'proofChanged', { designId: d.id });
+    }
+
     const now = new Date().toISOString();
     // One order line per design, always quantity 1: every item is its own print job.
     const items = designs.map((d) => {
@@ -1849,6 +2232,20 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         status: 'queued',
         history: [{ status: 'queued', at: now }],
       };
+    });
+    // The customer's approval of each proof, and whether the shop checks the job before printing.
+    items.forEach((it, i) => {
+      const d = designs[i];
+      const a = approvals[d.id];
+      if (a) recordApproval(it, d, { via: 'checkout', sample: a.sample === true && copiesOf(d) > 1 });
+      it.preflight = d.preflight ? { status: d.preflight.status, checks: d.preflight.checks } : null;
+      // Without approvals (switched off for older setups) the job goes straight to the queue.
+      const reasons = requireApproval || a ? reviewReasons(d, { sample: Boolean(a && a.sample === true && copiesOf(d) > 1) }) : [];
+      it.review = { needed: reasons.length > 0, reasons, status: reasons.length ? 'pending' : 'done' };
+      if (reasons.length) {
+        it.status = 'review';
+        it.history = [{ status: 'review', at: now }];
+      }
     });
     // Keep what each item cost to make today (when the costs are filled in), for the accounts.
     const costs = store.db.costs || {};
@@ -2275,6 +2672,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (status === undefined) return res.json(adminItem(order, item, order.items.indexOf(item)));
     }
     if (!ITEM_STATUSES.includes(status)) throw new HttpError(400, 'badStatus', { list: ITEM_STATUSES.join(', ') });
+    // A job waiting for review or for the customer's approval is cleared from the Review tab, not here.
+    if (REVIEW_STATUSES.includes(item.status) && status !== item.status) throw new HttpError(409, 'notApproved');
     if (item.status !== status) {
       item.status = status;
       item.history.push({ status, at: new Date().toISOString() });
@@ -2336,6 +2735,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const side = design.sides.find((s) => s.id === sideId);
     const order = design.orderId && store.getOrder(design.orderId);
     const base = `${order ? order.number : 'design'}-${design.productId}-${sideId}`;
+    // Production files only from what the customer approved, and only once the job is cleared to print.
+    const ordered = order && order.items.find((it) => it.designId === design.id);
+    if (ordered && !['preview-pdf', 'merge-csv', 'proof'].includes(format || 'png')) {
+      if (REVIEW_STATUSES.includes(ordered.status) || !approvedFilesMatch(ordered, design)) throw new HttpError(409, 'notApproved');
+    }
     if (format === 'preview-pdf') {
       // What the customer designed (all sides, or every book page), as one PDF.
       const target = store.designFile(designId, design.kind === 'book' ? 'book-preview.pdf' : `preview-v${design.version || 0}.pdf`);

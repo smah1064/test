@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="/fonts/fonts.css">
   <link rel="stylesheet" href="/css/styles.css">
   <link rel="stylesheet" href="/css/quantities.css">
+  <link rel="stylesheet" href="/css/proof.css">
 </head>
 <body data-title-key="cart.pageTitle">
   <header class="site-header">
@@ -64,7 +65,8 @@
         <div class="line total"><span data-i18n="checkout.total"></span><span id="total"></span></div>
         <p class="muted small" id="free-note" style="margin:6px 0 0"></p>
         <div class="pay-box"><strong data-i18n="checkout.cod"></strong><span data-i18n="checkout.codText"></span></div>
-        <button class="btn btn-primary btn-lg btn-block" id="place-order" type="submit" data-i18n="checkout.place"></button>
+        <p class="approve-status" id="approve-status" aria-live="polite"></p>
+        <button class="btn btn-primary btn-lg btn-block" id="place-order" type="submit" data-i18n="checkout.place" disabled aria-describedby="approve-status"></button>
       </form>
     </div>
   </main>
@@ -73,7 +75,9 @@
 
   <script src="/js/i18n.js"></script>
   <script src="/js/i18n-quantities.js"></script>
+  <script src="/js/i18n-proof.js"></script>
   <script src="/js/common.js"></script>
+  <script src="/js/proof-ui.js"></script>
   <script>
     (async () => {
       const { money, esc, t, tr } = POD;
@@ -134,11 +138,122 @@
         return esc(money(item.price)) + each;
       }
 
+      // ---------- Proofs: every item is checked and approved before the order can be placed ----------
+      // designId -> { state: 'loading' | 'ok' | 'error', proof, error }
+      const proofs = new Map();
+      // designId -> { hash, ok, sample }: what the customer ticked, against which proof.
+      const approvals = new Map();
+      // Designs whose proof changed after the customer had approved it.
+      const changed = new Set();
+      const APPROVALS_KEY = 'pod-proof-ok';
+      try {
+        const saved = JSON.parse(sessionStorage.getItem(APPROVALS_KEY) || '{}');
+        for (const [id, a] of Object.entries(saved)) if (a && a.hash) approvals.set(id, { hash: a.hash, ok: Boolean(a.ok), sample: Boolean(a.sample) });
+      } catch (e) { /* nothing remembered */ }
+      const saveApprovals = () => {
+        try { sessionStorage.setItem(APPROVALS_KEY, JSON.stringify(Object.fromEntries(approvals))); } catch (e) { /* private mode */ }
+      };
+      let placing = false;
+
+      const proofOf = (id) => { const p = proofs.get(id); return p && p.state === 'ok' ? p.proof : null; };
+      function isApproved(id) {
+        const proof = proofOf(id);
+        const a = approvals.get(id);
+        return Boolean(proof && a && a.ok && a.hash === proof.proofHash);
+      }
+      async function loadProof(id, { force = false } = {}) {
+        const cur = proofs.get(id);
+        if (cur && !force && cur.state !== 'error') return cur.promise;
+        const entry = { state: 'loading' };
+        entry.promise = POD.api('/api/designs/' + encodeURIComponent(id) + '/proof').then((proof) => {
+          Object.assign(entry, { state: 'ok', proof });
+          const a = approvals.get(id);
+          // Approved an older version: ask again.
+          if (a && a.ok && a.hash !== proof.proofHash) {
+            approvals.delete(id);
+            changed.add(id);
+            saveApprovals();
+          }
+        }, (err) => Object.assign(entry, { state: 'error', error: err.message }));
+        // Keep showing the proof already on screen while a newer one loads.
+        if (!force || !cur || cur.state !== 'ok') proofs.set(id, entry);
+        await entry.promise;
+        proofs.set(id, entry);
+        paintProof(id);
+        updateApproval();
+        return entry.promise;
+      }
+      function proofSlot(item, i) {
+        const id = item.designId;
+        const st = proofs.get(id);
+        const ok = isApproved(id);
+        const head = `<h3 class="cart-proof-title" id="proof-h-${i}"><span>${esc(t('proof.title'))} · ${esc(tr(item.productName))}</span><span class="cart-proof-ok">✓ ${esc(t('proof.approved'))}</span></h3>`;
+        let body;
+        if (!st || st.state === 'loading') {
+          body = `<div class="cart-proof-state" role="status"><div class="spinner"></div>${esc(t('proof.loading'))}</div>`;
+        } else if (st.state === 'error') {
+          body = `<div class="cart-proof-state" role="alert"><p>${esc(t('proof.loadFailed'))} ${esc(st.error || '')}</p><button class="btn btn-sm" type="button" data-proof-retry="${esc(id)}">${esc(t('proof.retry'))}</button></div>`;
+        } else {
+          const proof = st.proof;
+          const a = approvals.get(id);
+          const sample = Boolean(a && a.sample);
+          body = `
+            ${changed.has(id) ? `<p class="approve-changed" role="alert">${esc(t('proof.changed'))}</p>` : ''}
+            ${PODProof.html(proof)}
+            <div class="approve-box">
+              ${PODProof.screenNote()}
+              <label class="approve-check" for="ok-${i}"><input type="checkbox" id="ok-${i}" data-approve="${esc(id)}"${ok ? ' checked' : ''}><span>${esc(t('proof.ok'))}</span></label>
+              ${PODProof.pieces(proof) > 1 ? `<label class="approve-check sample" for="sample-${i}"><input type="checkbox" id="sample-${i}" data-sample="${esc(id)}"${sample ? ' checked' : ''}><span>${esc(t('proof.sample'))}</span></label>` : ''}
+            </div>`;
+        }
+        return `<section class="cart-proof${ok ? ' ok' : ''}" data-proof-for="${esc(id)}" data-index="${i}" aria-labelledby="proof-h-${i}"><div class="cart-proof-inner">${head}${body}</div></section>`;
+      }
+      /** Redraw one item's proof (after it loads) without touching the rest of the page. */
+      function paintProof(id) {
+        const cart = POD.getCart();
+        const i = cart.findIndex((it) => it.designId === id);
+        const slot = [...document.querySelectorAll('[data-proof-for]')].find((el) => el.dataset.proofFor === id);
+        if (i < 0 || !slot) return;
+        const focused = document.activeElement && slot.contains(document.activeElement) ? document.activeElement.id : null;
+        slot.outerHTML = proofSlot(cart[i], i);
+        if (focused && document.getElementById(focused)) document.getElementById(focused).focus();
+      }
+      /** "Place order" only once every item's current proof is approved. */
+      function updateApproval() {
+        const cart = POD.getCart();
+        const done = cart.filter((it) => isApproved(it.designId)).length;
+        const all = cart.length > 0 && done === cart.length;
+        const btn = document.getElementById('place-order');
+        if (!placing) btn.disabled = !all;
+        const status = document.getElementById('approve-status');
+        status.classList.toggle('done', all);
+        status.innerHTML = all ? `✓ ${esc(t('proof.approved'))}`
+          : `${esc(t('checkout.approveAll', { done: POD.num(done), total: POD.num(cart.length) }))} <button type="button" class="link-btn" data-next-proof>${esc(t('checkout.approveGo'))}</button>`;
+        document.querySelectorAll('[data-proof-for]').forEach((el) => {
+          const ok = isApproved(el.dataset.proofFor);
+          el.classList.toggle('ok', ok);
+          if (ok) el.classList.remove('needs');
+        });
+      }
+      function goToNextProof() {
+        const cart = POD.getCart();
+        const next = cart.find((it) => !isApproved(it.designId));
+        if (!next) return;
+        const slot = [...document.querySelectorAll('[data-proof-for]')].find((el) => el.dataset.proofFor === next.designId);
+        if (!slot) return;
+        slot.classList.add('needs');
+        slot.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        const box = slot.querySelector('[data-approve]') || slot.querySelector('[data-proof-retry]');
+        if (box) box.focus({ preventScroll: true });
+      }
+
       function render() {
         const cart = POD.getCart();
+        const focused = document.activeElement && document.activeElement.closest && document.activeElement.closest('#items') ? document.activeElement.id : null;
         document.getElementById('empty').hidden = cart.length > 0;
         document.getElementById('cart-layout').hidden = cart.length === 0;
         document.getElementById('items').innerHTML = cart.map((item, i) => `
+          <div class="cart-entry">
           <div class="cart-item">
             <img src="${esc(item.previewUrl)}" alt="${esc(t('cart.preview', { product: tr(item.productName) }))}">
             <div>
@@ -151,7 +266,12 @@
               </div>
             </div>
             <div class="price">${itemPrice(item)}</div>
+          </div>
+          ${proofSlot(item, i)}
           </div>`).join('');
+        if (focused && document.getElementById(focused)) document.getElementById(focused).focus();
+        for (const item of cart) if (!proofs.has(item.designId)) loadProof(item.designId);
+        updateApproval();
         const subtotal = Math.round(cart.reduce((s, i) => s + i.price, 0) * 100) / 100;
         const freeOver = quote ? quote.freeShippingOver : pricing.freeShippingOver;
         const applied = quote && quote.coupon && couponCode ? quote.coupon : null;
@@ -208,7 +328,26 @@
         if (gone.length) return refreshPrices();
       }
 
+      document.getElementById('items').addEventListener('change', (e) => {
+        const box = e.target;
+        const id = box.dataset.approve || box.dataset.sample;
+        if (!id) return;
+        const proof = proofOf(id);
+        if (!proof) return;
+        const a = approvals.get(id) && approvals.get(id).hash === proof.proofHash ? approvals.get(id) : { hash: proof.proofHash, ok: false, sample: false };
+        if (box.dataset.approve) a.ok = box.checked;
+        else a.sample = box.checked;
+        approvals.set(id, a);
+        if (box.dataset.approve && box.checked) changed.delete(id);
+        saveApprovals();
+        updateApproval();
+      });
+      document.getElementById('checkout').addEventListener('click', (e) => {
+        if (e.target.closest('[data-next-proof]')) goToNextProof();
+      });
       document.getElementById('items').addEventListener('click', (e) => {
+        const retry = e.target.closest('[data-proof-retry]');
+        if (retry) { loadProof(retry.dataset.proofRetry, { force: true }); paintProof(retry.dataset.proofRetry); return; }
         const btn = e.target.closest('[data-remove]');
         if (!btn) return;
         const cart = POD.getCart();
@@ -225,7 +364,12 @@
           missing.focus();
           return POD.toast(t('checkout.fill', { field: missing.labels[0]?.textContent || '' }), 'error');
         }
+        if (!POD.getCart().every((it) => isApproved(it.designId))) {
+          goToNextProof();
+          return POD.toast(t('checkout.approvalRequired'), 'error');
+        }
         const btn = document.getElementById('place-order');
+        placing = true;
         btn.disabled = true;
         btn.textContent = t('checkout.placing');
         try {
@@ -236,21 +380,38 @@
           render();
           if (!POD.getCart().length) throw new Error(t('cart.emptyTitle'));
           if (Math.abs(render.total - before) > 0.009) throw Object.assign(new Error(t('cart.pricesUpdated')), { code: 'priceChanged' });
+          const cartNow = POD.getCart();
+          // Each item's approval, against the exact proof the customer saw (and whether they want a sample first).
+          const approvalsBody = Object.fromEntries(cartNow.map((it) => {
+            const a = approvals.get(it.designId);
+            return [it.designId, { proofHash: proofOf(it.designId).proofHash, ...(a && a.sample && PODProof.pieces(proofOf(it.designId)) > 1 ? { sample: true } : {}) }];
+          }));
           const order = await POD.api('/api/orders', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ customer, designIds: POD.getCart().map((i) => i.designId), expectedTotal: render.total, ...(quote && quote.coupon && couponCode ? { couponCode } : {}) }),
+            body: JSON.stringify({ customer, designIds: cartNow.map((i) => i.designId), expectedTotal: render.total, approvals: approvalsBody, ...(quote && quote.coupon && couponCode ? { couponCode } : {}) }),
           });
           POD.setCart([]);
+          approvals.clear();
+          saveApprovals();
           location.href = '/order?id=' + encodeURIComponent(order.id) + '&new=1';
         } catch (err) {
           if (err.code === 'priceChanged' || err.code === 'designGone' || err.code === 'designOrdered' || /^coupon/.test(err.code || '')) {
             await refreshPrices();
             render();
           }
-          POD.toast(err.message, 'error');
-          btn.disabled = false;
+          placing = false;
           btn.textContent = t('checkout.place');
+          if (err.code === 'proofChanged' || err.code === 'approvalRequired') {
+            // Fetch every proof again: the ones that changed lose their approval and are shown anew.
+            await Promise.all(POD.getCart().map((it) => loadProof(it.designId, { force: true })));
+            render();
+            goToNextProof();
+            POD.toast(err.code === 'proofChanged' ? t('proof.changed') : err.message || t('checkout.approvalRequired'), 'error');
+            return;
+          }
+          POD.toast(err.message, 'error');
+          updateApproval();
         }
       });
 

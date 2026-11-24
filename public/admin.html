@@ -8,6 +8,7 @@
   <script>(function(){var l;try{l=localStorage.getItem('pod-lang')}catch(e){}l=l==='en'?'en':'ar';var d=document.documentElement;d.lang=l;d.dir=l==='ar'?'rtl':'ltr'})()</script>
   <link rel="stylesheet" href="/fonts/fonts.css">
   <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/review.css">
   <style>
     /* Orders: shipping, delivery and payment */
     .pill.delivered { background: #138a4a; color: #fff; }
@@ -80,6 +81,7 @@
         <h1 style="margin:0" data-i18n="admin.queueTitle"></h1>
         <div class="tabs" style="margin:0;margin-inline-start:auto">
           <button class="btn btn-sm active" data-tab="queue" data-i18n="admin.tabQueue"></button>
+          <button class="btn btn-sm rv-tab" data-tab="review"><span data-i18n="rv.tab"></span><span class="rv-count" id="rv-count" hidden></span></button>
           <button class="btn btn-sm" data-tab="orders" data-i18n="admin.tabOrders"></button>
           <button class="btn btn-sm" data-tab="film" data-i18n="admin.tabFilm"></button>
           <button class="btn btn-sm" data-tab="library" data-i18n="lib.tab"></button>
@@ -92,12 +94,22 @@
 
       <section id="tab-queue">
         <div class="stats" id="stats"></div>
+        <div id="rv-queue-note"></div>
         <h2 style="font-size:18px" data-i18n="admin.onPress"></h2>
         <div id="current"></div>
         <h2 style="font-size:18px;margin-top:28px" data-i18n="admin.upNext"></h2>
         <div class="queue-list" id="up-next"></div>
         <h2 style="font-size:18px;margin-top:28px" data-i18n="admin.toShip"></h2>
         <div class="queue-list" id="to-ship"></div>
+      </section>
+
+      <section id="tab-review" hidden>
+        <div class="card rv-intro">
+          <h2 data-i18n="rv.title"></h2>
+          <p class="muted small" data-i18n="rv.help"></p>
+          <p class="rv-screen-note small" data-i18n="rv.screenNote"></p>
+        </div>
+        <div class="rv-list" id="rv-list"></div>
       </section>
 
       <section id="tab-film" hidden>
@@ -268,6 +280,7 @@
 
   <script src="/js/i18n.js"></script>
   <script src="/js/i18n-admin-shipping.js"></script>
+  <script src="/js/i18n-review.js"></script>
   <script src="/js/common.js"></script>
   <script src="/js/admin.js"></script>
 </body>
