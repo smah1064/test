@@ -920,6 +920,16 @@ test('AI and EPS files are drawn to a transparent PNG for the editor', async () 
   assert.strictEqual(r.status, 200);
   const m2 = await sharp(Buffer.from(await r.arrayBuffer())).metadata();
   assert.ok(m2.width > m2.height * 1.8, 'the rectangle, 2:1');
+  // A logo on a solid panel keeps its panel (red 180x80 with a blue square on it): the panel is not
+  // taken for an empty margin.
+  const panel = await new Promise((resolve) => { const d = new PDF({ size: [400, 300] }); const b = []; d.on('data', (c) => b.push(c)); d.on('end', () => resolve(Buffer.concat(b))); d.rect(100, 100, 180, 80).fill('#ff0000'); d.rect(170, 120, 40, 40).fill('#0000ff'); d.end(); });
+  r = await send(panel);
+  assert.strictEqual(r.status, 200);
+  const pbuf = Buffer.from(await r.arrayBuffer());
+  const m3 = await sharp(pbuf).metadata();
+  assert.ok(m3.width > m3.height * 2, `the whole red panel (${m3.width}x${m3.height})`);
+  const corner = await sharp(pbuf).extract({ left: 2, top: 2, width: 1, height: 1 }).raw().toBuffer();
+  assert.ok(corner[0] > 200 && corner[2] < 60, `red at the corner: ${[...corner]}`);
   // A real-size file with a photo in it, drawn at full size (3000 px): Ghostscript's
   // banded mode crashed here ("memory access out of bounds") before -dMaxBitmap.
   const photo = await sharp({ create: { width: 1600, height: 1000, channels: 3, noise: { type: 'gaussian', mean: 128, sigma: 60 } } }).jpeg().toBuffer();

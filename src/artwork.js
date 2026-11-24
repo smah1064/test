@@ -168,6 +168,30 @@ async function convertArtwork(buf, { px = 4000, timeoutMs = 25000 } = {}) {
     err.detail = out.log;
     throw err;
   }
+  /** The picture cut to the box around its non-transparent pixels. */
+  async function cropToOpaque(buf) {
+    const { data, info } = await sharp(buf).ensureAlpha().extractChannel(3).raw().toBuffer({ resolveWithObject: true });
+    const { width: w, height: h } = info;
+    let top = h;
+    let bottom = -1;
+    let left = w;
+    let right = -1;
+    for (let y = 0; y < h; y++) {
+      const row = y * w;
+      for (let x = 0; x < w; x++) {
+        if (data[row + x] > 0) {
+          if (y < top) top = y;
+          bottom = y;
+          if (x < left) left = x;
+          if (x > right) right = x;
+        }
+      }
+    }
+    if (bottom < 0) throw new Error('empty');
+    const box = { left, top, width: right - left + 1, height: bottom - top + 1 };
+    const out = await sharp(buf).ensureAlpha().extract(box).png({ compressionLevel: 6 }).toBuffer({ resolveWithObject: true });
+    return out;
+  }
   // Cut away the empty margin around the artwork.
   let png = Buffer.from(out.png.buffer, out.png.byteOffset, out.png.byteLength);
   // The page area first (Ghostscript leaves an empty margin around it), then its white artboard.
@@ -177,9 +201,11 @@ async function convertArtwork(buf, { px = 4000, timeoutMs = 25000 } = {}) {
   } catch (e) {
     throw new ArtworkError('empty'); // nothing visible was drawn
   }
+  // Then only the transparent margin left by clearing the artboard: a trim by colour would take the
+  // artwork's own solid background (e.g. a red logo panel) for margin and cut it away.
   let trimmed;
   try {
-    trimmed = await sharp(png).trim({ threshold: 1 }).png({ compressionLevel: 6 }).toBuffer({ resolveWithObject: true });
+    trimmed = await cropToOpaque(png);
   } catch (e) {
     throw new ArtworkError('empty'); // nothing visible was drawn
   }
