@@ -222,31 +222,127 @@ const bearer = (req) => (/^Bearer\s+([A-Za-z0-9_.-]{20,})$/.exec(req.get('author
 
 /**
  * Removes anything in an uploaded SVG that could run code or load from
- * other sites: scripts, event handlers, foreignObject/iframes, and links
- * that are not embedded data or in-file references. The editor's own SVG
- * export contains none of these, so real print files are unchanged.
+ * other sites: scripts, event handlers, foreignObject/iframes, animations,
+ * and links that are not embedded pictures or in-file references. The SVG is
+ * read tag by tag (quoted attribute values, comments and CDATA understood),
+ * and every kept tag is written out again from its parsed parts, so broken
+ * or nested tricks ("<scr<set/>ipt>", a ">" inside quotes, xl:href,
+ * entity-encoded "javascript:") can't survive. The editor's own SVG export
+ * contains none of these, so real print files are unchanged.
  */
+const SVG_DROP = new Set(['script', 'foreignobject', 'iframe', 'object', 'embed', 'handler', 'listener', 'animate', 'set', 'animatemotion', 'animatetransform', 'animatecolor', 'discard', 'audio', 'video', 'base', 'meta', 'link', 'frame', 'frameset']);
+const SAFE_LINK = /^(#|data:image\/(png|jpe?g|webp|gif);)/i;
+function decodeEntities(v) {
+  return String(v)
+    .replace(/&#x([0-9a-f]+);?/gi, (m, h) => { const n = parseInt(h, 16); return n > 0 && n < 0x110000 ? String.fromCodePoint(n) : ''; })
+    .replace(/&#(\d+);?/g, (m, d) => { const n = Number(d); return n > 0 && n < 0x110000 ? String.fromCodePoint(n) : ''; })
+    .replace(/&(colon|tab|newline|lpar|rpar|sol|amp|quot|apos|lt|gt);?/gi, (m, e) => ({ colon: ':', tab: '\t', newline: '\n', lpar: '(', rpar: ')', sol: '/', amp: '&', quot: '"', apos: "'", lt: '<', gt: '>' })[e.toLowerCase()]);
+}
+// "java\tscript:", "j&#x61;vascript:"… once decoded and without blanks.
+const dangerousValue = (v) => /(javascript|vbscript|livescript):|data:(?!image\/(png|jpe?g|webp|gif);)/i.test(decodeEntities(v).replace(/[\s\u0000-\u001f]+/g, ''));
+const attrOut = (v) => String(v).replace(/&(?!(#\d+|#x[0-9a-f]+|[a-z][a-z0-9]*);)/gi, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+
 function sanitizeSvg(text) {
-  let s = String(text);
-  s = s.replace(/<!DOCTYPE[\s\S]*?>/gi, '');
-  s = s.replace(/<!ENTITY[\s\S]*?>/gi, '');
-  // animate/set can change an attribute (such as a link's href) to javascript: after loading.
-  for (const tag of ['script', 'foreignObject', 'iframe', 'object', 'embed', 'handler', 'listener', 'animate', 'set', 'animateMotion', 'animateTransform', 'animateColor']) {
-    s = s.replace(new RegExp(`<${tag}\\b[\\s\\S]*?</${tag}\\s*>`, 'gi'), '');
-    s = s.replace(new RegExp(`<${tag}\\b[^>]*/?>`, 'gi'), '');
+  const s = String(text);
+  let out = '';
+  let i = 0;
+  const skip = []; // names of dropped elements we are inside
+  const emit = (str) => { if (!skip.length) out += str; };
+  while (i < s.length) {
+    const lt = s.indexOf('<', i);
+    if (lt < 0) { emit(s.slice(i).replace(/>/g, '&gt;')); break; }
+    emit(s.slice(i, lt).replace(/>/g, '&gt;'));
+    i = lt;
+    if (s.startsWith('<!--', i)) { const e = s.indexOf('-->', i + 4); i = e < 0 ? s.length : e + 3; continue; }
+    if (s.startsWith('<![CDATA[', i)) {
+      const e = s.indexOf(']]>', i + 9);
+      const body = s.slice(i + 9, e < 0 ? s.length : e);
+      emit(`<![CDATA[${body.replace(/\]\]>/g, '')}]]>`);
+      i = e < 0 ? s.length : e + 3;
+      continue;
+    }
+    if (s.startsWith('<!', i)) {
+      // DOCTYPE / ENTITY declarations (with an internal [ ... ] part) are dropped.
+      const br = s.indexOf('[', i);
+      const gt = s.indexOf('>', i);
+      if (br >= 0 && (gt < 0 || br < gt)) { const e = s.indexOf(']', br); const g = s.indexOf('>', e < 0 ? br : e); i = g < 0 ? s.length : g + 1; } else i = gt < 0 ? s.length : gt + 1;
+      continue;
+    }
+    if (s.startsWith('<?', i)) {
+      const e = s.indexOf('?>', i + 2);
+      const pi = s.slice(i, e < 0 ? s.length : e + 2);
+      // Only the plain XML declaration at the very start is kept.
+      if (/^<\?xml\s[^<>]*\?>$/i.test(pi) && !out.trim()) emit(pi);
+      i = e < 0 ? s.length : e + 2;
+      continue;
+    }
+    const closing = s[i + 1] === '/';
+    const m = /^[A-Za-z_][\w:.-]*/.exec(s.slice(i + (closing ? 2 : 1), i + (closing ? 2 : 1) + 200));
+    if (!m) { emit('&lt;'); i += 1; continue; }
+    const name = m[0];
+    const local = name.toLowerCase().replace(/^.*:/, '');
+    let j = i + (closing ? 2 : 1) + name.length;
+    // Attributes, with quoted values understood (a ">" or "<" inside quotes is part of the value).
+    const attrs = [];
+    let selfClose = false;
+    let broken = false;
+    for (;;) {
+      while (j < s.length && /\s/.test(s[j])) j++;
+      if (j >= s.length) { broken = true; break; }
+      if (s[j] === '>') { j++; break; }
+      if (s[j] === '/' && s[j + 1] === '>') { selfClose = true; j += 2; break; }
+      if (s[j] === '<') { broken = true; break; }
+      const an = /^[^\s=>/<"']+/.exec(s.slice(j, j + 200));
+      if (!an) { j++; continue; }
+      j += an[0].length;
+      while (j < s.length && /\s/.test(s[j])) j++;
+      let value = null;
+      if (s[j] === '=') {
+        j++;
+        while (j < s.length && /\s/.test(s[j])) j++;
+        const q = s[j];
+        if (q === '"' || q === "'") {
+          const e = s.indexOf(q, j + 1);
+          if (e < 0) { broken = true; break; }
+          value = s.slice(j + 1, e);
+          j = e + 1;
+        } else {
+          const v = /^[^\s>]+/.exec(s.slice(j)) || [''];
+          value = v[0];
+          j += value.length;
+        }
+      }
+      attrs.push([an[0], value]);
+    }
+    if (broken) { emit('&lt;'); i += 1; continue; }
+    i = j;
+    if (closing) {
+      if (skip.length) { if (skip[skip.length - 1] === local) skip.pop(); continue; }
+      if (!SVG_DROP.has(local)) emit(`</${name}>`);
+      continue;
+    }
+    if (SVG_DROP.has(local) || skip.length) {
+      if (!selfClose && (SVG_DROP.has(local) ? true : skip.length)) skip.push(local);
+      continue;
+    }
+    const kept = [];
+    for (const [an, value] of attrs) {
+      const lname = an.toLowerCase();
+      const alocal = lname.replace(/^.*:/, '');
+      if (/^on/.test(alocal) || lname === 'xml:base' || alocal === 'attributename') continue;
+      if (value == null) { kept.push(` ${an}`); continue; }
+      if (alocal === 'href' || alocal === 'src') {
+        if (!SAFE_LINK.test(decodeEntities(value).trim())) continue;
+      } else if (dangerousValue(value)) continue;
+      kept.push(` ${an}="${attrOut(value)}"`);
+    }
+    emit(`<${name}${kept.join('')}${selfClose ? '/>' : '>'}`);
   }
-  // Inside tags only: drop on* handlers and unsafe links.
-  s = s.replace(/<[a-zA-Z][^<>]*>/g, (tag) => tag
-    .replace(/\s+on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
-    .replace(/\s+((?:xlink:)?href|src)\s*=\s*("([^"]*)"|'([^']*)')/gi, (all, attr, q, d1, d2) => {
-      const v = (d1 != null ? d1 : d2 || '').trim();
-      return /^(#|data:image\/(png|jpe?g|webp|gif);)/i.test(v) ? all : '';
-    }));
   // CSS that could load from elsewhere (embedded fonts and images are data: URLs).
-  s = s.replace(/url\(\s*(?!['"]?\s*(?:data:|#))[^)]*\)/gi, 'none');
-  s = s.replace(/@import[^;]*;/gi, '');
-  s = s.replace(/javascript:/gi, '');
-  return s;
+  out = out.replace(/url\(\s*(?!['"]?\s*(?:data:|#))[^)]*\)/gi, 'none');
+  out = out.replace(/@import[^;]*;?/gi, '');
+  out = out.replace(/(javascript|vbscript):/gi, '');
+  return out;
 }
 
 // ---------- Clean-up ----------

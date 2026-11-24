@@ -1883,14 +1883,14 @@
       <div class="field">
         <label>${esc(t('props.outline'))}</label>
         <div class="color-row"><input type="color" id="p-stroke" value="${toHex(o.stroke || '#000000')}" aria-label="${esc(t('props.outline'))}">${palette('stroke')}</div>
-        <input type="range" id="p-stroke-w" min="0" max="${max}" step="0.5" value="${o.strokeWidth || 0}" aria-label="${esc(t('props.outlineWidth'))}">
+        <input type="range" id="p-stroke-w" min="0" max="${max}" step="0.5" value="${numv(o.strokeWidth)}" aria-label="${esc(t('props.outlineWidth'))}">
       </div>`;
   }
 
   function arrangeGroup(o) {
     return group('arrange', t('grp.arrange'), `
       <div class="field grid-2">
-        <div><label for="p-opacity">${esc(t('props.opacity'))}</label><input type="range" id="p-opacity" min="0.05" max="1" step="0.05" value="${o.opacity}"></div>
+        <div><label for="p-opacity">${esc(t('props.opacity'))}</label><input type="range" id="p-opacity" min="0.05" max="1" step="0.05" value="${numv(o.opacity, 1)}"></div>
         <div><label for="p-angle">${esc(t('props.rotation'))}</label><input type="number" id="p-angle" min="-360" max="360" value="${Math.round(o.angle)}"></div>
       </div>
       <div class="field"><label class="check"><input type="checkbox" id="p-shadow" ${o.shadow ? 'checked' : ''}> ${esc(t('props.shadow'))}</label></div>
@@ -1989,7 +1989,7 @@
       html += group('effects', t('grp.effects'), `
         <div class="field">
           <label for="p-curve">${esc(t('props.curve'))}</label>
-          <div class="row"><input type="range" id="p-curve" min="-100" max="100" step="5" value="${o.curve || 0}"><button class="btn btn-sm shrink" data-act="straighten">${esc(t('props.straighten'))}</button></div>
+          <div class="row"><input type="range" id="p-curve" min="-100" max="100" step="5" value="${numv(o.curve)}"><button class="btn btn-sm shrink" data-act="straighten">${esc(t('props.straighten'))}</button></div>
         </div>
         <div class="field">
           <label class="check"><input type="checkbox" id="p-textbg" ${o.backgroundColor ? 'checked' : ''}> ${esc(t('props.textBg'))}</label>
@@ -1997,8 +1997,8 @@
           <div class="btn-group bg-shapes" style="margin-top:6px">${['box', 'pill', 'banner', 'ticket'].map((k) => `<button type="button" class="btn btn-sm ${(o.bgShape || 'box') === k ? 'active' : ''}" data-bgshape="${k}" title="${esc(t('bgshape.' + k))}"><span class="bgs bgs-${k}"></span>${esc(t('bgshape.' + k))}</button>`).join('')}</div>` : ''}
         </div>
         <div class="field grid-2">
-          <div><label for="p-spacing">${esc(t('props.spacing'))}</label>${arabic ? `<div class="muted small">${esc(t('props.spacingArabic'))}</div>` : `<input type="range" id="p-spacing" min="-100" max="800" step="10" value="${o.charSpacing || 0}">`}</div>
-          <div><label for="p-lh">${esc(t('props.lineHeight'))}</label><input type="range" id="p-lh" min="0.7" max="2.5" step="0.05" value="${o.lineHeight}"></div>
+          <div><label for="p-spacing">${esc(t('props.spacing'))}</label>${arabic ? `<div class="muted small">${esc(t('props.spacingArabic'))}</div>` : `<input type="range" id="p-spacing" min="-100" max="800" step="10" value="${numv(o.charSpacing)}">`}</div>
+          <div><label for="p-lh">${esc(t('props.lineHeight'))}</label><input type="range" id="p-lh" min="0.7" max="2.5" step="0.05" value="${numv(o.lineHeight, 1.16)}"></div>
         </div>`);
     } else if (image) {
       const fs = filterState(o);
@@ -2012,7 +2012,7 @@
           <label>${esc(t('props.photoShape'))}</label>
           <div class="mask-grid">${MASKS.map((m) => `<button class="mask-btn ${(o.mask || 'none') === m ? 'active' : ''}" data-mask="${m}" title="${esc(t('mask.' + m))}"><span class="mask-icon mask-${m}"></span><small>${esc(t('mask.' + m))}</small></button>`).join('')}</div>
         </div>
-        ${o.mask ? `<div class="field"><label>${esc(t('props.border'))}</label><div class="color-row"><input type="color" id="p-bordercolor" value="${toHex(o.maskBorderColor)}">${palette('border')}</div><input type="range" id="p-border" min="0" max="12" step="0.5" value="${o.maskBorder || 0}" aria-label="${esc(t('props.border'))}"></div>` : ''}
+        ${o.mask ? `<div class="field"><label>${esc(t('props.border'))}</label><div class="color-row"><input type="color" id="p-bordercolor" value="${toHex(o.maskBorderColor)}">${palette('border')}</div><input type="range" id="p-border" min="0" max="12" step="0.5" value="${numv(o.maskBorder)}" aria-label="${esc(t('props.border'))}"></div>` : ''}
         ${boostBox(o)}
         <div class="field">
           <button class="btn btn-sm btn-block" data-act="removebg">✦ ${esc(t('props.removeBg'))}</button>
@@ -2027,7 +2027,7 @@
         <button class="btn btn-sm" data-act="reset-adjust">${esc(t('props.reset'))}</button>`);
     } else if (!sticker && o.type !== 'group') {
       html += group('colours', t('grp.colours'), fillControls(o) + outlineControls(o, 30) +
-        (o.type === 'rect' ? `<div class="field"><label for="p-rx">${esc(t('props.radius'))}</label><input type="range" id="p-rx" min="0" max="${Math.round(Math.min(o.width, o.height) / 2)}" value="${o.rx || 0}"></div>` : ''));
+        (o.type === 'rect' ? `<div class="field"><label for="p-rx">${esc(t('props.radius'))}</label><input type="range" id="p-rx" min="0" max="${Math.round(Math.min(o.width, o.height) / 2)}" value="${numv(o.rx)}"></div>` : ''));
     }
     if (o.type === 'group' && !isSticker(o)) html += `<button class="btn btn-sm btn-block" data-act="ungroup" style="margin-bottom:10px">${esc(t('group.ungroup'))}</button>`;
     html += sizeGroup(o);
@@ -2073,6 +2073,9 @@
     canvas.requestRenderAll();
     commitNow ? commit() : scheduleCommit();
   }
+
+  /** A number for a slider (values in a shared or saved design are never put into the page as they are). */
+  function numv(v, fallback = 0) { const n = Number(v); return Number.isFinite(n) ? n : fallback; }
 
   // ---------- Text styles (one tap) ----------
   const TEXT_FX = ['none', 'shadow', 'neon', 'extrude', 'retro', 'outline', 'sticker', 'sunset', 'gold', 'ocean'];

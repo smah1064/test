@@ -244,3 +244,24 @@ test('account fields must be text (no "[object Object]" saved)', async () => {
   assert.strictEqual((await put({ name: 'Mona', address: { city: {}, address: '1 st' } })).status, 400);
   assert.strictEqual((await put({ name: 'Mona Ali' })).status, 200);
 });
+
+test('SVG cleaner: split tags, ">" inside quotes, other link prefixes and encoded javascript: are all removed', () => {
+  const evil = '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xl="http://www.w3.org/1999/xlink" a=">" onload="x()"><scr<set/>ipt>alert(1)</script>'
+    + '<image xl:href="http://evil.test/a.png"/><a href="jav&#x61;script:alert(1)"><rect width="9" height="9"/></a>'
+    + '<use href="data:image/svg+xml;base64,PHN2Zy8+"/><foreignObject><div>x</div></foreignObject><style>@import url(http://evil.test/x.css);.a{fill:url(#g)}</style></svg>';
+  const out = sanitizeSvg(evil);
+  assert.doesNotMatch(out, /<script|onload|evil\.test|javascript|<foreignObject|data:image\/svg/i);
+  assert.match(out, /<rect width="9" height="9"\/>/);
+  assert.match(out, /url\(#g\)/, 'in-file references are kept');
+  // A normal editor export keeps its fonts, pictures and text.
+  const ok = '<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg"><style><![CDATA[@font-face{font-family:Cairo;src:url(data:font/woff2;base64,AAAA)}]]></style><image href="data:image/png;base64,iVBOR" x="1"/><text font-family="Cairo">مرحبا &amp; hi</text></svg>';
+  assert.strictEqual(sanitizeSvg(ok), ok);
+});
+
+test('customers can only be signed out by the shop itself; imported sources must be web links', async () => {
+  const cross = await fetch(base + '/api/account/logout', { method: 'POST', headers: { 'Sec-Fetch-Site': 'cross-site' } });
+  assert.strictEqual(cross.status, 403);
+  const other = await fetch(base + '/api/account/logout', { method: 'POST', headers: { Origin: 'https://evil.example' } });
+  assert.strictEqual(other.status, 403);
+  assert.strictEqual((await fetch(base + '/api/account/logout', { method: 'POST', headers: { 'Sec-Fetch-Site': 'same-origin' } })).status, 200);
+});

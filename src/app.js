@@ -1093,7 +1093,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     // One artwork, many pieces: several of the same, or the same artwork in other sizes / colours.
     const lines = mergeList ? mergeList.lines : cleanQuantities(product, (req.body || {}).quantities, colorDef, sizeDef);
     // Pictures imported from other sites: the customer must confirm they may print them.
-    const imported = [...new Set(Object.values(editor).flatMap((e) => e.objects.map((o) => (o && typeof o.importSource === 'string' ? o.importSource.slice(0, 500) : null)).filter(Boolean)))].slice(0, 10);
+    const imported = [...new Set(Object.values(editor).flatMap((e) => e.objects.map((o) => (o && typeof o.importSource === 'string' && /^https?:\/\/[^\s"'<>]+$/i.test(o.importSource.trim()) ? o.importSource.trim().slice(0, 500) : null)).filter(Boolean)))].slice(0, 10);
     if (imported.length && (req.body || {}).rightsConfirmed !== true) throw new HttpError(400, 'rightsRequired');
 
     const token = crypto.randomBytes(24).toString('hex');
@@ -2328,6 +2328,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     res.json({ customer: customers.publicCustomer(cust) });
   }));
   app.post('/api/account/logout', (req, res) => {
+    // Another site can't sign a customer out (a form posted from elsewhere).
+    if (req.get('sec-fetch-site') === 'cross-site') throw new HttpError(403, 'notFound');
+    const origin = req.get('origin');
+    if (origin && origin !== 'null' && linkBase(req) && origin !== linkBase(req) && !SHOP_HOSTS.some((h) => origin.endsWith('//' + h))) throw new HttpError(403, 'notFound');
     setSession(req, res, null);
     res.json({ ok: true });
   });

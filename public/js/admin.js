@@ -530,7 +530,7 @@
   /** Imported design: a badge, and where it came from (the customer confirmed the rights). */
   const importBadge = (item) => (item.imports && item.imports.length ? ` <span class="pill import-pill" title="${esc(t('admin.imported.title'))}">${esc(t('admin.imported'))}</span>` : '');
   const importInfo = (item) => (item.imports && item.imports.length
-    ? `<div class="import-info small"><strong>${esc(t('admin.imported.from'))}</strong> ${item.imports.map((u) => `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer nofollow" dir="ltr">${esc(u.length > 70 ? u.slice(0, 67) + '…' : u)}</a>`).join('<br>')}<div class="muted">${esc(t('admin.imported.rights', { date: POD.date(item.rightsConfirmedAt || item.orderedAt) }))}</div></div>`
+    ? `<div class="import-info small"><strong>${esc(t('admin.imported.from'))}</strong> ${item.imports.map((u) => { const label = esc(u.length > 70 ? u.slice(0, 67) + '…' : u); return /^https?:\/\//i.test(u) ? `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer nofollow" dir="ltr">${label}</a>` : `<span dir="ltr">${label}</span>`; }).join('<br>')}<div class="muted">${esc(t('admin.imported.rights', { date: POD.date(item.rightsConfirmedAt || item.orderedAt) }))}</div></div>`
     : '');
 
   function row(item) {
