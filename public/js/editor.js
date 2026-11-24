@@ -19,7 +19,7 @@
   const MAX_VECTOR_BYTES = 40 * 1024 * 1024;
   const HISTORY_LIMIT = 60;
   const SNAP_PX = 7;
-  const EXTRA_PROPS = ['name', 'selectable', 'evented', 'curve', 'mask', 'maskBorder', 'maskBorderColor', 'lockRatio', 'bgShape', 'textFx', 'fxBase', 'boosted', 'importSource', 'mergeFit'];
+  const EXTRA_PROPS = ['name', 'selectable', 'evented', 'curve', 'mask', 'maskBorder', 'maskBorderColor', 'lockRatio', 'bgShape', 'textFx', 'fxBase', 'boosted', 'importSource', 'mergeFit', 'pdfSrc'];
   const $ = (id) => document.getElementById(id);
   const { esc, money, toast, t, tr } = POD;
   const D = window.POD_DESIGN;
@@ -1678,6 +1678,8 @@
     // its last page still goes on the back cover.
     const targets = pages.slice(0, Math.min(n, pages.length));
     const used = n > pages.length ? got.pages.slice(0, pages.length - 1).concat([got.pages[n - 1]]) : got.pages;
+    // Which page of the PDF each one is: the print files use that page of the PDF itself, not the picture.
+    const srcIdx = used.map((_, i) => (n > pages.length && i === used.length - 1 ? n - 1 : i));
     busy(true, tPg('ed.pdfPlacing'));
     try {
       for (let i = 0; i < used.length && i < targets.length; i++) {
@@ -1689,7 +1691,7 @@
         }
         const fimg = await new Promise((resolve) => fabric.Image.fromURL(used[i], resolve));
         const r = rects(page.id).bleed;
-        fimg.set({ name: `${(file.name || 'PDF').replace(/\.[^.]+$/, '').slice(0, 30)} · ${i + 1}` });
+        fimg.set({ name: `${(file.name || 'PDF').replace(/\.[^.]+$/, '').slice(0, 30)} · ${srcIdx[i] + 1}`, ...(got.pdfId ? { pdfSrc: { id: got.pdfId, page: srcIdx[i] } } : {}) });
         fimg.scale(Math.max(r.w / fimg.width, r.h / fimg.height));
         addObject(fimg, { select: false, shrinkToFit: false });
         // The page fills the page with its bleed, under anything already designed there.
@@ -5091,6 +5093,17 @@
         }
         try {
           files[`${s.id}-print.png`] = await exportPrint(s);
+          // A booklet page from the customer's PDF with things added on top: those things on their own
+          // (the print files put them over the PDF page itself).
+          const bottom = canvas.getObjects()[0];
+          if (st.product.paged && bottom && bottom.pdfSrc && canvas.getObjects().length > 1) {
+            bottom.visible = false;
+            try {
+              files[`${s.id}-overlay.png`] = await exportPrint(s);
+            } finally {
+              bottom.visible = true;
+            }
+          }
           files[`${s.id}-preview.png`] = await exportPreview();
           files[`${s.id}-design.svg`] = new Blob([await exportSvg(s)], { type: 'image/svg+xml' });
         } finally {

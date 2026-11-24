@@ -97,7 +97,7 @@ const MAX_EDITOR_JSON_BYTES = 40 * 1024 * 1024;
 // merge: a name list's pictures, one per copy (up to 1,000 of them).
 const UPLOAD_LIMITS = { print: 60 * 1024 * 1024, preview: 8 * 1024 * 1024, svg: 40 * 1024 * 1024, source: 60 * 1024 * 1024, merge: 150 * 1024 * 1024, photo: 15 * 1024 * 1024, thumb: 300 * 1024 };
 // Sides: front/back, and the two mugs of the couple mugs set.
-const FILE_RE = /^(front|back|mug1|mug2|emb|p\d{1,2})-(print|preview)\.png$|^(front|back|mug1|mug2)-merge-base\.png$|^(front|back|mug1|mug2|emb|p\d{1,2})-design\.svg$|^(front|back|mug1|mug2)-merge\.bin$|^src-\d{1,2}\.(png|jpg|webp)$|^(photo|thumb)-\d{3}\.jpg$/;
+const FILE_RE = /^(front|back|mug1|mug2|emb|p\d{1,2})-(print|preview)\.png$|^(front|back|p\d{1,2})-overlay\.png$|^(front|back|mug1|mug2)-merge-base\.png$|^(front|back|mug1|mug2|emb|p\d{1,2})-design\.svg$|^(front|back|mug1|mug2)-merge\.bin$|^src-\d{1,2}\.(png|jpg|webp)$|^(photo|thumb)-\d{3}\.jpg$/;
 const SIGNATURES = {
   png: (b) => b.subarray(0, 8).equals(PNG_SIGNATURE),
   jpg: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
@@ -131,7 +131,7 @@ function checkUpload(name, buf) {
     if (buf.length < 16 || !SIGNATURES.jpg(buf)) throw new HttpError(400, 'badImage');
     return k;
   }
-  const kind = name.startsWith('src-') ? 'source' : name.endsWith('.svg') ? 'svg' : name.endsWith('-merge.bin') ? 'merge' : name.includes('-print') || name.includes('-merge') ? 'print' : 'preview';
+  const kind = name.startsWith('src-') ? 'source' : name.endsWith('.svg') ? 'svg' : name.endsWith('-merge.bin') ? 'merge' : name.includes('-print') || name.includes('-merge') || name.includes('-overlay') ? 'print' : 'preview';
   if (buf.length > UPLOAD_LIMITS[kind]) throw new HttpError(413, 'uploadTooLarge');
   if (kind === 'source') {
     const ext = name.split('.').pop();
@@ -257,6 +257,8 @@ function publicItem(item) {
     process: item.process || getProduct(item.productId)?.process,
     // Booklets: the whole booklet's files (all pages in order, imposed for stapling).
     paged: Boolean(getProduct(item.productId)?.paged),
+    // Booklet pages printed from the customer's own PDF (its original can be downloaded).
+    pdfSource: (item.sides || []).some((s) => s.vector),
     methods: item.method === 'embroidery' ? ['embroidery'] : getProduct(item.productId)?.methods || [item.process || 'dtf'],
     kind: item.kind || 'product',
     ...(item.photos ? { photos: item.photos } : {}),
@@ -1123,6 +1125,46 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     return { path: target, name: `${base}-${n}-names${suffix}.${ext}` };
   }
 
+  /**
+   * A booklet page whose bottom layer is a page of the customer's uploaded PDF, placed straight
+   * (not turned, flipped, cropped or faded): where it sits in points from the page's bottom-left
+   * corner (bleed included), and whether anything is drawn on top of it. Otherwise null.
+   */
+  function vectorPage(product, storedSide, ed) {
+    const objs = (ed && Array.isArray(ed.objects)) ? ed.objects : [];
+    const o = objs[0];
+    const src = o && o.pdfSrc;
+    if (!src || !PDF_ID_RE.test(String(src.id)) || !Number.isInteger(src.page) || src.page < 0 || src.page > 999) return null;
+    let meta;
+    try {
+      meta = JSON.parse(fs.readFileSync(path.join(pdfUploadsDir, `${src.id}.json`), 'utf8'));
+    } catch (e) {
+      return null; // the PDF is gone (older than 45 days): printed from the picture
+    }
+    const box = meta.boxes && meta.boxes[src.page];
+    if (!box || !fs.existsSync(path.join(pdfUploadsDir, `${src.id}.pdf`))) return null;
+    const turned = Math.abs(((Number(o.angle) || 0) % 360 + 360) % 360) > 0.01;
+    if (turned || o.flipX || o.flipY || Number(o.skewX) || Number(o.skewY) || Number(o.cropX) || Number(o.cropY) || (o.filters && o.filters.length) || o.clipPath || (o.opacity != null && o.opacity < 0.999) || o.visible === false || (o.globalCompositeOperation && o.globalCompositeOperation !== 'source-over')) return null;
+    const side = product.sides.find((s) => s.id === storedSide.id);
+    const a = side.printArea;
+    const u = a.w / side.printWidthIn; // drawing units per inch
+    const bU = (side.bleedIn || 0) * u;
+    const w = (Number(o.width) || 0) * (Number(o.scaleX) || 1);
+    const h = (Number(o.height) || 0) * (Number(o.scaleY) || 1);
+    if (!(w > 0 && h > 0)) return null;
+    const left = (Number(o.left) || 0) - (o.originX === 'center' ? w / 2 : o.originX === 'right' ? w : 0);
+    const top = (Number(o.top) || 0) - (o.originY === 'center' ? h / 2 : o.originY === 'bottom' ? h : 0);
+    const k = 72 / u;
+    const pageH = (side.printWidthIn * a.h / a.w + 2 * (side.bleedIn || 0)) * 72;
+    const r3 = (v) => Math.round(v * 1000) / 1000;
+    return {
+      pdfId: src.id,
+      page: src.page,
+      src: box,
+      box: { x: r3((left - (a.x - bU)) * k), y: r3(pageH - (top - (a.y - bU)) * k - h * k), w: r3(w * k), h: r3(h * k) },
+      overlay: objs.length > 1,
+    };
+  }
   app.post('/api/designs', (req, res, next) => {
     // Checked before reading the (large) body.
     rateLimit(req, 'designs');
@@ -1259,10 +1301,20 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     design.price = designPrice({ ...design, status: 'ready' });
     if (design.price == null) throw new HttpError(400, 'unknownSize');
     Object.assign(design, pieceInfo(product, design));
-    const files = storedSides.flatMap((sd) => [`${sd.id}-print.png`, `${sd.id}-preview.png`, `${sd.id}-design.svg`]);
+    // Booklet pages from the customer's PDF: printed from the PDF page itself (with what was added on top).
+    const pdfCopies = {};
+    if (product.paged) {
+      for (const sd of storedSides) {
+        const v = vectorPage(product, sd, editor[sd.id]);
+        if (!v) continue;
+        sd.vector = v;
+        pdfCopies[`source-${v.pdfId}.pdf`] ||= fs.readFileSync(path.join(pdfUploadsDir, `${v.pdfId}.pdf`));
+      }
+    }
+    const files = storedSides.flatMap((sd) => [`${sd.id}-print.png`, `${sd.id}-preview.png`, `${sd.id}-design.svg`, ...(sd.vector && sd.vector.overlay ? [`${sd.id}-overlay.png`] : [])]);
     if (mergeList) for (const sd of Object.keys(mergeList.sides)) files.push(`${sd}-merge-base.png`, `${sd}-merge.bin`);
     design.expectedFiles = files;
-    store.createDesign(design, { 'editor.json': editorJson, ...(mergeList ? { 'merge.json': JSON.stringify({ columns: mergeList.columns, rows: mergeList.rows }) } : {}) });
+    store.createDesign(design, { 'editor.json': editorJson, ...pdfCopies, ...(mergeList ? { 'merge.json': JSON.stringify({ columns: mergeList.columns, rows: mergeList.rows }) } : {}) });
     res.status(201).json({ id: design.id, uploadToken: token, files });
   });
 
@@ -1589,6 +1641,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   });
 
   // Booklets: a whole PDF, one picture per page, to put on the booklet's pages in order.
+  // The PDF is kept for 45 days (designs copy it): the booklet print files are made from its pages.
+  const pdfUploadsDir = path.join(dataDir, 'pdf-uploads');
+  const PDF_ID_RE = /^[a-f0-9]{24}$/;
   app.post('/api/artwork/pages', express.raw({ type: () => true, limit: '60mb' }), async (req, res, next) => {
     try {
       const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
@@ -1596,20 +1651,23 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (!kind || kind.kind !== 'pdf') throw new HttpError(400, 'pdfOnly');
       rateLimit(req, 'artwork');
       const clamp = (v, lo, hi, d) => Math.min(hi, Math.max(lo, Math.round(Number(v)) || d));
-      const w = clamp(req.get('x-page-w'), 200, 2000, 1240);
-      const h = clamp(req.get('x-page-h'), 200, 2800, 1754);
       const max = clamp(req.get('x-max-pages'), 1, 40, 32);
       let out;
       try {
-        out = await artwork.pdfPages(buf, { w, h, max });
+        out = await artwork.pdfPages(buf, { max });
       } catch (e) {
         if (!(e instanceof artwork.ArtworkError)) throw e;
         if (e.reason === 'busy') throw new HttpError(429, 'tooFast');
         console.warn('[artwork] could not read the pages of a PDF of', buf.length, 'bytes:', e.reason, String(e.detail || '').slice(0, 400));
         throw new HttpError(400, 'pdfBad');
       }
+      // The PDF itself is kept (its pages are what gets printed; the pictures are only for the screen).
+      const pdfId = crypto.randomBytes(12).toString('hex');
+      fs.mkdirSync(pdfUploadsDir, { recursive: true });
+      fs.writeFileSync(path.join(pdfUploadsDir, `${pdfId}.pdf`), artwork.sniff(buf).data);
+      fs.writeFileSync(path.join(pdfUploadsDir, `${pdfId}.json`), JSON.stringify({ boxes: out.boxes, count: out.count }));
       res.set('Cache-Control', 'no-store');
-      res.json({ pages: out.pages.map((b) => `data:image/jpeg;base64,${b.toString('base64')}`), more: out.more });
+      res.json({ pdfId, pages: out.pages.map((b) => `data:image/jpeg;base64,${b.toString('base64')}`), boxes: out.boxes, count: out.count, more: out.more });
     } catch (e) {
       next(e);
     }
@@ -3901,6 +3959,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (!fs.existsSync(file)) throw new HttpError(404, 'notFound');
       return { path: file, name: `${base}-embroidery${format === 'dst' ? '.dst' : '-stitches.png'}` };
     }
+    if (format === 'source-pdf') {
+      // The PDF the customer uploaded, exactly as it came.
+      const sd = (design.sides || []).find((x) => x.vector);
+      const file = sd && store.designFile(designId, `source-${sd.vector.pdfId}.pdf`);
+      if (!file || !fs.existsSync(file)) throw new HttpError(404, 'notFound');
+      return { path: file, name: `${base.replace(`-${sideId}`, '')}-customer-original.pdf` };
+    }
     if (format === 'booklet-pdf' || format === 'booklet-imposed') {
       // Booklets: every page in reading order (blank pages left white), or arranged on sheets
       // for folding and stapling (saddle stitch), turning the way the binding says.
@@ -3915,7 +3980,37 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       });
       const rtl = !(design.options && design.options.binding && design.options.binding.id === 'left');
       const target = store.designFile(designId, `${format}-v${design.version || 1}.pdf`);
-      if (!fs.existsSync(target)) store.writeDesignFile(designId, path.basename(target), await printfiles.bookletPdf(pages, { widthIn: spec.widthIn, heightIn: spec.heightIn, bleedIn: spec.bleedIn || 0 }, { imposed: format === 'booklet-imposed', rtl, title: `${base} booklet` }));
+      const size = { widthIn: spec.widthIn, heightIn: spec.heightIn, bleedIn: spec.bleedIn || 0 };
+      if (!fs.existsSync(target)) {
+        let made = null;
+        // Pages from the customer's PDF: printed from the PDF pages themselves (sharp text and drawings,
+        // their images untouched), with anything added on top; the other pages from their print files.
+        const vec = order.map((ps) => design.sides.find((x) => x.id === ps.id)).map((sd) => (sd && sd.vector && fs.existsSync(store.designFile(designId, `source-${sd.vector.pdfId}.pdf`)) ? sd : null));
+        if (vec.some(Boolean)) {
+          try {
+            const PW = (size.widthIn + 2 * size.bleedIn) * 72;
+            const PH = (size.heightIn + 2 * size.bleedIn) * 72;
+            const partPngs = [];
+            const entries = order.map((ps, i) => {
+              const sd = vec[i];
+              if (sd) {
+                const ov = store.designFile(designId, `${sd.id}-overlay.png`);
+                let overlay = null;
+                if (sd.vector.overlay && fs.existsSync(ov)) overlay = partPngs.push(fs.readFileSync(ov)) - 1;
+                return { pdf: sd.vector.pdfId, page: sd.vector.page, src: sd.vector.src, box: sd.vector.box, overlay };
+              }
+              return pages[i] ? { part: partPngs.push(pages[i]) - 1 } : null;
+            });
+            const parts = partPngs.length ? await printfiles.imagesPdf(partPngs, PW, PH) : null;
+            const sources = {};
+            for (const sd of vec.filter(Boolean)) sources[sd.vector.pdfId] ||= fs.readFileSync(store.designFile(designId, `source-${sd.vector.pdfId}.pdf`));
+            made = await artwork.bookletFromPdf({ sources, parts, pages: entries, spec: size, imposed: format === 'booklet-imposed', rtl, title: `${base} booklet` });
+          } catch (e) {
+            console.warn('[booklet] could not print from the customer\'s PDF, using the print files:', e.reason || e.message, String(e.detail || '').slice(-300));
+          }
+        }
+        store.writeDesignFile(designId, path.basename(target), made || await printfiles.bookletPdf(pages, size, { imposed: format === 'booklet-imposed', rtl, title: `${base} booklet` }));
+      }
       return { path: target, name: `${base.replace(`-${sideId}`, '')}-booklet-${order.length}p${format === 'booklet-imposed' ? '-imposed' : ''}.pdf` };
     }
     if (format === 'repeat') {
@@ -4151,13 +4246,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   const productHouses = () => store.db.productHouses || {};
   const findHouse = (id) => houses().find((h) => h.id === id) || null;
   // Formats made once per item (not once per side).
-  const ONCE = new Set(['preview-pdf', 'book-pdf', 'booklet-pdf', 'booklet-imposed', 'proof', 'sheet-pdf', 'sheet-pdf-plain', 'repeat', 'dst', 'stitches', 'photos-zip', 'merge-pdf', 'merge-pdf-marks', 'merge-zip', 'merge-csv', 'merge-names-zip']);
+  const ONCE = new Set(['preview-pdf', 'book-pdf', 'booklet-pdf', 'booklet-imposed', 'source-pdf', 'proof', 'sheet-pdf', 'sheet-pdf-plain', 'repeat', 'dst', 'stitches', 'photos-zip', 'merge-pdf', 'merge-pdf-marks', 'merge-zip', 'merge-csv', 'merge-names-zip']);
   const SEND_FORMATS = new Set([...Object.keys(FORMATS), ...ONCE]);
   const FILE_LABELS = {
     pdf: t('Print PDF', 'ملف الطباعة PDF'), 'pdf-marks': t('Print PDF with crop marks', 'ملف الطباعة PDF بعلامات القص'), png: t('Print PNG (transparent)', 'ملف الطباعة PNG (خلفية شفافة)'), 'png-mirror': t('Print PNG (mirrored)', 'ملف الطباعة PNG (معكوس)'),
     tiff: t('Print TIFF (CMYK)', 'ملف الطباعة TIFF (CMYK)'), svg: t('Vector SVG', 'ملف فيكتور SVG'), 'dtf-film': t('DTF film PNG', 'فيلم DTF بصيغة PNG'), 'dtf-pdf': t('DTF film PDF', 'فيلم DTF بصيغة PDF'), 'dtg-white': t('DTG white underbase', 'طبقة الأبيض لطباعة DTG'),
     'laser-svg': t('Laser file for LightBurn (SVG)', 'ملف الليزر لـ LightBurn (SVG)'), 'engrave-png': t('Engraving bitmap (PNG)', 'صورة الحفر (PNG)'), 'cut-svg': t('Cut lines (SVG)', 'خطوط القص (SVG)'),
-    'preview-pdf': t('Preview PDF (customer design)', 'معاينة PDF (تصميم العميل)'), repeat: t('Repeat preview (whole fabric piece)', 'معاينة التكرار (قطعة القماش كاملة)'), dst: t('Embroidery file (DST)', 'ملف التطريز (DST)'), stitches: t('Stitch preview', 'معاينة الغرز'), 'book-pdf': t('Book print PDF', 'ملف طباعة الكتاب PDF'), 'booklet-pdf': t('Booklet PDF (all pages in order)', 'الكتيب PDF (كل الصفحات بالترتيب)'), 'booklet-imposed': t('Booklet imposed for saddle stitching', 'الكتيب مترتب للطباعة والتدبيس'), proof: t('Preview image', 'صورة المعاينة'), 'sheet-pdf': t('Gang sheet PDF (mirrored)', 'شيت DTF بصيغة PDF (معكوس)'), 'sheet-pdf-plain': t('Gang sheet PDF', 'شيت DTF بصيغة PDF'),
+    'preview-pdf': t('Preview PDF (customer design)', 'معاينة PDF (تصميم العميل)'), repeat: t('Repeat preview (whole fabric piece)', 'معاينة التكرار (قطعة القماش كاملة)'), dst: t('Embroidery file (DST)', 'ملف التطريز (DST)'), stitches: t('Stitch preview', 'معاينة الغرز'), 'book-pdf': t('Book print PDF', 'ملف طباعة الكتاب PDF'), 'booklet-pdf': t('Booklet PDF (all pages in order)', 'الكتيب PDF (كل الصفحات بالترتيب)'), 'booklet-imposed': t('Booklet imposed for saddle stitching', 'الكتيب مترتب للطباعة والتدبيس'), 'source-pdf': t('Customer\'s original PDF', 'ملف الـ PDF الأصلي من العميل'), proof: t('Preview image', 'صورة المعاينة'), 'sheet-pdf': t('Gang sheet PDF (mirrored)', 'شيت DTF بصيغة PDF (معكوس)'), 'sheet-pdf-plain': t('Gang sheet PDF', 'شيت DTF بصيغة PDF'),
     'photos-zip': t('All photos (ZIP, a folder per size)', 'كل الصور (ZIP، فولدر لكل مقاس)'),
     'merge-pdf': t('All names (PDF, one page per copy)', 'كل الأسماء (PDF، صفحة لكل نسخة)'), 'merge-pdf-marks': t('All names (PDF with crop marks)', 'كل الأسماء (PDF بعلامات القص)'), 'merge-zip': t('One PDF per name (ZIP)', 'ملف PDF لكل اسم (ZIP)'), 'merge-csv': t('Names list (CSV)', 'قائمة الأسماء (CSV)'), 'merge-names-zip': t('Names only (ZIP of PNGs)', 'الأسماء بس (ZIP صور PNG)'),
   };
@@ -4480,6 +4575,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   // the disk cannot fill up. Ordered designs are kept.
   const runCleanup = () => {
     try {
+      // Uploaded booklet PDFs not used within 45 days (designs keep their own copy).
+      try {
+        const old = Date.now() - 45 * 864e5;
+        for (const f of fs.readdirSync(pdfUploadsDir)) {
+          const file = path.join(pdfUploadsDir, f);
+          if (fs.statSync(file).mtimeMs < old) fs.rmSync(file, { force: true });
+        }
+      } catch (e) { /* no uploads yet */ }
       // Children's photos in books: removed 30 days after the book was shipped.
       const monthAgo = Date.now() - 30 * 864e5;
       const due = store.mutate((db) => {

@@ -59,7 +59,7 @@ const memMb = (pid) => {
   }
 };
 
-function runWorker(data, kind, px, timeoutMs, pages = null) {
+function runWorker(data, kind, px, timeoutMs, pages = null, job = null) {
   return new Promise((resolve, reject) => {
     const child = fork(path.join(__dirname, 'artwork-worker.mjs'), [], {
       execArgv: FLAGS,
@@ -92,12 +92,12 @@ function runWorker(data, kind, px, timeoutMs, pages = null) {
         done = true;
         clearTimeout(timer);
         clearInterval(watch);
-        runWorker(data, kind, px, timeoutMs, pages).then(resolve, reject);
+        runWorker(data, kind, px, timeoutMs, pages, job).then(resolve, reject);
         return;
       }
       finish(reject, fail('failed', `converter stopped (code ${code}, ${signal || 'no signal'}): ${stderr.trim().slice(-400)}`));
     });
-    child.send({ data, kind, px, pages });
+    child.send(job ? { job } : { data, kind, px, pages });
   });
 }
 
@@ -214,30 +214,145 @@ async function convertArtwork(buf, { px = 4000, timeoutMs = 25000 } = {}) {
   return { png: trimmed.data, width: trimmed.info.width, height: trimmed.info.height };
 }
 
-/**
- * Every page of a PDF as a JPEG page for a booklet: each fitted into a w x h px page on white
- * (up to `max` pages; `more` says the PDF has more). Returns { pages: [Buffer], more }.
- */
-async function pdfPages(buf, { w, h, max = 32, timeoutMs = 90000 } = {}) {
-  const found = sniff(buf);
-  if (!found || found.kind !== 'pdf') throw new ArtworkError('type');
+/** A Ghostscript job in the separate process, one at a time with the others (see runJob in the worker). */
+async function gsJob(job, timeoutMs) {
   if (running >= MAX_JOBS) throw new ArtworkError('busy');
   running++;
-  let out;
   try {
-    out = await runWorker(found.data, 'pdf', 0, timeoutMs, { w, h, max: max + 1 });
+    return await runWorker(null, null, 0, timeoutMs, null, job);
   } finally {
     running--;
   }
+}
+
+/** The size of each page of a PDF in points (its crop box, else its media box): [{ w, h, x, y }]. */
+async function pdfInfo(buf, { max = 40, timeoutMs = 30000 } = {}) {
+  const ps = `(in.pdf) (r) file runpdfbegin
+(COUNT ) print pdfpagecount ==
+1 1 pdfpagecount ${max} .min {
+  pdfgetpage dup /CropBox pget { exch pop } { /MediaBox pget pop } ifelse
+  (BOX ) print ==
+} for
+`;
+  const out = await gsJob({ inputs: { 'in.pdf': buf }, ps, device: 'nullpage' }, timeoutMs);
+  const count = Number((/COUNT (\d+)/.exec(out.log) || [])[1]);
+  const boxes = [...out.log.matchAll(/BOX \[([-\d.\s]+)\]/g)].map((m) => {
+    const [x0, y0, x1, y1] = m[1].trim().split(/\s+/).map(Number);
+    return { x: Math.min(x0, x1), y: Math.min(y0, y1), w: Math.abs(x1 - x0), h: Math.abs(y1 - y0) };
+  });
+  if (!count || !boxes.length || boxes.some((b) => !(b.w > 0 && b.h > 0))) {
+    const err = new ArtworkError('failed');
+    err.detail = out.log.slice(-600);
+    throw err;
+  }
+  return { count, boxes };
+}
+
+/**
+ * Every page of a PDF as a JPEG for the editor (each page its own shape, about 200 DPI),
+ * up to `max` pages. The pictures are only for the screen: the print files use the PDF itself.
+ * Returns { pages: [Buffer], boxes: [{ w, h, x, y }], count, more }.
+ */
+async function pdfPages(buf, { max = 32, maxPx = 2400, timeoutMs = 90000 } = {}) {
+  const found = sniff(buf);
+  if (!found || found.kind !== 'pdf') throw new ArtworkError('type');
+  const info = await pdfInfo(found.data, { max });
+  const biggest = Math.max(...info.boxes.map((b) => Math.max(b.w, b.h))) / 72;
+  const dpi = Math.max(36, Math.min(200, Math.floor(maxPx / biggest)));
+  const out = await gsJob({
+    inputs: { 'in.pdf': found.data },
+    device: 'png16m',
+    dpi,
+    args: ['-dUseCropBox', '-dTextAlphaBits=4', '-dGraphicsAlphaBits=4', '-dMaxBitmap=200000000', '-dFirstPage=1', `-dLastPage=${Math.min(max, info.count)}`, 'in.pdf'],
+  }, timeoutMs);
   const list = (out.pngs || []).map((p) => Buffer.from(p.buffer, p.byteOffset, p.byteLength));
   if (!list.length) {
     const err = new ArtworkError('failed');
-    err.detail = out.log;
+    err.detail = out.log.slice(-600);
     throw err;
   }
   const pages = [];
-  for (const png of list.slice(0, max)) pages.push(await sharp(png).flatten({ background: '#ffffff' }).jpeg({ quality: 86, mozjpeg: true }).toBuffer());
-  return { pages, more: list.length > max };
+  for (const png of list) pages.push(await sharp(png).flatten({ background: '#ffffff' }).jpeg({ quality: 86, mozjpeg: true }).toBuffer());
+  return { pages, boxes: info.boxes.slice(0, pages.length), count: info.count, more: info.count > max };
 }
 
-module.exports = { convertArtwork, pdfPages, sniff, ArtworkError };
+const psString = (s) => `(${String(s).replace(/[^\x20-\x7e]/g, '').replace(/[()\\]/g, (c) => `\\${c}`)})`;
+const n2 = (v) => (Math.round(v * 1000) / 1000).toString();
+/**
+ * A booklet print PDF made from the customer's own PDF pages (kept as they are: text and
+ * drawings stay sharp), with anything added on top of a page and the other pages from `parts`
+ * (one page each, trim + bleed). pages[i]: null (blank), { part } or { pdf, page, box, src, overlay }
+ * with box in points from the page's bottom-left corner (bleed included) and src the PDF page's box.
+ * `sources`: { pdfId: Buffer }. Imposed: two pages per sheet side for saddle stitching.
+ */
+async function bookletFromPdf({ sources, parts, pages, spec, imposed = false, rtl = false, title = '' }, timeoutMs = 180000) {
+  const pt = 72;
+  const trimW = spec.widthIn * pt;
+  const trimH = spec.heightIn * pt;
+  const b = (spec.bleedIn || 0) * pt;
+  const PW = trimW + 2 * b;
+  const H = trimH + 2 * b;
+  const list = pages.slice();
+  while (list.length % 4) list.splice(list.length - 1, 0, null);
+  const N = list.length;
+  const ids = Object.keys(sources);
+  const inputs = {};
+  let ps = '';
+  ids.forEach((id, k) => {
+    inputs[`src${k}.pdf`] = sources[id];
+    ps += `(src${k}.pdf) (r) file runpdfbegin /SRC${k} PDFFile def\n`;
+  });
+  if (parts) {
+    inputs['parts.pdf'] = parts;
+    ps += '(parts.pdf) (r) file runpdfbegin /PARTS PDFFile def\n';
+  }
+  ps += `[ /Title ${psString(title)} /Creator (ebda3) /DOCINFO pdfmark\n`;
+  const W = imposed ? 2 * trimW + 2 * b : PW;
+  ps += `<< /PageSize [${n2(W)} ${n2(H)}] >> setpagedevice\n`;
+  // One page with its bleed, its bottom-left corner at (ox, 0), clipped to [cx, cw].
+  const draw = (entry, ox, cx, cw) => {
+    if (!entry) return '';
+    let s = `gsave ${n2(cx)} 0 ${n2(cw)} ${n2(H)} rectclip ${n2(ox)} 0 translate\n`;
+    if (entry.pdf != null) {
+      const k = ids.indexOf(entry.pdf);
+      const sx = entry.box.w / entry.src.w;
+      const sy = entry.box.h / entry.src.h;
+      s += `gsave ${n2(entry.box.x)} ${n2(entry.box.y)} translate ${n2(sx)} ${n2(sy)} scale ${n2(-entry.src.x)} ${n2(-entry.src.y)} translate SRC${k} ${entry.page} .PDFDrawPage grestore\n`;
+      if (entry.overlay != null) s += `gsave PARTS ${entry.overlay} .PDFDrawPage grestore\n`;
+    } else if (entry.part != null) {
+      s += `gsave PARTS ${entry.part} .PDFDrawPage grestore\n`;
+    }
+    return `${s}grestore\n`;
+  };
+  const boxes = `[ {ThisPage} << /TrimBox [${n2(b)} ${n2(b)} ${n2(W - b)} ${n2(H - b)}] /BleedBox [0 0 ${n2(W)} ${n2(H)}] >> /PUT pdfmark\n`;
+  if (!imposed) {
+    for (const entry of list) ps += draw(entry, 0, 0, PW) + boxes + 'showpage\n';
+  } else {
+    for (let k = 0; k < N / 4; k++) {
+      for (const [l, r] of [[N - 2 * k, 1 + 2 * k], [2 + 2 * k, N - 1 - 2 * k]]) {
+        const [left, right] = rtl ? [r, l] : [l, r];
+        // Each page keeps its bleed on the three outer edges; the fold edge is cut at the trim.
+        ps += draw(list[left - 1], 0, 0, b + trimW);
+        ps += draw(list[right - 1], trimW, b + trimW, b + trimW);
+        if (b > 2) ps += `0.25 setlinewidth 0 setgray newpath ${n2(b + trimW)} 0 moveto 0 ${n2(b * 0.7)} rlineto stroke newpath ${n2(b + trimW)} ${n2(H)} moveto 0 ${n2(-b * 0.7)} rlineto stroke\n`;
+        ps += boxes + 'showpage\n';
+      }
+    }
+  }
+  const out = await gsJob({
+    inputs,
+    ps,
+    device: 'pdfwrite',
+    // Nothing made smaller or re-compressed: the pages print as the customer sent them.
+    args: ['-dCompatibilityLevel=1.6', '-dAutoRotatePages=/None', '-dDownsampleColorImages=false', '-dDownsampleGrayImages=false', '-dDownsampleMonoImages=false',
+      '-dAutoFilterColorImages=false', '-dAutoFilterGrayImages=false', '-dColorImageFilter=/FlateEncode', '-dGrayImageFilter=/FlateEncode', '-dPassThroughJPEGImages=true', '-dPassThroughJPXImages=true'],
+  }, timeoutMs);
+  if (!out.out || !out.out.length || out.code !== 0) {
+    const err = new ArtworkError('failed');
+    err.detail = out.log.slice(-800);
+    throw err;
+  }
+  return Buffer.from(out.out.buffer, out.out.byteOffset, out.out.byteLength);
+}
+
+module.exports = { convertArtwork, pdfPages, pdfInfo, bookletFromPdf, sniff, ArtworkError };

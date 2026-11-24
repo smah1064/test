@@ -354,4 +354,20 @@ function bookletPdf(pages, spec, { imposed = false, rtl = false, title = '' } = 
   });
 }
 
-module.exports = { bookletPdf, previewPdf, repeatPreview, enhancePhoto, finalizePrintPng, pngInfo, mirroredPng, cmykTiff, cmykProof, printPdf, hardAlpha, dtfFilmPng, dtgUnderbase, filmPdf };
+/** Pictures as pages of a PDF, each filling a W x H point page (pages added on top of a customer's PDF pages). */
+function imagesPdf(pngs, W, H) {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ autoFirstPage: false, margin: 0 });
+    const chunks = [];
+    doc.on('data', (c) => chunks.push(c));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+    for (const png of pngs) {
+      doc.addPage({ size: [W, H], margin: 0 });
+      doc.image(png, 0, 0, { width: W, height: H });
+    }
+    doc.end();
+  });
+}
+
+module.exports = { imagesPdf, bookletPdf, previewPdf, repeatPreview, enhancePhoto, finalizePrintPng, pngInfo, mirroredPng, cmykTiff, cmykProof, printPdf, hardAlpha, dtfFilmPng, dtgUnderbase, filmPdf };

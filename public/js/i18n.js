@@ -1275,6 +1275,7 @@ window.POD_STRINGS = {
   'book.privacy': ["Your child's photo is used only to print this book and is deleted automatically 30 days after delivery (or after 7 days if you don't order).", 'صورة طفلك بتُستخدم لطباعة الكتاب ده بس، وبتتمسح تلقائيًا بعد 30 يوم من التوصيل (أو بعد 7 أيام لو ما طلبتش).'],
   'fmt.booklet-imposed': ['Booklet, imposed for saddle stitching (PDF)', 'الكتيب مترتب للطباعة والتدبيس (PDF)'],
   'fmt.booklet-pdf': ['Booklet, all pages in order (PDF)', 'الكتيب كل الصفحات بالترتيب (PDF)'],
+  'fmt.source-pdf': ['Customer\'s original PDF', 'ملف الـ PDF الأصلي من العميل'],
   'fmt.book-pdf': ['Book PDF (all pages, 300 DPI, 3 mm bleed)', 'ملف الكتاب PDF (كل الصفحات، 300 DPI، هامش قص 3 مم)'],
   'admin.bookFiles': ['Book print file', 'ملف طباعة الكتاب'],
   'method.dtg': ['DTG', 'DTG'],

@@ -9,7 +9,9 @@
 // memory, and WebAssembly otherwise reserves about 10 GB of it up front.
 import loadGs from '@okathira/ghostpdl-wasm';
 
-process.once('message', async ({ data, kind, px, pages }) => {
+process.once('message', async (msg) => {
+  if (msg.job) return runJob(msg.job);
+  const { data, kind, px, pages } = msg;
   const log = [];
   let code = -1;
   let png = null;
@@ -61,3 +63,44 @@ process.once('message', async ({ data, kind, px, pages }) => {
   }
   process.send({ code, png, pngs, log: log.slice(-8).join('\n') }, () => process.exit(0));
 });
+
+// A PostScript job (booklet print files from the customer's own PDF pages, page sizes of a PDF):
+// the files it reads, the program, the output device. Returns the output file and the log.
+async function runJob({ inputs, ps, device, args = [], dpi }) {
+  const log = [];
+  let code = -1;
+  let out = null;
+  let pngs = null;
+  try {
+    const gs = await loadGs({ print: (s) => log.push(s), printErr: (s) => log.push(s) });
+    const permits = [];
+    for (const [name, data] of Object.entries(inputs || {})) {
+      gs.FS.writeFile(name, new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
+      permits.push(`--permit-file-read=${name}`);
+    }
+    const files = ps ? ['job.ps'] : [];
+    if (ps) gs.FS.writeFile('job.ps', ps);
+    const output = device === 'png16m' ? 'out-%03d.png' : 'out.pdf';
+    try {
+      code = gs.callMain(['-dSAFER', '-dBATCH', '-dNOPAUSE', `-sDEVICE=${device}`, `-sOutputFile=${output}`, ...permits, ...(dpi ? [`-r${dpi}`] : []), ...args, ...files]);
+    } catch (e) {
+      code = e && typeof e.status === 'number' ? e.status : -1;
+      log.push(String((e && e.message) || e));
+    }
+    if (device === 'png16m') {
+      pngs = [];
+      for (let i = 1; i < 1000; i++) {
+        try {
+          pngs.push(gs.FS.readFile(`out-${String(i).padStart(3, '0')}.png`));
+        } catch (e) {
+          break;
+        }
+      }
+    } else if (device !== 'nullpage') {
+      try { out = gs.FS.readFile('out.pdf'); } catch (e) { out = null; }
+    }
+  } catch (e) {
+    log.push(`load: ${(e && e.message) || e}`);
+  }
+  process.send({ code, out, pngs, log: log.slice(-400).join('\n') }, () => process.exit(0));
+}
