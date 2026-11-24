@@ -1468,8 +1468,10 @@ const PRODUCTION = {
   stickersheet: { process: 'paper', safeIn: 0.15, bleedIn: 0.08, model: { type: 'pad', depthIn: 0.03, radiusIn: 0.05, edge: '#f2f3f5', material: 'paper' } },
   namelabels: { process: 'paper', safeIn: 0.08, bleedIn: 0.04, model: { type: 'pad', depthIn: 0.03, radiusIn: 0.3, edge: '#f2f3f5', material: 'paper' } },
   // Real depth (gusset) so bags don't look paper-thin in 3D: lunch bag ~15 cm, pencil case ~6 cm, paper bags ~10 cm.
-  lunchbag: { process: 'dtf', safeIn: 0.25, bleedIn: 0, model: { type: 'card', material: 'fabric', depthIn: 5.9, closedTop: true } },
-  pencilcase: { process: 'dtf', safeIn: 0.2, bleedIn: 0, model: { type: 'card', material: 'fabric', depthIn: 2.2, closedTop: true } },
+  // Lunch bag: an insulated soft box (piped edges, zip across the top). Pencil case: a zip pouch, puffed in the
+  // middle and flat at the side seams (depthIn is its thickness at the fullest point).
+  lunchbag: { process: 'dtf', safeIn: 0.25, bleedIn: 0, model: { type: 'card', material: 'fabric', depthIn: 5.9, closedTop: true, shape: 'softbox' } },
+  pencilcase: { process: 'dtf', safeIn: 0.2, bleedIn: 0, model: { type: 'card', material: 'fabric', depthIn: 2.2, shape: 'pouch' } },
   bizcards: { process: 'paper', safeIn: 0.12, bleedIn: 0.08, model: { type: 'block', depthIn: 0.03, radiusIn: 0.02, edge: '#f6f6f4', material: 'paper' } },
   flyers: { process: 'paper', safeIn: 0.15, bleedIn: 0.08, model: { type: 'block', depthIn: 0.02, radiusIn: 0.02, edge: '#f6f6f4', material: 'paper' } },
   letterhead: { process: 'paper', safeIn: 0.25, bleedIn: 0, model: { type: 'pad', depthIn: 0.02, radiusIn: 0.02, edge: '#f6f6f4', material: 'paper' } },

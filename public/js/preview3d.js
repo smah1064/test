@@ -546,22 +546,45 @@ function buildCard(color, tex, renderer, product) {
   // stand apart and side, bottom (and top, for zipped bags) walls join them.
   const m = product.model || {};
   const depth = m.depthIn || 0;
-  const fg = new THREE.PlaneGeometry(w, h, 48, 1);
-  const bg = new THREE.PlaneGeometry(w, h, 48, 1);
+  const soft = m.shape === 'pouch' || m.shape === 'softbox';
+  const fg = new THREE.PlaneGeometry(w, h, soft ? 72 : 48, soft ? 48 : 1);
+  const bg = new THREE.PlaneGeometry(w, h, soft ? 72 : 48, soft ? 48 : 1);
   if (!depth) {
     bend(fg, 1);
     bend(bg, 1);
   }
+  // Soft bags: the panels puff out (a pouch all the way to its seams, a soft box a little),
+  // shaded by their own curve so the roundness shows.
+  const body = soft ? bodyOf(firstImg, w, h) : null;
+  if (soft && body) {
+    const puff = m.shape === 'pouch' ? depth / 2 : Math.min(0.45, depth * 0.07);
+    for (const geo of [fg, bg]) puffPanel(geo, body, puff, m.shape === 'pouch');
+  }
   // The renders already carry the photo's own light and shading, so show them
   // unlit: the front and back then look the same whichever way the panel faces.
-  const photoMat = (cv) => new THREE.MeshBasicMaterial({ map: texture(cv, renderer), alphaTest: 0.5 });
-  const fm = new THREE.Mesh(fg, photoMat(front));
-  const bm = new THREE.Mesh(bg, photoMat(backCv));
+  const photoMat = (cv) => new THREE.MeshBasicMaterial({ map: texture(cv, renderer), alphaTest: 0.5, vertexColors: Boolean(soft && body), side: m.shape === 'pouch' ? THREE.DoubleSide : THREE.FrontSide });
+  // A soft box gets a real strap handle on top: the flat handle drawn in the photos goes.
+  const noHandle = (cv) => {
+    if (m.shape !== 'softbox' || !body) return cv;
+    const c = canvas(cv.width, cv.height);
+    const ctx = c.getContext('2d');
+    ctx.drawImage(cv, 0, 0);
+    ctx.clearRect(0, 0, c.width, Math.max(0, Math.floor((0.5 - body.yT / h) * c.height) - 1));
+    return c;
+  };
+  const fm = new THREE.Mesh(fg, photoMat(noHandle(front)));
+  const bm = new THREE.Mesh(bg, photoMat(noHandle(backCv)));
   bm.rotation.y = Math.PI;
+  if (m.shape === 'pouch' && body) {
+    // A pouch has no walls: front and back meet at the seams.
+    g.add(fm, bm);
+    g.rotation.y = -0.45;
+    return g;
+  }
   if (depth) {
     fm.position.z = depth / 2;
     bm.position.z = -depth / 2;
-    for (const wall of bagWalls(firstImg, w, h, depth, m)) g.add(wall);
+    for (const wall of bagWalls(firstImg, w, h, depth, m, renderer)) g.add(wall);
   } else {
     bm.position.z = -0.3;
   }
@@ -574,7 +597,11 @@ function buildCard(color, tex, renderer, product) {
  * The walls of a bag: found from the photo (the rows where the body is at
  * least 70% of its widest, which leaves out handles), coloured like the body.
  */
-function bagWalls(img, w, h, depth, m) {
+/**
+ * Where the bag's body is in its photo (rows at least 70% of the widest, which
+ * leaves out handles), in model units, and the colour at its edges.
+ */
+function bodyOf(img, w, h) {
   const sw = 160;
   const sh = Math.max(1, Math.round((sw * img.height) / img.width));
   const c = canvas(sw, sh);
@@ -617,37 +644,184 @@ function bagWalls(img, w, h, depth, m) {
       n++;
     }
   });
-  if (top < 0) return [];
+  if (top < 0) return null;
   const toX = (px) => (px / sw - 0.5) * w;
   const toY = (py) => (0.5 - py / sh) * h;
   // Tucked in a little so the walls stay behind rounded corners and seams.
   const inset = (right - left) * 0.015;
-  const xL = toX(left + 0.5 + inset);
-  const xR = toX(right + 0.5 - inset);
-  const yT = toY(top + (bottom - top) * 0.04);
-  const yB = toY(bottom + 1 - (bottom - top) * 0.015);
+  return {
+    xL: toX(left + 0.5 + inset),
+    xR: toX(right + 0.5 - inset),
+    yT: toY(top + (bottom - top) * 0.04),
+    yB: toY(bottom + 1 - (bottom - top) * 0.015),
+    rgb: [rs / n, gs / n, bs / n],
+  };
+}
+
+/**
+ * Puff a bag panel out from its seams. A pouch swells to `puff` in the middle and
+ * meets the other panel at its seams (all four edges); a soft box bulges a little
+ * inside its piped edges. Each vertex is shaded by its slope, so the curve reads
+ * on the unlit photo.
+ */
+function puffPanel(geo, b, puff, pouch) {
+  const p = geo.attributes.position;
+  const cx = (b.xL + b.xR) / 2;
+  const cy = (b.yT + b.yB) / 2;
+  const hw = (b.xR - b.xL) / 2;
+  const hh = (b.yT - b.yB) / 2;
+  const colors = new Float32Array(p.count * 3);
+  for (let i = 0; i < p.count; i++) {
+    const u = Math.min(1, Math.abs((p.getX(i) - cx) / hw));
+    const v = Math.min(1, Math.abs((p.getY(i) - cy) / hh));
+    // Flat-ish in the middle, falling off to the seams (sharper at a pouch's zip and sides).
+    const fu = pouch ? 1 - u ** 3.2 : 1 - u ** 6;
+    const fv = pouch ? 1 - v ** 2.6 : 1 - v ** 6;
+    p.setZ(i, puff * Math.max(0, fu) ** 0.7 * Math.max(0, fv) ** 0.7);
+  }
+  geo.computeVertexNormals();
+  // Light from the upper left, a little in front: slopes facing away get darker.
+  const L = new THREE.Vector3(-0.42, 0.5, 0.76).normalize();
+  const nrm = geo.attributes.normal;
+  for (let i = 0; i < p.count; i++) {
+    const d = nrm.getX(i) * L.x + nrm.getY(i) * L.y + nrm.getZ(i) * L.z;
+    const k = Math.min(1.04, 0.83 + 0.27 * Math.max(0, d));
+    colors[i * 3] = colors[i * 3 + 1] = colors[i * 3 + 2] = k;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+}
+
+/** A woven-fabric texture in the bag's colour, with its bump map (for the walls). */
+function fabricTexture(rgb, renderer) {
+  const N = 256;
+  const c = canvas(N, N);
+  const bmp = canvas(N, N);
+  const ctx = c.getContext('2d');
+  const bctx = bmp.getContext('2d');
+  const img = ctx.createImageData(N, N);
+  const bimg = bctx.createImageData(N, N);
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      // A plain weave: alternating over-under threads, plus a little noise.
+      const weave = ((x >> 1) + (y >> 1)) % 2 ? 1 : -1;
+      const t = 0.5 + 0.5 * Math.sin((x * Math.PI) / 2) * Math.sin((y * Math.PI) / 2) * weave;
+      const noise = (Math.random() - 0.5) * 0.06;
+      const k = 0.95 + 0.06 * t + noise;
+      const i = (y * N + x) * 4;
+      img.data[i] = Math.min(255, rgb[0] * k);
+      img.data[i + 1] = Math.min(255, rgb[1] * k);
+      img.data[i + 2] = Math.min(255, rgb[2] * k);
+      img.data[i + 3] = 255;
+      bimg.data[i] = bimg.data[i + 1] = bimg.data[i + 2] = Math.round(255 * t);
+      bimg.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  bctx.putImageData(bimg, 0, 0);
+  const map = texture(c, renderer);
+  const bump = new THREE.CanvasTexture(bmp);
+  for (const t of [map, bump]) {
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  }
+  return { map, bump };
+}
+
+function bagWalls(img, w, h, depth, m, renderer) {
+  const b = bodyOf(img, w, h);
+  if (!b) return [];
+  const { xL, xR, yT, yB } = b;
+  const soft = m.shape === 'softbox';
   // The edge colour, a little darker: the sides face away from the light.
-  const col = new THREE.Color(`rgb(${Math.round((rs / n) * 0.88)}, ${Math.round((gs / n) * 0.88)}, ${Math.round((bs / n) * 0.88)})`);
-  const wallMat = new THREE.MeshStandardMaterial({ color: col, roughness: 0.9, metalness: 0, side: THREE.DoubleSide });
-  const plane = (pw, ph) => new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), wallMat);
+  const col = new THREE.Color(`rgb(${Math.round(b.rgb[0] * 0.88)}, ${Math.round(b.rgb[1] * 0.88)}, ${Math.round(b.rgb[2] * 0.88)})`);
+  let wallMat = new THREE.MeshStandardMaterial({ color: col, roughness: 0.9, metalness: 0, side: THREE.DoubleSide });
+  let fab = null;
+  if (soft) {
+    fab = fabricTexture(b.rgb.map((v) => v * 0.93), renderer);
+    wallMat = new THREE.MeshStandardMaterial({ map: fab.map, bumpMap: fab.bump, bumpScale: 0.6, roughness: 0.95, metalness: 0, side: THREE.DoubleSide, vertexColors: true });
+  }
+  const plane = (pw, ph) => {
+    const geo = new THREE.PlaneGeometry(pw, ph, soft ? 16 : 1, soft ? 16 : 1);
+    if (soft) {
+      // Soft walls bow out a little between the piped edges, and the weave keeps its real size.
+      const p = geo.attributes.position;
+      for (let i = 0; i < p.count; i++) {
+        const u = (2 * p.getX(i)) / pw;
+        const v = (2 * p.getY(i)) / ph;
+        p.setZ(i, Math.min(0.35, Math.min(pw, ph) * 0.05) * Math.max(0, 1 - u ** 4) * Math.max(0, 1 - v ** 4));
+      }
+      geo.computeVertexNormals();
+      const uv = geo.attributes.uv;
+      const shade = new Float32Array(p.count * 3);
+      for (let i = 0; i < p.count; i++) {
+        const k = 0.86 + 0.14 * ((p.getY(i) / ph) + 0.5) * (ph > pw * 0.6 ? 1 : 0.4);
+        shade[i * 3] = shade[i * 3 + 1] = shade[i * 3 + 2] = k;
+      }
+      geo.setAttribute('color', new THREE.BufferAttribute(shade, 3));
+      for (let i = 0; i < uv.count; i++) uv.setXY(i, (uv.getX(i) * pw) / 1.6, (uv.getY(i) * ph) / 1.6);
+    }
+    return new THREE.Mesh(geo, wallMat);
+  };
   const walls = [];
   const bodyH = yT - yB;
   const bodyW = xR - xL;
   for (const x of [xL, xR]) {
     const s = plane(depth, bodyH);
-    s.rotation.y = Math.PI / 2;
+    s.rotation.y = x < 0 ? -Math.PI / 2 : Math.PI / 2; // its bulge faces outwards
     s.position.set(x, (yT + yB) / 2, 0);
     walls.push(s);
   }
-  const b = plane(bodyW, depth);
-  b.rotation.x = -Math.PI / 2;
-  b.position.set((xL + xR) / 2, yB, 0);
-  walls.push(b);
+  const bot = plane(bodyW, depth);
+  bot.rotation.x = Math.PI / 2;
+  bot.position.set((xL + xR) / 2, yB, 0);
+  walls.push(bot);
   if (m.closedTop) {
     const t = plane(bodyW, depth);
-    t.rotation.x = Math.PI / 2;
+    t.rotation.x = -Math.PI / 2;
     t.position.set((xL + xR) / 2, yT, 0);
     walls.push(t);
+  }
+  if (soft) {
+    // Piping along every edge (it hides the corners and reads as a sewn bag) and a zip across the top.
+    // Lit a little from within, so on a light bag the piping is a soft seam and not a drawn outline.
+    const pipeMat = new THREE.MeshStandardMaterial({ color: col.clone().multiplyScalar(1.06), emissive: col.clone().multiplyScalar(0.4), roughness: 1, metalness: 0, envMapIntensity: 0.3 });
+    const r = Math.min(0.055, depth * 0.01);
+    const pipe = (len, axis, x, y, z) => {
+      const c = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 12, 1), pipeMat);
+      if (axis === 'x') c.rotation.z = Math.PI / 2;
+      if (axis === 'z') c.rotation.x = Math.PI / 2;
+      c.position.set(x, y, z);
+      walls.push(c);
+    };
+    const zf = depth / 2;
+    for (const x of [xL, xR]) for (const z of [-zf, zf]) pipe(bodyH, 'y', x, (yT + yB) / 2, z);
+    for (const y of [yB, yT]) {
+      for (const z of [-zf, zf]) pipe(bodyW, 'x', (xL + xR) / 2, y, z);
+      for (const x of [xL, xR]) pipe(depth, 'z', x, y, 0);
+    }
+    if (m.closedTop) {
+      // The zip: a dark tape with teeth, along the top's middle and down the sides a little.
+      const tape = canvas(512, 32);
+      const tctx = tape.getContext('2d');
+      tctx.fillStyle = '#2b2d33';
+      tctx.fillRect(0, 0, 512, 32);
+      tctx.fillStyle = '#8d9096';
+      for (let x = 0; x < 512; x += 6) tctx.fillRect(x, 11, 3, 10);
+      const zipMat = new THREE.MeshStandardMaterial({ map: texture(tape, renderer), roughness: 0.5, metalness: 0.3 });
+      const zip = new THREE.Mesh(new THREE.PlaneGeometry(bodyW * 0.98, Math.min(0.5, depth * 0.08)), zipMat);
+      zip.rotation.x = -Math.PI / 2;
+      zip.position.set((xL + xR) / 2, yT + Math.min(0.35, Math.min(bodyW, depth) * 0.05) + 0.01, 0);
+      walls.push(zip);
+      const pull = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.08, 0.7), new THREE.MeshStandardMaterial({ color: '#9a9ea6', roughness: 0.3, metalness: 0.8 }));
+      pull.position.set(xR - bodyW * 0.12, zip.position.y + 0.04, 0.3);
+      walls.push(pull);
+      // One carry strap across the top, from front to back like a real lunch bag's.
+      const strapMat = new THREE.MeshStandardMaterial({ map: fab.map, bumpMap: fab.bump, bumpScale: 0.4, color: 0xdddddd, roughness: 0.95, metalness: 0 });
+      const span = Math.min(bodyW * 0.42, 3.4);
+      const strap = new THREE.Mesh(new THREE.TorusGeometry(span / 2, 0.16, 10, 40, Math.PI), strapMat);
+      strap.scale.set(1, 1.15, 2.4); // a flat webbing strap, not a round rope
+      strap.position.set((xL + xR) / 2, yT + Math.min(0.35, Math.min(bodyW, depth) * 0.05), 0);
+      walls.push(strap);
+    }
   }
   return walls;
 }
