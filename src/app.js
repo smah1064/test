@@ -26,6 +26,7 @@ const {
   round2,
   printAreaFor,
   printWidthFor,
+  printHeightFor,
   REPEATS,
   matchSize,
   matchColor,
@@ -1187,7 +1188,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       }
       storedSides.push({
         // The physical size for the chosen size (a 30 x 40 poster prints smaller than a 45 x 60 one).
-        id: side.id, name: side.name, widthIn: printWidthFor(product, side, sizeDef.id), heightIn: round2((heightIn(side) * printWidthFor(product, side, sizeDef.id)) / side.printWidthIn), bleedIn: side.bleedIn || 0,
+        id: side.id, name: side.name, widthIn: printWidthFor(product, side, sizeDef.id), heightIn: round2(printHeightFor(product, side, sizeDef.id)), bleedIn: side.bleedIn || 0,
         // With embroidery: this side is printed (DTF / DTG files, not stitches).
         ...(emb ? { process: product.process } : {}),
         ...(offset ? { offsetCm: offsetCm(product, side, sizeDef.id, offset) } : {}),

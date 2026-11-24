@@ -416,7 +416,22 @@
       resolve(img);
     }));
   }
-  async function buildTemplate(tpl, area, ink, { inset = 0 } = {}) {
+  /**
+   * The part of a print area a layout goes in: printArea.readyZone (fractions of the
+   * area) where the product has one: the wall calendar's top half above the month
+   * pad, a folder's front half, a brochure's cover panel. readyZoneRtl is used for
+   * layouts led by Arabic text (Arabic folders and brochures open the other way).
+   */
+  function readyArea(area, tpl) {
+    if (!area || !area.readyZone) return area;
+    // (The biggest text with letters leads: a year or a number says nothing about the language.)
+    const texts = ((tpl && tpl.items) || []).filter((i) => i.kind === 'text' && (/[A-Za-z]/.test(i.text || '') || ARABIC_RE.test(i.text || '')));
+    const lead = texts.reduce((best, i) => (!best || (i.size || 0) > (best.size || 0) ? i : best), null);
+    const z = area.readyZoneRtl && lead && ARABIC_RE.test(lead.text) ? area.readyZoneRtl : area.readyZone;
+    return { x: area.x + area.w * z.x, y: area.y + area.h * z.y, w: area.w * z.w, h: area.h * z.h };
+  }
+  async function buildTemplate(tpl, fullArea, ink, { inset = 0 } = {}) {
+    const area = readyArea(fullArea, tpl);
     // A layout drawn for a box of a given shape (tpl.aspect = width / height,
     // e.g. 0.75 for the ready designs, made on a T-shirt): on wider, shorter
     // boxes (mugs, envelopes, banners) sizes follow the height instead, so
@@ -518,5 +533,5 @@
     return url;
   }
 
-  window.POD_DESIGN = { FONTS, BUNDLED, ARABIC_RE, ACCENT, SHAPES, TEXT_PRESETS, TEMPLATES, ensureFont, ensureFontsFor, buildTemplate, templateThumb };
+  window.POD_DESIGN = { FONTS, BUNDLED, ARABIC_RE, ACCENT, SHAPES, TEXT_PRESETS, TEMPLATES, ensureFont, ensureFontsFor, buildTemplate, readyArea, templateThumb };
 })();

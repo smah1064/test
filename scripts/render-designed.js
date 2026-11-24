@@ -167,34 +167,38 @@ const chosen = Object.fromEntries(args.filter((a) => a.includes('=')).map((a) =>
         return { url: card(cropToArt(out), { fill: 0.74 }), design: 'pattern' };
       }
 
-      let fits = lib.designs.filter((dd) => POD.designFor(dd, product));
-      let note = '';
+      // Only the designs the shop offers on this product (shape and light / dark colour: src/library.js productsFor).
+      const fits = lib.designs.filter((dd) => POD.designFor(dd, product));
+      const picked = pick && fits.find((dd) => dd.id === pick);
+      if (pick && !picked) console.warn(`${pick} is not offered on ${productId}`);
       if (!fits.length) {
-        // No ready design made for this shape: the ones made for the nearest shape.
-        const pa = product.sides[0].printArea;
-        const want = Math.log(pa.w / pa.h);
-        const aspectOf = (dd) => {
-          if (dd.aspect) return dd.aspect;
-          const src = catalog.products.find((p) => p.id === dd.product);
-          const a = src && src.sides[0].printArea;
-          return a ? a.w / a.h : 1;
-        };
-        const scored = lib.designs.map((dd) => [Math.abs(Math.log(aspectOf(dd)) - want), dd]).sort((p1, p2) => p1[0] - p2[0]);
-        const best = scored[0][0];
-        fits = scored.filter((s2) => s2[0] <= best + 0.15).map((s2) => s2[1]);
-        note = ' (nearest shape)';
+        // No ready design for this product (bookmarks, banners...): the plain product, so the
+        // catalogue never shows a design the customer can't pick.
+        const st = await POD_RENDER.stage({ kind: 'objects', objects: [] }, product, product.sides[0], product.colors[0]);
+        const pic = await POD_RENDER.productPicture(st, 2);
+        return { url: card(pic), design: 'plain' };
       }
       // Its own design first, else one picked by the product id (the rows don't all show the same design).
       const own = fits.filter((dd) => dd.product === productId);
-      const d0 = (pick && lib.designs.find((dd) => dd.id === pick)) || (own.length ? own[0] : fits[h % fits.length]);
+      const d0 = picked || (own.length ? own[0] : fits[h % fits.length]);
       const raw = d0.kind === 'objects' ? await POD.api('/api/library/' + encodeURIComponent(d0.id)) : d0;
       // Name-list fields ({Name}, {الاسم}...) shown filled in, as a customer's would be.
       const SAMPLE = { 'الاسم': 'سارة أحمد', 'الوظيفة': 'مديرة التسويق', 'الموبايل': '0100 123 4567', 'الإيميل': 'sara@ebda3.me', Name: 'Sara Ahmed', name: 'Sara', Position: 'Marketing Manager', Phone: '0100 123 4567', Email: 'sara@ebda3.me' };
       const d = JSON.parse(JSON.stringify(raw).replace(/\{([^{}"\\]{1,30})\}/g, (m, k) => SAMPLE[k] || k));
-      const color = product.colors.find((c) => c.id === d.color) || product.colors[0];
+      // The design's own colour, else the product's colour nearest it of the same lightness (a design
+      // for a black T-shirt goes on the black mug), else the first.
+      const dark = (hex) => POD.luminance(hex) < 0.45;
+      const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+      const dist = (a, b) => rgb(a).reduce((sum, v, i) => sum + (v - rgb(b)[i]) ** 2, 0);
+      const src = catalog.products.find((p) => p.id === d.product);
+      const srcColor = src && src.colors.find((c) => c.id === d.color);
+      const hex = srcColor && (src.surface || srcColor.hex);
+      const alike = hex && !product.surface ? product.colors.filter((c) => dark(c.hex) === dark(hex)) : [];
+      const color = product.colors.find((c) => c.id === d.color)
+        || (alike.length && !(dark(product.colors[0].hex) === dark(hex)) ? alike.reduce((b, c) => (dist(c.hex, hex) < dist(b.hex, hex) ? c : b)) : product.colors[0]);
       const st = await POD_RENDER.stage(d, product, product.sides[0], color);
       const pic = await POD_RENDER.productPicture(st, 2);
-      return { url: card(pic), design: d0.id + note };
+      return { url: card(pic), design: d0.id };
     }, { productId: id, pick: chosen[id] || null }).catch((e) => ({ error: String(e && e.message || e) }));
     if (!res.url) {
       console.log(id, 'skipped:', res.skipped || res.error);

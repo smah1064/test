@@ -70,7 +70,9 @@ test('designs go where a customer would buy them', () => {
   // Funny: clothes, mugs, phone cases; not prayer mats or business cards.
   assert.ok(on('mesh-fady', 'mug') && on('mesh-fady', 'phonecase') && on('mesh-fady', 'cap') && !on('mesh-fady', 'prayermat') && !on('mesh-fady', 'bizcards'), 'funny');
   // Prayer mat: Islamic phrases and the Ramadan / Eid greetings, not the food jokes.
-  assert.ok(on('fa-isl-alhamdulillah', 'prayermat') && on('fa-ram-kareem-gold', 'prayermat') && !on('fa-ram-foul', 'prayermat'), 'prayer mat');
+  assert.ok(on('fa-isl-mashallah', 'prayermat') && on('fa-ram-kareem-gold', 'prayermat') && !on('fa-ram-foul', 'prayermat'), 'prayer mat');
+  // (Its cream calligraphy, drawn for a dark green T-shirt, would not show on the white mat.)
+  assert.ok(on('fa-isl-alhamdulillah', 'mug') && !on('fa-isl-alhamdulillah', 'prayermat'), 'cream on white');
   assert.ok(on('eid-mubarak', 'eidenvelopes') && !on('kammel', 'eidenvelopes'), 'Eid envelopes');
 });
 

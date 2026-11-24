@@ -19,9 +19,23 @@
   const fitting = catalog.products.filter((p) => !p.kind && POD.designFor(design, p));
   const products = fitting.length ? fitting : catalog.products.filter((p) => !p.kind);
   const state = { product: null, color: null, size: null };
+  // The design's own colour (a design for a black T-shirt: white ink), for products without that colour id.
+  const isDark = (hex) => POD.luminance(hex) < 0.45;
+  const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const dist = (a, b) => rgb(a).reduce((sum, v, i) => sum + (v - rgb(b)[i]) ** 2, 0);
+  const own = catalog.products.find((p) => p.id === design.product);
+  const ownColor = own && own.colors.find((c) => c.id === design.color);
+  const ownHex = ownColor && (own.surface || ownColor.hex);
+  /** The product's colour nearest the design's own, if the first colour is the wrong lightness for it. */
+  function nearestOwn(product) {
+    const first = product.colors[0];
+    if (!ownHex || product.surface || isDark(first.hex) === isDark(ownHex)) return first;
+    const alike = product.colors.filter((c) => isDark(c.hex) === isDark(ownHex));
+    return alike.length ? alike.reduce((best, c) => (dist(c.hex, ownHex) < dist(best.hex, ownHex) ? c : best)) : first;
+  }
   function choose(productId, colorId) {
     state.product = products.find((p) => p.id === productId) || products.find((p) => p.id === design.product) || products[0];
-    state.color = state.product.colors.find((c) => c.id === colorId) || state.product.colors.find((c) => c.id === design.color) || state.product.colors[0];
+    state.color = state.product.colors.find((c) => c.id === colorId) || state.product.colors.find((c) => c.id === design.color) || nearestOwn(state.product);
     if (!state.size || !state.product.sizes.some((s) => s.id === state.size.id)) state.size = state.product.sizes[0];
   }
   choose(params.get('product'), params.get('color'));

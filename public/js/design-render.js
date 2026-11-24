@@ -48,7 +48,9 @@
     if (design.kind === 'template') {
       return window.POD_DESIGN.buildTemplate({ id: design.id, items: design.items, aspect: design.aspect }, side.printArea, inkFor(surface), { inset: (side.safeIn || 0) * (side.printArea.w / side.printWidthIn) });
     }
-    const objs = remap(design.objects || [], design.area || side.printArea, side.printArea);
+    // Made on another product: in this one's ready-design zone (the calendar's top half, a folder's front), as templates are.
+    const to = design.product && design.product !== product.id ? window.POD_DESIGN.readyArea(side.printArea, null) : side.printArea;
+    const objs = remap(design.objects || [], design.area || side.printArea, to);
     await window.POD_DESIGN.ensureFontsFor(objs);
     return new Promise((resolve) => fabric.util.enlivenObjects(objs, resolve));
   }

@@ -31,6 +31,24 @@
   $('pp').hidden = false;
 
   let color = product.colors.find((c) => c.id === params.get('color')) || product.colors[0];
+  // Until the customer picks a colour, each ready design is shown (and ordered) on its own
+  // colour where this product has it: a design for a black T-shirt (white ink) on the black mug.
+  let picked = Boolean(product.colors.find((c) => c.id === params.get('color')));
+  const isDark = (hex) => POD.luminance(hex) < 0.45;
+  const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const dist = (a, b) => rgb(a).reduce((sum, v, i) => sum + (v - rgb(b)[i]) ** 2, 0);
+  /** The colour a ready design is shown on: the picked one, else the design's own (or the nearest of the same lightness). */
+  function colorFor(d) {
+    if (picked) return color;
+    const same = product.colors.find((c) => c.id === d.color);
+    if (same) return same;
+    const own = catalog.products.find((p) => p.id === d.product);
+    const ownColor = own && own.colors.find((c) => c.id === d.color);
+    const hex = ownColor && (own.surface || ownColor.hex);
+    if (!hex || product.surface || isDark(hex) === isDark(color.hex)) return color;
+    const alike = product.colors.filter((c) => isDark(c.hex) === isDark(hex));
+    return alike.length ? alike.reduce((best, c) => (dist(c.hex, hex) < dist(best.hex, hex) ? c : best)) : color;
+  }
   let cat = 'all';
   let hasDraft = false;
   try {
@@ -43,9 +61,9 @@
 
   const pictures = new Map(); // design id + colour -> object URL
   function pictureFor(d) {
-    const key = `${d.id}:${color.id}`;
+    const c = colorFor(d);
+    const key = `${d.id}:${c.id}`;
     if (!pictures.has(key)) {
-      const c = color;
       pictures.set(key, (async () => {
         const st = await POD_RENDER.stage(d, product, product.sides[0], c);
         const cv = await POD_RENDER.productPicture(st, 1.2); // the whole product, framed close round it
@@ -89,7 +107,7 @@
     view = b.dataset.view;
     renderPicture();
   });
-  const q = () => `product=${encodeURIComponent(product.id)}&color=${encodeURIComponent(color.id)}`;
+  const q = (c = color) => `product=${encodeURIComponent(product.id)}&color=${encodeURIComponent(c.id)}`;
   function renderInfo() {
     document.title = `${tr(product.name)} · ${t('brand')}`;
     $('pp-name').textContent = tr(product.name);
@@ -117,18 +135,23 @@
   }
 
   function renderDesigns() {
+    // No ready designs for this product (bookmarks, banners...): no "pick a ready design" choice or section.
+    const none = !lib.designs.length;
+    $('pp-ready').hidden = none;
+    document.querySelectorAll('.pp-choice[href="#pp-ready"]').forEach((a) => { a.hidden = none; });
+    if (none) return;
     const used = lib.categories.filter((c) => lib.designs.some((d) => d.category === c.id));
     $('pp-cats').innerHTML = [{ id: 'all', name: null }, ...used]
       .map((c) => `<button class="chip ${c.id === cat ? 'active' : ''}" data-cat="${c.id}">${esc(c.name ? tr(c.name) : t('cat.all'))}</button>`).join('');
     const list = lib.designs.filter((d) => cat === 'all' || d.category === cat);
     $('pp-grid').innerHTML = list.map((d) => `
       <div class="card product-card design-card pp-design">
-        <a class="thumb" href="/design?id=${encodeURIComponent(d.id)}&${q()}"><img alt="${esc(tr(d.name))}" data-design="${esc(d.id)}"></a>
+        <a class="thumb" href="/design?id=${encodeURIComponent(d.id)}&${q(colorFor(d))}"><img alt="${esc(tr(d.name))}" data-design="${esc(d.id)}"></a>
         <div class="body">
           <h3 dir="auto">${esc(tr(d.name))}</h3>
           <div class="pp-actions">
-            <a class="btn btn-sm btn-primary" href="/design?id=${encodeURIComponent(d.id)}&${q()}">${esc(t('pp.order'))}</a>
-            <a class="btn btn-sm" href="/editor?library=${encodeURIComponent(d.id)}&${q()}">✏️ ${esc(t('pp.edit'))}</a>
+            <a class="btn btn-sm btn-primary" href="/design?id=${encodeURIComponent(d.id)}&${q(colorFor(d))}">${esc(t('pp.order'))}</a>
+            <a class="btn btn-sm" href="/editor?library=${encodeURIComponent(d.id)}&${q(colorFor(d))}">✏️ ${esc(t('pp.edit'))}</a>
           </div>
         </div>
       </div>`).join('') || `<p class="muted">${esc(t('designs.empty'))}</p>`;
@@ -140,13 +163,14 @@
   const io = 'IntersectionObserver' in window ? new IntersectionObserver((entries) => {
     entries.filter((e) => e.isIntersecting).forEach((e) => { io.unobserve(e.target); load(e.target); });
   }, { rootMargin: '300px' }) : null;
+  let shown = 0; // bumped when the colour changes: pictures still queued for the old one are skipped
   function load(img) {
     const d = lib.designs.find((x) => x.id === img.dataset.design);
-    const want = color.id;
+    const want = shown;
     queue = queue.then(async () => {
-      if (!img.isConnected || want !== color.id) return;
+      if (!img.isConnected || want !== shown) return;
       const url = await pictureFor(d);
-      if (url && img.isConnected && want === color.id) img.src = url;
+      if (url && img.isConnected && want === shown) img.src = url;
     });
   }
   function observe() {
@@ -157,6 +181,8 @@
     const b = e.target.closest('[data-color]');
     if (!b || b.dataset.color === color.id) return;
     color = product.colors.find((c) => c.id === b.dataset.color) || color;
+    picked = true;
+    shown++;
     view = 'plain'; // a colour picked: show the product in that colour
     history.replaceState(null, '', `/product?id=${encodeURIComponent(product.id)}&color=${encodeURIComponent(color.id)}`);
     renderInfo();

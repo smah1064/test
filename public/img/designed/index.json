@@ -113,7 +113,7 @@
  },
  "coasters": {
   "file": "/img/designed/coasters.webp",
-  "design": "fa-isl-subhanallah"
+  "design": "hb-level-up"
  },
  "tablecloth": {
   "file": "/img/designed/tablecloth.webp",
@@ -145,7 +145,7 @@
  },
  "namelabels": {
   "file": "/img/designed/namelabels.webp",
-  "design": "pp-kids-space-cadet"
+  "design": "pp-kids-princess-name"
  },
  "lunchbag": {
   "file": "/img/designed/lunchbag.webp",
@@ -233,7 +233,7 @@
  },
  "postcards": {
   "file": "/img/designed/postcards.webp",
-  "design": "fa-eid-neon"
+  "design": "st-maximal-more"
  },
  "foldedcards": {
   "file": "/img/designed/foldedcards.webp",
@@ -249,7 +249,7 @@
  },
  "notepads": {
   "file": "/img/designed/notepads.webp",
-  "design": "wd-noor"
+  "design": "pp-sch-cat-homework"
  },
  "folders": {
   "file": "/img/designed/folders.webp",
@@ -269,11 +269,11 @@
  },
  "calendar": {
   "file": "/img/designed/calendar.webp",
-  "design": "fa-isl-mashallah"
+  "design": "pp-biz-barber"
  },
  "deskcalendar": {
   "file": "/img/designed/deskcalendar.webp",
-  "design": "wd-el-gar"
+  "design": "pp-biz-barber"
  },
  "photobook": {
   "file": "/img/designed/photobook.webp",
@@ -281,7 +281,7 @@
  },
  "magnets": {
   "file": "/img/designed/magnets.webp",
-  "design": "wd-ta2khira-kheira"
+  "design": "mat2la2sh"
  },
  "tablenumbers": {
   "file": "/img/designed/tablenumbers.webp",
@@ -289,11 +289,11 @@
  },
  "deskmat": {
   "file": "/img/designed/deskmat.webp",
-  "design": "lz-frame-set-el-7abayeb (nearest shape)"
+  "design": "plain"
  },
  "dlenvelopes": {
   "file": "/img/designed/dlenvelopes.webp",
-  "design": "pp-biz-restaurant (nearest shape)"
+  "design": "plain"
  },
  "storybook": {
   "file": "/img/designed/storybook.webp",
@@ -333,11 +333,11 @@
  },
  "giftvouchers": {
   "file": "/img/designed/giftvouchers.webp",
-  "design": "pp-biz-salon (nearest shape)"
+  "design": "plain"
  },
  "bookmarks": {
   "file": "/img/designed/bookmarks.webp",
-  "design": "pp-pet-cats-over-people (nearest shape)"
+  "design": "plain"
  },
  "wrappingpaper": {
   "file": "/img/designed/wrappingpaper.webp",
@@ -345,10 +345,10 @@
  },
  "banners": {
   "file": "/img/designed/banners.webp",
-  "design": "lz-door-welcome (nearest shape)"
+  "design": "plain"
  },
  "placecards": {
   "file": "/img/designed/placecards.webp",
-  "design": "lz-door-family-ar (nearest shape)"
+  "design": "plain"
  }
 }

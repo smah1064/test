@@ -301,7 +301,9 @@ const SHAPE_MIN = 0.5;
 const SHAPE_MAX = 2.25;
 const SEEN_SHAPE = { mug: 1.15, magicmug: 1.15, couplemugs: 1.15 };
 const areaShape = (a) => (a && a.w > 0 && a.h > 0 ? a.w / a.h : 0);
-const productShape = (p) => SEEN_SHAPE[p.id] || areaShape(p.sides && p.sides[0] && p.sides[0].printArea) || 0.75;
+/** The part of a print area ready designs are placed in (printArea.readyZone: the wall calendar's top half, a folder's front). */
+const readyPart = (a) => (a && a.readyZone ? { w: a.w * a.readyZone.w, h: a.h * a.readyZone.h } : a);
+const productShape = (p) => SEEN_SHAPE[p.id] || areaShape(readyPart(p.sides && p.sides[0] && p.sides[0].printArea)) || 0.75;
 const MERGE_FIELD = /\{[^{}]+\}/;
 const hasNameFields = (d) => (d.items || []).some((i) => i.kind === 'text' && MERGE_FIELD.test(i.text || ''));
 /** Products that take no general ready designs. */
@@ -318,6 +320,58 @@ function fitsShape(d, p) {
   return r >= SHAPE_MIN && r <= SHAPE_MAX;
 }
 
+// Light or dark: a design drawn for a dark garment (white or neon ink, white line art)
+// disappears on white, so it is only offered on products that come in a dark colour;
+// one drawn for a light colour only where there is a light one. Products whose print
+// goes on white paper whatever the colour (posters, canvases: the colour is the frame
+// or edge) count as white. Same threshold as the editor's dark / light ink (inkFor).
+const luminance = (hex) => {
+  const n = parseInt(String(hex).slice(1, 7), 16);
+  return (0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255;
+};
+const isDark = (hex) => luminance(hex) < 0.45;
+/** The colour (hex) a design was drawn on, or null when not known. */
+function designHex(d) {
+  const own = PRODUCTS.find((p) => p.id === d.product);
+  if (own && own.surface) return own.surface;
+  const c = own && own.colors.find((x) => x.id === d.color);
+  return c ? c.hex : null;
+}
+// The magic mug is black when cold, but the print shows on white once it is hot.
+const PRINTS_ON = { magicmug: '#ffffff' };
+/** The colours the design is printed on, for each of the product's colours. */
+const surfaces = (p) => (PRINTS_ON[p.id] ? [PRINTS_ON[p.id]] : p.surface ? [p.surface] : p.colors.map((c) => c.hex));
+// A design drawn for a dark colour still reads on a light one when nothing in it is a fixed
+// light colour: text and icons without a colour take dark or light ink to suit, and the
+// colours it does use are dark enough (gold and the accent are, pale yellow and cyan are not).
+// Pictures (white line art, neon) and glowing text are taken to need their own colour.
+// The same the other way round for a light design on a dark-only product.
+// (Light text on a dark shape under it, a white "RUN" on an orange badge, reads anywhere.)
+function readsOn(d, dark) {
+  if (d.kind !== 'template' || !Array.isArray(d.items)) return false;
+  const hexOk = (hex) => !hex || !/^#[0-9a-f]{6}$/i.test(hex);
+  const ok = (hex) => hexOk(hex) || (dark ? luminance(hex) > 0.3 : luminance(hex) < 0.68);
+  const aspect = d.aspect || 0.75;
+  const onShape = (t, k) => d.items.slice(0, k).some((sh) => sh.kind === 'shape' && !sh.stroke && !hexOk(sh.fill)
+    && Math.abs(luminance(sh.fill) - luminance(t.fill)) > 0.3
+    && Math.abs(t.x - sh.x) < sh.w / 2 && Math.abs(t.y - sh.y) < (sh.w / 2) * aspect);
+  return d.items.every((i, k) => {
+    if (i.kind === 'image') return false;
+    if (i.kind === 'text') return !i.glow && (ok(i.bg || i.fill) || (!i.bg && onShape(i, k)));
+    if (i.kind === 'shape') return Boolean(i.stroke) || ok(i.fill);
+    if (i.kind === 'art') return ok(i.fill);
+    return true; // the shop's stickers are drawn in full colour, with their own outlines
+  });
+}
+function fitsColour(d, p) {
+  if (d.product === p.id) return true;
+  const hex = designHex(d);
+  if (!hex) return true;
+  const dark = isDark(hex);
+  const on = surfaces(p);
+  return on.some((h) => isDark(h) === dark) || readsOn(d, !dark);
+}
+
 const fitCache = new WeakMap();
 /** The ids of the products a design is offered on, in catalogue order. */
 function productsFor(d) {
@@ -331,7 +385,7 @@ function productsFor(d) {
   for (const id of d.notProducts || []) want.delete(id);
   const fields = hasNameFields(d);
   const list = PRODUCTS.filter((p) => !noGeneralDesigns(p) && ((d.kind === 'objects' && p.id === d.product)
-    || (want.has(p.id) && (!fields || p.merge) && fitsShape(d, p)))).map((p) => p.id);
+    || (want.has(p.id) && (!fields || p.merge) && fitsShape(d, p) && fitsColour(d, p)))).map((p) => p.id);
   fitCache.set(d, list);
   return list;
 }
@@ -470,4 +524,4 @@ class Library {
   }
 }
 
-module.exports = { Library, CATEGORIES, SEED, FITS, productsFor };
+module.exports = { Library, CATEGORIES, SEED, FITS, productsFor, fitsColour, productShape };

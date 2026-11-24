@@ -1762,6 +1762,8 @@ const TRIFOLD_SVG = sv(
     '<path d="M230 504 L280 494 L280 574 L230 584 Z" fill="{{S}}" stroke="{{L}}" stroke-width="2" stroke-linejoin="round"/>' +
     '<path d="M280 494 L330 504 L330 584 L280 574 Z" fill="{{C}}" stroke="{{L}}" stroke-width="2" stroke-linejoin="round"/>'
 );
+// Outside: ready designs on the front cover, the right-hand third (the left-hand one for Arabic brochures).
+const TRIFOLD_COVER = { readyZone: { x: 2 / 3, y: 0, w: 1 / 3, h: 1 }, readyZoneRtl: { x: 0, y: 0, w: 1 / 3, h: 1 } };
 const TRIFOLD_FOLDS = sv(
   '<path d="M180 150 V447 M320 150 V447" stroke="#7d838c" stroke-width="1.5" stroke-dasharray="7 6" opacity=".8"/>' +
     '<path d="M180 138 V146 M320 138 V146 M180 451 V459 M320 451 V459" stroke="#7d838c" stroke-width="2"/>'
@@ -1791,6 +1793,8 @@ const FOLDER_SVG = sv(
     '<path d="M370 480 L384 470 L428 470 L442 480" fill="none" stroke="{{L}}" stroke-width="1.5"/>' +
     shadowRect(FOLDER.x, FOLDER.y, FOLDER.w, FOLDER.h) + paperRect(FOLDER)
 );
+// Ready designs on the front: the right half (the left half for Arabic folders, which open the other way).
+const FOLDER_ZONES = { readyZone: { x: 0.5, y: 0, w: 0.5, h: 1 }, readyZoneRtl: { x: 0, y: 0, w: 0.5, h: 1 } };
 const FOLDER_SPINE = sv('<path d="M246 140 V450 M254 140 V450" stroke="#7d838c" stroke-width="1.5" stroke-dasharray="7 6" opacity=".8"/>');
 // Booklets: A5 (14.8 × 21 cm), stapled on the spine.
 const BOOKLET = { x: 139, y: 100, w: 222, h: 315 };
@@ -1827,6 +1831,10 @@ const WINDOW_SVG = sv(
 const WINDOW_SHINE = sv('<path d="M64 36 L156 36 L36 268 L36 92 Z" fill="#ffffff" opacity=".24"/><path d="M318 36 L352 36 L118 564 L84 564 Z" fill="#ffffff" opacity=".12"/>');
 // Wall calendar: the whole A3 card (29.7 × 42 cm) is printed; a pad of 12 month sheets is stapled on its lower half.
 const WALL_CAL = { x: 105, y: 40, w: 290, h: 410.1 };
+// printArea.readyZone: where ready designs and templates are placed, in fractions of the print area
+// (readyZoneRtl for Arabic-led designs, when that differs). The customer still prints on the whole area.
+// Wall calendar: the top half, above the month pad (its staples are at 51% of the height).
+const WALL_CAL_ZONE = { x: 0, y: 0, w: 1, h: 0.49 };
 const WALL_CAL_SVG = sv(
   '<path d="M150 36 L250 9 L350 36" fill="none" stroke="#7b8088" stroke-width="2.5"/><circle cx="250" cy="9" r="5" fill="#5f656d"/>' +
     shadowRect(WALL_CAL.x, WALL_CAL.y, WALL_CAL.w, WALL_CAL.h) + paperRect(WALL_CAL, 2.5)
@@ -2004,7 +2012,7 @@ PRODUCTS.push(
     colors: [{ id: 'satin', name: t('Satin white', 'أبيض ساتان'), hex: '#ffffff' }, { id: 'gloss', name: t('Glossy white', 'أبيض لامع'), hex: '#ffffff' }],
     sizes: qty([['100', '100 brochures', '100 بروشور', 0], ['250', '250 brochures', '250 بروشور', 350], ['500', '500 brochures', '500 بروشور', 750], ['1000', '1000 brochures', '1000 بروشور', 1400]]),
     sides: [
-      { id: 'front', name: t('Outside', 'من بره'), svg: TRIFOLD_SVG, overlay: TRIFOLD_FOLDS, printArea: { ...TRIFOLD }, printWidthIn: cmIn(29.7) },
+      { id: 'front', name: t('Outside', 'من بره'), svg: TRIFOLD_SVG, overlay: TRIFOLD_FOLDS, printArea: { ...TRIFOLD, ...TRIFOLD_COVER }, printWidthIn: cmIn(29.7) },
       { id: 'back', name: t('Inside', 'من جوه'), svg: TRIFOLD_SVG, overlay: TRIFOLD_FOLDS, printArea: { ...TRIFOLD }, printWidthIn: cmIn(29.7) },
     ],
     cardArt: withArt(
@@ -2060,7 +2068,7 @@ PRODUCTS.push(
       { 25: 150, 50: 250, 100: 450, 250: 950 },
     )],
     sizes: qty([['25', '25 folders', '25 فولدر', 0], ['50', '50 folders', '50 فولدر', 450], ['100', '100 folders', '100 فولدر', 1200], ['250', '250 folders', '250 فولدر', 3200]]),
-    sides: [{ id: 'front', name: t('Outside', 'من بره'), svg: FOLDER_SVG, overlay: FOLDER_SPINE, printArea: { ...FOLDER }, printWidthIn: cmIn(44) }],
+    sides: [{ id: 'front', name: t('Outside', 'من بره'), svg: FOLDER_SVG, overlay: FOLDER_SPINE, printArea: { ...FOLDER, ...FOLDER_ZONES }, printWidthIn: cmIn(44) }],
     cardArt: withArt(
       '<rect x="30" y="140" width="220" height="310" fill="#f1f3f5"/><rect x="250" y="140" width="220" height="310" fill="#343a40"/><circle cx="360" cy="260" r="40" fill="#fab005"/><rect x="305" y="330" width="110" height="14" rx="7" fill="#ffffff"/><rect x="100" y="380" width="80" height="10" rx="5" fill="#495057"/>',
       FOLDER_SPINE,
@@ -2183,7 +2191,7 @@ PRODUCTS.push(
     colorLabel: t('Card', 'الكارت'),
     colors: [{ id: 'matte', name: t('Matte card', 'كارت مطفي'), hex: '#ffffff' }, { id: 'gloss', name: t('Glossy card', 'كارت لامع'), hex: '#ffffff' }],
     sizes: qty([['1', '1 calendar', 'نتيجة واحدة', 0], ['10', '10 calendars', '10 نتايج', 1000], ['25', '25 calendars', '25 نتيجة', 2300], ['50', '50 calendars', '50 نتيجة', 4100], ['100', '100 calendars', '100 نتيجة', 7300]]),
-    sides: [{ id: 'front', name: FRONT, svg: WALL_CAL_SVG, overlay: WALL_CAL_PAD, printArea: { ...WALL_CAL }, printWidthIn: cmIn(29.7) }],
+    sides: [{ id: 'front', name: FRONT, svg: WALL_CAL_SVG, overlay: WALL_CAL_PAD, printArea: { ...WALL_CAL, readyZone: WALL_CAL_ZONE }, printWidthIn: cmIn(29.7) }],
     cardArt: withArt(photoArt({ x: 105, y: 40, w: 290, h: 205 }) + '<rect x="105" y="245" width="290" height="205" fill="#f8f9fa"/><rect x="190" y="440" width="120" height="6" rx="3" fill="#495057"/>', WALL_CAL_PAD),
   },
   {
@@ -2521,6 +2529,16 @@ for (const [pid, sizes] of Object.entries(SIZE_PRINT_SCALE)) {
   const p = PRODUCTS.find((x) => x.id === pid);
   if (p) p.sizes = p.sizes.map((sz) => (sizes[sz.id] ? { ...sz, printScale: Math.round(sizes[sz.id] * 10000) / 10000 } : sz));
 }
+// Paper sizes that are not exactly the drawing area's shape scaled (A6 is 10.5 × 14.8 cm,
+// A5 scaled down to 10.5 cm wide would be 14.9 cm high): the real trim height, in cm.
+// printHeightFor() gives it; the artwork is fitted to it (well within the bleed).
+const SIZE_PRINT_HEIGHT_CM = {
+  notepads: { 'A6-1': 14.8, 'A6-5': 14.8, 'A6-10': 14.8 },
+};
+for (const [pid, sizes] of Object.entries(SIZE_PRINT_HEIGHT_CM)) {
+  const p = PRODUCTS.find((x) => x.id === pid);
+  if (p) p.sizes = p.sizes.map((sz) => (sizes[sz.id] ? { ...sz, printHeightCm: sizes[sz.id] } : sz));
+}
 // One artwork, many pieces: can one design be ordered in several colours / sizes?
 // Only when every colour and size uses the same print file: not where a bigger
 // size is a bigger print (posters, mugs...), not canvas prints (the "colour" is
@@ -2570,6 +2588,14 @@ function variantColumns(columns) {
 function printWidthFor(product, side, sizeId) {
   const size = product.sizes.find((z) => z.id === sizeId);
   return Math.round(side.printWidthIn * ((size && size.printScale) || 1) * 1000) / 1000;
+}
+
+/** A side's physical print height in inches for a size (the size's own trim height where it has one). */
+function printHeightFor(product, side, sizeId) {
+  const size = product.sizes.find((z) => z.id === sizeId);
+  if (size && size.printHeightCm) return Math.round((size.printHeightCm / 2.54) * 1000) / 1000;
+  const a = side.printArea;
+  return Math.round(((side.printWidthIn * a.h) / a.w) * ((size && size.printScale) || 1) * 1000) / 1000;
 }
 
 /** The print area for a size (same physical print, so smaller on the screen for bigger garments), top edge kept below the collar. */
@@ -2736,6 +2762,7 @@ module.exports = {
   variantColumns,
   REPEATS,
   printAreaFor,
+  printHeightFor,
   printWidthFor,
   CATEGORIES,
   CURRENCY,
