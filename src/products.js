@@ -1517,7 +1517,8 @@ for (const p of PRODUCTS) {
 
 // Name lists (variable data): one design, a spreadsheet of names, one printed copy per row.
 // Garments too: team kits with each player's name and number (a Size column gives each row its size).
-const MERGE_PRODUCTS = ['invitations', 'certificates', 'greetingcard', 'idcards', 'namelabels', 'stickersheet', 'tshirt', 'kidstee', 'hoodie', 'kidshoodie', 'sweatshirt', 'jersey', 'polo', 'oversized', 'ziphoodie'];
+// Business cards: one pack (100, 250… cards) per row, each with its person's name, position, phone, email…
+const MERGE_PRODUCTS = ['invitations', 'certificates', 'greetingcard', 'idcards', 'bizcards', 'namelabels', 'stickersheet', 'tshirt', 'kidstee', 'hoodie', 'kidshoodie', 'sweatshirt', 'jersey', 'polo', 'oversized', 'ziphoodie'];
 for (const p of PRODUCTS) if (MERGE_PRODUCTS.includes(p.id)) p.merge = { maxRows: 1000 };
 
 // Sizes that change the physical print (the drawing area keeps its shape):

@@ -71,6 +71,12 @@
       $('pp-emb-text').textContent = t('pp.embText', { price: money(product.embroidery.surcharge) });
     }
     $('pp-scratch-title').textContent = t(hasDraft ? 'pp.continue' : 'pp.scratch');
+    // Products that print a list of names (variable data).
+    $('pp-names').hidden = !product.merge;
+    if (product.merge) {
+      $('pp-names').href = `/editor?${q()}&names=1`;
+      $('pp-names-text').textContent = t(product.id === 'bizcards' || product.id === 'idcards' ? 'pp.namesTextCards' : 'pp.namesText');
+    }
   }
 
   function renderDesigns() {

@@ -902,3 +902,7 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
   .panel-foot #preview-open-m { padding: 10px 11px; }
   .panel-foot .price-line { flex: 1 0 auto; }
 }
+
+/* Name-list section: a short highlight when opened from the toolbar or the product page */
+@keyframes sec-flash { 0% { box-shadow: 0 0 0 3px var(--accent, #ff5a36); } 100% { box-shadow: 0 0 0 3px transparent; } }
+.panel-section.flash { animation: sec-flash 1.6s ease-out; border-radius: 12px; }

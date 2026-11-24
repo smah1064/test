@@ -196,7 +196,10 @@ The design keeps `quantities: [{ color, size, qty, unitPrice }]`; orders, the ca
 
 ## Name lists (variable data printing)
 
-For invitations, certificates, greeting cards, ID cards, name labels and sticker sheets, the editor has **Print a list of names**:
+For invitations, certificates, greeting cards, ID cards, **business cards**, name labels and sticker sheets (and the team-kit garments below), the editor has **Print a list of names**. It is easy to find: a **Names** button in the editor's tool bar (only on these products) opens it, the product page has a "Print a list of names" card that opens the editor right there (`/editor?product=…&names=1`), and on phones the chip under the price shows the number of names.
+
+**Business cards for a whole team:** each row is one person's pack (100, 250… cards) with their own name, position, phone, email or any other column, priced per pack. Ready layouts with the fields in place ({الاسم} {الوظيفة} {الموبايل} {الإيميل} or {Name} {Position} {Phone} {Email}) are in Templates → Business & teams (`src/library-packs/cards.js`), and the example file has those columns. The shop prints each page of the PDF as one pack.
+
 
 1. The customer uploads an Excel (.xlsx) or CSV file. The first row holds the column titles (Name, Title…), then one row per copy; up to 1,000 rows. `POST /api/merge/parse` reads it (`src/merge-data.js`: CSV with any separator and Arabic encodings, .xlsx read without extra libraries; old .xls is refused with a "save as .xlsx" message). An example file can be downloaded from the panel.
 2. Fields such as `{Name}` go into any text (chips insert them; while typing, at the cursor). The customer styles them like any text and can step through the real rows on the canvas. Each field text has a **longest name width**: longer values get a smaller font so they always fit; the panel lists rows whose names shrink a lot or are empty.

@@ -3091,11 +3091,12 @@
     const chip = $('qty-chip');
     if (chip) {
       chip.hidden = p.kind === 'book';
-      chip.textContent = t('qty.chip', { n: POD.num(pieces) });
+      chip.textContent = t(p.merge && st.mergeList ? 'qty.chipNames' : 'qty.chip', { n: POD.num(pieces) });
     }
   }
   if ($('qty-chip')) {
     $('qty-chip').addEventListener('click', () => {
+      if (st.product.merge && st.mergeList) return openNames(); // a name list: one copy per name
       canvas.discardActiveObject();
       setSheet('product');
       requestAnimationFrame(() => { const f = $('qty-field'); if (f) f.scrollIntoView({ block: 'start', behavior: 'smooth' }); });
@@ -3424,6 +3425,7 @@
     const sec = $('sec-merge');
     if (!sec) return;
     sec.hidden = !st.product.merge;
+    if ($('tool-names')) $('tool-names').hidden = !st.product.merge;
     if (!st.product.merge) return;
     const L = st.mergeList;
     const body = $('merge-body');
@@ -3526,15 +3528,40 @@
   }
   function downloadExample() {
     const ar = POD.lang === 'ar';
-    const rows = ar
-      ? [['الاسم', 'الوظيفة'], ['أحمد علي', 'مدير'], ['منى حسن', 'مهندسة'], ['Omar Khaled', 'Designer']]
-      : [['Name', 'Title'], ['Ahmed Ali', 'Manager'], ['Mona Hassan', 'Engineer'], ['عمر خالد', 'مصمم']];
+    const pid = st.product.id;
+    // An example that fits the product: cards with contact details, team kits with numbers and sizes.
+    const rows = pid === 'bizcards' || pid === 'idcards'
+      ? (ar
+        ? [['الاسم', 'الوظيفة', 'الموبايل', 'الإيميل'], ['أحمد علي', 'مدير المبيعات', '01012345678', 'ahmed@example.com'], ['منى حسن', 'مهندسة', '01198765432', 'mona@example.com'], ['Omar Khaled', 'Designer', '01255511122', 'omar@example.com']]
+        : [['Name', 'Position', 'Phone', 'Email'], ['Ahmed Ali', 'Sales Manager', '01012345678', 'ahmed@example.com'], ['Mona Hassan', 'Engineer', '01198765432', 'mona@example.com'], ['عمر خالد', 'مصمم', '01255511122', 'omar@example.com']])
+      : st.product.category === 'apparel'
+        ? (ar ? [['الاسم', 'الرقم', 'المقاس'], ['أحمد', '10', 'L'], ['منى', '7', 'M'], ['Omar', '9', 'XL']] : [['Name', 'Number', 'Size'], ['Ahmed', '10', 'L'], ['Mona', '7', 'M'], ['عمر', '9', 'XL']])
+        : ar
+          ? [['الاسم', 'الوظيفة'], ['أحمد علي', 'مدير'], ['منى حسن', 'مهندسة'], ['Omar Khaled', 'Designer']]
+          : [['Name', 'Title'], ['Ahmed Ali', 'Manager'], ['Mona Hassan', 'Engineer'], ['عمر خالد', 'مصمم']];
     const csv = '﻿' + rows.map((r) => r.join(',')).join('\r\n') + '\r\n';
     const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })), download: ar ? 'قائمة-الأسماء.csv' : 'names.csv' });
     document.body.appendChild(a);
     a.click();
     a.remove();
   }
+  /** Open the name-list section (toolbar button, or ?names=1 from the product page). */
+  function openNames() {
+    if (!$('sec-merge') || $('sec-merge').hidden) return;
+    closeFlyouts();
+    if (MOBILE.matches) {
+      canvas.discardActiveObject();
+      setSheet('product');
+    }
+    requestAnimationFrame(() => {
+      const sec = $('sec-merge');
+      sec.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      sec.classList.remove('flash');
+      void sec.offsetWidth;
+      sec.classList.add('flash');
+    });
+  }
+  if ($('tool-names')) $('tool-names').addEventListener('click', openNames);
   if ($('sec-merge')) {
     $('merge-body').addEventListener('click', serial(async (e) => {
       const rowBtn = e.target.closest('[data-merge-row]');
@@ -4390,6 +4417,8 @@
       } catch (e) { /* diagnostics only */ }
     }, 1500);
   }
+  // From the product page's "Print a list of names": open the name-list section.
+  if (params.get('names') === '1') setTimeout(openNames, 400);
   if (restoredDraft) {
     const lost = outsideObjects();
     if (lost.length) {
