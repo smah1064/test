@@ -286,6 +286,10 @@ table.orders th { font-size: 12px; text-transform: uppercase; letter-spacing: .0
 .preset-group { font-size: 12px; font-weight: 700; color: var(--ink-3); margin: 12px 0 6px; text-transform: uppercase; letter-spacing: .05em; }
 .preset-group:first-of-type { margin-top: 0; }
 .template-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.tpl-q { width: 100%; margin: 0 0 8px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; font: inherit; font-size: 14px; background: #fff; }
+.tpl-cats { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 4px; scrollbar-width: thin; }
+.tpl-cat { flex: none; border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 5px 11px; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--ink-2); cursor: pointer; white-space: nowrap; }
+.tpl-cat.active { background: var(--ink, #16181d); border-color: var(--ink, #16181d); color: #fff; }
 .template-btn { border: 1px solid var(--line); border-radius: 10px; background: #fff; cursor: pointer; padding: 0; overflow: hidden; display: flex; flex-direction: column; font: inherit; font-size: 12px; font-weight: 600; color: var(--ink-2); }
 .template-btn:hover { border-color: var(--accent); }
 .template-btn img { width: 100%; aspect-ratio: 1; object-fit: contain; background: #f1f3f6; }
@@ -406,6 +410,7 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
   .panel-foot .price-note { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .panel-foot #add-to-cart, .panel-foot #save-draft, .panel-foot #preview-open-m { width: auto; flex: none; padding: 10px 12px; font-size: 14px; }
   .panel-foot .price-note { display: none; }
+  .panel-foot .qty-chip { display: inline-flex; }
   .tools { flex: none; }
   .panel-foot #preview-open-m { gap: 5px; align-items: center; }
   .foot-actions { flex: none; }
@@ -887,3 +892,13 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 .draft-bar .btn { white-space: nowrap; background: #fff; color: #16181d; border-color: #fff; }
 .draft-bar .fly-close { color: #fff; background: transparent; }
 @media (max-width: 520px) { .draft-bar { flex-wrap: wrap; bottom: calc(150px + env(safe-area-inset-bottom)); } .draft-bar span { flex: 1 1 100%; } }
+
+/* Number of pieces under the price (phones only); opens the quantities */
+.qty-chip { display: none; align-items: center; gap: 4px; margin-top: 2px; padding: 2px 9px; border: 1px solid var(--line); border-radius: 999px; background: #f8f9fb; color: var(--ink-2); font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.qty-chip[hidden] { display: none !important; }
+/* Narrow phones: the Preview button as an icon, so the price and the pieces stay readable */
+@media (max-width: 460px) {
+  .panel-foot #preview-open-m span { display: none; }
+  .panel-foot #preview-open-m { padding: 10px 11px; }
+  .panel-foot .price-line { flex: 1 0 auto; }
+}

@@ -154,4 +154,12 @@ function search(q, { type = 'all', page = 0, per = 60 } = {}) {
 
 const credits = () => SETS.map((s) => ({ name: s.name, license: s.license }));
 
-module.exports = { search, queryTerms, normAr, credits, load };
+let byId = null;
+/** One icon or sticker by its id ("fluent-emoji-flat:star"), or null. */
+function get(id) {
+  if (!byId) byId = new Map(load().map((e) => [e.id, e]));
+  const e = byId.get(String(id || ''));
+  return e ? { id: e.id, kind: e.set.kind, w: e.w, h: e.h, body: e.body } : null;
+}
+
+module.exports = { search, queryTerms, normAr, credits, load, get };

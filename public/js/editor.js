@@ -982,19 +982,97 @@
   });
 
   // ---------- Templates ----------
-  async function renderTemplates() {
-    const grid = $('template-grid');
-    grid.innerHTML = D.TEMPLATES.map((tpl, i) => `<button class="template-btn" data-tpl="${i}"><img alt="" data-thumb="${i}"><span>${esc(tr(tpl.name))}</span></button>`).join('');
-    for (const [i, tpl] of D.TEMPLATES.entries()) {
-      const url = await D.templateThumb(tpl);
-      const img = grid.querySelector(`[data-thumb="${i}"]`);
-      if (img) img.src = url;
+  // Every template: the editor's own (D.TEMPLATES) and the ready designs of the shop's
+  // library (hundreds, in categories), searchable in Arabic or English. Thumbnails are
+  // drawn only when they scroll into view.
+  const tplState = { list: null, cat: 'all', q: '', cats: [] };
+  const normQ = (x) => String(x || '').toLowerCase().replace(/[\u064b-\u065f\u0640]/g, '').replace(/[أإآٱ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي');
+  const colourHex = (pid, cid) => {
+    const p = products.find((x) => x.id === pid);
+    const c = p && p.colors.find((x) => x.id === cid);
+    return c ? c.hex : '#ffffff';
+  };
+  async function loadTemplateList() {
+    if (tplState.list) return tplState.list;
+    const lib = await POD.api('/api/library').catch(() => ({ categories: [], designs: [] }));
+    const ready = (lib.designs || []).map((d) => ({
+      key: 'lib:' + d.id, name: d.name, cat: d.category, design: d,
+      tpl: d.kind === 'template' ? { id: d.id, items: d.items, aspect: d.aspect } : null,
+      bg: colourHex(d.product, d.color), preview: d.kind === 'template' ? null : d.preview,
+    }));
+    const own = D.TEMPLATES.map((x) => ({ key: 'tpl:' + x.id, name: x.name, cat: 'basics', tpl: x, bg: '#ffffff' }));
+    tplState.cats = [{ id: 'all', name: { en: 'All', ar: 'الكل' } }, ...(lib.categories || []).filter((c) => ready.some((x) => x.cat === c.id)), { id: 'basics', name: { en: 'Basics', ar: 'أساسيات' } }];
+    tplState.list = [...ready, ...own];
+    return tplState.list;
+  }
+  /** Draw template thumbnails as they come into view (a few at a time). */
+  const thumbQueue = [];
+  let thumbBusy = 0;
+  function pumpThumbs() {
+    while (thumbBusy < 3 && thumbQueue.length) {
+      const { img, x } = thumbQueue.shift();
+      if (!img.isConnected || img.dataset.done) continue;
+      img.dataset.done = '1';
+      thumbBusy++;
+      const job = x.preview ? Promise.resolve(x.preview) : D.templateThumb(x.tpl, x.bg);
+      job.then((u) => { img.src = u; }).catch(() => {}).finally(() => { thumbBusy--; pumpThumbs(); });
     }
   }
+  const thumbObserver = 'IntersectionObserver' in window ? new IntersectionObserver((entries) => {
+    for (const en of entries) {
+      if (!en.isIntersecting) continue;
+      thumbObserver.unobserve(en.target);
+      const x = en.target._tpl;
+      if (x) thumbQueue.push({ img: en.target, x });
+    }
+    pumpThumbs();
+  }, { rootMargin: '200px' }) : null;
+  function lazyThumb(img, x) {
+    img._tpl = x;
+    if (thumbObserver) thumbObserver.observe(img);
+    else { thumbQueue.push({ img, x }); pumpThumbs(); }
+  }
+  async function renderTemplates() {
+    const list = await loadTemplateList();
+    $('tpl-cats').innerHTML = tplState.cats.map((c) => `<button type="button" class="tpl-cat ${c.id === tplState.cat ? 'active' : ''}" data-tplcat="${esc(c.id)}" role="tab" aria-selected="${c.id === tplState.cat}">${esc(tr(c.name))}</button>`).join('');
+    const words = normQ(tplState.q).split(/\s+/).filter(Boolean);
+    const catNames = Object.fromEntries(tplState.cats.map((c) => [c.id, [c.name.en, c.name.ar]]));
+    const shown = list.filter((x) => (tplState.cat === 'all' || x.cat === tplState.cat)
+      && words.every((w) => [x.name.en, x.name.ar, ...(catNames[x.cat] || [])].some((n) => normQ(n).includes(w))));
+    $('tpl-status').hidden = shown.length > 0;
+    $('tpl-status').textContent = shown.length ? '' : t('lib.none');
+    const grid = $('template-grid');
+    grid.innerHTML = shown.map((x) => `<button class="template-btn" data-tplkey="${esc(x.key)}"><img alt=""><span>${esc(tr(x.name))}</span></button>`).join('');
+    const byKey = new Map(shown.map((x) => [x.key, x]));
+    grid.querySelectorAll('[data-tplkey]').forEach((b) => lazyThumb(b.querySelector('img'), byKey.get(b.dataset.tplkey)));
+  }
+  $('tpl-cats').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-tplcat]');
+    if (!b) return;
+    tplState.cat = b.dataset.tplcat;
+    renderTemplates();
+  });
+  let tplQTimer = null;
+  $('tpl-q').addEventListener('input', () => {
+    clearTimeout(tplQTimer);
+    tplQTimer = setTimeout(() => {
+      tplState.q = $('tpl-q').value;
+      renderTemplates();
+    }, 200);
+  });
+  /** Put a template or a ready design (from the Templates panel or the Library) on the product. */
+  async function useTemplateEntry(x) {
+    if (x.tpl && !x.design) return addTemplate(x.tpl);
+    const full = await POD.api('/api/library/' + encodeURIComponent(x.design.id));
+    if (full.kind === 'template') return addTemplate({ id: full.id, items: full.items, aspect: full.aspect });
+    await loadObjects([...serialize(), ...remap(full.objects || [], full.area || area(), area())]);
+    commit();
+  }
   $('template-grid').addEventListener('click', serial(async (e) => {
-    const btn = e.target.closest('[data-tpl]');
-    if (!btn) return;
-    await addTemplate(D.TEMPLATES[Number(btn.dataset.tpl)]);
+    const btn = e.target.closest('[data-tplkey]');
+    if (!btn || !tplState.list) return;
+    const x = tplState.list.find((y) => y.key === btn.dataset.tplkey);
+    if (x) await useTemplateEntry(x);
   }));
   /** Put a template's (or an AI logo's) elements on the product, selected together. */
   async function addTemplate(tpl) {
@@ -1285,8 +1363,8 @@
         for (const x of list) {
           const img = $('lib-grid').querySelector(`[data-tplthumb="${CSS.escape(x.id)}"]`);
           if (!img) continue;
-          if (x.kind === 'ready' && x.design.kind !== 'template') img.src = x.design.preview;
-          else D.templateThumb(x.kind === 'tpl' ? x.tpl : { id: x.design.id, items: x.design.items, aspect: x.design.aspect }).then((u) => { img.src = u; }).catch(() => {});
+          if (x.kind === 'ready' && x.design.kind !== 'template') lazyThumb(img, { preview: x.design.preview });
+          else lazyThumb(img, { tpl: x.kind === 'tpl' ? x.tpl : { id: x.design.id, items: x.design.items, aspect: x.design.aspect }, bg: x.kind === 'tpl' ? '#ffffff' : colourHex(x.design.product, x.design.color) });
         }
         $('lib-more').hidden = true;
         return;
@@ -2859,7 +2937,7 @@
    * for their printed size, tiny text, text close to the cut, and fonts that did not load
    * (the text would print in a fallback font).
    */
-  function reportChecks(sideId, issues) {
+  async function reportChecks(sideId, issues) {
     const short = (v) => String(v || '').slice(0, 60);
     const out = [];
     for (const i of issues) {
@@ -2872,8 +2950,15 @@
     for (const o of canvas.getObjects()) {
       if (!isText(o) || o.visible === false || !o.fontFamily) continue;
       const family = String(o.fontFamily).split(',')[0].replace(/["']/g, '').trim();
+      if (!family || !document.fonts) continue;
+      // The face this text really uses (a bold line needs the bold font, not the regular one).
+      const spec = `${o.fontStyle || 'normal'} ${o.fontWeight || 'normal'} 16px "${family}"`;
+      const sample = String(o.text || 'a').slice(0, 50) || 'a';
       try {
-        if (family && document.fonts && !document.fonts.check(`16px "${family}"`, String(o.text || 'a').slice(0, 50) || 'a')) missing.add(short(family));
+        if (!document.fonts.check(spec, sample)) {
+          await Promise.race([document.fonts.load(spec, sample), new Promise((res) => setTimeout(res, 3000))]).catch(() => {});
+          if (!document.fonts.check(spec, sample)) missing.add(short(family));
+        }
       } catch (e) { /* an odd font name: nothing to report */ }
     }
     if (missing.size) out.push({ id: 'fontFallback', level: 'warn', side: sideId, params: { fonts: [...missing].slice(0, 10) } });
@@ -3002,6 +3087,19 @@
     }
     $('price').textContent = money(total);
     if (notes && pieces > 1) notes.push(t('qty.priceNote', { n: POD.num(pieces) }));
+    // Phones: the number of pieces under the price; tapping it opens the quantities.
+    const chip = $('qty-chip');
+    if (chip) {
+      chip.hidden = p.kind === 'book';
+      chip.textContent = t('qty.chip', { n: POD.num(pieces) });
+    }
+  }
+  if ($('qty-chip')) {
+    $('qty-chip').addEventListener('click', () => {
+      canvas.discardActiveObject();
+      setSheet('product');
+      requestAnimationFrame(() => { const f = $('qty-field'); if (f) f.scrollIntoView({ block: 'start', behavior: 'smooth' }); });
+    });
   }
   function refreshChrome() {
     if (bootDone) scheduleDraft();
@@ -4063,7 +4161,7 @@
         await showSide(s.id);
         const issues = checkIssues();
         issues.forEach((i) => problems.push(`• ${tr(s.name)}: ${t(i.key, { ...i.params, dpi: i.params.dpi, pt: i.params.pt })}`));
-        clientChecks.push(...reportChecks(s.id, issues));
+        clientChecks.push(...(await reportChecks(s.id, issues)));
         sidesPayload[s.id] = { editor: { version: fabric.version, objects: await inlineImages(st.designs[s.id]), ...(st.offsets[s.id] ? { offset: st.offsets[s.id] } : {}), ...(st.pattern ? { pattern: { ...st.pattern } } : {}) } };
         const withFields = useMerge && mergeSides.some((x) => x.id === s.id);
         if (withFields) {

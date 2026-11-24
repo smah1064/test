@@ -376,6 +376,24 @@
    * Build fabric objects for a template in the given print area.
    * `ink` is the main text colour that reads well on the product.
    */
+  // Library icons and stickers named in templates ({ kind: 'art', art: 'set:name' }), fetched once.
+  const artCache = new Map();
+  function loadArt(id) {
+    if (!artCache.has(id)) {
+      artCache.set(id, fetch('/api/assets/icon/' + encodeURIComponent(id)).then((r) => (r.ok ? r.json() : null)).catch(() => null));
+    }
+    return artCache.get(id);
+  }
+  async function makeArt(i, ink) {
+    const it = await loadArt(i.art);
+    if (!it) return null;
+    // One-colour icons take the template's colour (or the ink); stickers keep their own colours.
+    const body = it.kind === 'icon' ? it.body.replace(/currentColor/g, i.fill || ink) : it.body;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${it.w} ${it.h}" width="${it.w * 8}" height="${it.h * 8}">${body}</svg>`;
+    const o = await new Promise((resolve) => fabric.loadSVGFromString(svg, (objects, options) => resolve(objects && objects.length ? fabric.util.groupSVGElements(objects, options) : null)));
+    if (o) o.set({ name: (it.kind === 'icon' ? 'icon:' : 'sticker:') + i.art.split(':')[1] });
+    return o;
+  }
   async function buildTemplate(tpl, area, ink) {
     // A layout drawn for a box of a given shape (tpl.aspect = width / height,
     // e.g. 0.75 for the ready designs, made on a T-shirt): on wider, shorter
@@ -386,17 +404,19 @@
     // Stickers load from SVG, so build them first.
     const SK = window.POD_STICKERS;
     const stickerObjs = await Promise.all(tpl.items.map((i) => {
+      if (i.kind === 'art') return makeArt(i, ink);
       if (i.kind !== 'sticker' || !SK) return null;
       const def = SK.STICKERS.find((x) => x.id === i.sticker);
       return def ? SK.makeSticker(def) : null;
     }));
     const objs = tpl.items.map((i, idx) => {
       let o;
-      if (i.kind === 'sticker') {
+      if (i.kind === 'sticker' || i.kind === 'art') {
         o = stickerObjs[idx];
         if (!o) return null;
         o.scaleToWidth(U * i.w);
-        o.set({ angle: i.angle || 0 });
+        if (i.h && o.getScaledHeight() > U * i.h) o.scaleToHeight(U * i.h);
+        o.set({ angle: i.angle || 0, opacity: i.opacity ?? 1 });
       } else if (i.kind === 'text') {
         const fill = i.fill || ink;
         o = new fabric.IText(i.text, {

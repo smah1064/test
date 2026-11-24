@@ -16,13 +16,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const ACCENT = '#ff5a36';
-const GOLD = '#e0a526';
-const GREEN = '#2f9e44';
-const PINK = '#e64980';
-const T = (text, font, size, x, y, extra = {}) => ({ kind: 'text', text, font, size, x, y, ...extra });
-const S = (shape, w, x, y, extra = {}) => ({ kind: 'shape', shape, w, x, y, ...extra });
-const K = (sticker, w, x, y, extra = {}) => ({ kind: 'sticker', sticker, w, x, y, ...extra });
+const { T, S, K, D, ACCENT, GOLD, GREEN, PINK } = require('./library-dsl');
 
 const CATEGORIES = [
   { id: 'funny', name: { en: 'Funny phrases', ar: 'جمل مضحكة' } },
@@ -36,9 +30,8 @@ const CATEGORIES = [
   { id: 'motivation', name: { en: 'Motivation', ar: 'تحفيز' } },
 ];
 
-const D = (id, category, en, ar, items, color = 'white') => ({ id, category, name: { en, ar }, kind: 'template', product: 'tshirt', color, items, aspect: 0.75 });
 
-const SEED = [
+const BASE = [
   // ---------- Funny Egyptian phrases ----------
   D('mesh-fady', 'funny', 'Busy right now', 'مش فاضي', [
     T('مش فاضي', 'Lalezar', 0.3, 0.5, 0.42),
@@ -185,6 +178,34 @@ const SEED = [
     T('BIG', 'Anton', 0.32, 0.5, 0.66, { fill: ACCENT }),
   ], 'black'),
 ];
+
+// Template packs (src/library-packs/*.js): each adds its categories and designs.
+// A pack exports { categories: [{ id, name: { en, ar } }], designs: [D(...), ...] }.
+const PACKS_DIR = path.join(__dirname, 'library-packs');
+// A broken pack is skipped (with a warning), never stopping the shop; the tests catch it.
+const packs = (fs.existsSync(PACKS_DIR) ? fs.readdirSync(PACKS_DIR).filter((f) => f.endsWith('.js')).sort() : []).map((f) => {
+  try {
+    return require(path.join(PACKS_DIR, f));
+  } catch (e) {
+    console.error(`[library] template pack ${f} skipped: ${e.message}`);
+    return {};
+  }
+});
+for (const p of packs) {
+  for (const c of p.categories || []) if (!CATEGORIES.some((x) => x.id === c.id)) CATEGORIES.push(c);
+}
+const seen = new Set(BASE.map((d) => d.id));
+const SEED = [...BASE];
+for (const p of packs) {
+  for (const d of p.designs || []) {
+    if (!d || !d.id || seen.has(d.id)) {
+      console.error(`[library] template ${d && d.id} skipped: duplicate or missing id`);
+      continue;
+    }
+    seen.add(d.id);
+    SEED.push(d);
+  }
+}
 
 // Designs that look best on one of the newer products open on it by default
 // (customers can still switch to any product on the design page).

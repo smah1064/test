@@ -113,6 +113,9 @@
         <div class="flyout" id="flyout-templates" hidden>
           <div class="fly-head"><h4 data-i18n="fly.templates"></h4><button class="fly-close" data-i18n-aria="bar.close">✕</button></div>
           <p class="muted small" style="margin-top:0" data-i18n="fly.templates.hint"></p>
+          <input type="search" id="tpl-q" class="tpl-q" autocomplete="off" data-i18n-placeholder="tpl.search">
+          <div class="tpl-cats" id="tpl-cats" role="tablist"></div>
+          <p class="muted small" id="tpl-status" hidden></p>
           <div class="template-grid" id="template-grid"></div>
         </div>
         <div class="flyout" id="flyout-text" hidden>
@@ -282,6 +285,7 @@
             <div>
               <div class="amount" id="price"></div>
               <div class="price-note" id="price-note"></div>
+              <button type="button" class="qty-chip" id="qty-chip" hidden></button>
             </div>
             <div class="price-note text-end" data-i18n-html="panel.oneOff"></div>
           </div>

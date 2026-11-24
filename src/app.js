@@ -1290,6 +1290,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     res.json(assets.search(String(req.query.q || '').slice(0, 80), { type, page }));
   });
   app.get('/api/assets/credits', (req, res) => res.json({ sets: assets.credits() }));
+  // One icon or sticker (templates name them by id and fetch them when drawn).
+  app.get('/api/assets/icon/:id', (req, res) => {
+    const id = String(req.params.id || '');
+    const it = /^[a-z0-9-]{1,40}:[a-z0-9-]{1,80}$/.test(id) ? assets.get(id) : null;
+    if (!it) throw new HttpError(404, 'notFound');
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.json(it);
+  });
 
   // ---------- Import a design from a link (another shop's product page or an image link) ----------
   const importError = (e) => (e instanceof importer.ImportError ? new HttpError(['importBadUrl', 'importBlocked'].includes(e.code) ? 400 : 422, e.code) : e);
