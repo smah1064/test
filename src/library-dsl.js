@@ -26,7 +26,12 @@ const S = (shape, w, x, y, extra = {}) => ({ kind: 'shape', shape, w, x, y, ...e
 const K = (sticker, w, x, y, extra = {}) => ({ kind: 'sticker', sticker, w, x, y, ...extra });
 /** A library icon or sticker by id ('fluent-emoji-flat:star', 'tabler:ball-football'). Icons take `fill` (or the ink). */
 const A = (art, w, x, y, extra = {}) => ({ kind: 'art', art, w, x, y, ...extra });
+/**
+ * Artwork from the shop's own files (public/img/art/...: .svg vector art, .png illustrations).
+ * w (and h) as for stickers.
+ */
+const I = (src, w, x, y, extra = {}) => ({ kind: 'image', src, w, x, y, ...extra });
 /** A ready design: shown on a T-shirt of `color` in the shop; `aspect` is the print area's shape it was drawn for. */
 const D = (id, category, en, ar, items, color = 'white', extra = {}) => ({ id, category, name: { en, ar }, kind: 'template', product: 'tshirt', color, items, aspect: 0.75, ...extra });
 
-module.exports = { T, S, K, A, D, ACCENT, GOLD, GREEN, PINK, BLUE, PURPLE, TEAL, RED };
+module.exports = { T, S, K, A, I, D, ACCENT, GOLD, GREEN, PINK, BLUE, PURPLE, TEAL, RED };

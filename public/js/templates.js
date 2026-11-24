@@ -394,6 +394,28 @@
     if (o) o.set({ name: (it.kind === 'icon' ? 'icon:' : 'sticker:') + i.art.split(':')[1] });
     return o;
   }
+  /**
+   * Artwork from the shop's own files (public/img/art): vector art (.svg) becomes editable
+   * shapes, so it prints sharp at any size; pictures (.png/.webp) a photo layer.
+   */
+  const fileArt = new Map();
+  async function makeImage(i) {
+    const src = String(i.src || '');
+    if (!/^\/img\/art\/[\w/-]+\.(svg|png|webp|jpg)$/.test(src)) return null;
+    if (/\.svg$/.test(src)) {
+      if (!fileArt.has(src)) fileArt.set(src, fetch(src).then((r) => (r.ok ? r.text() : null)).catch(() => null));
+      const text = await fileArt.get(src);
+      if (!text) return null;
+      const o = await new Promise((resolve) => fabric.loadSVGFromString(text, (objects, options) => resolve(objects && objects.length ? fabric.util.groupSVGElements(objects, options) : null)));
+      if (o) o.set({ name: 'art:' + src.split('/').pop().replace(/\.svg$/, '') });
+      return o;
+    }
+    return new Promise((resolve) => fabric.Image.fromURL(src, (img, failed) => {
+      if (failed || !img) return resolve(null);
+      img.set({ name: 'art:' + src.split('/').pop().replace(/\.\w+$/, '') });
+      resolve(img);
+    }));
+  }
   async function buildTemplate(tpl, area, ink, { inset = 0 } = {}) {
     // A layout drawn for a box of a given shape (tpl.aspect = width / height,
     // e.g. 0.75 for the ready designs, made on a T-shirt): on wider, shorter
@@ -405,13 +427,14 @@
     const SK = window.POD_STICKERS;
     const stickerObjs = await Promise.all(tpl.items.map((i) => {
       if (i.kind === 'art') return makeArt(i, ink);
+      if (i.kind === 'image') return makeImage(i);
       if (i.kind !== 'sticker' || !SK) return null;
       const def = SK.STICKERS.find((x) => x.id === i.sticker);
       return def ? SK.makeSticker(def) : null;
     }));
     const objs = tpl.items.map((i, idx) => {
       let o;
-      if (i.kind === 'sticker' || i.kind === 'art') {
+      if (i.kind === 'sticker' || i.kind === 'art' || i.kind === 'image') {
         o = stickerObjs[idx];
         if (!o) return null;
         o.scaleToWidth(U * i.w);
