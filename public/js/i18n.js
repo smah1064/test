@@ -706,7 +706,8 @@ window.POD_STRINGS = {
   'checkout.subtotal': ['Subtotal', 'المجموع الفرعي'],
   'checkout.shipping': ['Shipping', 'الشحن'],
   'checkout.total': ['Total', 'الإجمالي'],
-  'delivery.note': ['🚚 Delivery within 5 business days · ⚡ Express delivery in 2 business days', '🚚 التوصيل خلال 5 أيام عمل · ⚡ أو توصيل سريع خلال يومين عمل'],
+  // Marketing copy (home, product pages): only express is mentioned; checkout shows both options.
+  'delivery.note': ['⚡ Express delivery within 2 business days', '⚡ توصيل سريع خلال يومين عمل'],
   'delivery.title': ['Delivery', 'التوصيل'],
   'delivery.standard': ['Standard', 'عادي'],
   'delivery.standardText': ['Within 5 business days', 'خلال 5 أيام عمل'],
