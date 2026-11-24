@@ -245,6 +245,8 @@ const WEAR = ['tshirt', 'oversized', 'hoodie', 'sweatshirt', 'ziphoodie']; // ev
 const KIDS_WEAR = ['kidstee', 'kidshoodie'];
 const MUGS = ['mug', 'magicmug'];
 const WALL = ['poster', 'canvas', 'canvaswide'];
+/** Artwork-led designs: clothes, mugs and drinkware, home, wall art, accessories and stationery. */
+const STYLE = [...WEAR, 'denim', 'cap', ...MUGS, 'tumbler', 'bottle', 'cushion', ...WALL, 'tote', 'phonecase', 'mousepad', 'deskmat', 'keychain', 'coasters', 'notebook', 'postcards', 'magnets', 'stickersheet', 'notepads', 'lunchbag', 'pencilcase'];
 
 const FITS = {
   funny: { products: [...WEAR, 'denim', 'shorts', 'cap', ...MUGS, 'tumbler', 'bottle', 'apron', 'cushion', 'coasters', 'poster', 'tote', 'phonecase', 'mousepad', 'deskmat', 'keychain', 'notebook', 'lunchbag', 'pencilcase', 'stickersheet', 'magnets', 'notepads'] },
@@ -277,6 +279,15 @@ const FITS = {
   business: { cats: ['business'], products: ['tshirt', 'polo', 'hoodie', 'sweatshirt', 'ziphoodie', 'cap', 'apron', 'mug', 'tumbler', 'bottle', 'tote', 'notebook', 'mousepad', 'deskmat', 'keychain', 'coasters', 'sign', 'notepads', 'calendar', 'deskcalendar', 'magnets'], not: ['certificates'] },
   quotes: { products: [...WEAR, 'denim', ...MUGS, 'tumbler', 'cushion', ...WALL, 'plaque', 'coasters', 'tote', 'phonecase', 'mousepad', 'deskmat', 'keychain', 'notebook', 'postcards', 'bookmarks', 'notepads', 'magnets', 'deskcalendar'] },
   minimal: { products: [...WEAR, 'polo', 'denim', 'shorts', 'cap', ...MUGS, 'tumbler', 'bottle', 'cushion', ...WALL, 'coasters', 'tote', 'phonecase', 'mousepad', 'deskmat', 'keychain', 'notebook', 'pencilcase', 'notepads', 'postcards'] },
+  // The design-trend styles (src/library-packs/styles.js): artwork-led, for everything that shows a picture well.
+  vintage: { products: [...STYLE, 'calendar', 'deskcalendar', 'bookmarks'] },
+  surreal: { products: [...STYLE] },
+  optical: { products: [...STYLE] },
+  comic: { products: [...STYLE, ...KIDS_WEAR] },
+  maximal: { products: [...STYLE] },
+  artsy: { products: [...STYLE, 'calendar', 'deskcalendar', 'bookmarks'] },
+  luxury: { products: [...WEAR, 'polo', 'cap', ...MUGS, 'tumbler', 'cushion', ...WALL, 'plaque', 'tote', 'phonecase', 'notebook', 'coasters', 'keychain', 'deskmat', 'notepads', 'deskcalendar'] },
+  trends: { products: [...STYLE] },
 };
 // A subject missing from the table (a new pack) still goes on the everyday products.
 const FITS_OTHER = { products: [...WEAR, ...MUGS, 'tumbler', 'cushion', 'poster', 'tote'] };
