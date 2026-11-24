@@ -8,6 +8,11 @@ const INK = '#16181d';
 
 const categories = [{ id: 'friends', name: { en: 'Friends', ar: 'أصحاب' } }];
 
+// Fine-tuning the family subject's products (src/library.js FITS): the designs a child or baby wears.
+const LITTLE = { alsoProducts: ['kidstee', 'kidshoodie', 'onesie'] };
+// A gift for mum, dad or the grandparents also on a prayer mat.
+const MAT = { alsoProducts: ['prayermat'] };
+
 const designs = [
   // ---------- Funny Egyptian phrases ----------
   D('ev-nayem', 'funny', 'Asleep even when awake', 'نايم وأنا صاحي', [
@@ -269,23 +274,23 @@ const designs = [
     K('bolt', 0.2, 0.5, 0.3),
     T('البطل', 'Lalezar', 0.3, 0.5, 0.56),
     T('  سند العيلة  ', 'Lemonada', 0.1, 0.5, 0.8, { weight: 'bold', fill: WHITE, bg: TEAL, bgShape: 'banner' }),
-  ]),
+  ], 'white', LITTLE),
   D('ev-fam-daughter', 'family', 'Family set: Daughter', 'طقم العيلة: البنت', [
     T('عيلة المصري', 'Changa', 0.08, 0.5, 0.14, { weight: 'bold', fill: GOLD }),
     K('sparkle', 0.2, 0.5, 0.3),
     T('الأميرة', 'Lalezar', 0.28, 0.5, 0.56),
     T('  دلّوعة العيلة  ', 'Lemonada', 0.1, 0.5, 0.8, { weight: 'bold', fill: WHITE, bg: PURPLE, bgShape: 'banner' }),
-  ]),
+  ], 'white', LITTLE),
   D('ev-family-first', 'family', 'Family first', 'العيلة أولًا', [
     A('fluent-emoji-flat:house-with-garden', 0.3, 0.5, 0.2),
     T('العيلة أولًا', 'Lalezar', 0.2, 0.5, 0.5),
     T('FAMILY FIRST', 'Montserrat', 0.07, 0.5, 0.68, { weight: 'bold', spacing: 300, fill: GREEN }),
-  ], 'white'),
+  ], 'white', LITTLE),
   D('ev-gedo', 'family', 'Grandpa our blessing', 'جدو بركتنا', [
     A('fluent-emoji-flat:old-man', 0.3, 0.5, 0.2),
     T('جدو', 'Lalezar', 0.34, 0.5, 0.5),
     T('كبيرنا وبركتنا', 'El Messiri', 0.12, 0.5, 0.74, { weight: 'bold', fill: GOLD }),
-  ], 'navy'),
+  ], 'navy', MAT),
   D('ev-tita', 'family', 'Nothing beats grandma\'s cooking', 'أكل تيتة', [
     A('fluent-emoji-flat:old-woman', 0.28, 0.5, 0.18),
     T('مفيش أحلى من', 'Changa', 0.1, 0.5, 0.42, { weight: 'bold' }),
@@ -297,24 +302,24 @@ const designs = [
     T('خناق كل يوم', 'Changa', 0.1, 0.5, 0.6, { weight: 'bold' }),
     T('وحب العمر كله', 'Changa', 0.1, 0.5, 0.74, { weight: 'bold', fill: PINK }),
     S('heart', 0.1, 0.5, 0.88, { fill: PINK }),
-  ]),
+  ], 'white', LITTLE),
   D('ev-set-el-kol', 'family', 'Mum the queen of all', 'ست الكل', [
     S('heart', 0.56, 0.5, 0.36, { fill: RED }),
     T('ماما', 'Lalezar', 0.16, 0.5, 0.34, { fill: WHITE }),
     T('ست الكل', 'El Messiri', 0.2, 0.5, 0.74, { weight: 'bold', fill: RED }),
-  ], 'white'),
+  ], 'white', MAT),
   D('ev-baba-sanad', 'family', 'Dad my rock', 'بابا سندي', [
     S('shield', 0.5, 0.5, 0.36, { fill: BLUE }),
     T('بابا', 'Lalezar', 0.16, 0.5, 0.34, { fill: WHITE }),
     T('سندي وضهري', 'Lalezar', 0.16, 0.5, 0.78),
     T('HAPPY FATHER\'S DAY', 'Bebas Neue', 0.05, 0.5, 0.91, { spacing: 200, fill: BLUE }),
-  ], 'heather'),
+  ], 'heather', MAT),
   D('ev-a9ghar-wa7ed', 'family', 'Newest family member', 'أصغر واحد في العيلة', [
     A('fluent-emoji-flat:baby', 0.3, 0.5, 0.2),
     T('أصغر واحد', 'Lalezar', 0.2, 0.5, 0.48),
     T('في العيلة', 'Marhey', 0.14, 0.5, 0.68, { weight: 'bold', fill: PINK }),
     T('سليم 2025', 'Changa', 0.07, 0.5, 0.86, { weight: 'bold', fill: BLUE }),
-  ]),
+  ], 'white', LITTLE),
 ];
 
 module.exports = { categories, designs };

@@ -15,7 +15,9 @@
   }
   $('dp').hidden = false;
 
-  const products = catalog.products.filter((p) => !p.kind);
+  // Only the products this design is offered on (the same check as the designs page, the product page and the editor).
+  const fitting = catalog.products.filter((p) => !p.kind && POD.designFor(design, p));
+  const products = fitting.length ? fitting : catalog.products.filter((p) => !p.kind);
   const state = { product: null, color: null, size: null };
   function choose(productId, colorId) {
     state.product = products.find((p) => p.id === productId) || products.find((p) => p.id === design.product) || products[0];

@@ -1220,7 +1220,7 @@
   /** Put a template's (or an AI logo's) elements on the product, selected together. */
   async function addTemplate(tpl) {
     cancelCrop();
-    const objs = await D.buildTemplate(tpl, area(), inkFor(surfaceHex()));
+    const objs = await D.buildTemplate(tpl, area(), inkFor(surfaceHex()), { inset: rects().sf });
     if (!objs.length) return;
     st.silent = true;
     canvas.discardActiveObject();

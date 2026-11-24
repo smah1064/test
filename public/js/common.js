@@ -234,8 +234,14 @@
     const ids = new Set(items.map((it) => it.designId));
     return writeRaw([...getCart().filter((it) => !ids.has(it.designId)), ...items.map((it) => ({ ...it, later: true }))]);
   }
-  /** Can this ready design go on this product? Designs made for certain products go on those only; laser products take only their own. */
-  const designFor = (d, p) => (Array.isArray(d.products) ? d.products.includes(p.id) : !p.laser);
+  /**
+   * Is this ready design offered on this product? The shop works out each
+   * design's products once (src/library.js: subject, print-area shape, name
+   * fields) and sends them as `products`; the designs page, the product page and
+   * the editor all ask here. (Without the list: never on laser products, fabric
+   * by the metre, books or photo prints.)
+   */
+  const designFor = (d, p) => (Array.isArray(d.products) ? d.products.includes(p.id) : !(p.laser || p.pattern || p.kind));
   /** Move one item out of the order to "saved for later" (later = true) or back into the cart. */
   function moveItem(designId, later) {
     const now = new Date().toISOString();

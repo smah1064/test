@@ -394,7 +394,7 @@
     if (o) o.set({ name: (it.kind === 'icon' ? 'icon:' : 'sticker:') + i.art.split(':')[1] });
     return o;
   }
-  async function buildTemplate(tpl, area, ink) {
+  async function buildTemplate(tpl, area, ink, { inset = 0 } = {}) {
     // A layout drawn for a box of a given shape (tpl.aspect = width / height,
     // e.g. 0.75 for the ready designs, made on a T-shirt): on wider, shorter
     // boxes (mugs, envelopes, banners) sizes follow the height instead, so
@@ -451,13 +451,18 @@
       o.setCoords();
       return o;
     }).filter(Boolean);
-    // Squeeze vertically for wide, short print areas so nothing spills out.
-    const tops = objs.map((o) => o.getBoundingRect(true, true));
-    const minY = Math.min(...tops.map((r) => r.top));
-    const maxY = Math.max(...tops.map((r) => r.top + r.height));
-    const minX = Math.min(...tops.map((r) => r.left));
-    const maxX = Math.max(...tops.map((r) => r.left + r.width));
-    const s = Math.min(1, (area.h * 0.94) / (maxY - minY), (area.w * 0.96) / (maxX - minX));
+    // Keep everything well inside the edges: a margin of 8% of the area's short side (at least
+    // the product's safe zone, `inset`) all round. Too big: shrunk round the middle; then
+    // moved in if a part still sits in the margin.
+    const pad = Math.max(inset, Math.min(area.w, area.h) * 0.08);
+    const box = { x: area.x + pad, y: area.y + pad, w: area.w - 2 * pad, h: area.h - 2 * pad };
+    const bounds = () => {
+      const rs = objs.map((o) => o.getBoundingRect(true, true));
+      return { x0: Math.min(...rs.map((r) => r.left)), y0: Math.min(...rs.map((r) => r.top)), x1: Math.max(...rs.map((r) => r.left + r.width)), y1: Math.max(...rs.map((r) => r.top + r.height)) };
+    };
+    if (!objs.length) return objs;
+    let b = bounds();
+    const s = Math.min(1, box.h / (b.y1 - b.y0), box.w / (b.x1 - b.x0));
     if (s < 1) {
       const cx = area.x + area.w / 2;
       const cy = area.y + area.h / 2;
@@ -465,7 +470,11 @@
         o.set({ left: cx + (o.left - cx) * s, top: cy + (o.top - cy) * s, scaleX: o.scaleX * s, scaleY: o.scaleY * s });
         o.setCoords();
       });
+      b = bounds();
     }
+    const dx = b.x0 < box.x ? box.x - b.x0 : b.x1 > box.x + box.w ? box.x + box.w - b.x1 : 0;
+    const dy = b.y0 < box.y ? box.y - b.y0 : b.y1 > box.y + box.h ? box.y + box.h - b.y1 : 0;
+    if (dx || dy) objs.forEach((o) => { o.set({ left: o.left + dx, top: o.top + dy }); o.setCoords(); });
     return objs;
   }
 

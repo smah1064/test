@@ -17,6 +17,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const { T, S, K, D, ACCENT, GOLD, GREEN, PINK } = require('./library-dsl');
+const { PRODUCTS } = require('./products');
 
 const CATEGORIES = [
   { id: 'funny', name: { en: 'Funny phrases', ar: 'جمل مضحكة' } },
@@ -73,7 +74,7 @@ const BASE = [
     K('fanous', 0.3, 0.5, 0.25),
     T('رمضان كريم', 'Aref Ruqaa', 0.2, 0.5, 0.62, { weight: 'bold' }),
     T('RAMADAN KAREEM', 'Playfair Display', 0.06, 0.5, 0.82, { spacing: 200, fill: GOLD }),
-  ]),
+  ], 'white', { alsoProducts: ['prayermat'] }),
   D('ramadan-yegma3na', 'ramadan', 'Ramadan brings us together', 'رمضان يجمعنا', [
     S('crescent', 0.24, 0.5, 0.2, { fill: GOLD }),
     S('star', 0.07, 0.66, 0.12, { fill: GOLD }),
@@ -83,13 +84,13 @@ const BASE = [
   D('ramadan-wanas', 'ramadan', 'Ramadan vibes', 'ونس رمضان', [
     K('mosque', 0.42, 0.5, 0.32),
     T('ونس رمضان', 'Lemonada', 0.15, 0.5, 0.74, { weight: 'bold' }),
-  ]),
+  ], 'white', { alsoProducts: ['prayermat'] }),
   D('ahlan-ramadan', 'ramadan', 'Ahlan Ramadan', 'أهلًا رمضان', [
     K('stars', 0.2, 0.22, 0.2),
     K('crescent', 0.22, 0.78, 0.2),
     T('أهلًا رمضان', 'Reem Kufi', 0.2, 0.5, 0.55, { weight: 'bold', fill: GOLD }),
     T('Ahlan Ramadan', 'Dancing Script', 0.11, 0.5, 0.76, { weight: 'bold' }),
-  ], 'black'),
+  ], 'black', { alsoProducts: ['prayermat'] }),
   // ---------- Football ----------
   D('kora-hayaty', 'football', 'Football is my life', 'الكورة حياتي', [
     K('ball', 0.3, 0.5, 0.24),
@@ -119,7 +120,7 @@ const BASE = [
     K('eid-lantern', 0.24, 0.5, 0.24),
     T('عيد مبارك', 'Marhey', 0.22, 0.5, 0.6, { weight: 'bold', fill: GREEN }),
     T('كل سنة وانتم طيبين', 'Changa', 0.075, 0.5, 0.8, { weight: 'bold' }),
-  ]),
+  ], 'white', { alsoProducts: ['prayermat'] }),
   D('eid-sheep', 'eid', 'Eid joy', 'العيد فرحة', [
     K('eid-sheep', 0.42, 0.5, 0.32),
     T('العيد فرحة', 'Lalezar', 0.2, 0.5, 0.76),
@@ -150,12 +151,12 @@ const BASE = [
     S('heart', 0.44, 0.5, 0.36, { fill: PINK }),
     T('ماما', 'Lalezar', 0.15, 0.5, 0.35, { fill: '#ffffff' }),
     T('ست الحبايب', 'Aref Ruqaa', 0.16, 0.5, 0.8, { weight: 'bold' }),
-  ]),
+  ], 'white', { alsoProducts: ['prayermat'] }),
   D('a7san-ab', 'family', 'Best dad', 'أحسن بابا', [
     K('crown', 0.28, 0.5, 0.22),
     T('بابا', 'Jomhuria', 0.5, 0.5, 0.58),
     T('أحسن أب في الدنيا', 'Changa', 0.09, 0.5, 0.86, { weight: 'bold', fill: ACCENT }),
-  ]),
+  ], 'white', { alsoProducts: ['prayermat'] }),
   // ---------- Egypt ----------
   D('masry', 'egypt', 'Proudly Egyptian', 'مصري وأفتخر', [
     K('pyramids', 0.44, 0.5, 0.28),
@@ -225,6 +226,119 @@ for (const d of SEED) {
   if (DEFAULT_PRODUCT[d.id]) [d.product, d.color] = DEFAULT_PRODUCT[d.id];
 }
 
+// ---------- Which ready designs are offered on which products ----------
+// One table, by subject: what a customer would really buy with such a design on
+// it. `products` lists product ids (src/products.js), `cats` adds every product
+// of a product category, `not` takes products out again. A design can change its
+// own list in its pack: `products` (exactly these, e.g. the laser pack),
+// `alsoProducts` (add) and `notProducts` (take out). A design the owner added
+// is always offered on the product it was made on. Ready designs are shown on a
+// T-shirt unless they say otherwise; `shownOn` picks a better one for a subject
+// (the first of those the design is offered on).
+// On top of the table:
+//  - products that get no general designs at all: fabric by the metre and other
+//    printed textiles (`pattern`), books and photo prints (`kind`), laser products
+//    (`laser`: they have their own pack);
+//  - designs with {Name} fields (filled from a list) go only on name-list products;
+//  - the print area's shape must suit the design's (see fitsShape).
+const WEAR = ['tshirt', 'oversized', 'hoodie', 'sweatshirt', 'ziphoodie']; // everyday adult clothes
+const KIDS_WEAR = ['kidstee', 'kidshoodie'];
+const MUGS = ['mug', 'magicmug'];
+const WALL = ['poster', 'canvas', 'canvaswide'];
+
+const FITS = {
+  funny: { products: [...WEAR, 'denim', 'shorts', 'cap', ...MUGS, 'tumbler', 'bottle', 'apron', 'cushion', 'coasters', 'poster', 'tote', 'phonecase', 'mousepad', 'deskmat', 'keychain', 'notebook', 'lunchbag', 'pencilcase', 'stickersheet'] },
+  // The prayer mat only takes the respectful greetings (alsoProducts in the packs), not the food jokes.
+  ramadan: { products: [...WEAR, ...KIDS_WEAR, ...MUGS, 'tumbler', 'cushion', ...WALL, 'tablecloth', 'apron', 'coasters', 'tote', 'notebook', 'sign', 'greetingcard', 'logostickers', 'paperbags', 'flyers'] },
+  football: { products: [...WEAR, 'jersey', 'shorts', 'polo', 'cap', ...KIDS_WEAR, ...MUGS, 'tumbler', 'bottle', 'cushion', 'poster', 'canvas', 'phonecase', 'mousepad', 'deskmat', 'keychain', 'coasters', 'notebook', 'lunchbag', 'pencilcase', 'stickersheet', 'tote'] },
+  eid: { products: [...WEAR, ...KIDS_WEAR, ...MUGS, 'cushion', 'poster', 'tablecloth', 'apron', 'coasters', 'tote', 'eidenvelopes', 'greetingcard', 'sign', 'logostickers', 'paperbags', 'flyers'] },
+  love: { products: [...WEAR, 'denim', ...MUGS, 'couplemugs', 'tumbler', 'cushion', ...WALL, 'plaque', 'keychain', 'phonecase', 'tote', 'coasters', 'greetingcard'] },
+  birthday: { products: [...WEAR, ...KIDS_WEAR, ...MUGS, 'tumbler', 'cushion', 'poster', 'plaque', 'sign', 'greetingcard', 'invitations', 'logostickers', 'paperbags', 'tote'] },
+  // Kids' clothes only for the son / daughter / siblings designs, the prayer mat only
+  // for the gifts to mum, dad and the grandparents (alsoProducts in the packs).
+  family: { products: [...WEAR, ...MUGS, 'couplemugs', 'tumbler', 'cushion', ...WALL, 'plaque', 'sign', 'apron', 'greetingcard', 'keychain', 'coasters', 'tote'] },
+  egypt: { products: [...WEAR, 'denim', 'cap', ...KIDS_WEAR, ...MUGS, 'tumbler', 'cushion', ...WALL, 'tote', 'phonecase', 'mousepad', 'deskmat', 'keychain', 'coasters', 'notebook'] },
+  motivation: { products: [...WEAR, 'denim', 'cap', ...MUGS, 'tumbler', 'bottle', 'cushion', ...WALL, 'plaque', 'tote', 'phonecase', 'mousepad', 'deskmat', 'keychain', 'notebook', 'greetingcard', 'stickersheet'] },
+  wedding: { products: [...WEAR, 'denim', ...MUGS, 'couplemugs', 'cushion', ...WALL, 'plaque', 'sign', 'coasters', 'keychain', 'tote', 'greetingcard', 'invitations', 'logostickers', 'paperbags'] },
+  graduation: { products: [...WEAR, 'cap', ...MUGS, 'tumbler', 'cushion', 'poster', 'canvas', 'plaque', 'sign', 'keychain', 'tote', 'greetingcard', 'invitations', 'certificates', 'logostickers'] },
+  // Mum / dad to be on adult T-shirts; the onesie and kids' clothes are added per design in the pack.
+  baby: { shownOn: ['onesie', 'kidstee'], products: ['tshirt', 'oversized', ...MUGS, 'cushion', ...WALL, 'plaque', 'sign', 'tote', 'greetingcard', 'invitations', 'logostickers', 'paperbags'] },
+  friends: { products: [...WEAR, 'cap', ...MUGS, 'couplemugs', 'tumbler', 'cushion', 'poster', 'plaque', 'keychain', 'phonecase', 'tote', 'greetingcard'] },
+  islamic: { products: [...WEAR, ...MUGS, 'tumbler', 'cushion', ...WALL, 'plaque', 'sign', 'prayermat', 'tablecloth', 'keychain', 'coasters', 'tote', 'phonecase', 'notebook', 'greetingcard'] },
+  fitness: { products: [...WEAR, 'polo', 'shorts', 'jersey', 'cap', ...KIDS_WEAR, 'bottle', 'tumbler', 'mug', 'tote', 'poster', 'notebook'] },
+  gaming: { products: [...WEAR, 'cap', ...KIDS_WEAR, ...MUGS, 'cushion', 'poster', 'canvas', 'mousepad', 'deskmat', 'phonecase', 'keychain', 'coasters', 'notebook', 'pencilcase', 'lunchbag', 'stickersheet'] },
+  music: { products: [...WEAR, 'denim', 'cap', ...MUGS, 'tumbler', 'cushion', ...WALL, 'tote', 'phonecase', 'mousepad', 'deskmat', 'keychain', 'coasters', 'notebook'] },
+  travel: { products: [...WEAR, 'shorts', 'cap', ...KIDS_WEAR, ...MUGS, 'tumbler', 'bottle', ...WALL, 'tote', 'phonecase', 'keychain', 'notebook', 'flyers'] },
+  kids: { shownOn: ['kidstee'], products: [...KIDS_WEAR, 'onesie', 'cap', 'magicmug', 'bottle', 'cushion', 'poster', 'canvas', 'lunchbag', 'pencilcase', 'notebook', 'stickersheet', 'namelabels', 'tote'] },
+  school: { products: [...WEAR, ...KIDS_WEAR, 'polo', 'jersey', 'cap', 'mug', 'tumbler', 'bottle', 'notebook', 'pencilcase', 'lunchbag', 'stickersheet', 'namelabels', 'greetingcard', 'certificates', 'idcards', 'poster', 'sign', 'tote'] },
+  pets: { products: [...WEAR, ...KIDS_WEAR, ...MUGS, 'cushion', 'poster', 'canvas', 'plaque', 'tote', 'phonecase', 'mousepad', 'keychain', 'coasters', 'notebook', 'stickersheet'] },
+  // Shop and company logos: all the business print, work wear and give-aways. Staff
+  // shirts and events take some of it out again in their pack (src/library-packs/people.js).
+  business: { cats: ['business'], products: ['tshirt', 'polo', 'hoodie', 'sweatshirt', 'ziphoodie', 'cap', 'apron', 'mug', 'tumbler', 'bottle', 'tote', 'notebook', 'mousepad', 'deskmat', 'keychain', 'coasters', 'sign'], not: ['certificates'] },
+  quotes: { products: [...WEAR, 'denim', ...MUGS, 'tumbler', 'cushion', ...WALL, 'plaque', 'coasters', 'tote', 'phonecase', 'mousepad', 'deskmat', 'keychain', 'notebook'] },
+  minimal: { products: [...WEAR, 'polo', 'denim', 'shorts', 'cap', ...MUGS, 'tumbler', 'bottle', 'cushion', ...WALL, 'coasters', 'tote', 'phonecase', 'mousepad', 'deskmat', 'keychain', 'notebook', 'pencilcase'] },
+};
+// A subject missing from the table (a new pack) still goes on the everyday products.
+const FITS_OTHER = { products: [...WEAR, ...MUGS, 'tumbler', 'cushion', 'poster', 'tote'] };
+
+// Print-area shape (width / height). The ready designs are drawn for a T-shirt
+// (0.75); on a wider area they keep their size by the height and sit in the
+// middle, on a narrower one they spread down. Up to about 2× either way still
+// looks right; beyond that (desk mat, DL envelope) a tall design looks lost.
+// A mug's print area wraps round it, but the customer sees one side at a time.
+const SHAPE_MIN = 0.5;
+const SHAPE_MAX = 2.25;
+const SEEN_SHAPE = { mug: 1.15, magicmug: 1.15, couplemugs: 1.15 };
+const areaShape = (a) => (a && a.w > 0 && a.h > 0 ? a.w / a.h : 0);
+const productShape = (p) => SEEN_SHAPE[p.id] || areaShape(p.sides && p.sides[0] && p.sides[0].printArea) || 0.75;
+const MERGE_FIELD = /\{[^{}]+\}/;
+const hasNameFields = (d) => (d.items || []).some((i) => i.kind === 'text' && MERGE_FIELD.test(i.text || ''));
+/** Products that take no general ready designs. */
+const noGeneralDesigns = (p) => Boolean(p.laser || p.pattern || p.kind);
+
+function designShape(d) {
+  if (d.aspect) return d.aspect;
+  if (areaShape(d.area)) return areaShape(d.area); // designs the owner added keep the area they were made on
+  const own = PRODUCTS.find((p) => p.id === d.product);
+  return own ? productShape(own) : 0.75;
+}
+function fitsShape(d, p) {
+  const r = productShape(p) / designShape(d);
+  return r >= SHAPE_MIN && r <= SHAPE_MAX;
+}
+
+const fitCache = new WeakMap();
+/** The ids of the products a design is offered on, in catalogue order. */
+function productsFor(d) {
+  if (Array.isArray(d.products)) return d.products; // chosen by hand (laser designs)
+  if (fitCache.has(d)) return fitCache.get(d);
+  const rule = FITS[d.category] || FITS_OTHER;
+  const want = new Set(rule.products || []);
+  for (const p of PRODUCTS) if ((rule.cats || []).includes(p.category)) want.add(p.id);
+  for (const id of rule.not || []) want.delete(id);
+  for (const id of d.alsoProducts || []) want.add(id);
+  for (const id of d.notProducts || []) want.delete(id);
+  const fields = hasNameFields(d);
+  const list = PRODUCTS.filter((p) => !noGeneralDesigns(p) && ((d.kind === 'objects' && p.id === d.product)
+    || (want.has(p.id) && (!fields || p.merge) && fitsShape(d, p)))).map((p) => p.id);
+  fitCache.set(d, list);
+  return list;
+}
+// (The colour closest to the T-shirt colour the design was drawn on.)
+const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+const distance = (a, b) => rgb(a).reduce((sum, v, i) => sum + (v - rgb(b)[i]) ** 2, 0);
+for (const d of SEED) {
+  const list = productsFor(d);
+  if (d.product !== 'tshirt' || !list.length) continue; // (the DSL's default product)
+  const shownOn = ((FITS[d.category] || {}).shownOn || []).find((id) => list.includes(id)) || (list.includes('tshirt') ? 'tshirt' : list[0]);
+  if (shownOn !== 'tshirt') {
+    const from = PRODUCTS.find((p) => p.id === 'tshirt').colors.find((c) => c.id === d.color);
+    const to = PRODUCTS.find((p) => p.id === shownOn);
+    d.product = to.id;
+    if (from && !to.colors.some((c) => c.id === d.color)) d.color = to.colors.reduce((best, c) => (distance(c.hex, from.hex) < distance(best.hex, from.hex) ? c : best)).id;
+  }
+}
+
 // ---------- Custom designs (added by the shop owner) ----------
 class Library {
   constructor(dataDir) {
@@ -285,11 +399,11 @@ class Library {
       if (got) fs.rmSync(lock, { force: true });
     }
   }
-  /** Every design, newest custom ones first, with `hidden` set. */
+  /** Every design, newest custom ones first, with `hidden` set and the products it is offered on. */
   all() {
     this.reload();
     const hidden = new Set(this.index.hidden);
-    return [...this.index.custom.slice().reverse(), ...SEED].map((d) => ({ ...d, hidden: hidden.has(d.id) }));
+    return [...this.index.custom.slice().reverse(), ...SEED].map((d) => ({ ...d, products: productsFor(d), hidden: hidden.has(d.id) }));
   }
   visible() {
     return this.all().filter((d) => !d.hidden);
@@ -345,4 +459,4 @@ class Library {
   }
 }
 
-module.exports = { Library, CATEGORIES, SEED };
+module.exports = { Library, CATEGORIES, SEED, FITS, productsFor };

@@ -8,6 +8,14 @@ const INK = '#16181d';
 const BROWN = '#7a4a2b';
 const fe = (name) => `fluent-emoji-flat:${name}`;
 
+// Where the business designs go (the subject's list is in src/library.js FITS):
+// staff and crew shirts are worn and pinned on, not printed on the shop's paper;
+// events also get certificates, but no letterhead, invoices or shopping bags.
+const STAFF = { notProducts: ['bizcards', 'flyers', 'letterhead', 'dlenvelopes', 'logostickers', 'rollup', 'paperbags', 'invoicebook', 'sign', 'coasters', 'apron', 'deskmat', 'mousepad'] };
+// Teachers' designs: not on the children's clothes and school things.
+const TEACHER = { notProducts: ['kidstee', 'kidshoodie', 'jersey', 'namelabels', 'lunchbag', 'pencilcase', 'stickersheet', 'idcards'] };
+const EVENT = { alsoProducts: ['certificates'], notProducts: ['bizcards', 'letterhead', 'dlenvelopes', 'paperbags', 'invoicebook', 'apron', 'coasters'] };
+
 const categories = [
   { id: 'kids', name: { en: 'Kids', ar: 'أطفال' } },
   { id: 'school', name: { en: 'School & teachers', ar: 'مدرسة ومدرسين' } },
@@ -70,7 +78,7 @@ const designs = [
     T('أول يوم', 'Lalezar', 0.22, 0.5, 0.5),
     T('في المدرسة', 'Marhey', 0.13, 0.5, 0.69, { fill: BLUE, weight: 'bold' }),
     T('2026', 'Bungee', 0.07, 0.5, 0.86, { fill: INK, bg: GOLD, bgShape: 'pill' }),
-  ]),
+  ], 'white', { notProducts: ['onesie'] }),
   D('pp-kids-letters', 'kids', 'My first letters', 'حروفي الأولى أ ب ت', [
     T('أ', 'Lalezar', 0.34, 0.72, 0.34, { fill: RED }),
     T('ب', 'Lalezar', 0.34, 0.5, 0.34, { fill: BLUE }),
@@ -121,13 +129,13 @@ const designs = [
     T('أحسن', 'Changa', 0.12, 0.5, 0.42, { weight: 'bold' }),
     T('مدرس', 'Lalezar', 0.3, 0.5, 0.62, { fill: BLUE }),
     T('في الدنيا', 'Marhey', 0.1, 0.5, 0.84, { weight: 'bold' }),
-  ]),
+  ], 'white', TEACHER),
   D('pp-sch-best-teacher-f', 'school', 'Best teacher (female) with name', 'أحسن مدرسة باسمها', [
     A(fe('red-apple'), 0.24, 0.5, 0.18),
     T('أحسن', 'Marhey', 0.12, 0.5, 0.38, { weight: 'bold' }),
     T('مدرسة', 'Aref Ruqaa', 0.26, 0.5, 0.58, { weight: 'bold', fill: PINK }),
     T('ميس منى', 'Lemonada', 0.08, 0.5, 0.84, { weight: 'bold', fill: WHITE, bg: PINK, bgShape: 'pill' }),
-  ]),
+  ], 'white', TEACHER),
   D('pp-sch-class-trip', 'school', 'School trip with school name', 'رحلة المدرسة باسم المدرسة', [
     A(fe('bus'), 0.34, 0.5, 0.2),
     T('رحلة', 'Lalezar', 0.26, 0.5, 0.46),
@@ -180,7 +188,7 @@ const designs = [
     A(fe('hot-beverage'), 0.26, 0.5, 0.2),
     T('مدرّس', 'Lalezar', 0.26, 0.5, 0.48),
     T('شغال بالقهوة والصبر', 'Changa', 0.08, 0.5, 0.72, { weight: 'bold', fill: BROWN }),
-  ], 'sand'),
+  ], 'sand', TEACHER),
 
   // ---------- Pets ----------
   D('pp-pet-cat-mom', 'pets', 'Cat mom', 'مامي القطط', [
@@ -235,14 +243,14 @@ const designs = [
     T('STAFF', 'Anton', 0.32, 0.5, 0.46, { spacing: 100 }),
     S('line', 0.5, 0.5, 0.66, { fill: GOLD }),
     T('اسم الشركة', 'Cairo', 0.08, 0.5, 0.77, { weight: 'bold' }),
-  ], 'black'),
+  ], 'black', STAFF),
   D('pp-biz-team-badge', 'business', 'Team round badge', 'شعار فريق دائري TEAM', [
     S('ring', 0.7, 0.5, 0.38, { fill: BLUE }),
     T('اسم الفريق', 'Cairo', 0.07, 0.5, 0.26, { weight: 'bold' }),
     T('TEAM', 'Bebas Neue', 0.22, 0.5, 0.39, { fill: BLUE }),
     T('2026', 'Montserrat', 0.05, 0.5, 0.5, { spacing: 200, weight: 'bold' }),
     T('فريق العمل', 'Kufam', 0.1, 0.5, 0.86, { weight: 'bold' }),
-  ]),
+  ], 'white', STAFF),
   D('pp-biz-cafe', 'business', 'Cafe logo with name', 'لوجو كافيه بالاسم', [
     S('ring', 0.72, 0.5, 0.42, { fill: BROWN }),
     A('ph:coffee-fill', 0.2, 0.5, 0.27, { fill: BROWN }),
@@ -293,19 +301,19 @@ const designs = [
     T('CREW', 'Anton', 0.26, 0.5, 0.45, { fill: INK, bg: GOLD, bgShape: 'box' }),
     T('طاقم التنظيم', 'Cairo', 0.1, 0.5, 0.7, { weight: 'bold' }),
     A('ph:headset-fill', 0.1, 0.5, 0.86, { fill: GOLD }),
-  ], 'black'),
+  ], 'black', STAFF),
   D('pp-biz-volunteer', 'business', 'Volunteer', 'متطوع VOLUNTEER', [
     A('ph:hand-heart-fill', 0.3, 0.5, 0.2, { fill: RED }),
     T('متطوع', 'Lalezar', 0.28, 0.5, 0.5),
     T('VOLUNTEER', 'Bebas Neue', 0.1, 0.5, 0.72, { spacing: 250, fill: RED }),
     T('إيد واحدة تفرق', 'Changa', 0.07, 0.5, 0.86, { weight: 'bold' }),
-  ]),
+  ], 'white', STAFF),
   D('pp-biz-charity-run', 'business', 'Charity run with year', 'ماراثون الخير بالسنة', [
     A('ph:person-simple-run-fill', 0.26, 0.5, 0.18, { fill: ACCENT }),
     T('ماراثون الخير', 'Lalezar', 0.14, 0.5, 0.4),
     T('2026', 'Anton', 0.26, 0.5, 0.6, { fill: ACCENT }),
     T('5K CHARITY RUN', 'Bebas Neue', 0.08, 0.5, 0.82, { spacing: 200 }),
-  ]),
+  ], 'white', EVENT),
   D('pp-biz-finisher', 'business', 'Marathon finisher badge', 'ميدالية إنهاء الماراثون FINISHER', [
     S('circle', 0.62, 0.5, 0.34, { fill: ACCENT }),
     T('MARATHON', 'Montserrat', 0.05, 0.5, 0.24, { spacing: 250, weight: 'bold', fill: WHITE }),
@@ -313,20 +321,20 @@ const designs = [
     T('2026', 'Montserrat', 0.05, 0.5, 0.46, { spacing: 200, weight: 'bold', fill: WHITE }),
     T('FINISHER', 'Bebas Neue', 0.16, 0.5, 0.7, { spacing: 150 }),
     T('خلّصت السباق', 'Marhey', 0.08, 0.5, 0.86, { weight: 'bold', fill: ACCENT }),
-  ], 'navy'),
+  ], 'navy', EVENT),
   D('pp-biz-conference', 'business', 'Annual conference', 'المؤتمر السنوي', [
     T('المؤتمر السنوي', 'Cairo', 0.1, 0.5, 0.22, { weight: 'bold' }),
     S('line', 0.5, 0.5, 0.32, { fill: BLUE }),
     T('2026', 'Bebas Neue', 0.32, 0.5, 0.5, { fill: BLUE }),
     S('line', 0.5, 0.5, 0.68, { fill: BLUE }),
     T('ANNUAL CONFERENCE', 'Montserrat', 0.05, 0.5, 0.78, { spacing: 250, weight: 'bold' }),
-  ]),
+  ], 'white', EVENT),
   D('pp-biz-workshop', 'business', 'Workshop', 'ورشة عمل', [
     A('ph:lightbulb-fill', 0.24, 0.5, 0.18, { fill: GOLD }),
     T('ورشة عمل', 'Lalezar', 0.2, 0.5, 0.44),
     T('اتعلم • جرّب • ابتكر', 'Changa', 0.075, 0.5, 0.62, { weight: 'bold', fill: GOLD }),
     T('WORKSHOP 2026', 'Bebas Neue', 0.08, 0.5, 0.82, { spacing: 250 }),
-  ], 'navy'),
+  ], 'navy', EVENT),
   D('pp-biz-startup', 'business', 'Startup team', 'فريق ستارت أب', [
     A('ph:rocket-launch-fill', 0.26, 0.5, 0.18, { fill: ACCENT }),
     T('STARTUP', 'Righteous', 0.16, 0.5, 0.42),
@@ -339,19 +347,19 @@ const designs = [
     T('أحمد', 'Lalezar', 0.26, 0.5, 0.44),
     T('SALES TEAM', 'Bebas Neue', 0.09, 0.5, 0.66, { spacing: 150, fill: WHITE, bg: BLUE, bgShape: 'pill' }),
     T('فريق المبيعات', 'Cairo', 0.07, 0.5, 0.82, { weight: 'bold' }),
-  ]),
+  ], 'white', STAFF),
   D('pp-biz-delivery', 'business', 'Delivery staff with shop name', 'ديليفري باسم المحل', [
     A('ph:moped-fill', 0.3, 0.5, 0.18, { fill: ACCENT }),
     T('ديليفري', 'Lalezar', 0.22, 0.5, 0.44),
     T(' اسم المحل ', 'Lemonada', 0.08, 0.5, 0.62, { weight: 'bold', fill: WHITE, bg: ACCENT, bgShape: 'banner' }),
     T('DELIVERY', 'Bebas Neue', 0.08, 0.5, 0.82, { spacing: 300 }),
-  ]),
+  ], 'white', STAFF),
   D('pp-biz-security', 'business', 'Event security', 'أمن SECURITY', [
     A('ph:shield-check-fill', 0.22, 0.5, 0.18, { fill: GOLD }),
     T('SECURITY', 'Anton', 0.17, 0.5, 0.42, { fill: GOLD, spacing: 100 }),
     S('line', 0.6, 0.5, 0.58, { fill: GOLD }),
     T('الأمن', 'Lalezar', 0.2, 0.5, 0.74),
-  ], 'black'),
+  ], 'black', STAFF),
 ];
 
 module.exports = { categories, designs };

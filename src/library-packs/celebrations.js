@@ -17,6 +17,12 @@ const categories = [
   { id: 'baby', name: { en: 'New baby', ar: 'مولود جديد' } },
 ];
 
+// Fine-tuning the subject's products (src/library.js FITS): what a baby or a child
+// wears, and the grown-up birthdays that are not for kids' clothes.
+const ONESIE = { alsoProducts: ['onesie'] };
+const KIDS_CLOTHES = { alsoProducts: ['kidstee', 'kidshoodie'] };
+const GROWN_UP = { notProducts: ['kidstee', 'kidshoodie'] };
+
 const designs = [
   // ---------- Birthday ----------
   D('ce-bday-ya-sara', 'birthday', 'Happy birthday with name', 'عيد ميلاد سعيد يا سارة', [
@@ -43,20 +49,20 @@ const designs = [
     A('fluent-emoji-flat:sparkles', 0.13, 0.74, 0.2),
     T('30', 'Abril Fatface', 0.5, 0.5, 0.4, { fill: GOLD }),
     T('& FABULOUS', 'Playfair Display', 0.09, 0.5, 0.72, { spacing: 150 }),
-  ], 'black'),
+  ], 'black', GROWN_UP),
   D('ce-40-lessa-shabab', 'birthday', '40 and still young', '40 ولسه شباب', [
     T('40', 'Anton', 0.52, 0.5, 0.38, { fill: ACCENT }),
     T('ولسه شباب', 'Lalezar', 0.17, 0.5, 0.74),
-  ], 'heather'),
+  ], 'heather', GROWN_UP),
   D('ce-18-kebert', 'birthday', '18 all grown up (neon)', '18 كبرت خلاص', [
     T('18', 'Righteous', 0.46, 0.5, 0.38, { fill: WHITE, glow: PINK }),
     T('كبرت خلاص', 'Lalezar', 0.15, 0.5, 0.73, { fill: ROSE }),
-  ], 'black'),
+  ], 'black', GROWN_UP),
   D('ce-50-nos-2arn', 'birthday', '50: half a century of sweetness', '50 نص قرن من الحلاوة', [
     T('50', 'Abril Fatface', 0.46, 0.5, 0.32, { fill: GOLD }),
     T('نص قرن', 'Lalezar', 0.17, 0.5, 0.62),
     T('من الحلاوة', 'Marhey', 0.11, 0.5, 0.81, { weight: 'bold', fill: GOLD }),
-  ], 'navy'),
+  ], 'navy', GROWN_UP),
   D('ce-bday-queen', 'birthday', 'Birthday queen', 'ملكة عيد الميلاد', [
     A('fluent-emoji-flat:crown', 0.26, 0.5, 0.2),
     T('ملكة', 'Aref Ruqaa', 0.28, 0.5, 0.5, { weight: 'bold' }),
@@ -80,7 +86,7 @@ const designs = [
     A('fluent-emoji-flat:teddy-bear', 0.32, 0.5, 0.24),
     T('عيد ميلادي', 'Lemonada', 0.12, 0.5, 0.57, { weight: 'bold' }),
     T('الأول', 'Lalezar', 0.2, 0.5, 0.78, { fill: TEAL }),
-  ]),
+  ], 'white', ONESIE),
   D('ce-bday-squad-ar', 'birthday', 'Birthday squad (Arabic)', 'شلة عيد الميلاد', [
     K('confetti', 0.26, 0.5, 0.17),
     T('شلة', 'Lalezar', 0.32, 0.5, 0.46, { fill: GOLD }),
@@ -102,7 +108,7 @@ const designs = [
     T('1995', 'Abril Fatface', 0.3, 0.5, 0.42, { fill: BURGUNDY }),
     T('AGED TO PERFECTION', 'Montserrat', 0.055, 0.5, 0.63, { weight: 'bold', spacing: 150 }),
     T('LIMITED EDITION', 'Oswald', 0.065, 0.5, 0.8, { fill: WHITE, bg: BURGUNDY, bgShape: 'ticket', spacing: 100 }),
-  ], 'sand'),
+  ], 'sand', GROWN_UP),
   D('ce-kol-sana-w-enti-tayba', 'birthday', 'Many happy returns (her)', 'كل سنة وإنتِ طيبة', [
     K('gift', 0.26, 0.5, 0.2),
     T('كل سنة', 'Aref Ruqaa', 0.2, 0.5, 0.5, { weight: 'bold' }),
@@ -263,7 +269,7 @@ const designs = [
     T('Welcome', 'Pacifico', 0.17, 0.5, 0.45, { fill: TEAL }),
     T('BABY', 'Bebas Neue', 0.16, 0.5, 0.65, { spacing: 400 }),
     T('آدم', 'Aref Ruqaa', 0.18, 0.5, 0.84, { weight: 'bold', fill: TEAL }),
-  ]),
+  ], 'white', ONESIE),
   D('ce-sebou3', 'baby', 'Sebou3 party (name)', 'سبوع سارة', [
     A('fluent-emoji-flat:candle', 0.2, 0.34, 0.16, { angle: -12 }),
     A('fluent-emoji-flat:candle', 0.22, 0.5, 0.14),
@@ -271,24 +277,24 @@ const designs = [
     T('سبوع', 'Lalezar', 0.3, 0.5, 0.43, { fill: PINK }),
     T('سارة', 'Aref Ruqaa', 0.22, 0.5, 0.66, { weight: 'bold' }),
     T('حلقة برجالاتك', 'Marhey', 0.09, 0.5, 0.85, { weight: 'bold', fill: PINK }),
-  ]),
+  ], 'white', ONESIE),
   D('ce-ahlan-bel-nono', 'baby', 'Welcome little one (Arabic)', 'أهلًا بالنونو', [
     A('fluent-emoji-flat:baby', 0.3, 0.5, 0.22),
     T('أهلًا', 'Marhey', 0.15, 0.5, 0.52, { weight: 'bold' }),
     T('بالنونو', 'Lalezar', 0.24, 0.5, 0.75, { fill: TEAL }),
-  ]),
+  ], 'white', ONESIE),
   D('ce-big-sister', 'baby', 'Big sister', 'الأخت الكبيرة', [
     A('fluent-emoji-flat:crown', 0.2, 0.5, 0.16),
     T('BIG', 'Bebas Neue', 0.2, 0.5, 0.38, { spacing: 300 }),
     T('SISTER', 'Bebas Neue', 0.2, 0.5, 0.56, { fill: PINK, spacing: 200 }),
     T('أنا الأخت الكبيرة', 'Changa', 0.08, 0.5, 0.78, { weight: 'bold', fill: WHITE, bg: PINK, bgShape: 'pill' }),
-  ]),
+  ], 'white', KIDS_CLOTHES),
   D('ce-big-brother', 'baby', 'Big brother', 'الأخ الكبير', [
     K('star-student', 0.2, 0.5, 0.16),
     T('BIG', 'Bebas Neue', 0.2, 0.5, 0.38, { spacing: 300 }),
     T('BROTHER', 'Bebas Neue', 0.2, 0.5, 0.56, { fill: BLUE, spacing: 150 }),
     T('أنا الأخ الكبير', 'Changa', 0.08, 0.5, 0.78, { weight: 'bold', fill: WHITE, bg: BLUE, bgShape: 'pill' }),
-  ]),
+  ], 'white', KIDS_CLOTHES),
   D('ce-mama-2orayeb', 'baby', 'Mum to be', 'ماما قريب', [
     T('ماما', 'Lalezar', 0.32, 0.5, 0.32, { fill: PINK }),
     T('قريب أوي', 'Marhey', 0.13, 0.5, 0.58, { weight: 'bold' }),

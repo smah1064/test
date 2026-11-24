@@ -7,29 +7,12 @@
   const productById = (id) => products.find((p) => p.id === id);
 
   // ---------- Which designs fit which product ----------
-  // The shop sends each design's own product and the shape it was drawn for
-  // (width / height of the print area). A design fits a product when it was made
-  // for it, or when it was drawn for a print area of a similar shape (at most
-  // twice as wide or tall) and, if it prints names from a list ({Name} fields),
-  // the product prints name lists. A `products` list from the server wins.
-  const shapeOf = (p) => {
-    const a = p && p.sides && p.sides[0] && p.sides[0].printArea;
-    return a && a.w && a.h ? a.w / a.h : 0.75;
-  };
-  const MERGE_FIELD = /\{[^{}]+\}/;
-  const hasNameFields = (d) => (d.items || []).some((i) => i.kind === 'text' && MERGE_FIELD.test(i.text || ''));
-  const designShape = (d) => d.aspect || shapeOf(productById(d.product));
-  function fits(d, p) {
-    if (Array.isArray(d.products)) return d.products.includes(p.id);
-    if (p.laser) return false; // laser products: only designs made for them
-    if (d.product === p.id) return true;
-    if (hasNameFields(d) && !p.merge) return false;
-    const r = shapeOf(p) / designShape(d);
-    return r <= 2 && r >= 0.5;
-  }
+  // The shop sends each design's products (its subject, the print area's shape
+  // and name fields decide them: src/library.js); the product page and the
+  // editor use the same check, so all three show the same designs.
   const fitting = new Map(); // product id -> Set of design ids
   for (const p of products) {
-    const ids = new Set(lib.designs.filter((d) => fits(d, p)).map((d) => d.id));
+    const ids = new Set(lib.designs.filter((d) => POD.designFor(d, p)).map((d) => d.id));
     if (ids.size) fitting.set(p.id, ids);
   }
 
