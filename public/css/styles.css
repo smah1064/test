@@ -1111,3 +1111,8 @@ html[lang="ar"] .brand-en, html:not([lang="ar"]) .brand-ar { display: none; }
 .bk-books { display: inline-flex; margin: 16px 0 12px; flex-wrap: wrap; }
 .bk-books[hidden] { display: none; }
 .bk-books .side-tab { text-decoration: none; font-size: 14px; padding: 8px 16px; }
+/* Home: product search above the categories. */
+.home-search { display: block; max-width: 540px; margin: 0 0 12px; }
+.home-count { margin: -8px 0 12px; min-height: 0; }
+.home-count:empty { display: none; }
+.home-empty { grid-column: 1 / -1; text-align: center; padding: 28px 16px; }
