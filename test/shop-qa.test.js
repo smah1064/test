@@ -84,3 +84,33 @@ test('the cart quote checks a per-customer coupon against the phone typed at che
   const guest = await fetch(base + '/api/account/drafts/tshirt');
   assert.strictEqual(guest.status, 204);
 });
+
+test('accounts: correct sign-ins never lock the owner out; text-only names; clearing the address; drafts name the account', async () => {
+  const user = { name: 'Sara Ali', phone: '01033344455', password: 'a-long-password-1' };
+  const up = await post('/api/account/signup', user);
+  assert.strictEqual(up.status, 201, await up.clone().text());
+  for (let i = 0; i < 14; i++) {
+    const r = await post('/api/account/login', { login: user.phone, password: user.password }, { 'X-Forwarded-For': `10.9.0.${i}` });
+    assert.strictEqual(r.status, 200, `sign-in ${i + 1}`);
+  }
+  assert.strictEqual((await post('/api/account/signup', { name: { a: 1 }, phone: '01033344466', password: 'a-long-password-1' })).status, 400);
+  const login = await post('/api/account/login', { login: user.phone, password: user.password });
+  const cookie = login.headers.get('set-cookie').split(';')[0];
+  const me = (await login.json()).customer;
+  const put = (body) => fetch(base + '/api/account', { method: 'PUT', headers: { 'Content-Type': 'application/json', cookie }, body: JSON.stringify(body) });
+  assert.strictEqual((await put({ name: 'Sara Ali', address: { governorate: 'cairo', city: 'Nasr', address: '1 st' } })).status, 200);
+  const cleared = await (await put({ name: 'Sara Ali', address: { governorate: '', city: '', address: '' } })).json();
+  assert.strictEqual(cleared.customer.address, null);
+  const draft = await fetch(base + '/api/account/drafts/tshirt', { headers: { cookie } });
+  assert.strictEqual(draft.status, 404);
+  assert.strictEqual(draft.headers.get('x-account'), me.id);
+});
+
+test('share link previews use the shop address, not the Host header', async () => {
+  const pic = await sharp({ create: { width: 40, height: 40, channels: 4, background: '#c33' } }).png().toBuffer();
+  const sh = await post('/api/shares', { productId: 'mug', color: 'white', size: '11oz', sides: { front: { objects: [{ type: 'i-text', text: 'x' }] } }, previews: { front: `data:image/png;base64,${pic.toString('base64')}` } });
+  assert.strictEqual(sh.status, 201, await sh.clone().text());
+  const { id } = await sh.json();
+  const html = await (await fetch(`${base}/s/${id}`, { headers: { Host: 'evil.example', 'X-Forwarded-Proto': 'https' } })).text();
+  assert.doesNotMatch(html, /evil\.example/);
+});

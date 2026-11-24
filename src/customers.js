@@ -94,10 +94,12 @@ function tokenFrom(req) {
 /** Checks sign-up details; returns { fields } or { error, params }. */
 function cleanSignup(body) {
   const b = body && typeof body === 'object' ? body : {};
-  const name = String(b.name || '').trim().replace(/\s+/g, ' ').slice(0, 120);
-  const phone = normalizeEgyptMobile(b.phone);
-  const email = String(b.email || '').trim().toLowerCase().slice(0, 200);
-  const password = String(b.password || '');
+  // Only text counts (an object or a list is not a name).
+  const str = (v) => (typeof v === 'string' ? v : '');
+  const name = str(b.name).replace(/[\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/g, '').trim().replace(/\s+/g, ' ').slice(0, 120);
+  const phone = typeof b.phone === 'string' ? normalizeEgyptMobile(b.phone) : null;
+  const email = str(b.email).trim().toLowerCase().slice(0, 200);
+  const password = str(b.password);
   if (name.length < 2) return { error: 'acctName' };
   if (!phone) return { error: 'badPhone' };
   if (email && !EMAIL_RE.test(email)) return { error: 'badEmail' };

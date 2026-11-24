@@ -3192,6 +3192,8 @@
   function optionsPrice(sizeId) {
     return (st.product.options || []).reduce((sum, opt) => sum + choicePrice(chosenOption(opt), sizeId), 0);
   }
+  /** "1 piece in total", "6 قطع", "12 قطعة" (Arabic: 3–10 take the plural). */
+  const qtyTotalText = (n) => (n === 1 ? t('qty.totalOne') : t(n % 100 >= 3 && n % 100 <= 10 ? 'qty.totalFew' : 'qty.total', { n: POD.num(n) }));
   function renderQty() {
     const box = $('qty-field');
     if (!box) return;
@@ -3230,7 +3232,7 @@
           </tr>`).join('')}</tbody>
         </table></div>
         ${mix().colors && colors.length < p.colors.length ? `<select class="qty-add" id="qty-add"><option value="">${esc(t('qty.addColour'))}</option>${p.colors.filter((c) => !g[c.id]).map((c) => `<option value="${c.id}">${esc(tr(c.name))}</option>`).join('')}</select>` : ''}`}
-      <p class="small qty-sum">${esc(t('qty.total', { n: POD.num(total) }))}</p>
+      <p class="small qty-sum">${esc(qtyTotalText(total))}</p>
       ${total > 1 ? `<p class="muted small" style="margin:2px 0 0;line-height:1.5">${esc(t(mix().sizes || mix().colors ? 'qty.help' : 'qty.helpSame'))}</p>` : ''}`;
   }
   if ($('qty-field')) {
@@ -3263,7 +3265,7 @@
       setCell(i.dataset.qc, i.dataset.qz, i.value);
       refreshPrice();
       const sum = $('qty-field').querySelector('.qty-sum');
-      if (sum) sum.textContent = t('qty.total', { n: POD.num(qtyTotal()) });
+      if (sum) sum.textContent = qtyTotalText(qtyTotal());
     });
     $('qty-field').addEventListener('click', (e) => {
       const step = e.target.closest('[data-qstep]');

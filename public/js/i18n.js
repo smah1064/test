@@ -277,6 +277,8 @@ window.POD_STRINGS = {
   'qty.chip': ['{n} pcs ✎', '{n} قطعة ✎'],
   'qty.chipNames': ['{n} names ✎', '{n} اسم ✎'],
   'qty.total': ['{n} pieces in total', 'الإجمالي {n} قطعة'],
+  'qty.totalOne': ['1 piece in total', 'الإجمالي قطعة واحدة'],
+  'qty.totalFew': ['{n} pieces in total', 'الإجمالي {n} قطع'],
   'qty.addColour': ['+ Same design in another colour', '+ نفس التصميم بلون تاني'],
   'qty.removeColour': ['Remove {c}', 'شيل {c}'],
   'qty.help': ['One design, printed on every piece. Type how many of each size and colour; the price is for all of them.', 'تصميم واحد بيتطبع على كل القطع. اكتب العدد من كل مقاس ولون؛ السعر لكل القطع.'],

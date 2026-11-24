@@ -2290,10 +2290,17 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     await checkCaptcha(req);
     const key = customers.loginKey(login);
     const cust = key && customerList().find((x) => (key.phone ? x.phone === key.phone : x.email === key.email));
-    if (cust) rateLimit(req, 'accountLoginId', cust.id);
+    // The per-account lock counts wrong passwords only (signing in correctly never locks the owner out).
+    if (cust) {
+      const wait = limiter.check(`accountLoginId:${cust.id}`, LIMITS.accountLoginId);
+      if (typeof wait === 'number') throw new HttpError(429, wait > 90 ? 'tooManyWait' : 'tooFast', { min: Math.ceil(wait / 60) });
+    }
     // Same answer whether the account exists or not.
     if (!cust) customers.hashPassword(String(password || '')); // same time as a real check
-    if (!cust || !customers.checkPassword(cust, password)) throw new HttpError(401, 'acctWrong');
+    if (!cust || !customers.checkPassword(cust, password)) {
+      if (cust) limiter.hit(`accountLoginId:${cust.id}`, LIMITS.accountLoginId);
+      throw new HttpError(401, 'acctWrong');
+    }
     setSession(req, res, cust);
     res.json({ customer: customers.publicCustomer(cust) });
   }));
@@ -2314,6 +2321,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const phone = b.phone === undefined || b.phone === null || b.phone === '' ? null : normalizeEgyptMobile(b.phone);
     if (b.phone && !phone) throw new HttpError(400, 'badPhone');
     let address = null;
+    // An address with every field emptied: the saved one is removed.
+    const clearAddress = Boolean(b.address && typeof b.address === 'object' && !text(b.address.address).trim() && !text(b.address.city).trim());
     if (b.address && typeof b.address === 'object' && (b.address.address || b.address.city)) {
       const a = b.address;
       address = {
@@ -2333,6 +2342,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       Object.assign(cust, { name, email });
       if (phone) cust.phone = phone;
       if (address) cust.address = address;
+      else if (clearAddress) delete cust.address;
       return cust;
     });
     res.json({ customer: customers.publicCustomer(updated) });
@@ -2722,6 +2732,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     // Guests: nothing to load (204, not an error the browser logs on every product page).
     if (!currentCustomer(req)) return res.status(204).set('Cache-Control', 'private, no-store').end();
     const me = signedIn(req);
+    // Which customer this is (the browser keeps drafts per customer on shared computers).
+    res.set('X-Account', me.id);
     const product = draftProduct(req);
     const file = path.join(draftDir(me), `${product.id}.json`);
     res.set('Cache-Control', 'private, no-store');
@@ -3565,8 +3577,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     // An old or wrong link: the share page itself says the design wasn't found.
     if (!sh) return sendPage(res.status(404), 'share', html);
     const product = getProduct(sh.productId);
-    const proto = String(req.get('x-forwarded-proto') || req.protocol).split(',')[0].trim();
-    const origin = `${proto}://${req.get('host')}`;
+    // The shop's own address (never whatever Host header the request came with).
+    const origin = linkBase(req);
     const escAttr = (v) => String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
     const title = `${product ? product.name.ar : 'تصميم'} · ${product ? product.name.en : 'Design'} · OneOff Print`;
     const tags = [

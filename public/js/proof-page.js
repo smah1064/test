@@ -25,7 +25,7 @@
       return `
         <form class="reject-box" id="reject-form" novalidate>
           <label for="comment">${esc(t('proofPage.comment'))}</label>
-          <textarea id="comment" rows="4" maxlength="2000" placeholder="${esc(t('proofPage.commentPh'))}" aria-describedby="form-err"${st.formError ? ' aria-invalid="true"' : ''}>${esc(st.comment)}</textarea>
+          <textarea id="comment" rows="4" maxlength="1000" placeholder="${esc(t('proofPage.commentPh'))}" aria-describedby="form-err"${st.formError ? ' aria-invalid="true"' : ''}>${esc(st.comment)}</textarea>
           <p class="form-err" id="form-err" role="alert">${esc(st.formError)}</p>
           <div class="row-btns">
             <button class="btn btn-primary" type="submit"${st.sending ? ' disabled' : ''}>${esc(t(st.sending ? 'proofPage.sending' : 'proofPage.send'))}</button>

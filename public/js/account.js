@@ -20,7 +20,13 @@
     } catch (e) {
       me = null;
     }
-    try { if (me) localStorage.setItem('pod-acct', '1'); else localStorage.removeItem('pod-acct'); } catch (e) { /* private mode */ }
+    try {
+      const before = localStorage.getItem('pod-acct');
+      // Someone else signed in on this browser: the last customer's drafts kept here go.
+      if (me && before && before !== '1' && before !== me.id) await POD.drafts.clearLocal();
+      if (me) localStorage.setItem('pod-acct', me.id);
+      else localStorage.removeItem('pod-acct');
+    } catch (e) { /* private mode */ }
     render();
   }
 
@@ -105,12 +111,10 @@
   async function afterSignIn() {
     orders = null;
     drafts = null;
-    // Came here from checkout: go back there.
-    if (params.get('next') === 'cart') {
-      location.href = '/cart';
-      return;
-    }
+    // Who is signed in now (and the last customer's drafts in this browser cleared) before going anywhere.
     await load();
+    // Came here from checkout: go back there.
+    if (params.get('next') === 'cart') location.href = '/cart';
   }
 
   // ---------- Signed in ----------
@@ -128,6 +132,8 @@
     orders = null;
     drafts = null;
     try { localStorage.removeItem('pod-acct'); } catch (e) { /* private mode */ }
+    // Their drafts are on their account; nothing of theirs stays in this browser.
+    await POD.drafts.clearLocal();
     render();
   });
   const STATUS = { received: 'queued', in_production: 'printing', shipped: 'shipped', delivered: 'delivered' };

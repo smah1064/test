@@ -338,11 +338,23 @@
         tx.onabort = () => reject(tx.error);
       });
     };
+    // Each draft in this browser remembers whose it is (the signed-in customer's id, or none for a
+    // guest): on a shared computer the next customer never sees, or saves to their account, someone else's.
+    const owner = () => {
+      try {
+        const v = localStorage.getItem('pod-acct');
+        return v && v !== '1' ? v : '';
+      } catch (e) {
+        return '';
+      }
+    };
+    const mine = (d) => Boolean(d) && (!d.owner || d.owner === owner());
     const local = {
-      get: (productId) => run('readonly', (s) => s.get(productId)).catch(() => null),
-      set: (productId, draft) => run('readwrite', (s) => s.put(draft, productId)).then(() => true).catch(() => false),
+      get: (productId) => run('readonly', (s) => s.get(productId)).then((d) => (mine(d) ? d : null)).catch(() => null),
+      set: (productId, draft) => run('readwrite', (s) => s.put({ ...draft, owner: owner() || undefined }, productId)).then(() => true).catch(() => false),
       remove: (productId) => run('readwrite', (s) => s.delete(productId)).catch(() => null),
-      all: () => run('readonly', (s) => s.getAll()).catch(() => []),
+      all: () => run('readonly', (s) => s.getAll()).then((list) => list.filter(mine)).catch(() => []),
+      clear: () => run('readwrite', (s) => s.clear()).catch(() => null),
     };
     // Signed-in customers: every draft is also kept on their account, so a
     // design started on the phone opens on the laptop (the newest copy wins).
@@ -365,7 +377,19 @@
       try {
         const res = await fetch(url(productId), { credentials: 'same-origin', signal: withTimeout(5000) });
         if (res.status === 401) signedOut = true;
-        if (res.status === 204) return null;
+        // Signed in as someone other than the last customer here (e.g. with Google straight to the cart):
+        // their drafts kept in this browser go before anything is shown.
+        const who = res.headers.get('x-account');
+        if (who && who !== owner()) {
+          if (owner()) await local.clear();
+          try { localStorage.setItem('pod-acct', who); } catch (e) { /* private mode */ }
+        }
+        if (res.status === 204) {
+          // Not signed in (any more): drafts of the last customer here are not shown.
+          signedOut = true;
+          try { localStorage.removeItem('pod-acct'); } catch (e) { /* private mode */ }
+          return null;
+        }
         return res.ok ? await res.json() : null;
       } catch (e) {
         return null;
@@ -387,7 +411,9 @@
     }
     return {
       async get(productId) {
-        const [mine, acct] = await Promise.all([local.get(productId), fromAccount(productId)]);
+        // The account first: it says who is signed in, which decides which drafts here are theirs.
+        const acct = await fromAccount(productId);
+        const mine = await local.get(productId);
         if (acct && acct.designs && (!mine || String(acct.savedAt || '') > String(mine.savedAt || ''))) {
           const { previewDataUrl, ...draft } = acct; // eslint-disable-line no-unused-vars
           return draft;
@@ -405,6 +431,8 @@
         if (!signedOut) fetch(url(productId), { method: 'DELETE', credentials: 'same-origin' }).then((r) => { if (r.status === 401) signedOut = true; }).catch(() => {});
       },
       all: local.all,
+      /** Forget every draft kept in this browser (signing out, another customer signing in). */
+      clearLocal: local.clear,
     };
   })();
 
