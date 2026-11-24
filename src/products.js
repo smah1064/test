@@ -1601,31 +1601,36 @@ function printAreaFor(product, sideId, sizeId) {
 }
 
 // Garments and bags: the customer can move the print area within this zone
-// (mockup units; measured from the product photos, kept clear of collars,
-// hems, zips, plackets and pockets).
+// (mockup units, checked against the product photos). Rules: the top stays at
+// least 2.5 cm below the collar / neck / hood seam (and the tote's top hem),
+// the bottom at least 2.5 cm above the hem, waistband or leg binding, and the
+// sides about 1 cm clear of armhole / side / raglan / panel seams, plackets,
+// zips and pockets. Where a standard printArea itself sits closer than that
+// (e.g. tshirt front, oversized front, hoodie fronts, jersey front, tote) the
+// zone starts at the standard area so it stays allowed.
 const MOVE_ZONES = {
-  'tshirt:front': { x: 114, y: 100, w: 271, h: 397 },
-  'tshirt:back': { x: 118, y: 93, w: 264, h: 397 },
-  'kidstee:front': { x: 107, y: 114, w: 286, h: 440 },
-  'kidstee:back': { x: 110, y: 126, w: 279, h: 423 },
-  'hoodie:front': { x: 156, y: 166, w: 191, h: 239 },
-  'hoodie:back': { x: 105, y: 165, w: 291, h: 361 },
-  'sweatshirt:front': { x: 94, y: 112, w: 313, h: 392 },
-  'sweatshirt:back': { x: 119, y: 116, w: 264, h: 376 },
-  'polo:front': { x: 266, y: 120, w: 123, h: 267 },
-  'polo:back': { x: 139, y: 115, w: 220, h: 338 },
-  'oversized:front': { x: 133, y: 125, w: 235, h: 296 },
-  'ziphoodie:front': { x: 272, y: 132, w: 120, h: 183 },
-  'ziphoodie:back': { x: 108, y: 175, w: 282, h: 312 },
-  'denim:back': { x: 103, y: 170, w: 294, h: 280 },
-  'onesie:front': { x: 178, y: 151, w: 142, h: 211 },
-  'kidshoodie:front': { x: 173, y: 192, w: 155, h: 198 },
-  'kidshoodie:back': { x: 132, y: 196, w: 235, h: 262 },
-  'shorts:front': { x: 264, y: 249, w: 100, h: 144 },
-  'jersey:front': { x: 115, y: 98, w: 265, h: 389 },
-  'jersey:back': { x: 112, y: 101, w: 272, h: 416 },
-  'tote:front': { x: 135, y: 252, w: 230, h: 268 },
-  'tote:back': { x: 135, y: 252, w: 230, h: 268 },
+  'tshirt:front': { x: 126, y: 140, w: 248, h: 357 },
+  'tshirt:back': { x: 124, y: 111, w: 252, h: 379 },
+  'kidstee:front': { x: 123, y: 137, w: 256, h: 417 },
+  'kidstee:back': { x: 119, y: 150, w: 261, h: 399 },
+  'hoodie:front': { x: 156, y: 175, w: 191, h: 230 },
+  'hoodie:back': { x: 107, y: 180, w: 286, h: 346 },
+  'sweatshirt:front': { x: 115, y: 126, w: 270, h: 370 },
+  'sweatshirt:back': { x: 119, y: 131, w: 264, h: 355 },
+  'polo:front': { x: 268, y: 150, w: 88, h: 237 },
+  'polo:back': { x: 147, y: 115, w: 206, h: 338 },
+  'oversized:front': { x: 141, y: 140, w: 218, h: 281 },
+  'ziphoodie:front': { x: 272, y: 165, w: 88, h: 150 },
+  'ziphoodie:back': { x: 124, y: 180, w: 250, h: 299 },
+  'denim:back': { x: 160, y: 226, w: 181, h: 217 },
+  'onesie:front': { x: 190, y: 188, w: 120, h: 167 },
+  'kidshoodie:front': { x: 173, y: 200, w: 155, h: 190 },
+  'kidshoodie:back': { x: 147, y: 200, w: 206, h: 255 },
+  'shorts:front': { x: 264, y: 273, w: 89, h: 116 },
+  'jersey:front': { x: 153, y: 150, w: 194, h: 337 },
+  'jersey:back': { x: 132, y: 101, w: 234, h: 416 },
+  'tote:front': { x: 135, y: 260, w: 230, h: 260 },
+  'tote:back': { x: 135, y: 260, w: 230, h: 260 },
 };
 for (const [key, zone] of Object.entries(MOVE_ZONES)) {
   const [pid, sid] = key.split(':');
