@@ -85,7 +85,8 @@ function apply(coupon, { lines, orders = [], phone = null }) {
   const limited = coupon.products.length || coupon.categories.length;
   const fits = lines.map((l) => !limited || coupon.products.includes(l.productId) || coupon.categories.includes(l.category));
   const eligible = round2(lines.filter((l, i) => fits[i]).reduce((n, l) => n + l.price, 0));
-  if (!eligible && coupon.type !== 'freeship') return { ok: false, reason: 'couponNoItems' };
+  // Limited to some products: the cart must have one of them (free shipping too).
+  if (!eligible && (coupon.type !== 'freeship' || limited)) return { ok: false, reason: 'couponNoItems' };
   let discount = 0;
   if (coupon.type === 'percent') discount = round2((eligible * coupon.value) / 100);
   if (coupon.type === 'fixed') discount = Math.min(eligible, coupon.value);

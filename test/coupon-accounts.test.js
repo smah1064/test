@@ -29,3 +29,12 @@ test('a one-product coupon lowers only that product in the per-product table', (
   const old = sales(order(null));
   assert.ok(old.tshirt < 450 && Math.abs(old.tshirt + old.mug - 575) < 0.01);
 });
+
+test('a free-shipping coupon limited to some products needs one of them in the cart (QA 24 Nov 16:02)', () => {
+  const c = { code: 'MUGSHIP', active: true, type: 'freeship', value: 0, products: ['mug'], categories: [] };
+  const tee = [{ productId: 'tshirt', category: 'apparel', price: 450 }];
+  assert.deepStrictEqual(coupons.apply(c, { lines: tee }), { ok: false, reason: 'couponNoItems' });
+  assert.strictEqual(coupons.apply(c, { lines: [...tee, { productId: 'mug', category: 'home', price: 250 }] }).freeShipping, true);
+  // Not limited: free shipping on any cart, as before.
+  assert.strictEqual(coupons.apply({ ...c, products: [] }, { lines: tee }).freeShipping, true);
+});
