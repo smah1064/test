@@ -158,3 +158,37 @@ test('drafts kept on the account (open on another device)', async () => {
   assert.strictEqual((await (await json('GET', '/api/account/drafts', undefined, H)).json()).drafts.length, 0);
   assert.strictEqual((await json('GET', '/api/account/drafts/tshirt', undefined, H)).status, 404);
 });
+
+test('admin: an order still in review cannot be marked shipped; delivery dates must be real; Arabic digits find customers', async () => {
+  const { createApp: make } = require('../src/app');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pod-ship-gate-'));
+  const app = make({ dataDir: dir, adminPassword: 'secret', cleanupEvery: 0, requireApproval: false, limits: { designs: [{ max: 1e6, ms: 1000 }], orders: [{ max: 1e6, ms: 1000 }] } });
+  const srv = await new Promise((resolve) => { const s = app.listen(0, () => resolve(s)); });
+  const b = `http://127.0.0.1:${srv.address().port}`;
+  try {
+    const p = (url, body, headers = {}) => fetch(b + url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
+    const sharp = require('sharp');
+    const c = await (await p('/api/designs', { productId: 'mug', color: 'white', size: '11oz', sides: { front: { editor: { objects: [{ type: 'i-text', text: 'x' }] } } }, quantities: [{ color: 'white', size: '11oz', qty: 60 }] })).json();
+    for (const name of c.files) {
+      const data = name.endsWith('.svg') ? Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>') : await sharp({ create: { width: name.includes('print') ? 1200 : 60, height: name.includes('print') ? 1050 : 52, channels: 4, background: '#c33' } }).png().toBuffer();
+      await fetch(`${b}/api/designs/${c.id}/files/${name}`, { method: 'PUT', headers: { 'x-upload-token': c.uploadToken }, body: data });
+    }
+    const d = await (await fetch(`${b}/api/designs/${c.id}/complete`, { method: 'POST', headers: { 'x-upload-token': c.uploadToken } })).json();
+    const proof = await (await fetch(`${b}/api/designs/${d.id}/proof`)).json();
+    const q = await (await p('/api/cart/quote', { designIds: [d.id] })).json();
+    const order = await (await p('/api/orders', { customer: { name: 'منى', phone: '01012345678', governorate: 'cairo', city: 'نصر', address: '1' }, designIds: [d.id], expectedTotal: q.total, approvals: { [d.id]: { proofHash: proof.proofHash } } })).json();
+    assert.strictEqual(order.items[0].status, 'review', '60 mugs: checked by hand first');
+    const { token } = await (await p('/api/admin/login', { password: 'secret' })).json();
+    const ship = (body) => fetch(`${b}/api/admin/orders/${order.id}/shipment`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
+    assert.strictEqual((await ship({ delivered: true })).status, 409);
+    assert.strictEqual((await ship({ shipped: true })).status, 409);
+    assert.strictEqual((await ship({ eta: '2026-02-30' })).status, 400);
+    assert.strictEqual((await ship({ eta: '2026-12-01' })).status, 200);
+    assert.strictEqual((await p('/api/account/signup', { name: 'Mona Ali', phone: '01012345678', password: 'a-long-password-1' })).status, 201);
+    const found = await (await fetch(`${b}/api/admin/customers?q=${encodeURIComponent('٠١٠١٢')}`, { headers: { Authorization: `Bearer ${token}` } })).json();
+    assert.ok((found.customers || []).length >= 1 || found.total >= 1, JSON.stringify(found).slice(0, 200));
+  } finally {
+    srv.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

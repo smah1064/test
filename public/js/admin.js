@@ -258,7 +258,7 @@
       <div class="print-files-block">
         <div class="small muted" style="font-weight:700;margin-bottom:6px">${esc(t('admin.mergeFiles', { n: POD.num(item.merge.count) }))}</div>
         <div class="print-files">
-          ${['merge-pdf-marks', 'merge-pdf', 'merge-zip', 'merge-csv'].map((f, k) => `<button class="btn btn-sm ${k === 0 ? 'btn-primary' : ''}" data-download="${esc(s.printUrl)}?format=${f}">⬇ ${esc(t('fmt.' + f))}${k === 0 ? ` <span class="rec">· ${esc(t('admin.recommended'))}</span>` : ''}</button>`).join('')}
+          ${mergeFormats(item).map((f, k) => `<button class="btn btn-sm ${k === 0 ? 'btn-primary' : ''}" data-download="${esc(s.printUrl)}?format=${f}">⬇ ${esc(t('fmt.' + f))}${k === 0 ? ` <span class="rec">· ${esc(t('admin.recommended'))}</span>` : ''}</button>`).join('')}
         </div>
       </div>` : '';
     return mergeBlock + `
@@ -275,9 +275,14 @@
   const sendOpen = new Set();
   const sendState = {};
   const findHouse = (id) => (housesData && housesData.houses.find((h) => h.id === id)) || null;
-  const printPdfKey = (item) => (item.kind === 'book' ? 'book-pdf' : item.kind === 'gangsheet' ? 'sheet-pdf' : item.kind === 'photoset' ? 'photos-zip' : 'pdf');
+  const printPdfKey = (item) => (item.merge ? 'merge-pdf-marks' : item.kind === 'book' ? 'book-pdf' : item.kind === 'gangsheet' ? 'sheet-pdf' : item.kind === 'photoset' ? 'photos-zip' : 'pdf');
+  /** Name-list files; garments (DTF / DTG) also get the names alone, to print over a plain base. */
+  function mergeFormats(item) {
+    return ['merge-pdf-marks', 'merge-pdf', 'merge-zip', 'merge-csv', ...(['dtf', 'dtg'].includes(item.process) ? ['merge-names-zip'] : [])];
+  }
   function sendFormats(item) {
     if (item.kind === 'book') return ['book-pdf', 'preview-pdf', 'proof'];
+    if (item.merge) return [...mergeFormats(item), 'preview-pdf'];
     if (item.kind === 'photoset') return ['photos-zip', 'proof'];
     if (item.kind === 'gangsheet') return ['sheet-pdf', 'sheet-pdf-plain', 'preview-pdf', 'proof'];
     const more = (FORMATS_BY_METHOD[item.process] || ['png', 'pdf-marks', 'png-mirror', 'tiff']).concat(item.sides.some((sd) => sd.hasSvg) ? ['svg'] : []);

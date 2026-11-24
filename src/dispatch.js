@@ -111,7 +111,7 @@ function jobLines(order, item, design, lang) {
     [t.product, pick(item.productName, lang)],
     // Several colours / sizes: every line with its count (S×2, 2XL×1), not the design's first size.
     [t.colour, Array.isArray(item.quantities) && item.quantities.length
-      ? item.quantities.map((l) => `${[pick(l.color && l.color.name, lang), pick(l.size && l.size.label, lang)].filter(Boolean).join(' · ')} ×${l.qty}`).join('، ')
+      ? item.quantities.map((l) => `${[pick(l.color && l.color.name, lang), pick(l.size && l.size.label, lang)].filter(Boolean).join(' · ')} ×${l.qty}`).join(lang === 'ar' ? '، ' : ', ')
       : [pick(item.color && item.color.name, lang), pick(item.size && item.size.label, lang)].filter(Boolean).join(' · ')],
     [t.method, String(item.process || '').toUpperCase()],
     ...(sides ? [[t.sides, sides]] : []),

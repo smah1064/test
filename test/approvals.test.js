@@ -277,7 +277,7 @@ test('printing houses are told every size and the number of pieces', () => {
   const base = { position: 1, productName: { en: 'T-shirt', ar: 'تيشيرت' }, process: 'dtf', color: { name: { en: 'Black', ar: 'أسود' } }, size: { label: { en: 'M', ar: 'M' } } };
   const args = { house: { name: 'X' }, order, design: { sides: [] }, files: [], lang: 'en', expires: '2026-12-24T00:00:00Z' };
   const mixed = dispatch.whatsappText({ ...args, item: { ...base, copies: 3, quantities: [{ color: { name: { en: 'Black' } }, size: { label: { en: 'S' } }, qty: 2 }, { color: { name: { en: 'Black' } }, size: { label: { en: '2XL' } }, qty: 1 }] } });
-  assert.match(mixed, /Black · S ×2، Black · 2XL ×1/);
+  assert.match(mixed, /Black · S ×2, Black · 2XL ×1/);
   assert.match(mixed, /\*Quantity:\* 3/);
   assert.doesNotMatch(mixed, /Black · M/);
   assert.match(dispatch.whatsappText({ ...args, item: { ...base, copies: 4 } }), /\*Quantity:\* 4/);

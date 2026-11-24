@@ -324,6 +324,7 @@ window.POD_STRINGS = {
   'fmt.merge-pdf': ['All names · one PDF', 'كل الأسماء · PDF واحد'],
   'fmt.merge-pdf-marks': ['All names · PDF with crop marks', 'كل الأسماء · PDF بعلامات القص'],
   'fmt.merge-zip': ['One PDF per name (ZIP)', 'PDF لكل اسم (ZIP)'],
+  'fmt.merge-names-zip': ['Names only (ZIP of PNGs, to print over a plain base)', 'الأسماء بس (ZIP صور PNG، للطباعة فوق تصميم ثابت)'],
   'fmt.merge-csv': ['Name list (CSV)', 'قائمة الأسماء (CSV)'],
   'admin.mergeCopies': ['Copies', 'النسخ'],
   'admin.mergeSpec': ['{n} copies, each with its own name (list: {cols})', '{n} نسخة، كل نسخة باسمها (القائمة: {cols})'],

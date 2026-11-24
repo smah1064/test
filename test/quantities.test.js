@@ -137,3 +137,34 @@ test('team kit: names and numbers on the back, each row in its own size', async 
   assert.strictEqual(pdf.status, 200);
   assert.match(Buffer.from(await pdf.arrayBuffer()).toString('latin1'), /\/SMask/);
 });
+
+test('team kit in the admin: one DTF transfer per name, no single-file replacement of the names, a names-only ZIP', async () => {
+  const sides = { back: { editor: { objects: [{ type: 'i-text', text: '{Name}' }] } } };
+  const rows = [['Ahmed', 'L'], ['Mona', 'M'], ['Omar', 'XL']];
+  const box = { x: 100, y: 200, w: 500, h: 300 };
+  const r = await post('/api/designs', { productId: 'tshirt', color: 'white', size: 'M', sides, merge: { columns: ['Name', 'Size'], rows, sides: { back: { box } } } });
+  assert.strictEqual(r.status, 201, await r.clone().text());
+  // Each row's picture is a different colour, to see it on the film.
+  const pics = await Promise.all([[200, 0, 0], [0, 160, 0], [0, 0, 200]].map(([r1, g, b]) => sharp({ create: { width: box.w, height: box.h, channels: 4, background: { r: r1, g, b, alpha: 1 } } }).png().toBuffer()));
+  const d = await upload(await r.json(), { 'back-merge.bin': Buffer.concat(pics) });
+  const q = await (await post('/api/cart/quote', { designIds: [d.id] })).json();
+  const order = await (await post('/api/orders', { customer: CUSTOMER, designIds: [d.id], expectedTotal: q.total })).json();
+  const item = order.items[0];
+  const { token } = await (await post('/api/admin/login', { password: 'secret' })).json();
+  const admin = (url, opts = {}) => fetch(base + url, { ...opts, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...(opts.headers || {}) } });
+  assert.strictEqual((await admin(`/api/admin/items/${item.id}`, { method: 'PATCH', body: JSON.stringify({ process: 'dtf' }) })).status, 200);
+  const film = await admin('/api/admin/dtf-film', { method: 'POST', body: JSON.stringify({ itemIds: [item.id] }) });
+  assert.strictEqual(film.status, 200, await film.clone().text());
+  const pdf = Buffer.from(await film.arrayBuffer()).toString('latin1');
+  // Three different pictures on the film (the background with each row's name), not one picture three times.
+  assert.ok((pdf.match(/\/Subtype\s*\/Image/g) || []).length >= 3, 'three transfers');
+  // The name side can't be replaced by one file.
+  const rep = await admin(`/api/admin/items/${item.id}/replacement/back`, { method: 'PUT', headers: { 'Content-Type': 'image/png' }, body: await png(1200, 1600) });
+  assert.strictEqual(rep.status, 409);
+  assert.strictEqual((await rep.json()).code, 'replaceNames');
+  // The names-only ZIP keeps its name on every download.
+  const names = [];
+  for (let i = 0; i < 2; i++) names.push((await admin(`/api/admin/files/${d.id}/back?format=merge-names-zip`)).headers.get('content-disposition'));
+  assert.match(names[0], /-3-names-only\.zip/);
+  assert.strictEqual(names[0], names[1]);
+});

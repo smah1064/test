@@ -781,9 +781,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (!found) throw new HttpError(404, 'itemNotFound');
       const { order, item } = found;
       const d = store.getDesign(item.designId);
-      const sd = d && d.kind !== 'book' && d.kind !== 'gangsheet' && d.sides.find((x) => x.id === req.params.side);
+      const sd = d && d.kind !== 'book' && d.kind !== 'gangsheet' && d.kind !== 'photoset' && d.sides.find((x) => x.id === req.params.side);
       if (!sd) throw new HttpError(404, 'notFound');
       if (['printing', 'printed', 'shipped'].includes(item.status)) throw new HttpError(409, 'alreadyPrinting');
+      // A side with the customer's name list: its files are made per name, so one picture can't replace it.
+      if (d.merge && d.merge.sides && d.merge.sides[sd.id]) throw new HttpError(409, 'replaceNames');
       const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
       if (buf.length < 24 || !buf.subarray(0, 8).equals(PNG_SIGNATURE)) throw new HttpError(400, 'badImage');
       if (buf.readUInt32BE(16) !== sd.widthPx || buf.readUInt32BE(20) !== sd.heightPx) throw new HttpError(400, 'replacementSize', { w: sd.widthPx, h: sd.heightPx });
@@ -1007,7 +1009,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       }
     }
     const ext = { 'merge-pdf': 'pdf', 'merge-pdf-marks': 'pdf', 'merge-zip': 'zip', 'merge-csv': 'csv', 'merge-names-zip': 'zip' }[format];
-    const suffix = { 'merge-pdf': '', 'merge-pdf-marks': '-cropmarks', 'merge-zip': '-separate', 'merge-csv': '-list', 'merge-names-zip': '-names-only' }[format];
+    const suffix = { 'merge-pdf': '', 'merge-pdf-marks': '-cropmarks', 'merge-zip': '-separate', 'merge-csv': '-list', 'merge-names-zip': '-only' }[format];
     return { path: target, name: `${base}-${n}-names${suffix}.${ext}` };
   }
 
@@ -2819,9 +2821,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     }
     if ('eta' in b) {
       const d = text(b.eta, 10);
-      if (d && !/^\d{4}-\d{2}-\d{2}$/.test(d)) throw new HttpError(400, 'badDate');
+      if (d && (!/^\d{4}-\d{2}-\d{2}$/.test(d) || new Date(d + 'T00:00:00Z').toISOString().slice(0, 10) !== d)) throw new HttpError(400, 'badDate');
       s.eta = d;
     }
+    // A job still waiting for review or the customer's approval can't be shipped.
+    if ((b.shipped === true || b.delivered === true) && order.items.some((it) => REVIEW_STATUSES.includes(it.status))) throw new HttpError(409, 'notApproved');
     order.shipment = s;
     let first = false;
     if (b.shipped === true || b.delivered === true) first = markShipped(order, req);
@@ -3134,7 +3138,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   // ---------- Customers (admin): find a customer, help with a forgotten password ----------
   app.get('/api/admin/customers', requireAdmin, (req, res) => {
     const q = String(req.query.q || '').trim().toLowerCase().slice(0, 80);
-    const digits = q.replace(/\D/g, '');
+    const digits = q.replace(/[\u0660-\u0669]/g, (c) => String(c.charCodeAt(0) - 0x0660)).replace(/[\u06f0-\u06f9]/g, (c) => String(c.charCodeAt(0) - 0x06f0)).replace(/\D/g, '');
     const orders = store.listOrders();
     const list = customerList()
       .filter((c) => !q || String(c.name || '').toLowerCase().includes(q) || (c.email || '').includes(q) || (digits.length >= 3 && String(c.phone || '').includes(digits)))
@@ -3292,12 +3296,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   const productHouses = () => store.db.productHouses || {};
   const findHouse = (id) => houses().find((h) => h.id === id) || null;
   // Formats made once per item (not once per side).
-  const ONCE = new Set(['preview-pdf', 'book-pdf', 'proof', 'sheet-pdf', 'sheet-pdf-plain', 'repeat', 'dst', 'stitches']);
+  const ONCE = new Set(['preview-pdf', 'book-pdf', 'proof', 'sheet-pdf', 'sheet-pdf-plain', 'repeat', 'dst', 'stitches', 'photos-zip', 'merge-pdf', 'merge-pdf-marks', 'merge-zip', 'merge-csv', 'merge-names-zip']);
   const SEND_FORMATS = new Set([...Object.keys(FORMATS), ...ONCE]);
   const FILE_LABELS = {
-    pdf: 'Print PDF', 'pdf-marks': 'Print PDF with crop marks', png: 'Print PNG (transparent)', 'png-mirror': 'Print PNG (mirrored)',
-    tiff: 'Print TIFF (CMYK)', svg: 'Vector SVG', 'dtf-film': 'DTF film PNG', 'dtf-pdf': 'DTF film PDF', 'dtg-white': 'DTG white underbase',
-    'preview-pdf': 'Preview PDF (customer design)', repeat: 'Repeat preview (whole fabric piece)', dst: 'Embroidery file (DST)', stitches: 'Stitch preview', 'book-pdf': 'Book print PDF', proof: 'Preview image', 'sheet-pdf': 'Gang sheet PDF (mirrored)', 'sheet-pdf-plain': 'Gang sheet PDF',
+    pdf: t('Print PDF', 'ملف الطباعة PDF'), 'pdf-marks': t('Print PDF with crop marks', 'ملف الطباعة PDF بعلامات القص'), png: t('Print PNG (transparent)', 'ملف الطباعة PNG (خلفية شفافة)'), 'png-mirror': t('Print PNG (mirrored)', 'ملف الطباعة PNG (معكوس)'),
+    tiff: t('Print TIFF (CMYK)', 'ملف الطباعة TIFF (CMYK)'), svg: t('Vector SVG', 'ملف فيكتور SVG'), 'dtf-film': t('DTF film PNG', 'فيلم DTF بصيغة PNG'), 'dtf-pdf': t('DTF film PDF', 'فيلم DTF بصيغة PDF'), 'dtg-white': t('DTG white underbase', 'طبقة الأبيض لطباعة DTG'),
+    'preview-pdf': t('Preview PDF (customer design)', 'معاينة PDF (تصميم العميل)'), repeat: t('Repeat preview (whole fabric piece)', 'معاينة التكرار (قطعة القماش كاملة)'), dst: t('Embroidery file (DST)', 'ملف التطريز (DST)'), stitches: t('Stitch preview', 'معاينة الغرز'), 'book-pdf': t('Book print PDF', 'ملف طباعة الكتاب PDF'), proof: t('Preview image', 'صورة المعاينة'), 'sheet-pdf': t('Gang sheet PDF (mirrored)', 'شيت DTF بصيغة PDF (معكوس)'), 'sheet-pdf-plain': t('Gang sheet PDF', 'شيت DTF بصيغة PDF'),
+    'photos-zip': t('All photos (ZIP, a folder per size)', 'كل الصور (ZIP، فولدر لكل مقاس)'),
+    'merge-pdf': t('All names (PDF, one page per copy)', 'كل الأسماء (PDF، صفحة لكل نسخة)'), 'merge-pdf-marks': t('All names (PDF with crop marks)', 'كل الأسماء (PDF بعلامات القص)'), 'merge-zip': t('One PDF per name (ZIP)', 'ملف PDF لكل اسم (ZIP)'), 'merge-csv': t('Names list (CSV)', 'قائمة الأسماء (CSV)'), 'merge-names-zip': t('Names only (ZIP of PNGs)', 'الأسماء بس (ZIP صور PNG)'),
   };
 
   app.get('/api/admin/houses', requireAdmin, (req, res) => {
@@ -3385,8 +3391,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
           }
           const link = dispatch.signLink(auth.linkKey, { designId: design.id, side: sideId, format });
           expires = link.expires;
-          const sideName = !ONCE.has(format) && design.sides.length > 1 ? ` · ${pickEn(design.sides.find((sd) => sd.id === sideId).name)}` : '';
-          files.push({ format, side: sideId, name: f.name, path: f.path, size: fs.statSync(f.path).size, label: `${FILE_LABELS[format] || format}${sideName}`, url: `${siteUrl}/dl/${link.token}` });
+          const sideLabel = !ONCE.has(format) && design.sides.length > 1 ? ` · ${(design.sides.find((sd) => sd.id === sideId).name || {})[lang] || pickEn(design.sides.find((sd) => sd.id === sideId).name)}` : '';
+          files.push({ format, side: sideId, name: f.name, path: f.path, size: fs.statSync(f.path).size, label: `${FILE_LABELS[format] ? FILE_LABELS[format][lang] : format}${sideLabel}`, url: `${siteUrl}/dl/${link.token}` });
         }
       }
       if (!files.length) throw new HttpError(400, 'houseNoFiles');
@@ -3458,6 +3464,32 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (!chosen.length) throw new HttpError(400, 'itemNotFound');
       const pieces = [];
       for (const it of chosen) {
+        // Name lists: one transfer per row, each with that row's name (background + the row's picture).
+        const design = it.merge && store.getDesign(it.designId);
+        if (design && design.merge) {
+          const lays = await merge.layers(design, (n) => fs.readFileSync(store.designFile(design.id, n)), { keepAlpha: true });
+          const list = readMergeList(design);
+          for (const lay of lays) {
+            const sd = lay.side;
+            for (let r = 0; r < design.merge.count; r++) {
+              let png = lay.base;
+              if (lay.overlays && lay.overlays[r]) {
+                // The row's picture goes in its box (print pixels), as in the name-list PDF.
+                const bx = lay.box;
+                const name = await sharp()(lay.overlays[r]).resize(Math.max(1, Math.round(bx.w)), Math.max(1, Math.round(bx.h)), { fit: 'fill' }).png().toBuffer();
+                png = await sharp()(lay.base, { limitInputPixels: 130e6 }).composite([{ input: name, left: Math.round(bx.x), top: Math.round(bx.y) }]).png().toBuffer();
+              }
+              const who = ((list && list.rows[r]) || []).filter(Boolean).slice(0, 2).join(' / ');
+              pieces.push({
+                png,
+                widthIn: sd.widthIn + 2 * (sd.bleedIn || 0),
+                heightIn: sd.heightIn + 2 * (sd.bleedIn || 0),
+                label: `${it.orderNumber} #${it.position} · ${pickEn(it.productName)} · ${pickEn(sd.name)} · ${r + 1}/${design.merge.count}${who ? ` ${who}` : ''}`.slice(0, 120),
+              });
+            }
+          }
+          continue;
+        }
         // One transfer per piece: an item of several sizes / colours gets one per piece, labelled with its size.
         const lines = Array.isArray(it.quantities) && it.quantities.length ? it.quantities.map((l) => ({ label: [pickEn(l.color && l.color.name), pickEn(l.size.label)].filter(Boolean).join(' '), qty: l.qty })) : [{ label: pickEn(it.size.label), qty: 1 }];
         for (const sd of it.sides) {
