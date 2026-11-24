@@ -717,7 +717,8 @@
     ctx.font = `600 ${11 * px}px Cairo, system-ui, sans-serif`;
     ctx.fillStyle = '#ca3d1a';
     const dims = { w: POD.num(s.printWidthIn * 2.54), h: POD.num(s.printHeightIn * 2.54) };
-    let label = t('printArea', dims);
+    const stitched = embHere() || st.method === 'embroidery';
+    let label = t(stitched ? 'embArea' : 'printArea', dims);
     if (ctx.measureText(label).width > a.w + 30 * px) label = t('printAreaShort', dims);
     const rtl = POD.lang === 'ar';
     ctx.textAlign = rtl ? 'right' : 'left';
@@ -802,6 +803,7 @@
     const parts = [];
     if (y) parts.push(t(y > 0 ? 'area.lower' : 'area.higher', { n: POD.num(Math.abs(y)) }));
     if (x) parts.push(t(x > 0 ? 'area.right' : 'area.left', { n: POD.num(Math.abs(x)) }));
+    $('place-title').textContent = t(embHere() || st.method === 'embroidery' ? 'area.titleEmb' : 'area.title');
     $('place-info').textContent = parts.length ? t('area.moved', { v: parts.join(POD.lang === 'ar' ? ' و' : ', ') }) : t('area.standard');
     $('place-reset').disabled = !parts.length;
   }
