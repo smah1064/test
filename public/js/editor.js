@@ -195,11 +195,13 @@
   const sideDef = (id = st.side) => {
     const s = baseSide(id);
     if (!s) return s;
-    // Embroidery: its own smaller area (left chest, cap front...), not movable.
+    // Embroidery: its own smaller area (left chest, cap front...), movable like a print.
     const e = emb();
     if (e && e.side === s.id) {
-      const key = `emb:${st.product.id}:${s.id}`;
-      if (!sizedSides.has(key)) sizedSides.set(key, { ...s, printArea: e.area, printWidthIn: e.widthIn, printHeightIn: e.heightIn, bleedIn: 0, safeIn: 0.06, moveZone: null });
+      const eo = st.offsets[s.id];
+      const key = `emb:${st.product.id}:${s.id}:${eo ? eo.dx : 0}:${eo ? eo.dy : 0}`;
+      const printArea = { ...e.area, x: e.area.x + ((eo && eo.dx) || 0), y: e.area.y + ((eo && eo.dy) || 0) };
+      if (!sizedSides.has(key)) sizedSides.set(key, { ...s, printArea, printWidthIn: e.widthIn, printHeightIn: e.heightIn, bleedIn: 0, safeIn: 0.06 });
       return sizedSides.get(key);
     }
     const o = st.offsets[s.id];
@@ -442,15 +444,19 @@
 
   // ---------- Moving the print area (garments and bags) ----------
   function zoneOf(id = st.side) {
-    if (emb()) return null;
-    return (baseSide(id) && baseSide(id).moveZone) || null;
+    const s = baseSide(id);
+    // Embroidery moves anywhere on the side's printable zone (on caps and totes: the whole print area).
+    if (emb()) return emb().side === id && s ? s.moveZone || s.printArea : null;
+    return (s && s.moveZone) || null;
   }
-  const areaUnitsPerCm = (id = st.side) => areaFor(st.product, id, st.sizeId, null).w / (sideDef(id).printWidthIn * 2.54);
+  /** The print box at its standard spot (embroidery: the standard embroidery spot). */
+  const baseArea = (id = st.side) => (emb() && emb().side === id ? emb().area : areaFor(st.product, id, st.sizeId, null));
+  const areaUnitsPerCm = (id = st.side) => baseArea(id).w / (sideDef(id).printWidthIn * 2.54);
   /** Keep the print area inside the side's allowed zone. */
   function clampOffset(dx, dy, id = st.side) {
     const z = zoneOf(id);
     if (!z) return { dx: 0, dy: 0 };
-    const a = areaFor(st.product, id, st.sizeId, null);
+    const a = baseArea(id);
     const clamp = (v, lo, hi) => Math.round(Math.min(Math.max(v, Math.min(lo, 0)), Math.max(hi, 0)));
     return { dx: clamp(dx, z.x - a.x, z.x + z.w - a.w - a.x), dy: clamp(dy, z.y - a.y, z.y + z.h - a.h - a.y) };
   }
@@ -461,7 +467,7 @@
   }
   /** Snap a dragged offset so the print box's centre sits on a guide when it is close. */
   function snapOffset(dx, dy) {
-    const a = areaFor(st.product, st.side, st.sizeId, null);
+    const a = baseArea();
     const g = areaGuides();
     const th = SNAP_PX / canvas.getZoom();
     const cx = a.x + a.w / 2 + dx;
@@ -2522,6 +2528,7 @@
     if (st.side !== side) await showSide(side);
     const from = area();
     st.method = b.dataset.method;
+    delete st.offsets[side]; // the new method starts at its standard spot
     const to = area();
     // The design follows into the new area (scaled to fit).
     const objs = remap(serialize(), from, to);
@@ -2608,6 +2615,7 @@
     canvas.discardActiveObject();
     st.sizeId = sizeId;
     for (const sd of st.product.sides) {
+      if (emb() && emb().side === sd.id) continue; // the embroidery box is the same on every size
       const from = before(sd.id);
       const o = st.offsets[sd.id];
       if (o) {

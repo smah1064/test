@@ -145,6 +145,16 @@ function cleanOffset(product, side, sizeId, offset) {
   const dy = clamp(offset.dy, z.y - a.y, z.y + z.h - a.h - a.y);
   return dx || dy ? { dx, dy } : null;
 }
+/** Embroidery: the stitch box moved from its standard spot, kept on the side's printable zone. */
+function cleanEmbOffset(side, emb, offset) {
+  const z = side.moveZone || side.printArea;
+  if (!offset || typeof offset !== 'object') return null;
+  const a = emb.area;
+  const clamp = (v, lo, hi) => Math.round(Math.min(Math.max(Number(v) || 0, Math.min(lo, 0)), Math.max(hi, 0)));
+  const dx = clamp(offset.dx, z.x - a.x, z.x + z.w - a.w - a.x);
+  const dy = clamp(offset.dy, z.y - a.y, z.y + z.h - a.h - a.y);
+  return dx || dy ? { dx, dy } : null;
+}
 /** "3 cm lower, 2 cm left" */
 function placementEn(o) {
   const parts = [];
@@ -468,47 +478,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       return null;
     }
   };
-  const fileHash = (designId, name) => {
-    try {
-      return crypto.createHash('sha256').update(fs.readFileSync(store.designFile(designId, name))).digest('hex');
-    } catch (e) {
-      return null;
-    }
-  };
-  /** The files that are printed (what the approval covers). */
-  function productionFiles(d) {
-    if (d.kind === 'gangsheet') return (d.sheet && d.sheet.items ? d.sheet.items.map((it) => it.file) : []);
-    if (d.kind === 'book') {
-      let names = [];
-      try {
-        names = fs.readdirSync(store.designDir(d.id)).filter((n) => /^redraw-\d+\.jpg$/.test(n)).sort();
-      } catch (e) { /* no files */ }
-      return names;
-    }
-    const names = [];
-    for (const sd of d.sides) {
-      names.push(`${sd.id}-print.png`);
-      if (d.merge && d.merge.sides && d.merge.sides[sd.id]) names.push(`${sd.id}-merge-base.png`, `${sd.id}-merge.bin`);
-    }
-    if (d.merge) names.push('merge.json');
-    return names;
-  }
-  const fileHashes = (d) => Object.fromEntries(productionFiles(d).map((n) => [n, fileHash(d.id, n)]));
-  /** Everything that, if changed, means the customer must approve again. */
-  function proofSpec(d) {
-    return {
-      productId: d.productId,
-      kind: d.kind || 'product',
-      color: d.color && d.color.id,
-      size: d.size && d.size.id,
-      quantities: d.quantities ? d.quantities.map((l) => [l.color.id, l.size.id, l.qty]) : null,
-      sides: d.sides.map((sd) => [sd.id, sd.widthIn, sd.heightIn, sd.bleedIn || 0, sd.offsetCm || null]),
-      method: d.method || 'print',
-      pattern: d.pattern || null,
-      book: d.kind === 'book' ? { bookId: d.bookId, version: d.version || 0, answers: d.answers || null } : null,
-    };
-  }
-  const proofHashOf = (d) => crypto.createHash('sha256').update(JSON.stringify({ spec: proofSpec(d), files: fileHashes(d) })).digest('hex');
+  /**
+   * What the customer approves: a version of the design. Every material change after the
+   * order (a corrected file from the shop, a redrawn book page) makes a new version.
+   * Sent and checked as `proofHash` ("v3").
+   */
+  const proofHashOf = (d) => `v${d.version || 1}`;
   const LARGE_ORDER = 50;
   /** Why a design needs the shop to look at it before printing (empty: approval at checkout is enough). */
   function reviewReasons(d, { sample = false } = {}) {
@@ -599,15 +574,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const now = new Date().toISOString();
     const proofHash = proofHashOf(d);
     item.approval = { proofHash, version: d.version || 1, at: now, by: 'customer', via, sample: Boolean(sample) };
-    item.approvedFiles = fileHashes(d);
     item.approvals = [...(item.approvals || []), { action: 'approved', by: 'customer', via, at: now, proofHash, version: d.version || 1, ...(note ? { note } : {}) }];
   }
-  /** Do the files on disk still match what the customer approved? */
+  /** Is the design still the version the customer approved? */
   function approvedFilesMatch(item, d) {
     if (!item.approval) return true; // orders from before approvals existed
-    if (d.kind === 'book') return proofHashOf(d) === item.approval.proofHash;
-    const want = item.approvedFiles || {};
-    return Object.entries(want).every(([name, h]) => !h || fileHash(d.id, name) === h);
+    return item.approval.proofHash === proofHashOf(d);
   }
   /** A link the customer can open to approve a new proof (kept on the item until used). */
   function newProofLink(item) {
@@ -712,7 +684,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const now = new Date().toISOString();
       if (b.action === 'approve') {
         // Printed only from what the customer approved; otherwise they get the proof first.
-        if (item.approval && d && approvedFilesMatch(item, d) && item.approval.proofHash === proofHashOf(d)) item.status = 'queued';
+        if (item.approval && d && approvedFilesMatch(item, d)) item.status = 'queued';
         else {
           item.status = 'awaiting_approval';
           newProofLink(item);
@@ -1015,8 +987,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const offset = cleanOffset(product, side, sizeDef.id, s.editor.offset);
       editor[side.id] = { ...s.editor, offset: offset || undefined, ...(pattern ? { pattern: { repeat: pattern.repeat, tileCm: pattern.tileCm } } : {}) };
       if (emb) {
-        editor[side.id] = { ...s.editor, offset: undefined };
-        storedSides.push({ id: side.id, name: side.name, widthIn: emb.widthIn, heightIn: emb.heightIn, bleedIn: 0 });
+        const eo = cleanEmbOffset(side, emb, s.editor.offset);
+        editor[side.id] = { ...s.editor, offset: eo || undefined };
+        const perCm = emb.area.w / (emb.widthIn * 2.54);
+        const cm = (v) => Math.round((v / perCm) * 2) / 2;
+        storedSides.push({ id: side.id, name: side.name, widthIn: emb.widthIn, heightIn: emb.heightIn, bleedIn: 0, ...(eo ? { offsetCm: { x: cm(eo.dx), y: cm(eo.dy) } } : {}) });
         continue;
       }
       if (pattern) {

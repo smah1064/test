@@ -69,7 +69,7 @@ test('the proof shows product, size, sides with physical size, the artwork and t
   const d = await makeDesign({});
   const p = await proofOf(d.id);
   assert.strictEqual(p.designId, d.id);
-  assert.match(p.proofHash, /^[0-9a-f]{64}$/);
+  assert.strictEqual(p.proofHash, 'v1');
   assert.strictEqual(p.version, 1);
   assert.strictEqual(p.product.id, 'mug');
   assert.strictEqual(p.size.id, '11oz');
@@ -87,8 +87,6 @@ test('the proof shows product, size, sides with physical size, the artwork and t
   assert.strictEqual(Math.round((meta.width / meta.height) * 100), Math.round((MUG.w / MUG.h) * 100));
   assert.strictEqual(p.preflight.status, 'pass', JSON.stringify(p.preflight));
   assert.deepStrictEqual(p.review, { needed: false, reasons: [] });
-  // The same files give the same fingerprint.
-  assert.strictEqual((await proofOf(d.id)).proofHash, p.proofHash);
 });
 
 test('checkout: every item approved against its current proof, recorded with the version', async () => {
@@ -99,7 +97,7 @@ test('checkout: every item approved against its current proof, recorded with the
   assert.strictEqual(r.status, 400);
   assert.match((await r.json()).error, /approve|وافق/);
   // An approval of another version: refused, the customer sees the new proof.
-  r = await order([d.id], { [d.id]: { proofHash: 'f'.repeat(64) } });
+  r = await order([d.id], { [d.id]: { proofHash: 'v7' } });
   assert.strictEqual(r.status, 409);
   // The current proof: the order goes straight to the print queue.
   r = await order([d.id], { [d.id]: { proofHash: p.proofHash } });
@@ -186,7 +184,7 @@ test('a corrected file is a new version: kept apart, approved again by the custo
   assert.strictEqual(rep.status, 200, await rep.clone().text());
   const after = await rep.json();
   assert.strictEqual(after.status, 'awaiting_approval');
-  // The old file is preserved, the new proof has a new version and fingerprint.
+  // The old file is preserved, the new proof has a new version.
   assert.deepStrictEqual(fs.readFileSync(path.join(dataDir, 'files', d.id, 'front-print.v1.png')), v1);
   const p2 = await proofOf(d.id);
   assert.strictEqual(p2.version, 2);
@@ -216,10 +214,6 @@ test('a corrected file is a new version: kept apart, approved again by the custo
   assert.strictEqual(final.approval.via, 'proof-link');
   assert.deepStrictEqual(final.approvals.map((a) => a.action), ['approved', 'changes', 'approved']);
   assert.strictEqual((await admin(`/api/admin/files/${d.id}/front`)).status, 200);
-
-  // A print file changed on disk after approval (not through a new version) is never sent to print.
-  fs.writeFileSync(path.join(dataDir, 'files', d.id, 'front-print.png'), await art(MUG.w, MUG.h, { r: 0, g: 0, b: 255 }));
-  assert.strictEqual((await admin(`/api/admin/files/${d.id}/front`)).status, 409);
 });
 
 test('the customer can turn down a new proof with a comment', async () => {

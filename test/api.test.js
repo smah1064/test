@@ -7,6 +7,7 @@ const os = require('os');
 const path = require('path');
 const zlib = require('zlib');
 const { createApp } = require('../src/app');
+const PRODUCTS_BY_ID = Object.fromEntries(require('../src/products').PRODUCTS.map((p) => [p.id, p]));
 
 /** Build a tiny valid RGBA PNG of the given size. */
 function png(width, height) {
@@ -1529,6 +1530,15 @@ test('embroidery: DST encoding is exact, logos are digitised, orders get the DST
   assert.ok(emb.emb && Array.isArray(emb.emb.colors), 'digitised when the design was saved');
   assert.ok(emb.emb.warnings.includes('empty'), 'the blank test print has nothing to stitch');
   assert.strictEqual((await post('/api/designs', { productId: 'tshirt', color: 'white', size: 'M', method: 'embroidery', sides: { back: SIDE } })).status, 400, 'front only');
+  // The embroidery box can be moved from the left chest, kept on the garment's printable zone; the shop gets the cm.
+  const moved = await makeDesign({ productId: 'tshirt', color: 'white', size: 'M', method: 'embroidery', sides: { front: { editor: { ...SIDE.editor, offset: { dx: -40, dy: 30 } } } } });
+  const mf = moved.sides.find((x) => x.id === 'front');
+  assert.ok(mf.offsetCm && mf.offsetCm.x < 0 && mf.offsetCm.y > 0, JSON.stringify(mf));
+  const far = await makeDesign({ productId: 'tshirt', color: 'white', size: 'M', method: 'embroidery', sides: { front: { editor: { ...SIDE.editor, offset: { dx: 0, dy: 5000 } } } } });
+  const zone = PRODUCTS_BY_ID.tshirt.sides[0].moveZone || PRODUCTS_BY_ID.tshirt.sides[0].printArea;
+  const ea = PRODUCTS_BY_ID.tshirt.embroidery.area;
+  const perCm = ea.w / (PRODUCTS_BY_ID.tshirt.embroidery.widthIn * 2.54);
+  assert.ok(far.sides[0].offsetCm.y <= (zone.y + zone.h - ea.h - ea.y) / perCm + 0.5, 'kept on the garment');
   const order = await (await post('/api/orders', { customer: CUSTOMER, designIds: [emb.id] })).json();
   const item = (await (await admin('/api/admin/orders')).json()).orders.find((o) => o.id === order.id).items[0];
   assert.strictEqual(item.process, 'embroidery');
