@@ -1079,3 +1079,8 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 html[lang="ar"] .brand-en, html:not([lang="ar"]) .brand-ar { display: none; }
 @media (max-width: 640px) { .brand-logo { height: 34px; } }
 @media (max-width: 400px) { .brand-logo { height: 26px; } }
+
+/* Preview zoom: magnified where the pointer is, or on the design with the button. */
+.pv-canvas.pv-zoomable { cursor: zoom-in; transition: transform .12s ease-out; will-change: transform; }
+.pv-canvas.pv-zoomable.pv-zoomed { cursor: zoom-out; touch-action: none; }
+.pv-zoom-btn { position: absolute; bottom: 12px; inset-inline-start: 12px; z-index: 2; box-shadow: 0 2px 8px rgba(0, 0, 0, .12); }

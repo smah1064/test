@@ -283,6 +283,8 @@
     if (product.laser && product.laser.kind === 'cut') ctx.drawImage(designCv, 0, 0, Wd, Hd);
     if (overImg) ctx.drawImage(overImg, 0, 0, Wd, Hd);
     out.pxPerIn = (entry.rects.u || 1) * S;
+    const fa = entry.rects.trim; // where the print is (for "Zoom to the design")
+    out.focus = { x: (fa.x + fa.w / 2) / W, y: (fa.y + fa.h / 2) / H, w: fa.w / W };
     return out;
   }
 
@@ -440,6 +442,7 @@
         mapV = (y) => (y - r.y) / r.h;
       }
       const cyl = cfg.warp === 'cylinder' ? cfg.cyl : null;
+      out.focus = { x: (r.x + r.w / 2) / W, y: (r.y + r.h / 2) / H, w: Math.min(r.w, cyl ? 2 * cyl.R : r.w) / W };
       // A turned model: the print wraps round the torso (an upright elliptical cylinder).
       // Screen x = cx + R·sin(t + φ), where t is the angle round the body that the
       // straight-on photo shows at ref.cx + ref.a·sin(t). Scaled to this photo by
@@ -750,7 +753,8 @@
     } else {
       state.turnFrames = null;
     }
-    $('pv-hint').textContent = tab === '3d' ? t('pv.drag') : tab === 'proof' ? t('pv.proofNote') : tab === 'model' ? t(turning ? 'pv.turnNote' : 'pv.modelNote') : '';
+    const zoomHint = t(window.matchMedia('(hover: hover)').matches ? 'pv.zoomHover' : 'pv.zoomTap');
+    $('pv-hint').textContent = tab === '3d' ? t('pv.drag') : tab === 'proof' ? t('pv.proofNote') : tab === 'model' ? (turning ? t('pv.turnNote') : `${t('pv.modelNote')} · ${zoomHint}`) : zoomHint;
     if (three && tab !== '3d') {
       three.dispose();
       three = null;
@@ -766,6 +770,7 @@
         const shown = sizedPicture(cv, state.viewScale, { whole: !state.product.photoChestCm });
         shown.className = 'pv-canvas';
         $('pv-body').appendChild(shown);
+        zoomable(shown);
       } else if (tab === 'model' && turning) {
         setBody('');
         await drawTurn();
@@ -775,6 +780,7 @@
         setBody('');
         cv.className = 'pv-canvas';
         $('pv-body').appendChild(cv);
+        zoomable(cv);
       } else if (tab === 'proof') {
         const cv = await realisticFor(sideId);
         const small = document.createElement('canvas');
@@ -836,7 +842,103 @@
    * the hole (and its old shadow) is filled from the backdrop around it, and
    * the garment goes back at its size with a soft shadow.
    */
-  function sizedPicture(cv, k, { whole = false } = {}) {
+  /**
+   * Zoom on a preview picture. Mouse: the picture is magnified where the pointer is
+   * (click holds the zoom, click again lets go). Touch: tap zooms in there, drag moves
+   * round, tap again zooms out. "Zoom to the design" jumps to the print (pic.focus).
+   */
+  function zoomable(pic) {
+    const body = pic.parentNode;
+    const HOVER = 2.5;
+    let scale = 1;
+    let held = false;
+    let ox = 0.5;
+    let oy = 0.5;
+    const apply = () => {
+      pic.style.transformOrigin = `${(ox * 100).toFixed(2)}% ${(oy * 100).toFixed(2)}%`;
+      pic.style.transform = scale > 1 ? `scale(${scale})` : '';
+      pic.classList.toggle('pv-zoomed', scale > 1);
+      btn.textContent = t(scale > 1 ? 'pv.zoomOut' : 'pv.zoomDesign');
+    };
+    const at = (e) => {
+      const b = body.getBoundingClientRect();
+      return [Math.min(1, Math.max(0, (e.clientX - b.left) / b.width)), Math.min(1, Math.max(0, (e.clientY - b.top) / b.height))];
+    };
+    pic.classList.add('pv-zoomable');
+    pic.addEventListener('pointermove', (e) => {
+      if (e.pointerType !== 'mouse' || held) return;
+      [ox, oy] = at(e);
+      scale = HOVER;
+      apply();
+    });
+    pic.addEventListener('pointerleave', (e) => {
+      if (e.pointerType !== 'mouse' || held) return;
+      scale = 1;
+      apply();
+    });
+    // Touch: a tap zooms in or out; a drag while zoomed moves the zoom round.
+    let down = null;
+    pic.addEventListener('pointerdown', (e) => {
+      down = { x: e.clientX, y: e.clientY, ox, oy, moved: false, type: e.pointerType };
+      if (e.pointerType !== 'mouse' && scale > 1) pic.setPointerCapture(e.pointerId);
+    });
+    pic.addEventListener('pointermove', (e) => {
+      if (!down || down.type === 'mouse' || scale <= 1) return;
+      const b = body.getBoundingClientRect();
+      const dx = e.clientX - down.x;
+      const dy = e.clientY - down.y;
+      if (Math.abs(dx) + Math.abs(dy) > 6) down.moved = true;
+      ox = Math.min(1, Math.max(0, down.ox - dx / (b.width * (scale - 1))));
+      oy = Math.min(1, Math.max(0, down.oy - dy / (b.height * (scale - 1))));
+      apply();
+    });
+    pic.addEventListener('pointerup', (e) => {
+      const d = down;
+      down = null;
+      if (!d || d.moved) return;
+      if (e.pointerType === 'mouse') {
+        held = !held;
+        if (!held) { [ox, oy] = at(e); scale = HOVER; }
+      } else if (scale > 1) {
+        scale = 1;
+      } else {
+        [ox, oy] = at(e);
+        scale = HOVER;
+      }
+      apply();
+    });
+    // The picture fits its box (object-fit: contain): the print's place in the box.
+    const focusPoint = () => {
+      const f = pic.focus || { x: 0.5, y: 0.5, w: 0.4 };
+      const b = body.getBoundingClientRect();
+      const k = Math.min(b.width / pic.width, b.height / pic.height);
+      const fx = ((b.width - pic.width * k) / 2 + f.x * pic.width * k) / b.width;
+      const fy = ((b.height - pic.height * k) / 2 + f.y * pic.height * k) / b.height;
+      const fw = (f.w * pic.width * k) / b.width;
+      return { fx, fy, s: Math.min(5, Math.max(2, 0.6 / Math.max(0.01, fw))) };
+    };
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-sm pv-zoom-btn';
+    btn.addEventListener('click', () => {
+      if (scale > 1) {
+        scale = 1;
+        held = false;
+      } else {
+        const p = focusPoint();
+        [ox, oy, scale, held] = [p.fx, p.fy, p.s, true];
+      }
+      apply();
+    });
+    body.appendChild(btn);
+    apply();
+  }
+  function sizedPicture(cv, k, opts) {
+    const out = sizedPictureOf(cv, k, opts);
+    if (out !== cv && cv.focus) out.focus = { x: 0.5 + (cv.focus.x - 0.5) * k, y: 0.5 + (cv.focus.y - 0.5) * k, w: cv.focus.w * k };
+    return out;
+  }
+  function sizedPictureOf(cv, k, { whole = false } = {}) {
     if (!k || k >= 1) return cv;
     const W0 = cv.width;
     const H0 = cv.height;
