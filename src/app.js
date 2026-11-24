@@ -2971,7 +2971,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const d = rec && UUID_RE.test(rec.designId || '') && store.getDesign(rec.designId);
       if (!d || d.orderId || (d.status && d.status !== 'ready')) continue;
       if (d.kind === 'book' && !rec.editToken) continue;
-      items.push({ ...cartEntry(d, rec.editToken), addedAt: rec.addedAt || c.updatedAt || new Date().toISOString() });
+      items.push({ ...cartEntry(d, rec.editToken), addedAt: rec.addedAt || c.updatedAt || new Date().toISOString(), ...(rec.later ? { later: true } : {}), ...(rec.movedAt ? { movedAt: rec.movedAt } : {}) });
     }
     return { items, updatedAt: c.updatedAt };
   }
@@ -2997,8 +2997,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const d = store.getDesign(it.designId);
       if (!d || d.orderId) continue;
       seen.add(it.designId);
-      const at = typeof it.addedAt === 'string' && !Number.isNaN(Date.parse(it.addedAt)) ? new Date(it.addedAt).toISOString() : new Date().toISOString();
-      items.push({ designId: it.designId, addedAt: at, ...(d.kind === 'book' && BOOK_TOKEN_RE.test(it.editToken || '') ? { editToken: it.editToken } : {}) });
+      const when = (v) => (typeof v === 'string' && !Number.isNaN(Date.parse(v)) ? new Date(v).toISOString() : null);
+      const at = when(it.addedAt) || new Date().toISOString();
+      // "Saved for later" (kept out of the order), and when it last moved between cart and saved.
+      const moved = when(it.movedAt);
+      items.push({ designId: it.designId, addedAt: at, ...(it.later === true ? { later: true } : {}), ...(moved ? { movedAt: moved } : {}), ...(d.kind === 'book' && BOOK_TOKEN_RE.test(it.editToken || '') ? { editToken: it.editToken } : {}) });
     }
     // With `base` (the ids this device last agreed with the account): merged with what the account has
     // now, so a device with an old page open can't drop items added elsewhere or bring back removed ones.
@@ -3008,9 +3011,16 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (baseIds) {
       const stored = readAccountCart(me).items.filter((r) => r && UUID_RE.test(r.designId || ''));
       const mine = new Set(items.map((r) => r.designId));
-      const theirs = new Set(stored.map((r) => r.designId));
+      const theirs = new Map(stored.map((r) => [r.designId, r]));
+      // In both: saved-for-later or not as moved last (on whichever device).
+      const latest = (r) => {
+        const o = theirs.get(r.designId);
+        if (!o || String(o.movedAt || '') <= String(r.movedAt || '')) return r;
+        const { later, movedAt, ...rest } = r;
+        return { ...rest, ...(o.later ? { later: true } : {}), movedAt: o.movedAt };
+      };
       result = [
-        ...items.filter((r) => theirs.has(r.designId) || !baseIds.has(r.designId)),
+        ...items.filter((r) => theirs.has(r.designId) || !baseIds.has(r.designId)).map(latest),
         ...stored.filter((r) => !mine.has(r.designId) && !baseIds.has(r.designId)),
       ].slice(0, MAX_CART);
     }

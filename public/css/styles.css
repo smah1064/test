@@ -1067,3 +1067,9 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 .laser-note { display: flex; gap: 10px; align-items: center; }
 .laser-swatch { flex: none; width: 34px; height: 34px; border-radius: 8px; border: 1px solid rgba(0, 0, 0, .15); display: grid; place-items: center; }
 .laser-swatch i { width: 16px; height: 6px; border-radius: 3px; }
+
+/* Cart: items saved for later, under the cart */
+.saved-box { margin-top: 18px; padding: 16px; }
+.saved-box .saved-title { font-size: 17px; margin: 0 0 4px; }
+.saved-box .saved-item { padding: 12px 0; }
+.saved-box .saved-item img { opacity: .9; }

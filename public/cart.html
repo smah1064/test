@@ -128,6 +128,13 @@
         <button class="btn btn-primary btn-lg btn-block" id="place-order" type="submit" data-i18n="checkout.place" disabled aria-describedby="approve-status"></button>
       </form>
     </div>
+
+    <!-- Items kept out of this order, to order later -->
+    <section class="card saved-box" id="saved" hidden aria-labelledby="saved-title">
+      <h2 id="saved-title" class="saved-title"></h2>
+      <p class="muted small" data-i18n="cart.savedNote"></p>
+      <div id="saved-items"></div>
+    </section>
   </main>
 
   <!-- Phones: the total and the way to the order form, always at hand on a long cart -->
@@ -419,7 +426,53 @@
         if (box) box.focus({ preventScroll: true });
       }
 
+      /** "Saved for later": shown under the cart (also when the cart itself is empty). */
+      function renderSaved() {
+        const saved = POD.getSaved();
+        const box = document.getElementById('saved');
+        box.hidden = !saved.length;
+        if (!saved.length) return;
+        document.getElementById('saved-title').textContent = t('cart.savedTitle', { n: POD.num(saved.length) });
+        document.getElementById('saved-items').innerHTML = saved.map((item) => `
+          <div class="cart-item saved-item">
+            <img src="${esc(item.previewUrl)}" alt="${esc(t('cart.preview', { product: tr(item.productName) }))}">
+            <div>
+              <h3>${esc(tr(item.productName))}</h3>
+              <div class="meta">${itemMeta(item)}</div>
+              <div class="actions">
+                <button class="btn btn-sm btn-primary" data-to-cart="${esc(item.designId)}">${esc(t('cart.moveToCart'))}</button>
+                <button class="btn btn-sm btn-danger" data-saved-remove="${esc(item.designId)}">${esc(t('cart.remove'))}</button>
+              </div>
+            </div>
+            <div class="price">${itemPrice(item)}</div>
+          </div>`).join('');
+      }
+      /** Saved items: today's prices, and ones that were ordered or are gone dropped. */
+      async function refreshSaved() {
+        const saved = POD.getSaved();
+        if (!saved.length) return;
+        let q;
+        try {
+          q = await POD.api('/api/cart/quote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ designIds: saved.map((i) => i.designId) }) });
+        } catch (e) {
+          return;
+        }
+        let changed = false;
+        const keep = saved.filter((item, i) => {
+          const r = q.items[i];
+          if (!r || r.designId !== item.designId) return true;
+          if (r.gone) { changed = true; return false; }
+          if (r.price !== item.price) { item.price = r.price; changed = true; }
+          return true;
+        });
+        if (changed) {
+          POD.setSaved(keep);
+          renderSaved();
+        }
+      }
+
       function render() {
+        renderSaved();
         const cart = POD.getCart();
         const focused = document.activeElement && document.activeElement.closest && document.activeElement.closest('#items') ? document.activeElement.id : null;
         document.getElementById('empty').hidden = cart.length > 0;
@@ -438,6 +491,7 @@
               <div class="actions">
                 ${item.productId === 'dtfsheet' || item.productId === 'photoprints' ? '' : item.bookId ? `<a class="btn btn-sm" href="/book?b=${encodeURIComponent(item.bookId)}&cart=${i}">${esc(t('cart.edit'))}</a>` : `<a class="btn btn-sm" href="/editor?design=${encodeURIComponent(item.designId)}&cart=${i}">${esc(t('cart.edit'))}</a>
                 ${item.bookId ? '' : `<a class="btn btn-sm" href="/editor?design=${encodeURIComponent(item.designId)}">${esc(t('cart.duplicate'))}</a>`}`}
+                <button class="btn btn-sm" data-later="${esc(item.designId)}">${esc(t('cart.saveLater'))}</button>
                 <button class="btn btn-sm btn-danger" data-remove="${i}">${esc(t('cart.remove'))}</button>
               </div>
             </div>
@@ -601,6 +655,15 @@
         }
         const retry = e.target.closest('[data-proof-retry]');
         if (retry) { loadProof(retry.dataset.proofRetry, { force: true }); paintProof(retry.dataset.proofRetry); return; }
+        // Save for later / back to the cart: what is ordered (and its price, coupon and shipping) changes.
+        const later = e.target.closest('[data-later]');
+        if (later) {
+          POD.moveItem(later.dataset.later, true);
+          POD.toast(t('cart.savedToast'));
+          render();
+          refreshPrices().then(render);
+          return;
+        }
         const btn = e.target.closest('[data-remove]');
         if (!btn) return;
         const cart = POD.getCart();
@@ -879,9 +942,24 @@
         btn.focus({ preventScroll: true });
       });
 
+      // The saved list sits outside the cart's own box (it stays when the cart is empty).
+      document.getElementById('saved').addEventListener('click', (e) => {
+        const back = e.target.closest('[data-to-cart]');
+        const del = e.target.closest('[data-saved-remove]');
+        if (back) {
+          POD.moveItem(back.dataset.toCart, false);
+          render();
+          refreshPrices().then(render);
+          document.getElementById('items').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else if (del) {
+          POD.setSaved(POD.getSaved().filter((it) => it.designId !== del.dataset.savedRemove));
+          render();
+        }
+      });
       renderGovernorates();
       render();
       prefillAccount();
+      refreshSaved();
       // An order placed from this tab whose answer never arrived: go to it instead of showing its items as gone.
       if (!(await showPlacedOrder())) refreshPrices({ announce: true }).then(render);
       document.addEventListener('pod:langchange', () => {
@@ -898,7 +976,7 @@
       // The cart changed in another tab (an order placed there, an item added).
       window.addEventListener('storage', (e) => { if (e.key === 'pod-cart-v2') refreshPrices().then(render); });
       // The account's cart arrived (items added on another device, or removed there).
-      document.addEventListener('pod:cartsynced', () => refreshPrices().then(render));
+      document.addEventListener('pod:cartsynced', () => refreshPrices().then(render).then(refreshSaved));
     })();
   </script>
 </body>

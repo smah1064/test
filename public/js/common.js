@@ -200,7 +200,10 @@
   }
 
   // ---------- Cart (designs live on the server; the cart keeps references) ----------
-  function getCart() {
+  // One list in the browser: the items being bought, and those "saved for later" (later: true, kept
+  // out of the order). getCart / setCart only see and change the first; getSaved / setSaved the second.
+  // movedAt says when an item last moved between the two, so the latest move wins across devices.
+  function rawCart() {
     try {
       const items = JSON.parse(localStorage.getItem(CART_KEY) || '[]');
       // Damaged or very old entries are left out instead of breaking the whole cart.
@@ -209,7 +212,7 @@
       return [];
     }
   }
-  function setCart(items) {
+  function writeRaw(items) {
     let ok = true;
     try {
       localStorage.setItem(CART_KEY, JSON.stringify(items));
@@ -220,6 +223,21 @@
     updateCartBadge();
     if (ok) cartToAccount();
     return ok;
+  }
+  const getCart = () => rawCart().filter((it) => !it.later);
+  const getSaved = () => rawCart().filter((it) => it.later);
+  function setCart(items) {
+    const ids = new Set(items.map((it) => it.designId));
+    return writeRaw([...items.map((it) => { const { later, ...rest } = it; return rest; }), ...getSaved().filter((it) => !ids.has(it.designId))]);
+  }
+  function setSaved(items) {
+    const ids = new Set(items.map((it) => it.designId));
+    return writeRaw([...getCart().filter((it) => !ids.has(it.designId)), ...items.map((it) => ({ ...it, later: true }))]);
+  }
+  /** Move one item out of the order to "saved for later" (later = true) or back into the cart. */
+  function moveItem(designId, later) {
+    const now = new Date().toISOString();
+    return writeRaw(rawCart().map((it) => (it.designId === designId ? { ...it, later: Boolean(later) || undefined, movedAt: now } : it)));
   }
   /** Upload one file of a design; a dropped connection gives the shop's own message, not the browser's. */
   async function putFile(url, token, body) {
@@ -578,26 +596,33 @@
   async function pushCart(acct) {
     cartTimer = null;
     if (!acct) return;
-    const items = getCart();
+    const items = rawCart();
     // With what this device last agreed with the account: the server merges (another device may have
     // added or removed items since this page was opened) and answers with the merged cart.
-    const body = JSON.stringify({ items: items.map((i) => ({ designId: i.designId, addedAt: i.addedAt, ...(i.editToken ? { editToken: i.editToken } : {}) })), base: [...cartBase(acct)] });
+    const body = JSON.stringify({ items: items.map((i) => ({ designId: i.designId, addedAt: i.addedAt, ...(i.later ? { later: true } : {}), ...(i.movedAt ? { movedAt: i.movedAt } : {}), ...(i.editToken ? { editToken: i.editToken } : {}) })), base: [...cartBase(acct)] });
     try {
       const res = await fetch('/api/account/cart', { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Account': acct }, body, keepalive: body.length < 60000 });
       if (!res.ok || cartAcct() !== acct) return;
       const merged = (await res.json()).items || [];
-      const now = getCart();
+      const now = rawCart();
       const byId = new Map(now.map((i) => [i.designId, i]));
-      const out = merged.map((m) => byId.get(m.designId) || m);
-      if (out.map((i) => i.designId).join(',') !== now.map((i) => i.designId).join(',')) {
+      const out = merged.map((m) => withMove(byId.get(m.designId), m));
+      if (cartKey(out) !== cartKey(now)) {
         cartMerging = true;
-        setCart(out);
+        writeRaw(out);
         cartMerging = false;
         document.dispatchEvent(new CustomEvent('pod:cartsynced'));
       }
       setCartBase(acct, out);
     } catch (e) { /* offline (or the page closed first): sent with the next change or visit */ }
   }
+  /** This browser's entry with the account's "saved for later" state when that move is newer. */
+  function withMove(local, remote) {
+    if (!local) return remote;
+    if (!remote || String(remote.movedAt || '') <= String(local.movedAt || '')) return local;
+    return { ...local, later: remote.later ? true : undefined, movedAt: remote.movedAt };
+  }
+  const cartKey = (list) => list.map((i) => i.designId + (i.later ? '*' : '')).join(',');
   function cartToAccount() {
     if (cartMerging) return;
     const acct = cartAcct();
@@ -630,22 +655,23 @@
       return;
     }
     if (cartAcct() !== acct) return;
-    const local = getCart();
+    const local = rawCart();
     const base = cartBase(acct);
     const inRemote = new Set(remote.map((i) => i.designId));
     const inLocal = new Set(local.map((i) => i.designId));
     // Kept: in both, or added here since the last sync. Dropped: in the last sync but gone from the
     // account (removed on another device, or ordered). Added: new on the account since the last sync.
-    const out = local.filter((i) => inRemote.has(i.designId) || !base.has(i.designId));
+    const byRemote = new Map(remote.map((i) => [i.designId, i]));
+    const out = local.filter((i) => inRemote.has(i.designId) || !base.has(i.designId)).map((i) => withMove(i, byRemote.get(i.designId)));
     for (const i of remote) if (!inLocal.has(i.designId) && !base.has(i.designId)) out.push(i);
-    const ids = (list) => list.map((i) => i.designId).join(',');
-    if (ids(out) !== ids(local)) {
+    if (cartKey(out) !== cartKey(local)) {
       cartMerging = true;
-      setCart(out);
+      writeRaw(out);
       cartMerging = false;
       document.dispatchEvent(new CustomEvent('pod:cartsynced'));
     }
-    if ([...inRemote].sort().join(',') !== out.map((i) => i.designId).sort().join(',')) await pushCart(acct);
+    const sortKey = (list) => list.map((i) => i.designId + (i.later ? '*' : '')).sort().join(',');
+    if (sortKey(remote) !== sortKey(out)) await pushCart(acct);
     else setCartBase(acct, out);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(mergeAccountCart, 0));
@@ -783,7 +809,7 @@
     t, tr, setLang, applyI18n,
     loadCatalog, fillMockup, mockupUrl, svgDataUrl, luminance,
     money, date, day, num, captcha,
-    getCart, setCart, putFile, updateCartBadge, toast, esc, api, drafts, forgetPersonal,
+    getCart, setCart, getSaved, setSaved, moveItem, putFile, updateCartBadge, toast, esc, api, drafts, forgetPersonal,
     sizedArea, sizeView, canvasEdges, drawPattern, wrapOffsets, fabricCm,
   };
 })();

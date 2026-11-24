@@ -764,6 +764,11 @@ window.POD_STRINGS = {
   'cart.edit': ['Edit design', 'تعديل التصميم'],
   'cart.duplicate': ['Duplicate', 'نسخة أخرى'],
   'cart.remove': ['Remove', 'حذف'],
+  'cart.saveLater': ['Save for later', 'احفظه لبعدين'],
+  'cart.moveToCart': ['Move to cart', 'رجّعه للسلة'],
+  'cart.savedTitle': ['Saved for later ({n})', 'محفوظ لبعدين ({n})'],
+  'cart.savedNote': ['Not part of this order. Move an item back to the cart when you want to order it.', 'مش داخل في الطلب ده. رجّع أي قطعة للسلة لما تحب تطلبها.'],
+  'cart.savedToast': ['Saved for later: it stays here, out of this order.', 'اتحفظ لبعدين: هيفضل هنا، برّه الطلب ده.'],
   'cart.printed': ['Printed: {sides}', 'الطباعة: {sides}'],
   'cart.preview': ['Preview of your {product}', 'معاينة {product}'],
   'cart.note': [
