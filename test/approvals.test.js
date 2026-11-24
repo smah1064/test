@@ -291,3 +291,55 @@ test('accounts: "sold" counts pieces, not order lines', () => {
   const r = accounting.report({ orders, costs: {}, expenses: [], settings: {} });
   assert.strictEqual(r.products.find((p) => p.productId === 'tshirt').units, 9);
 });
+
+test('changes asked for: the customer edits the design and sends it again (same price), then approves its proof', async () => {
+  const qty = (n) => ({ quantities: [{ color: 'white', size: '11oz', qty: n }] });
+  const d = await makeDesign(qty(60));
+  const p1 = await proofOf(d.id);
+  const o = await (await order([d.id], { [d.id]: { proofHash: p1.proofHash } })).json();
+  const it = o.items[0];
+  assert.strictEqual(it.status, 'review');
+  const revise = (designId, orderId = o.id, itemId = it.id) => post(`/api/orders/${orderId}/items/${itemId}/revise`, { designId });
+  // Only once the shop has asked for changes.
+  const early = await makeDesign(qty(60));
+  assert.strictEqual((await revise(early.id)).status, 409);
+  assert.strictEqual((await adminJson(`/api/admin/items/${it.id}/review`, { action: 'changes', note: 'Make the text darker.' })).status, 200);
+
+  // Refused: another price, another product, an unknown order, a design already ordered.
+  const more = await makeDesign(qty(61));
+  const r1 = await revise(more.id);
+  assert.strictEqual(r1.status, 409);
+  assert.match((await r1.json()).error, /→|←/);
+  const tee = await (await post('/api/designs', { productId: 'tshirt', color: 'white', size: 'M', sides: { front: { editor: { objects: [] } } } })).json();
+  assert.ok([400, 409].includes((await revise(tee.id)).status));
+  assert.strictEqual((await revise(early.id, '00000000-0000-4000-8000-000000000000')).status, 404);
+  assert.strictEqual((await revise(d.id)).status, 409, 'the ordered design itself');
+
+  // The new version replaces the item's design and goes back to the shop.
+  const ok = await revise(early.id);
+  assert.strictEqual(ok.status, 200, await ok.clone().text());
+  const pub = await ok.json();
+  const item = pub.items[0];
+  assert.strictEqual(item.designId, early.id);
+  assert.strictEqual(item.status, 'review');
+  assert.strictEqual(pub.total, o.total, 'the order total stays as agreed');
+  assert.strictEqual((await revise(early.id)).status, 409, 'sent once');
+  // It belongs to this order now: it can't be ordered again.
+  assert.strictEqual((await order([early.id], {})).status, 409);
+  const list = await (await admin('/api/admin/review')).json();
+  const rv = list.items.find((x) => x.id === it.id);
+  assert.ok(rv.review.reasons.includes('revised'), JSON.stringify(rv.review));
+  const p2 = await proofOf(early.id);
+  assert.strictEqual(p2.version, 2);
+
+  // The shop approves: the customer gets the new proof to approve, then it prints from the new files.
+  const ap = await (await adminJson(`/api/admin/items/${it.id}/review`, { action: 'approve' })).json();
+  assert.strictEqual(ap.status, 'awaiting_approval');
+  assert.strictEqual((await admin(`/api/admin/files/${early.id}/front`)).status, 409);
+  const link = (await (await fetch(`${base}/api/orders/${o.id}`)).json()).items[0].proofUrl;
+  const t = link.split('t=')[1];
+  const yes = await post(`/api/proofs/${t}`, { decision: 'approve', proofHash: p2.proofHash });
+  assert.strictEqual(yes.status, 200, await yes.clone().text());
+  assert.strictEqual((await yes.json()).status, 'queued');
+  assert.strictEqual((await admin(`/api/admin/files/${early.id}/front`)).status, 200);
+});

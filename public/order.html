@@ -183,7 +183,10 @@
           body = `<p>${esc(t('item.awaitingHint'))}</p>${link ? `<a class="btn btn-sm btn-primary" href="${esc(link)}">${esc(t('item.openProof'))}</a>` : `<p>${esc(t('item.awaitingLinkSent'))}</p>`}`;
         } else {
           const n = changesNote(item);
-          body = `${n ? `<p><strong>${esc(t(n.mine ? 'item.yourNote' : 'item.shopNote', { note: '\u2063' })).replace('\u2063', `<bdi>${esc(n.note)}</bdi>`)}</strong></p>` : ''}<p>${esc(t('item.changesHint'))}</p>`;
+          // Editor-made items: the customer can make the change and send the new version themselves.
+          const editable = item.kind === 'product' && /^[0-9a-f-]{36}$/i.test(item.designId || '');
+          const edit = editable ? `<p>${esc(t('item.editHint'))}</p><a class="btn btn-sm btn-primary" href="/editor?design=${encodeURIComponent(item.designId)}&revise=${encodeURIComponent(order.id + '.' + item.id)}">${esc(t('item.editResend'))}</a>` : '';
+          body = `${n ? `<p><strong>${esc(t(n.mine ? 'item.yourNote' : 'item.shopNote', { note: '\u2063' })).replace('\u2063', `<bdi>${esc(n.note)}</bdi>`)}</strong></p>` : ''}${edit}<p class="${editable ? 'muted small' : ''}">${esc(t(editable ? 'item.changesOrWait' : 'item.changesHint'))}</p>`;
         }
         return `<div class="item-proof-state ${item.status}">${body}</div>`;
       }
@@ -333,6 +336,13 @@
           error = null;
           // Just placed here: remembered on this device (the cart does it too; this covers every way in).
           if (params.get('new')) PODAftercare.rememberOrder(order);
+          // Back from the editor with a new version of an item.
+          if (params.get('revised')) {
+            POD.toast(t('item.revisedSent'));
+            const u = new URL(location.href);
+            u.searchParams.delete('revised');
+            history.replaceState(null, '', u.toString());
+          }
         } catch (e) {
           // A failed refresh (weak signal) keeps showing the order already loaded.
           if (order && e.status !== 404) return;

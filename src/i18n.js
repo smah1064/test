@@ -40,6 +40,10 @@ const MESSAGES = {
   acctPasswordLong: { en: 'That password is too long', ar: 'كلمة المرور طويلة جدًا' },
   acctPhoneTaken: { en: 'There is already an account with this mobile number. Sign in instead.', ar: 'في حساب بالرقم ده. سجّل دخول بدل كده.' },
   acctEmailTaken: { en: 'There is already an account with this email', ar: 'في حساب بالإيميل ده' },
+  reviseNotNeeded: { en: 'This item doesn\'t need changes any more (refresh the page).', ar: 'القطعة دي مش محتاجة تعديل دلوقتي (حدّث الصفحة).' },
+  reviseNotEditable: { en: 'This item can\'t be edited here. Please contact the shop.', ar: 'القطعة دي مينفعش تتعدّل من هنا. كلّم المحل من فضلك.' },
+  reviseOtherProduct: { en: 'The new version must be the same product as the one ordered.', ar: 'النسخة الجديدة لازم تكون نفس المنتج اللي اتطلب.' },
+  revisePrice: { en: 'This version changes the price ({was} → {now}). Keep the same number of pieces and options, or contact the shop to change the order.', ar: 'النسخة دي بتغيّر السعر ({was} ← {now}). خلّي عدد القطع والاختيارات زي ما هي، أو كلّم المحل لو عايز تغيّر الطلب.' },
   notInReview: { en: 'This job is no longer waiting for review (refresh the page).', ar: 'المهمة دي مش مستنية مراجعة دلوقتي (حدّث الصفحة).' },
   replaceNames: { en: "This side holds the customer's name list, so one file can't replace it. Ask the customer for changes instead.", ar: 'الوش ده عليه قائمة أسماء العميل، فمينفعش ملف واحد يحل محله. اطلب من العميل التعديل بدل كده.' },
   photosCount: { en: 'Choose between 1 and {max} photos', ar: 'اختار من صورة واحدة لحد {max} صورة' },
@@ -180,7 +184,7 @@ function format(key, params, lang) {
   return m[lang].replace(/\{(\w+)\}/g, (_, k) => {
     const v = params[k];
     // Amounts of money as the pages show them ("EGP 1,000" / "١٬٠٠٠ ج.م."); other numbers in the page's digits.
-    if (typeof v === 'number' && k === 'amount') return money(v, lang);
+    if (typeof v === 'number' && (k === 'amount' || k === 'was' || k === 'now')) return money(v, lang);
     if (typeof v === 'number' && lang === 'ar') return new Intl.NumberFormat('ar-EG', { useGrouping: false }).format(v);
     return pick(v, lang) ?? '';
   });

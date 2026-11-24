@@ -76,6 +76,7 @@
     pattern: null, // fabric products: { repeat, tileCm } (how the tile repeats, and its size)
     method: 'print', // 'embroidery' on products that can be embroidered
     editingCartIndex: null,
+    revise: null, // { orderId, itemId }: a new version of an ordered item the shop sent back for changes
     editingDesignId: null,
     preview: false,
     exporting: false,
@@ -107,7 +108,10 @@
       }
       const idx = Number(params.get('cart'));
       const cart = POD.getCart();
-      if (params.get('cart') !== null && Number.isInteger(idx) && cart[idx] && cart[idx].designId === saved.id) {
+      // From the order page's "Edit the design and send it again": ?revise=<order id>.<item id>.
+      const rv = /^([0-9a-f-]{36})\.([0-9a-f-]{36})$/i.exec(params.get('revise') || '');
+      if (rv) st.revise = { orderId: rv[1], itemId: rv[2] };
+      if (!rv && params.get('cart') !== null && Number.isInteger(idx) && cart[idx] && cart[idx].designId === saved.id) {
         st.editingCartIndex = idx;
         st.editingDesignId = saved.id;
       }
@@ -3292,7 +3296,7 @@
     const h = hist();
     $('undo').disabled = h.i <= 0;
     $('redo').disabled = h.i >= h.stack.length - 1;
-    $('add-to-cart').textContent = t(st.editingCartIndex !== null ? 'cart.update' : 'cart.add');
+    $('add-to-cart').textContent = t(st.revise ? 'revise.send' : st.editingCartIndex !== null ? 'cart.update' : 'cart.add');
     renderSideTabs();
     renderLayers();
     renderCheck();
@@ -4507,6 +4511,18 @@
       busy(true, t('busy.finishing'));
       const design = await POD.api(`/api/designs/${created.id}/complete`, { method: 'POST', headers: { 'x-upload-token': created.uploadToken } });
 
+      // A new version of an ordered item the shop sent back for changes: it replaces the item's design.
+      if (st.revise) {
+        await POD.api(`/api/orders/${encodeURIComponent(st.revise.orderId)}/items/${encodeURIComponent(st.revise.itemId)}/revise`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ designId: design.id }),
+        });
+        st.dirty = false;
+        location.href = `/order?id=${encodeURIComponent(st.revise.orderId)}&revised=1`;
+        return;
+      }
+
       const entry = {
         designId: design.id,
         productId: design.productId,
@@ -4617,8 +4633,8 @@
 
   $('save-draft').addEventListener('click', serial(async () => {
     commit();
-    // Editing a cart item: saving means updating the cart (there is no separate draft for it).
-    if (st.editingCartIndex !== null) return $('add-to-cart').click();
+    // Editing a cart item (or an ordered item to send again): saving means that, there is no separate draft.
+    if (st.editingCartIndex !== null || st.revise) return $('add-to-cart').click();
     // Drafts are off here (the browser blocks site data, or a shared design): say so, keep the customer here.
     if (!draftMode) return toast(t('draft.saveOff'), 'error');
     busy(true, t('busy.saving'));
@@ -4704,6 +4720,10 @@
     draftChoice(lost.length);
   }
   if (fromShare) { toast(t('share.loaded')); scheduleDraft(); }
+  if (st.revise) {
+    toast(t('revise.hint'));
+    if ($('save-draft')) $('save-draft').hidden = true; // one way out: send the new version
+  }
   if (libraryDesign) {
     if (libraryDesign.kind === 'template') {
       await addTemplate({ id: libraryDesign.id, items: libraryDesign.items, aspect: libraryDesign.aspect });

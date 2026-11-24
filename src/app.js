@@ -2574,28 +2574,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
           status: 'queued', history: [{ status: 'queued', at: now }],
         };
       }
-      const product = getProduct(d.productId);
-      return {
-        id: crypto.randomUUID(),
-        designId: d.id,
-        ...(d.kind === 'book' ? { kind: 'book', bookId: d.bookId } : {}),
-        productId: d.productId,
-        productName: product.name,
-        color: d.color,
-        size: d.size,
-        sides: d.sides,
-        process: d.process || product.process,
-        price: designPrice({ ...d, status: 'ready', orderId: null }),
-        ...(copiesOf(d) > 1 || d.quantities ? pieceInfo(product, JSON.parse(JSON.stringify(d))) : {}),
-        ...(d.quantities ? { quantities: JSON.parse(JSON.stringify(d.quantities)).map((l) => ({ ...l, unitPrice: round2(priceFor(product, l.size.id, d.sides.length) + embExtra(product, d, l.size.id)) })) } : {}),
-        ...(d.merge ? { merge: { count: d.merge.count, columns: d.merge.columns } } : {}),
-        ...(d.method === 'embroidery' ? { method: 'embroidery', emb: d.emb || null } : {}),
-        ...(d.options ? { options: JSON.parse(JSON.stringify(d.options)) } : {}),
-        ...(d.imports ? { imports: d.imports, rightsConfirmedAt: d.rightsConfirmedAt } : {}),
-        ...(d.pattern ? { pattern: d.pattern } : {}),
-        status: 'queued',
-        history: [{ status: 'queued', at: now }],
-      };
+      return { id: crypto.randomUUID(), ...designItemFields(d), status: 'queued', history: [{ status: 'queued', at: now }] };
     });
     // The customer's approval of each proof, and whether the shop checks the job before printing.
     items.forEach((it, i) => {
@@ -2694,6 +2673,70 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       })
       .catch((e) => console.warn('[notify]', e.message));
   }));
+
+  /** What an order line keeps from its (editor-made or book) design: product, sides, pieces, price… */
+  function designItemFields(d) {
+    const product = getProduct(d.productId);
+    return {
+      designId: d.id,
+      ...(d.kind === 'book' ? { kind: 'book', bookId: d.bookId } : {}),
+      productId: d.productId,
+      productName: product.name,
+      color: d.color,
+      size: d.size,
+      sides: d.sides,
+      process: d.process || product.process,
+      price: designPrice({ ...d, status: 'ready', orderId: null }),
+      ...(copiesOf(d) > 1 || d.quantities ? pieceInfo(product, JSON.parse(JSON.stringify(d))) : {}),
+      ...(d.quantities ? { quantities: JSON.parse(JSON.stringify(d.quantities)).map((l) => ({ ...l, unitPrice: round2(priceFor(product, l.size.id, d.sides.length) + embExtra(product, d, l.size.id)) })) } : {}),
+      ...(d.merge ? { merge: { count: d.merge.count, columns: d.merge.columns } } : {}),
+      ...(d.method === 'embroidery' ? { method: 'embroidery', emb: d.emb || null } : {}),
+      ...(d.options ? { options: JSON.parse(JSON.stringify(d.options)) } : {}),
+      ...(d.imports ? { imports: d.imports, rightsConfirmedAt: d.rightsConfirmedAt } : {}),
+      ...(d.pattern ? { pattern: d.pattern } : {}),
+    };
+  }
+
+  // ---------- Changes asked for: the customer edits the design and sends it again ----------
+  // An item the shop (or the customer, on the proof page) sent back for changes: the customer opens
+  // it in the editor, saves a new version (a new design), and it replaces the item's design. The
+  // shop checks it again (Review tab); the customer then approves its proof as usual.
+  // Same price only: a version that costs more or less is refused (the order total stays as agreed).
+  app.post('/api/orders/:id/items/:itemId/revise', (req, res, next) => {
+    rateLimit(req, 'reorder');
+    next();
+  }, express.json({ limit: '2kb' }), (req, res) => {
+    const order = UUID_RE.test(req.params.id) && store.getOrder(req.params.id);
+    if (!order) throw new HttpError(404, 'orderNotFound');
+    const item = order.items.find((it) => it.id === req.params.itemId);
+    if (!item) throw new HttpError(404, 'itemNotFound');
+    if (item.status !== 'changes_requested') throw new HttpError(409, 'reviseNotNeeded');
+    if (item.kind) throw new HttpError(409, 'reviseNotEditable'); // books, photo sets, film sheets
+    const old = store.getDesign(item.designId);
+    const id = (req.body || {}).designId;
+    const d = typeof id === 'string' && UUID_RE.test(id) && store.getDesign(id);
+    if (!d || d.kind || (d.status && d.status !== 'ready')) throw new HttpError(400, 'designGone');
+    if (d.orderId) throw new HttpError(409, 'designOrdered');
+    if (d.productId !== item.productId) throw new HttpError(409, 'reviseOtherProduct');
+    const fields = designItemFields(d);
+    if (Math.abs(fields.price - item.price) > 0.009) throw new HttpError(409, 'revisePrice', { was: item.price, now: fields.price });
+    const now = new Date().toISOString();
+    // The new design belongs to this order now (it can't be ordered again), as the next version.
+    d.orderId = order.id;
+    d.version = ((old && old.version) || 1) + 1;
+    d.revisionOf = item.designId;
+    // The line now describes the new design (what the old one had and this one hasn't goes).
+    for (const k of ['quantities', 'merge', 'method', 'emb', 'options', 'imports', 'rightsConfirmedAt', 'pattern', 'copies', 'unitPrice']) delete item[k];
+    Object.assign(item, fields);
+    item.preflight = d.preflight ? { status: d.preflight.status, checks: d.preflight.checks } : null;
+    item.status = 'review';
+    item.review = { needed: true, reasons: [...new Set(['revised', ...reviewReasons(d, {})])], status: 'pending' };
+    item.approvals = [...(item.approvals || []), { action: 'revised', by: 'customer', at: now, proofHash: proofHashOf(d), version: d.version }];
+    item.history.push({ status: 'review', at: now });
+    delete item.proofToken;
+    store.save();
+    res.json(publicOrder(order));
+  });
 
   app.get('/api/orders/:id', (req, res) => {
     const order = UUID_RE.test(req.params.id) && store.getOrder(req.params.id);

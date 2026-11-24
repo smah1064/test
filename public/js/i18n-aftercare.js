@@ -25,7 +25,7 @@
     // "Now:" while items wait for a check or an approval (instead of "printing starts soon")
     'track.now.awaitingOne': ['One item is waiting for you to approve its proof. We print it as soon as you approve.', 'في منتج مستني موافقتك على البروفة بتاعته. هنطبعه أول ما توافق.'],
     'track.now.awaitingMany': ['{n} items are waiting for you to approve their proofs. We print each one as soon as you approve.', 'عدد المنتجات المستنية موافقتك على البروفة: {n}. هنطبع كل واحد أول ما توافق.'],
-    'track.now.changes': ['We are making the changes to your design and will send you a new proof to approve.', 'بنعمل التعديلات على التصميم، وهنبعتلك بروفة جديدة توافق عليها.'],
+    'track.now.changes': ['A change is needed: see the item below. Edit it yourself and send it again, or leave it to us and we’ll send you a new proof.', 'محتاجين تعديل: شوف القطعة تحت. عدّلها بنفسك وابعتها تاني، أو سيبها علينا وهنبعتلك بروفة جديدة.'],
     'track.now.review': ['Our team is checking your design before printing. We will contact you if anything needs changing.', 'فريقنا بيراجع التصميم قبل الطباعة، وهنكلمك لو فيه حاجة محتاجة تتغير.'],
     // After ordering: the way back to the order
     'order.placedTitle': ['Thank you! Your order is placed.', 'شكرًا! طلبك اتسجّل.'],
