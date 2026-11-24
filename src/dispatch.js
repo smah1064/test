@@ -75,14 +75,14 @@ function cleanHouse(input) {
 const T = {
   en: {
     dir: 'ltr', hello: (n) => `Hello ${n},`, intro: 'Please print the following job for OneOff Print:',
-    order: 'Order', product: 'Product', colour: 'Colour / size', method: 'Print method', sides: 'Print areas', qty: 'Quantity',
+    cm: 'cm', order: 'Order', product: 'Product', colour: 'Colour / size', method: 'Print method', sides: 'Print areas', qty: 'Quantity',
     placement: (v) => `moved ${v} from the standard position, see the preview PDF`,
     note: 'Note', files: 'Files', attached: 'attached to this email', expires: (d) => `Download links work until ${d}.`,
     thanks: 'Thank you!', subject: (o, p) => `Print job ${o} · ${p}`,
   },
   ar: {
-    dir: 'rtl', hello: (n) => `أهلًا ${n}،`, intro: 'من فضلك اطبعوا الشغل ده لـ OneOff Print:',
-    order: 'الطلب', product: 'المنتج', colour: 'اللون / المقاس', method: 'طريقة الطباعة', sides: 'أماكن الطباعة', qty: 'الكمية',
+    dir: 'rtl', hello: (n) => `أهلًا ${n}،`, intro: 'من فضلك اطبعوا الشغل ده لـ ون أوف برنت:',
+    cm: 'سم', order: 'الطلب', product: 'المنتج', colour: 'اللون / المقاس', method: 'طريقة الطباعة', sides: 'أماكن الطباعة', qty: 'الكمية',
     placement: (v) => `متحرك ${v} عن المكان القياسي، شوف ملف المعاينة`,
     note: 'ملاحظة', files: 'الملفات', attached: 'مرفقة في الإيميل ده', expires: (d) => `روابط التحميل شغالة لحد ${d}.`,
     thanks: 'شكرًا!', subject: (o, p) => `شغل طباعة ${o} · ${p}`,
@@ -90,12 +90,15 @@ const T = {
 };
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const cm = (inches) => Math.round(inches * 2.54 * 10) / 10;
+/** Digits in the message language: Arabic-Indic in Arabic, Latin in English. */
+const ARABIC_DIGITS = '٠١٢٣٤٥٦٧٨٩';
+const digits = (v, lang) => (lang === 'ar' ? String(v).replace(/\d/g, (d) => ARABIC_DIGITS[d]).replace(/(\S)\.(\S)/g, '$1٫$2') : String(v));
 /** "3 cm lower, 2 cm left" in the message language. */
 function placement(o, lang) {
   const ar = lang === 'ar';
   const parts = [];
-  if (o.y) parts.push(ar ? `${Math.abs(o.y)} سم ${o.y > 0 ? 'لتحت' : 'لفوق'}` : `${Math.abs(o.y)} cm ${o.y > 0 ? 'lower' : 'higher'}`);
-  if (o.x) parts.push(ar ? `${Math.abs(o.x)} سم ${o.x > 0 ? 'يمين' : 'شمال'}` : `${Math.abs(o.x)} cm ${o.x > 0 ? 'right' : 'left'}`);
+  if (o.y) parts.push(ar ? `${digits(Math.abs(o.y), lang)} سم ${o.y > 0 ? 'لتحت' : 'لفوق'}` : `${Math.abs(o.y)} cm ${o.y > 0 ? 'lower' : 'higher'}`);
+  if (o.x) parts.push(ar ? `${digits(Math.abs(o.x), lang)} سم ${o.x > 0 ? 'يمين' : 'شمال'}` : `${Math.abs(o.x)} cm ${o.x > 0 ? 'right' : 'left'}`);
   return parts.join(ar ? ' و' : ', ');
 }
 
@@ -104,18 +107,18 @@ function jobLines(order, item, design, lang) {
   const t = T[lang];
   const sides = (design.sides || [])
     .filter((s) => s.widthIn)
-    .map((s) => `${pick(s.name, lang)} ${cm(s.widthIn)} × ${cm(s.heightIn)} cm${s.offsetCm ? ` (${t.placement(placement(s.offsetCm, lang))})` : ''}`)
+    .map((s) => `${pick(s.name, lang)} ${digits(cm(s.widthIn), lang)} × ${digits(cm(s.heightIn), lang)} ${t.cm}${s.offsetCm ? ` (${t.placement(placement(s.offsetCm, lang))})` : ''}`)
     .join(' + ');
   return [
-    [t.order, `${order.number} (${item.position}/${order.items.length})`],
+    [t.order, `${order.number} (${digits(item.position, lang)}/${digits(order.items.length, lang)})`],
     [t.product, pick(item.productName, lang)],
     // Several colours / sizes: every line with its count (S×2, 2XL×1), not the design's first size.
     [t.colour, Array.isArray(item.quantities) && item.quantities.length
-      ? item.quantities.map((l) => `${[pick(l.color && l.color.name, lang), pick(l.size && l.size.label, lang)].filter(Boolean).join(' · ')} ×${l.qty}`).join(lang === 'ar' ? '، ' : ', ')
+      ? item.quantities.map((l) => `${[pick(l.color && l.color.name, lang), pick(l.size && l.size.label, lang)].filter(Boolean).join(' · ')} ×${digits(l.qty, lang)}`).join(lang === 'ar' ? '، ' : ', ')
       : [pick(item.color && item.color.name, lang), pick(item.size && item.size.label, lang)].filter(Boolean).join(' · ')],
     [t.method, String(item.process || '').toUpperCase()],
     ...(sides ? [[t.sides, sides]] : []),
-    [t.qty, String(Array.isArray(item.quantities) && item.quantities.length ? item.quantities.reduce((n, l) => n + (l.qty || 0), 0) : item.copies || 1)],
+    [t.qty, digits(Array.isArray(item.quantities) && item.quantities.length ? item.quantities.reduce((n, l) => n + (l.qty || 0), 0) : item.copies || 1, lang)],
   ].filter(([, v]) => v);
 }
 
@@ -131,7 +134,7 @@ function whatsappText({ house, order, item, design, files, note, lang, expires }
     `*${t.files}:*`,
     ...files.map((f) => `• ${f.label}: ${f.url}`),
     '',
-    t.expires(expires.slice(0, 10)),
+    t.expires(digits(expires.slice(0, 10), lang)),
     t.thanks,
   ].join('\n');
 }
@@ -145,14 +148,14 @@ function emailBody({ house, order, item, design, files, note, lang, expires, att
 <table style="border-collapse:collapse;margin:8px 0 14px">${rows}</table>
 ${note ? `<p><strong>${esc(t.note)}:</strong> ${esc(note)}</p>` : ''}
 <p style="margin-bottom:4px"><strong>${esc(t.files)}</strong>${attached ? ` (${esc(t.attached)})` : ''}:</p><ul style="margin-top:0">${list}</ul>
-<p style="color:#666;font-size:13px">${esc(t.expires(expires.slice(0, 10)))}</p><p>${esc(t.thanks)}</p></div>`;
+<p style="color:#666;font-size:13px">${esc(t.expires(digits(expires.slice(0, 10), lang)))}</p><p>${esc(t.thanks)}</p></div>`;
   const text = [
     t.hello(house.name), t.intro, '',
     ...jobLines(order, item, design, lang).map(([k, v]) => `${k}: ${v}`),
     ...(note ? ['', `${t.note}: ${note}`] : []),
     '', `${t.files}${attached ? ` (${t.attached})` : ''}:`,
     ...files.map((f) => `- ${f.label}: ${f.url}`),
-    '', t.expires(expires.slice(0, 10)), t.thanks,
+    '', t.expires(digits(expires.slice(0, 10), lang)), t.thanks,
   ].join('\n');
   return { subject: t.subject(order.number, pick(item.productName, lang)), html, text };
 }

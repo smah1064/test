@@ -40,27 +40,41 @@ function status() {
 }
 
 // ---------- Text helpers ----------
+/** A number in the message language: Arabic-Indic digits in Arabic (like money()), Latin in English. */
+function num(n, lang) {
+  if (lang !== 'ar') return String(n);
+  try {
+    return new Intl.NumberFormat('ar-EG').format(n);
+  } catch (e) {
+    return String(n);
+  }
+}
+/** Arabic counting (as on the rest of the shop): 1 and 2 have their own words, 3–10 (103–110…) the plural, others the singular. */
+const arCount = (n, one, two, few, many) => (n === 1 ? one : n === 2 ? two : n % 100 >= 3 && n % 100 <= 10 ? `${num(n, 'ar')} ${few}` : `${num(n, 'ar')} ${many}`);
+const enCount = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const L = {
   ar: {
-    newOrder: 'طلب جديد', items: (n) => `${n} ${n === 1 ? 'منتج' : n === 2 ? 'منتجان' : n <= 10 ? 'منتجات' : 'منتج'}`,
+    newOrder: 'طلب جديد', items: (n) => arCount(n, 'منتج واحد', 'منتجان', 'منتجات', 'منتج'), brand: 'ون أوف برنت',
     total: 'الإجمالي', subtotal: 'المنتجات', discount: 'الخصم', shipping: 'الشحن', free: 'مجاني', cod: 'الدفع عند الاستلام',
     customer: 'العميل', phone: 'الموبايل', email: 'البريد', address: 'العنوان', notes: 'ملاحظات',
     openAdmin: 'افتح لوحة الإنتاج', track: 'تابع طلبك',
-    thanksSubject: (n) => `تم استلام طلبك ${n} · OneOff Print`,
+    thanksSubject: (n) => `تم استلام طلبك ${n} · ون أوف برنت`,
     thanksHi: (name) => `أهلًا ${name}،`,
     thanksBody: 'شكرًا لطلبك! استلمنا طلبك وهنبدأ نطبع كل قطعة مخصوص ليك. هنتواصل معاك قبل الشحن.',
     adminSubject: (n, total) => `طلب جديد ${n} · ${total}`,
     sides: ' + ', dir: 'rtl', test: 'رسالة تجريبية من متجرك: الإشعارات شغالة ✅',
-    shippedSubject: (n) => `طلبك ${n} في الطريق ليك · OneOff Print`,
+    shippedSubject: (n) => `طلبك ${n} في الطريق ليك · ون أوف برنت`,
     shippedBody: 'طلبك اتشحن وفي الطريق ليك! جهّز المبلغ للمندوب عند الاستلام.',
     shippedBodyPaid: 'طلبك اتشحن وفي الطريق ليك!',
     courier: 'شركة الشحن', trackingNumber: 'رقم التتبع', trackingLink: 'تتبع الشحنة عند شركة الشحن', eta: 'الاستلام المتوقع',
-    invoice: 'الفاتورة', copies: (n) => `${n} نسخ`, order: 'الطلب',
+    invoice: 'الفاتورة', copies: (n) => arCount(n, 'نسخة واحدة', 'نسختين', 'نسخ', 'نسخة'), order: 'الطلب',
+    pieces: (n) => arCount(n, 'قطعة واحدة', 'قطعتين', 'قطع', 'قطعة'), photos: (n) => arCount(n, 'صورة واحدة', 'صورتين', 'صور', 'صورة'),
+    names: (n) => `قائمة أسماء: ${arCount(n, 'اسم واحد', 'اسمين', 'أسماء', 'اسم')}`, listSep: '، ',
     delivery: 'التوصيل', express: '⚡ توصيل سريع', expressAdmin: '⚡ توصيل سريع: خلال يومين عمل',
-    deliveryLine: (d, by) => `${d.speed === 'express' ? '⚡ توصيل سريع' : 'توصيل عادي'} خلال ${d.days === 2 ? 'يومين' : d.days + ' أيام'} عمل (حتى ${by})`,
+    deliveryLine: (d, by) => `${d.speed === 'express' ? '⚡ توصيل سريع' : 'توصيل عادي'} خلال ${arCount(d.days, 'يوم', 'يومين', 'أيام', 'يوم')} عمل (حتى ${by})`,
   },
   en: {
-    newOrder: 'New order', items: (n) => `${n} item${n === 1 ? '' : 's'}`,
+    newOrder: 'New order', items: (n) => enCount(n, 'item'), brand: 'OneOff Print',
     total: 'Total', subtotal: 'Items', discount: 'Discount', shipping: 'Shipping', free: 'Free', cod: 'Cash on delivery',
     customer: 'Customer', phone: 'Mobile', email: 'Email', address: 'Address', notes: 'Notes',
     openAdmin: 'Open the production dashboard', track: 'Track your order',
@@ -73,9 +87,10 @@ const L = {
     shippedBody: 'Your order has shipped and is on its way to you! Please have the amount ready for the courier on delivery.',
     shippedBodyPaid: 'Your order has shipped and is on its way to you!',
     courier: 'Courier', trackingNumber: 'Tracking number', trackingLink: 'Track the parcel with the courier', eta: 'Expected delivery',
-    invoice: 'Invoice', copies: (n) => `${n} copies`, order: 'Order',
+    invoice: 'Invoice', copies: (n) => `${n} cop${n === 1 ? 'y' : 'ies'}`, order: 'Order',
+    pieces: (n) => enCount(n, 'piece'), photos: (n) => enCount(n, 'photo'), names: (n) => `Name list: ${enCount(n, 'name')}`, listSep: ', ',
     delivery: 'Delivery', express: '⚡ Express delivery', expressAdmin: '⚡ EXPRESS: deliver within 2 business days',
-    deliveryLine: (d, by) => `${d.speed === 'express' ? '⚡ Express' : 'Standard'} delivery within ${d.days} business days (by ${by})`,
+    deliveryLine: (d, by) => `${d.speed === 'express' ? '⚡ Express' : 'Standard'} delivery within ${d.days} business day${d.days === 1 ? '' : 's'} (by ${by})`,
   },
 };
 const tr = (v, lang) => (v && typeof v === 'object' ? v[lang] || v.en || '' : String(v == null ? '' : v));
@@ -88,7 +103,37 @@ function money(n, lang) {
 }
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
 const govName = (id, lang) => tr((GOVERNORATES.find((g) => g.id === id) || {}).name, lang) || id;
-const itemLine = (it, lang) => `${tr(it.productName, lang)} · ${tr(it.color.name, lang)} · ${tr(it.size.label, lang)} · ${it.sides.map((s) => tr(s.name, lang)).join(L[lang].sides)}`;
+/**
+ * One order line: product, colour, size, print areas and how many. Several colours / sizes
+ * (and photo sets) show the total and every line with its count, like the printing-house
+ * message (src/dispatch.js); name lists show the number of names; other items their copies.
+ */
+function itemLine(it, lang) {
+  const t = L[lang];
+  const name = (v) => tr(v, lang);
+  const photoset = it.kind === 'photoset';
+  const sides = photoset ? '' : (it.sides || []).map((s) => name(s && s.name)).filter(Boolean).join(t.sides);
+  const lines = Array.isArray(it.quantities) ? it.quantities.filter((l) => l && Number(l.qty) > 0) : [];
+  const parts = [name(it.productName)];
+  if (lines.length) {
+    const colorOf = (l) => name(l.color && l.color.name);
+    const oneColor = new Set(lines.map(colorOf)).size === 1;
+    const total = lines.reduce((n, l) => n + Number(l.qty), 0);
+    const breakdown = lines.map((l) => `${[oneColor ? '' : colorOf(l), name(l.size && l.size.label)].filter(Boolean).join(' · ')} ×${num(Number(l.qty), lang)}`).join(t.listSep);
+    const count = photoset
+      ? [Array.isArray(it.photos) && it.photos.length ? t.photos(it.photos.length) : '', t.copies(total)].filter(Boolean).join(' · ')
+      : t.pieces(total);
+    parts.push(oneColor ? colorOf(lines[0]) : '', `${count} (${breakdown})`);
+    // A photo set's size label is its summary; its options (border…) are not on the lines.
+    if (photoset && it.options && typeof it.options === 'object') parts.push(...Object.values(it.options).map((o) => name(o && o.name)));
+    parts.push(sides);
+  } else {
+    parts.push(it.color && name(it.color.name), it.size && name(it.size.label), sides);
+    if (!it.merge && Number(it.copies) > 1) parts.push(t.copies(Number(it.copies)));
+  }
+  if (it.merge && Number(it.merge.count) > 0) parts.push(t.names(Number(it.merge.count)));
+  return parts.filter(Boolean).join(' · ');
+}
 const dayOf = (ymd, lang) => {
   try {
     return new Intl.DateTimeFormat(lang === 'ar' ? 'ar-EG' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }).format(new Date(ymd + 'T12:00:00Z'));
@@ -123,7 +168,7 @@ function emailHtml(order, links, lang, forAdmin) {
   const c = order.customer;
   const rows = order.items.map((it, i) => `
     <tr>
-      <td style="padding:8px 0;border-bottom:1px solid #eee">${i + 1}. ${esc(itemLine(it, lang))}</td>
+      <td style="padding:8px 0;border-bottom:1px solid #eee">${num(i + 1, lang)}. ${esc(itemLine(it, lang))}</td>
       <td style="padding:8px 0;border-bottom:1px solid #eee;white-space:nowrap;text-align:${lang === 'ar' ? 'left' : 'right'}">${esc(money(it.price, lang))}</td>
     </tr>`).join('');
   const sum = (label, value, bold) => `<tr><td style="padding:4px 0;${bold ? 'font-weight:700' : ''}">${esc(label)}</td><td style="padding:4px 0;text-align:${lang === 'ar' ? 'left' : 'right'};${bold ? 'font-weight:700' : ''}">${esc(value)}</td></tr>`;
@@ -136,10 +181,10 @@ function emailHtml(order, links, lang, forAdmin) {
       </table>`
     : `<p style="margin:16px 0 0;color:#555">${esc(t.address)}: ${esc(addressOf(c, lang))}</p>`;
   const link = forAdmin ? links.admin : links.track;
-  const button = link ? `<p style="margin:20px 0 0"><a href="${esc(link)}" style="background:#ff5a36;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;display:inline-block;font-weight:700">${esc(forAdmin ? t.openAdmin : t.track)}</a></p>` : '';
+  const button = link ? `<p style="margin:20px 0 0"><a href="${esc(link)}" style="background:#ca3d1a;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;display:inline-block;font-weight:700">${esc(forAdmin ? t.openAdmin : t.track)}</a></p>` : '';
   return `<!doctype html><html lang="${lang}" dir="${t.dir}"><body style="margin:0;background:#f4f5f7;font-family:Tahoma,Arial,sans-serif;color:#16181d">
   <div style="max-width:560px;margin:0 auto;padding:24px 16px">
-    <div style="font-weight:800;font-size:18px;margin-bottom:16px">OneOff Print</div>
+    <div style="font-weight:800;font-size:18px;margin-bottom:16px">${esc(t.brand)}</div>
     <div style="background:#fff;border-radius:14px;padding:20px;direction:${t.dir};text-align:${lang === 'ar' ? 'right' : 'left'}">
       ${intro}
       <table style="width:100%;border-collapse:collapse">${rows}</table>
@@ -161,7 +206,7 @@ const emailText = (order, links, lang, forAdmin) => {
   return [
     forAdmin ? `${t.newOrder} ${order.number}` : `${t.thanksHi(c.name)}\n${t.thanksBody}\n${order.number}`,
     '',
-    ...order.items.map((it, i) => `${i + 1}. ${itemLine(it, lang)} · ${money(it.price, lang)}`),
+    ...order.items.map((it, i) => `${num(i + 1, lang)}. ${itemLine(it, lang)} · ${money(it.price, lang)}`),
     '',
     `${t.total} (${t.cod}): ${money(order.total, lang)}`,
     deliveryText(order, lang),
@@ -231,7 +276,7 @@ async function adminTest() {
   };
   await Promise.all([
     run('adminWhatsApp', st.adminWhatsApp, () => sendWhatsApp(cfg, t.test)),
-    run('adminEmail', st.adminEmail, () => sendEmail(cfg, cfg.adminEmail, 'OneOff Print · ✅', `<p dir="${t.dir}">${esc(t.test)}</p>`, t.test)),
+    run('adminEmail', st.adminEmail, () => sendEmail(cfg, cfg.adminEmail, `${t.brand} · ✅`, `<p dir="${t.dir}">${esc(t.test)}</p>`, t.test)),
   ]);
   return result;
 }
@@ -248,10 +293,7 @@ async function emailTo(to, subject, html, text, attachments) {
 // ---------- "Your order has shipped" (to the customer) ----------
 const safeLine = (it, lang) => {
   try {
-    const parts = [tr(it.productName, lang), it.color && tr(it.color.name, lang), it.size && tr(it.size.label, lang),
-      (it.sides || []).map((s) => tr(s.name, lang)).filter(Boolean).join(L[lang].sides)].filter(Boolean);
-    const copies = Number(it.copies) > 1 ? ` · ${L[lang].copies(Number(it.copies))}` : '';
-    return parts.join(' · ') + copies;
+    return itemLine(it, lang);
   } catch (e) {
     return tr(it && it.productName, lang);
   }
@@ -278,12 +320,12 @@ function shippedContent(order, links, lang) {
     sh.trackingNumber ? [t.trackingNumber, sh.trackingNumber] : null,
     sh.eta ? [t.eta, etaText(sh.eta, lang)] : null,
   ].filter(Boolean);
-  const items = (order.items || []).map((it, i) => `${i + 1}. ${safeLine(it, lang)}`);
+  const items = (order.items || []).map((it, i) => `${num(i + 1, lang)}. ${safeLine(it, lang)}`);
   const end = lang === 'ar' ? 'left' : 'right';
-  const button = (href, label, primary) => `<a href="${esc(href)}" style="${primary ? 'background:#ff5a36;color:#fff;' : 'background:#fff;color:#16181d;border:1px solid #d5d8de;'}text-decoration:none;padding:11px 18px;border-radius:10px;display:inline-block;font-weight:700;margin:0 0 8px">${esc(label)}</a>`;
+  const button = (href, label, primary) => `<a href="${esc(href)}" style="${primary ? 'background:#ca3d1a;color:#fff;' : 'background:#fff;color:#16181d;border:1px solid #d5d8de;'}text-decoration:none;padding:11px 18px;border-radius:10px;display:inline-block;font-weight:700;margin:0 0 8px">${esc(label)}</a>`;
   const html = `<!doctype html><html lang="${lang}" dir="${t.dir}"><body style="margin:0;background:#f4f5f7;font-family:Tahoma,Arial,sans-serif;color:#16181d">
   <div style="max-width:560px;margin:0 auto;padding:24px 16px">
-    <div style="font-weight:800;font-size:18px;margin-bottom:16px">OneOff Print</div>
+    <div style="font-weight:800;font-size:18px;margin-bottom:16px">${esc(t.brand)}</div>
     <div style="background:#fff;border-radius:14px;padding:20px;direction:${t.dir};text-align:${lang === 'ar' ? 'right' : 'left'}">
       <h2 style="margin:0 0 12px">📦 ${esc(t.thanksHi(c.name || ''))}</h2>
       <p style="margin:0 0 16px;line-height:1.6">${esc(body)}</p>
@@ -372,7 +414,7 @@ async function proofMessage(order, item, { kind = 'proof', note = '', link = '' 
     const html = `<div dir="${dir}" style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;color:#1b1f27">
       <p>${h(T.lead)}</p>
       ${note ? `<p><strong>${h(T.noteLabel)}</strong><br>${h(note).replace(/\n/g, '<br>')}</p>` : ''}
-      ${/^https?:\/\//.test(link) ? `<p><a href="${h(link)}" style="display:inline-block;background:#ff5a36;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:bold">${h(T.button)}</a></p>` : ''}
+      ${/^https?:\/\//.test(link) ? `<p><a href="${h(link)}" style="display:inline-block;background:#ca3d1a;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:bold">${h(T.button)}</a></p>` : ''}
       <p style="color:#666;font-size:13px">${h(T.screen)}</p></div>`;
     const text = [T.lead, note ? `${T.noteLabel} ${note}` : '', link, T.screen].filter(Boolean).join('\n\n');
     await sendEmail(cfg, to, T.subject, html, text);
