@@ -286,5 +286,69 @@
  "tablenumbers": {
   "file": "/img/designed/tablenumbers.webp",
   "design": "birthday-squad"
+ },
+ "deskmat": {
+  "file": "/img/designed/deskmat.webp",
+  "design": "lz-frame-set-el-7abayeb (nearest shape)"
+ },
+ "dlenvelopes": {
+  "file": "/img/designed/dlenvelopes.webp",
+  "design": "pp-biz-restaurant (nearest shape)"
+ },
+ "storybook": {
+  "file": "/img/designed/storybook.webp",
+  "design": "book-cover"
+ },
+ "coloringbook": {
+  "file": "/img/designed/coloringbook.webp",
+  "design": "book-cover"
+ },
+ "photoprints": {
+  "file": "/img/designed/photoprints.webp",
+  "design": "photos"
+ },
+ "canvaswide": {
+  "file": "/img/designed/canvaswide.webp",
+  "design": "ramadan-fanous"
+ },
+ "fabric": {
+  "file": "/img/designed/fabric.webp",
+  "design": "pattern"
+ },
+ "upholstery": {
+  "file": "/img/designed/upholstery.webp",
+  "design": "pattern"
+ },
+ "bedsheet": {
+  "file": "/img/designed/bedsheet.webp",
+  "design": "pattern"
+ },
+ "duvetcover": {
+  "file": "/img/designed/duvetcover.webp",
+  "design": "pattern"
+ },
+ "curtains": {
+  "file": "/img/designed/curtains.webp",
+  "design": "pattern"
+ },
+ "giftvouchers": {
+  "file": "/img/designed/giftvouchers.webp",
+  "design": "pp-biz-salon (nearest shape)"
+ },
+ "bookmarks": {
+  "file": "/img/designed/bookmarks.webp",
+  "design": "pp-pet-cats-over-people (nearest shape)"
+ },
+ "wrappingpaper": {
+  "file": "/img/designed/wrappingpaper.webp",
+  "design": "pattern"
+ },
+ "banners": {
+  "file": "/img/designed/banners.webp",
+  "design": "lz-door-welcome (nearest shape)"
+ },
+ "placecards": {
+  "file": "/img/designed/placecards.webp",
+  "design": "lz-door-family-ar (nearest shape)"
  }
 }

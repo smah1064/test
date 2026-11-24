@@ -590,8 +590,8 @@
   "calendar": {
     "file": "/img/lifestyle/calendar.webp",
     "alt": {
-      "en": "A3 wall calendar with artwork and a month pad",
-      "ar": "نتيجة حائط A3 بتصميم فني وبلوك شهور"
+      "en": "A3 wall calendar with landscape artwork and a stapled month pad",
+      "ar": "نتيجة حائط A3 بتصميم منظر طبيعي وبلوك شهور مدبّس"
     }
   },
   "deskcalendar": {
@@ -611,8 +611,8 @@
   "magnets": {
     "file": "/img/lifestyle/magnets.webp",
     "alt": {
-      "en": "Printed photo magnets on a cream fridge door",
-      "ar": "مغناطيس ثلاجة مطبوع بالصور على باب ثلاجة كريمي"
+      "en": "Colourful printed photo magnets on a cream fridge door",
+      "ar": "مغناطيس ثلاجة مطبوع بصور ملوّنة على باب ثلاجة كريمي"
     }
   },
   "banners": {
