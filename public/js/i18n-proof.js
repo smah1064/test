@@ -58,6 +58,7 @@ Object.assign(window.POD_STRINGS, {
   'pf.checkFailed': ['We could not finish every automatic check, so our team will look at it.', 'ما قدرناش نكمّل كل الفحوصات التلقائية، ففريقنا هيبص عليه.'],
   'pf.empty': ['There is nothing to print here.', 'مفيش حاجة هتتطبع هنا.'],
   'pf.outsideSafe': ['Part of the design is only {mm} mm from the cut edge and may be cut off. Keep text and faces inside the dashed line.', 'جزء من التصميم على بُعد {mm} مم بس من حافة القص وممكن يتقص. خلّي الكلام والوشوش جوّه الخط المتقطع.'],
+  'pf.outsideSafe.named': ['“{name}” touches the edge of the print area, so it may look cut off. Move it inside the green line.', '“{name}” لازق في حافة مساحة الطباعة، فممكن يبان مقصوص. حرّكه جوّه الخط الأخضر.'],
   'pf.outsideSafe.edge': ['The design touches the edge of the print area, so it may look cut off.', 'التصميم لازق في حافة مساحة الطباعة، فممكن يبان مقصوص.'],
   'pf.semiTransparent': ['About {percent}% of the design is see-through (soft shadows, faded edges). Those parts can print patchy.', 'حوالي {percent}% من التصميم شفاف جزئيًا (ظلال ناعمة، أطراف باهتة). الأجزاء دي ممكن تطلع مبقّعة.'],
   'pf.fontFallback': ['A font did not load when the file was made ({fonts}), so the text may use a different font. Check the lettering.', 'خط ما اتحمّلش وقت تجهيز الملف ({fonts})، فممكن الكلام يطلع بخط تاني. راجع شكل الكتابة.'],

@@ -37,7 +37,7 @@
     const params = { ...(c.params || {}) };
     let key = 'pf.' + c.id;
     if (c.id === 'exportSize' && params.error) key = 'pf.exportSize.error';
-    if (c.id === 'outsideSafe' && !Number(params.mm)) key = 'pf.outsideSafe.edge';
+    if (c.id === 'outsideSafe' && !Number(params.mm)) key = params.name ? 'pf.outsideSafe.named' : 'pf.outsideSafe.edge';
     if (Array.isArray(params.fonts)) params.fonts = params.fonts.join(POD.lang === 'ar' ? '، ' : ', ');
     // Photo numbers ("4, 8, 12") in the page's digits and list commas.
     if (typeof params.photos === 'string') params.photos = params.photos.split(/\s*,\s*/).filter(Boolean).map((n) => POD.num(Number(n))).join(POD.lang === 'ar' ? '، ' : ', ');
@@ -80,7 +80,14 @@
     const problems = checks.filter((c) => c.level === 'warn' || c.level === 'fail');
     const infos = checks.filter((c) => c.level !== 'warn' && c.level !== 'fail');
     const review = proof.review && proof.review.needed;
-    const list = (arr) => (arr.length ? `<ul>${arr.map((c) => `<li class="pf-li-${c.level === 'fail' ? 'fail' : c.level === 'warn' ? 'warn' : 'info'}">${esc(checkText(c, sideNames))}</li>`).join('')}</ul>` : '');
+    // The editor and the server can find the same problem: say each thing once. A named edge warning covers the general one on that side.
+    const named = new Set(checks.filter((c) => c.id === 'outsideSafe' && c.params && c.params.name).map((c) => c.side));
+    const list = (arr) => {
+      const seen = new Set();
+      const lines = arr.filter((c) => !(c.id === 'outsideSafe' && !(c.params && c.params.name) && !Number(c.params && c.params.mm) && named.has(c.side)))
+        .map((c) => ({ c, text: checkText(c, sideNames) })).filter((x) => !seen.has(x.text) && seen.add(x.text));
+      return lines.length ? `<ul>${lines.map(({ c, text }) => `<li class="pf-li-${c.level === 'fail' ? 'fail' : c.level === 'warn' ? 'warn' : 'info'}">${esc(text)}</li>`).join('')}</ul>` : '';
+    };
     const lead = { pass: 'proof.st.passText', warn: 'proof.st.warnText', fail: 'proof.st.failText' }[status];
     let out = `
       <div class="pf-box pf-${status}" role="group" aria-label="${esc(t('proof.checks'))}">

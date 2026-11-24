@@ -3406,6 +3406,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (method !== undefined) {
       // Switch an item between DTG and DTF (for products that allow both).
       const allowed = getProduct(item.productId)?.methods || [];
+      // Embroidered items stay embroidered: the stitch file can't be printed instead.
+      if (item.process === 'embroidery' && method !== 'embroidery') throw new HttpError(400, 'badProcess', { list: 'embroidery' });
       if (!allowed.includes(method)) throw new HttpError(400, 'badProcess', { list: allowed.join(', ') });
       item.process = method;
       store.save();
@@ -3593,7 +3595,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (fmt.make) out = await fmt.make(png, side, design);
       else if (fmt.ext === 'pdf') {
         const product = getProduct(design.productId);
-        const label = `${order ? order.number + ' · ' : ''}${pickEn(design.productName)} · ${pickEn(design.size.label)} · ${pickEn(design.color.name)} · ${pickEn(side.name)} · trim ${side.widthIn} x ${side.heightIn} in${side.bleedIn ? ` + ${side.bleedIn} in bleed` : ''}${side.offsetCm ? ` · PLACEMENT moved ${placementEn(side.offsetCm)} from standard` : ''} · ${side.dpi} DPI · ${product ? product.process.toUpperCase() : ''}`;
+        const label = `${order ? order.number + ' · ' : ''}${pickEn(design.productName)} · ${pickEn(design.size.label)} · ${pickEn(design.color.name)} · ${pickEn(side.name)} · trim ${side.widthIn} x ${side.heightIn} in${side.bleedIn ? ` + ${side.bleedIn} in bleed` : ''}${side.offsetCm ? ` · PLACEMENT moved ${placementEn(side.offsetCm)} from standard` : ''} · ${side.dpi} DPI · ${String(side.process || design.process || (product && product.process) || '').toUpperCase()}`;
         out = await printfiles.printPdf(png, side, { marks: format === 'pdf-marks', title: base, slug: label });
       } else throw new HttpError(404, 'notFound');
       store.writeDesignFile(designId, fmt.file(sideId), out);
@@ -3865,9 +3867,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       for (const format of wanted) {
         // Embroidered chest with a printed back: stitches for the stitched side, film for the printed ones.
         const embSide = embSideOf(design);
-        const sideIds = ONCE.has(format) ? [design.sides[0].id]
-          : ['dst', 'stitches'].includes(format) ? [embSide].filter(Boolean)
-            : embSide && ['dtf-film', 'dtf-pdf', 'dtg-white', 'png-mirror'].includes(format) ? design.sides.map((sd) => sd.id).filter((id) => id !== embSide)
+        // Print files skip the stitched layer when there's something printed too; it goes as DST.
+        const printed = design.sides.map((sd) => sd.id).filter((id) => id !== embSide);
+        const sideIds = ['dst', 'stitches'].includes(format) ? [embSide].filter(Boolean)
+          : ONCE.has(format) ? [design.sides[0].id]
+            : embSide && printed.length ? printed
               : design.sides.map((sd) => sd.id);
         for (const sideId of sideIds) {
           let f;
@@ -3940,7 +3944,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     for (const order of store.listOrders()) {
       order.items.forEach((item, i) => {
         const method = item.process || getProduct(item.productId)?.process;
-        if (item.kind !== 'gangsheet' && method === 'dtf' && (item.status === 'queued' || item.status === 'printing')) list.push(adminItem(order, item, i));
+        if (item.kind === 'gangsheet' || !(item.status === 'queued' || item.status === 'printing')) return;
+        if (method === 'dtf') return list.push(adminItem(order, item, i));
+        // Embroidered chest with a DTF-printed back: on the film with its printed sides only.
+        const a = adminItem(order, item, i);
+        const film = (a.sides || []).filter((sd) => sd.process === 'dtf');
+        if (film.length) list.push({ ...a, sides: film });
       });
     }
     return list.sort((a, b) => a.orderedAt.localeCompare(b.orderedAt));
@@ -3986,6 +3995,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         // One transfer per piece: an item of several sizes / colours gets one per piece, labelled with its size.
         const lines = Array.isArray(it.quantities) && it.quantities.length ? it.quantities.map((l) => ({ label: [pickEn(l.color && l.color.name), pickEn(l.size.label)].filter(Boolean).join(' '), qty: l.qty })) : [{ label: pickEn(it.size.label), qty: 1 }];
         for (const sd of it.sides) {
+          if (sd.process === 'embroidery') continue; // stitched, not printed
           const png = fs.readFileSync(store.designFile(it.designId, `${sd.id}-print.png`));
           for (const line of lines) {
             for (let k = 0; k < line.qty; k++) {

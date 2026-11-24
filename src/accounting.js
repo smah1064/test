@@ -122,7 +122,10 @@ function itemCostFrom(costs, item) {
     return { blank: sum('blank'), print: sum('print'), other: sum('other'), total: sum('total'), set: Boolean(costs && costs[item.productId]), copies: parts.reduce((n, x) => n + x.qty, 0) };
   }
   const c = (costs && costs[item.productId]) || {};
-  const sides = item.kind === 'book' ? 1 : Math.max(1, (item.sides || []).length);
+  // The embroidery layer is stitched, not an extra printed side (its own price is the embroidery surcharge).
+  const all = item.sides || [];
+  const printed = all.filter((sd) => sd && sd.process !== 'embroidery').length;
+  const sides = item.kind === 'book' ? 1 : Math.max(1, printed < all.length && printed ? printed : all.length);
   const blank = round2((c.blank || 0) + ((c.sizes && item.size && c.sizes[item.size.id]) || 0));
   const print = round2((c.printFirst || 0) + (sides - 1) * (c.printExtra || 0));
   const other = round2(c.other || 0);

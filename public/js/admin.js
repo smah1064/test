@@ -341,7 +341,11 @@
     const house = findHouse(houseId);
     // Only files offered for this item (photo sets have no preview PDF).
     const offered = sendFormats(item);
-    return { houseId, channel: house ? house.prefer : 'email', formats: new Set([printPdfKey(item), 'preview-pdf'].filter((f) => offered.includes(f))), note: '', msg: '', busy: false };
+    // Embroidery goes as the stitch file; a print PDF only when something is printed too. Booklets go imposed.
+    const stitched = item.sides.filter((sd) => (sd.process || item.process) === 'embroidery').length;
+    const printedToo = item.sides.length > stitched;
+    const main = item.paged ? ['booklet-imposed'] : [...(stitched ? ['dst'] : []), ...(!stitched || printedToo ? [printPdfKey(item)] : [])];
+    return { houseId, channel: house ? house.prefer : 'email', formats: new Set([...main, 'preview-pdf'].filter((f) => offered.includes(f))), note: '', msg: '', busy: false };
   }
   const when = (iso) => new Date(iso).toLocaleString(POD.lang === 'ar' ? 'ar-EG' : 'en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   function sendHistory(item) {
