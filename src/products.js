@@ -2070,7 +2070,7 @@ PRODUCTS.push(
     id: 'booklets',
     category: 'business',
     name: t('Booklets & Catalogues (A5, stapled)', 'كتيبات وكتالوجات (A5 دبوس)'),
-    description: t('A5 booklets stapled on the spine, 8 to 32 pages on 115 gsm paper with a 250 gsm cover; the page count is part of the size. Here you design the front and back covers. After you order, we contact you on WhatsApp for the inside pages (a PDF, Word or PowerPoint file).', 'كتيبات A5 متدبّسة من الجنب، من 8 لـ 32 صفحة على ورق 115 جرام بغلاف 250 جرام؛ عدد الصفحات جوه المقاس. هنا بتصمم الغلاف الأمامي والخلفي، وبعد ما تطلب هنكلمك على واتساب عشان الصفحات اللي جوه (ملف PDF أو Word أو PowerPoint).'),
+    description: t('A5 booklets stapled on the spine, 8 to 32 pages on 115 gsm paper with a 250 gsm cover; the page count is part of the size. Design every page here: the covers and each inside page, bound on the right (Arabic) or the left (English).', 'كتيبات A5 متدبّسة من الجنب، من 8 لـ 32 صفحة على ورق 115 جرام بغلاف 250 جرام؛ عدد الصفحات جوه المقاس. صمم كل صفحة هنا: الغلافين وكل صفحة جوه، والتدبيس يمين (عربي) أو شمال (إنجليزي).'),
     basePrice: 900,
     extraSidePrice: 0,
     colors: [{ id: 'matte', name: t('Matte cover', 'غلاف مطفي'), hex: '#ffffff' }, { id: 'gloss', name: t('Glossy cover', 'غلاف لامع'), hex: '#ffffff' }],
@@ -2078,9 +2078,22 @@ PRODUCTS.push(
       ['8-50', '8 pages × 50 copies', '8 صفحات × 50 نسخة', 0], ['16-50', '16 pages × 50 copies', '16 صفحة × 50 نسخة', 500], ['24-50', '24 pages × 50 copies', '24 صفحة × 50 نسخة', 1000], ['32-50', '32 pages × 50 copies', '32 صفحة × 50 نسخة', 1500],
       ['8-100', '8 pages × 100 copies', '8 صفحات × 100 نسخة', 600], ['16-100', '16 pages × 100 copies', '16 صفحة × 100 نسخة', 1500], ['32-100', '32 pages × 100 copies', '32 صفحة × 100 نسخة', 3100],
     ]),
+    // Many pages: the front cover, the inside pages (p2...p31) and the back cover; the size
+    // says how many are printed (sizes[].pages), the binding which way the pages turn.
+    paged: true,
+    options: [{
+      id: 'binding',
+      name: t('Binding', 'التدبيس'),
+      help: t('Arabic booklets open on the right, English ones on the left: it sets the order of the pages.', 'الكتيبات العربي بتتفتح من اليمين والإنجليزي من الشمال: ده بيحدد ترتيب الصفحات.'),
+      choices: [
+        { id: 'right', name: t('On the right (Arabic)', 'من اليمين (عربي)'), price: 0 },
+        { id: 'left', name: t('On the left (English)', 'من الشمال (إنجليزي)'), price: 0 },
+      ],
+    }],
     sides: [
-      { id: 'front', name: t('Front cover', 'الغلاف الأمامي'), svg: bookletSvg(true), overlay: bookletSpine(true), printArea: { ...BOOKLET }, printWidthIn: cmIn(14.8) },
-      { id: 'back', name: t('Back cover', 'الغلاف الخلفي'), svg: bookletSvg(false), overlay: bookletSpine(false), printArea: { ...BOOKLET }, printWidthIn: cmIn(14.8) },
+      { id: 'front', name: t('Front cover', 'الغلاف الأمامي'), short: t('Cover', 'الغلاف'), svg: bookletSvg(true), overlay: bookletSpine(true), printArea: { ...BOOKLET }, printWidthIn: cmIn(14.8) },
+      ...Array.from({ length: 30 }, (_, k) => ({ id: `p${k + 2}`, name: t(`Page ${k + 2}`, `صفحة ${k + 2}`), short: t(String(k + 2), String(k + 2)), svg: flat(BOOKLET.x, BOOKLET.y, BOOKLET.w, BOOKLET.h), printArea: { ...BOOKLET }, printWidthIn: cmIn(14.8) })),
+      { id: 'back', name: t('Back cover', 'الغلاف الخلفي'), short: t('Back', 'الخلفي'), svg: bookletSvg(false), overlay: bookletSpine(false), printArea: { ...BOOKLET }, printWidthIn: cmIn(14.8) },
     ],
     cardArt: withArt(sampleArt(BOOKLET, { bg: '#fff0f6', accent: '#c2255c' }), bookletSpine(true)),
   },
@@ -2702,8 +2715,22 @@ function deliveryFor(speed, at = new Date()) {
   return { speed: s, days, fee: s === 'express' ? expressFee() : 0, by: businessDaysAfter(at, days) };
 }
 
+// Booklets: each size says how many pages are printed ("16-50" = 16 pages × 50 copies).
+for (const p of PRODUCTS) if (p.paged) for (const z of p.sizes) z.pages = Math.max(4, Math.min(p.sides.length, Number(String(z.id).split('-')[0]) || 4));
+/**
+ * The pages a booklet of this size prints, in reading order: the front cover, the
+ * inside pages, the back cover (other products: all their sides).
+ */
+function pageSides(product, sizeId) {
+  if (!product.paged) return product.sides;
+  const size = product.sizes.find((z) => z.id === sizeId) || product.sizes[0];
+  const n = size.pages || product.sides.length;
+  return [product.sides[0], ...product.sides.slice(1, n - 1), product.sides[product.sides.length - 1]];
+}
+
 module.exports = {
   PRODUCTS,
+  pageSides,
   matchSize,
   matchColor,
   variantColumns,

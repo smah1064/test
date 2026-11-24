@@ -294,7 +294,15 @@
           ${mergeFormats(item).map((f, k) => `<button class="btn btn-sm ${k === 0 ? 'btn-primary' : ''}" data-download="${esc(s.printUrl)}?format=${f}">⬇ ${esc(t('fmt.' + f))}${k === 0 ? ` <span class="rec">· ${esc(t('admin.recommended'))}</span>` : ''}</button>`).join('')}
         </div>
       </div>` : '';
-    return mergeBlock + `
+    // Booklets: every page together, in reading order or imposed for folding and stapling (shown with the first page).
+    const bookletBlock = item.paged && item.sides[0] === s ? `
+      <div class="print-files-block">
+        <div class="small muted" style="font-weight:700;margin-bottom:6px">${esc(t('admin.bookletFiles', { n: POD.num(item.sides.length) }))}</div>
+        <div class="print-files">
+          ${['booklet-imposed', 'booklet-pdf'].map((f, k) => `<button class="btn btn-sm ${k === 0 ? 'btn-primary' : ''}" data-download="${esc(s.printUrl)}?format=${f}">⬇ ${esc(t('fmt.' + f))}${k === 0 ? ` <span class="rec">· ${esc(t('admin.recommended'))}</span>` : ''}</button>`).join('')}
+        </div>
+      </div>` : '';
+    return mergeBlock + bookletBlock + `
       <div class="print-files-block">
         <div class="small muted" style="font-weight:700;margin-bottom:6px">${esc(t('admin.files', { side: tr(s.name) }))}</div>
         <div class="print-files">
@@ -324,6 +332,7 @@
     if (item.kind === 'photoset') return ['photos-zip', 'proof'];
     if (item.kind === 'gangsheet') return ['sheet-pdf', 'sheet-pdf-plain', 'preview-pdf', 'proof'];
     const procs = [...new Set([item.process, ...item.sides.map((sd) => sd.process)].filter(Boolean))];
+    if (item.paged) return [...new Set(['booklet-imposed', 'booklet-pdf', 'preview-pdf', 'pdf'])];
     const more = procs.flatMap((p) => FORMATS_BY_METHOD[p] || ['png', 'pdf-marks', 'png-mirror', 'tiff']).concat(item.sides.some((sd) => sd.hasSvg) ? ['svg'] : []);
     return [...new Set(['pdf', 'preview-pdf', ...more, ...(item.pattern ? ['repeat'] : [])])];
   }

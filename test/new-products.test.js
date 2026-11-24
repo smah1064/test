@@ -79,6 +79,7 @@ test('every size has a price, and bigger packs cost more', () => {
       assert.ok(priceFor(p, z.id, p.sides.length) >= one, `${id}/${z.id} more sides never cost less`);
     }
     for (const o of p.options || []) {
+      if (o.choices.every((c) => c.price === 0)) continue; // a free choice, like which side a booklet opens from
       for (const c of o.choices.slice(1)) {
         for (const z of p.sizes) assert.ok((typeof c.price === 'number' ? c.price : c.price[z.id]) > 0, `${id} ${o.id}/${c.id} priced for ${z.id}`);
       }
@@ -116,8 +117,8 @@ test('print areas sit inside the drawing, and every size prints at its real size
 });
 
 /** Create a design on every side of a product the way the editor does, upload its files and complete it. */
-async function makeDesign(p, size, extra = {}) {
-  const sides = Object.fromEntries(p.sides.map((s) => [s.id, { editor: { objects: [{ type: 'i-text', text: 'Hi' }], ...(p.pattern ? { pattern: { repeat: 'halfdrop', tileCm: p.pattern.tile } } : {}) } }]));
+async function makeDesign(p, size, extra = {}, only = null) {
+  const sides = Object.fromEntries(p.sides.filter((s) => !only || only.includes(s.id)).map((s) => [s.id, { editor: { objects: [{ type: 'i-text', text: 'Hi' }], ...(p.pattern ? { pattern: { repeat: 'halfdrop', tileCm: p.pattern.tile } } : {}) } }]));
   const res = await post('/api/designs', { productId: p.id, color: p.colors[0].id, size: size.id, sides, ...extra });
   assert.strictEqual(res.status, 201, `${p.id}: ${await res.clone().text()}`);
   const created = await res.json();
@@ -155,4 +156,32 @@ test('options are charged per pack (menu lamination)', async () => {
   const p = byId('menus');
   const d = await makeDesign(p, p.sizes.find((z) => z.id === 'A3-25'), { options: { lamination: 'matte' } });
   assert.strictEqual(d.price, priceFor(p, 'A3-25', 2) + 400);
+});
+
+test('booklets: one design per page, only the pages of the size, PDFs in reading order and imposed for stapling', async () => {
+  const p = byId('booklets');
+  const size = p.sizes.find((z) => z.id === '8-50');
+  assert.strictEqual(size.pages, 8);
+  // An 8-page booklet has no page 12.
+  const bad = await post('/api/designs', { productId: 'booklets', color: 'matte', size: '8-50', sides: { front: { editor: { objects: [{ type: 'i-text', text: 'x' }] } }, p12: { editor: { objects: [{ type: 'i-text', text: 'x' }] } } } });
+  assert.strictEqual(bad.status, 400);
+  // The covers and one inside page designed; the other pages stay blank. Bound on the left (English).
+  const d = await makeDesign(p, size, { options: { binding: 'left' } }, ['front', 'p3', 'back']);
+  assert.deepStrictEqual(d.sides.map((s) => s.id), ['front', 'p3', 'back']);
+  assert.strictEqual(d.price, priceFor(p, '8-50', 3), 'the page count is in the size price');
+  const order = await (await post('/api/orders', { customer: { name: 'Test', phone: '01012345678', governorate: 'cairo', city: 'Nasr City', address: '1 Street' }, designIds: [d.id] })).json();
+  assert.ok(order.id, JSON.stringify(order));
+  const { token } = await (await post('/api/admin/login', { password: 'secret' })).json();
+  const get = (url) => fetch(base + url, { headers: { Authorization: `Bearer ${token}` } });
+  const pagesIn = (buf) => (buf.toString('latin1').match(/\/Type\s*\/Page\b/g) || []).length;
+  const reading = await get(`/api/admin/files/${d.id}/front?format=booklet-pdf`);
+  assert.strictEqual(reading.status, 200, await reading.clone().text());
+  assert.match(reading.headers.get('content-disposition'), /booklet-8p\.pdf/);
+  assert.strictEqual(pagesIn(Buffer.from(await reading.arrayBuffer())), 8, 'every page, blank ones included');
+  const imposed = await get(`/api/admin/files/${d.id}/front?format=booklet-imposed`);
+  assert.strictEqual(imposed.status, 200);
+  assert.strictEqual(pagesIn(Buffer.from(await imposed.arrayBuffer())), 4, '2 sheets, printed both sides');
+  // Other products have no booklet files.
+  const card = await makeDesign(byId('postcards'), byId('postcards').sizes[0], {}, ['front']);
+  assert.strictEqual((await get(`/api/admin/files/${card.id}/front?format=booklet-pdf`)).status, 404);
 });

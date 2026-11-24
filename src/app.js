@@ -30,6 +30,7 @@ const {
   matchSize,
   matchColor,
   variantColumns,
+  pageSides,
 } = require('./products');
 const { GOVERNORATES, normalizeEgyptMobile } = require('./egypt');
 const { FIELDS, langOf, format } = require('./i18n');
@@ -91,7 +92,7 @@ const MAX_EDITOR_JSON_BYTES = 40 * 1024 * 1024;
 // merge: a name list's pictures, one per copy (up to 1,000 of them).
 const UPLOAD_LIMITS = { print: 60 * 1024 * 1024, preview: 8 * 1024 * 1024, svg: 40 * 1024 * 1024, source: 60 * 1024 * 1024, merge: 150 * 1024 * 1024, photo: 15 * 1024 * 1024, thumb: 300 * 1024 };
 // Sides: front/back, and the two mugs of the couple mugs set.
-const FILE_RE = /^(front|back|mug1|mug2|emb)-(print|preview)\.png$|^(front|back|mug1|mug2)-merge-base\.png$|^(front|back|mug1|mug2|emb)-design\.svg$|^(front|back|mug1|mug2)-merge\.bin$|^src-\d{1,2}\.(png|jpg|webp)$|^(photo|thumb)-\d{3}\.jpg$/;
+const FILE_RE = /^(front|back|mug1|mug2|emb|p\d{1,2})-(print|preview)\.png$|^(front|back|mug1|mug2)-merge-base\.png$|^(front|back|mug1|mug2|emb|p\d{1,2})-design\.svg$|^(front|back|mug1|mug2)-merge\.bin$|^src-\d{1,2}\.(png|jpg|webp)$|^(photo|thumb)-\d{3}\.jpg$/;
 const SIGNATURES = {
   png: (b) => b.subarray(0, 8).equals(PNG_SIGNATURE),
   jpg: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
@@ -249,6 +250,8 @@ function publicItem(item) {
     status: item.status,
     history: item.history,
     process: item.process || getProduct(item.productId)?.process,
+    // Booklets: the whole booklet's files (all pages in order, imposed for stapling).
+    paged: Boolean(getProduct(item.productId)?.paged),
     methods: item.method === 'embroidery' ? ['embroidery'] : getProduct(item.productId)?.methods || [item.process || 'dtf'],
     kind: item.kind || 'product',
     ...(item.photos ? { photos: item.photos } : {}),
@@ -1131,6 +1134,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const picked = cleanOptions(product, (req.body || {}).options);
     if (picked.error) throw new HttpError(400, 'badOption');
     if (emb && !sideIds.includes(EMB)) throw new HttpError(400, 'embEmpty');
+    // Booklets: only the pages this size prints (an 8-page booklet has no page 12).
+    if (product.paged) {
+      const pages = new Set(pageSides(product, sizeDef.id).map((sd) => sd.id));
+      const extra = sideIds.filter((id) => !pages.has(id));
+      if (extra.length) throw new HttpError(400, 'unknownSide', { side: extra.join(', ') });
+    }
     const editor = {};
     const storedSides = [];
     // Fabric: how the tile repeats and how big it prints (the tile is the print file).
@@ -3520,6 +3529,23 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (!fs.existsSync(file)) throw new HttpError(404, 'notFound');
       return { path: file, name: `${base}-embroidery${format === 'dst' ? '.dst' : '-stitches.png'}` };
     }
+    if (format === 'booklet-pdf' || format === 'booklet-imposed') {
+      // Booklets: every page in reading order (blank pages left white), or arranged on sheets
+      // for folding and stapling (saddle stitch), turning the way the binding says.
+      const product = getProduct(design.productId);
+      if (!product || !product.paged) throw new HttpError(404, 'notFound');
+      const order = pageSides(product, design.size.id);
+      const spec = design.sides[0];
+      const pages = order.map((ps) => {
+        const sd = design.sides.find((x) => x.id === ps.id);
+        const file = sd && store.designFile(designId, `${sd.id}-print.png`);
+        return file && fs.existsSync(file) ? fs.readFileSync(file) : null;
+      });
+      const rtl = !(design.options && design.options.binding && design.options.binding.id === 'left');
+      const target = store.designFile(designId, `${format}-v${design.version || 1}.pdf`);
+      if (!fs.existsSync(target)) store.writeDesignFile(designId, path.basename(target), await printfiles.bookletPdf(pages, { widthIn: spec.widthIn, heightIn: spec.heightIn, bleedIn: spec.bleedIn || 0 }, { imposed: format === 'booklet-imposed', rtl, title: `${base} booklet` }));
+      return { path: target, name: `${base.replace(`-${sideId}`, '')}-booklet-${order.length}p${format === 'booklet-imposed' ? '-imposed' : ''}.pdf` };
+    }
     if (format === 'repeat') {
       // Fabric: the whole piece with the tile repeated, to check before printing.
       if (!design.pattern) throw new HttpError(404, 'notFound');
@@ -3751,13 +3777,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   const productHouses = () => store.db.productHouses || {};
   const findHouse = (id) => houses().find((h) => h.id === id) || null;
   // Formats made once per item (not once per side).
-  const ONCE = new Set(['preview-pdf', 'book-pdf', 'proof', 'sheet-pdf', 'sheet-pdf-plain', 'repeat', 'dst', 'stitches', 'photos-zip', 'merge-pdf', 'merge-pdf-marks', 'merge-zip', 'merge-csv', 'merge-names-zip']);
+  const ONCE = new Set(['preview-pdf', 'book-pdf', 'booklet-pdf', 'booklet-imposed', 'proof', 'sheet-pdf', 'sheet-pdf-plain', 'repeat', 'dst', 'stitches', 'photos-zip', 'merge-pdf', 'merge-pdf-marks', 'merge-zip', 'merge-csv', 'merge-names-zip']);
   const SEND_FORMATS = new Set([...Object.keys(FORMATS), ...ONCE]);
   const FILE_LABELS = {
     pdf: t('Print PDF', 'ملف الطباعة PDF'), 'pdf-marks': t('Print PDF with crop marks', 'ملف الطباعة PDF بعلامات القص'), png: t('Print PNG (transparent)', 'ملف الطباعة PNG (خلفية شفافة)'), 'png-mirror': t('Print PNG (mirrored)', 'ملف الطباعة PNG (معكوس)'),
     tiff: t('Print TIFF (CMYK)', 'ملف الطباعة TIFF (CMYK)'), svg: t('Vector SVG', 'ملف فيكتور SVG'), 'dtf-film': t('DTF film PNG', 'فيلم DTF بصيغة PNG'), 'dtf-pdf': t('DTF film PDF', 'فيلم DTF بصيغة PDF'), 'dtg-white': t('DTG white underbase', 'طبقة الأبيض لطباعة DTG'),
     'laser-svg': t('Laser file for LightBurn (SVG)', 'ملف الليزر لـ LightBurn (SVG)'), 'engrave-png': t('Engraving bitmap (PNG)', 'صورة الحفر (PNG)'), 'cut-svg': t('Cut lines (SVG)', 'خطوط القص (SVG)'),
-    'preview-pdf': t('Preview PDF (customer design)', 'معاينة PDF (تصميم العميل)'), repeat: t('Repeat preview (whole fabric piece)', 'معاينة التكرار (قطعة القماش كاملة)'), dst: t('Embroidery file (DST)', 'ملف التطريز (DST)'), stitches: t('Stitch preview', 'معاينة الغرز'), 'book-pdf': t('Book print PDF', 'ملف طباعة الكتاب PDF'), proof: t('Preview image', 'صورة المعاينة'), 'sheet-pdf': t('Gang sheet PDF (mirrored)', 'شيت DTF بصيغة PDF (معكوس)'), 'sheet-pdf-plain': t('Gang sheet PDF', 'شيت DTF بصيغة PDF'),
+    'preview-pdf': t('Preview PDF (customer design)', 'معاينة PDF (تصميم العميل)'), repeat: t('Repeat preview (whole fabric piece)', 'معاينة التكرار (قطعة القماش كاملة)'), dst: t('Embroidery file (DST)', 'ملف التطريز (DST)'), stitches: t('Stitch preview', 'معاينة الغرز'), 'book-pdf': t('Book print PDF', 'ملف طباعة الكتاب PDF'), 'booklet-pdf': t('Booklet PDF (all pages in order)', 'الكتيب PDF (كل الصفحات بالترتيب)'), 'booklet-imposed': t('Booklet imposed for saddle stitching', 'الكتيب مترتب للطباعة والتدبيس'), proof: t('Preview image', 'صورة المعاينة'), 'sheet-pdf': t('Gang sheet PDF (mirrored)', 'شيت DTF بصيغة PDF (معكوس)'), 'sheet-pdf-plain': t('Gang sheet PDF', 'شيت DTF بصيغة PDF'),
     'photos-zip': t('All photos (ZIP, a folder per size)', 'كل الصور (ZIP، فولدر لكل مقاس)'),
     'merge-pdf': t('All names (PDF, one page per copy)', 'كل الأسماء (PDF، صفحة لكل نسخة)'), 'merge-pdf-marks': t('All names (PDF with crop marks)', 'كل الأسماء (PDF بعلامات القص)'), 'merge-zip': t('One PDF per name (ZIP)', 'ملف PDF لكل اسم (ZIP)'), 'merge-csv': t('Names list (CSV)', 'قائمة الأسماء (CSV)'), 'merge-names-zip': t('Names only (ZIP of PNGs)', 'الأسماء بس (ZIP صور PNG)'),
   };

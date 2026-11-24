@@ -286,4 +286,72 @@ async function repeatPreview(tilePng, { repeat, tileCm, fabricCm }) {
   return sharp(sheet).extract({ left: t, top: t, width: W, height: H }).jpeg({ quality: 85 }).toBuffer();
 }
 
-module.exports = { previewPdf, repeatPreview, enhancePhoto, finalizePrintPng, pngInfo, mirroredPng, cmykTiff, cmykProof, printPdf, hardAlpha, dtfFilmPng, dtgUnderbase, filmPdf };
+/**
+ * A booklet as print PDFs. `pages` are the print PNGs (trim + bleed) in reading order,
+ * front cover first, back cover last; null is a blank page.
+ *  - reading order: one PDF page per booklet page, at its size with bleed (TrimBox set);
+ *  - imposed (saddle stitch): the pages paired on sheets the size of two pages, so the
+ *    printed stack folds into the booklet. Right-bound booklets (Arabic) turn the other way.
+ * The page count is made a multiple of 4 with blank pages before the back cover.
+ */
+function bookletPdf(pages, spec, { imposed = false, rtl = false, title = '' } = {}) {
+  const pt = 72;
+  const trimW = spec.widthIn * pt;
+  const trimH = spec.heightIn * pt;
+  const b = (spec.bleedIn || 0) * pt;
+  const list = pages.slice();
+  while (list.length % 4) list.splice(list.length - 1, 0, null);
+  const N = list.length;
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ autoFirstPage: false, margin: 0, info: { Title: title, Creator: 'ebda3' } });
+    const chunks = [];
+    doc.on('data', (c) => chunks.push(c));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+    const boxes = (W, H, trim) => {
+      doc.page.dictionary.data.BleedBox = [0, 0, W, H];
+      doc.page.dictionary.data.TrimBox = trim;
+      doc.page.dictionary.data.ArtBox = trim;
+    };
+    if (!imposed) {
+      const W = trimW + 2 * b;
+      const H = trimH + 2 * b;
+      for (const png of list) {
+        doc.addPage({ size: [W, H], margin: 0 });
+        boxes(W, H, [b, b, W - b, H - b]);
+        if (png) doc.image(png, 0, 0, { width: W, height: H });
+      }
+    } else {
+      // Sheet s (outside, inside): which pages sit left and right (1-based), for a left-bound booklet.
+      const W = 2 * trimW + 2 * b;
+      const H = trimH + 2 * b;
+      const sides = [];
+      for (let k = 0; k < N / 4; k++) {
+        sides.push([N - 2 * k, 1 + 2 * k]); // outside of sheet k
+        sides.push([2 + 2 * k, N - 1 - 2 * k]); // inside
+      }
+      const place = (png, left) => {
+        if (!png) return;
+        // Each page keeps its bleed on the three outer edges; the fold edge is cut at the trim.
+        const x = left ? 0 : trimW;
+        const clipX = left ? 0 : b + trimW;
+        doc.save();
+        doc.rect(clipX, 0, b + trimW, H).clip();
+        doc.image(png, x, 0, { width: trimW + 2 * b, height: H });
+        doc.restore();
+      };
+      for (const [l, r] of sides) {
+        const [left, right] = rtl ? [r, l] : [l, r];
+        doc.addPage({ size: [W, H], margin: 0 });
+        boxes(W, H, [b, b, W - b, H - b]);
+        place(list[left - 1], true);
+        place(list[right - 1], false);
+        // The fold: a short mark top and bottom, in the bleed.
+        if (b > 2) doc.lineWidth(0.25).strokeColor('#000000').moveTo(b + trimW, 0).lineTo(b + trimW, b * 0.7).stroke().moveTo(b + trimW, H).lineTo(b + trimW, H - b * 0.7).stroke();
+      }
+    }
+    doc.end();
+  });
+}
+
+module.exports = { bookletPdf, previewPdf, repeatPreview, enhancePhoto, finalizePrintPng, pngInfo, mirroredPng, cmykTiff, cmykProof, printPdf, hardAlpha, dtfFilmPng, dtgUnderbase, filmPdf };

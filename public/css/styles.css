@@ -1251,3 +1251,6 @@ html[dir="rtl"] .hm-arrow { transform: scaleX(-1); }
 .hm-pic img.hm-designed { object-fit: contain; background: #ececec; }
 .pp-photo:has(img.pp-designed) { background: #ececec; }
 .pp-photo img.pp-designed { object-fit: contain; padding: 0; }
+/* Booklets: the page strip (Cover, 2, 3… Back) scrolls sideways. */
+.side-tabs.pages { flex-wrap: nowrap; overflow-x: auto; max-width: min(620px, 100%); scrollbar-width: thin; }
+.side-tabs.pages .page-tab { min-width: 36px; padding: 6px 9px; justify-content: center; flex: none; }

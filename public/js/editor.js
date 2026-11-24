@@ -238,9 +238,16 @@
   /** The product's embroidery (null when it can't be embroidered). */
   const emb = () => st.product.embroidery || null;
   /** The product sides (tabs); the embroidery layer is reached from its side with Print / Embroidery. */
-  const activeSides = () => st.product.sides;
-  /** Every layer that can carry artwork: the sides, and the embroidery layer. */
-  const allSides = () => (emb() ? [...st.product.sides, baseSide(EMB)] : st.product.sides);
+  const activeSides = () => {
+    // Booklets: the pages this size prints (front cover, inside pages, back cover).
+    if (!st.product.paged) return st.product.sides;
+    const all = st.product.sides;
+    const size = st.product.sizes.find((z) => z.id === st.sizeId) || st.product.sizes[0];
+    const n = Math.min(all.length, size.pages || all.length);
+    return [all[0], ...all.slice(1, n - 1), all[all.length - 1]];
+  };
+  /** Every layer that can carry artwork: the sides (pages), and the embroidery layer. */
+  const allSides = () => (emb() ? [...activeSides(), baseSide(EMB)] : activeSides());
   /** Is this the embroidery layer? */
   const embHere = (id = st.side) => Boolean(emb() && id === EMB);
   /** The product side a layer is on (the embroidery: its side). */
@@ -3234,6 +3241,8 @@
     fit(); // the garment is drawn at this size's scale
     schedulePatternPreview(0);
     redrawn.then(() => refreshGhost()); // the print under the embroidery changed size too
+    // Booklets: a smaller page count drops the last pages from the strip (their designs are kept).
+    if (st.product.paged && !activeSides().some((sd) => sd.id === st.side)) redrawn = redrawn.then(() => showSide(activeSides()[0].id));
     return redrawn;
   }
   $('product-select').addEventListener('change', serial(async (e) => changeProduct(e.target.value)));
@@ -3310,8 +3319,13 @@
   function renderSideTabs() {
     if (heldOff('side-tabs', renderSideTabs)) return;
     const n = (id) => (id === st.side ? canvas.getObjects().length : (st.designs[id] || []).length);
+    // Booklets: a strip of numbered pages (Cover, 2, 3… Back) that scrolls sideways.
+    $('side-tabs').classList.toggle('pages', Boolean(st.product.paged));
     $('side-tabs').innerHTML = activeSides().map((s) => {
       const on = hostOf() === s.id;
+      if (st.product.paged) {
+        return `<button class="side-tab page-tab ${on ? 'active' : ''}" data-side="${s.id}" role="tab" aria-selected="${on}" title="${esc(tr(s.name))}" aria-label="${esc(tr(s.name))}">${esc(tr(s.short || s.name))}${n(s.id) ? '<span class="has"></span>' : ''}</button>`;
+      }
       const stitched = emb() && emb().side === s.id && n(EMB) > 0;
       const count = n(s.id) + (stitched ? n(EMB) : 0);
       // The side with embroidery says so ("Front + embroidery").
@@ -5019,7 +5033,10 @@
     canvas.discardActiveObject();
     const original = st.side;
     const sides = [];
-    for (const sd of st.product.sides) {
+    const previewSides = st.product.paged
+      ? activeSides().filter((sd, k, all) => k === 0 || k === all.length - 1 || sd.id === original)
+      : st.product.sides;
+    for (const sd of previewSides) {
       if (sd.id !== st.side) await showSide(sd.id);
       if (st.pattern) {
         // Fabric: the product picture with the pattern repeated at its real size.
