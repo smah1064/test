@@ -28,6 +28,7 @@
 
   // ---------- Picture ----------
   let token = 0;
+  let zoomReady = false; // hover / tap zoom on the picture, set up with the first picture
   let current = null; // { st, entry } for the preview window
   async function draw() {
     const my = ++token;
@@ -61,6 +62,12 @@
       const blob = await new Promise((r) => cv.toBlob(r, 'image/webp', 0.9));
       const old = $('dp-img').src;
       $('dp-img').src = URL.createObjectURL(blob);
+      // Where the design is in the picture, for "Zoom to the design".
+      $('dp-img').zoomFocus = cv.focus && typeof cv.focus === 'object' ? cv.focus : null;
+      if (!zoomReady) {
+        zoomReady = true;
+        window.POD_PREVIEW.zoomable($('dp-img'));
+      }
 
       if (old.startsWith('blob:')) URL.revokeObjectURL(old);
       current = { st, entry };

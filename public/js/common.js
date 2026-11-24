@@ -331,6 +331,12 @@
       f.append(span);
     }
     f.insertAdjacentHTML('beforeend', ' · <a href="/privacy" data-i18n="pp2.link" style="color:inherit"></a> · <a href="/rights" data-rights-link data-i18n="rights.policy" style="color:inherit"></a>');
+    // The white logo (from the brand kit) on the dark footer, in the page's language.
+    const text = document.createElement('div');
+    text.className = 'footer-text';
+    text.append(...f.childNodes);
+    f.append(text);
+    f.insertAdjacentHTML('afterbegin', '<a class="footer-logo" href="/" aria-label="إبداع · ebda3"><img class="for-ar" src="/img/logo-ar-white.svg" alt="" width="91" height="60"><img class="for-en" src="/img/logo-en-white.svg" alt="" width="147" height="60"></a>');
   }
   function initChrome() {
     addAccountLink();

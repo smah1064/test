@@ -47,7 +47,14 @@ html[lang="en"] .lang-toggle { font-family: "Cairo", sans-serif; }
 
 .container { width: 100%; max-width: 1200px; margin: 0 auto; padding: 0 20px; }
 main { flex: 1; }
-.site-footer { border-top: 1px solid var(--line); color: var(--ink-3); font-size: 14px; padding: 24px 0; margin-top: 48px; background: #fff; }
+.site-footer { color: rgba(255, 255, 255, .72); font-size: 14px; padding: 28px 0; margin-top: 48px; background: #16181d; }
+/* Dark footer: the white logo from the brand kit, then the line and links. */
+.site-footer .container { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+.site-footer a { color: #fff; }
+.site-footer .footer-text { flex: 1 1 260px; line-height: 1.7; }
+.footer-logo { display: inline-flex; flex: none; }
+.footer-logo img { height: 44px; width: auto; display: block; }
+html[lang="ar"] .footer-logo .for-en, html:not([lang="ar"]) .footer-logo .for-ar { display: none; }
 
 /* ---------- Buttons & form ---------- */
 .btn {
@@ -625,7 +632,12 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 .dp-layout > * { min-width: 0; } /* the product strip scrolls instead of widening the page */
 .dp-stage { padding: 10px; position: relative; background: linear-gradient(180deg, #f1f3f6, #e8ebf0); }
 .dp-picture { position: relative; display: grid; place-items: center; min-height: 320px; }
+.dp-zoom { position: relative; width: 100%; max-width: 620px; overflow: hidden; border-radius: 10px; }
 .dp-picture img { width: 100%; max-width: 620px; height: auto; display: block; transition: opacity .2s; }
+/* Zoom on the picture (hover, click to hold, tap on phones), as in the previews. */
+.dp-zoom img.pv-zoomable { cursor: zoom-in; transition: transform .12s ease-out, opacity .2s; will-change: transform; }
+.dp-zoom img.pv-zoomable.pv-zoomed { cursor: zoom-out; touch-action: none; }
+.dp-zoom .pv-zoom-btn { bottom: auto; top: 10px; } /* the 3D preview button is at the bottom */
 .dp-picture img:not([src]) { visibility: hidden; height: 420px; }
 .dp-picture .spinner { position: absolute; }
 .dp-3d { position: absolute; bottom: 14px; inset-inline-start: 14px; gap: 6px; background: #fff; }

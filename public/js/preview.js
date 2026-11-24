@@ -909,12 +909,15 @@
     });
     // The picture fits its box (object-fit: contain): the print's place in the box.
     const focusPoint = () => {
-      const f = pic.focus || { x: 0.5, y: 0.5, w: 0.4 };
+      // (A canvas carries .focus; a picture element its .zoomFocus, as .focus is its own method.)
+      const f = pic.zoomFocus || (typeof pic.focus === 'object' && pic.focus) || { x: 0.5, y: 0.5, w: 0.4 };
+      const pw = pic.naturalWidth || pic.width;
+      const ph = pic.naturalHeight || pic.height;
       const b = body.getBoundingClientRect();
-      const k = Math.min(b.width / pic.width, b.height / pic.height);
-      const fx = ((b.width - pic.width * k) / 2 + f.x * pic.width * k) / b.width;
-      const fy = ((b.height - pic.height * k) / 2 + f.y * pic.height * k) / b.height;
-      const fw = (f.w * pic.width * k) / b.width;
+      const k = Math.min(b.width / pw, b.height / ph);
+      const fx = ((b.width - pw * k) / 2 + f.x * pw * k) / b.width;
+      const fy = ((b.height - ph * k) / 2 + f.y * ph * k) / b.height;
+      const fw = (f.w * pw * k) / b.width;
       return { fx, fy, s: Math.min(5, Math.max(2, 0.6 / Math.max(0.01, fw))) };
     };
     const btn = document.createElement('button');
@@ -1108,5 +1111,5 @@
     });
   });
 
-  window.POD_PREVIEW = { open, renderRealistic, renderPhoto, photoFor, modelsFor, sizedPicture };
+  window.POD_PREVIEW = { open, renderRealistic, renderPhoto, photoFor, modelsFor, sizedPicture, zoomable };
 })();
