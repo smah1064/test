@@ -55,6 +55,30 @@
 
   // ---------- Form ----------
   const today = new Date().toISOString().slice(0, 10);
+  // The books are printed in English: right-to-left letters (Arabic…) can't go in. Shown on every such
+  // field as it is typed, and all of them at once when making the book.
+  const RTL_RE = /[\u0590-\u08ff\ufb1d-\ufdff\ufe70-\ufeff]/;
+  function markLatin(el) {
+    if (!el || !el.dataset || !el.dataset.q || !/^(INPUT|TEXTAREA)$/.test(el.tagName) || el.type === 'date') return false;
+    const bad = RTL_RE.test(el.value || '');
+    const field = el.closest('.field');
+    let note = field && field.querySelector('.bk-latin-note');
+    if (bad && field && !note) {
+      note = document.createElement('p');
+      note.className = 'bk-latin-note';
+      note.setAttribute('role', 'alert');
+      note.style.cssText = 'margin:4px 0 0;color:var(--bad);font-size:13px;font-weight:600';
+      note.textContent = t('book.latinNote');
+      field.appendChild(note);
+    } else if (!bad && note) note.remove();
+    el.setAttribute('aria-invalid', bad ? 'true' : 'false');
+    el.style.borderColor = bad ? 'var(--bad)' : '';
+    return bad;
+  }
+  /** Fields with right-to-left letters, as [question, element]. */
+  const latinProblems = () => book.questions
+    .filter((q) => q.type !== 'choice' && q.type !== 'date' && RTL_RE.test(String(state.answers[q.id] || '')))
+    .map((q) => [q, document.querySelector(`#bk-questions [data-q="${q.id}"]`)]);
   function renderForm() {
     $('bk-title').textContent = tr(book.title).replace('{name}', state.answers.name || t('book.yourChild'));
     $('bk-blurb').textContent = tr(book.blurb);
@@ -72,6 +96,8 @@
       const type = q.type === 'date' ? 'date' : 'text';
       return `<div class="field">${label}<input id="q-${q.id}" data-q="${q.id}" type="${type}" ${type === 'date' ? `max="${today}" min="1990-01-01"` : `maxlength="${q.max || 40}" dir="auto"`} value="${esc(v)}" placeholder="${q.placeholder ? esc(tr(q.placeholder)) : ''}"></div>`;
     }).join('');
+    $('bk-questions').insertAdjacentHTML('afterbegin', `<p class="muted small bk-en-hint" style="margin:0 0 10px">${esc(t('book.englishHint'))}</p>`);
+    $('bk-questions').querySelectorAll('input[data-q], textarea[data-q]').forEach(markLatin);
     $('bk-sizes').innerHTML = product.sizes.map((s) => `<button type="button" class="chip ${s.id === state.size.id ? 'active' : ''}" data-size="${s.id}">${esc(tr(s.label))}${s.surcharge ? ` <span style="opacity:.7">+${esc(money(s.surcharge))}</span>` : ''}</button>`).join('');
     $('bk-price').textContent = money(product.basePrice + state.size.surcharge);
     document.title = `${tr(product.name)} · OneOff Print`;
@@ -96,6 +122,7 @@
     const q = e.target.dataset.q;
     if (!q || e.target.tagName === 'BUTTON') return;
     state.answers[q] = e.target.value;
+    markLatin(e.target);
     changed();
   });
   $('bk-questions').addEventListener('click', (e) => {
@@ -280,6 +307,17 @@
     return null;
   }
   async function make() {
+    const rtl = latinProblems();
+    if (rtl.length) {
+      rtl.forEach(([, el]) => markLatin(el));
+      POD.toast(t('book.latinFields', { fields: rtl.map(([q]) => tr(q.label)).join(POD.lang === 'ar' ? '، ' : ', ') }), 'error');
+      const first = rtl[0][1];
+      if (first) {
+        first.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        first.focus({ preventScroll: true });
+      }
+      return false;
+    }
     const miss = missing();
     if (miss) {
       POD.toast(t('book.missing', { field: miss }), 'error');

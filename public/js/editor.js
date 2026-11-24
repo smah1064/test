@@ -150,25 +150,34 @@
   const draftMode = !params.get('design') && !!(POD.drafts && idbOk);
   let restoredDraft = false;
   let bootDone = false; // autosave starts once the editor has loaded
-  if (draftMode && !fromShare && !libraryDesign) {
-    const draft = await POD.drafts.get(st.product.id);
-    if (draft && draft.designs && Object.values(draft.designs).some((o) => o && o.length)) {
-      st.colorId = draft.colorId;
-      st.sizeId = draft.sizeId;
-      for (const [sideId, objs] of Object.entries(draft.designs)) {
-        if (st.product.sides.some((s) => s.id === sideId)) st.designs[sideId] = await blobifyImages(objs || []);
-      }
-      for (const [sideId, o] of Object.entries(draft.offsets || {})) if (st.product.sides.some((s) => s.id === sideId)) st.offsets[sideId] = o;
-      if (draft.pattern) st.pattern = draft.pattern;
-      if (draft.method === 'embroidery') st.method = 'embroidery';
-      if (draft.options && typeof draft.options === 'object') st.options = { ...draft.options };
-      if (draft.mergeList && draft.mergeList.columns && draft.mergeList.rows) st.mergeList = draft.mergeList;
-      if (draft.qty && typeof draft.qty === 'object') st.qty = draft.qty;
-      restoredDraft = true;
-    }
+  // The ready-made design this draft started from (kept in the draft), so opening that design
+  // again brings back the customer's own version instead of the original.
+  st.libraryId = null;
+  let draft = draftMode && !fromShare ? await POD.drafts.get(st.product.id) : null;
+  if (!(draft && draft.designs && Object.values(draft.designs).some((o) => o && o.length))) draft = null;
+  if (draft && libraryDesign) {
+    if (draft.library && draft.library === params.get('library')) libraryDesign = null;
+    else draft = null; // another design (or one from scratch): the ready-made design opens as asked
   }
-  // A colour picked on the product page (?color=) wins over the draft's; a saved design keeps its own.
-  if (!params.get('design') && st.product.colors.some((c) => c.id === params.get('color'))) st.colorId = params.get('color');
+  if (libraryDesign) st.libraryId = params.get('library');
+  if (draft) {
+    st.libraryId = typeof draft.library === 'string' ? draft.library : null;
+    st.colorId = draft.colorId;
+    st.sizeId = draft.sizeId;
+    for (const [sideId, objs] of Object.entries(draft.designs)) {
+      if (st.product.sides.some((s) => s.id === sideId)) st.designs[sideId] = await blobifyImages(objs || []);
+    }
+    for (const [sideId, o] of Object.entries(draft.offsets || {})) if (st.product.sides.some((s) => s.id === sideId)) st.offsets[sideId] = o;
+    if (draft.pattern) st.pattern = draft.pattern;
+    if (draft.method === 'embroidery') st.method = 'embroidery';
+    if (draft.options && typeof draft.options === 'object') st.options = { ...draft.options };
+    if (draft.mergeList && draft.mergeList.columns && draft.mergeList.rows) st.mergeList = draft.mergeList;
+    if (draft.qty && typeof draft.qty === 'object') st.qty = draft.qty;
+    restoredDraft = true;
+  }
+  // A colour picked on the product page (?color=) wins over the draft's; a saved design keeps its own
+  // (and so does a restored draft of a ready-made design: the link carries the design's first colour).
+  if (!params.get('design') && !(restoredDraft && st.libraryId) && st.product.colors.some((c) => c.id === params.get('color'))) st.colorId = params.get('color');
   st.colorId = st.product.colors.some((c) => c.id === st.colorId) ? st.colorId : st.product.colors[0].id;
   st.sizeId = st.product.sizes.some((s) => s.id === st.sizeId) ? st.sizeId : st.product.sizes[0].id;
   st.side = st.product.sides.find((s) => (st.designs[s.id] || []).length)?.id || st.product.sides[0].id;
@@ -4210,7 +4219,7 @@
     for (const s of st.product.sides) designs[s.id] = s.id === st.side ? serialize() : (st.designs[s.id] || []);
     const empty = !Object.values(designs).some((o) => o.length);
     const productId = st.product.id;
-    const meta = { productId, colorId: st.colorId, sizeId: st.sizeId, side: st.side, offsets: { ...st.offsets }, ...(st.pattern ? { pattern: { ...st.pattern } } : {}), method: st.method, options: st.options || {}, mergeList: st.mergeList || null, qty: st.qty || null };
+    const meta = { productId, colorId: st.colorId, sizeId: st.sizeId, side: st.side, offsets: { ...st.offsets }, ...(st.pattern ? { pattern: { ...st.pattern } } : {}), method: st.method, options: st.options || {}, mergeList: st.mergeList || null, qty: st.qty || null, library: st.libraryId || null };
     let preview = null;
     if (!empty) {
       try {
