@@ -1,0 +1,506 @@
+{
+  "tshirt": {
+    "file": "/img/lifestyle/tshirt.webp",
+    "alt": {
+      "en": "White cotton t-shirt with a colourful abstract print, laid flat on linen",
+      "ar": "تيشيرت قطن أبيض مطبوع بتصميم تجريدي ملوّن على قماش كتان"
+    }
+  },
+  "kidstee": {
+    "file": "/img/lifestyle/kidstee.webp",
+    "alt": {
+      "en": "Light blue kids t-shirt printed with a cute whale",
+      "ar": "تيشيرت أطفال أزرق فاتح مطبوع عليه حوت لطيف"
+    }
+  },
+  "hoodie": {
+    "file": "/img/lifestyle/hoodie.webp",
+    "alt": {
+      "en": "Black hoodie with a mountain and sun print on a wooden hanger",
+      "ar": "هودي أسود بطبعة جبال وشمس على شماعة خشب"
+    }
+  },
+  "sweatshirt": {
+    "file": "/img/lifestyle/sweatshirt.webp",
+    "alt": {
+      "en": "Cream sweatshirt printed with wildflowers on an oak bench",
+      "ar": "سويت شيرت كريمي مطبوع بزهور برية على مقعد خشبي"
+    }
+  },
+  "cap": {
+    "file": "/img/lifestyle/cap.webp",
+    "alt": {
+      "en": "Black baseball cap with a colourful sun and wave emblem",
+      "ar": "كاب أسود بشعار ملوّن للشمس والموج"
+    }
+  },
+  "mug": {
+    "file": "/img/lifestyle/mug.webp",
+    "alt": {
+      "en": "White ceramic mug with an all-round leaf print next to coffee and a croissant",
+      "ar": "مج سيراميك أبيض بطبعة أوراق حول المج بجانب قهوة وكرواسون"
+    }
+  },
+  "cushion": {
+    "file": "/img/lifestyle/cushion.webp",
+    "alt": {
+      "en": "Throw pillow with a colourful abstract print on a linen sofa",
+      "ar": "خدادية بطبعة تجريدية ملوّنة على كنبة كتان"
+    }
+  },
+  "poster": {
+    "file": "/img/lifestyle/poster.webp",
+    "alt": {
+      "en": "Framed abstract art poster on an oak sideboard",
+      "ar": "بوستر فني تجريدي في برواز على كونسول خشبي"
+    }
+  },
+  "bottle": {
+    "file": "/img/lifestyle/bottle.webp",
+    "alt": {
+      "en": "White water bottle printed with tropical leaves",
+      "ar": "زمزمية مياه بيضاء مطبوعة بأوراق استوائية"
+    }
+  },
+  "tote": {
+    "file": "/img/lifestyle/tote.webp",
+    "alt": {
+      "en": "Canvas tote bag with a flower print hanging on a chair",
+      "ar": "شنطة قماش كانفاس بطبعة ورود معلّقة على كرسي"
+    }
+  },
+  "phonecase": {
+    "file": "/img/lifestyle/phonecase.webp",
+    "alt": {
+      "en": "Lilac phone case with a daisy pattern on a wooden table",
+      "ar": "جراب موبايل ليلكي بنقشة زهور على طاولة خشب"
+    }
+  },
+  "mousepad": {
+    "file": "/img/lifestyle/mousepad.webp",
+    "alt": {
+      "en": "Mouse pad with a colourful landscape print and a white mouse",
+      "ar": "ماوس باد بطبعة منظر طبيعي ملوّن مع ماوس أبيض"
+    }
+  },
+  "notebook": {
+    "file": "/img/lifestyle/notebook.webp",
+    "alt": {
+      "en": "Spiral notebook with a geometric printed cover, pen and tea",
+      "ar": "نوتة سلك بغلاف مطبوع بأشكال هندسية مع قلم وشاي"
+    }
+  },
+  "polo": {
+    "file": "/img/lifestyle/polo.webp",
+    "alt": {
+      "en": "Folded navy polo shirt with a small chest emblem",
+      "ar": "بولو شيرت كحلي مطوي بشعار صغير على الصدر"
+    }
+  },
+  "oversized": {
+    "file": "/img/lifestyle/oversized.webp",
+    "alt": {
+      "en": "Sand oversized t-shirt with a large sunset print on a hanger",
+      "ar": "تيشيرت أوفر سايز بيج بطبعة غروب كبيرة على شماعة"
+    }
+  },
+  "ziphoodie": {
+    "file": "/img/lifestyle/ziphoodie.webp",
+    "alt": {
+      "en": "Grey zip hoodie with a small chest logo, flat lay",
+      "ar": "هودي بسوستة رمادي بشعار صغير على الصدر"
+    }
+  },
+  "denim": {
+    "file": "/img/lifestyle/denim.webp",
+    "alt": {
+      "en": "Denim jacket with a large flower print across the back",
+      "ar": "جاكيت جينز بطبعة وردة كبيرة على الظهر"
+    }
+  },
+  "apron": {
+    "file": "/img/lifestyle/apron.webp",
+    "alt": {
+      "en": "Black kitchen apron with a lemon print hanging in a kitchen",
+      "ar": "مريلة مطبخ سوداء بطبعة ليمون معلّقة في المطبخ"
+    }
+  },
+  "onesie": {
+    "file": "/img/lifestyle/onesie.webp",
+    "alt": {
+      "en": "White baby onesie printed with a sleepy moon and stars",
+      "ar": "بادي بيبي أبيض مطبوع بقمر ونجوم"
+    }
+  },
+  "kidshoodie": {
+    "file": "/img/lifestyle/kidshoodie.webp",
+    "alt": {
+      "en": "Light blue kids hoodie printed with a cute dinosaur",
+      "ar": "هودي أطفال أزرق فاتح مطبوع بديناصور لطيف"
+    }
+  },
+  "shorts": {
+    "file": "/img/lifestyle/shorts.webp",
+    "alt": {
+      "en": "Black jogger shorts with a small printed emblem on the leg",
+      "ar": "شورت جوجر أسود بشعار صغير مطبوع على الرجل"
+    }
+  },
+  "jersey": {
+    "file": "/img/lifestyle/jersey.webp",
+    "alt": {
+      "en": "Blue football jersey with a crest print on a hanger",
+      "ar": "تيشيرت كورة أزرق بشعار مطبوع على شماعة"
+    }
+  },
+  "magicmug": {
+    "file": "/img/lifestyle/magicmug.webp",
+    "alt": {
+      "en": "Black magic mug revealing a colourful sunrise design with hot tea",
+      "ar": "مج سحري أسود يظهر تصميم شروق ملوّن مع الشاي الساخن"
+    }
+  },
+  "couplemugs": {
+    "file": "/img/lifestyle/couplemugs.webp",
+    "alt": {
+      "en": "Pair of white mugs with matching heart designs",
+      "ar": "مجّين أبيض بتصميم قلوب متناسق"
+    }
+  },
+  "tumbler": {
+    "file": "/img/lifestyle/tumbler.webp",
+    "alt": {
+      "en": "Sage travel tumbler with a terrazzo print next to coffee beans",
+      "ar": "تمبلر سفر أخضر بطبعة تيرازو بجانب حبوب قهوة"
+    }
+  },
+  "coasters": {
+    "file": "/img/lifestyle/coasters.webp",
+    "alt": {
+      "en": "Four printed ceramic coasters with an iced coffee",
+      "ar": "أربع قواعد أكواب سيراميك مطبوعة مع قهوة مثلجة"
+    }
+  },
+  "tablecloth": {
+    "file": "/img/lifestyle/tablecloth.webp",
+    "alt": {
+      "en": "Ramadan tablecloth with lanterns and crescents on an iftar table",
+      "ar": "مفرش رمضان بفوانيس وأهلّة على سفرة الإفطار"
+    }
+  },
+  "prayermat": {
+    "file": "/img/lifestyle/prayermat.webp",
+    "alt": {
+      "en": "Printed velvet prayer mat with an arch design and prayer beads",
+      "ar": "سجادة صلاة قطيفة مطبوعة بتصميم محراب مع سبحة"
+    }
+  },
+  "eidenvelopes": {
+    "file": "/img/lifestyle/eidenvelopes.webp",
+    "alt": {
+      "en": "Fan of printed Eid money envelopes with dates and a lantern",
+      "ar": "ظروف عيدية مطبوعة مع تمر وفانوس"
+    }
+  },
+  "greetingcard": {
+    "file": "/img/lifestyle/greetingcard.webp",
+    "alt": {
+      "en": "Greeting card with a watercolour bouquet and envelope",
+      "ar": "كارت تهنئة بباقة ورد ألوان مائية مع ظرف"
+    }
+  },
+  "invitations": {
+    "file": "/img/lifestyle/invitations.webp",
+    "alt": {
+      "en": "Floral invitation cards with envelopes and a silk ribbon",
+      "ar": "كروت دعوة بورود مع ظروف وشريطة حرير"
+    }
+  },
+  "plaque": {
+    "file": "/img/lifestyle/plaque.webp",
+    "alt": {
+      "en": "Clear acrylic photo plaque with a sunset photo on a shelf",
+      "ar": "لوحة أكريليك شفافة بصورة غروب على رف"
+    }
+  },
+  "sign": {
+    "file": "/img/lifestyle/sign.webp",
+    "alt": {
+      "en": "Floral welcome sign on an easel at a wedding venue",
+      "ar": "لوحة ترحيب بورود على حامل في قاعة فرح"
+    }
+  },
+  "deskmat": {
+    "file": "/img/lifestyle/deskmat.webp",
+    "alt": {
+      "en": "Large desk mat with a mountain print under a keyboard",
+      "ar": "ماوس باد مكتب كبير بطبعة جبال تحت الكيبورد"
+    }
+  },
+  "keychain": {
+    "file": "/img/lifestyle/keychain.webp",
+    "alt": {
+      "en": "Acrylic keychain with a cute cactus print and keys",
+      "ar": "ميدالية أكريليك بطبعة صبّارة لطيفة مع مفاتيح"
+    }
+  },
+  "stickersheet": {
+    "file": "/img/lifestyle/stickersheet.webp",
+    "alt": {
+      "en": "Sticker sheet with colourful rainbow and flower stickers",
+      "ar": "شيت ستيكرز بقوس قزح وزهور ملوّنة"
+    }
+  },
+  "namelabels": {
+    "file": "/img/lifestyle/namelabels.webp",
+    "alt": {
+      "en": "Sheet of school name labels with a rocket icon",
+      "ar": "شيت ستيكرز أسماء للمدرسة بأيقونة صاروخ"
+    }
+  },
+  "lunchbag": {
+    "file": "/img/lifestyle/lunchbag.webp",
+    "alt": {
+      "en": "Blue kids lunch bag printed with happy fruits",
+      "ar": "شنطة لانش أطفال زرقاء مطبوعة بفواكه مبتسمة"
+    }
+  },
+  "pencilcase": {
+    "file": "/img/lifestyle/pencilcase.webp",
+    "alt": {
+      "en": "Canvas pencil case with a rainbow pattern and coloured pencils",
+      "ar": "مقلمة قماش بنقشة قوس قزح مع ألوان خشب"
+    }
+  },
+  "bizcards": {
+    "file": "/img/lifestyle/bizcards.webp",
+    "alt": {
+      "en": "Business cards with a simple logo held in hand on a desk",
+      "ar": "كروت شخصية بشعار بسيط في اليد على مكتب"
+    }
+  },
+  "flyers": {
+    "file": "/img/lifestyle/flyers.webp",
+    "alt": {
+      "en": "Fanned colourful flyers with a beach illustration",
+      "ar": "فلايرز ملوّنة بتصميم شاطئ"
+    }
+  },
+  "letterhead": {
+    "file": "/img/lifestyle/letterhead.webp",
+    "alt": {
+      "en": "Letterhead paper with a small logo and matching envelope",
+      "ar": "ورق رسمي بشعار صغير مع ظرف متناسق"
+    }
+  },
+  "dlenvelopes": {
+    "file": "/img/lifestyle/dlenvelopes.webp",
+    "alt": {
+      "en": "Stack of DL company envelopes with a logo",
+      "ar": "رصّة ظروف شركة مقاس DL بشعار"
+    }
+  },
+  "logostickers": {
+    "file": "/img/lifestyle/logostickers.webp",
+    "alt": {
+      "en": "Round logo stickers on kraft gift boxes",
+      "ar": "ستيكرز لوجو دائرية على علب هدايا كرافت"
+    }
+  },
+  "rollup": {
+    "file": "/img/lifestyle/rollup.webp",
+    "alt": {
+      "en": "Roll-up banner with a colourful design in a shop",
+      "ar": "رول أب بانر بتصميم ملوّن داخل محل"
+    }
+  },
+  "paperbags": {
+    "file": "/img/lifestyle/paperbags.webp",
+    "alt": {
+      "en": "Kraft paper shopping bags with a leaf logo",
+      "ar": "شنط ورق كرافت بشعار ورقة شجر"
+    }
+  },
+  "invoicebook": {
+    "file": "/img/lifestyle/invoicebook.webp",
+    "alt": {
+      "en": "Open invoice book with logo and carbonless copies",
+      "ar": "دفتر فواتير مفتوح بشعار ونسخ كربونية"
+    }
+  },
+  "idcards": {
+    "file": "/img/lifestyle/idcards.webp",
+    "alt": {
+      "en": "Employee ID cards on teal lanyards",
+      "ar": "كروت هوية موظفين بشرائط تعليق"
+    }
+  },
+  "certificates": {
+    "file": "/img/lifestyle/certificates.webp",
+    "alt": {
+      "en": "Certificate with a gold border and seal on a desk",
+      "ar": "شهادة تقدير بإطار وختم ذهبي على مكتب"
+    }
+  },
+  "storybook": {
+    "file": "/img/lifestyle/storybook.webp",
+    "alt": {
+      "en": "Open children’s story book with a space adventure illustration on a bed",
+      "ar": "قصة أطفال مفتوحة برسومات مغامرة في الفضاء على السرير"
+    }
+  },
+  "coloringbook": {
+    "file": "/img/lifestyle/coloringbook.webp",
+    "alt": {
+      "en": "Open colouring book with crayons on a rug",
+      "ar": "كتاب تلوين مفتوح مع ألوان شمع على سجادة"
+    }
+  },
+  "photoprints": {
+    "file": "/img/lifestyle/photoprints.webp",
+    "alt": {
+      "en": "Printed photos fanned on a table with a camera",
+      "ar": "صور مطبوعة على طاولة مع كاميرا"
+    }
+  },
+  "canvas": {
+    "file": "/img/lifestyle/canvas.webp",
+    "alt": {
+      "en": "Portrait canvas print with abstract art on a plaster wall",
+      "ar": "لوحة كانفاس طولية بفن تجريدي على الحائط"
+    }
+  },
+  "canvaswide": {
+    "file": "/img/lifestyle/canvaswide.webp",
+    "alt": {
+      "en": "Landscape canvas print of a sunset valley above a sofa",
+      "ar": "لوحة كانفاس عرضية لوادٍ وقت الغروب فوق كنبة"
+    }
+  },
+  "fabric": {
+    "file": "/img/lifestyle/fabric.webp",
+    "alt": {
+      "en": "Roll of floral printed fabric with sewing tools",
+      "ar": "لفة قماش مطبوع بزهور مع أدوات خياطة"
+    }
+  },
+  "upholstery": {
+    "file": "/img/lifestyle/upholstery.webp",
+    "alt": {
+      "en": "Armchair upholstered in leaf-print fabric",
+      "ar": "فوتيه منجّد بقماش مطبوع بأوراق شجر"
+    }
+  },
+  "bedsheet": {
+    "file": "/img/lifestyle/bedsheet.webp",
+    "alt": {
+      "en": "Bed with a leaf-print flat sheet in a bright bedroom",
+      "ar": "سرير بملاية مطبوعة بأوراق شجر في غرفة نوم مشرقة"
+    }
+  },
+  "duvetcover": {
+    "file": "/img/lifestyle/duvetcover.webp",
+    "alt": {
+      "en": "Bed with a colourful arch-pattern duvet cover",
+      "ar": "سرير بكفر لحاف بنقشة أقواس ملوّنة"
+    }
+  },
+  "curtains": {
+    "file": "/img/lifestyle/curtains.webp",
+    "alt": {
+      "en": "Pair of printed botanical curtains at a bright window",
+      "ar": "زوج ستائر مطبوعة بنباتات عند شباك مشرق"
+    }
+  },
+  "engrplaque": {
+    "file": "/img/lifestyle/engrplaque.webp",
+    "alt": {
+      "en": "Clear acrylic plaque engraved with hearts on a wooden stand",
+      "ar": "لوحة أكريليك شفافة محفورة بقلوب على قاعدة خشب"
+    }
+  },
+  "engrcoasters": {
+    "file": "/img/lifestyle/engrcoasters.webp",
+    "alt": {
+      "en": "Slate coasters engraved with ornaments and mint tea",
+      "ar": "قواعد أكواب أردواز محفورة بزخارف مع شاي بالنعناع"
+    }
+  },
+  "engrtray": {
+    "file": "/img/lifestyle/engrtray.webp",
+    "alt": {
+      "en": "Wooden engagement tray engraved with rings and a wreath",
+      "ar": "صينية شبكة خشب محفورة بدبل وإكليل ورد"
+    }
+  },
+  "engrframe": {
+    "file": "/img/lifestyle/engrframe.webp",
+    "alt": {
+      "en": "Wooden photo frame with an engraved hearts panel",
+      "ar": "برواز صور خشب بلوحة سفلية محفورة بقلوب"
+    }
+  },
+  "engrcardholder": {
+    "file": "/img/lifestyle/engrcardholder.webp",
+    "alt": {
+      "en": "Tan leather card holder with an engraved emblem",
+      "ar": "حافظة كروت جلد بني فاتح بشعار محفور"
+    }
+  },
+  "caketopper": {
+    "file": "/img/lifestyle/caketopper.webp",
+    "alt": {
+      "en": "Gold mirror heart cake topper on a white cake",
+      "ar": "توبر تورتة ذهبي على شكل قلب فوق تورتة بيضاء"
+    }
+  },
+  "weddingsign": {
+    "file": "/img/lifestyle/weddingsign.webp",
+    "alt": {
+      "en": "Arched wooden wedding welcome sign on an easel",
+      "ar": "لوحة ترحيب خشب مقوّسة للفرح على حامل"
+    }
+  },
+  "doorsign": {
+    "file": "/img/lifestyle/doorsign.webp",
+    "alt": {
+      "en": "Engraved wooden door sign hanging on a white door",
+      "ar": "لوحة باب خشب محفورة معلّقة على باب أبيض"
+    }
+  },
+  "ramadandecor": {
+    "file": "/img/lifestyle/ramadandecor.webp",
+    "alt": {
+      "en": "Gold crescent and lantern Ramadan decoration on a wall",
+      "ar": "زينة رمضان ذهبية على شكل هلال وفانوس على الحائط"
+    }
+  },
+  "namepuzzle": {
+    "file": "/img/lifestyle/namepuzzle.webp",
+    "alt": {
+      "en": "Chunky wooden shape puzzle for kids on a rug",
+      "ar": "بازل خشب للأطفال بقطع سميكة على سجادة"
+    }
+  },
+  "hero-1": {
+    "file": "/img/lifestyle/hero-1.webp",
+    "alt": {
+      "en": "Flat lay of printed products: t-shirt, mug, business cards, stickers, tote bag and notebook",
+      "ar": "مجموعة منتجات مطبوعة: تيشيرت ومج وكروت شخصية وستيكرز وشنطة قماش ونوتة"
+    }
+  },
+  "hero-2": {
+    "file": "/img/lifestyle/hero-2.webp",
+    "alt": {
+      "en": "Printed gifts: mug, cushion, framed poster and coasters in a cosy living room",
+      "ar": "هدايا مطبوعة: مج وخدادية وبوستر وقواعد أكواب في غرفة معيشة دافئة"
+    }
+  },
+  "hero-3": {
+    "file": "/img/lifestyle/hero-3.webp",
+    "alt": {
+      "en": "Business printing: business cards, flyers, letterhead and a roll-up banner in a bright office",
+      "ar": "طباعة الشركات: كروت شخصية وفلايرز وورق رسمي ورول أب في مكتب مشرق"
+    }
+  }
+}

@@ -1232,3 +1232,22 @@ html[dir="rtl"] .hm-arrow { transform: scaleX(-1); }
 .pp-thumb img { width: 100%; height: 100%; object-fit: contain; padding: 6%; box-sizing: border-box; display: block; }
 .pp-thumb.is-life img { object-fit: cover; padding: 0; }
 .pp-thumb.active { border-color: var(--ink); }
+/* All products: catalogue cards (the product with a design on, light grey), two buttons. */
+.product-grid:has(.hm-gcard) { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 28px 20px; }
+.hm-gcard { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.hm-gpic { display: block; aspect-ratio: 4 / 3; border-radius: 14px; overflow: hidden; background: #ececec; margin-bottom: 6px; }
+.hm-gpic img { width: 100%; height: 100%; display: block; object-fit: cover; transition: transform .35s ease; }
+.hm-gpic img.photo-thumb { object-fit: contain; padding: 7%; box-sizing: border-box; mix-blend-mode: multiply; }
+.hm-gcard:hover .hm-gpic img { transform: scale(1.03); }
+.hm-gcard h3 { font-size: 16px; margin: 0; line-height: 1.35; }
+.hm-gcard h3 a { color: inherit; text-decoration: none; }
+.hm-gcard h3 a:hover { text-decoration: underline; }
+.hm-gstart { margin-top: 8px; width: 100%; justify-content: center; text-align: center; }
+.hm-gdetails { width: 100%; justify-content: center; text-align: center; }
+.hm-gcard .saved-badge { position: absolute; }
+.hm-gpic { position: relative; }
+@media (max-width: 1000px) { .product-grid:has(.hm-gcard) { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .product-grid:has(.hm-gcard) { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 12px; } .hm-gstart, .hm-gdetails { font-size: 14px; padding-inline: 8px; } }
+.hm-pic img.hm-designed { object-fit: contain; background: #ececec; }
+.pp-photo:has(img.pp-designed) { background: #ececec; }
+.pp-photo img.pp-designed { object-fit: contain; padding: 0; }

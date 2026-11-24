@@ -176,10 +176,17 @@
       // ---------- Lifestyle photos (each product printed with a design, styled) ----------
       // public/img/lifestyle/index.json: { productId: { file, alt } }; products without one keep their studio photo.
       let life = {};
-      try {
-        const r = await fetch('/img/lifestyle/index.json', { cache: 'no-cache' });
-        if (r.ok) life = await r.json();
-      } catch (e) { /* the studio photos are used */ }
+      // public/img/designed/index.json: each product printed with a ready design, on light grey (scripts/render-designed.js).
+      let designed = {};
+      const loadJson = async (url) => {
+        try {
+          const r = await fetch(url, { cache: 'no-cache' });
+          return r.ok ? await r.json() : {};
+        } catch (e) {
+          return {};
+        }
+      };
+      [life, designed] = await Promise.all([loadJson('/img/lifestyle/index.json'), loadJson('/img/designed/index.json')]);
       const byId = (id) => products.find((p) => p.id === id);
       const hrefOf = (p) => (p.kind === 'book' ? `/book?b=${encodeURIComponent(p.book)}` : p.kind === 'photoset' ? '/photos' : `/product?id=${encodeURIComponent(p.id)}`);
       /** The card picture: a saved draft, else the lifestyle photo, else the product photo. */
@@ -188,6 +195,8 @@
         if (d && d.url) return `<img alt="" src="${d.url}"><span class="saved-badge">${esc(t('draft.badge'))}</span>`;
         const l = life[p.id];
         if (l && l.file) return `<img class="hm-life" alt="${esc(tr(l.alt) || tr(p.name))}" ${eager ? '' : 'loading="lazy" '}decoding="async" src="${esc(l.file)}">`;
+        const g = designed[p.id];
+        if (g && g.file) return `<img class="hm-designed" alt="${esc(tr(p.name))}" ${eager ? '' : 'loading="lazy" '}decoding="async" src="${esc(g.file)}">`;
         return thumbImg(p, p.colors[0], eager);
       }
       /** "From 250 EGP" and, for products sold in quantities, the smallest pack ("A5 × 100"). */
@@ -211,6 +220,17 @@
         { key: 'events', ids: ['weddingsign', 'tablenumbers', 'caketopper', 'ramadandecor', 'invitations', 'eidenvelopes', 'tablecloth'], link: '/?cat=occasions#products' },
         { key: 'laser', ids: products.filter((p) => p.category === 'laser').map((p) => p.id), link: '/?cat=laser#products' },
       ];
+      /** All products: the product printed with a design on light grey, like a print catalogue. */
+      function gridPicture(p) {
+        const d = drafts[p.id];
+        if (d && d.url) return `<img alt="" src="${d.url}"><span class="saved-badge">${esc(t('draft.badge'))}</span>`;
+        const g = designed[p.id];
+        if (g && g.file) return `<img class="hm-designed" alt="${esc(tr(p.name))}" loading="lazy" decoding="async" src="${esc(g.file)}">`;
+        const l = life[p.id];
+        if (l && l.file) return `<img class="hm-life" alt="${esc(tr(l.alt) || tr(p.name))}" loading="lazy" decoding="async" src="${esc(l.file)}">`;
+        return thumbImg(p, p.colors[0]);
+      }
+      const editorHref = (p) => (p.kind === 'book' ? `/book?b=${encodeURIComponent(p.book)}` : p.kind === 'photoset' ? '/photos' : `/editor?product=${encodeURIComponent(p.id)}`);
       function rowCard(p, badge) {
         return `<a class="hm-card" href="${hrefOf(p)}">
           <div class="hm-pic">${cardPicture(p)}${badge ? `<span class="hm-badge hm-badge-${badge}">${esc(t('hm.badge.' + badge))}</span>` : ''}</div>
@@ -288,18 +308,15 @@
           </div>`;
           return;
         }
+        // Catalogue cards: the product with a design on, the name, the price, "Start designing" and "Details".
         grid.innerHTML = list.map((p) => `
-          <a class="card product-card" href="${p.kind === 'book' ? `/book?b=${encodeURIComponent(p.book)}` : p.kind === 'photoset' ? '/photos' : `/product?id=${p.id}`}">
-            <div class="thumb">${cardPicture(p)}</div>
-            <div class="body">
-              <h3>${esc(tr(p.name))}</h3>
-              <p class="desc">${esc(tr(p.description))}</p>
-              <div class="foot">
-                <span class="price">${esc(t('home.from', { price: money(p.basePrice) }))}</span>
-                <span class="dots">${p.colors.slice(0, 6).map((c) => `<span class="dot" title="${esc(tr(c.name))}" style="background:${c.hex}"></span>`).join('')}</span>
-              </div>
-            </div>
-          </a>`).join('');
+          <div class="hm-gcard">
+            <a class="hm-gpic" href="${hrefOf(p)}" tabindex="-1" aria-hidden="true">${gridPicture(p)}</a>
+            <h3><a href="${hrefOf(p)}">${esc(tr(p.name))}</a></h3>
+            <div class="hm-meta">${priceLine(p)}</div>
+            <a class="btn btn-primary hm-gstart" href="${editorHref(p)}">${esc(t(p.kind ? 'hm.open' : 'home.start'))}</a>
+            <a class="btn hm-gdetails" href="${hrefOf(p)}">${esc(t('hm.details'))}</a>
+          </div>`).join('');
       }
       document.getElementById('cats').addEventListener('click', (e) => {
         const b = e.target.closest('[data-cat]');

@@ -58,23 +58,30 @@
 
   // The lifestyle photo (the product printed with a design, styled): shown first when there is one;
   // the plain product in the chosen colour next to it (public/img/lifestyle/index.json).
-  let life = null;
-  try {
-    const r = await fetch('/img/lifestyle/index.json', { cache: 'no-cache' });
-    if (r.ok) life = (await r.json())[product.id] || null;
-  } catch (e) { /* the product photo only */ }
-  let view = life && life.file && !params.get('color') ? 'life' : 'plain';
+  // Also the product printed with a ready design on light grey (public/img/designed/index.json), shown first.
+  const loadJson = async (url) => {
+    try {
+      const r = await fetch(url, { cache: 'no-cache' });
+      return r.ok ? await r.json() : {};
+    } catch (e) {
+      return {};
+    }
+  };
+  const [lifeAll, designedAll] = await Promise.all([loadJson('/img/lifestyle/index.json'), loadJson('/img/designed/index.json')]);
+  const life = (lifeAll[product.id] && lifeAll[product.id].file) ? lifeAll[product.id] : null;
+  const designed = (designedAll[product.id] && designedAll[product.id].file) ? designedAll[product.id] : null;
+  let view = params.get('color') ? 'plain' : designed ? 'designed' : life ? 'life' : 'plain';
   const plainUrl = () => `/api/thumbs/${encodeURIComponent(product.id)}/${encodeURIComponent(color.id)}.webp`;
   function renderPicture() {
-    const showLife = view === 'life' && life && life.file;
-    $('pp-img').src = showLife ? life.file : plainUrl();
-    $('pp-img').alt = showLife ? tr(life.alt) || tr(product.name) : tr(product.name);
-    $('pp-img').classList.toggle('pp-life', Boolean(showLife));
-    $('pp-gallery').hidden = !(life && life.file);
-    if (life && life.file) {
-      $('pp-gallery').innerHTML = [['life', life.file, t('pp.viewPrinted')], ['plain', plainUrl(), t('pp.viewPlain')]]
-        .map(([v, src, label]) => `<button type="button" class="pp-thumb ${v === view ? 'active' : ''} ${v === 'life' ? 'is-life' : ''}" data-view="${v}" aria-pressed="${v === view}" aria-label="${esc(label)}" title="${esc(label)}"><img src="${esc(src)}" alt=""></button>`).join('');
-    }
+    const views = [designed && ['designed', designed.file, t('pp.viewDesigned')], life && ['life', life.file, t('pp.viewPrinted')], ['plain', plainUrl(), t('pp.viewPlain')]].filter(Boolean);
+    const cur = views.find((v) => v[0] === view) || views[views.length - 1];
+    $('pp-img').src = cur[1];
+    $('pp-img').alt = cur[0] === 'life' ? tr(life.alt) || tr(product.name) : tr(product.name);
+    $('pp-img').classList.toggle('pp-life', cur[0] === 'life');
+    $('pp-img').classList.toggle('pp-designed', cur[0] === 'designed');
+    $('pp-gallery').hidden = views.length < 2;
+    $('pp-gallery').innerHTML = views.length < 2 ? '' : views
+      .map(([v, src, label]) => `<button type="button" class="pp-thumb ${v === cur[0] ? 'active' : ''} ${v !== 'plain' ? 'is-life' : ''}" data-view="${v}" aria-pressed="${v === cur[0]}" aria-label="${esc(label)}" title="${esc(label)}"><img src="${esc(src)}" alt=""></button>`).join('');
   }
   $('pp-gallery').addEventListener('click', (e) => {
     const b = e.target.closest('[data-view]');
