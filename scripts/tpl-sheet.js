@@ -74,6 +74,25 @@ const sharp = require('sharp');
     results.push({ d, ...r });
   }
   await br.close();
+  // COMPACT=1: only the T-shirt view, 8 per row (quick overview of a whole pack).
+  if (process.env.COMPACT) {
+    const per = 8;
+    const cw = 250;
+    const ch = 350;
+    const rows = Math.max(1, Math.ceil(results.length / per));
+    const tiles = [];
+    const esc = (v) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    for (const [k, r] of results.entries()) {
+      const x = (k % per) * cw;
+      const y = Math.floor(k / per) * ch;
+      tiles.push({ input: Buffer.from(r.tall.split(',')[1], 'base64'), left: x + 5, top: y });
+      tiles.push({ input: Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${cw}" height="26"><text x="6" y="18" font-size="13" font-family="sans-serif" fill="${r.problems.length ? '#c92a2a' : '#222'}">${esc(r.d.id)}</text></svg>`), left: x, top: y + 322 });
+    }
+    const sheet = await sharp({ create: { width: per * cw, height: rows * ch, channels: 3, background: '#e9ecef' } }).composite(tiles).jpeg({ quality: 80 }).toBuffer();
+    await sharp(sheet).toFile(out);
+    console.log(`${results.length} designs, ${results.filter((r) => r.problems.length).length} with problems -> ${out}`);
+    return;
+  }
   // Contact sheet: 4 per row, tall over wide, id underneath (red when a problem was found).
   const per = 4;
   const cw = 440;

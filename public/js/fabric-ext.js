@@ -124,14 +124,16 @@
   TP._renderBackground = function (ctx) {
     if (!this.backgroundColor) return;
     const dim = this._getNonTransformedDimensions();
-    const px = this.fontSize * 0.3;
+    const shape = this.bgShape || 'box';
     const py = this.fontSize * 0.15;
+    const h = dim.y + py * 2;
+    // Ribbons and tickets are cut in at the ends: widen them by the cut so it never reaches the letters.
+    const cut = shape === 'banner' ? h * 0.32 : shape === 'ticket' ? h * 0.22 : 0;
+    const px = this.fontSize * 0.3 + cut;
     const x = -dim.x / 2 - px;
     const y = -dim.y / 2 - py;
     const w = dim.x + px * 2;
-    const h = dim.y + py * 2;
     ctx.fillStyle = this.backgroundColor;
-    const shape = this.bgShape || 'box';
     if (shape === 'pill') {
       roundRectPath(ctx, x, y, w, h, h / 2);
     } else if (shape === 'banner') {

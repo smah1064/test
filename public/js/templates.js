@@ -419,7 +419,8 @@
         o.set({ angle: i.angle || 0, opacity: i.opacity ?? 1 });
       } else if (i.kind === 'text') {
         const fill = i.fill || ink;
-        o = new fabric.IText(i.text, {
+        // (Spaces once used to keep text clear of a ribbon's cut ends are not needed any more.)
+        o = new fabric.IText(i.bg ? String(i.text).trim() : i.text, {
           name: 'Text',
           fontFamily: i.font,
           fontSize: Math.round(U * i.size),

@@ -273,6 +273,12 @@ Editor → **Library**: one search box for about 22,000 icons and colourful stic
 
 The graphics are open-licence sets installed from npm (`@iconify-json/*`), all fine to print on products for sale: Fluent Emoji Flat (Microsoft, MIT), Tabler Icons (MIT), Phosphor (MIT, regular and fill), Lucide (ISC) and Material Design Icons (Apache 2.0). They load on first use (about 50 MB of memory). Arabic search words are in `src/asset-words.js` (add more there); spelling differences (أ/إ/آ, ة/ه, ى/ي, diacritics, "ال") are ignored.
 
+### Templates (about 350, in categories)
+
+Editor → **Templates** lists every template and ready design with a search box (Arabic or English) and category chips: Ramadan, Eid, Islamic phrases, birthdays, weddings & engagement, graduation, new baby, funny Egyptian phrases, Egypt, friends, family, football, gym & fitness, gaming, music & art, travel, love, motivation, quotes & wisdom, minimal, kids, school & teachers, pets, business & teams, plus the basics. Thumbnails are drawn only as they scroll into view. The same designs appear in the shop's Ready designs page.
+
+They are written as data in `src/library-packs/*.js` (one file per theme; `src/library.js` holds the first ones), in the small language of `src/library-dsl.js`: text `T`, shapes `S`, the shop's stickers `K` and any library icon or sticker `A('set:name')`, placed as fractions of the print area so each fits every product. A pack adds its own categories. `npm test` checks every design (fonts, shapes, stickers, icons, colours, positions, ids), and `node scripts/tpl-sheet.js <server> <pack.js|all> <out.jpg>` draws a pack on a T-shirt and on a mug-shaped area, reports anything that spills out or overlaps, and makes a contact sheet to look at (`COMPACT=1` for a quick overview). The shop owner can still add designs from the admin (from a share link).
+
 ## Fabric printing (roll to roll)
 
 Category **Fabric & home textiles**: printed fabric by the metre (145 cm wide, 1–10 m), upholstery fabric by the metre (140 cm), bed sheets, duvet covers and curtains (pairs). The "colour" is the fabric type (cotton poplin, canvas, satin, velvet, blackout…).
