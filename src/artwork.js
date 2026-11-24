@@ -59,7 +59,7 @@ const memMb = (pid) => {
   }
 };
 
-function runWorker(data, kind, px, timeoutMs) {
+function runWorker(data, kind, px, timeoutMs, pages = null) {
   return new Promise((resolve, reject) => {
     const child = fork(path.join(__dirname, 'artwork-worker.mjs'), [], {
       execArgv: FLAGS,
@@ -92,12 +92,12 @@ function runWorker(data, kind, px, timeoutMs) {
         done = true;
         clearTimeout(timer);
         clearInterval(watch);
-        runWorker(data, kind, px, timeoutMs).then(resolve, reject);
+        runWorker(data, kind, px, timeoutMs, pages).then(resolve, reject);
         return;
       }
       finish(reject, fail('failed', `converter stopped (code ${code}, ${signal || 'no signal'}): ${stderr.trim().slice(-400)}`));
     });
-    child.send({ data, kind, px });
+    child.send({ data, kind, px, pages });
   });
 }
 
@@ -214,4 +214,30 @@ async function convertArtwork(buf, { px = 4000, timeoutMs = 25000 } = {}) {
   return { png: trimmed.data, width: trimmed.info.width, height: trimmed.info.height };
 }
 
-module.exports = { convertArtwork, sniff, ArtworkError };
+/**
+ * Every page of a PDF as a JPEG page for a booklet: each fitted into a w x h px page on white
+ * (up to `max` pages; `more` says the PDF has more). Returns { pages: [Buffer], more }.
+ */
+async function pdfPages(buf, { w, h, max = 32, timeoutMs = 90000 } = {}) {
+  const found = sniff(buf);
+  if (!found || found.kind !== 'pdf') throw new ArtworkError('type');
+  if (running >= MAX_JOBS) throw new ArtworkError('busy');
+  running++;
+  let out;
+  try {
+    out = await runWorker(found.data, 'pdf', 0, timeoutMs, { w, h, max: max + 1 });
+  } finally {
+    running--;
+  }
+  const list = (out.pngs || []).map((p) => Buffer.from(p.buffer, p.byteOffset, p.byteLength));
+  if (!list.length) {
+    const err = new ArtworkError('failed');
+    err.detail = out.log;
+    throw err;
+  }
+  const pages = [];
+  for (const png of list.slice(0, max)) pages.push(await sharp(png).flatten({ background: '#ffffff' }).jpeg({ quality: 86, mozjpeg: true }).toBuffer());
+  return { pages, more: list.length > max };
+}
+
+module.exports = { convertArtwork, pdfPages, sniff, ArtworkError };

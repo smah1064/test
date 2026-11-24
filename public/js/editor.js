@@ -1614,16 +1614,119 @@
   // Remembered in this browser.
   try { $('auto-bg').checked = localStorage.getItem('pod-auto-bg') === '1'; } catch (e) { /* private mode */ }
   $('auto-bg').addEventListener('change', (e) => { try { localStorage.setItem('pod-auto-bg', e.target.checked ? '1' : '0'); } catch (err) { /* private mode */ } });
+  // ---------- Booklets: a whole PDF, or several photos, on the pages in order ----------
+  const isPdf = (f) => f && (f.type === 'application/pdf' || /\.pdf$/i.test(f.name || ''));
+  /** Pages from the current one on (several files), or every page from the cover (a PDF). */
+  const addFiles = serial(async (list) => {
+    const files = [...(list || [])].filter(Boolean);
+    if (!files.length) return;
+    if (!st.product.paged) return addImageFile(files[0]);
+    if (files.length === 1 && isPdf(files[0])) return addPdfPages(files[0]);
+    if (files.length === 1) return addImageFile(files[0]);
+    const pages = activeSides();
+    const from = Math.max(0, pages.findIndex((s) => s.id === hostOf()));
+    const room = pages.slice(from);
+    const use = files.filter((f) => !isPdf(f)).slice(0, room.length);
+    if (use.length < files.length) toast(tPg('ed.filesSkipped', { n: POD.num(files.length - use.length) }));
+    for (let i = 0; i < use.length; i++) {
+      if (room[i].id !== hostOf()) {
+        commit();
+        canvas.discardActiveObject();
+        await showSide(room[i].id);
+      }
+      await addImageFile(use[i]);
+      commit();
+    }
+    renderSideTabs();
+    refreshChrome();
+    toast(tPg('ed.filesPlaced', { n: POD.num(use.length) }));
+  });
+  /** Every page of a PDF on the booklet's pages: page 1 on the cover, the last on the back cover. */
+  async function addPdfPages(file) {
+    if (file.size > 60 * 1024 * 1024) return toast(t('msg.tooBigVector'), 'error');
+    const first = activeSides()[0];
+    const r0 = rects(first.id).bleed;
+    // About 200 DPI over the page with its bleed.
+    const w = Math.round(Math.min(2000, sideDef(first.id).printWidthIn * 200 * (r0.w / rects(first.id).trim.w)));
+    const h = Math.round((w * r0.h) / r0.w);
+    busy(true, tPg('ed.pdfReading'));
+    let got;
+    try {
+      const res = await netFetch('/api/artwork/pages', { method: 'POST', headers: { 'x-lang': POD.lang, 'x-page-w': String(w), 'x-page-h': String(h), 'x-max-pages': '32', 'Content-Type': 'application/pdf' }, body: file });
+      const body = await res.json().catch(() => null);
+      if (!res.ok || !body) throw new Error((body && body.error) || t('msg.badImage'));
+      got = body;
+    } catch (e) {
+      busy(false);
+      return toast(e.message, 'error');
+    }
+    busy(false);
+    const n = got.pages.length;
+    // A size with room for every page (same number of copies), when the chosen one is too small or too big.
+    const copies = (id) => String(id).split('-')[1] || '';
+    const cur = st.product.sizes.find((z) => z.id === st.sizeId);
+    if (n !== activeSides().length) {
+      const fits = st.product.sizes.filter((z) => z.pages >= n && copies(z.id) === copies(st.sizeId) && canPick(z)).sort((a, b) => a.pages - b.pages)[0];
+      if (fits && fits.id !== st.sizeId && fits.pages !== cur.pages && window.confirm(tPg('ed.pdfSize', { n: POD.num(n), pages: POD.num(fits.pages), now: POD.num(cur.pages) }))) {
+        st.sizePicked = true;
+        await changeSize(fits.id);
+        renderOptions();
+      }
+    }
+    const pages = activeSides();
+    // In order: PDF page 1 on the cover, page 2 on page 2… When the PDF is longer than the booklet,
+    // its last page still goes on the back cover.
+    const targets = pages.slice(0, Math.min(n, pages.length));
+    const used = n > pages.length ? got.pages.slice(0, pages.length - 1).concat([got.pages[n - 1]]) : got.pages;
+    busy(true, tPg('ed.pdfPlacing'));
+    try {
+      for (let i = 0; i < used.length && i < targets.length; i++) {
+        const page = targets[i];
+        if (page.id !== hostOf()) {
+          commit();
+          canvas.discardActiveObject();
+          await showSide(page.id);
+        }
+        const fimg = await new Promise((resolve) => fabric.Image.fromURL(used[i], resolve));
+        const r = rects(page.id).bleed;
+        fimg.set({ name: `${(file.name || 'PDF').replace(/\.[^.]+$/, '').slice(0, 30)} · ${i + 1}` });
+        fimg.scale(Math.max(r.w / fimg.width, r.h / fimg.height));
+        addObject(fimg, { select: false, shrinkToFit: false });
+        // The page fills the page with its bleed, under anything already designed there.
+        fimg.set({ left: r.x + r.w / 2, top: r.y + r.h / 2 });
+        canvas.sendToBack(fimg);
+        fimg.setCoords();
+        commit();
+      }
+      if (targets[0].id !== hostOf()) await showSide(targets[0].id);
+    } finally {
+      busy(false);
+    }
+    renderSideTabs();
+    refreshChrome();
+    if (got.more || n > pages.length) toast(tPg('ed.pdfTooMany', { n: POD.num(pages.length) }), 'error');
+    else toast(tPg('ed.pdfPlaced', { n: POD.num(Math.min(n, pages.length)) }));
+  }
+  const PG_TEXT = {
+    'ed.pdfReading': ['Reading the PDF pages…', 'بنقرا صفحات الـ PDF…'],
+    'ed.pdfPlacing': ['Putting the pages in the booklet…', 'بنحط الصفحات في الكتيب…'],
+    'ed.pdfPlaced': ['{n} pages placed in order, page 1 on the cover. Flip through them in the preview.', 'اتحطت الصفحات بالترتيب (عددها {n})، أول صفحة على الغلاف. قلّب فيهم من المعاينة.'],
+    'ed.pdfTooMany': ['The PDF has more pages than the biggest booklet ({n} pages). The first pages and the last one (back cover) were used.', 'الـ PDF فيه صفحات أكتر من أكبر كتيب (عدد صفحاته {n}). استخدمنا أول الصفحات وآخر صفحة للغلاف الخلفي.'],
+    'ed.pdfSize': ['The PDF has {n} pages and this booklet has {now}. Switch to the {pages}-page booklet?', 'صفحات الـ PDF: {n}، وصفحات الكتيب ده: {now}. تحب تغيّر لكتيب عدد صفحاته {pages}؟'],
+    'ed.filesPlaced': ['{n} photos placed, one on each page from this one on.', 'اتحطت الصور (عددها {n})، صورة في كل صفحة من الصفحة دي ورايح.'],
+    'ed.filesSkipped': ['{n} files were left out (not enough pages after this one, or a PDF among photos).', 'سبنا {n} ملف (الصفحات اللي بعد دي مش كفاية، أو PDF وسط الصور).'],
+  };
+  const tPg = (k, params = {}) => (PG_TEXT[k] ? PG_TEXT[k][POD.lang === 'ar' ? 1 : 0].replace(/\{(\w+)\}/g, (m, x) => (params[x] != null ? params[x] : m)) : t(k, params));
   $('file-input').addEventListener('change', (e) => {
-    addImageFile(e.target.files[0]);
+    addFiles([...e.target.files]); // copied first: clearing the field empties its list
     e.target.value = '';
   });
   const dz = $('dropzone');
   ['dragenter', 'dragover'].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.add('over'); }));
   ['dragleave', 'drop'].forEach((ev) => dz.addEventListener(ev, () => dz.classList.remove('over')));
-  dz.addEventListener('drop', (e) => { e.preventDefault(); addImageFile(e.dataTransfer.files[0]); });
+  dz.addEventListener('drop', (e) => { e.preventDefault(); addFiles([...e.dataTransfer.files]); });
   $('stage').addEventListener('dragover', (e) => e.preventDefault());
-  $('stage').addEventListener('drop', (e) => { e.preventDefault(); addImageFile(e.dataTransfer.files[0]); });
+  $('stage').addEventListener('drop', (e) => { e.preventDefault(); addFiles([...e.dataTransfer.files]); });
 
   /** Resolution a print needs at its size: big prints are seen from further away (same tiers as the server's checks). */
   function dpiLimits(sideId = st.side) {

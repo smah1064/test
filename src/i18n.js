@@ -84,6 +84,8 @@ const MESSAGES = {
   linkExpired: { en: 'This download link has expired or is not valid. Ask the shop for a new one.', ar: 'رابط التحميل انتهت صلاحيته أو غير صالح. اطلب رابطًا جديدًا من المتجر.' },
   artworkType: { en: 'Please choose an AI, EPS, JPG or PNG file', ar: 'من فضلك اختر ملف AI أو EPS أو JPG أو PNG' },
   artworkBad: { en: 'We could not open this file. Save it from Illustrator as "PDF compatible" AI or as EPS, then try again.', ar: 'لم نتمكن من فتح هذا الملف. احفظه من Illustrator كملف AI متوافق مع PDF أو كملف EPS ثم حاول مرة أخرى.' },
+  pdfOnly: { en: 'Please choose a PDF file.', ar: 'من فضلك اختار ملف PDF.' },
+  pdfBad: { en: 'We could not read the pages of this PDF. Save it again as a standard PDF (for example "Save as PDF" or "Export to PDF") and try again.', ar: 'معرفناش نقرا صفحات ملف الـ PDF ده. احفظه تاني كـ PDF عادي (مثلًا "حفظ كـ PDF" أو "تصدير PDF") وجرّب تاني.' },
   artworkEmpty: { en: 'This file looks empty: nothing visible was found on its first page.', ar: 'يبدو أن الملف فارغ: لا يوجد شيء ظاهر في صفحته الأولى.' },
   tooFast: { en: 'Too many tries. Wait a minute and try again.', ar: 'محاولات كثيرة. انتظر دقيقة وحاول مرة أخرى.' },
   bookDrawing: { en: 'The pages are still being drawn ({done} of {total}). Try again in a few minutes.', ar: 'الصفحات لسه بتترسم ({done} من {total}). حاول تاني بعد دقايق.' },

@@ -1588,6 +1588,33 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     }
   });
 
+  // Booklets: a whole PDF, one picture per page, to put on the booklet's pages in order.
+  app.post('/api/artwork/pages', express.raw({ type: () => true, limit: '60mb' }), async (req, res, next) => {
+    try {
+      const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+      const kind = artwork.sniff(buf);
+      if (!kind || kind.kind !== 'pdf') throw new HttpError(400, 'pdfOnly');
+      rateLimit(req, 'artwork');
+      const clamp = (v, lo, hi, d) => Math.min(hi, Math.max(lo, Math.round(Number(v)) || d));
+      const w = clamp(req.get('x-page-w'), 200, 2000, 1240);
+      const h = clamp(req.get('x-page-h'), 200, 2800, 1754);
+      const max = clamp(req.get('x-max-pages'), 1, 40, 32);
+      let out;
+      try {
+        out = await artwork.pdfPages(buf, { w, h, max });
+      } catch (e) {
+        if (!(e instanceof artwork.ArtworkError)) throw e;
+        if (e.reason === 'busy') throw new HttpError(429, 'tooFast');
+        console.warn('[artwork] could not read the pages of a PDF of', buf.length, 'bytes:', e.reason, String(e.detail || '').slice(0, 400));
+        throw new HttpError(400, 'pdfBad');
+      }
+      res.set('Cache-Control', 'no-store');
+      res.json({ pages: out.pages.map((b) => `data:image/jpeg;base64,${b.toString('base64')}`), more: out.more });
+    } catch (e) {
+      next(e);
+    }
+  });
+
   // ---------- Shared designs (approval links) ----------
   const sharesDir = path.join(dataDir, 'shares');
   fs.mkdirSync(sharesDir, { recursive: true });
