@@ -19,6 +19,7 @@
         <a href="/#products" data-i18n="nav.products"></a>
         <a href="/designs"><span class="nav-long" data-i18n="nav.designs"></span><span class="nav-short" data-i18n="nav.designsShort"></span></a>
         <a href="/photos"><span class="nav-long" data-i18n="nav.photos"></span><span class="nav-short" data-i18n="nav.photosShort"></span></a>
+        <a class="nav-books" href="/book?b=space-hero"><span class="nav-long" data-i18n="nav.books"></span><span class="nav-short" data-i18n="nav.booksShort"></span></a>
         <a class="cart-link" href="/cart"><span data-i18n="nav.cart"></span> <span class="badge" data-cart-count hidden>0</span></a>
         <button class="btn btn-sm lang-toggle" data-lang-toggle data-i18n="lang.other"></button>
       </nav>
@@ -56,6 +57,19 @@
       <div><h2 data-i18n="home.photosTitle"></h2><p data-i18n="home.photosText"></p></div>
       <span class="btn btn-primary" data-i18n="home.photosCta"></span>
     </a>
+
+    <section class="card biz" id="business" aria-labelledby="biz-title">
+      <div class="biz-head">
+        <div class="promo-art" aria-hidden="true">🏢</div>
+        <div><h2 id="biz-title" data-i18n="home.bizTitle"></h2><p data-i18n="home.bizLead"></p></div>
+      </div>
+      <div class="cat-chips biz-links" id="biz-links"></div>
+      <ul class="biz-points">
+        <li data-i18n="home.bizNames"></li>
+        <li data-i18n="home.bizMany"></li>
+      </ul>
+      <a class="btn btn-sm biz-more" href="/designs?cat=business" data-i18n="home.bizDesigns"></a>
+    </section>
 
     <section id="products">
       <div class="section-title">
@@ -116,7 +130,15 @@
         return `<img alt="" ${eager ? '' : 'loading="lazy" '}decoding="async" class="photo-thumb" data-pid="${esc(p.id)}" data-color="${esc(color.id)}" src="${thumbUrl(p, color)}">`;
       }
 
+      // For companies, schools and events: straight to the products they order.
+      const BIZ = ['bizcards', 'idcards', 'certificates', 'invitations', 'namelabels', 'stickersheet', 'letterhead', 'paperbags', 'rollup'];
+      function renderBiz() {
+        document.getElementById('biz-links').innerHTML = BIZ.map((id) => products.find((p) => p.id === id)).filter(Boolean)
+          .map((p) => `<a class="chip" href="/product?id=${encodeURIComponent(p.id)}">${esc(tr(p.name))}</a>`).join('');
+      }
+
       function render() {
+        renderBiz();
         document.getElementById('cats').innerHTML = [{ id: 'all', name: null }, ...categories]
           .map((c) => `<button class="chip ${c.id === cat ? 'active' : ''}" data-cat="${c.id}">${esc(c.name ? tr(c.name) : t('cat.all'))}</button>`)
           .join('');

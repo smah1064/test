@@ -977,6 +977,21 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 .dlv-express-pill { background: #fff3bf; color: #7a5800; font-size: 11px; vertical-align: middle; text-transform: none; }
 @media (max-width: 340px) { .site-header nav a[href="/designs"] { display: none; } }
 @media (max-width: 300px) { .site-header nav a[href="/photos"] { display: none; } }
+/* Menu with the kids' books link ("Stories"): one line at every width, Products and Cart always shown. */
+@media (max-width: 960px) and (min-width: 901px) { .site-header nav { gap: 16px; } }
+@media (max-width: 760px) { .site-header .acct-link span { display: none; } }
+@media (max-width: 700px) and (min-width: 601px) { .site-header .inner { gap: 10px; } .site-header nav { gap: 8px; } }
+@media (max-width: 640px) and (min-width: 601px) { .site-header .brand { font-size: 16px; } }
+@media (max-width: 460px) and (min-width: 381px) { .site-header .lang-toggle { padding: 3px 7px; font-size: 12.5px; } }
+@media (max-width: 420px) and (min-width: 401px) { html[lang="en"] .site-header nav { font-size: 13.5px; } }
+@media (max-width: 400px) and (min-width: 381px) { .site-header nav { font-size: 13px; } }
+@media (max-width: 380px) { .site-header nav { gap: 6px; } }
+@media (max-width: 310px) { .site-header nav { gap: 4px; } }
+/* Phones: the Stories link gives way first (the kids' books stay on the home page), so Photos and
+   Designs keep their place in the menu as before; then the older rules hide Designs, then Photos. */
+@media (max-width: 420px) { .site-header nav .nav-books { display: none; } }
+@media (max-width: 470px) { html[lang="en"] .site-header nav .nav-books { display: none; } }
+@media (max-width: 346px) { html[lang="en"] .site-header nav a[href="/designs"] { display: none; } }
 
 /* CAPTCHA (Cloudflare Turnstile): takes no room unless Cloudflare asks the customer to tick a box. */
 .captcha-box:empty { display: none; }
@@ -985,3 +1000,45 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 /* A long coupon code wraps instead of pushing the cart wider than the screen. */
 .discount-line > span:first-child { min-width: 0; overflow-wrap: anywhere; }
 .discount-line #coupon-code { overflow-wrap: anywhere; word-break: break-all; }
+
+/* Ready designs: search box, product filter, one-row chips on phones, result count, empty state. */
+.design-tools { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; margin: 0 0 14px; }
+.design-search { position: relative; flex: 1 1 280px; max-width: 540px; min-width: 0; }
+.design-search svg { position: absolute; inset-inline-start: 12px; top: 50%; transform: translateY(-50%); color: var(--ink-3); pointer-events: none; }
+.design-search input { height: 44px; font-size: 16px; padding-inline-start: 40px; }
+.design-product { display: flex; align-items: center; gap: 8px; margin: 0; flex: 0 1 auto; min-width: 0; }
+.design-product span { white-space: nowrap; }
+.design-product select { width: auto; min-width: 0; max-width: 280px; height: 44px; font-size: 15px; }
+.design-count { margin: -6px 0 12px; }
+.design-empty { grid-column: 1 / -1; padding: 40px 20px; }
+.design-empty h2 { font-size: 20px; overflow-wrap: anywhere; }
+.design-empty-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 14px; }
+.design-empty-products { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; align-items: center; margin: 18px 0 0; }
+@media (max-width: 700px) {
+  .design-cats { flex-wrap: nowrap; overflow-x: auto; margin-inline: -20px; padding: 2px 20px 8px; margin-bottom: 10px; scrollbar-width: none; overscroll-behavior-x: contain; }
+  .design-cats::-webkit-scrollbar { display: none; }
+  .design-cats .chip { flex: none; white-space: nowrap; }
+}
+@media (max-width: 640px) {
+  .design-cats { margin-inline: -16px; padding-inline: 16px; }
+  .design-search { flex-basis: 100%; max-width: none; }
+  .design-product { flex: 1 1 100%; }
+  .design-product select { flex: 1; max-width: none; }
+}
+
+/* Home: for companies, schools and events. */
+.biz { padding: 20px 22px; margin-bottom: 28px; }
+.biz-head { display: flex; align-items: center; gap: 18px; }
+.biz-head .promo-art { width: 60px; height: 60px; font-size: 28px; }
+.biz h2 { margin: 0 0 4px; font-size: 20px; }
+.biz-head p { margin: 0; color: var(--ink-2); font-size: 14px; line-height: 1.5; }
+.biz-links { margin: 16px 0 12px; }
+.biz-links .chip { text-decoration: none; color: var(--ink); }
+.biz-links .chip:hover { border-color: var(--accent); }
+.biz-points { margin: 0 0 12px; padding-inline-start: 20px; color: var(--ink-2); font-size: 14px; line-height: 1.6; }
+@media (max-width: 640px) {
+  .biz { padding: 16px; }
+  .biz-head { gap: 12px; }
+  .biz-head .promo-art { width: 48px; height: 48px; font-size: 24px; }
+  .biz-more { width: 100%; }
+}
