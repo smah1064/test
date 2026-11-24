@@ -244,7 +244,8 @@ function cleanAnswers(book, input) {
     } else if (q.type === 'textarea') v = (typeof v === 'string' ? v : '').replace(INVISIBLE, '').replace(/[\u0000-\u0009\u000b-\u001f\u007f<>{}\[\]|]/g, ' ').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim().slice(0, q.max);
     else v = clean(v, q.max || 40);
     // The books are printed in English: Arabic letters would scramble the sentences.
-    if (typeof v === 'string' && /[\u0600-\u06ff\u0750-\u077f\ufb50-\ufdff\ufe70-\ufeff]/.test(v)) {
+    // Any right-to-left script (Arabic, Hebrew, Syriac, Thaana…) would scramble the English sentences.
+    if (typeof v === 'string' && /[\u0590-\u08ff\ufb1d-\ufdff\ufe70-\ufeff]/.test(v)) {
       const err = new Error('bookLatin');
       err.field = q.label;
       throw err;

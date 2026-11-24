@@ -1855,7 +1855,20 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       await drop('failed', e.reason || 'failed');
     }
   }
+  // Saves of one book run one after the other: a failed save restores the book as it was before
+  // *it* started, which must not undo a save that finished in between (two tabs, a retry).
+  const bookSaves = new Map();
   async function saveBook(design, body, ip) {
+    const prev = bookSaves.get(design.id) || Promise.resolve();
+    const run = prev.catch(() => {}).then(() => saveBookAtomic(design, body, ip));
+    bookSaves.set(design.id, run);
+    try {
+      return await run;
+    } finally {
+      if (bookSaves.get(design.id) === run) bookSaves.delete(design.id);
+    }
+  }
+  async function saveBookAtomic(design, body, ip) {
     // All or nothing: if anything fails (a page that can't be drawn, a bad photo),
     // the book stays exactly as it was, so a half-saved book can't be ordered.
     const before = JSON.parse(JSON.stringify(design));
