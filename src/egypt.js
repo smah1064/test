@@ -41,9 +41,12 @@ function normalizeDigits(s) {
  * Accepts +20 / 0020 prefixes, spaces, dashes and Arabic digits.
  */
 function normalizeEgyptMobile(input) {
-  let s = normalizeDigits(input || '').replace(/[\s\-().]/g, '');
+  // Phones add invisible direction marks when a number is copied from contacts or WhatsApp.
+  let s = normalizeDigits(input || '').replace(/[\s\-().\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/g, '');
   if (s.startsWith('+20')) s = '0' + s.slice(3);
   else if (s.startsWith('0020')) s = '0' + s.slice(4);
+  // "+20 010…": the leading 0 written after the country code.
+  if (/^001[0125]\d{8}$/.test(s)) s = s.slice(1);
   else if (/^20 ?1/.test(s) && s.length === 12) s = '0' + s.slice(2);
   return /^01[0125]\d{8}$/.test(s) ? s : null;
 }

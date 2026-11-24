@@ -55,6 +55,7 @@
     'acct.draftDeleted': ['Draft deleted', 'اتمسحت المسودة'],
     // One design in several sizes / colours / quantities
     'qty.pieces': ['{n} pieces', '{n} قطعة'],
+    'qty.piecesFew': ['{n} pieces', '{n} قطع'],
     'qty.piece': ['1 piece', 'قطعة واحدة'],
     'qty.each': ['{price} each', '{price} للقطعة'],
     'qty.breakdown': ['Sizes and colours', 'المقاسات والألوان'],
@@ -90,6 +91,12 @@
       return [...groups.values()];
     },
     /** Total pieces of an item (1 when nothing says otherwise). */
+    /** "1 piece", "6 قطع", "12 قطعة" (Arabic: 3–10 take the plural). */
+    piecesText(n) {
+      const { t, num } = window.POD;
+      const k = n % 100;
+      return n === 1 ? t('qty.piece') : t(k >= 3 && k <= 10 ? 'qty.piecesFew' : 'qty.pieces', { n: num(n) });
+    },
     pieces(item) {
       const groups = this.qtyGroups(item);
       const sum = groups ? groups.reduce((n, g) => n + g.lines.reduce((m, l) => m + Number(l.qty), 0), 0) : 1;
@@ -121,7 +128,7 @@
         return `<span class="qty-row">${hex ? `<span class="qty-dot" style="background:${hex}"></span>` : ''}${name ? `<span class="qty-color">${esc(name)}:</span> ` : ''}<span class="qty-sizes">${sizes(g)}</span></span>`;
       }).join('');
       const n = this.pieces(item);
-      const total = this.isNameList(item) ? '' : `<span class="qty-total">${esc(n === 1 ? t('qty.piece') : t('qty.pieces', { n: num(n) }))}</span>`;
+      const total = this.isNameList(item) ? '' : `<span class="qty-total">${esc(this.piecesText(n))}</span>`;
       return `<div class="qty-break${inline ? ' qty-inline' : ''}" aria-label="${esc(t('qty.breakdown'))}">${rows}${total}</div>`;
     },
     /** The same as plain text (WhatsApp messages): "Black: S×2, M×5 / White: M×2". */

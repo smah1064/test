@@ -330,7 +330,7 @@
         const cart = POD.getCart();
         if (!cart.length) { quote = null; return; }
         try {
-          quote = await POD.api('/api/cart/quote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ designIds: cart.map((i) => i.designId), couponCode, delivery }) });
+          quote = await POD.api('/api/cart/quote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ designIds: cart.map((i) => i.designId), couponCode, delivery, phone: (document.getElementById('phone') || {}).value || undefined }) });
         } catch (e) {
           quote = null;
           return;
@@ -380,6 +380,8 @@
         cart.splice(Number(btn.dataset.remove), 1);
         POD.setCart(cart);
         render();
+        // The coupon and shipping depend on what is left: ask the shop again.
+        refreshPrices().then(render);
       });
 
       const form = document.getElementById('checkout');

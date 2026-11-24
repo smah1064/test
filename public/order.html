@@ -63,7 +63,7 @@
           if (A.showBreakdown(it)) parts.push(A.qtyText(it));
           else parts.push(tr(it.color.name), tr(it.size.label));
           if (A.isNameList(it)) parts.push(t('cart.copies', { n: POD.num(A.pieces(it)) }));
-          else if (A.pieces(it) > 1) parts.push(t('qty.pieces', { n: POD.num(A.pieces(it)) }));
+          else if (A.pieces(it) > 1) parts.push(A.piecesText(A.pieces(it)));
           return `${POD.num(i + 1)}. ${parts.join(' · ')}`;
         }).join('\n');
         const text = t('order.waMessage', { n: o.number, items, total: money(o.total), name: o.customer.name });

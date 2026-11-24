@@ -87,7 +87,8 @@ const REVIEW_STATUSES = ['review', 'awaiting_approval', 'changes_requested'];
 const MAX_EDITOR_JSON_BYTES = 40 * 1024 * 1024;
 // merge: a name list's pictures, one per copy (up to 1,000 of them).
 const UPLOAD_LIMITS = { print: 60 * 1024 * 1024, preview: 8 * 1024 * 1024, svg: 40 * 1024 * 1024, source: 60 * 1024 * 1024, merge: 150 * 1024 * 1024, photo: 15 * 1024 * 1024, thumb: 300 * 1024 };
-const FILE_RE = /^(front|back)-(print|preview|merge-base)\.png$|^(front|back)-design\.svg$|^(front|back)-merge\.bin$|^src-\d{1,2}\.(png|jpg|webp)$|^(photo|thumb)-\d{3}\.jpg$/;
+// Sides: front/back, and the two mugs of the couple mugs set.
+const FILE_RE = /^(front|back|mug1|mug2)-(print|preview|merge-base)\.png$|^(front|back|mug1|mug2)-design\.svg$|^(front|back|mug1|mug2)-merge\.bin$|^src-\d{1,2}\.(png|jpg|webp)$|^(photo|thumb)-\d{3}\.jpg$/;
 const SIGNATURES = {
   png: (b) => b.subarray(0, 8).equals(PNG_SIGNATURE),
   jpg: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
@@ -151,7 +152,8 @@ function jpegWithDpi(buf, dpi) {
 }
 
 function cleanString(value, field, { max = 200, required = true } = {}) {
-  const s = typeof value === 'string' ? value.trim() : '';
+  // Invisible characters (zero-width, direction marks pasted from phones) don't count as text.
+  const s = typeof value === 'string' ? value.replace(/[\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/g, '').trim() : '';
   if (required && !s) throw new HttpError(400, 'fieldRequired', { field: FIELDS[field] });
   if (s.length > max) throw new HttpError(400, 'fieldTooLong', { field: FIELDS[field] });
   return s;
@@ -2416,7 +2418,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     let coupon = null;
     let couponError = null;
     if (code) {
-      const r = coupons.apply(findCoupon(code), { lines, orders: store.listOrders() });
+      // The phone typed at checkout (when there is one), so a coupon already used by this customer says so here too.
+      const phone = typeof (req.body || {}).phone === 'string' ? normalizeEgyptMobile(req.body.phone) : null;
+      const r = coupons.apply(findCoupon(code), { lines, orders: store.listOrders(), ...(phone ? { phone } : {}) });
       if (r.ok) coupon = { code, discount: r.discount, freeShipping: r.freeShipping };
       else couponError = format(r.reason, r.params || {}, langOf(req));
     }
@@ -2715,6 +2719,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     res.json({ drafts });
   });
   app.get('/api/account/drafts/:productId', (req, res) => {
+    // Guests: nothing to load (204, not an error the browser logs on every product page).
+    if (!currentCustomer(req)) return res.status(204).set('Cache-Control', 'private, no-store').end();
     const me = signedIn(req);
     const product = draftProduct(req);
     const file = path.join(draftDir(me), `${product.id}.json`);

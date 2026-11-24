@@ -365,6 +365,7 @@
       try {
         const res = await fetch(url(productId), { credentials: 'same-origin', signal: withTimeout(5000) });
         if (res.status === 401) signedOut = true;
+        if (res.status === 204) return null;
         return res.ok ? await res.json() : null;
       } catch (e) {
         return null;

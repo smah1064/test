@@ -939,3 +939,7 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 /* CAPTCHA (Cloudflare Turnstile): takes no room unless Cloudflare asks the customer to tick a box. */
 .captcha-box:empty { display: none; }
 .captcha-box { margin: 4px 0 10px; }
+
+/* A long coupon code wraps instead of pushing the cart wider than the screen. */
+.discount-line > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.discount-line #coupon-code { overflow-wrap: anywhere; word-break: break-all; }
