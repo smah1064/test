@@ -254,8 +254,12 @@ async function writeZipOfNames(design, read, rows, file, { extra = () => '' } = 
 /** The list as CSV (UTF-8 with BOM so Excel shows Arabic correctly). */
 function csv(columns, rows) {
   const cell = (v) => {
-    const s = String(v == null ? '' : v);
-    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    let s = String(v == null ? '' : v);
+    // The list comes from the customer: text that Excel would run as a formula
+    // (=HYPERLINK(...), +cmd, @SUM...) gets a ' in front, like the accounts CSV.
+    // Plain numbers (+201..., -5) stay as they are.
+    if (/^[=@\t\r]/.test(s) || (/^[+-]/.test(s) && !/^[+-]?\d[\d\s.,]*$/.test(s))) s = `'${s}`;
+    return /[",\n\r]/.test(s) || s.startsWith("'") ? `"${s.replace(/"/g, '""')}"` : s;
   };
   const lines = [['#', ...columns], ...rows.map((r, i) => [i + 1, ...r])].map((r) => r.map(cell).join(','));
   return Buffer.from('﻿' + lines.join('\r\n') + '\r\n', 'utf8');

@@ -368,6 +368,7 @@ const DEFAULT_LIMITS = {
   accountLoginId: [{ max: 10, ms: 3600e3 }],
   accountSignup: [{ max: 5, ms: 3600e3 }, { max: 20, ms: 24 * 3600e3 }],
   accountForgot: [{ max: 5, ms: 3600e3 }],
+  accountForgotId: [{ max: 3, ms: 3600e3 }, { max: 6, ms: 24 * 3600e3 }],
   // Printing houses downloading their files.
   downloads: [{ max: 200, ms: 3600e3 }],
 };
@@ -596,7 +597,19 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     }
     return null;
   }
-  const siteOf = (req) => notify.siteUrl() || `${isHttps(req) ? 'https' : 'http'}://${req.get('host')}`;
+  /**
+   * The shop's address for links in emails: SITE_URL, else this request's host only when it is
+   * one of the shop's own (ALLOWED_HOSTS, default ebda3.me and www, plus localhost). Anyone can
+   * send any Host header, and a reset link pointing at their site would hand them the account.
+   */
+  const SHOP_HOSTS = String(process.env.ALLOWED_HOSTS || 'ebda3.me,www.ebda3.me').toLowerCase().split(',').map((h) => h.trim()).filter(Boolean);
+  const linkBase = (req) => {
+    if (notify.siteUrl()) return notify.siteUrl();
+    const host = String(req.get('host') || '').toLowerCase();
+    const ok = SHOP_HOSTS.includes(host) || /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(host);
+    return ok ? `${isHttps(req) ? 'https' : 'http'}://${host}` : '';
+  };
+  const siteOf = (req) => linkBase(req);
   /** Email the customer a proof to approve, or the shop's request for changes (never blocks the request). */
   function tellCustomer(order, item, kind, note, req) {
     if (typeof notify.proofMessage !== 'function') return;
@@ -1225,7 +1238,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     try {
       const now = Date.now();
       const hits = (enhanceHits.get(req.ip) || []).filter((tm) => now - tm < 60000);
-      if (hits.length >= 20) throw new HttpError(429, 'aiLimit');
+      if (hits.length >= 20 || limiter.hit(`enhanceDay:${req.ip}`, [{ max: 200, ms: 24 * 3600e3 }])) throw new HttpError(429, 'aiLimit');
       enhanceHits.set(req.ip, [...hits, now]);
       if (enhanceHits.size > 5000) enhanceHits.clear();
       const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
@@ -2009,6 +2022,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const cust = key && customerList().find((x) => (key.phone ? x.phone === key.phone : x.email === key.email));
     if (cust) rateLimit(req, 'accountLoginId', cust.id);
     // Same answer whether the account exists or not.
+    if (!cust) customers.hashPassword(String(password || '')); // same time as a real check
     if (!cust || !customers.checkPassword(cust, password)) throw new HttpError(401, 'acctWrong');
     setSession(req, res, cust);
     res.json({ customer: customers.publicCustomer(cust) });
@@ -2079,8 +2093,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const cust = key && customerList().find((x) => (key.phone ? x.phone === key.phone : x.email === key.email));
       const lang = langOf(req);
       // Only by email (a link valid for 1 hour); otherwise the shop helps on WhatsApp.
-      if (cust && cust.email && notify.emailReady()) {
-        const link = `${notify.siteUrl() || `${isHttps(req) ? 'https' : 'http'}://${req.get('host')}`}/account?reset=${encodeURIComponent(customers.resetToken(auth.customerKey, cust))}`;
+      const site = linkBase(req);
+      if (cust && cust.email && notify.emailReady() && !site) console.warn('[account] reset email not sent: set SITE_URL (request for an unknown host)');
+      if (cust && cust.email && notify.emailReady() && site && !limiter.hit(`accountForgotId:${cust.id}`, LIMITS.accountForgotId)) {
+        const link = `${site}/account?reset=${encodeURIComponent(customers.resetToken(auth.customerKey, cust))}`;
         const ar = lang === 'ar';
         const subject = ar ? 'إعادة تعيين كلمة المرور · ون أوف برنت' : 'Reset your password · OneOff Print';
         const text = ar ? `اضغط الرابط ده خلال ساعة عشان تختار كلمة مرور جديدة:\n${link}\nلو مش انت اللي طلبت ده، تجاهل الرسالة.` : `Open this link within 1 hour to choose a new password:\n${link}\nIf you didn't ask for this, ignore this email.`;
@@ -2290,8 +2306,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       store.save();
       return;
     }
-    const proto = String(req.get('x-forwarded-proto') || req.protocol).split(',')[0].trim();
-    notify.orderPlaced(order, { origin: `${proto}://${req.get('host')}`, lang: order.lang })
+    notify.orderPlaced(order, { origin: linkBase(req), lang: order.lang })
       .then((result) => {
         order.notifications = { ...result, at: new Date().toISOString() };
         store.save();
@@ -2466,7 +2481,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   /** Tell the customer their order is on its way (once), without holding up the request. */
   function sendShipped(order, req) {
     if (typeof notify.orderShipped !== 'function') return;
-    const siteUrl = notify.siteUrl() || `${isHttps(req) ? 'https' : 'http'}://${req.get('host')}`;
+    const siteUrl = linkBase(req);
     Promise.resolve()
       .then(() => notify.orderShipped(order, { siteUrl }))
       .then((result) => {

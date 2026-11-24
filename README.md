@@ -324,7 +324,9 @@ Each new order item keeps a copy of its costs on the order day, so changing cost
 - **AI / EPS uploads:** the editor accepts Illustrator (.ai) and EPS files. The server draws the first page to a transparent PNG with Ghostscript compiled to WebAssembly (`@okathira/ghostpdl-wasm`, AGPL-3.0, unmodified) in a worker thread: in-memory files only, `-dSAFER`, stopped after 45 s, two at a time, rate limited per visitor (`src/artwork.js`). AI files must be saved "PDF compatible" (Illustrator's default).
 - **Uploads:** file names, types, sizes and signatures are checked; SVG print files are cleaned of scripts, event handlers, embedded web pages and outside links; image processing has pixel limits. Print files are admin-only downloads.
 - **Clean-up:** every 6 hours, designs that were never ordered are deleted after 30 days (unfinished uploads after 24 hours) and share links after 120 days. Ordered designs are never deleted.
-- **No cookies** are used, so cross-site request forgery doesn't apply; admin requests need the token header.
+- **Cookies:** only the customer sign-in cookie (HttpOnly, Secure, SameSite=Lax) and the short Google/Facebook sign-in state cookie. Every change made with the cookie needs a JSON body, which another site's form can't send, so cross-site request forgery doesn't apply; admin requests need the token header.
+- **Links in emails** (password reset, order alerts, proofs, shipping) use `SITE_URL`, or the request's host only when it is one of the shop's own (`ALLOWED_HOSTS`, default `ebda3.me,www.ebda3.me`), so a forged Host header can't send customers to another site. Reset emails: at most 3 an hour per account.
+- **Daily security review:** a scheduled review checks the whole shop every night, fixes clear low-risk problems with tests, and reports the rest.
 
 ## Photo mockups
 

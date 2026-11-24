@@ -228,7 +228,8 @@ function sanitizeSvg(text) {
   let s = String(text);
   s = s.replace(/<!DOCTYPE[\s\S]*?>/gi, '');
   s = s.replace(/<!ENTITY[\s\S]*?>/gi, '');
-  for (const tag of ['script', 'foreignObject', 'iframe', 'object', 'embed', 'handler', 'listener']) {
+  // animate/set can change an attribute (such as a link's href) to javascript: after loading.
+  for (const tag of ['script', 'foreignObject', 'iframe', 'object', 'embed', 'handler', 'listener', 'animate', 'set', 'animateMotion', 'animateTransform', 'animateColor']) {
     s = s.replace(new RegExp(`<${tag}\\b[\\s\\S]*?</${tag}\\s*>`, 'gi'), '');
     s = s.replace(new RegExp(`<${tag}\\b[^>]*/?>`, 'gi'), '');
   }

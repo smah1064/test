@@ -381,20 +381,66 @@ function xmlText(s) {
 /** Attributes of a tag as an object (any order, either quote style). */
 function attrs(s) {
   const out = {};
-  for (const m of s.matchAll(/([\w:.-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g)) out[m[1]] = xmlText(m[2] ?? m[3]);
+  // Real attribute lists are short; a huge one is an attack on the regex below.
+  for (const m of s.slice(0, 4096).matchAll(/([\w:.-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g)) out[m[1]] = xmlText(m[2] ?? m[3]);
   return out;
 }
 
-/** Elements named `tag` (any namespace prefix): [attribute text, inner XML]; self-closing gives ''. */
+/**
+ * Elements named `tag` (any namespace prefix): [attribute text, inner XML]; self-closing gives ''.
+ * Scans forward only (linear time): an uploaded file full of tags that never close
+ * must not make a backtracking regex rescan the rest of the file for every tag.
+ */
 function* elements(xml, tag) {
-  const re = new RegExp(`<(?:[\\w.-]+:)?${tag}(?=[\\s/>])([^>]*?)(?:/>|>([\\s\\S]*?)</(?:[\\w.-]+:)?${tag}\\s*>)`, 'g');
-  for (const m of xml.matchAll(re)) yield [m[1], m[2] || ''];
+  const open = new RegExp(`<(?:[\\w.-]+:)?${tag}(?=[\\s/>])`, 'g');
+  const close = new RegExp(`</(?:[\\w.-]+:)?${tag}\\s*>`, 'g');
+  let noClose = false; // no closing tag after some point: only self-closing ones can still match
+  let m;
+  while ((m = open.exec(xml))) {
+    const nameEnd = m.index + m[0].length;
+    const gt = xml.indexOf('>', nameEnd);
+    if (gt < 0) return;
+    const head = xml.slice(nameEnd, gt);
+    if (head.endsWith('/')) {
+      yield [head.slice(0, -1), ''];
+      open.lastIndex = gt + 1;
+      continue;
+    }
+    open.lastIndex = gt + 1;
+    if (noClose) continue;
+    close.lastIndex = gt + 1;
+    const c = close.exec(xml);
+    if (!c) {
+      noClose = true;
+      continue;
+    }
+    yield [head, xml.slice(gt + 1, c.index)];
+    open.lastIndex = c.index + c[0].length;
+  }
+}
+
+/** The XML with every `tag` element taken out (linear time, see elements). */
+function withoutElements(xml, tag) {
+  const open = new RegExp(`<(?:[\\w.-]+:)?${tag}\\b`, 'g');
+  const close = new RegExp(`</(?:[\\w.-]+:)?${tag}\\s*>`, 'g');
+  let out = '';
+  let from = 0;
+  let m;
+  while ((m = open.exec(xml))) {
+    close.lastIndex = m.index + m[0].length;
+    const c = close.exec(xml);
+    if (!c) break; // nothing after this closes it
+    out += xml.slice(from, m.index);
+    from = c.index + c[0].length;
+    open.lastIndex = from;
+  }
+  return out + xml.slice(from);
 }
 
 /** All <t> texts joined (rich text runs), leaving out phonetic guides. */
 function richText(xml) {
   let s = '';
-  for (const [, inner] of elements(xml.replace(/<(?:[\w.-]+:)?rPh\b[\s\S]*?<\/(?:[\w.-]+:)?rPh\s*>/g, ''), 't')) s += xmlText(inner);
+  for (const [, inner] of elements(withoutElements(xml, 'rPh'), 't')) s += xmlText(inner);
   return s;
 }
 
@@ -463,7 +509,7 @@ function parseXlsx(buf, table, maxCols) {
       const ref = refColumn(a.r);
       col = ref >= 0 ? ref : col + 1;
       if (col >= maxCols) continue;
-      const v = /<(?:[\w.-]+:)?v(?:\s[^>]*)?>([\s\S]*?)<\/(?:[\w.-]+:)?v\s*>/.exec(inner);
+      const v = elements(inner, 'v').next().value;
       const raw = v ? xmlText(v[1]) : '';
       let text;
       if (a.t === 's') text = strings[parseInt(raw, 10)] ?? '';
