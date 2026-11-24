@@ -98,20 +98,21 @@
     'tshirt:front': [M('tshirt-man-front', 'man', { cx: 507, top: 433, w: 218 }), M('tshirt-woman-front', 'woman', { cx: 501, top: 459, w: 216 })],
     'tshirt:back': [M('tshirt-man-back', 'man', { cx: 504, top: 363, w: 196 }), M('tshirt-woman-back', 'woman', { cx: 505, top: 396, w: 198 })],
     'oversized:front': [M('oversized-man-front', 'man', { cx: 510, top: 422, w: 214 }), M('oversized-woman-front', 'woman', { cx: 504, top: 448, w: 246 })],
-    'oversized:back': [M('oversized-man-back', 'man', { cx: 503, top: 354, w: 223 })],
+    'oversized:back': [M('oversized-man-back', 'man', { cx: 503, top: 354, w: 223 }), M('oversized-woman-back', 'woman', { cx: 501, top: 388, w: 234 })],
     'kidstee:front': [M('kidstee-boy-front', 'boy', { cx: 505, top: 467, w: 190 }), M('kidstee-girl-front', 'girl', { cx: 507, top: 471, w: 199 })],
-    'kidstee:back': [M('kidstee-boy-back', 'boy', { cx: 506, top: 411, w: 170 })],
+    'kidstee:back': [M('kidstee-boy-back', 'boy', { cx: 506, top: 411, w: 170 }), M('kidstee-girl-back', 'girl', { cx: 506, top: 410, w: 168 })],
+    'kidshoodie:back': [M('kidshoodie-boy-back', 'boy', { cx: 503, top: 535, w: 184 }), M('kidshoodie-girl-back', 'girl', { cx: 507, top: 558, w: 182 })],
     'hoodie:front': [M('hoodie-man-front', 'man', { cx: 503, top: 412, w: 191 }), M('hoodie-woman-front', 'woman', { cx: 502, top: 435, w: 189 })],
-    'hoodie:back': [M('hoodie-man-back', 'man', { cx: 504, top: 495, w: 196 })],
+    'hoodie:back': [M('hoodie-man-back', 'man', { cx: 504, top: 495, w: 196 }), M('hoodie-woman-back', 'woman', { cx: 510, top: 522, w: 188 })],
     'kidshoodie:front': [M('kidshoodie-boy-front', 'boy', { cx: 504, top: 459, w: 168 }), M('kidshoodie-girl-front', 'girl', { cx: 507, top: 461, w: 176 })],
     'ziphoodie:front': [M('ziphoodie-man-front', 'man', { cx: 580, top: 443, w: 73 })],
     'sweatshirt:front': [M('sweatshirt-man-front', 'man', { cx: 503, top: 439, w: 218 }), M('sweatshirt-woman-front', 'woman', { cx: 501, top: 457, w: 216 })],
-    'sweatshirt:back': [M('sweatshirt-man-back', 'man', { cx: 504, top: 355, w: 196 })],
+    'sweatshirt:back': [M('sweatshirt-man-back', 'man', { cx: 504, top: 355, w: 196 }), M('sweatshirt-woman-back', 'woman', { cx: 517, top: 384, w: 189 })],
     'polo:front': [M('polo-man-front', 'man', { cx: 584, top: 452, w: 63 })],
     'polo:back': [M('polo-man-back', 'man', { cx: 509, top: 326, w: 193 })],
     'jersey:front': [M('jersey-man-front', 'man', { cx: 509, top: 420, w: 178 })],
     'jersey:back': [M('jersey-man-back', 'man', { cx: 508, top: 342, w: 185 })],
-    'ziphoodie:back': [M('hoodie-man-back', 'man', { cx: 504, top: 495, w: 196 })],
+    'ziphoodie:back': [M('ziphoodie-man-back', 'man', { cx: 502, top: 498, w: 203 })],
   };
 
   /*
@@ -123,40 +124,106 @@
    * hem plus the turn angle of the printed side (+ = that side faces the picture's right).
    * Measured from the garment masks.
    */
-  const TURN_REF = {
+  const TURNS = {
     'tshirt:man': {
       front: { cx: 506.5, a: 191.5, top: 324, bot: 1023 },
       back: { cx: 505, a: 172, top: 309, bot: 1027 },
-      depth: 60.25,
+      frames: { 45: { cx: 504, half: 168, top: 324, bot: 1026 }, 135: { cx: 499.5, half: 167.5, top: 305, bot: 1028 }, 225: { cx: 514, half: 172, top: 297, bot: 1028 }, 315: { cx: 515.5, half: 162.5, top: 321, bot: 1024 } },
+    },
+    'tshirt:woman': {
+      front: { cx: 500.5, a: 181.5, top: 351, bot: 1024 },
+      back: { cx: 501, a: 172, top: 341, bot: 1037 },
+      frames: { 45: { cx: 512.5, half: 170.5, top: 349, bot: 1027 }, 135: { cx: 490, half: 147, top: 337, bot: 1038 }, 225: { cx: 512, half: 159, top: 334, bot: 1037 }, 315: { cx: 522, half: 168, top: 349, bot: 1028 } },
+    },
+    'oversized:man': {
+      front: { cx: 509, a: 180, top: 327, bot: 1020 },
+      back: { cx: 503, a: 187, top: 305, bot: 1032 },
+      frames: { 45: { cx: 514.5, half: 176.5, top: 327, bot: 1029 }, 135: { cx: 486, half: 183, top: 301, bot: 1034 }, 225: { cx: 531, half: 186, top: 298, bot: 1039 }, 315: { cx: 492.5, half: 162.5, top: 319, bot: 1023 } },
+    },
+    'oversized:woman': {
+      front: { cx: 503.5, a: 192.5, top: 351, bot: 1074 },
+      back: { cx: 501, a: 196, top: 337, bot: 1087 },
+      frames: { 45: { cx: 533.5, half: 166.5, top: 345, bot: 1078 }, 135: { cx: 481.5, half: 182.5, top: 334, bot: 1089 }, 225: { cx: 479.5, half: 172.5, top: 332, bot: 1092 }, 315: { cx: 479, half: 162, top: 347, bot: 1081 } },
+    },
+    'polo:man': {
+      front: { cx: 504.5, a: 173.5, top: 307, bot: 1024 },
+      back: { cx: 508.5, a: 170.5, top: 278, bot: 1042 },
+      frames: { 45: { cx: 498, half: 170, top: 303, bot: 1030 }, 135: { cx: 498.5, half: 174.5, top: 276, bot: 1042 }, 225: { cx: 513.5, half: 182.5, top: 273, bot: 1048 }, 315: { cx: 510, half: 165, top: 300, bot: 1029 } },
+    },
+    'jersey:man': {
+      front: { cx: 509, a: 173, top: 324, bot: 1018 },
+      back: { cx: 508.5, a: 166.5, top: 304, bot: 1040 },
+      frames: { 45: { cx: 501.5, half: 168.5, top: 322, bot: 1019 }, 135: { cx: 505, half: 171, top: 301, bot: 1040 }, 225: { cx: 516, half: 168, top: 295, bot: 1032 }, 315: { cx: 516.5, half: 164.5, top: 316, bot: 1018 } },
+    },
+    'kidstee:boy': {
+      front: { cx: 506.5, a: 171.5, top: 370, bot: 1016 },
+      back: { cx: 507, a: 164, top: 358, bot: 1025 },
+      frames: { 45: { cx: 520, half: 141, top: 360, bot: 1014 }, 135: { cx: 485, half: 153, top: 353, bot: 1023 }, 225: { cx: 514.5, half: 160.5, top: 356, bot: 1025 }, 315: { cx: 496, half: 148, top: 366, bot: 1022 } },
+    },
+    'kidstee:girl': {
+      front: { cx: 507.5, a: 171.5, top: 368, bot: 994 },
+      back: { cx: 506.5, a: 162.5, top: 358, bot: 1016 },
+      frames: { 45: { cx: 516.5, half: 153.5, top: 364, bot: 999 }, 135: { cx: 494, half: 157, top: 359, bot: 1016 }, 225: { cx: 508.5, half: 162.5, top: 354, bot: 1015 }, 315: { cx: 490.5, half: 151.5, top: 364, bot: 1004 } },
+    },
+    // Hoodies and sweatshirts: widths measured at the sleeve-to-body seam (the sleeves hang against the body).
+    'hoodie:man': {
+      front: { cx: 503, a: 188, top: 260, bot: 1034 },
+      back: { cx: 510, a: 185, top: 268, bot: 1032 },
+      frames: { 45: { cx: 510, half: 184, top: 257, bot: 1058 }, 135: { cx: 454.5, half: 160.5, top: 261, bot: 1034 }, 225: { cx: 521, half: 191, top: 264, bot: 1047 }, 315: { cx: 495.5, half: 170.5, top: 252, bot: 1053 } },
+    },
+    'hoodie:woman': {
+      front: { cx: 502, a: 187, top: 281, bot: 1052 },
+      back: { cx: 516, a: 177, top: 266, bot: 1055 },
+      frames: { 45: { cx: 538, half: 147, top: 283, bot: 1078 }, 135: { cx: 461, half: 153, top: 275, bot: 1065 }, 225: { cx: 533.5, half: 159.5, top: 270, bot: 1057 }, 315: { cx: 483.5, half: 160.5, top: 277, bot: 1067 } },
+    },
+    'ziphoodie:man': {
+      front: { cx: 503.5, a: 190.5, top: 286, bot: 1033 },
+      back: { cx: 508, a: 192, top: 272, bot: 1034 },
+      frames: { 45: { cx: 510.5, half: 185.5, top: 288, bot: 1048 }, 135: { cx: 471.5, half: 176.5, top: 273, bot: 1045 }, 225: { cx: 518.5, half: 186.5, top: 271, bot: 1047 }, 315: { cx: 508, half: 174, top: 283, bot: 1044 } },
+    },
+    'sweatshirt:man': {
+      front: { cx: 507, a: 188, top: 327, bot: 1030 },
+      back: { cx: 506, a: 184, top: 305, bot: 1039 },
+      frames: { 45: { cx: 526.5, half: 164.5, top: 325, bot: 1056 }, 135: { cx: 484, half: 186, top: 302, bot: 1052 }, 225: { cx: 539, half: 169, top: 298, bot: 1047 }, 315: { cx: 482, half: 161, top: 319, bot: 1049 } },
+    },
+    'sweatshirt:woman': {
+      front: { cx: 506, a: 185, top: 348, bot: 1054 },
+      back: { cx: 518.5, a: 177.5, top: 335, bot: 1058 },
+      frames: { 45: { cx: 537.5, half: 157.5, top: 342, bot: 1073 }, 135: { cx: 500, half: 180, top: 334, bot: 1069 }, 225: { cx: 526.5, half: 171.5, top: 332, bot: 1072 }, 315: { cx: 488, half: 168, top: 345, bot: 1070 } },
+    },
+    'kidshoodie:boy': {
+      front: { cx: 502, a: 184, top: 300, bot: 1037 },
+      back: { cx: 506, a: 177, top: 294, bot: 1039 },
+      frames: { 45: { cx: 496, half: 165, top: 294, bot: 1049 }, 135: { cx: 462.5, half: 156.5, top: 298, bot: 1048 }, 225: { cx: 545.5, half: 155.5, top: 295, bot: 1050 }, 315: { cx: 490.5, half: 156.5, top: 295, bot: 1053 } },
+    },
+    'kidshoodie:girl': {
+      front: { cx: 504.5, a: 178.5, top: 329, bot: 1032 },
+      back: { cx: 512.5, a: 175.5, top: 323, bot: 1034 },
+      frames: { 45: { cx: 538, half: 136, top: 326, bot: 1062 }, 135: { cx: 476.5, half: 156.5, top: 322, bot: 1045 }, 225: { cx: 532, half: 158, top: 320, bot: 1046 }, 315: { cx: 478, half: 148, top: 329, bot: 1059 } },
     },
   };
-  const TF = (key, deg, side, file, m) => {
+  // The torso's half-depth is about 0.7 of its half-width: what the 45° photos give for every
+  // model (depth = √(2·half45² − a²)); side views can't show it, the arms hang in front.
+  const DEPTH = 0.7;
+  // Turn angle of the printed side in each photo (+ = that side faces the picture's right).
+  const TURN_ANGLES = [[0, 'front', 0], [45, 'front', 45], [90, null, 0], [135, 'back', -45], [180, 'back', 0], [225, 'back', 45], [270, null, 0], [315, 'front', -45]];
+  const modelFor = (pid, who, side) => (window.POD_MODELS[`${pid}:${side}`] || []).find((x) => x.who === who);
+  window.POD_TURNS = {};
+  for (const [key, T] of Object.entries(TURNS)) {
     const [pid, who] = key.split(':');
-    const base = POD_MODELS_REF(pid, who, side === 'back' ? 'back' : 'front');
-    return {
-      deg, side, who, warp: 'fabric',
-      src: `/mockups/models/${file}.webp`, mask: `/mockups/models/${file}-mask.png`,
-      rect: base.rect,
-      turn: side ? { ...m, ref: TURN_REF[key][side], depth: TURN_REF[key].depth } : null,
-    };
-  };
-  function POD_MODELS_REF(pid, who, side) {
-    return window.POD_MODELS[`${pid}:${side}`].find((x) => x.who === who);
+    window.POD_TURNS[key] = () => TURN_ANGLES.map(([deg, side, theta]) => {
+      const straight = (deg === 0 || deg === 180) && modelFor(pid, who, side);
+      if (straight) return { ...straight, deg, side };
+      const file = `${pid}-${who}-t${String(deg).padStart(3, '0')}`;
+      const base = (side && modelFor(pid, who, side)) || modelFor(pid, who, 'front'); // side views: the front box, for scale only
+      return {
+        deg, side: side && modelFor(pid, who, side) ? side : null, who, warp: 'fabric',
+        src: `/mockups/models/${file}.webp`, mask: `/mockups/models/${file}-mask.png`,
+        rect: base ? base.rect : null,
+        turn: side && modelFor(pid, who, side) ? { theta, ...T.frames[deg], ref: T[side], depth: Math.round(T.front.a * DEPTH) } : null,
+      };
+    });
   }
-  window.POD_TURNS = {
-    // 0° and 180° are the straight-on photos above; the rest turn the model to the
-    // picture's right (45°: three-quarter front … 315°: three-quarter front facing left).
-    'tshirt:man': () => [
-      { ...POD_MODELS_REF('tshirt', 'man', 'front'), deg: 0, side: 'front' },
-      TF('tshirt:man', 45, 'front', 'tshirt-man-t045', { theta: 45, cx: 504, half: 168, top: 324, bot: 1026 }),
-      TF('tshirt:man', 90, null, 'tshirt-man-t090'),
-      TF('tshirt:man', 135, 'back', 'tshirt-man-t135', { theta: -45, cx: 499.5, half: 167.5, top: 305, bot: 1028 }),
-      { ...POD_MODELS_REF('tshirt', 'man', 'back'), deg: 180, side: 'back' },
-      TF('tshirt:man', 225, 'back', 'tshirt-man-t225', { theta: 45, cx: 514, half: 172, top: 297, bot: 1028 }),
-      TF('tshirt:man', 270, null, 'tshirt-man-t270'),
-      TF('tshirt:man', 315, 'front', 'tshirt-man-t315', { theta: -45, cx: 515.5, half: 162.5, top: 321, bot: 1024 }),
-    ],
-  };
 
   // ---------- Recoloured product photos (cards, editor, thumbnails) ----------
   const loadImg = (src) => new Promise((resolve, reject) => {
