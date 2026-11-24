@@ -477,6 +477,7 @@
       } catch (e) { /* private mode */ }
     };
     const timers = new Map(); // productId -> { timer, run }
+    const sending = new Map(); // productId -> the upload on its way (waited for before a delete)
     async function upload(productId, draft, account) {
       if (owner() !== account) return false; // signed out or someone else since
       try {
@@ -497,7 +498,9 @@
       if (old) clearTimeout(old.timer);
       const run = () => {
         timers.delete(productId);
-        return upload(productId, draft, account);
+        const p = upload(productId, draft, account).finally(() => { if (sending.get(productId) === p) sending.delete(productId); });
+        sending.set(productId, p);
+        return p;
       };
       timers.set(productId, { timer: setTimeout(run, 1500), run });
     }
@@ -545,7 +548,12 @@
         timers.delete(productId);
         setPending(productId, null);
         await local.remove(productId);
-        if (who) fetch(url(productId), { method: 'DELETE', credentials: 'same-origin' }).catch(() => {});
+        if (who) {
+          // An upload already on its way would bring the draft back after the delete: let it land first.
+          await (sending.get(productId) || Promise.resolve()).catch(() => null);
+          // Waited for, so a page reloaded right after ("Start a new design") doesn't get the account's copy back.
+          await fetch(url(productId), { method: 'DELETE', credentials: 'same-origin', keepalive: true, signal: withTimeout(8000) }).catch(() => {});
+        }
       },
       all: local.all,
       /**

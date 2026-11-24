@@ -895,8 +895,12 @@
       await draftSaving.catch(() => null);
       await POD.drafts.remove(st.product.id);
       try { localStorage.removeItem('pod-rescue:' + st.product.id); } catch (err) { /* private mode */ }
+      // The same product, colour and size, empty: not the ready-made design, shared design or cart item it came from.
       const u = new URL(location.href);
-      u.searchParams.delete('cart');
+      for (const k of ['cart', 'library', 'share', 'design', 'revise']) u.searchParams.delete(k);
+      u.searchParams.set('product', st.product.id);
+      u.searchParams.set('color', st.colorId);
+      if (st.sizePicked) u.searchParams.set('size', st.sizeId);
       location.replace(u.toString());
     });
   }
