@@ -69,6 +69,8 @@
       const reo = { busy: false, added: 0, skipped: null, error: null };
       const catalog = await POD.loadCatalog().catch(() => null);
       const shopWa = catalog && catalog.contact && catalog.contact.whatsapp;
+      /** "3 names": Arabic takes the plural for 3–10 («٣ أسماء»), the singular otherwise («١١ اسم»). */
+      const namesText = (n) => t(n % 100 >= 3 && n % 100 <= 10 ? 'cart.copies.few' : 'cart.copies', { n: POD.num(n) });
       /** A WhatsApp chat with the shop, the order details already typed. */
       function whatsappLink(o) {
         const A = PODAftercare;
@@ -76,7 +78,7 @@
           const parts = [tr(it.productName)];
           if (A.showBreakdown(it)) parts.push(A.qtyText(it));
           else parts.push(tr(it.color.name), tr(it.size.label));
-          if (A.isNameList(it)) parts.push(t('cart.copies', { n: POD.num(A.pieces(it)) }));
+          if (A.isNameList(it)) parts.push(namesText(A.pieces(it)));
           else if (A.pieces(it) > 1) parts.push(A.piecesText(A.pieces(it)));
           return `${POD.num(i + 1)}. ${parts.join(' · ')}`;
         }).join('\n');
@@ -191,9 +193,18 @@
         }
         return `<div class="item-proof-state ${item.status}">${body}</div>`;
       }
+      /** The order's status as the customer reads it: "Waiting for you" while an item needs their answer
+       *  (the shop still counts the order as being checked). */
+      function shownStatus(o) {
+        if (o.status === 'in_review' && o.items.some((i) => i.status === 'awaiting_approval' || i.status === 'changes_requested')) return 'waiting_you';
+        return o.status;
+      }
       function approvalHtml(item) {
         const a = item.approval;
         if (!a || !a.at) return '';
+        // A new version waits for its own approval (or for changes): the old version's approval would mislead.
+        if (item.status === 'awaiting_approval' || item.status === 'changes_requested') return '';
+        if (item.status === 'review' && (item.approvals || []).some((h) => h && h.action === 'revised' && h.at > a.at)) return '';
         return `<div class="item-approved"><span>✓ ${esc(t('item.approvedOn', { date: POD.date(a.at), v: POD.num(a.version || 1) }))}</span>${a.sample ? `<span class="item-sample">${esc(t('item.sampleFirst'))}</span>` : ''}</div>`;
       }
 
@@ -224,7 +235,7 @@
               <p class="muted small">${esc(t('order.emailWhy'))}</p>
             </section>` : ''}
             <h1>${esc(t('order.title', { n: o.number }))}</h1>
-            <p class="muted">${esc(t('order.meta', { status: t('order.' + o.status), date: POD.date(o.createdAt), n: POD.num(o.items.length) }))}</p>
+            <p class="muted">${esc(t('order.meta', { status: t('order.' + shownStatus(o)), date: POD.date(o.createdAt), n: POD.num(o.items.length) }))}</p>
             ${isNew ? '' : arrives}
             <div class="order-actions">
               <a class="btn" href="/invoice?id=${encodeURIComponent(o.id)}">${esc(t('track.invoice'))}</a>
@@ -248,7 +259,7 @@
                 ${pic ? `<img src="${esc(pic)}" alt="">` : '<span></span>'}
                 <div>
                   <h3>${POD.num(i + 1)}. ${esc(tr(item.productName))}</h3>
-                  <div class="meta">${breakdown ? '' : `${esc(tr(item.color.name))} · ${esc(tr(item.size.label))} · `}${esc((item.sides || []).map((s) => tr(s.name)).join(' + '))}${names ? ` · <span class="cart-copies">${esc(t('cart.copies', { n: POD.num(pieces) }))}</span>` : ''}</div>
+                  <div class="meta">${breakdown ? '' : `${esc(tr(item.color.name))} · ${esc(tr(item.size.label))} · `}${esc((item.sides || []).map((s) => tr(s.name)).join(' + '))}${names ? ` · <span class="cart-copies">${esc(namesText(pieces))}</span>` : ''}</div>
                   ${breakdown ? PODAftercare.qtyHtml(item) : ''}
                   <div class="status-label st-${esc(status)}" style="margin-top:10px">${esc(t('item.' + status))}</div>
                   ${delivered ? '' : proofStateHtml(item)}
@@ -261,7 +272,7 @@
           </div>
           <div class="card summary" style="margin-top:16px;position:static">
             <div class="line"><span>${esc(t('checkout.subtotal'))}</span><span>${esc(money(o.subtotal))}</span></div>
-            ${o.discount ? `<div class="line discount-line"><span>${esc(t('coupon.discount'))} <bdi dir="ltr">${esc(o.coupon || '')}</bdi></span><span>-${esc(money(o.discount))}</span></div>` : ''}
+            ${o.discount || o.coupon ? `<div class="line discount-line"><span>${esc(t('coupon.discount'))} <bdi dir="ltr">${esc(o.coupon || '')}</bdi></span><span>${o.discount ? '-' + esc(money(o.discount)) : esc(t('coupon.freeShipping'))}</span></div>` : ''}
             ${shippingLines(o)}
             <div class="line total"><span>${esc(t('checkout.total'))}</span><span>${esc(money(o.total))}</span></div>
             ${o.delivery && !delivered ? `<p class="dlv-expected">🚚 ${esc(t('delivery.line', { speed: t(o.delivery.speed === 'express' ? 'delivery.express' : 'delivery.standard'), date: POD.day(o.delivery.by) }))}</p>` : ''}

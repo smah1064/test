@@ -32,7 +32,12 @@ Object.assign(window.POD_STRINGS, {
   'proof.pages': ['Pages', 'الصفحات'],
   'proof.page': ['Page {n}', 'صفحة {n}'],
   'proof.pageAlt': ['Page {n} of the book', 'صفحة {n} من الكتاب'],
-  'proof.names': ['Name list: {n} names', 'قائمة الأسماء: {n} اسم'],
+  // No number-noun agreement needed (the caller passes no plural form): "قائمة الأسماء (عددها ٣)".
+  'proof.names': ['Name list: {n} names', 'قائمة الأسماء (عددها {n})'],
+  // The same with Arabic counting (1 / 2 / 3–10 / 11+), for a caller that picks the form by the number.
+  'proof.names.two': ['Name list: 2 names', 'قائمة الأسماء: اسمين'],
+  'proof.names.few': ['Name list: {n} names', 'قائمة الأسماء: {n} أسماء'],
+  'proof.names.many': ['Name list: {n} names', 'قائمة الأسماء: {n} اسم'],
   'proof.namesFirst': ['The first {n} rows (each piece gets its own row):', 'أول {n} صفوف (كل قطعة بتاخد صف):'],
   'proof.row': ['Row', 'صف'],
 
@@ -105,6 +110,9 @@ Object.assign(window.POD_STRINGS, {
   'proofPage.sending': ['Sending…', 'جاري الإرسال…'],
   'proofPage.doneApprove': ['Thank you! This proof is approved and the item goes to printing.', 'شكرًا! تمت الموافقة على البروفة والمنتج رايح للطباعة.'],
   'proofPage.doneReject': ['Thank you, we got your request. Our team will make the changes and send you a new proof.', 'شكرًا، وصلنا طلبك. فريقنا هيعمل التعديلات ويبعتلك بروفة جديدة.'],
+  // After asking for changes to an editor-made item: the customer can also make them.
+  'proofPage.doneRejectEdit': ['Thank you, we got your request. You can make the changes yourself: open your order page, edit the design and send it again. Or leave it to us and we’ll send you a new proof.', 'شكرًا، وصلنا طلبك. تقدر تعمل التعديلات بنفسك: افتح صفحة طلبك، عدّل التصميم وابعته تاني. أو سيبها علينا وهنبعتلك بروفة جديدة.'],
+  'proofPage.toOrderEdit': ['Edit it from your order page', 'عدّله من صفحة طلبك'],
   'proofPage.toOrder': ['View your order', 'شوف طلبك'],
   'proofPage.gone': ['This proof link no longer works', 'لينك البروفة ده مابقاش شغّال'],
   'proofPage.goneText': ['It may have expired or already been used, or we sent you a newer proof. Check our latest message, or open your order page to see where things are.', 'ممكن يكون انتهى أو اتستخدم قبل كده، أو بعتنالك بروفة أحدث. شوف آخر رسالة مننا، أو افتح صفحة طلبك علشان تعرف وصلنا لفين.'],
@@ -122,6 +130,8 @@ Object.assign(window.POD_STRINGS, {
 
   // ---------- Order page ----------
   'order.in_review': ['Being checked', 'تحت المراجعة'],
+  // An item waits for the customer's answer (a proof to approve, or changes to make).
+  'order.waiting_you': ['Waiting for you', 'مستنيين ردك'],
   'item.review': ['Being checked by our team', 'فريقنا بيراجعه'],
   'item.awaiting_approval': ['Waiting for your approval', 'مستني موافقتك'],
   'item.changes_requested': ['Changes needed', 'محتاج تعديلات'],

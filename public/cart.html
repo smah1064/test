@@ -452,10 +452,15 @@
         const freeOver = quote ? quote.freeShippingOver : pricing.freeShippingOver;
         const applied = quote && quote.coupon && couponCode ? quote.coupon : null;
         const discount = applied ? applied.discount : 0;
-        const baseShipping = (applied && applied.freeShipping) || subtotal - discount >= freeOver ? 0 : (quote ? quote.shippingFlat : pricing.shipping);
+        // The shop's own numbers when its answer is for exactly this cart (same items, same coupon);
+        // until then the same rule as the shop's: free shipping goes by the subtotal before any discount.
+        const fresh = quoteFits(cart) && Boolean(quote.coupon) === Boolean(applied);
+        const baseShipping = fresh && typeof quote.baseShipping === 'number' ? quote.baseShipping
+          : (applied && applied.freeShipping) || subtotal >= freeOver ? 0 : (quote ? quote.shippingFlat : pricing.shipping);
         const expressNow = delivery === 'express' ? expressFee() : 0;
         const shipping = Math.round((baseShipping + expressNow) * 100) / 100;
-        render.total = Math.round((subtotal - discount + shipping) * 100) / 100;
+        render.total = fresh && typeof quote.total === 'number' && quote.delivery && quote.delivery.speed === delivery
+          ? quote.total : Math.round((subtotal - discount + shipping) * 100) / 100;
         document.querySelectorAll('input[name="delivery"]').forEach((r) => { r.checked = r.value === delivery; });
         // Standard costs the normal shipping fee; express adds its fee on top.
         document.getElementById('dlv-fee-standard').textContent = baseShipping ? t('delivery.feeStandard', { price: money(baseShipping) }) : t('delivery.feeFree');
@@ -468,9 +473,12 @@
         document.getElementById('coupon-code').textContent = applied ? applied.code : '';
         document.getElementById('discount').textContent = applied ? (applied.freeShipping && !discount ? t('coupon.freeShipping') : '-' + money(discount)) : '';
         const msg = document.getElementById('coupon-msg');
-        msg.textContent = couponCode && quote && quote.couponError ? quote.couponError : applied ? t('coupon.applied') : '';
-        msg.classList.toggle('bad', Boolean(couponCode && quote && quote.couponError));
-        if (document.activeElement !== document.getElementById('coupon')) document.getElementById('coupon').value = couponCode;
+        // A code the shop refused: its reason stays under the field (with the code) until the customer changes it.
+        const refused = couponCode && quote && quote.couponError ? quote.couponError : !couponCode && couponNote ? couponNote.msg : '';
+        msg.textContent = refused || (applied ? t('coupon.applied') : '');
+        msg.classList.toggle('bad', Boolean(refused));
+        markCoupon(Boolean(refused));
+        if (document.activeElement !== document.getElementById('coupon')) document.getElementById('coupon').value = couponCode || (couponNote ? couponNote.code : '');
         document.getElementById('subtotal').textContent = money(subtotal);
         document.getElementById('shipping').textContent = baseShipping ? money(baseShipping) : t('free');
         document.getElementById('express-line').hidden = !expressNow;
@@ -483,18 +491,42 @@
 
       // Today's prices from the shop (the cart keeps the price from when an item was added).
       let quote = null;
+      /** Is the shop's last answer about exactly these items (at the prices the cart shows)? */
+      const quoteFits = (cart) => Boolean(quote && Array.isArray(quote.items) && quote.items.length === cart.length
+        && quote.items.every((q, i) => q && q.designId === cart[i].designId && q.price === cart[i].price));
+      /** Pieces of a cart item, like the shop counts them (copies, or the colour/size lines). */
+      const piecesOf = (item) => {
+        const proof = proofOf(item.designId);
+        return proof ? PODProof.pieces(proof) : Math.max(1, Number(item.copies) || qtyLines(item).reduce((n, l) => n + Number(l.qty), 0) || 1);
+      };
+      /** "Print one sample first" counts only for items still in the cart with more than one piece. */
+      const wantsSample = (cart) => cart.some((it) => { const a = approvals.get(it.designId); return Boolean(a && a.sample) && piecesOf(it) > 1; });
+      /** Ticks kept for items no longer in the cart are forgotten. */
+      function forgetRemoved(cart) {
+        const ids = new Set(cart.map((it) => it.designId));
+        let dropped = false;
+        for (const id of [...approvals.keys()]) if (!ids.has(id)) { approvals.delete(id); dropped = true; }
+        if (dropped) saveApprovals();
+      }
       // The coupon code the customer typed (kept for this visit).
       let couponCode = '';
       try { couponCode = sessionStorage.getItem('pod-coupon') || ''; } catch (e) { couponCode = ''; }
+      // A code the shop refused (its reason, and the code as typed), shown at the coupon field.
+      let couponNote = null;
+      function markCoupon(bad) {
+        const el = document.getElementById('coupon');
+        if (bad) { el.setAttribute('aria-invalid', 'true'); el.setAttribute('aria-describedby', 'coupon-msg'); } else { el.removeAttribute('aria-invalid'); el.removeAttribute('aria-describedby'); }
+      }
       const setCoupon = (code) => {
         couponCode = code;
         try { if (code) sessionStorage.setItem('pod-coupon', code); else sessionStorage.removeItem('pod-coupon'); } catch (e) { /* private mode */ }
       };
       async function refreshPrices({ announce = false } = {}) {
         const cart = POD.getCart();
+        forgetRemoved(cart);
         if (!cart.length) { quote = null; return; }
         try {
-          quote = await POD.api('/api/cart/quote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ designIds: cart.map((i) => i.designId), couponCode, delivery, sample: [...approvals.values()].some((a) => a && a.sample), phone: (document.getElementById('phone') || {}).value || undefined }) });
+          quote = await POD.api('/api/cart/quote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ designIds: cart.map((i) => i.designId), couponCode, delivery, sample: wantsSample(cart), phone: (document.getElementById('phone') || {}).value || undefined }) });
         } catch (e) {
           quote = null;
           return;
@@ -583,6 +615,8 @@
       // ---------- Field errors: shown under the field, which is scrolled to and focused ----------
       const FIELDS = ['name', 'phone', 'email', 'governorate', 'city', 'address'].map((id) => document.getElementById(id));
       const SERVER_FIELD = { badPhone: 'phone', badEmail: 'email', badGovernorate: 'governorate' };
+      // The same refusals in this page's words (to show them again in the other language).
+      const SERVER_TEXT = { badPhone: 'checkout.badPhone', badEmail: 'checkout.badEmail', badGovernorate: 'checkout.needGov' };
       const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       /** The same check as the shop's: an Egyptian mobile, Arabic digits and +20 allowed. */
       function egyptMobile(input) {
@@ -601,8 +635,9 @@
         if (el.id === 'email' && v && !EMAIL_RE.test(v)) return t('checkout.badEmail');
         return '';
       }
-      function setFieldError(el, msg) {
+      function setFieldError(el, msg, code) {
         const errId = 'err-' + el.id;
+        if (msg && code) el.dataset.errCode = code; else delete el.dataset.errCode;
         let p = document.getElementById(errId);
         if (el.dataset.desc == null) el.dataset.desc = el.getAttribute('aria-describedby') || '';
         if (!msg) {
@@ -657,7 +692,10 @@
           const captchaToken = await orderCaptcha.token();
           // Check prices again right before ordering: the customer must see what they will pay.
           const before = render.total;
+          const codeBefore = couponCode;
           await refreshPrices();
+          // The coupon no longer works (e.g. this phone already used it): say why, with the price without it, and order nothing.
+          if (codeBefore && quote && quote.couponError) throw Object.assign(new Error(quote.couponError), { code: 'couponRefused' });
           render();
           if (!POD.getCart().length) throw new Error(t('cart.emptyTitle'));
           if (Math.abs(render.total - before) > 0.009) throw Object.assign(new Error(t('cart.pricesUpdated')), { code: 'priceChanged' });
@@ -677,6 +715,13 @@
           orderCaptcha.reset();
           // The shop answered (a wrong phone, a changed price…): that try placed nothing, so its key is done.
           if (!err.network) { try { sessionStorage.removeItem('pod-order-key'); } catch (e) { /* private mode */ } }
+          // The coupon was refused (here or by the shop): its reason goes at the coupon field and the code comes off,
+          // so the total shown is the one without it; the customer sees why before ordering again.
+          const couponRefused = /^coupon/.test(err.code || '') && (couponCode || err.code === 'couponRefused');
+          if (couponRefused) {
+            couponNote = { code: couponCode || (couponNote && couponNote.code) || '', msg: err.message };
+            setCoupon('');
+          }
           if (err.code === 'priceChanged' || err.code === 'designGone' || err.code === 'designOrdered' || /^coupon/.test(err.code || '')) {
             await refreshPrices();
             render();
@@ -694,10 +739,11 @@
           // A field the shop refused (the phone, the email…): the message goes under that field.
           const field = SERVER_FIELD[err.code] && document.getElementById(SERVER_FIELD[err.code]);
           if (field) {
-            setFieldError(field, err.message);
+            setFieldError(field, err.message, err.code);
             goToField(field);
           } else {
             POD.toast(err.message, 'error');
+            if (couponRefused) document.querySelector('.coupon-box').scrollIntoView({ block: 'center', behavior: 'smooth' });
           }
           updateApproval();
         }
@@ -752,15 +798,29 @@
       // Coupon: apply / remove.
       const applyCoupon = async () => {
         const code = document.getElementById('coupon').value.trim().toUpperCase().replace(/\s+/g, '');
+        couponNote = null;
         setCoupon(code);
         document.getElementById('coupon').blur();
         await refreshPrices();
+        if (code && quote && quote.couponError) {
+          couponNote = { code, msg: quote.couponError };
+          setCoupon('');
+        }
         render();
-        if (code && quote && quote.couponError) setCoupon('');
       };
       document.getElementById('coupon-apply').addEventListener('click', applyCoupon);
       document.getElementById('coupon').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); applyCoupon(); } });
+      // Typing another code: the old refusal goes.
+      document.getElementById('coupon').addEventListener('input', () => {
+        if (!couponNote) return;
+        couponNote = null;
+        const msg = document.getElementById('coupon-msg');
+        msg.textContent = '';
+        msg.classList.remove('bad');
+        markCoupon(false);
+      });
       document.getElementById('coupon-remove').addEventListener('click', async () => {
+        couponNote = null;
         setCoupon('');
         document.getElementById('coupon').value = '';
         await refreshPrices();
@@ -768,15 +828,20 @@
       });
 
       // Signed-in customers: their details are filled in and the order is saved to their account.
+      // undefined until the shop answers; then the signed-in customer, or null for a guest.
+      let acctMe;
+      function renderAcctNote() {
+        if (acctMe === undefined) return;
+        const note = document.getElementById('acct-note');
+        if (!acctMe) note.innerHTML = `${esc(t('acct.checkoutGuest'))} <a href="/account?next=cart">${esc(t('acct.signIn'))}</a>`;
+        else note.textContent = t('acct.checkoutAs', { name: acctMe.name });
+      }
       async function prefillAccount() {
         let me = null;
         try { me = (await POD.api('/api/account')).customer; } catch (e) { me = null; }
-        const note = document.getElementById('acct-note');
-        if (!me) {
-          note.innerHTML = `${esc(t('acct.checkoutGuest'))} <a href="/account?next=cart">${esc(t('acct.signIn'))}</a>`;
-          return;
-        }
-        note.textContent = t('acct.checkoutAs', { name: me.name });
+        acctMe = me || null;
+        renderAcctNote();
+        if (!me) return;
         const fill = (id, v) => { const el = document.getElementById(id); if (el && !el.value && v) el.value = v; };
         fill('name', me.name);
         fill('phone', me.phone);
@@ -819,7 +884,17 @@
       prefillAccount();
       // An order placed from this tab whose answer never arrived: go to it instead of showing its items as gone.
       if (!(await showPlacedOrder())) refreshPrices({ announce: true }).then(render);
-      document.addEventListener('pod:langchange', () => { renderGovernorates(); render(); });
+      document.addEventListener('pod:langchange', () => {
+        renderGovernorates();
+        render();
+        renderAcctNote();
+        // Errors under the fields, in the new language (the shop's own refusals by their code).
+        for (const el of FIELDS) {
+          if (el.getAttribute('aria-invalid') !== 'true') continue;
+          const again = fieldProblem(el) || (SERVER_TEXT[el.dataset.errCode] ? t(SERVER_TEXT[el.dataset.errCode]) : '');
+          if (again) setFieldError(el, again);
+        }
+      });
       // The cart changed in another tab (an order placed there, an item added).
       window.addEventListener('storage', (e) => { if (e.key === 'pod-cart-v2') refreshPrices().then(render); });
       // The account's cart arrived (items added on another device, or removed there).

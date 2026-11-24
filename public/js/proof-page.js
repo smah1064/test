@@ -6,7 +6,8 @@
   const token = new URLSearchParams(location.search).get('t') || '';
   // view: 'loading' | 'gone' | 'replaced' | 'proof' | 'done'
   // 'replaced': the shop sent a newer proof while this page was open, so the answer could not be sent.
-  const st = { view: 'loading', data: null, error: null, rejecting: false, sending: false, result: null, formError: '', ok: false, comment: '', unsent: '' };
+  // editable: after "Request changes", the item is editor-made, so the customer can edit it themselves from the order page.
+  const st = { view: 'loading', data: null, error: null, rejecting: false, sending: false, result: null, formError: '', ok: false, comment: '', unsent: '', editable: false };
 
   const icon = (d) => `<svg class="pf-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
   const orderLink = (d) => (d && d.order && d.order.id ? `<a class="btn btn-primary" href="/order?id=${encodeURIComponent(d.order.id)}">${esc(t('proofPage.toOrder'))}</a>` : '');
@@ -87,8 +88,8 @@
       content.innerHTML = `${head}
         <div class="card proof-done ${approved ? 'approved' : 'rejected'}" role="status" tabindex="-1" id="done">
           ${icon(approved ? '<circle cx="12" cy="12" r="10"/><path d="m7.5 12.5 3 3 6-6.5"/>' : '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>')}
-          <h2 style="font-size:20px">${esc(t(approved ? 'proofPage.doneApprove' : 'proofPage.doneReject'))}</h2>
-          ${orderLink(d)}
+          <h2 style="font-size:20px">${esc(t(approved ? 'proofPage.doneApprove' : st.editable ? 'proofPage.doneRejectEdit' : 'proofPage.doneReject'))}</h2>
+          ${!approved && st.editable ? `<a class="btn btn-primary" href="/order?id=${encodeURIComponent(d.order.id)}">${esc(t('proofPage.toOrderEdit'))}</a>` : orderLink(d)}
         </div>`;
       document.getElementById('done').focus();
       return;
@@ -114,11 +115,14 @@
     st.formError = '';
     render();
     try {
-      await POD.api('/api/proofs/' + encodeURIComponent(token), {
+      const r = await POD.api('/api/proofs/' + encodeURIComponent(token), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(decision === 'reject' ? { decision, comment } : { decision, proofHash: st.data.proof.proofHash }),
       });
+      if (r && r.orderId && st.data.order && !st.data.order.id) st.data.order.id = r.orderId;
+      // Changes asked for: an editor-made item can be edited and sent again from the order page (as that page offers).
+      if (decision === 'reject') st.editable = await canEditOnOrderPage(r && r.orderId);
       Object.assign(st, { view: 'done', result: decision, sending: false });
     } catch (e) {
       st.sending = false;
@@ -133,6 +137,19 @@
       } else st.formError = e.message;
     }
     render();
+  }
+
+  /** Does the order page offer "Edit the design and send it again" for this item? (Same rule as that page.) */
+  async function canEditOnOrderPage(orderId) {
+    const id = orderId || (st.data.order && st.data.order.id);
+    if (!id) return false;
+    try {
+      const o = await POD.api('/api/orders/' + encodeURIComponent(id));
+      const it = (o.items || []).find((x) => x.id === st.data.item.id);
+      return Boolean(it && it.status === 'changes_requested' && it.kind === 'product' && /^[0-9a-f-]{36}$/i.test(it.designId || ''));
+    } catch (e) {
+      return false;
+    }
   }
 
   content.addEventListener('click', (e) => {

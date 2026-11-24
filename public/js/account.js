@@ -174,7 +174,7 @@
       <div class="card acct-order">
         <a class="acct-order-pics" href="${href}" tabindex="-1" aria-hidden="true">${pics.slice(0, 3).map((u) => `<img src="${esc(u)}" alt="">`).join('')}${pics.length > 3 ? `<span class="acct-order-more">+${esc(POD.num(pics.length - 3))}</span>` : ''}</a>
         <div class="acct-order-info">
-          <a class="acct-order-title" href="${href}"><strong>${esc(t('order.title', { n: o.number }))}</strong></a> <span class="pill ${STATUS[o.status] || 'queued'}">${esc(t('order.' + o.status))}</span>
+          <a class="acct-order-title" href="${href}"><strong>${esc(t('order.title', { n: o.number }))}</strong></a> <span class="pill ${STATUS[o.status] || 'queued'}">${esc(t('order.' + (o.status === 'in_review' && (o.items || []).some((i) => i.status === 'awaiting_approval' || i.status === 'changes_requested') ? 'waiting_you' : o.status)))}</span>
           <div class="muted small">${esc(POD.date(o.createdAt))} · ${esc(o.items.map((i) => tr(i.productName)).join(POD.lang === 'ar' ? '، ' : ', '))}</div>
           ${o.items.filter((i) => PODAftercare.showBreakdown(i)).map((i) => `<div class="acct-order-qty"><span class="acct-qty-name">${esc(tr(i.productName))}</span>${PODAftercare.qtyHtml(i, { inline: true })}</div>`).join('')}
         </div>

@@ -31,6 +31,8 @@
       </div>`).join('')}</div>`;
   }
 
+  /** "3 names" with the Arabic counting forms (2 / 3–10 / the rest). */
+  const namesText = (n) => t(n === 2 ? 'proof.names.two' : n % 100 >= 3 && n % 100 <= 10 ? 'proof.names.few' : 'proof.names.many', { n: POD.num(n) });
   function checkText(c, sideNames) {
     const params = { ...(c.params || {}) };
     let key = 'pf.' + c.id;
@@ -112,7 +114,7 @@
       if (tr(size.label)) rows.push([t('proof.size'), esc(tr(size.label))]);
       if (n > 1 && !names) rows.push([t('proof.pieces'), esc(POD.num(n))]);
     }
-    if (names) rows.push([t('proof.copies'), esc(t('proof.names', { n: POD.num(names) }))]);
+    if (names) rows.push([t('proof.copies'), esc(namesText(names))]);
     const proc = proof.method === 'embroidery' ? 'embroidery' : proof.process;
     const procKey = 'proof.process.' + proc;
     if (proc && t(procKey) !== procKey) rows.push([t('proof.method'), esc(t(procKey))]);
@@ -161,7 +163,7 @@
     const cell = (row, col, i) => (Array.isArray(row) ? row[i] : row && typeof row === 'object' ? row[col] : i === 0 ? row : '');
     return `
       <div class="proof-names">
-        <h4>${esc(t('proof.names', { n: POD.num(merge.count) }))}</h4>
+        <h4>${esc(namesText(merge.count))}</h4>
         ${rows.length && cols.length ? `
           <p class="muted small">${esc(t('proof.namesFirst', { n: POD.num(rows.length) }))}</p>
           <div class="proof-table-wrap"><table class="proof-table">

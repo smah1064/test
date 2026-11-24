@@ -40,6 +40,10 @@
     link.href = '/css/quantities.css';
     document.head.appendChild(link);
   }
+  /** Arabic counts: 1, 2, 3–10 (plural), 11+ (singular), as elsewhere in the shop. */
+  const countKey = (n) => (n === 1 ? 'one' : n === 2 ? 'two' : n % 100 >= 3 && n % 100 <= 10 ? 'few' : 'many');
+  const copiesText = (n, price) => t(n === 2 || countKey(n) === 'few' ? `invoice.copies.${countKey(n)}` : 'invoice.copies', { n: POD.num(n), price });
+  const namesText = (n) => t(n === 2 || countKey(n) === 'few' ? `invoice.qty.names.${countKey(n)}` : 'invoice.qty.names', { n: POD.num(n) });
   const piecesText = (n) => t('invoice.qty.' + (n === 1 ? 'one' : n === 2 ? 'two' : n % 100 >= 3 && n % 100 <= 10 ? 'few' : 'many'), { n: POD.num(n) });
   /** The colour/size lines of an item ordered in several colours or sizes (sorted by colour). */
   function qtyLines(item) {
@@ -69,7 +73,7 @@
         <td>
           <div class="prod">${esc(tr(item.productName))}</div>
           ${desc ? `<div class="desc">${esc(desc)}</div>` : ''}
-          ${copies > 1 ? `<div class="copies">${esc(one && !item.merge ? t('invoice.qty.same', { pieces: piecesText(copies), price: money(unit) }) : t('invoice.copies', { n: POD.num(copies), price: money(unit) }))}</div>` : ''}
+          ${copies > 1 ? `<div class="copies">${esc(one && !item.merge ? t('invoice.qty.same', { pieces: piecesText(copies), price: money(unit) }) : copiesText(copies, money(unit)))}</div>` : ''}
         </td>
         <td class="num opt">${esc(POD.num(copies))}</td>
         <td class="num opt">${esc(money(unit))}</td>
@@ -85,7 +89,7 @@
     // (item.unitPrice may be an average of the lines, so it is not used here.)
     const unit = same ? [...units][0] : null;
     const lineUnit = (l) => (l.unitPrice != null ? Number(l.unitPrice) : round2(Number(item.price) / copies));
-    const names = item.merge && item.merge.count > 1 ? t('invoice.qty.names', { n: POD.num(item.merge.count) }) : '';
+    const names = item.merge && item.merge.count > 1 ? namesText(item.merge.count) : '';
     const desc = [sides, names].filter(Boolean).join(' · ');
     const head = `
       <tr class="qty-has-sub">
@@ -126,7 +130,11 @@
     const comma = POD.lang === 'ar' ? '، ' : ', ';
     const c = o.customer || {};
     const place = [c.city, tr(c.governorate)].filter(Boolean).join(comma);
-    const paid = o.payment && o.payment.status === 'paid';
+    // Cash on delivery: once delivered, the courier has collected it.
+    const delivered = o.status === 'delivered' || Boolean(o.shipment && o.shipment.deliveredAt);
+    const cod = !o.payment || o.payment.method === 'cod';
+    const paidOnDelivery = cod && delivered && !(o.payment && o.payment.status === 'paid');
+    const paid = (o.payment && o.payment.status === 'paid') || paidOnDelivery;
     const method = !o.payment || o.payment.method === 'cod' ? t('checkout.cod') : String(o.payment.method);
     const site = shop.url ? shop.url.replace(/^https?:\/\//, '').replace(/\/$/, '') : '';
     const contacts = [
@@ -166,7 +174,7 @@
           <div>
             <h2>${esc(t('invoice.payment'))}</h2>
             <p>${esc(method)}</p>
-            <span class="inv-pay-status ${paid ? 'paid' : 'pending'}">${esc(t(paid ? 'invoice.paid' : 'invoice.unpaid'))}</span>
+            <span class="inv-pay-status ${paid ? 'paid' : 'pending'}">${esc(t(paidOnDelivery ? 'invoice.paidOnDelivery' : paid ? 'invoice.paid' : 'invoice.unpaid'))}</span>
           </div>
         </section>
 
@@ -189,7 +197,7 @@
           <p class="inv-note">${esc(t('invoice.currency'))}</p>
           <div class="inv-totals">
             <div class="line"><span>${esc(t('checkout.subtotal'))}</span><span>${esc(money(o.subtotal))}</span></div>
-            ${o.discount ? `<div class="line"><span>${esc(t('coupon.discount'))}${o.coupon ? ` (${ltr(o.coupon)})` : ''}</span><span>${esc(money(-o.discount))}</span></div>` : ''}
+            ${o.discount || o.coupon ? `<div class="line"><span>${esc(t('coupon.discount'))}${o.coupon ? ` (${ltr(o.coupon)})` : ''}</span><span>${o.discount ? esc(money(-o.discount)) : esc(t('coupon.freeShipping'))}</span></div>` : ''}
             ${(() => {
               // Express: the shipping and the express fee on their own lines (as in the cart and the order page).
               const fee = o.delivery && o.delivery.speed === 'express' ? Number(o.delivery.fee) || 0 : 0;
