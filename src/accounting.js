@@ -46,6 +46,28 @@ function initPricing(products, extraSideDefault) {
 }
 
 let appliedKey = null;
+/**
+ * After the product manager changed the catalogue (src/catalog.js): products and sizes
+ * added since start get their own built-in prices, and the saved prices are laid over again.
+ */
+function catalogChanged(products, extraSideDefault) {
+  appliedKey = null;
+  for (const p of products) {
+    p.sizes = p.sizes.map((s) => ({ ...s }));
+    const d = defaults[p.id];
+    if (!d) {
+      defaults[p.id] = {
+        basePrice: p.basePrice,
+        extraSidePrice: p.extraSidePrice != null ? p.extraSidePrice : extraSideDefault,
+        hadExtra: p.extraSidePrice != null,
+        sizes: Object.fromEntries(p.sizes.map((s) => [s.id, s.surcharge || 0])),
+      };
+      continue;
+    }
+    // Sizes the manager added: their own price is the built-in one.
+    for (const s of p.sizes) if (d.sizes[s.id] === undefined || s.added) d.sizes[s.id] = s.surcharge || 0;
+  }
+}
 /** Lay the saved prices over the defaults (cheap when nothing changed). */
 function applyPricing(products, pricing) {
   const key = JSON.stringify(pricing || {});
@@ -254,6 +276,7 @@ function cleanExpense(body) {
 }
 
 module.exports = {
+  catalogChanged,
   round2, money, localDay, initPricing, applyPricing, cleanPricing, cleanCosts, itemCostFrom, itemCost, report, reportCsv, cleanExpense, EXPENSE_CATEGORIES,
   defaultsFor: (id) => defaults && defaults[id],
 };

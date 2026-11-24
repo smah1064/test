@@ -2422,9 +2422,8 @@ const EMBROIDERY = {
   tote: { cm: [15, 15], at: 'center', surcharge: 180 },
   apron: { cm: [10, 10], at: 'top', surcharge: 150 },
 };
-for (const [pid, e] of Object.entries(EMBROIDERY)) {
-  const p = PRODUCTS.find((x) => x.id === pid);
-  if (!p) continue;
+/** The embroidery area on a product's first side for a spec { cm: [w, h], at, surcharge }. */
+function embroideryFor(p, e) {
   const side = p.sides[0];
   const a = side.printArea;
   const upc = a.w / (side.printWidthIn * 2.54); // mockup units per cm
@@ -2440,14 +2439,18 @@ for (const [pid, e] of Object.entries(EMBROIDERY)) {
   if (e.at === 'chest') [x, y] = [a.x + a.w * 0.78 - w / 2, Math.min(a.y + (e.cm[0] >= 9 ? 4.5 : 2.5) * upc, a.y + a.h - h)];
   if (e.at === 'top') y = a.y + a.h * 0.05;
   const r1 = (v) => Math.round(v * 10) / 10;
-  p.embroidery = {
+  return {
     side: side.id,
     area: { x: r1(x), y: r1(y), w: r1(w), h: r1(h) },
     widthIn: Math.round((w / upc / 2.54) * 100) / 100,
     heightIn: Math.round((h / upc / 2.54) * 100) / 100,
     surcharge: e.surcharge,
-    maxColors: 6,
+    maxColors: e.maxColors || 6,
   };
+}
+for (const [pid, e] of Object.entries(EMBROIDERY)) {
+  const p = PRODUCTS.find((x) => x.id === pid);
+  if (p) p.embroidery = embroideryFor(p, e);
 }
 
 /** Extra charge for every printed side beyond the first. */
@@ -2756,6 +2759,9 @@ function pageSides(product, sizeId) {
 
 module.exports = {
   PRODUCTS,
+  EMBROIDERY,
+  embroideryFor,
+  scalePrice,
   pageSides,
   matchSize,
   matchColor,

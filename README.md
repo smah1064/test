@@ -156,6 +156,20 @@ test/api.test.js     API tests (npm test)
 
 Add an entry to `PRODUCTS` in `src/products.js`. Mockups are SVGs in a 500 × 600 space using `{{C}}` (product colour), `{{S}}` (shade) and `{{L}}` (outline). Each side defines a `printArea` rectangle in that space and its physical `printWidthIn`. Set its print method, safe zone and bleed in the `PRODUCTION` map, and for garments the allowed methods in `METHODS`. An optional `overlay` SVG is drawn on top of the design (for example a phone camera or a mug's highlight).
 
+## Products screen (product manager)
+
+Admin → **Products** changes the real products without touching the code (`src/catalog.js`; the changes are kept in the data file under `catalog` and laid over `src/products.js` on every request, like the owner's prices):
+
+- **Hide** a product (out of stock, season, quality, supplier, other + a note) or **remove** it from the shop. It disappears from every shop page, ready designs stop offering it, new designs and orders are refused, and carts holding it say so. Old orders and their files keep working.
+- **Stock**: optional count per product. Every order takes its pieces off; at 0 the product hides itself; "Only n left" shows near the end.
+- **Colours and sizes**: on / sold out (still shown, crossed out) / off; rename sizes; add colours and sizes.
+- **Prices**: base price, extra side, per-size add-ons (the same prices as Accounts → Prices).
+- **Print setup per side**: on/off, physical print width, safe margin, bleed, and the print area on the product drawing (drag the box). New designs use them; designs already made keep their own sizes.
+- **Technology**: printing method within what the product can be made with (garments DTG/DTF, laser engraving/cutting...), embroidery on/off, its position, size, price and thread colours.
+- **Photos**: upload real product photos (JPG/PNG/WebP, stored as WebP in `DATA_DIR/catalog-photos/`); they lead the product page gallery and the main one is the product's picture on the home page.
+- **New product**: made from an existing one (its drawing, 3D model, print setup and ready designs), then changed. It starts hidden until it's published. An added product that was never ordered can be deleted; built-in products can be reset to the original.
+- **Staff**: the owner adds product managers (name, username, password ≥ 10 characters). They sign in on the admin page with "Staff sign-in" and see only the Products screen; every other admin route refuses their token. Changing their password signs them out everywhere. Every change is logged with who made it.
+
 ## Before going live
 
 - **Prices** are starting points in `src/products.js` (`basePrice`, size `surcharge`) and the shipping constants at the bottom of that file. Adjust them to your costs.

@@ -344,8 +344,47 @@ class AdminAuth {
     if (parseInt(m[1], 36) < Date.now()) return false;
     return !this.revoked()[sha256(token).toString('hex')];
   }
-  logout(token) {
-    if (!this.verify(token)) return;
+  // ---------- Staff (product managers) ----------
+  // Staff sign in with a username and their own password (kept as a scrypt hash in db.staff).
+  // Their token has 4 parts (expiry.random.staffId.signature), so the owner's checks (3 parts) never accept it.
+  static hashStaffPassword(password) {
+    const salt = crypto.randomBytes(16).toString('hex');
+    return { salt, hash: crypto.scryptSync(String(password), salt, 32).toString('hex') };
+  }
+  staffLogin(ip, username, password, staffList, { knownDevice = false } = {}) {
+    const wait = this.lockedFor(ip, { knownDevice });
+    if (wait) return { wait };
+    const user = (staffList || []).find((u) => u.username === String(username || '').trim().toLowerCase());
+    // Always hash once, so a wrong username takes as long as a wrong password.
+    const given = crypto.scryptSync(typeof password === 'string' ? password : '', user ? user.salt : 'no-such-user', 32);
+    const ok = user && crypto.timingSafeEqual(given, Buffer.from(user.hash, 'hex'));
+    if (!ok) {
+      this.fails.hit('admin:*', ADMIN_ALL_RULES);
+      this.fails.hit(`admin:${ip}`, ADMIN_IP_RULES);
+      console.warn(`[admin] wrong staff sign-in from ${ip}`);
+      return null;
+    }
+    this.fails.clear(`admin:${ip}`);
+    const expiresAt = Date.now() + SESSION_MS;
+    const body = `${expiresAt.toString(36)}.${crypto.randomBytes(18).toString('base64url')}.${user.id}`;
+    console.log(`[admin] staff ${user.username} signed in from ${ip}`);
+    return { token: `${body}.${this.sign(`staff.${body}.${user.gen || 0}`)}`, expiresAt, user };
+  }
+  /** The staff member a token belongs to (null if it isn't a valid staff token). */
+  verifyStaff(token, staffList) {
+    const m = /^([0-9a-z]+)\.([A-Za-z0-9_-]+)\.([a-f0-9]{8,32})\.([A-Za-z0-9_-]+)$/.exec(token || '');
+    if (!m) return null;
+    const user = (staffList || []).find((u) => u.id === m[3]);
+    if (!user) return null;
+    const good = Buffer.from(this.sign(`staff.${m[1]}.${m[2]}.${m[3]}.${user.gen || 0}`));
+    const given = Buffer.from(m[4]);
+    if (good.length !== given.length || !crypto.timingSafeEqual(good, given)) return null;
+    if (parseInt(m[1], 36) < Date.now()) return null;
+    if (this.revoked()[sha256(token).toString('hex')]) return null;
+    return user;
+  }
+  logout(token, staffList) {
+    if (!this.verify(token) && !this.verifyStaff(token, staffList)) return;
     const id = sha256(token).toString('hex');
     const exp = parseInt(token.split('.')[0], 36);
     if (!this.store) return this.sessions.set(id, exp);

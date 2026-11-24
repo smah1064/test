@@ -63,6 +63,20 @@
     if (asked && asked.kind === 'photoset') location.replace('/photos');
   }
   const params = new URLSearchParams(location.search);
+  // Colours and sizes the product manager marked sold out stay listed but can't be picked.
+  const canPick = (x) => x && !x.soldOut;
+  const ED_TEXT = {
+    'ed.soldOut': ['Sold out', 'خلصان'],
+    'ed.soldOutPick': ['This one is sold out right now. Please pick another.', 'ده خلصان دلوقتي. اختار غيره.'],
+    'ed.productGone': ['This product isn\'t available right now, so we opened another one. You can pick a different product from the list.', 'المنتج ده مش متاح دلوقتي، ففتحنالك منتج تاني. تقدر تختار منتج غيره من القائمة.'],
+  };
+  const tEd = (k) => (ED_TEXT[k] ? ED_TEXT[k][POD.lang === 'ar' ? 1 : 0] : t(k));
+  const firstPick = (list) => list.find(canPick) || list[0];
+  // A product hidden in the admin (out of stock, season...) isn't in the list: say so, then show another one.
+  const missing = (id) => {
+    if (id && !products.some((p) => p.id === id)) setTimeout(() => toast(tEd('ed.productGone'), 'error'), 400);
+  };
+  missing(params.get('product'));
 
   const st = {
     product: products.find((p) => p.id === params.get('product')) || products[0],
@@ -93,6 +107,7 @@
   if (params.get('design')) {
     try {
       const saved = await POD.api('/api/designs/' + encodeURIComponent(params.get('design')));
+      missing(saved.productId);
       st.product = products.find((p) => p.id === saved.productId) || st.product;
       st.colorId = saved.color.id;
       st.sizeId = saved.size.id;
@@ -212,13 +227,13 @@
   }
   // A colour picked on the product page (?color=) wins over the draft's; a saved design keeps its own
   // (and so does a restored draft of a ready-made design: the link carries the design's first colour).
-  if (!params.get('design') && !(restoredDraft && st.libraryId) && st.product.colors.some((c) => c.id === params.get('color'))) st.colorId = params.get('color');
-  st.colorId = st.product.colors.some((c) => c.id === st.colorId) ? st.colorId : st.product.colors[0].id;
-  if (!params.get('design') && st.product.sizes.some((z) => z.id === params.get('size'))) {
+  if (!params.get('design') && !(restoredDraft && st.libraryId) && canPick(st.product.colors.find((c) => c.id === params.get('color')))) st.colorId = params.get('color');
+  st.colorId = canPick(st.product.colors.find((c) => c.id === st.colorId)) ? st.colorId : firstPick(st.product.colors).id;
+  if (!params.get('design') && canPick(st.product.sizes.find((z) => z.id === params.get('size')))) {
     st.sizeId = params.get('size');
     st.sizePicked = true;
   }
-  st.sizeId = st.product.sizes.some((s) => s.id === st.sizeId) ? st.sizeId : st.product.sizes[0].id;
+  st.sizeId = canPick(st.product.sizes.find((s) => s.id === st.sizeId)) ? st.sizeId : firstPick(st.product.sizes).id;
   st.side = st.product.sides.find((s) => (st.designs[s.id] || []).length)?.id || st.product.sides[0].id;
   /** Fabric products: a valid { repeat, tileCm } for this product (or null for other products). */
   const REPEATS = ['straight', 'halfdrop', 'halfbrick', 'mirror'];
@@ -1026,7 +1041,7 @@
     let bg;
     let ov;
     // A print all the way round (mugs) is shown unrolled: the drawing, not the photo of one side.
-    const photo = !side.wrap && window.POD_PHOTOS && window.POD_PHOTOS.forSide ? window.POD_PHOTOS.forSide(st.product.id, side.host || side.id) : null;
+    const photo = !side.wrap && window.POD_PHOTOS && window.POD_PHOTOS.forSide ? window.POD_PHOTOS.forSide(st.product.base || st.product.id, side.host || side.id) : null;
     if (photo) {
       try {
         [bg, ov] = await photoMockup(photo, side, hex);
@@ -3089,7 +3104,7 @@
   function renderOptions() {
     const p = st.product;
     $('product-select').innerHTML = products.map((x) => `<option value="${x.id}" ${x === p ? 'selected' : ''}>${esc(tr(x.name))}</option>`).join('');
-    $('swatches').innerHTML = p.colors.map((c) => `<button class="swatch ${c.id === st.colorId ? 'active' : ''}" data-color="${c.id}" title="${esc(tr(c.name))}" aria-label="${esc(tr(c.name))}" style="background:${c.hex}"></button>`).join('');
+    $('swatches').innerHTML = p.colors.map((c) => `<button class="swatch ${c.id === st.colorId ? 'active' : ''}${c.soldOut ? ' sold-out' : ''}" data-color="${c.id}"${c.soldOut ? ' aria-disabled="true"' : ''} title="${esc(tr(c.name))}${c.soldOut ? ` · ${esc(tEd('ed.soldOut'))}` : ''}" aria-label="${esc(tr(c.name))}${c.soldOut ? ` · ${esc(tEd('ed.soldOut'))}` : ''}" style="background:${c.hex}"></button>`).join('');
     $('color-name').textContent = tr(color().name);
     $('color-label').textContent = p.colorLabel ? `${tr(p.colorLabel)}:` : t('panel.colour');
     // Options such as lamination (business cards), with what each adds to the chosen size.
@@ -3099,7 +3114,7 @@
         <div class="chips">${opt.choices.map((c) => { const pr = choicePrice(c, st.sizeId); return `<button class="chip ${c === cur ? 'active' : ''}" data-opt="${esc(opt.id)}" data-choice="${esc(c.id)}">${esc(tr(c.name))}${pr ? ` <span style="opacity:.7">+${esc(money(pr))}</span>` : ''}</button>`; }).join('')}</div>
         ${opt.help ? `<p class="muted small" style="margin:6px 0 0;line-height:1.5">${esc(tr(opt.help))}</p>` : ''}</div>`;
     }).join('');
-    $('sizes').innerHTML = p.sizes.map((s) => `<button class="chip ${s.id === st.sizeId ? 'active' : ''}" data-size="${s.id}">${esc(tr(s.label))}${s.surcharge ? ` <span style="opacity:.7">+${esc(money(s.surcharge))}</span>` : ''}</button>`).join('');
+    $('sizes').innerHTML = p.sizes.map((s) => `<button class="chip ${s.id === st.sizeId ? 'active' : ''}${s.soldOut ? ' sold-out' : ''}" data-size="${s.id}"${s.soldOut ? ' aria-disabled="true"' : ''}>${esc(tr(s.label))}${s.soldOut ? ` <span class="sold-tag">${esc(tEd('ed.soldOut'))}</span>` : s.surcharge ? ` <span style="opacity:.7">+${esc(money(s.surcharge))}</span>` : ''}</button>`).join('');
     // Print or embroidery (garments, caps, totes, aprons).
     $('method-field').hidden = !p.embroidery;
     if (p.embroidery) {
@@ -3165,6 +3180,7 @@
   $('swatches').addEventListener('click', serial(async (e) => {
     const b = e.target.closest('[data-color]');
     if (!b || b.dataset.color === st.colorId) return;
+    if (b.classList.contains('sold-out')) return toast(tEd('ed.soldOutPick'));
     const oldInk = inkFor(surfaceHex());
     const fromColor = st.colorId;
     st.colorId = b.dataset.color;
@@ -3200,6 +3216,7 @@
   $('sizes').addEventListener('click', (e) => {
     const b = e.target.closest('[data-size]');
     if (!b) return;
+    if (b.classList.contains('sold-out')) return toast(tEd('ed.soldOutPick'));
     st.sizePicked = true;
     if (b.dataset.size !== st.sizeId) {
       const fromSize = st.sizeId;
@@ -3260,7 +3277,7 @@
     const pending = prev.sides.filter((s) => (st.designs[s.id] || []).length).map((s) => s.id);
     const mapped = {};
     const from = (sid) => sideDef(sid).printArea; // where the customer had moved it
-    const nextSize = next.sizes.some((z) => z.id === st.sizeId) ? st.sizeId : next.sizes[0].id;
+    const nextSize = canPick(next.sizes.find((z) => z.id === st.sizeId)) ? st.sizeId : firstPick(next.sizes).id;
     const to = (s) => areaFor(next, s.id, nextSize, null);
     for (const s of next.sides) {
       if (pending.includes(s.id)) {
@@ -3287,7 +3304,7 @@
     st.designs = mapped;
     st.offsets = {}; // the new product starts at its standard print position
     st.history = {};
-    if (!next.colors.some((c) => c.id === st.colorId)) st.colorId = next.colors[0].id;
+    if (!canPick(next.colors.find((c) => c.id === st.colorId))) st.colorId = firstPick(next.colors).id;
     st.sizeId = nextSize;
     st.pattern = normPattern(next, st.pattern);
     st.side = wasEmb && next.embroidery ? EMB : next.sides.find((s) => s.id === hostOf(st.side))?.id || next.sides[0].id;
@@ -3800,7 +3817,7 @@
       return;
     }
     const g = qtyGrid();
-    const sizes = mix().sizes ? p.sizes : p.sizes.filter((z) => z.id === st.sizeId);
+    const sizes = mix().sizes ? p.sizes.filter((z) => canPick(z) || z.id === st.sizeId) : p.sizes.filter((z) => z.id === st.sizeId);
     const colors = p.colors.filter((c) => g[c.id]);
     const total = qtyTotal();
     const cell = (c, z) => `<input type="number" inputmode="numeric" min="0" max="1000" step="1" class="qty-in" data-qc="${c.id}" data-qz="${z.id}" value="${(g[c.id] && g[c.id][z.id]) || ''}" placeholder="0" aria-label="${esc(`${tr(c.name)} ${tr(z.label)}`)}">`;
@@ -3821,7 +3838,7 @@
             ${colors.length > 1 ? `<td><button type="button" class="qty-x" data-qdel="${c.id}" aria-label="${esc(t('qty.removeColour', { c: tr(c.name) }))}">×</button></td>` : ''}
           </tr>`).join('')}</tbody>
         </table></div>
-        ${mix().colors && colors.length < p.colors.length ? `<select class="qty-add" id="qty-add"><option value="">${esc(t('qty.addColour'))}</option>${p.colors.filter((c) => !g[c.id]).map((c) => `<option value="${c.id}">${esc(tr(c.name))}</option>`).join('')}</select>` : ''}`}
+        ${mix().colors && colors.length < p.colors.length ? `<select class="qty-add" id="qty-add"><option value="">${esc(t('qty.addColour'))}</option>${p.colors.filter((c) => !g[c.id] && !c.soldOut).map((c) => `<option value="${c.id}">${esc(tr(c.name))}</option>`).join('')}</select>` : ''}`}
       <p class="small qty-sum">${esc(qtyTotalText(total))}</p>
       ${total > 1 ? `<p class="muted small" style="margin:2px 0 0;line-height:1.5">${esc(t(mix().sizes || mix().colors ? 'qty.help' : 'qty.helpSame'))}</p>` : ''}`;
   }
@@ -4826,7 +4843,7 @@
     const n = lines.reduce((m, l) => m + l.qty, 0);
     $('size-ask-title').textContent = t('sizeAsk.title');
     $('size-ask-note').textContent = n > 1 ? t('sizeAsk.many', { n: POD.num(n) }) : t('sizeAsk.one');
-    $('size-ask-chips').innerHTML = st.product.sizes.map((z) => `<button type="button" class="chip" data-ask-size="${esc(z.id)}">${esc(tr(z.label))}${z.surcharge ? ` <span style="opacity:.7">+${esc(money(z.surcharge))}</span>` : ''}</button>`).join('');
+    $('size-ask-chips').innerHTML = st.product.sizes.filter(canPick).map((z) => `<button type="button" class="chip" data-ask-size="${esc(z.id)}">${esc(tr(z.label))}${z.surcharge ? ` <span style="opacity:.7">+${esc(money(z.surcharge))}</span>` : ''}</button>`).join('');
     box.hidden = false;
     const first = box.querySelector('[data-ask-size]');
     if (first) first.focus();

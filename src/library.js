@@ -372,7 +372,11 @@ function fitsColour(d, p) {
   return on.some((h) => isDark(h) === dark) || readsOn(d, !dark);
 }
 
-const fitCache = new WeakMap();
+let fitCache = new WeakMap();
+/** The catalogue changed (product manager): work out again which products each design goes on. */
+function catalogChanged() {
+  fitCache = new WeakMap();
+}
 /** The ids of the products a design is offered on, in catalogue order. */
 function productsFor(d) {
   if (Array.isArray(d.products)) return d.products; // chosen by hand (laser designs)
@@ -383,6 +387,8 @@ function productsFor(d) {
   for (const id of rule.not || []) want.delete(id);
   for (const id of d.alsoProducts || []) want.add(id);
   for (const id of d.notProducts || []) want.delete(id);
+  // Products the manager made from another one take that product's designs too.
+  for (const p of PRODUCTS) if (p.base && want.has(p.base)) want.add(p.id);
   const fields = hasNameFields(d);
   const list = PRODUCTS.filter((p) => !noGeneralDesigns(p) && ((d.kind === 'objects' && p.id === d.product)
     || (want.has(p.id) && (!fields || p.merge) && fitsShape(d, p) && fitsColour(d, p)))).map((p) => p.id);
@@ -524,4 +530,4 @@ class Library {
   }
 }
 
-module.exports = { Library, CATEGORIES, SEED, FITS, productsFor, fitsColour, productShape };
+module.exports = { Library, catalogChanged, CATEGORIES, SEED, FITS, productsFor, fitsColour, productShape };

@@ -51,9 +51,13 @@ const embroidery = require('./embroidery');
 let laserModule = null;
 const laserFiles = new Proxy({}, { get: (_, key) => (laserModule ||= require('./laser'))[key] });
 
-// Prices the owner changed in the admin are laid over the built-in ones.
+// The product manager's changes (admin → Products) are laid over the products as written,
+// then the prices the owner changed over the built-in ones.
+const catalog = require('./catalog');
+const productsMod = require('./products');
+catalog.init(PRODUCTS, { embroidery: productsMod.EMBROIDERY, embroideryFor: productsMod.embroideryFor, scalePrice: productsMod.scalePrice });
 accounting.initPricing(PRODUCTS, EXTRA_SIDE_PRICE);
-const { Library, CATEGORIES: DESIGN_CATEGORIES } = require('./library');
+const { Library, CATEGORIES: DESIGN_CATEGORIES, catalogChanged: libraryCatalogChanged } = require('./library');
 const security = require('./security');
 const books = require('./books');
 const cartoon = require('./cartoon');
@@ -495,6 +499,15 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (wait) throw new HttpError(429, wait > 90 ? 'tooManyWait' : 'tooFast', { min: Math.ceil(wait / 60) });
   };
 
+  /** The latest catalogue (product manager) and prices, laid over the products. */
+  const syncCatalog = () => {
+    if (catalog.apply(PRODUCTS, store.db.catalog)) {
+      accounting.catalogChanged(PRODUCTS, EXTRA_SIDE_PRICE);
+      libraryCatalogChanged();
+    }
+    accounting.applyPricing(PRODUCTS, store.db.pricing);
+  };
+  syncCatalog();
   app.disable('x-powered-by');
   // Hostinger runs the app behind its proxy and CDN: use the visitor's own IP
   // (from X-Forwarded-For) for the per-visitor limits.
@@ -507,7 +520,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   // The host may run several copies of the app: start every request from the latest saved data.
   app.use((req, res, next) => {
     store.sync();
-    accounting.applyPricing(PRODUCTS, store.db.pricing);
+    syncCatalog();
     next();
   });
 
@@ -559,7 +572,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       categories: CATEGORIES,
       governorates: GOVERNORATES,
       contact: { whatsapp: notify.shopWhatsApp() || null },
-      products: PRODUCTS.map(publicProduct),
+      // Hidden, removed and sold-out products aren't in the shop (admin → Products).
+      products: PRODUCTS.filter(catalog.visible).map((p) => publicProduct(catalog.forShop(p))),
     });
   });
 
@@ -1117,6 +1131,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const sizeDef = product.sizes.find((s) => s.id === size);
     if (!sizeDef) throw new HttpError(400, 'unknownSize');
     if (!sides || typeof sides !== 'object' || Array.isArray(sides)) throw new HttpError(400, 'sidesRequired');
+    // Hidden by the product manager, or this colour / size / side not offered now.
+    const why = catalog.unavailable(product, { colorId: colorDef.id, sizeId: sizeDef.id, sideIds: Object.keys(sides).filter((id) => id !== EMB) });
+    if (why) throw new HttpError(409, why, { name: product.name[langOf(req)] || product.name.en });
 
     // Pages from before embroidery was a layer sent the stitched design as the front itself.
     if ((req.body || {}).method === 'embroidery' && product.embroidery && !sides[EMB] && sides[product.embroidery.side]) {
@@ -1376,7 +1393,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   const libraryCard = (d) => ({
     id: d.id, name: d.name, category: d.category, kind: d.kind, product: d.product, color: d.color,
     // Made for certain products only (laser designs: one tone, cut pieces joined up).
-    ...(Array.isArray(d.products) ? { products: d.products } : {}),
+    ...(Array.isArray(d.products) ? { products: d.products.filter((id) => catalog.visible(getProduct(id))) } : {}),
     ...(d.kind === 'template' ? { items: d.items, aspect: d.aspect } : { preview: `/api/library/${d.id}/preview.png` }),
   });
   app.get('/api/library', (req, res) => {
@@ -2295,6 +2312,21 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   }, 3000).unref();
 
   // ---------- Orders ----------
+  /** Why a design can't be ordered now (product hidden / sold out by the product manager), or null. */
+  const designUnavailable = (d) => {
+    if (!d || d.kind === 'gangsheet' || d.kind === 'book') return null;
+    const product = getProduct(d.productId);
+    if (!product) return null;
+    if (d.kind === 'photoset') return catalog.unavailable(product, { colorId: d.color && d.color.id });
+    const lines = d.quantities && d.quantities.length ? d.quantities : [{ color: d.color, size: d.size }];
+    for (const l of lines) {
+      const why = catalog.unavailable(product, { colorId: l.color && l.color.id, sizeId: l.size && l.size.id, sideIds: (d.sides || []).map((sd) => sd.id).filter((id) => id !== EMB) });
+      if (why) return why;
+    }
+    return null;
+  };
+  /** Pieces of a design that come out of the product's counted stock. */
+  const stockPieces = (d) => (d.kind === 'photoset' ? 0 : d.quantities && d.quantities.length ? d.quantities.reduce((n, l) => n + l.qty, 0) : copiesOf(d));
   /** What a design costs right now (prices the owner changed apply), or null if it can't be ordered. */
   const designPrice = (d) => {
     if (!d || (d.status && d.status !== 'ready') || d.orderId) return null;
@@ -2636,7 +2668,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const d = typeof id === 'string' && UUID_RE.test(id) ? store.getDesign(id) : null;
       const price = designPrice(d);
       // Already ordered (e.g. the answer to the order got lost): the cart can take the customer to it.
-      return { designId: String(id).slice(0, 40), price, gone: price === null, ...(d && d.orderId ? { ordered: true } : {}) };
+      const why = price === null ? null : designUnavailable(d);
+      const p = why && getProduct(d.productId);
+      return { designId: String(id).slice(0, 40), price, gone: price === null, ...(d && d.orderId ? { ordered: true } : {}), ...(why ? { unavailable: why, unavailableText: format(why, { name: p ? p.name[langOf(req)] || p.name.en : '' }, langOf(req)) } : {}) };
     });
     const subtotal = round2(items.reduce((n, i) => n + (i.price || 0), 0));
     const lines = items.filter((i) => !i.gone).map((i) => couponLine(store.getDesign(i.designId), i.price));
@@ -2703,8 +2737,20 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const d = typeof id === 'string' && UUID_RE.test(id) && store.getDesign(id);
       if (!d || (d.status && d.status !== 'ready')) throw new HttpError(400, 'designGone');
       if (d.orderId) throw new HttpError(409, 'designOrdered');
+      const why = designUnavailable(d);
+      if (why) {
+        const p = getProduct(d.productId);
+        throw new HttpError(409, why, { name: p.name[langOf(req)] || p.name.en, designId: d.id });
+      }
       return d;
     });
+    // Counted stock (admin → Products): enough left for every piece.
+    const wanted = new Map();
+    for (const d of designs) if (stockPieces(d)) wanted.set(d.productId, (wanted.get(d.productId) || 0) + stockPieces(d));
+    for (const [pid, n] of wanted) {
+      const p = getProduct(pid);
+      if (typeof p.stock === 'number' && p.stock < n) throw new HttpError(409, 'notEnoughStock', { name: p.name[langOf(req)] || p.name.en, left: p.stock });
+    }
 
     // Every item approved by the customer against its current proof (see /api/designs/:id/proof).
     const approvals = body.approvals && typeof body.approvals === 'object' ? body.approvals : {};
@@ -2818,6 +2864,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (applied) {
         const r = coupons.apply((db.coupons || []).find((x) => x.id === applied.id), { lines, orders: db.orders, phone: c.phone });
         if (!r.ok) throw new HttpError(409, r.reason, r.params || {});
+      }
+      // Counted stock goes down by the pieces ordered (checked again with the latest count).
+      for (const [pid, n] of wanted) {
+        const e = db.catalog && db.catalog.products && db.catalog.products[pid];
+        if (!e || typeof e.stock !== 'number') continue;
+        if (e.stock < n) throw new HttpError(409, 'notEnoughStock', { name: getProduct(pid).name[langOf(req)] || pid, left: e.stock });
+        e.stock -= n;
       }
     });
     // A signed-in customer without a saved address keeps this one for next time.
@@ -3295,24 +3348,287 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   // visitor out for 15 minutes.
   app.post('/api/admin/login', express.json({ limit: '2kb' }), (req, res) => {
     const mark = (/(?:^|;\s*)pod-admin-device=([^;]+)/.exec(req.get('cookie') || '') || [])[1];
-    const result = auth.login(req.ip, (req.body || {}).password, { knownDevice: auth.knownDevice(mark) });
+    // Staff (product managers) sign in with their username; the owner with the shop password only.
+    const username = typeof (req.body || {}).username === 'string' ? req.body.username.trim() : '';
+    const result = username
+      ? auth.staffLogin(req.ip, username, (req.body || {}).password, staffList(), { knownDevice: auth.knownDevice(mark) })
+      : auth.login(req.ip, (req.body || {}).password, { knownDevice: auth.knownDevice(mark) });
     if (!result) throw new HttpError(401, 'wrongPassword');
     if (result.wait) throw new HttpError(429, 'tooManyLogins', { min: Math.ceil(result.wait / 60) });
     res.set('Cache-Control', 'no-store');
     // This browser is now known: a flood of wrong passwords from elsewhere won't lock the owner out of it.
     res.append('Set-Cookie', `pod-admin-device=${auth.deviceMark()}; Path=/api/admin/login; Max-Age=${180 * 24 * 3600}; HttpOnly; SameSite=Strict${isHttps(req) ? '; Secure' : ''}`);
-    res.json({ token: result.token, expiresAt: new Date(result.expiresAt).toISOString(), weakPassword: auth.weak });
+    if (result.user) return res.json({ token: result.token, expiresAt: new Date(result.expiresAt).toISOString(), role: result.user.role, name: result.user.name });
+    res.json({ token: result.token, expiresAt: new Date(result.expiresAt).toISOString(), weakPassword: auth.weak, role: 'owner' });
   });
   app.post('/api/admin/logout', (req, res) => {
-    auth.logout(security.bearer(req));
+    auth.logout(security.bearer(req), staffList());
     res.status(204).end();
   });
+  const staffList = () => store.db.staff || [];
   const requireAdmin = (req, res, next) => {
     if (!auth.verify(security.bearer(req))) throw new HttpError(401, 'signInAgain');
     res.set('Cache-Control', 'no-store');
     next();
   };
-  app.get('/api/admin/session', requireAdmin, (req, res) => res.json({ ok: true, weakPassword: auth.weak }));
+  /** The owner, or a product manager: the Products screen only. */
+  const requireCatalog = (req, res, next) => {
+    const token = security.bearer(req);
+    if (auth.verify(token)) req.adminWho = { role: 'owner', name: 'owner' };
+    else {
+      const u = auth.verifyStaff(token, staffList());
+      if (!u || u.role !== 'products') throw new HttpError(401, 'signInAgain');
+      req.adminWho = { role: u.role, name: u.username };
+    }
+    res.set('Cache-Control', 'no-store');
+    next();
+  };
+  app.get('/api/admin/session', requireCatalog, (req, res) => res.json({ ok: true, role: req.adminWho.role, ...(req.adminWho.role === 'owner' ? { weakPassword: auth.weak } : { name: req.adminWho.name }) }));
+
+  // ---------- Products (product manager) ----------
+  // Changes are laid over the products as written (src/catalog.js); see the notes there.
+  const catalogEdits = () => (store.db.catalog && store.db.catalog.products) || {};
+  const adminProduct = (p) => {
+    const row = catalog.forAdmin(p, catalogEdits()[p.id]);
+    const pr = (store.db.pricing || {})[p.id] || {};
+    return { ...row, pricesChanged: Boolean(Object.keys(pr).length) };
+  };
+  // Top-level fields of an edit and the keys each one holds (a field sent with its default value clears it).
+  const EDIT_FIELDS = {
+    name: ['name'], description: ['description'], category: ['category'], status: ['status', 'hiddenReason', 'hiddenNote'],
+    stock: ['stock'], lowStockAt: ['lowStockAt'], colors: ['colors'], addColors: ['addColors'], sizes: ['sizes'], addSizes: ['addSizes'],
+    sides: ['sides'], process: ['process'], methods: ['methods'], embroidery: ['embroidery'],
+  };
+  const logCatalog = (db, req, productId, what) => {
+    db.catalogLog ||= [];
+    db.catalogLog.push({ at: new Date().toISOString(), who: req.adminWho.name, productId, what: String(what).slice(0, 200) });
+    if (db.catalogLog.length > 500) db.catalogLog.splice(0, db.catalogLog.length - 500);
+  };
+  /** Save the fields sent for a product (others stay as they were); prices go to the owner's price list. */
+  const saveProductEdit = (req, product, body) => {
+    const c = catalog.clean(product, body, { categories: CATEGORIES.map((x) => x.id) });
+    if (c.error) throw new HttpError(400, c.error, { field: c.field || '' });
+    let pricing = null;
+    if (body.prices !== undefined) {
+      const pr = accounting.cleanPricing(product, body.prices || {});
+      if (pr.error) throw new HttpError(400, pr.error);
+      pricing = pr.pricing;
+    }
+    const sent = Object.keys(EDIT_FIELDS).filter((k) => body[k] !== undefined);
+    store.mutate((db) => {
+      db.catalog ||= {};
+      db.catalog.products ||= {};
+      const prev = db.catalog.products[product.id] || {};
+      const next = { ...prev };
+      for (const k of sent) for (const key of EDIT_FIELDS[k]) delete next[key];
+      for (const k of sent) for (const key of EDIT_FIELDS[k]) if (c.edit[key] !== undefined) next[key] = c.edit[key];
+      if (pricing) {
+        db.pricing ||= {};
+        if (Object.keys(pricing).length) db.pricing[product.id] = pricing;
+        else delete db.pricing[product.id];
+      }
+      const changed = JSON.stringify(next) !== JSON.stringify(prev);
+      if (changed) {
+        next.updatedAt = new Date().toISOString();
+        next.updatedBy = req.adminWho.name;
+      }
+      const keep = Object.keys(next).filter((k) => !['updatedAt', 'updatedBy'].includes(k));
+      if (keep.length) db.catalog.products[product.id] = next;
+      else delete db.catalog.products[product.id];
+      if (changed || pricing) logCatalog(db, req, product.id, [...sent, ...(pricing ? ['prices'] : [])].join(', '));
+    });
+    syncCatalog();
+  };
+  app.get('/api/admin/catalog', requireCatalog, (req, res) => {
+    res.json({
+      role: req.adminWho.role,
+      categories: CATEGORIES,
+      hideReasons: catalog.HIDE_REASONS,
+      maxPhotos: catalog.MAX_PHOTOS,
+      mockup: { width: MOCKUP_WIDTH, height: MOCKUP_HEIGHT },
+      products: PRODUCTS.map(adminProduct),
+      log: (store.db.catalogLog || []).slice(-50).reverse(),
+    });
+  });
+  app.get('/api/admin/catalog/:id', requireCatalog, (req, res) => {
+    const p = getProduct(req.params.id);
+    if (!p) throw new HttpError(404, 'unknownProduct');
+    res.json(adminProduct(p));
+  });
+  app.put('/api/admin/catalog/:id', requireCatalog, express.json({ limit: '200kb' }), (req, res) => {
+    const p = getProduct(req.params.id);
+    if (!p || p.kind === 'book') throw new HttpError(404, 'unknownProduct');
+    saveProductEdit(req, p, req.body && typeof req.body === 'object' ? req.body : {});
+    res.json(adminProduct(getProduct(p.id)));
+  });
+  // A new product, made from an existing one (its drawing, 3D model and print setup). It starts hidden.
+  app.post('/api/admin/catalog', requireCatalog, express.json({ limit: '200kb' }), (req, res) => {
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const n = catalog.cleanNew(body, PRODUCTS);
+    if (n.error) throw new HttpError(400, n.error);
+    const from = getProduct(n.template);
+    store.mutate((db) => {
+      db.catalog ||= {};
+      db.catalog.products ||= {};
+      if (db.catalog.products[n.id]) throw new HttpError(400, 'productIdTaken');
+      db.catalog.products[n.id] = {
+        template: n.template, createdAt: new Date().toISOString(), createdBy: req.adminWho.name,
+        name: { en: `${from.name.en} (new)`, ar: `${from.name.ar} (جديد)` },
+        status: 'hidden', hiddenReason: 'other', hiddenNote: 'New product: check it, then show it in the shop',
+      };
+      logCatalog(db, req, n.id, `new product from ${n.template}`);
+    });
+    syncCatalog();
+    const fields = { ...body };
+    delete fields.id;
+    delete fields.template;
+    if (Object.keys(fields).length) {
+      try {
+        saveProductEdit(req, getProduct(n.id), fields);
+      } catch (e) {
+        // A bad field: the product stays (hidden), and the manager fixes the field on its page.
+        return res.status(201).json({ ...adminProduct(getProduct(n.id)), warning: e.code || 'badProductField' });
+      }
+    }
+    res.status(201).json(adminProduct(getProduct(n.id)));
+  });
+  // Back to the product as written (built-in products), or delete an added one that was never ordered.
+  app.delete('/api/admin/catalog/:id', requireCatalog, (req, res) => {
+    const p = getProduct(req.params.id);
+    if (!p) throw new HttpError(404, 'unknownProduct');
+    const added = !catalog.isBuiltIn(p.id);
+    if (added) {
+      const used = store.listOrders().some((o) => o.items.some((it) => it.productId === p.id)) || Object.values(store.db.designs || {}).some((d) => d.productId === p.id);
+      if (used) throw new HttpError(409, 'productInUse');
+    }
+    store.mutate((db) => {
+      if (db.catalog && db.catalog.products) delete db.catalog.products[p.id];
+      if (added && db.pricing) delete db.pricing[p.id];
+      logCatalog(db, req, p.id, added ? 'deleted' : 'reset to the original');
+    });
+    if (added) fs.rmSync(path.join(dataDir, 'catalog-photos', p.id), { recursive: true, force: true });
+    syncCatalog();
+    res.json(added ? { deleted: true } : adminProduct(getProduct(p.id)));
+  });
+
+  // Product photos: stored in the data folder as WebP (up to 1600 px), the first (or chosen) one leads.
+  const PHOTO_ID_RE = /^[a-f0-9]{16}$/;
+  const photoDir = (pid) => path.join(dataDir, 'catalog-photos', pid);
+  app.post('/api/admin/catalog/:id/photos', requireCatalog, express.raw({ type: () => true, limit: '15mb' }), asyncRoute(async (req, res) => {
+    const p = getProduct(req.params.id);
+    if (!p) throw new HttpError(404, 'unknownProduct');
+    const prev = (catalogEdits()[p.id] || {}).photos || [];
+    if (prev.length >= catalog.MAX_PHOTOS) throw new HttpError(400, 'tooManyPhotos', { max: catalog.MAX_PHOTOS });
+    if (!Buffer.isBuffer(req.body) || req.body.length < 100) throw new HttpError(400, 'badPhoto');
+    let webp;
+    try {
+      const meta = await sharp()(req.body, { limitInputPixels: 80e6 }).metadata();
+      if (!['jpeg', 'png', 'webp'].includes(meta.format)) throw new Error('type');
+      webp = await sharp()(req.body, { limitInputPixels: 80e6 }).rotate().resize(1600, 1600, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 84 }).toBuffer();
+    } catch (e) {
+      throw new HttpError(400, 'badPhoto');
+    }
+    const id = crypto.randomBytes(8).toString('hex');
+    fs.mkdirSync(photoDir(p.id), { recursive: true });
+    fs.writeFileSync(path.join(photoDir(p.id), `${id}.webp`), webp);
+    store.mutate((db) => {
+      db.catalog ||= {};
+      db.catalog.products ||= {};
+      const e = (db.catalog.products[p.id] ||= {});
+      e.photos = [...(e.photos || []), { id }].slice(0, catalog.MAX_PHOTOS);
+      e.updatedAt = new Date().toISOString();
+      e.updatedBy = req.adminWho.name;
+      logCatalog(db, req, p.id, 'photo added');
+    });
+    syncCatalog();
+    res.status(201).json(adminProduct(getProduct(p.id)));
+  }));
+  // Order of the photos and which one leads: { order: [ids], main: id }.
+  app.put('/api/admin/catalog/:id/photos', requireCatalog, express.json({ limit: '8kb' }), (req, res) => {
+    const p = getProduct(req.params.id);
+    if (!p) throw new HttpError(404, 'unknownProduct');
+    const b = req.body || {};
+    store.mutate((db) => {
+      const e = db.catalog && db.catalog.products && db.catalog.products[p.id];
+      if (!e || !e.photos) throw new HttpError(404, 'notFound');
+      if (Array.isArray(b.order)) {
+        const ids = e.photos.map((ph) => ph.id);
+        if (b.order.length !== ids.length || !ids.every((id) => b.order.includes(id))) throw new HttpError(400, 'badProductField', { field: 'order' });
+        e.photos = b.order.map((id) => e.photos.find((ph) => ph.id === id));
+      }
+      if (b.main !== undefined) {
+        if (b.main === null) delete e.mainPhoto;
+        else if (e.photos.some((ph) => ph.id === b.main)) e.mainPhoto = b.main;
+        else throw new HttpError(400, 'badProductField', { field: 'main' });
+      }
+      e.updatedAt = new Date().toISOString();
+      e.updatedBy = req.adminWho.name;
+      logCatalog(db, req, p.id, 'photos arranged');
+    });
+    syncCatalog();
+    res.json(adminProduct(getProduct(p.id)));
+  });
+  app.delete('/api/admin/catalog/:id/photos/:photoId', requireCatalog, (req, res) => {
+    const p = getProduct(req.params.id);
+    if (!p || !PHOTO_ID_RE.test(req.params.photoId)) throw new HttpError(404, 'notFound');
+    store.mutate((db) => {
+      const e = db.catalog && db.catalog.products && db.catalog.products[p.id];
+      if (!e || !(e.photos || []).some((ph) => ph.id === req.params.photoId)) throw new HttpError(404, 'notFound');
+      e.photos = e.photos.filter((ph) => ph.id !== req.params.photoId);
+      if (!e.photos.length) delete e.photos;
+      if (e.mainPhoto === req.params.photoId) delete e.mainPhoto;
+      e.updatedAt = new Date().toISOString();
+      e.updatedBy = req.adminWho.name;
+      logCatalog(db, req, p.id, 'photo removed');
+    });
+    fs.rmSync(path.join(photoDir(p.id), `${req.params.photoId}.webp`), { force: true });
+    syncCatalog();
+    res.json(adminProduct(getProduct(p.id)));
+  });
+  app.get('/catalog-photos/:pid/:file', (req, res) => {
+    const m = /^([a-f0-9]{16})\.webp$/.exec(req.params.file);
+    if (!m || !/^[a-z0-9][a-z0-9-]{0,39}$/.test(req.params.pid)) throw new HttpError(404, 'notFound');
+    const file = path.join(photoDir(req.params.pid), `${m[1]}.webp`);
+    if (!fs.existsSync(file)) throw new HttpError(404, 'notFound');
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.type('image/webp').send(fs.readFileSync(file));
+  });
+
+  // ---------- Staff accounts (owner only): product managers sign in with their own password ----------
+  const staffRow = (u) => ({ id: u.id, name: u.name, username: u.username, role: u.role, createdAt: u.createdAt });
+  app.get('/api/admin/staff', requireAdmin, (req, res) => res.json({ staff: staffList().map(staffRow) }));
+  app.post('/api/admin/staff', requireAdmin, express.json({ limit: '4kb' }), (req, res) => {
+    const b = req.body || {};
+    const name = typeof b.name === 'string' ? b.name.replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 60) : '';
+    const username = typeof b.username === 'string' ? b.username.trim().toLowerCase() : '';
+    if (!name || !/^[a-z0-9][a-z0-9._-]{2,29}$/.test(username) || typeof b.password !== 'string' || b.password.length < 10 || b.password.length > 200) throw new HttpError(400, 'badStaff');
+    const user = { id: crypto.randomBytes(8).toString('hex'), name, username, role: 'products', gen: 0, createdAt: new Date().toISOString(), ...security.AdminAuth.hashStaffPassword(b.password) };
+    store.mutate((db) => {
+      db.staff ||= [];
+      if (db.staff.some((u) => u.username === username)) throw new HttpError(400, 'staffTaken');
+      db.staff.push(user);
+    });
+    res.status(201).json(staffRow(user));
+  });
+  app.put('/api/admin/staff/:id/password', requireAdmin, express.json({ limit: '4kb' }), (req, res) => {
+    const pw = (req.body || {}).password;
+    if (typeof pw !== 'string' || pw.length < 10 || pw.length > 200) throw new HttpError(400, 'badStaff');
+    store.mutate((db) => {
+      const u = (db.staff || []).find((x) => x.id === req.params.id);
+      if (!u) throw new HttpError(404, 'notFound');
+      Object.assign(u, security.AdminAuth.hashStaffPassword(pw));
+      u.gen = (u.gen || 0) + 1; // signs out everywhere
+    });
+    res.status(204).end();
+  });
+  app.delete('/api/admin/staff/:id', requireAdmin, (req, res) => {
+    store.mutate((db) => {
+      const before = (db.staff || []).length;
+      db.staff = (db.staff || []).filter((x) => x.id !== req.params.id);
+      if (db.staff.length === before) throw new HttpError(404, 'notFound');
+    });
+    res.status(204).end();
+  });
 
   app.get('/api/admin/notifications', requireAdmin, (req, res) => {
     res.json(notify.status());

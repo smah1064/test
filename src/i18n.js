@@ -157,6 +157,26 @@ const MESSAGES = {
   gangTooWide: { en: 'A design is wider than the 56 cm film', ar: 'أحد التصميمات أعرض من الفيلم (56 سم)' },
   gangTooLong: { en: 'The sheet would be longer than 5 m. Split it into two orders.', ar: 'الشيت سيصبح أطول من 5 متر. قسّمه على طلبين.' },
   gangMissingFile: { en: 'A design file did not finish uploading', ar: 'لم يكتمل رفع أحد ملفات التصميم' },
+  // Product manager (admin → Products) and what the shop says about it.
+  productUnavailable: { en: '{name} is not available right now. Remove it from the cart or choose another product.', ar: '{name} مش متاح دلوقتي. شيله من السلة أو اختار منتج تاني.' },
+  colorUnavailable: { en: 'This colour of {name} is sold out right now. Please choose another colour.', ar: 'اللون ده من {name} خلصان دلوقتي. اختار لون تاني.' },
+  sizeUnavailable: { en: 'This size of {name} is sold out right now. Please choose another size.', ar: 'المقاس ده من {name} خلصان دلوقتي. اختار مقاس تاني.' },
+  sideUnavailable: { en: 'One side of {name} can\'t be printed right now. Remove the design from that side.', ar: 'وش من {name} مش متاح للطباعة دلوقتي. شيل التصميم من الوش ده.' },
+  notEnoughStock: { en: 'Only {left} of {name} left. Please order fewer pieces.', ar: 'فاضل {left} بس من {name}. اطلب عدد أقل.' },
+  badProductField: { en: 'Please check this field: {field}', ar: 'راجع الخانة دي: {field}' },
+  needOneColor: { en: 'Keep at least one colour on.', ar: 'خلّي لون واحد على الأقل شغال.' },
+  needOneSize: { en: 'Keep at least one size on.', ar: 'خلّي مقاس واحد على الأقل شغال.' },
+  needOneSide: { en: 'Keep at least one side on.', ar: 'خلّي وش واحد على الأقل شغال.' },
+  badProductId: { en: 'The product code can use small English letters, numbers and dashes only (for example: kids-cap).', ar: 'كود المنتج حروف إنجليزي صغيرة وأرقام وشَرطة بس (مثلًا: kids-cap).' },
+  productIdTaken: { en: 'There is already a product with this code.', ar: 'فيه منتج بالكود ده بالفعل.' },
+  badTemplate: { en: 'New products can\'t be made from this one.', ar: 'مينفعش نعمل منتج جديد من ده.' },
+  tooManyProducts: { en: 'Too many added products.', ar: 'المنتجات المضافة كتير.' },
+  tooManyPhotos: { en: 'Up to {max} photos per product.', ar: 'لحد {max} صور للمنتج.' },
+  badPhoto: { en: 'Upload a JPG, PNG or WebP photo (up to 15 MB).', ar: 'ارفع صورة JPG أو PNG أو WebP (لحد 15 ميجا).' },
+  ownerOnly: { en: 'Only the shop owner can do this.', ar: 'صاحب المحل بس اللي يقدر يعمل ده.' },
+  badStaff: { en: 'Enter a name, a username (small English letters and numbers) and a password of at least 10 characters.', ar: 'اكتب الاسم واسم مستخدم (حروف إنجليزي صغيرة وأرقام) وكلمة سر 10 حروف على الأقل.' },
+  productInUse: { en: 'This product is in designs or orders already: hide it or remove it from the shop instead of deleting it.', ar: 'المنتج ده موجود في تصميمات أو طلبات: اخفيه أو شيله من المحل بدل ما تمسحه.' },
+  staffTaken: { en: 'This username is taken.', ar: 'اسم المستخدم ده موجود.' },
 };
 
 const FIELDS = {
