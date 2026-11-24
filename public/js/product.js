@@ -56,6 +56,32 @@
     return pictures.get(key);
   }
 
+  // The lifestyle photo (the product printed with a design, styled): shown first when there is one;
+  // the plain product in the chosen colour next to it (public/img/lifestyle/index.json).
+  let life = null;
+  try {
+    const r = await fetch('/img/lifestyle/index.json', { cache: 'no-cache' });
+    if (r.ok) life = (await r.json())[product.id] || null;
+  } catch (e) { /* the product photo only */ }
+  let view = life && life.file && !params.get('color') ? 'life' : 'plain';
+  const plainUrl = () => `/api/thumbs/${encodeURIComponent(product.id)}/${encodeURIComponent(color.id)}.webp`;
+  function renderPicture() {
+    const showLife = view === 'life' && life && life.file;
+    $('pp-img').src = showLife ? life.file : plainUrl();
+    $('pp-img').alt = showLife ? tr(life.alt) || tr(product.name) : tr(product.name);
+    $('pp-img').classList.toggle('pp-life', Boolean(showLife));
+    $('pp-gallery').hidden = !(life && life.file);
+    if (life && life.file) {
+      $('pp-gallery').innerHTML = [['life', life.file, t('pp.viewPrinted')], ['plain', plainUrl(), t('pp.viewPlain')]]
+        .map(([v, src, label]) => `<button type="button" class="pp-thumb ${v === view ? 'active' : ''} ${v === 'life' ? 'is-life' : ''}" data-view="${v}" aria-pressed="${v === view}" aria-label="${esc(label)}" title="${esc(label)}"><img src="${esc(src)}" alt=""></button>`).join('');
+    }
+  }
+  $('pp-gallery').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-view]');
+    if (!b || b.dataset.view === view) return;
+    view = b.dataset.view;
+    renderPicture();
+  });
   const q = () => `product=${encodeURIComponent(product.id)}&color=${encodeURIComponent(color.id)}`;
   function renderInfo() {
     document.title = `${tr(product.name)} · ${t('brand')}`;
@@ -63,8 +89,7 @@
     $('pp-desc').textContent = tr(product.description);
     $('pp-price').textContent = t('home.from', { price: money(product.basePrice) });
     $('pp-sizes').textContent = product.sizes.length > 1 ? t('pp.sizes', { list: product.sizes.map((s) => tr(s.label)).join(' · ') }) : '';
-    $('pp-img').src = `/api/thumbs/${encodeURIComponent(product.id)}/${encodeURIComponent(color.id)}.webp`;
-    $('pp-img').alt = tr(product.name);
+    renderPicture();
     $('pp-color-name').textContent = tr(color.name);
     $('pp-color-label').textContent = product.colorLabel ? `${tr(product.colorLabel)}:` : t('panel.colour');
     $('pp-swatches').innerHTML = product.colors.map((c) => `<button type="button" class="swatch ${c.id === color.id ? 'active' : ''}" data-color="${esc(c.id)}" title="${esc(tr(c.name))}" aria-label="${esc(tr(c.name))}" style="background:${esc(c.hex)}"></button>`).join('');
@@ -125,6 +150,7 @@
     const b = e.target.closest('[data-color]');
     if (!b || b.dataset.color === color.id) return;
     color = product.colors.find((c) => c.id === b.dataset.color) || color;
+    view = 'plain'; // a colour picked: show the product in that colour
     history.replaceState(null, '', `/product?id=${encodeURIComponent(product.id)}&color=${encodeURIComponent(color.id)}`);
     renderInfo();
     renderDesigns();

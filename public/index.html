@@ -38,53 +38,38 @@
   </header>
 
   <main class="container">
-    <section class="hero">
-      <div>
-        <h1 data-i18n-html="home.title"></h1>
-        <p data-i18n="home.lead"></p>
-        <p class="delivery-note" data-i18n="delivery.note"></p>
-        <div class="row" style="max-width: 380px; margin-top: 24px;">
-          <a class="btn btn-primary btn-lg" href="/editor?product=tshirt" data-i18n="home.start"></a>
-          <a class="btn btn-lg" href="#products" data-i18n="home.browse"></a>
+    <!-- Hero: big lifestyle picture on a soft gradient, the line and two buttons. -->
+    <section class="hm-hero">
+      <div class="hm-hero-text">
+        <p class="hm-kicker" data-i18n="hm.kicker"></p>
+        <h1 data-i18n-html="hm.title"></h1>
+        <p class="hm-lead" data-i18n="hm.lead"></p>
+        <div class="hm-hero-cta">
+          <a class="btn btn-primary btn-lg" href="#products" data-i18n="hm.shopAll"></a>
+          <a class="btn btn-lg hm-btn-ghost" href="/designs" data-i18n="hm.readyDesigns"></a>
         </div>
+        <p class="hm-delivery" data-i18n="delivery.note"></p>
       </div>
-      <div class="hero-art" id="hero-art" aria-hidden="true"></div>
+      <div class="hm-hero-art" id="hero-art" aria-hidden="true"></div>
     </section>
 
-    <section class="steps">
-      <div class="card step"><div class="num">1</div><h3 data-i18n="home.step1.title"></h3><p data-i18n="home.step1.text"></p></div>
-      <div class="card step"><div class="num">2</div><h3 data-i18n="home.step2.title"></h3><p data-i18n="home.step2.text"></p></div>
-      <div class="card step"><div class="num">3</div><h3 data-i18n="home.step3.title"></h3><p data-i18n="home.step3.text"></p></div>
-    </section>
+    <!-- Three picture tiles -->
+    <section class="hm-tiles" id="hm-tiles" aria-label="" data-i18n-aria="hm.tilesLabel"></section>
 
-    <a class="card promo" href="/designs" style="text-decoration:none">
-      <div class="promo-art" aria-hidden="true">👕</div>
-      <div><h2 data-i18n="home.designsTitle"></h2><p data-i18n="home.designsText"></p></div>
-      <span class="btn btn-primary" data-i18n="home.designsCta"></span>
-    </a>
+    <!-- New and best sellers, then rows by theme (filled from the catalogue). -->
+    <div id="hm-rows"></div>
 
-    <a class="card promo promo-photos" href="/photos" style="text-decoration:none">
-      <div class="promo-art" aria-hidden="true">📸</div>
-      <div><h2 data-i18n="home.photosTitle"></h2><p data-i18n="home.photosText"></p></div>
-      <span class="btn btn-primary" data-i18n="home.photosCta"></span>
-    </a>
-
-    <section class="card biz" id="business" aria-labelledby="biz-title">
-      <div class="biz-head">
-        <div class="promo-art" aria-hidden="true">🏢</div>
-        <div><h2 id="biz-title" data-i18n="home.bizTitle"></h2><p data-i18n="home.bizLead"></p></div>
-      </div>
-      <div class="cat-chips biz-links" id="biz-links"></div>
-      <ul class="biz-points">
-        <li data-i18n="home.bizNames"></li>
-        <li data-i18n="home.bizMany"></li>
-      </ul>
-      <a class="btn btn-sm biz-more" href="/designs?cat=business" data-i18n="home.bizDesigns"></a>
+    <!-- Why order here -->
+    <section class="hm-benefits" aria-label="" data-i18n-aria="hm.whyLabel">
+      <div class="hm-benefit"><span class="hm-ico" aria-hidden="true">⚡</span><div><strong data-i18n="hm.b1.title"></strong><p data-i18n="hm.b1.text"></p></div></div>
+      <div class="hm-benefit"><span class="hm-ico" aria-hidden="true">✅</span><div><strong data-i18n="hm.b2.title"></strong><p data-i18n="hm.b2.text"></p></div></div>
+      <div class="hm-benefit"><span class="hm-ico" aria-hidden="true">💵</span><div><strong data-i18n="hm.b3.title"></strong><p data-i18n="hm.b3.text"></p></div></div>
+      <div class="hm-benefit"><span class="hm-ico" aria-hidden="true">🧾</span><div><strong data-i18n="hm.b4.title"></strong><p data-i18n="hm.b4.text"></p></div></div>
     </section>
 
     <section id="products">
       <div class="section-title">
-        <h2 data-i18n="home.pick"></h2>
+        <h2 data-i18n="hm.allTitle"></h2>
         <span class="muted small hide-sm" data-i18n="home.priceNote"></span>
       </div>
       <form class="design-search home-search" id="home-search" role="search" autocomplete="off">
@@ -94,6 +79,25 @@
       <div class="cat-chips" id="cats"></div>
       <p class="muted small home-count" id="home-count" aria-live="polite"></p>
       <div class="product-grid" id="product-grid"></div>
+    </section>
+
+    <section class="hm-how" aria-labelledby="hm-how-title">
+      <h2 id="hm-how-title" data-i18n="hm.howTitle"></h2>
+      <div class="hm-steps">
+        <div class="hm-step"><span class="hm-num">1</span><h3 data-i18n="home.step1.title"></h3><p data-i18n="home.step1.text"></p></div>
+        <div class="hm-step"><span class="hm-num">2</span><h3 data-i18n="home.step2.title"></h3><p data-i18n="home.step2.text"></p></div>
+        <div class="hm-step"><span class="hm-num">3</span><h3 data-i18n="home.step3.title"></h3><p data-i18n="home.step3.text"></p></div>
+      </div>
+    </section>
+
+    <section class="hm-faq" aria-labelledby="hm-faq-title">
+      <h2 id="hm-faq-title" data-i18n="hm.faqTitle"></h2>
+      <details><summary data-i18n="hm.q1"></summary><p data-i18n="hm.a1"></p></details>
+      <details><summary data-i18n="hm.q2"></summary><p data-i18n="hm.a2"></p></details>
+      <details><summary data-i18n="hm.q3"></summary><p data-i18n="hm.a3"></p></details>
+      <details><summary data-i18n="hm.q4"></summary><p data-i18n="hm.a4"></p></details>
+      <details><summary data-i18n="hm.q5"></summary><p data-i18n="hm.a5"></p></details>
+      <details><summary data-i18n="hm.q6"></summary><p data-i18n="hm.a6"></p></details>
     </section>
   </main>
 
@@ -165,24 +169,102 @@
         POD.toast(t('draft.saved'));
         history.replaceState(null, '', '/#products');
       }
-      function cardThumb(p) {
-        const d = drafts[p.id];
-        if (!d || !d.url) return thumbImg(p, p.colors[0]);
-        return `<img alt="" src="${d.url}"><span class="saved-badge">${esc(t('draft.badge'))}</span>`;
-      }
       function thumbImg(p, color, eager) {
         return `<img alt="" ${eager ? '' : 'loading="lazy" '}decoding="async" class="photo-thumb" data-pid="${esc(p.id)}" data-color="${esc(color.id)}" src="${thumbUrl(p, color)}">`;
       }
 
-      // For companies, schools and events: straight to the products they order.
-      const BIZ = ['bizcards', 'idcards', 'certificates', 'invitations', 'namelabels', 'stickersheet', 'letterhead', 'paperbags', 'rollup'];
-      function renderBiz() {
-        document.getElementById('biz-links').innerHTML = BIZ.map((id) => products.find((p) => p.id === id)).filter(Boolean)
-          .map((p) => `<a class="chip" href="/product?id=${encodeURIComponent(p.id)}">${esc(tr(p.name))}</a>`).join('');
+      // ---------- Lifestyle photos (each product printed with a design, styled) ----------
+      // public/img/lifestyle/index.json: { productId: { file, alt } }; products without one keep their studio photo.
+      let life = {};
+      try {
+        const r = await fetch('/img/lifestyle/index.json', { cache: 'no-cache' });
+        if (r.ok) life = await r.json();
+      } catch (e) { /* the studio photos are used */ }
+      const byId = (id) => products.find((p) => p.id === id);
+      const hrefOf = (p) => (p.kind === 'book' ? `/book?b=${encodeURIComponent(p.book)}` : p.kind === 'photoset' ? '/photos' : `/product?id=${encodeURIComponent(p.id)}`);
+      /** The card picture: a saved draft, else the lifestyle photo, else the product photo. */
+      function cardPicture(p, eager) {
+        const d = drafts[p.id];
+        if (d && d.url) return `<img alt="" src="${d.url}"><span class="saved-badge">${esc(t('draft.badge'))}</span>`;
+        const l = life[p.id];
+        if (l && l.file) return `<img class="hm-life" alt="${esc(tr(l.alt) || tr(p.name))}" ${eager ? '' : 'loading="lazy" '}decoding="async" src="${esc(l.file)}">`;
+        return thumbImg(p, p.colors[0], eager);
+      }
+      /** "From 250 EGP" and, for products sold in quantities, the smallest pack ("A5 × 100"). */
+      function priceLine(p) {
+        const first = p.sizes && p.sizes[0];
+        const pack = first && /\d/.test(tr(first.label)) && !['apparel'].includes(p.category) && /×|x\b|\d{2,}/i.test(tr(first.label)) ? tr(first.label) : '';
+        return `<span class="hm-price">${esc(t('home.from', { price: money(p.basePrice) }))}</span>${pack ? `<span class="hm-pack" dir="auto">${esc(pack)}</span>` : ''}`;
+      }
+
+      // ---------- Rows: new and best sellers, then by theme ----------
+      // Ids that don't exist (yet) are skipped, so a row only shows what the shop sells.
+      const BEST = ['tshirt', 'mug', 'bizcards', 'stickersheet', 'hoodie', 'cushion', 'invitations', 'tote'];
+      const NEW = ['engrplaque', 'caketopper', 'namepuzzle', 'postcards', 'menus', 'calendar', 'photobook', 'magnets', 'labels', 'wrappingpaper'];
+      const ROWS = [
+        { key: 'fresh', ids: [...NEW.slice(0, 4), ...BEST.slice(0, 6)], badge: (id) => (NEW.includes(id) ? 'new' : 'best') },
+        { key: 'cards', ids: ['invitations', 'greetingcard', 'postcards', 'foldedcards', 'giftvouchers', 'bookmarks', 'eidenvelopes', 'certificates'], link: '/?cat=occasions#products' },
+        { key: 'wear', ids: ['tshirt', 'hoodie', 'sweatshirt', 'oversized', 'polo', 'kidstee', 'cap', 'tote', 'apron'], link: '/?cat=apparel#products' },
+        { key: 'home', ids: ['mug', 'cushion', 'poster', 'canvas', 'coasters', 'calendar', 'deskcalendar', 'bedsheet', 'curtains', 'magnets'], link: '/?cat=home#products' },
+        { key: 'gifts', ids: ['magicmug', 'couplemugs', 'photobook', 'engrframe', 'keychain', 'namepuzzle', 'tumbler', 'prayermat', 'wrappingpaper'], link: '/?cat=occasions#products' },
+        { key: 'biz', ids: ['bizcards', 'flyers', 'brochures', 'menus', 'letterhead', 'labels', 'logostickers', 'paperbags', 'rollup', 'banners', 'idcards', 'notepads', 'folders'], link: '/?cat=business#products' },
+        { key: 'events', ids: ['weddingsign', 'tablenumbers', 'caketopper', 'ramadandecor', 'invitations', 'eidenvelopes', 'tablecloth'], link: '/?cat=occasions#products' },
+        { key: 'laser', ids: products.filter((p) => p.category === 'laser').map((p) => p.id), link: '/?cat=laser#products' },
+      ];
+      function rowCard(p, badge) {
+        return `<a class="hm-card" href="${hrefOf(p)}">
+          <div class="hm-pic">${cardPicture(p)}${badge ? `<span class="hm-badge hm-badge-${badge}">${esc(t('hm.badge.' + badge))}</span>` : ''}</div>
+          <h3>${esc(tr(p.name))}</h3>
+          <div class="hm-meta">${priceLine(p)}</div>
+        </a>`;
+      }
+      function renderRows() {
+        document.getElementById('hm-rows').innerHTML = ROWS.map((row) => {
+          const list = [...new Set(row.ids)].map(byId).filter(Boolean);
+          if (list.length < 3) return '';
+          return `<section class="hm-section" aria-labelledby="hm-row-${row.key}">
+            <div class="hm-head">
+              <div><h2 id="hm-row-${row.key}">${esc(t(`hm.row.${row.key}`))}</h2><p class="muted">${esc(t(`hm.row.${row.key}.sub`))}</p></div>
+              <div class="hm-head-end">
+                ${row.link ? `<a class="hm-more" href="${row.link}">${esc(t('hm.seeAll'))}</a>` : ''}
+                <button type="button" class="hm-arrow" data-scroll="-1" aria-label="${esc(t('hm.prev'))}">‹</button><button type="button" class="hm-arrow" data-scroll="1" aria-label="${esc(t('hm.next'))}">›</button>
+              </div>
+            </div>
+            <div class="hm-row">${list.map((p) => rowCard(p, row.badge ? row.badge(p.id) : null)).join('')}</div>
+          </section>`;
+        }).join('');
+      }
+      // Arrows: one screenful along the row (in reading direction).
+      document.getElementById('hm-rows').addEventListener('click', (e) => {
+        const b = e.target.closest('[data-scroll]');
+        if (!b) return;
+        const row = b.closest('.hm-section').querySelector('.hm-row');
+        const dir = getComputedStyle(row).direction === 'rtl' ? -1 : 1;
+        row.scrollBy({ left: Number(b.dataset.scroll) * dir * row.clientWidth * 0.9, behavior: 'smooth' });
+      });
+
+      // ---------- Three picture tiles ----------
+      function renderTiles() {
+        const pic = (key, fallbackId) => {
+          const l = life[key] || life[fallbackId];
+          if (l && l.file) return `<img alt="" loading="lazy" decoding="async" src="${esc(l.file)}">`;
+          const p = byId(fallbackId);
+          return p ? thumbImg(p, p.colors[0]) : '';
+        };
+        const tiles = [
+          { key: 'gifts', img: pic('hero-2', 'mug'), href: '/?cat=occasions#products' },
+          { key: 'biz', img: pic('hero-3', 'bizcards'), href: '/?cat=business#products' },
+          { key: 'designs', img: pic('tshirt', 'tshirt'), href: '/designs' },
+        ];
+        document.getElementById('hm-tiles').innerHTML = tiles.map((x) => `<a class="hm-tile" href="${x.href}">
+          <div class="hm-tile-pic">${x.img}</div>
+          <div class="hm-tile-body"><h3>${esc(t(`hm.tile.${x.key}`))}</h3><span class="hm-tile-link">${esc(t(`hm.tile.${x.key}.cta`))} <span aria-hidden="true">←</span></span></div>
+        </a>`).join('');
       }
 
       function render() {
-        renderBiz();
+        renderRows();
+        renderTiles();
         document.getElementById('cats').innerHTML = [{ id: 'all', name: null }, ...categories]
           .map((c) => `<button class="chip ${c.id === cat ? 'active' : ''}" data-cat="${c.id}">${esc(c.name ? tr(c.name) : t('cat.all'))}</button>`)
           .join('');
@@ -208,7 +290,7 @@
         }
         grid.innerHTML = list.map((p) => `
           <a class="card product-card" href="${p.kind === 'book' ? `/book?b=${encodeURIComponent(p.book)}` : p.kind === 'photoset' ? '/photos' : `/product?id=${p.id}`}">
-            <div class="thumb">${cardThumb(p)}</div>
+            <div class="thumb">${cardPicture(p)}</div>
             <div class="body">
               <h3>${esc(tr(p.name))}</h3>
               <p class="desc">${esc(tr(p.description))}</p>
@@ -275,8 +357,11 @@
         const c = p.colors.find((x) => x.id === colorId) || p.colors[0];
         return thumbImg(p, c, true);
       };
+      // The hero: the big lifestyle picture of many printed products; until there is one, three product photos.
       const hero = document.getElementById('hero-art');
-      hero.innerHTML = [pick('tshirt', 'navy'), pick('hoodie', 'cream'), pick('mug', 'white')].join('');
+      hero.innerHTML = life['hero-1'] && life['hero-1'].file
+        ? `<img class="hm-hero-photo" alt="" src="${esc(life['hero-1'].file)}" fetchpriority="high">`
+        : `<div class="hm-hero-trio">${[pick('tshirt', 'navy'), pick('hoodie', 'cream'), pick('mug', 'white')].join('')}</div>`;
 
       render();
       document.addEventListener('pod:langchange', render);
