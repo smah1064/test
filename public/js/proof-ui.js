@@ -98,7 +98,8 @@
       const one = lines[0];
       const color = (one && one.color) || proof.color || {};
       const size = (one && one.size) || proof.size || {};
-      rows.push([t('proof.color'), `${color.hex ? `<span class="qty-dot" style="background:${esc(color.hex)}"></span> ` : ''}${esc(tr(color.name))}`]);
+      // Products with their own word for it (business cards and photos: "Paper").
+      rows.push([proof.product && proof.product.colorLabel ? tr(proof.product.colorLabel) : t('proof.color'), `${color.hex ? `<span class="qty-dot" style="background:${esc(color.hex)}"></span> ` : ''}${esc(tr(color.name))}`]);
       if (tr(size.label)) rows.push([t('proof.size'), esc(tr(size.label))]);
       if (n > 1 && !names) rows.push([t('proof.pieces'), esc(POD.num(n))]);
     }

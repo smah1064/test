@@ -220,7 +220,7 @@
             <div class="approve-box">
               ${PODProof.screenNote()}
               <label class="approve-check" for="ok-${i}"><input type="checkbox" id="ok-${i}" data-approve="${esc(id)}"${ok ? ' checked' : ''}><span>${esc(t('proof.ok'))}</span></label>
-              ${PODProof.pieces(proof) > 1 ? `<label class="approve-check sample" for="sample-${i}"><input type="checkbox" id="sample-${i}" data-sample="${esc(id)}"${sample ? ' checked' : ''}><span>${esc(t('proof.sample'))}</span></label>` : ''}
+              ${PODProof.pieces(proof) > 1 && !proof.photos ? `<label class="approve-check sample" for="sample-${i}"><input type="checkbox" id="sample-${i}" data-sample="${esc(id)}"${sample ? ' checked' : ''}><span>${esc(t('proof.sample'))}</span></label>` : ''}
             </div>`;
         }
         return `<section class="cart-proof${ok ? ' ok' : ''}" data-proof-for="${esc(id)}" data-index="${i}" aria-labelledby="proof-h-${i}"><div class="cart-proof-inner">${head}${body}</div></section>`;

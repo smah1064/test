@@ -589,7 +589,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       designId: d.id,
       version: d.version || 1,
       proofHash: proofHashOf(d),
-      product: product ? { id: product.id, name: product.name } : { id: d.productId, name: d.productName },
+      product: product ? { id: product.id, name: product.name, ...(product.colorLabel ? { colorLabel: product.colorLabel } : {}) } : { id: d.productId, name: d.productName },
       color: d.color, size: d.size, quantities: d.quantities || null, copies: copiesOf(d),
       method: d.method || 'print', process: d.process || (product && product.process) || null,
       sides: d.kind === 'book' ? [] : d.sides.map(side),

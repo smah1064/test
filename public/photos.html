@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OneOff Print</title>
+  <script>(function(){var l;try{l=localStorage.getItem('pod-lang')}catch(e){}l=l==='en'?'en':'ar';var d=document.documentElement;d.lang=l;d.dir=l==='ar'?'rtl':'ltr'})()</script>
+  <link rel="stylesheet" href="/fonts/fonts.css">
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/photos.css">
+</head>
+<body data-title-key="photos.pageTitle" class="ph-page">
+  <header class="site-header">
+    <div class="container inner">
+      <a class="brand" href="/"><span class="brand-mark">1</span>OneOff Print</a>
+      <nav>
+        <a href="/#products" data-i18n="nav.products"></a>
+        <a href="/designs" data-i18n="nav.designs"></a>
+        <a class="cart-link" href="/cart"><span data-i18n="nav.cart"></span> <span class="badge" data-cart-count hidden>0</span></a>
+        <button class="btn btn-sm lang-toggle" data-lang-toggle data-i18n="lang.other"></button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container ph-main">
+    <div id="ph-missing" class="card empty" hidden>
+      <h2 data-i18n="photos.missing"></h2>
+      <a class="btn btn-primary" href="/#products" data-i18n="photos.browse"></a>
+    </div>
+
+    <div id="ph" hidden>
+      <section class="ph-hero">
+        <div class="ph-hero-text">
+          <h1 data-i18n="photos.title"></h1>
+          <p class="muted ph-lead" data-i18n="photos.lead"></p>
+          <p class="ph-from"><span class="amount" id="ph-from"></span></p>
+          <p class="delivery-note" data-i18n="delivery.note"></p>
+        </div>
+        <div class="ph-hero-art" aria-hidden="true">
+          <span class="ph-art ph-art-1"></span>
+          <span class="ph-art ph-art-2"></span>
+          <span class="ph-art ph-art-3"></span>
+        </div>
+      </section>
+
+      <div class="ph-layout">
+        <aside class="ph-side" id="ph-side">
+          <section class="card ph-pick" id="ph-drop">
+            <input type="file" id="ph-file" class="ph-file" accept="image/*" multiple tabindex="-1" aria-hidden="true">
+            <button type="button" class="btn btn-primary btn-lg ph-pick-btn" id="ph-pick-btn">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-4.5-4.5L6 21"/></svg>
+              <span id="ph-pick-label" data-i18n="photos.pick"></span>
+            </button>
+            <p class="muted small ph-drop-hint" id="ph-drop-hint"></p>
+            <p class="small ph-status" id="ph-status" role="status" aria-live="polite"></p>
+          </section>
+
+          <section class="card ph-settings" aria-labelledby="ph-settings-title">
+            <h2 class="ph-h3" id="ph-settings-title" data-i18n="photos.settings"></h2>
+            <div class="field">
+              <label id="ph-paper-label"></label>
+              <div class="chips ph-chips" id="ph-paper" role="group" aria-labelledby="ph-paper-label"></div>
+            </div>
+            <div class="field">
+              <label id="ph-border-label"></label>
+              <div class="chips ph-chips" id="ph-border" role="group" aria-labelledby="ph-border-label"></div>
+            </div>
+            <div class="field ph-field-last">
+              <label id="ph-sizeall-label" data-i18n="photos.sizeAll"></label>
+              <div class="chips ph-chips ph-size-chips" id="ph-sizeall" role="group" aria-labelledby="ph-sizeall-label"></div>
+              <p class="muted small ph-mixed" id="ph-mixed" data-i18n="photos.mixed" hidden></p>
+            </div>
+          </section>
+        </aside>
+
+        <section class="ph-photos" aria-labelledby="ph-photos-title">
+          <h2 class="ph-photos-title"><span id="ph-photos-title" data-i18n="photos.yours"></span> <span class="muted" id="ph-photos-count"></span></h2>
+          <p class="muted ph-empty card" id="ph-empty" data-i18n="photos.empty"></p>
+          <div class="ph-grid" id="ph-grid"></div>
+        </section>
+      </div>
+
+      <div class="ph-bar" id="ph-bar">
+        <div class="ph-bar-in">
+          <div class="ph-bar-main" id="ph-bar-main">
+            <div class="ph-sum">
+              <span class="ph-sum-count" id="ph-sum-count"></span>
+              <strong class="ph-sum-total" id="ph-sum-total"></strong>
+            </div>
+            <button type="button" class="btn btn-primary btn-lg ph-add" id="ph-add" data-i18n="photos.add" disabled></button>
+          </div>
+          <div class="ph-bar-up" id="ph-bar-up" hidden>
+            <div class="ph-up-line">
+              <span class="ph-up-text" id="ph-up-text" role="status" aria-live="polite"></span>
+              <span class="muted small ph-up-keep" data-i18n="photos.keepOpen"></span>
+            </div>
+            <div class="ph-progress" id="ph-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="ph-progress-fill"></span></div>
+          </div>
+          <div class="ph-bar-err" id="ph-bar-err" hidden>
+            <p class="ph-err-text" id="ph-err-text" role="alert"></p>
+            <div class="ph-err-actions">
+              <button type="button" class="btn" id="ph-cancel" data-i18n="photos.cancel"></button>
+              <button type="button" class="btn btn-primary" id="ph-retry" data-i18n="photos.retry"></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div class="ph-modal" id="ph-crop" hidden>
+    <div class="ph-sheet" role="dialog" aria-modal="true" aria-labelledby="ph-crop-title">
+      <div class="ph-sheet-head">
+        <h2 id="ph-crop-title" data-i18n="photos.cropTitle"></h2>
+        <button type="button" class="btn btn-icon ph-close" id="ph-crop-close" data-i18n-aria="photos.close">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <div class="ph-stage" id="ph-stage" tabindex="0" role="application" data-i18n-aria="photos.cropStage">
+        <canvas id="ph-stage-cv"></canvas>
+      </div>
+      <div class="ph-sheet-foot">
+        <div class="ph-zoom">
+          <button type="button" class="btn btn-icon btn-sm" id="ph-zoom-out" data-i18n-aria="photos.zoomOut">−</button>
+          <input type="range" id="ph-zoom" min="1" max="6" step="0.01" value="1" data-i18n-aria="photos.zoom">
+          <button type="button" class="btn btn-icon btn-sm" id="ph-zoom-in" data-i18n-aria="photos.zoomIn">+</button>
+        </div>
+        <p class="muted small ph-crop-help" data-i18n="photos.cropHelp"></p>
+        <p class="small ph-crop-warn" id="ph-crop-warn" hidden></p>
+        <div class="ph-sheet-actions">
+          <button type="button" class="btn" id="ph-crop-reset" data-i18n="photos.reset"></button>
+          <span class="ph-spacer"></span>
+          <button type="button" class="btn" id="ph-crop-cancel" data-i18n="photos.cancel"></button>
+          <button type="button" class="btn btn-primary" id="ph-crop-done" data-i18n="photos.done"></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer"><div class="container" data-i18n="footer"></div></footer>
+
+  <script src="/js/i18n.js"></script>
+  <script src="/js/i18n-photos.js"></script>
+  <script src="/js/common.js"></script>
+  <script src="/js/photos.js"></script>
+</body>
+</html>
