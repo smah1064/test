@@ -63,7 +63,7 @@ const Q = {
   name: { id: 'name', type: 'text', label: t("Child's name", 'اسم الطفل'), max: 20, required: true },
   gender: { id: 'gender', type: 'choice', label: t('Boy or girl', 'ولد ولا بنت'), options: [{ id: 'boy', label: t('Boy', 'ولد') }, { id: 'girl', label: t('Girl', 'بنت') }], required: true },
   birthday: { id: 'birthday', type: 'date', label: t('Birthday', 'تاريخ الميلاد'), required: true },
-  city: { id: 'city', type: 'text', label: t('City', 'المدينة'), max: 24, placeholder: t('Cairo', 'القاهرة'), required: true },
+  city: { id: 'city', type: 'text', label: t('City', 'المدينة'), max: 24, placeholder: t('Cairo', 'Cairo'), required: true },
   father: { id: 'father', type: 'text', label: t("Father's name", 'اسم الأب'), max: 20, required: true },
   mother: { id: 'mother', type: 'text', label: t("Mother's name", 'اسم الأم'), max: 20, required: true },
   fruit: { id: 'fruit', type: 'choice', label: t('Favourite fruit', 'الفاكهة المفضلة'), options: options(FRUIT_LABELS), required: true, pictures: 'fruit' },

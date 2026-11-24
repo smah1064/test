@@ -244,6 +244,9 @@
     if (!root) {
       root = document.createElement('div');
       root.id = 'toast-root';
+      // Screen readers read each message out (errors right away).
+      root.setAttribute('role', 'status');
+      root.setAttribute('aria-live', 'polite');
       document.body.appendChild(root);
     }
     const el = document.createElement('div');

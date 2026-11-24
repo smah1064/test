@@ -1039,7 +1039,7 @@ window.POD_STRINGS = {
   'book.making': ['Making your book…', 'جاري تجهيز الكتاب…'],
   'book.missing': ['Please fill in: {field}', 'من فضلك اكتب: {field}'],
   'book.yourChild': ['Your child', 'طفلك'],
-  'book.dedicationHint': ['e.g. To our hero, with love from Baba and Mama', 'مثال: لبطلنا الصغير، مع حب بابا وماما'],
+  'book.dedicationHint': ['e.g. To our hero, with love from Baba and Mama', 'اكتبها بالإنجليزي (الكتاب بالإنجليزي)، مثال: To our hero, with love from Baba and Mama'],
   'book.privacy': ["Your child's photo is used only to print this book and is deleted automatically 30 days after delivery (or after 7 days if you don't order).", 'صورة طفلك بتُستخدم لطباعة الكتاب ده بس، وبتتمسح تلقائيًا بعد 30 يوم من التوصيل (أو بعد 7 أيام لو ما طلبتش).'],
   'fmt.book-pdf': ['Book PDF (all pages, 300 DPI, 3 mm bleed)', 'ملف الكتاب PDF (كل الصفحات، 300 DPI، هامش قص 3 مم)'],
   'admin.bookFiles': ['Book print file', 'ملف طباعة الكتاب'],
