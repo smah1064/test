@@ -2443,9 +2443,22 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     res.json({ items, subtotal, discount, coupon, couponError, shipping, baseShipping, delivery, deliveryOptions, total: round2(subtotal - discount + shipping), freeShippingOver: FREE_SHIPPING_OVER, shippingFlat: SHIPPING_FLAT });
   });
 
+  // The order's one-time key from the cart: when the answer to an order got lost on the way (the phone
+  // lost its connection), sending it again (or asking with the key) gives the same order, not an error.
+  const ORDER_KEY_RE = /^[A-Za-z0-9-]{16,64}$/;
+  const orderByKey = (key) => (ORDER_KEY_RE.test(String(key || '')) ? store.listOrders().find((o) => o.orderKey === key) || null : null);
+  app.get('/api/orders/by-key/:key', (req, res) => {
+    const order = orderByKey(req.params.key);
+    if (!order) throw new HttpError(404, 'orderNotFound');
+    res.set('Cache-Control', 'no-store');
+    res.json(publicOrder(order));
+  });
   app.post('/api/orders', express.json({ limit: '100kb' }), asyncRoute(async (req, res) => {
     const body = req.body && typeof req.body === 'object' ? req.body : {};
     const { designIds, expectedTotal } = body;
+    const orderKey = typeof body.orderKey === 'string' && ORDER_KEY_RE.test(body.orderKey) ? body.orderKey : null;
+    const already = orderKey && orderByKey(orderKey);
+    if (already) return res.status(200).json(publicOrder(already));
     const customer = body.customer && typeof body.customer === 'object' ? body.customer : {};
     const c = {
       name: cleanString(customer.name, 'name', { max: 120 }),
@@ -2588,6 +2601,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       total,
       // Cash on delivery: collected by the courier.
       payment: { method: 'cod', status: 'pending' },
+      ...(orderKey ? { orderKey } : {}),
       lang: langOf(req),
     }, (db) => {
       // Checked again under the lock with the latest data: another copy may have just ordered one of these.

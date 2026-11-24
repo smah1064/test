@@ -203,18 +203,32 @@
   function getCart() {
     try {
       const items = JSON.parse(localStorage.getItem(CART_KEY) || '[]');
-      return Array.isArray(items) ? items : [];
+      // Damaged or very old entries are left out instead of breaking the whole cart.
+      return Array.isArray(items) ? items.filter((it) => it && typeof it === 'object' && typeof it.designId === 'string').map((it) => (Array.isArray(it.sides) ? it : { ...it, sides: [] })) : [];
     } catch (e) {
       return [];
     }
   }
   function setCart(items) {
+    let ok = true;
     try {
       localStorage.setItem(CART_KEY, JSON.stringify(items));
     } catch (e) {
       toast(t('msg.saveCartFailed'), 'error');
+      ok = false;
     }
     updateCartBadge();
+    return ok;
+  }
+  /** Upload one file of a design; a dropped connection gives the shop's own message, not the browser's. */
+  async function putFile(url, token, body) {
+    try {
+      return await fetch(url, { method: 'PUT', headers: { 'x-upload-token': token, 'x-lang': lang, 'Content-Type': 'application/octet-stream' }, body });
+    } catch (e) {
+      const err = new Error(t('msg.network'));
+      err.network = true;
+      throw err;
+    }
   }
   function updateCartBadge() {
     const n = getCart().length;
@@ -568,7 +582,7 @@
     t, tr, setLang, applyI18n,
     loadCatalog, fillMockup, mockupUrl, svgDataUrl, luminance,
     money, date, day, num, captcha,
-    getCart, setCart, updateCartBadge, toast, esc, api, drafts,
+    getCart, setCart, putFile, updateCartBadge, toast, esc, api, drafts,
     sizedArea, sizeView, canvasEdges, drawPattern, wrapOffsets, fabricCm,
   };
 })();

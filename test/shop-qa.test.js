@@ -114,3 +114,23 @@ test('share link previews use the shop address, not the Host header', async () =
   const html = await (await fetch(`${base}/s/${id}`, { headers: { Host: 'evil.example', 'X-Forwarded-Proto': 'https' } })).text();
   assert.doesNotMatch(html, /evil\.example/);
 });
+
+test('an order sent again with its one-time key gives the same order (the first answer got lost)', async () => {
+  const d = await makeDesign({ productId: 'mug', color: 'white', size: '11oz', sides: { front: { editor: { objects: [{ type: 'i-text', text: 'x' }] } } } });
+  const q = await (await post('/api/cart/quote', { designIds: [d.id] })).json();
+  const key = 'k-0123456789abcdef-retry';
+  const body = { customer: CUSTOMER, designIds: [d.id], expectedTotal: q.total, orderKey: key };
+  const first = await post('/api/orders', body);
+  assert.strictEqual(first.status, 201);
+  const o1 = await first.json();
+  const again = await post('/api/orders', body);
+  assert.strictEqual(again.status, 200);
+  assert.strictEqual((await again.json()).id, o1.id);
+  const found = await fetch(`${base}/api/orders/by-key/${key}`);
+  assert.strictEqual(found.status, 200);
+  const o2 = await found.json();
+  assert.strictEqual(o2.id, o1.id);
+  assert.strictEqual(o2.orderKey, undefined, 'the key is not shown back');
+  assert.strictEqual((await fetch(`${base}/api/orders/by-key/k-not-a-real-key-000000`)).status, 404);
+  assert.strictEqual((await fetch(`${base}/api/orders/by-key/short`)).status, 404);
+});

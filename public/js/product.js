@@ -32,6 +32,7 @@
   let cat = 'all';
   let hasDraft = false;
   try {
+    // (Reading window.indexedDB throws when site data is blocked: caught below.)
     const d = POD.drafts && window.indexedDB ? await POD.drafts.get(product.id) : null;
     hasDraft = Boolean(d && d.designs && Object.values(d.designs).some((o) => o && o.length));
   } catch (e) {

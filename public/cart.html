@@ -349,7 +349,7 @@
           return true;
         });
         if (gone.length || changed || synced) POD.setCart(keep);
-        if (gone.length) POD.toast(t('cart.gone', { list: gone.join('، ') }), 'error');
+        if (gone.length) POD.toast(t('cart.gone', { list: gone.join(POD.lang === 'ar' ? '، ' : ', ') }), 'error');
         else if (changed && announce) POD.toast(t('cart.pricesUpdated'));
         if (gone.length) return refreshPrices();
       }
@@ -401,6 +401,8 @@
         btn.disabled = true;
         btn.textContent = t('checkout.placing');
         try {
+          // An earlier try may have reached the shop although its answer got lost: show that order.
+          if (await showPlacedOrder()) return;
           const customer = Object.fromEntries(new FormData(form));
           delete customer.delivery;
           const captchaToken = await orderCaptcha.token();
@@ -419,12 +421,9 @@
           const order = await POD.api('/api/orders', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ customer, designIds: cartNow.map((i) => i.designId), expectedTotal: render.total, delivery, approvals: approvalsBody, ...(captchaToken ? { captchaToken } : {}), ...(quote && quote.coupon && couponCode ? { couponCode } : {}) }),
+            body: JSON.stringify({ customer, designIds: cartNow.map((i) => i.designId), expectedTotal: render.total, delivery, orderKey: orderKey(), approvals: approvalsBody, ...(captchaToken ? { captchaToken } : {}), ...(quote && quote.coupon && couponCode ? { couponCode } : {}) }),
           });
-          POD.setCart([]);
-          approvals.clear();
-          saveApprovals();
-          location.href = '/order?id=' + encodeURIComponent(order.id) + '&new=1';
+          goToOrder(order);
         } catch (err) {
           orderCaptcha.reset();
           if (err.code === 'priceChanged' || err.code === 'designGone' || err.code === 'designOrdered' || /^coupon/.test(err.code || '')) {
@@ -445,6 +444,37 @@
           updateApproval();
         }
       });
+
+      // ---------- The order's one-time key (see /api/orders/by-key) ----------
+      const KEY = 'pod-order-key';
+      function orderKey() {
+        let k = null;
+        try { k = sessionStorage.getItem(KEY); } catch (e) { k = null; }
+        if (!k) {
+          k = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`);
+          try { sessionStorage.setItem(KEY, k); } catch (e) { /* private mode: no retry check */ }
+        }
+        return k;
+      }
+      function goToOrder(order) {
+        const ordered = new Set((order.items || []).map((i) => i.designId));
+        POD.setCart(POD.getCart().filter((it) => !ordered.has(it.designId)));
+        try { sessionStorage.removeItem(KEY); } catch (e) { /* private mode */ }
+        approvals.clear();
+        saveApprovals();
+        location.href = '/order?id=' + encodeURIComponent(order.id) + '&new=1';
+      }
+      async function showPlacedOrder() {
+        let k = null;
+        try { k = sessionStorage.getItem(KEY); } catch (e) { k = null; }
+        if (!k) return false;
+        try {
+          goToOrder(await POD.api('/api/orders/by-key/' + encodeURIComponent(k)));
+          return true;
+        } catch (e) {
+          return false; // not placed (or still offline): carry on
+        }
+      }
 
       // CAPTCHA: checked silently while the customer fills in the form (a box only if Cloudflare asks).
       const orderCaptcha = POD.captcha(document.getElementById('cap-order'));
@@ -500,7 +530,8 @@
       renderGovernorates();
       render();
       prefillAccount();
-      refreshPrices({ announce: true }).then(render);
+      // An order placed from this tab whose answer never arrived: go to it instead of showing its items as gone.
+      if (!(await showPlacedOrder())) refreshPrices({ announce: true }).then(render);
       document.addEventListener('pod:langchange', () => { renderGovernorates(); render(); });
       // The cart changed in another tab (an order placed there, an item added).
       window.addEventListener('storage', (e) => { if (e.key === 'pod-cart-v2') refreshPrices().then(render); });

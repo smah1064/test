@@ -12,7 +12,7 @@
   const TARGET_DPI = 300;
   const MAX_PRINT_PIXELS = 16e6;
   const MAX_PRINT_SIDE = 8000;
-  const EXTRA_PROPS = ['name', 'selectable', 'evented', 'curve', 'mask', 'maskBorder', 'maskBorderColor', 'lockRatio', 'bgShape', 'textFx', 'boosted'];
+  const EXTRA_PROPS = ['name', 'selectable', 'evented', 'curve', 'mask', 'maskBorder', 'maskBorderColor', 'lockRatio', 'bgShape', 'textFx', 'fxBase', 'boosted'];
   const inkFor = (hex) => (POD.luminance(hex) < 0.45 ? '#ffffff' : '#16181d');
 
   /** Trim, bleed and safe zone in mockup units (same as the editor). */
@@ -179,12 +179,8 @@
       body: JSON.stringify({ productId: product.id, color: color.id, size: size.id, sides: { [side.id]: { editor: { version: fabric.version, objects: serialize(st), library: design.id } } } }),
     });
     await Promise.all(created.files.map(async (name) => {
-      const res = await fetch(`/api/designs/${created.id}/files/${encodeURIComponent(name)}`, {
-        method: 'PUT',
-        headers: { 'x-upload-token': created.uploadToken, 'x-lang': POD.lang, 'Content-Type': 'application/octet-stream' },
-        body: files[name],
-      });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Upload failed (${res.status})`);
+      const res = await POD.putFile(`/api/designs/${created.id}/files/${encodeURIComponent(name)}`, created.uploadToken, files[name]);
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || POD.t('msg.requestFailed', { status: res.status }));
     }));
     onProgress('finish');
     const done = await POD.api(`/api/designs/${created.id}/complete`, { method: 'POST', headers: { 'x-upload-token': created.uploadToken } });

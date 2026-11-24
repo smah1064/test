@@ -19,7 +19,7 @@
   const MAX_VECTOR_BYTES = 40 * 1024 * 1024;
   const HISTORY_LIMIT = 60;
   const SNAP_PX = 7;
-  const EXTRA_PROPS = ['name', 'selectable', 'evented', 'curve', 'mask', 'maskBorder', 'maskBorderColor', 'lockRatio', 'bgShape', 'textFx', 'boosted', 'importSource', 'mergeFit'];
+  const EXTRA_PROPS = ['name', 'selectable', 'evented', 'curve', 'mask', 'maskBorder', 'maskBorderColor', 'lockRatio', 'bgShape', 'textFx', 'fxBase', 'boosted', 'importSource', 'mergeFit'];
   const $ = (id) => document.getElementById(id);
   const { esc, money, toast, t, tr } = POD;
   const D = window.POD_DESIGN;
@@ -76,6 +76,7 @@
     pattern: null, // fabric products: { repeat, tileCm } (how the tile repeats, and its size)
     method: 'print', // 'embroidery' on products that can be embroidered
     editingCartIndex: null,
+    editingDesignId: null,
     preview: false,
     exporting: false,
     silent: false,
@@ -105,7 +106,10 @@
       }
       const idx = Number(params.get('cart'));
       const cart = POD.getCart();
-      if (params.get('cart') !== null && Number.isInteger(idx) && cart[idx] && cart[idx].designId === saved.id) st.editingCartIndex = idx;
+      if (params.get('cart') !== null && Number.isInteger(idx) && cart[idx] && cart[idx].designId === saved.id) {
+        st.editingCartIndex = idx;
+        st.editingDesignId = saved.id;
+      }
     } catch (e) {
       toast(t('msg.openFailed', { msg: e.message }), 'error');
     }
@@ -141,7 +145,9 @@
       toast(e.message, 'error');
     }
   }
-  const draftMode = !params.get('design') && !!(POD.drafts && window.indexedDB);
+  // Reading window.indexedDB throws when the browser blocks site data: drafts are then simply off.
+  const idbOk = (() => { try { return Boolean(window.indexedDB); } catch (e) { return false; } })();
+  const draftMode = !params.get('design') && !!(POD.drafts && idbOk);
   let restoredDraft = false;
   let bootDone = false; // autosave starts once the editor has loaded
   if (draftMode && !fromShare && !libraryDesign) {
@@ -2072,8 +2078,13 @@
   const TEXT_FX = ['none', 'shadow', 'neon', 'extrude', 'retro', 'outline', 'sticker', 'sunset', 'gold', 'ocean'];
   const hexToRgb = (h) => { const n = parseInt(toHex(h).slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
   const mixHex = (a, b, k) => '#' + hexToRgb(a).map((v, i) => Math.round(v + (hexToRgb(b)[i] - v) * k).toString(16).padStart(2, '0')).join('');
+  // Neon lightens the letters: the chosen colour is kept (fxBase) so "None" or another style brings it back.
+  const neonGlow = (base) => { const lum = POD.luminance(base); return lum < 0.12 || lum > 0.92 ? '#ff2d95' : base; };
+  const neonFill = (base) => mixHex(neonGlow(base), '#ffffff', 0.6);
   /** The text's main colour, whatever its current fill is. */
   function baseColour(o) {
+    // Still the neon letters of the colour chosen before (not recoloured since): that colour.
+    if (o.textFx === 'neon' && o.fxBase && typeof o.fill === 'string' && toHex(o.fill) === neonFill(o.fxBase)) return toHex(o.fxBase);
     if (isGradient(o.fill)) return toHex(o.fill.colorStops[0].color);
     if (o.fill && o.fill !== 'transparent') return toHex(o.fill);
     if (o.stroke) return toHex(o.stroke);
@@ -2084,13 +2095,13 @@
     const sc = Math.abs(o.scaleX || 1);
     const base = baseColour(o);
     const lum = POD.luminance(base);
-    const plain = { shadow: null, stroke: null, strokeWidth: 0, fill: base, textFx: id === 'none' ? null : id };
+    const plain = { shadow: null, stroke: null, strokeWidth: 0, fill: base, textFx: id === 'none' ? null : id, fxBase: null };
     const shadow = (color, blur, off) => new fabric.Shadow({ color, blur: fs * blur, offsetX: fs * off, offsetY: fs * off });
     switch (id) {
       case 'shadow': return { ...plain, shadow: shadow('rgba(0,0,0,0.38)', 0.14, 0.06) };
       case 'neon': {
-        const glow = lum < 0.12 || lum > 0.92 ? '#ff2d95' : base;
-        return { ...plain, fill: mixHex(glow, '#ffffff', 0.6), shadow: new fabric.Shadow({ color: glow, blur: fs * 0.42, offsetX: 0, offsetY: 0 }) };
+        const glow = neonGlow(base);
+        return { ...plain, fill: neonFill(base), fxBase: base, shadow: new fabric.Shadow({ color: glow, blur: fs * 0.42, offsetX: 0, offsetY: 0 }) };
       }
       case 'extrude': return { ...plain, shadow: shadow(mixHex(base, lum < 0.2 ? '#ffffff' : '#000000', 0.45), 0, 0.07) };
       case 'retro': return { ...plain, stroke: '#16181d', strokeWidth: fs * sc * 0.045, strokeUniform: true, paintFirst: 'stroke', shadow: shadow(lum > 0.6 ? D.ACCENT : '#fcc419', 0, 0.09) };
@@ -2568,7 +2579,27 @@
   }
   const LOCK_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
   const UNLOCK_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>';
+  // Pressing a layer or side button right after typing in a field: leaving the field saves the change,
+  // which would draw these lists again under the pointer, and the browser then drops the click. While a
+  // press inside them lasts, they are drawn again only once it is over.
+  // (var and function declarations: these lists can be drawn while the editor is still starting.)
+  var pressIn = null; // eslint-disable-line no-var
+  var deferred = new Map(); // eslint-disable-line no-var
+  document.addEventListener('pointerdown', (e) => { pressIn = ['layers', 'side-tabs'].find((id) => $(id) && $(id).contains(e.target)) || null; }, true);
+  function endPress() {
+    if (!pressIn) return;
+    pressIn = null;
+    setTimeout(() => { for (const [id, fn] of [...deferred]) { deferred.delete(id); fn(); } }, 0);
+  }
+  document.addEventListener('pointerup', endPress, true);
+  document.addEventListener('pointercancel', endPress, true);
+  function heldOff(id, fn) {
+    if (!pressIn || pressIn !== id) return false;
+    (deferred || (deferred = new Map())).set(id, fn);
+    return true;
+  }
   function renderLayers() {
+    if (heldOff('layers', renderLayers)) return;
     const objs = canvas.getObjects().slice().reverse();
     const sel = canvas.getActiveObjects();
     $('layers').innerHTML = objs.length
@@ -2870,6 +2901,7 @@
 
   // ---------- Sides ----------
   function renderSideTabs() {
+    if (heldOff('side-tabs', renderSideTabs)) return;
     $('side-tabs').innerHTML = activeSides().map((s) => {
       const count = s.id === st.side ? canvas.getObjects().length : (st.designs[s.id] || []).length;
       return `<button class="side-tab ${s.id === st.side ? 'active' : ''}" data-side="${s.id}" role="tab" aria-selected="${s.id === st.side}">${esc(tr(s.name))}${count ? '<span class="has"></span>' : ''}</button>`;
@@ -4281,12 +4313,8 @@
       let done = 0;
       busy(true, t('busy.uploading', { n: 0, total: created.files.length }));
       await Promise.all(created.files.map(async (name) => {
-        const res = await fetch(`/api/designs/${created.id}/files/${encodeURIComponent(name)}`, {
-          method: 'PUT',
-          headers: { 'x-upload-token': created.uploadToken, 'x-lang': POD.lang, 'Content-Type': 'application/octet-stream' },
-          body: files[name],
-        });
-        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Upload failed (${res.status})`);
+        const res = await POD.putFile(`/api/designs/${created.id}/files/${encodeURIComponent(name)}`, created.uploadToken, files[name]);
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || t('msg.requestFailed', { status: res.status }));
         busy(true, t('busy.uploading', { n: ++done, total: created.files.length }));
       }));
       busy(true, t('busy.finishing'));
@@ -4307,9 +4335,12 @@
         addedAt: new Date().toISOString(),
       };
       const cart = POD.getCart();
-      if (st.editingCartIndex !== null && cart[st.editingCartIndex]) cart[st.editingCartIndex] = entry;
+      // The cart may have changed in another tab since this item was opened: replace it where it is now.
+      const at = st.editingCartIndex !== null ? cart.findIndex((it) => it.designId === st.editingDesignId) : -1;
+      if (at >= 0) cart[at] = entry;
       else cart.push(entry);
-      POD.setCart(cart);
+      // The browser refused to keep the cart (storage blocked): stay here, the message says so.
+      if (POD.setCart(cart) === false) return;
       st.dirty = false;
       if (draftMode) {
         clearTimeout(draftTimer);
