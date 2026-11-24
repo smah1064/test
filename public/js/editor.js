@@ -3193,6 +3193,8 @@
     return (st.product.options || []).reduce((sum, opt) => sum + choicePrice(chosenOption(opt), sizeId), 0);
   }
   /** "1 piece in total", "6 قطع", "12 قطعة" (Arabic: 3–10 take the plural). */
+  /** Arabic: 3–10 (and 103–110…) take the plural form. */
+  const few = (n) => n % 100 >= 3 && n % 100 <= 10;
   const qtyTotalText = (n) => (n === 1 ? t('qty.totalOne') : t(n % 100 >= 3 && n % 100 <= 10 ? 'qty.totalFew' : 'qty.total', { n: POD.num(n) }));
   function renderQty() {
     const box = $('qty-field');
@@ -3478,7 +3480,7 @@
     const label = (i) => String(L.rows[i][0] || '').slice(0, 40) || t('merge.emptyValue');
     body.innerHTML = `
       <div class="merge-sum">
-        <span><strong>${esc(t('merge.count', { n: POD.num(L.rows.length) }))}</strong> · ${esc(L.fileName || '')}</span>
+        <span><strong>${esc(t(few(L.rows.length) ? 'merge.countFew' : 'merge.count', { n: POD.num(L.rows.length) }))}</strong> · ${esc(L.fileName || '')}</span>
         <button class="btn btn-sm" data-merge="remove">${esc(t('merge.remove'))}</button>
       </div>
       ${L.truncated ? `<p class="small merge-warn">${esc(t('merge.truncated', { n: POD.num(L.total), max: POD.num(L.rows.length) }))}</p>` : ''}
@@ -3503,10 +3505,10 @@
         <input type="range" id="merge-fit" min="20" max="100" step="5" value="${Math.round((fieldSel.mergeFit || 0.9) * 100)}">
         <p class="muted small" style="margin:4px 0 0;line-height:1.5">${esc(t('merge.fitHelp'))}</p>
       </div>` : ''}
-      ${mergeBadVariants().length ? `<p class="small merge-warn">${esc(t('merge.badVariant', { n: POD.num(mergeBadVariants().length), sizes: st.product.sizes.map((z) => tr(z.label)).join('، ') }))} ${rowList(mergeBadVariants())}</p>` : ''}
+      ${mergeBadVariants().length ? `<p class="small merge-warn">${esc(t('merge.badVariant', { n: POD.num(mergeBadVariants().length), sizes: st.product.sizes.map((z) => tr(z.label)).join(POD.lang === 'ar' ? '، ' : ', ') }))} ${rowList(mergeBadVariants())}</p>` : ''}
       ${rep && rep.small.length ? `<p class="small merge-warn">${esc(t('merge.small', { n: POD.num(rep.small.length) }))} ${rowList(rep.small)}</p>` : ''}
       ${rep && rep.empty.length ? `<p class="small merge-warn">${esc(t('merge.empty', { n: POD.num(rep.empty.length) }))} ${rowList(rep.empty)}</p>` : ''}
-      <p class="muted small" style="margin:8px 0 0">${esc(t('merge.priceNote', { n: POD.num(L.rows.length) }))}</p>`;
+      <p class="muted small" style="margin:8px 0 0">${esc(t(few(L.rows.length) ? 'merge.priceNoteFew' : 'merge.priceNote', { n: POD.num(L.rows.length) }))}</p>`;
   }
 
   async function uploadMergeFile(file) {
@@ -3570,7 +3572,24 @@
         : ar
           ? [['الاسم', 'الوظيفة'], ['أحمد علي', 'مدير'], ['منى حسن', 'مهندسة'], ['Omar Khaled', 'Designer']]
           : [['Name', 'Title'], ['Ahmed Ali', 'Manager'], ['Mona Hassan', 'Engineer'], ['عمر خالد', 'مصمم']];
-    const csv = '﻿' + rows.map((r) => r.join(',')).join('\r\n') + '\r\n';
+    // The design's own fields ({الاسم}, {Name}…): the example has exactly those columns, so it works as it is
+    // (a bilingual card uses both Arabic and English fields).
+    const used = [...new Set([...mergeObjects().flatMap((o) => fieldsOf(srcText(o))), ...Object.entries(st.designs || {}).filter(([id]) => id !== st.side).flatMap(([, list]) => (list || []).filter((o) => o && /text/i.test(o.type)).flatMap((o) => fieldsOf(o.text)))])];
+    if (used.length) {
+      const samples = new Map();
+      rows[0].forEach((h, i) => samples.set(h, rows.slice(1).map((r) => r[i])));
+      const EN = { Name: ['Ahmed Ali', 'Mona Hassan', 'Omar Khaled'], Position: ['Sales Manager', 'Engineer', 'Designer'], Title: ['Manager', 'Engineer', 'Designer'], Phone: ['01012345678', '01198765432', '01255511122'], Email: ['ahmed@example.com', 'mona@example.com', 'omar@example.com'], Number: ['10', '7', '9'], Size: ['L', 'M', 'XL'] };
+      const AR = { 'الاسم': ['أحمد علي', 'منى حسن', 'عمر خالد'], 'الوظيفة': ['مدير المبيعات', 'مهندسة', 'مصمم'], 'الموبايل': EN.Phone, 'الإيميل': EN.Email, 'الرقم': EN.Number, 'المقاس': EN.Size };
+      const sample = (f) => samples.get(f) || EN[f] || AR[f] || [`${f} 1`, `${f} 2`, `${f} 3`];
+      rows.length = 0;
+      rows.push(used, ...[0, 1, 2].map((i) => used.map((f) => sample(f)[i] || '')));
+      // A size column for team kits even when the design doesn't show the size.
+      if (st.product.category === 'apparel' && !used.some((f) => ['Size', 'المقاس'].includes(f))) {
+        rows[0].push(ar ? 'المقاس' : 'Size');
+        ['L', 'M', 'XL'].forEach((z, i) => rows[i + 1].push(z));
+      }
+    }
+    const csv = '﻿' + rows.map((r) => r.map((v) => (/[",\n]/.test(v) ? `"${String(v).replace(/"/g, '""')}"` : v)).join(',')).join('\r\n') + '\r\n';
     const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })), download: ar ? 'قائمة-الأسماء.csv' : 'names.csv' });
     document.body.appendChild(a);
     a.click();
@@ -3642,8 +3661,9 @@
   async function exportMergeSide(side, onProgress) {
     const { bleed, u } = rects(side.id);
     const mult = Math.min(TARGET_DPI / u, Math.sqrt(MAX_PRINT_PIXELS / (bleed.w * bleed.h)), MAX_PRINT_SIDE / Math.max(bleed.w, bleed.h));
-    const W = Math.floor(bleed.w * mult + 1e-6);
-    const H = Math.floor(bleed.h * mult + 1e-6);
+    // The same size as the side's print file (exportPrint rounds): the server checks they match exactly.
+    const W = Math.round(bleed.w * mult);
+    const H = Math.round(bleed.h * mult);
     const objs = canvas.getObjects().filter((o) => o.name !== '__cropper' && o.visible !== false);
     const fields = objs.filter(isFieldText);
     await mergeFonts(fields);
@@ -4185,7 +4205,7 @@
         return;
       }
       if (useMerge && mergeBadVariants().length) {
-        toast(t('merge.badVariant', { n: POD.num(mergeBadVariants().length), sizes: st.product.sizes.map((z) => tr(z.label)).join('، ') }), 'error');
+        toast(t('merge.badVariant', { n: POD.num(mergeBadVariants().length), sizes: st.product.sizes.map((z) => tr(z.label)).join(POD.lang === 'ar' ? '، ' : ', ') }), 'error');
         return;
       }
       if (useMerge) {
