@@ -456,5 +456,32 @@
     return css.join('');
   }
 
+  // ---------- Laser engraving: a photo as the laser will burn it ----------
+  // Every pixel becomes the material's engraved tone (`ink`); how dark the
+  // photo is there decides how strongly it is engraved (its opacity). On
+  // materials that turn lighter where engraved (acrylic, slate) the photo's
+  // light parts are engraved instead (`light`), as for a negative.
+  fabric.Image.filters.Engrave = fabric.util.createClass(fabric.Image.filters.BaseFilter, {
+    type: 'Engrave',
+    ink: '#000000',
+    light: false,
+    mainParameter: 'ink',
+    applyTo2d(options) {
+      const d = options.imageData.data;
+      const c = new fabric.Color(this.ink).getSource();
+      for (let i = 0; i < d.length; i += 4) {
+        const lum = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) / 255;
+        const k = this.light ? lum : 1 - lum;
+        d[i] = c[0];
+        d[i + 1] = c[1];
+        d[i + 2] = c[2];
+        d[i + 3] = Math.round(d[i + 3] * k);
+      }
+    },
+    isNeutralState() { return false; },
+    toObject() { return { type: this.type, ink: this.ink, light: this.light }; },
+  });
+  fabric.Image.filters.Engrave.fromObject = fabric.Image.filters.BaseFilter.fromObject;
+
   window.POD_FX = { maskPath, roundRectPath, removeBackground, fontFaceCss };
 })();

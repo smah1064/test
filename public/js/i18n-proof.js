@@ -15,6 +15,8 @@ Object.assign(window.POD_STRINGS, {
   'proof.process.paper': ['Paper print', 'طباعة على الورق'],
   'proof.process.textile': ['Fabric print', 'طباعة على القماش'],
   'proof.process.uv': ['UV print', 'طباعة UV'],
+  'proof.process.engrave': ['Laser engraving', 'حفر بالليزر'],
+  'proof.process.lasercut': ['Laser cut', 'قص بالليزر'],
   'proof.process.canvas': ['Canvas print', 'طباعة على الكانفاس'],
   'proof.process.embroidery': ['Embroidery', 'تطريز'],
   'proof.sides': ['What will be printed', 'اللي هيتطبع'],

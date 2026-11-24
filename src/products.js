@@ -38,6 +38,7 @@ const CATEGORIES = [
   { id: 'kids', name: t('Kids books', 'كتب أطفال') },
   { id: 'textiles', name: t('Fabric & home textiles', 'أقمشة ومفروشات') },
   { id: 'photos', name: t('Photo prints', 'طباعة صور') },
+  { id: 'laser', name: t('Laser engraving & cutting', 'حفر وقص ليزر') },
 ];
 
 const C = {
@@ -1414,6 +1415,270 @@ PRODUCTS.push(
   },
 );
 
+// ---------- Laser engraving and cutting (CO2 laser) ----------
+// The "colours" are materials. `ink` is how the design looks on that material:
+// the engraved tone (dark burn on wood, frosted white on acrylic, light grey on
+// slate) or, for cut pieces, the material itself. The editor draws every
+// element in that one tone; the shop gets an engraving bitmap and cut lines.
+//   laser.kind   'engrave' (on a blank or a board cut to `cut` shape) or 'cut' (the design's outline is cut)
+//   laser.cut    board outline cut around an engraving: 'rounded' | 'arch' | null (ready-made blank)
+//   laser.bridgeMm  cut pieces: text is thickened by this much so letters join into one piece
+//   laser.pieces 'one' (warn when the cut falls apart) | 'many' (puzzle letters are meant to come out)
+const WOOD = (id, en, ar, hex, ink) => ({ id, name: t(en, ar), hex, ink });
+const GRAIN = (x, y, w, h) => `<g opacity=".09" stroke="#3b2412" stroke-width="2" fill="none">${[0.18, 0.37, 0.55, 0.74, 0.9].map((f, i) => `<path d="M${x} ${y + h * f} q${w * 0.25} ${i % 2 ? -9 : 9} ${w * 0.5} 0 t${w * 0.5} 0"/>`).join('')}</g>`;
+const LASER_WOODS = [
+  WOOD('natural', 'Natural wood', 'خشب طبيعي', '#d8b183', '#5a3416'),
+  WOOD('walnut', 'Walnut', 'خشب جوزي', '#7a5232', '#2b170a'),
+  WOOD('white', 'White painted wood', 'خشب أبيض', '#f2eee7', '#8a6544'),
+];
+PRODUCTS.push(
+  {
+    id: 'engrplaque',
+    category: 'laser',
+    name: t('Engraved Acrylic Plaque', 'بلاك أكريليك محفور'),
+    description: t('Thin crystal-clear acrylic, laser engraved in frosted white, on a wooden stand. For weddings, graduation and thank-you gifts.', 'أكريليك شفاف ورفيع، محفور بالليزر بلون أبيض مطفي، على قاعدة خشب. للأفراح والتخرج والتكريم.'),
+    basePrice: 400,
+    colorLabel: t('Material', 'الخامة'),
+    colors: [{ id: 'clear', name: t('Clear acrylic', 'أكريليك شفاف'), hex: '#b5c9cf', ink: '#f7fbfc' }],
+    sizes: [
+      { id: '13x18', label: t('13 × 18 cm', '13 × 18 سم'), surcharge: 0 },
+      { id: '18x25', label: t('18 × 25 cm', '18 × 25 سم'), surcharge: 200 },
+    ],
+    sides: [{
+      id: 'front',
+      name: FRONT,
+      svg: sv(shadowRect(140, 70, 220, 305, 6) + '<rect x="140" y="70" width="220" height="305" rx="6" fill="{{C}}" stroke="#93a9b0" stroke-width="3"/><path d="M150 80 L200 80 L150 170 Z" fill="#fff" opacity=".25"/><rect x="118" y="368" width="264" height="34" rx="4" fill="#b98d5e" stroke="#8a6440" stroke-width="2"/>'),
+      printArea: { x: 140, y: 70, w: 220, h: 305, rx: 6 },
+      printWidthIn: 13 / 2.54,
+    }],
+    cardArt: '<path d="M250 180 c-30 -40 -90 -10 -60 40 l60 55 l60 -55 c30 -50 -30 -80 -60 -40z" fill="none" stroke="{{I}}" stroke-width="6"/><rect x="180" y="290" width="140" height="7" rx="3.5" fill="{{I}}"/><rect x="205" y="312" width="90" height="6" rx="3.0" fill="{{I}}"/>',
+    laser: { kind: 'engrave', cut: 'rounded', radiusMm: 2 },
+  },
+  {
+    id: 'engrcoasters',
+    category: 'laser',
+    name: t('Engraved Coasters', 'كوسترز محفورة'),
+    description: t('Slate or wooden coasters, 10 × 10 cm, laser engraved with your names, logo or drawing. Sold in sets.', 'كوسترز إردواز أو خشب 10 × 10 سم، محفورة بالليزر بالأسماء أو اللوجو أو الرسمة. بتتباع طقم.'),
+    basePrice: 380,
+    colorLabel: t('Material', 'الخامة'),
+    colors: [
+      { id: 'slate', name: t('Slate stone', 'حجر إردواز'), hex: '#3a3e44', ink: '#c9cdd2' },
+      WOOD('wood', 'Wood', 'خشب', '#d8b183', '#5a3416'),
+    ],
+    sizes: [
+      { id: 'set4', label: t('Set of 4', 'طقم 4 قطع'), surcharge: 0 },
+      { id: 'set6', label: t('Set of 6', 'طقم 6 قطع'), surcharge: 170 },
+    ],
+    sides: [{
+      id: 'front',
+      name: t('Top', 'الوجه'),
+      svg: sv('<rect x="214" y="96" width="270" height="270" rx="16" fill="{{C}}" stroke="{{L}}" stroke-width="3" opacity=".55" transform="rotate(8 349 231)"/>' + shadowRect(100, 150, 300, 300, 18) + '<rect x="100" y="150" width="300" height="300" rx="18" fill="{{C}}" stroke="{{L}}" stroke-width="3"/>'),
+      printArea: { x: 100, y: 150, w: 300, h: 300, rx: 18 },
+      printWidthIn: 10 / 2.54,
+    }],
+    cardArt: '<circle cx="250" cy="280" r="70" fill="none" stroke="{{I}}" stroke-width="6"/><circle cx="250" cy="280" r="56" fill="none" stroke="{{I}}" stroke-width="2"/><path d="M250 272 c-16 -22 -50 -6 -33 22 l33 30 l33 -30 c16 -28 -16 -44 -33 -22z" fill="{{I}}"/><rect x="190" y="375" width="120" height="7" rx="3.5" fill="{{I}}"/>',
+    laser: { kind: 'engrave', cut: null },
+  },
+  {
+    id: 'engrtray',
+    category: 'laser',
+    name: t('Engraved Engagement Tray', 'صينية شبكة محفورة'),
+    description: t('Wooden tray with handles for the shabka, engraved with the couple’s names and date.', 'صينية خشب بإيدين للشبكة، محفور عليها أسماء العروسين والتاريخ.'),
+    basePrice: 850,
+    colorLabel: t('Wood', 'الخشب'),
+    colors: LASER_WOODS,
+    sizes: [
+      { id: '35x25', label: t('35 × 25 cm', '35 × 25 سم'), surcharge: 0 },
+      { id: '45x32', label: t('45 × 32 cm', '45 × 32 سم'), surcharge: 350 },
+    ],
+    sides: [{
+      id: 'front',
+      name: t('Tray floor', 'أرضية الصينية'),
+      svg: sv('<rect x="36" y="160" width="440" height="320" rx="20" fill="#000" opacity=".12"/><rect x="30" y="150" width="440" height="320" rx="20" fill="{{C}}" stroke="{{L}}" stroke-width="3"/><rect x="5" y="270" width="40" height="80" rx="18" fill="{{S}}" stroke="{{L}}" stroke-width="3"/><rect x="455" y="270" width="40" height="80" rx="18" fill="{{S}}" stroke="{{L}}" stroke-width="3"/><rect x="18" y="292" width="20" height="36" rx="9" fill="#fff" opacity=".8"/><rect x="462" y="292" width="20" height="36" rx="9" fill="#fff" opacity=".8"/><rect x="58" y="178" width="384" height="264" rx="10" fill="{{C}}" stroke="{{L}}" stroke-width="2" opacity=".96"/>' + GRAIN(58, 178, 384, 264)),
+      printArea: { x: 85, y: 211, w: 330, h: 198 },
+      printWidthIn: 25 / 2.54,
+    }],
+    cardArt: '<g fill="none" stroke="{{I}}" stroke-width="6"><circle cx="233.5" cy="275" r="30"/><circle cx="266.5" cy="275" r="30"/></g><rect x="165" y="330" width="170" height="7" rx="3.5" fill="{{I}}"/><rect x="195" y="352" width="110" height="6" rx="3.0" fill="{{I}}"/>',
+    laser: { kind: 'engrave', cut: null },
+  },
+  {
+    id: 'engrframe',
+    category: 'laser',
+    name: t('Engraved Wooden Photo Frame', 'برواز خشب محفور'),
+    description: t('Wooden frame with a wide bottom engraved with names, a date or a message. You put your photo in.', 'برواز خشب بحافة تحت عريضة محفور عليها أسماء أو تاريخ أو جملة. وانت بتحط صورتك.'),
+    basePrice: 350,
+    colorLabel: t('Wood', 'الخشب'),
+    colors: LASER_WOODS,
+    sizes: [
+      { id: '13x18', label: t('For a 13 × 18 cm photo', 'لصورة 13 × 18 سم'), surcharge: 0 },
+      { id: '20x25', label: t('For a 20 × 25 cm photo', 'لصورة 20 × 25 سم'), surcharge: 150 },
+    ],
+    sides: [{
+      id: 'front',
+      name: t('Bottom of the frame', 'حافة البرواز'),
+      svg: sv(shadowRect(95, 40, 310, 500, 4) + '<rect x="95" y="40" width="310" height="500" rx="4" fill="{{C}}" stroke="{{L}}" stroke-width="3"/>' + GRAIN(95, 40, 310, 500) + '<rect x="135" y="80" width="230" height="300" fill="#e9ecef" stroke="{{L}}" stroke-width="2"/><path d="M150 360 L215 270 L260 325 L292 290 L350 360 Z" fill="#cfd4da"/><circle cx="305" cy="140" r="20" fill="#cfd4da"/>'),
+      printArea: { x: 110, y: 400, w: 280, h: 120 },
+      printWidthIn: 19 / 2.54,
+    }],
+    cardArt: '<path d="M250 428 c-14 -18 -40 -4 -27 18 l27 25 l27 -25 c14 -22 -14 -36 -27 -18z" fill="{{I}}"/><rect x="170" y="478" width="160" height="7" rx="3.5" fill="{{I}}"/><rect x="200" y="498" width="100" height="6" rx="3.0" fill="{{I}}"/>',
+    laser: { kind: 'engrave', cut: null },
+  },
+  {
+    id: 'engrcardholder',
+    category: 'laser',
+    name: t('Engraved Leather Card Holder', 'حافظة كروت جلد محفورة'),
+    description: t('Real leather card holder engraved with a name, initials or a logo. A neat gift for colleagues and clients.', 'حافظة كروت جلد طبيعي محفور عليها اسم أو حروف أو لوجو. هدية شيك للزملاء والعملاء.'),
+    basePrice: 250,
+    colorLabel: t('Leather', 'الجلد'),
+    colors: [
+      { id: 'black', name: t('Black', 'أسود'), hex: '#232124', ink: '#5b544f' },
+      { id: 'brown', name: t('Brown', 'بني'), hex: '#7b4a2b', ink: '#3a1f10' },
+      { id: 'tan', name: t('Tan', 'عسلي'), hex: '#b8834f', ink: '#5c3818' },
+    ],
+    sizes: [{ id: 'one', label: t('10 × 7 cm', '10 × 7 سم'), surcharge: 0 }],
+    sides: [{
+      id: 'front',
+      name: FRONT,
+      svg: sv(shadowRect(60, 165, 380, 266, 22) + '<rect x="60" y="165" width="380" height="266" rx="22" fill="{{C}}" stroke="{{L}}" stroke-width="3"/><rect x="74" y="179" width="352" height="238" rx="14" fill="none" stroke="{{S}}" stroke-width="2.5" stroke-dasharray="7 6"/><path d="M60 225 Q250 255 440 225" fill="none" stroke="{{L}}" stroke-width="2" opacity=".6"/>'),
+      printArea: { x: 130, y: 262, w: 240, h: 140 },
+      printWidthIn: 6 / 2.54,
+    }],
+    cardArt: '<circle cx="250" cy="318" r="34" fill="none" stroke="{{I}}" stroke-width="5"/><path d="M250 314 c-9 -12 -27 -3 -18 12 l18 16 l18 -16 c9 -15 -9 -24 -18 -12z" fill="{{I}}"/><rect x="190" y="370" width="120" height="6" rx="3.0" fill="{{I}}"/>',
+    laser: { kind: 'engrave', cut: null },
+  },
+  {
+    id: 'caketopper',
+    category: 'laser',
+    name: t('Cake Topper with a Name', 'توبر تورتة بالاسم'),
+    description: t('A name or a wish laser cut from mirror acrylic or wood, with a stick to push into the cake.', 'اسم أو جملة مقصوصة بالليزر من أكريليك مراية أو خشب، بعصاية تتغرس في التورتة.'),
+    basePrice: 180,
+    colorLabel: t('Material', 'الخامة'),
+    colors: [
+      { id: 'gold', name: t('Gold mirror acrylic', 'أكريليك مراية دهبي'), hex: '#d4af37', ink: '#d4af37' },
+      { id: 'silver', name: t('Silver mirror acrylic', 'أكريليك مراية فضي'), hex: '#bfc4ca', ink: '#aeb4bb' },
+      { id: 'rosegold', name: t('Rose gold mirror acrylic', 'أكريليك مراية روز جولد'), hex: '#d8a08c', ink: '#cf8f7a' },
+      { id: 'black', name: t('Black acrylic', 'أكريليك أسود'), hex: '#1f1f22', ink: '#1f1f22' },
+      { id: 'white', name: t('White acrylic', 'أكريليك أبيض'), hex: '#f7f7f5', ink: '#ffffff' },
+      WOOD('wood', 'Wood', 'خشب', '#d8b183', '#c99a66'),
+    ],
+    sizes: [
+      { id: '15', label: t('15 cm wide', 'عرض 15 سم'), surcharge: 0 },
+      { id: '20', label: t('20 cm wide', 'عرض 20 سم'), surcharge: 60 },
+    ],
+    sides: [{
+      id: 'front',
+      name: FRONT,
+      svg: sv('<ellipse cx="250" cy="560" rx="200" ry="22" fill="#000" opacity=".1"/><path d="M70 440 L70 545 Q250 580 430 545 L430 440 Z" fill="#f4d9e1" stroke="#d9a7b6" stroke-width="3"/><ellipse cx="250" cy="440" rx="180" ry="34" fill="#fbeaf0" stroke="#d9a7b6" stroke-width="3"/><path d="M70 470 q30 22 60 0 t60 0 t60 0 t60 0 t60 0 t60 0" fill="none" stroke="#e8b9c7" stroke-width="8" stroke-linecap="round"/>'),
+      printArea: { x: 70, y: 150, w: 360, h: 288 },
+      printWidthIn: 15 / 2.54,
+    }],
+    cardArt: '<rect x="214" y="300" width="9" height="150" rx="4" fill="{{I}}"/><rect x="277" y="300" width="9" height="150" rx="4" fill="{{I}}"/><path d="M250 215 c-40 -54 -122 -14 -81 54 l81 74 l81 -74 c40 -68 -40 -108 -81 -54z" fill="{{I}}"/><rect x="150" y="300" width="200" height="14" rx="7.0" fill="{{I}}"/>',
+    laser: { kind: 'cut', bridgeMm: 2.5, pieces: 'one' },
+  },
+  {
+    id: 'weddingsign',
+    category: 'laser',
+    name: t('Engraved Wedding Welcome Sign', 'لوحة ترحيب للفرح محفورة'),
+    description: t('An arch-shaped welcome sign cut and engraved in acrylic or wood, with an easel. For weddings, engagements and katb kitab.', 'لوحة ترحيب على شكل قوس مقصوصة ومحفورة في أكريليك أو خشب، ومعاها حامل. للفرح والخطوبة وكتب الكتاب.'),
+    basePrice: 900,
+    colorLabel: t('Material', 'الخامة'),
+    colors: [
+      { id: 'clear', name: t('Clear acrylic', 'أكريليك شفاف'), hex: '#b5c9cf', ink: '#f7fbfc' },
+      { id: 'black', name: t('Black acrylic', 'أكريليك أسود'), hex: '#232326', ink: '#e4e4e4' },
+      WOOD('wood', 'Wood', 'خشب', '#d8b183', '#4a2a12'),
+    ],
+    sizes: [
+      { id: '40x60', label: t('40 × 60 cm', '40 × 60 سم'), surcharge: 0 },
+      { id: '50x75', label: t('50 × 75 cm', '50 × 75 سم'), surcharge: 300 },
+    ],
+    sides: [{
+      id: 'front',
+      name: FRONT,
+      svg: sv('<path d="M200 410 L165 580 M300 410 L335 580 M250 410 L250 565" stroke="#b08a5c" stroke-width="10" stroke-linecap="round"/><path d="M130 410 L130 170 A120 120 0 0 1 370 170 L370 410 Z" fill="#000" opacity=".12" transform="translate(6 8)"/><path d="M130 410 L130 170 A120 120 0 0 1 370 170 L370 410 Z" fill="{{C}}" stroke="{{L}}" stroke-width="3"/>'),
+      printArea: { x: 130, y: 50, w: 240, h: 360, shape: 'arch' },
+      printWidthIn: 40 / 2.54,
+    }],
+    cardArt: '<g fill="none" stroke="{{I}}" stroke-width="6"><circle cx="233.5" cy="175" r="30"/><circle cx="266.5" cy="175" r="30"/></g><rect x="170" y="240" width="160" height="7" rx="3.5" fill="{{I}}"/><rect x="190" y="262" width="120" height="6" rx="3.0" fill="{{I}}"/><rect x="160" y="300" width="180" height="10" rx="5.0" fill="{{I}}"/><rect x="200" y="330" width="100" height="6" rx="3.0" fill="{{I}}"/>',
+    laser: { kind: 'engrave', cut: 'arch' },
+  },
+  {
+    id: 'doorsign',
+    category: 'laser',
+    name: t('Door Name Sign', 'يافطة اسم للباب'),
+    description: t('A family or room name engraved on wood or acrylic, cut with rounded corners and ready to hang.', 'اسم العيلة أو الأوضة محفور على خشب أو أكريليك، مقصوص بحواف مدورة وجاهز للتعليق.'),
+    basePrice: 350,
+    colorLabel: t('Material', 'الخامة'),
+    colors: [...LASER_WOODS, { id: 'black', name: t('Black acrylic', 'أكريليك أسود'), hex: '#232326', ink: '#e4e4e4' }],
+    sizes: [
+      { id: '30x15', label: t('30 × 15 cm', '30 × 15 سم'), surcharge: 0 },
+      { id: '40x20', label: t('40 × 20 cm', '40 × 20 سم'), surcharge: 150 },
+    ],
+    sides: [{
+      id: 'front',
+      name: FRONT,
+      svg: sv('<rect x="0" y="0" width="500" height="600" fill="#e7e2da"/><rect x="40" y="0" width="420" height="600" fill="#cdbfae"/><circle cx="420" cy="380" r="12" fill="#9c8f80"/>' + shadowRect(70, 200, 360, 180, 18) + '<rect x="70" y="200" width="360" height="180" rx="18" fill="{{C}}" stroke="{{L}}" stroke-width="3"/>' + GRAIN(70, 200, 360, 180)),
+      printArea: { x: 70, y: 200, w: 360, h: 180, rx: 18 },
+      printWidthIn: 30 / 2.54,
+    }],
+    cardArt: '<path d="M250 232 l34 28 v34 h-68 v-34z" fill="none" stroke="{{I}}" stroke-width="6" stroke-linejoin="round"/><rect x="150" y="310" width="200" height="10" rx="5.0" fill="{{I}}"/><rect x="190" y="334" width="120" height="6" rx="3.0" fill="{{I}}"/>',
+    laser: { kind: 'engrave', cut: 'rounded', radiusMm: 8 },
+  },
+  {
+    id: 'ramadandecor',
+    category: 'laser',
+    name: t('Ramadan Decoration with a Name', 'زينة رمضان بالاسم'),
+    description: t('A crescent, lantern or star with your family name, laser cut from wood or mirror acrylic, ready to hang.', 'هلال أو فانوس أو نجمة باسم العيلة، مقصوصة بالليزر من خشب أو أكريليك مراية، وجاهزة للتعليق.'),
+    basePrice: 220,
+    colorLabel: t('Material', 'الخامة'),
+    colors: [
+      { id: 'gold', name: t('Gold mirror acrylic', 'أكريليك مراية دهبي'), hex: '#d4af37', ink: '#d4af37' },
+      WOOD('wood', 'Wood', 'خشب', '#d8b183', '#c99a66'),
+      { id: 'white', name: t('White acrylic', 'أكريليك أبيض'), hex: '#f7f7f5', ink: '#ffffff' },
+    ],
+    sizes: [
+      { id: '25', label: t('25 cm', '25 سم'), surcharge: 0 },
+      { id: '35', label: t('35 cm', '35 سم'), surcharge: 120 },
+    ],
+    sides: [{
+      id: 'front',
+      name: FRONT,
+      svg: sv('<path d="M250 0 L250 110" stroke="#8d8d8d" stroke-width="2"/><circle cx="250" cy="112" r="5" fill="none" stroke="#8d8d8d" stroke-width="2"/>'),
+      printArea: { x: 90, y: 120, w: 320, h: 320 },
+      printWidthIn: 25 / 2.54,
+    }],
+    cardArt: '<path d="M268 150 A110 110 0 1 0 268 410 A135 135 0 0 1 268 150 Z" fill="{{I}}"/><polygon points="322,338 330,361 354,361 335,376 342,400 322,386 302,400 309,376 290,361 314,361" fill="{{I}}"/><rect x="318" y="372" width="8" height="34" fill="{{I}}"/><rect x="200" y="400" width="150" height="16" rx="8" fill="{{I}}"/>',
+    laser: { kind: 'cut', bridgeMm: 2.5, pieces: 'one' },
+  },
+  {
+    id: 'namepuzzle',
+    category: 'laser',
+    name: t('Kids’ Wooden Name Puzzle', 'بازل خشب باسم الطفل'),
+    description: t('Your child’s name cut as chunky wooden letters that lift out of a board. Fun for learning letters.', 'اسم طفلك مقصوص حروف خشب تخينة بتطلع من لوحة. بيلعب وبيتعلم الحروف.'),
+    basePrice: 300,
+    colorLabel: t('Letters', 'الحروف'),
+    colors: [
+      { id: 'natural', name: t('Natural wood', 'خشب طبيعي'), hex: '#dcb98c', ink: '#a8784a' },
+      { id: 'pink', name: t('Pink letters', 'حروف بينك'), hex: '#dcb98c', ink: '#e64980' },
+      { id: 'blue', name: t('Blue letters', 'حروف زرقا'), hex: '#dcb98c', ink: '#1c7ed6' },
+      { id: 'rainbow', name: t('Colourful letters', 'حروف ملونة'), hex: '#dcb98c', ink: '#f08c00' },
+    ],
+    sizes: [
+      { id: '30x10', label: t('30 × 10 cm (up to 6 letters)', '30 × 10 سم (لحد 6 حروف)'), surcharge: 0 },
+      { id: '45x15', label: t('45 × 15 cm (up to 10 letters)', '45 × 15 سم (لحد 10 حروف)'), surcharge: 150 },
+    ],
+    sides: [{
+      id: 'front',
+      name: FRONT,
+      svg: sv(shadowRect(45, 225, 410, 150, 12) + '<rect x="45" y="225" width="410" height="150" rx="12" fill="{{C}}" stroke="{{L}}" stroke-width="3"/>' + GRAIN(45, 225, 410, 150)),
+      printArea: { x: 55, y: 235, w: 390, h: 130 },
+      printWidthIn: 30 / 2.54,
+    }],
+    cardArt: '<g fill="{{I}}" stroke="#000" stroke-opacity=".18" stroke-width="2"><rect x="90" y="262" width="62" height="76" rx="14"/><circle cx="208" cy="300" r="38"/><path d="M262 338 L297 262 L332 338 Z" stroke-linejoin="round"/><rect x="352" y="262" width="58" height="76" rx="29"/></g>',
+    laser: { kind: 'cut', bridgeMm: 0, pieces: 'many', board: true },
+  },
+);
+const LASER_IDS = ['engrplaque', 'engrcoasters', 'engrtray', 'engrframe', 'engrcardholder', 'caketopper', 'weddingsign', 'doorsign', 'ramadandecor', 'namepuzzle'];
+
 /**
  * Print production details per product:
  *   process  how it is printed; decides which file the shop should use
@@ -1422,6 +1687,17 @@ PRODUCTS.push(
  *   model    shape used by the 3D preview, with real-world size in inches
  */
 const PRODUCTION = {
+  // Laser: thickness of the sheet or blank (inches); `laser` material names the look in 3D.
+  engrplaque: { process: 'engrave', safeIn: 0.15, bleedIn: 0, model: { type: 'block', depthIn: 0.2, radiusIn: 0.08, material: 'plastic', clear: true, base: 'wood' } },
+  engrcoasters: { process: 'engrave', safeIn: 0.12, bleedIn: 0, model: { type: 'pad', depthIn: 0.2, radiusIn: 0.25, material: 'laser' } },
+  engrtray: { process: 'engrave', safeIn: 0.3, bleedIn: 0, model: { type: 'tray', outerIn: [13.8, 9.84], rimIn: 1.4, wallIn: 0.4, handles: true, material: 'laser' } },
+  engrframe: { process: 'engrave', safeIn: 0.15, bleedIn: 0, model: { type: 'frame', outerIn: [8.66, 11.4], windowIn: [5.12, 7.09], windowTopIn: 0.9, depthIn: 0.6, material: 'laser' } },
+  engrcardholder: { process: 'engrave', safeIn: 0.1, bleedIn: 0, model: { type: 'cardholder', outerIn: [3.94, 2.76], depthIn: 0.18, material: 'laser' } },
+  caketopper: { process: 'lasercut', safeIn: 0, bleedIn: 0, model: { type: 'cutout', depthIn: 0.12, scene: 'cake', material: 'laser' } },
+  weddingsign: { process: 'engrave', safeIn: 0.6, bleedIn: 0, model: { type: 'block', shape: 'arch', depthIn: 0.2, radiusIn: 0.05, material: 'laser', easel: true } },
+  doorsign: { process: 'engrave', safeIn: 0.3, bleedIn: 0, model: { type: 'block', depthIn: 0.24, radiusIn: 0.31, material: 'laser' } },
+  ramadandecor: { process: 'lasercut', safeIn: 0, bleedIn: 0, model: { type: 'cutout', depthIn: 0.12, hang: true, material: 'laser' } },
+  namepuzzle: { process: 'lasercut', safeIn: 0.25, bleedIn: 0, model: { type: 'puzzle', depthIn: 0.35, material: 'laser' } },
   tshirt: { process: 'dtg', safeIn: 0.25, bleedIn: 0, model: { type: 'card', material: 'fabric' } },
   kidstee: { process: 'dtg', safeIn: 0.25, bleedIn: 0, model: { type: 'card', material: 'fabric' } },
   hoodie: { process: 'dtg', safeIn: 0.25, bleedIn: 0, model: { type: 'card', material: 'fabric' } },
@@ -1600,6 +1876,14 @@ const SIZE_PRINT_SCALE = {
   greetingcard: { A5: 14.8 / 10.5 },
   certificates: { A3: 42 / 29.7 },
   plaque: { '18x25': 18 / 13 },
+  engrplaque: { '18x25': 18 / 13 },
+  engrtray: { '45x32': 45 / 35 },
+  engrframe: { '20x25': 20 / 13 },
+  caketopper: { 20: 20 / 15 },
+  weddingsign: { '50x75': 50 / 40 },
+  doorsign: { '40x20': 40 / 30 },
+  ramadandecor: { 35: 35 / 25 },
+  namepuzzle: { '45x15': 45 / 30 },
   sign: { A1: 59.4 / 42 },
   stickersheet: { A4: 21 / 14.8 },
   flyers: { 'A5-100': 14.8 / 21, 'A5-500': 14.8 / 21, 'A5-1000': 14.8 / 21 },
@@ -1619,6 +1903,8 @@ for (const p of PRODUCTS) {
     colors: plain && p.colors.length > 1 && !(p.model && p.model.type === 'canvas'),
     sizes: plain && p.sizes.length > 1 && !p.sizes.some((sz) => sz.printScale),
   };
+  // Laser: the design is drawn in each material's own tone, so one design is one material.
+  if (p.laser) p.mix.colors = false;
 }
 
 /** Text compared loosely: case, spaces, dashes and Arabic letter forms don't matter. */

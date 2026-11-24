@@ -261,6 +261,108 @@
   };
   const area = (id) => sideDef(id).printArea;
   const color = () => st.product.colors.find((c) => c.id === st.colorId);
+  // ---------- Laser: the design in the material's one tone ----------
+  // A laser can't print colours: what it engraves (or cuts) shows as the
+  // material's own engraved tone (`ink` of the chosen material). Every element
+  // is drawn in that tone, photos as the laser would burn them; cut pieces get
+  // a thick outline round the letters (`bridgeMm`) so they join into one piece.
+  const laser = () => st.product.laser || null;
+  const inkOf = () => (color() && color().ink) || '#000000';
+  const lightEngrave = () => POD.luminance(inkOf()) > POD.luminance((color() && color().hex) || '#ffffff');
+  const solidPaint = (v) => v != null && v !== '' && v !== 'transparent' && v !== 'none' && !(typeof v === 'string' && /^rgba?\([^)]*,\s*0(\.0+)?\s*\)$/.test(v));
+  function engraveFilters(o) {
+    const keep = (o.filters || []).filter((f) => f && !['Engrave', 'Grayscale', 'Sepia'].includes(f.type));
+    return [...keep, new fabric.Image.filters.Engrave({ ink: inkOf(), light: lightEngrave() })];
+  }
+  function laserTone(o, { images = true } = {}) {
+    const L = laser();
+    if (!L || !o || o.name === '__cropper') return;
+    const ink = inkOf();
+    const paint = (x) => {
+      if (x.type === 'image') {
+        if (!images) return;
+        x.filters = engraveFilters(x);
+        x.applyFilters();
+        if (x.maskBorderColor) x.set('maskBorderColor', ink);
+        return;
+      }
+      if (x.type === 'group' && x._objects) {
+        x._objects.forEach(paint);
+        return;
+      }
+      if (solidPaint(x.fill) || (x.fill && typeof x.fill === 'object')) x.set('fill', ink);
+      if (solidPaint(x.stroke) && x.strokeWidth) x.set('stroke', ink);
+      if (x.shadow) x.set('shadow', null);
+      // A box behind the words would be engraved (or cut) as one solid block, hiding them.
+      if (x.backgroundColor) x.set('backgroundColor', '');
+      if (x.textFx) x.set({ textFx: null, fxBase: null });
+      if (x.styles) {
+        for (const line of Object.values(x.styles)) for (const ch of Object.values(line || {})) {
+          delete ch.fill;
+          delete ch.stroke;
+          delete ch.textBackgroundColor;
+        }
+      }
+      if (L.kind === 'cut' && isText(x)) {
+        const sw = ((L.bridgeMm || 0) / 25.4) * rects().u;
+        x.set({ stroke: sw ? ink : null, strokeWidth: sw, strokeUniform: true, paintFirst: 'stroke', strokeLineJoin: 'round' });
+      }
+      x.dirty = true;
+    };
+    paint(o);
+    o.dirty = true;
+  }
+  /** After the material changes: everything takes the new tone. */
+  function retoneAll() {
+    if (!laser()) return;
+    canvas.getObjects().forEach(laserTone);
+    canvas.requestRenderAll();
+    commit();
+  }
+  /** Cut products: how many separate pieces the cut would make (counted on a small render). */
+  let cutTimer = null;
+  function measureCut() {
+    const L = laser();
+    if (!L || L.kind !== 'cut') return;
+    clearTimeout(cutTimer);
+    cutTimer = setTimeout(() => {
+      try {
+        const r = rects().trim;
+        const k = Math.min(1.5, 260 / r.w);
+        const cv = withArtworkOnly(() => canvas.toCanvasElement(k, { left: r.x, top: r.y, width: r.w, height: r.h }), r);
+        const w = cv.width;
+        const h = cv.height;
+        const a = cv.getContext('2d').getImageData(0, 0, w, h).data;
+        const seen = new Uint8Array(w * h);
+        let pieces = 0;
+        const stack = [];
+        for (let i = 0; i < w * h; i++) {
+          if (seen[i] || a[i * 4 + 3] < 128) continue;
+          let size = 0;
+          stack.push(i);
+          seen[i] = 1;
+          while (stack.length) {
+            const j = stack.pop();
+            size++;
+            const x = j % w;
+            const y = (j - x) / w;
+            for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+              const nx = x + dx;
+              const ny = y + dy;
+              if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+              const n = ny * w + nx;
+              if (!seen[n] && a[n * 4 + 3] >= 128) { seen[n] = 1; stack.push(n); }
+            }
+          }
+          if (size > 3) pieces++;
+        }
+        if (pieces !== st.cutPieces) {
+          st.cutPieces = pieces;
+          scheduleCheck();
+        }
+      } catch (e) { /* only a warning */ }
+    }, 350);
+  }
   const surfaceHex = () => st.product.surface || color().hex;
   const inkFor = (hex) => (POD.luminance(hex) < 0.45 ? '#ffffff' : '#16181d');
 
@@ -312,6 +414,12 @@
   $('zoom-fit').addEventListener('click', () => setZoom(1));
 
   function clipRect(a) {
+    // An arch-topped board (welcome signs): straight sides, a half circle on top.
+    const arch = sideDef().printArea.shape === 'arch';
+    if (arch) {
+      const r = a.w / 2;
+      return new fabric.Path(`M ${a.x} ${a.y + a.h} L ${a.x} ${a.y + r} A ${r} ${r} 0 0 1 ${a.x + a.w} ${a.y + r} L ${a.x + a.w} ${a.y + a.h} Z`, { strokeWidth: 0, absolutePositioned: true });
+    }
     return new fabric.Rect({
       left: a.x, top: a.y, width: a.w, height: a.h, rx: a.rx || 0, ry: a.rx || 0,
       originX: 'left', originY: 'top', strokeWidth: 0, absolutePositioned: true,
@@ -813,6 +921,7 @@
 
   canvas.on('object:added', (e) => {
     e.target.clipPath = clipRect(currentClip());
+    laserTone(e.target);
     if (!st.silent) commit();
   });
   canvas.on('object:removed', () => !st.silent && commit());
@@ -887,6 +996,11 @@
   function commit() {
     clearTimeout(commitTimer);
     if (st.silent || crop || st.mergePreview) return;
+    // Laser: nothing gets a colour of its own (photos keep their engraving filter from when they were added).
+    if (laser()) {
+      canvas.getObjects().forEach((o) => laserTone(o, { images: false }));
+      canvas.requestRenderAll();
+    }
     const snap = snapshot();
     const h = hist();
     if (h.stack[h.i] !== snap) {
@@ -897,6 +1011,7 @@
       st.dirty = true;
     }
     st.designs[st.side] = JSON.parse(snap).o;
+    measureCut();
     refreshChrome();
     schedulePatternPreview();
   }
@@ -2030,18 +2145,18 @@
         <div class="field btn-group" dir="ltr">
           ${['left', 'center', 'right'].map((al) => `<button class="btn btn-sm ${o.textAlign === al ? 'active' : ''}" data-align="${al}" title="${esc(t('props.align' + al[0].toUpperCase() + al.slice(1)))}">${{ left: '⇤', center: '↔', right: '⇥' }[al]}</button>`).join('')}
         </div>`);
-      html += textFxGroup(o);
-      html += group('colours', t('grp.colours'), fillControls(o) + wordControls(o) + outlineControls(o, 12));
+      if (!laser()) html += textFxGroup(o);
+      html += group('colours', t(laser() ? 'laser.toneTitle' : 'grp.colours'), laser() ? laserNote() : fillControls(o) + wordControls(o) + outlineControls(o, 12));
       html += group('effects', t('grp.effects'), `
         <div class="field">
           <label for="p-curve">${esc(t('props.curve'))}</label>
           <div class="row"><input type="range" id="p-curve" min="-100" max="100" step="5" value="${numv(o.curve)}"><button class="btn btn-sm shrink" data-act="straighten">${esc(t('props.straighten'))}</button></div>
         </div>
-        <div class="field">
+        ${laser() ? '' : `        <div class="field">
           <label class="check"><input type="checkbox" id="p-textbg" ${o.backgroundColor ? 'checked' : ''}> ${esc(t('props.textBg'))}</label>
           ${o.backgroundColor ? `<div class="color-row" style="margin-top:6px"><input type="color" id="p-bgcolor" value="${toHex(o.backgroundColor)}">${palette('bg')}</div>
           <div class="btn-group bg-shapes" style="margin-top:6px">${['box', 'pill', 'banner', 'ticket'].map((k) => `<button type="button" class="btn btn-sm ${(o.bgShape || 'box') === k ? 'active' : ''}" data-bgshape="${k}" title="${esc(t('bgshape.' + k))}"><span class="bgs bgs-${k}"></span>${esc(t('bgshape.' + k))}</button>`).join('')}</div>` : ''}
-        </div>
+        </div>`}
         <div class="field grid-2">
           <div><label for="p-spacing">${esc(t('props.spacing'))}</label>${arabic ? `<div class="muted small">${esc(t('props.spacingArabic'))}</div>` : `<input type="range" id="p-spacing" min="-100" max="800" step="10" value="${numv(o.charSpacing)}">`}</div>
           <div><label for="p-lh">${esc(t('props.lineHeight'))}</label><input type="range" id="p-lh" min="0.7" max="2.5" step="0.05" value="${numv(o.lineHeight, 1.16)}"></div>
@@ -2058,7 +2173,7 @@
           <label>${esc(t('props.photoShape'))}</label>
           <div class="mask-grid">${MASKS.map((m) => `<button class="mask-btn ${(o.mask || 'none') === m ? 'active' : ''}" data-mask="${m}" title="${esc(t('mask.' + m))}"><span class="mask-icon mask-${m}"></span><small>${esc(t('mask.' + m))}</small></button>`).join('')}</div>
         </div>
-        ${o.mask ? `<div class="field"><label>${esc(t('props.border'))}</label><div class="color-row"><input type="color" id="p-bordercolor" value="${toHex(o.maskBorderColor)}">${palette('border')}</div><input type="range" id="p-border" min="0" max="12" step="0.5" value="${numv(o.maskBorder)}" aria-label="${esc(t('props.border'))}"></div>` : ''}
+        ${o.mask ? `<div class="field"><label>${esc(t('props.border'))}</label>${laser() ? '' : `<div class="color-row"><input type="color" id="p-bordercolor" value="${toHex(o.maskBorderColor)}">${palette('border')}</div>`}<input type="range" id="p-border" min="0" max="12" step="0.5" value="${numv(o.maskBorder)}" aria-label="${esc(t('props.border'))}"></div>` : ''}
         ${boostBox(o)}
         <div class="field">
           <button class="btn btn-sm btn-block" data-act="removebg">✦ ${esc(t('props.removeBg'))}</button>
@@ -2066,13 +2181,13 @@
         </div>`);
       html += group('adjust', t('grp.adjust'), `
         ${['brightness', 'contrast', 'saturation'].map((k) => `<div class="field"><label for="p-${k}">${esc(t('props.' + k))}</label><input type="range" id="p-${k}" data-adjust="${k}" min="-100" max="100" step="5" value="${Math.round(fs[k] * 100)}"></div>`).join('')}
-        <div class="field toggles">
+        <div class="field toggles" ${laser() ? 'hidden' : ''}>
           <label class="check"><input type="checkbox" data-filter="gray" ${fs.gray ? 'checked' : ''}> ${esc(t('props.grayscale'))}</label>
           <label class="check"><input type="checkbox" data-filter="sepia" ${fs.sepia ? 'checked' : ''}> ${esc(t('props.sepia'))}</label>
         </div>
         <button class="btn btn-sm" data-act="reset-adjust">${esc(t('props.reset'))}</button>`);
     } else if (!sticker && o.type !== 'group') {
-      html += group('colours', t('grp.colours'), fillControls(o) + outlineControls(o, 30) +
+      html += group('colours', t(laser() ? 'laser.toneTitle' : 'grp.colours'), (laser() ? laserNote() : fillControls(o) + outlineControls(o, 30)) +
         (o.type === 'rect' ? `<div class="field"><label for="p-rx">${esc(t('props.radius'))}</label><input type="range" id="p-rx" min="0" max="${Math.round(Math.min(o.width, o.height) / 2)}" value="${numv(o.rx)}"></div>` : ''));
     }
     if (o.type === 'group' && !isSticker(o)) html += `<button class="btn btn-sm btn-block" data-act="ungroup" style="margin-bottom:10px">${esc(t('group.ungroup'))}</button>`;
@@ -2083,6 +2198,12 @@
     syncSheetTitle();
   }
 
+  /** Laser products: one tone, so instead of colour pickers a word on how it will look. */
+  function laserNote() {
+    const c = color();
+    return `<div class="field laser-note"><span class="laser-swatch" style="background:${esc(c.hex)}"><i style="background:${esc(inkOf())}"></i></span>
+      <p class="small" style="margin:0">${esc(t(laser().kind === 'cut' ? 'laser.noteCut' : 'laser.noteEngrave', { material: tr(c.name) }))}</p></div>`;
+  }
   function toHex(c) {
     if (typeof c !== 'string') return '#000000';
     if (/^#[0-9a-f]{6}$/i.test(c)) return c;
@@ -2241,7 +2362,7 @@
     if (s.saturation) list.push(new F.Saturation({ saturation: s.saturation }));
     if (s.gray) list.push(new F.Grayscale());
     if (s.sepia) list.push(new F.Sepia());
-    o.filters = list;
+    o.filters = laser() ? engraveFilters({ filters: list }) : list;
     clearTimeout(filterTimer);
     const run = () => {
       o.applyFilters();
@@ -2833,7 +2954,8 @@
     const newInk = inkFor(surfaceHex());
     renderOptions();
     await applyMockup();
-    if (oldInk !== newInk) swapInk(oldInk, newInk);
+    if (oldInk !== newInk && !laser()) swapInk(oldInk, newInk);
+    retoneAll();
     schedulePatternPreview(0);
   }));
   /** Text and shapes in the default ink colour follow the product: dark on light, white on dark. */
@@ -3071,6 +3193,8 @@
       else if (i.key === 'check.hidden') out.push({ id: 'hiddenText', level: 'fail', side: sideId, params: { name: short(i.params.name) } });
       else if (i.key === 'check.inkOnColour') out.push({ id: 'inkOnColour', level: 'warn', side: sideId, params: { name: short(i.params.name), colour: short(i.params.colour) } });
       else if (i.key === 'check.fieldText') out.push({ id: 'fieldText', level: 'fail', side: sideId, params: { name: short(i.params.name) } });
+      else if (i.key === 'check.cutPieces') out.push({ id: 'cutPieces', level: 'warn', side: sideId, params: { n: Number(st.cutPieces) || 0 } });
+      else if (i.key === 'check.cutPhoto') out.push({ id: 'cutPhoto', level: 'warn', side: sideId, params: { name: short(i.params.name) } });
     }
     const missing = new Set();
     for (const o of canvas.getObjects()) {
@@ -3183,7 +3307,7 @@
       for (const o of objs) if (isText(o) && /\{[^{}\n]{1,40}\}/.test(o.text || '')) issues.push({ level: 'error', key: 'check.fieldText', obj: o, params: { name: layerName(o) } });
     }
     // Several garment colours in one order (name list colours or the quantities): words that disappear on one of them.
-    if (!st.product.surface && !emb()) {
+    if (!st.product.surface && !emb() && !laser()) {
       const ids = new Set(Object.entries(qtyGrid()).filter(([, row]) => Object.values(row).some((n) => n > 0)).map(([c]) => c));
       if (st.mergeList) {
         const vc = mergeVariantCols();
@@ -3222,6 +3346,20 @@
         if (isText(o) && o.fontSize * Math.abs(o.scaleY || 1) * 0.7 < 5 * ppmm) issues.push({ level: 'warn', key: 'check.embSmallText', obj: o, params: { name } });
       }
       if (colours.size > emb().maxColors) issues.push({ level: 'warn', key: 'check.embColors', obj: null, params: { n: POD.num(colours.size), max: POD.num(emb().maxColors) } });
+    }
+    // Laser: photos can't be cut round, letters too small to engrave or cut cleanly, cut pieces that fall apart.
+    if (laser()) {
+      const L = laser();
+      const ppmm = R.u / 25.4;
+      const minMm = L.kind === 'cut' ? 5 : 1.5; // letter height
+      for (const o of canvas.getObjects()) {
+        if (o.name === '__cropper' || o.visible === false) continue;
+        const name = layerName(o);
+        if (L.kind === 'cut' && o.type === 'image') issues.push({ level: 'warn', key: 'check.cutPhoto', obj: o, params: { name } });
+        if (isText(o) && o.fontSize * Math.abs(o.scaleY || 1) * 0.7 < minMm * ppmm) issues.push({ level: 'warn', key: L.kind === 'cut' ? 'check.cutSmallText' : 'check.laserSmallText', obj: o, params: { name, mm: POD.num(minMm) } });
+      }
+      measureCut();
+      if (L.kind === 'cut' && L.pieces === 'one' && st.cutPieces > 1) issues.push({ level: 'warn', key: 'check.cutPieces', obj: null, params: { n: POD.num(st.cutPieces) } });
     }
     issues.sort((x, y) => (x.level === y.level ? 0 : x.level === 'error' ? -1 : 1));
     return issues.map((i) => ({ ...i, side: sd }));

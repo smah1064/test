@@ -1062,3 +1062,8 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 @media (orientation: landscape) and (max-height: 520px) and (min-width: 821px) {
   body.editor-page .stage { height: calc(100dvh - 96px); flex: none; }
 }
+
+/* Laser products: the material with the engraved tone, instead of colour pickers. */
+.laser-note { display: flex; gap: 10px; align-items: center; }
+.laser-swatch { flex: none; width: 34px; height: 34px; border-radius: 8px; border: 1px solid rgba(0, 0, 0, .15); display: grid; place-items: center; }
+.laser-swatch i { width: 16px; height: 6px; border-radius: 3px; }

@@ -46,6 +46,8 @@ const oauth = require('./oauth');
 const importer = require('./importer');
 const assets = require('./assets');
 const embroidery = require('./embroidery');
+let laserModule = null;
+const laserFiles = new Proxy({}, { get: (_, key) => (laserModule ||= require('./laser'))[key] });
 
 // Prices the owner changed in the admin are laid over the built-in ones.
 accounting.initPricing(PRODUCTS, EXTRA_SIDE_PRICE);
@@ -511,7 +513,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (product.kind === 'photoset') return res.redirect(302, '/mockups/photoprints-card.webp');
       let img = product.pattern ? await thumbs.patternImage(product, color.hex) : await thumbs.cardImage(product.id, product.sides[0].id, color.hex);
       // No product photo yet: the drawn product in its colour, trimmed, on white.
-      if (!img && product.sides[0].svg) img = await drawnThumb(product.sides[0].svg, color.hex);
+      // Laser products: with a sample engraving (or cut piece) in the material's tone.
+      const drawn = product.cardArt ? product.sides[0].svg.replace('</svg>', `${product.cardArt.replace(/\{\{I\}\}/g, color.ink || '#000000')}</svg>`) : product.sides[0].svg;
+      if (!img && drawn) img = await drawnThumb(drawn, color.hex);
       if (!img) throw new HttpError(404, 'notFound');
       res.set('Cache-Control', 'public, max-age=86400, no-transform');
       res.type('image/webp').send(img);
@@ -856,8 +860,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       // Files made from the old version are out of date.
       for (const name of fs.readdirSync(store.designDir(d.id))) {
         if (name.startsWith(`${sd.id}-print`) && name !== `${sd.id}-print.png` && !/\.v\d+\.png$/.test(name)) fs.rmSync(store.designFile(d.id, name), { force: true });
-        // DTF film and DTG underbase are made from the print file too.
-        if (name.startsWith(`${sd.id}-dtf-`) || name.startsWith(`${sd.id}-dtg-`)) fs.rmSync(store.designFile(d.id, name), { force: true });
+        // DTF film, DTG underbase and laser files are made from the print file too.
+        if (name.startsWith(`${sd.id}-dtf-`) || name.startsWith(`${sd.id}-dtg-`) || [`${sd.id}-laser.svg`, `${sd.id}-engrave.png`, `${sd.id}-cut.svg`].includes(name)) fs.rmSync(store.designFile(d.id, name), { force: true });
         if (/^preview-v\d+\.pdf$/.test(name)) fs.rmSync(store.designFile(d.id, name), { force: true });
         // …and the embroidery stitch file and the name-list print files.
         if (name.startsWith(`${sd.id}-stitches.`) || /^merge-(print(-marks)?\.pdf|copies\.zip|names\.zip)$/.test(name)) fs.rmSync(store.designFile(d.id, name), { force: true });
@@ -3337,7 +3341,16 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     'dtf-film': { file: (sd) => `${sd}-dtf-film.png`, ext: 'png', type: 'image/png', make: (buf, side) => printfiles.dtfFilmPng(buf, side.dpi) },
     'dtf-pdf': { file: (sd) => `${sd}-dtf-film.pdf`, ext: 'pdf', type: 'application/pdf', make: async (buf, side) => printfiles.printPdf(await printfiles.dtfFilmPng(buf, side.dpi), side, { title: 'DTF film' }) },
     'dtg-white': { file: (sd) => `${sd}-dtg-white.png`, ext: 'png', type: 'image/png', make: (buf, side) => printfiles.dtgUnderbase(buf, side.dpi, Math.max(1, Math.round(side.dpi / 150))) },
+    // CO2 laser: one LightBurn file (engraving image + red cut lines), or the two parts on their own.
+    'laser-svg': { file: (sd) => `${sd}-laser.svg`, ext: 'svg', type: 'image/svg+xml', laser: true, make: (buf, side, design) => laserFiles.laserSvg(buf, laserSpec(side, design)) },
+    'engrave-png': { file: (sd) => `${sd}-engrave.png`, ext: 'png', type: 'image/png', laser: true, make: (buf, side, design) => laserFiles.engravePng(buf, laserSpec(side, design)) },
+    'cut-svg': { file: (sd) => `${sd}-cut.svg`, ext: 'svg', type: 'image/svg+xml', laser: true, make: (buf, side, design) => laserFiles.cutSvg(buf, laserSpec(side, design)) },
   };
+  /** A laser side's physical size and the product's laser settings. */
+  function laserSpec(side, design) {
+    const product = getProduct(design.productId);
+    return { widthMm: Math.round(side.widthIn * 25.4 * 100) / 100, heightMm: Math.round(side.heightIn * 25.4 * 100) / 100, laser: (product && product.laser) || { kind: 'engrave' }, dpi: 254 };
+  }
   const SUFFIX = { 'png-mirror': '-mirrored', 'pdf-marks': '-cropmarks', tiff: '-cmyk', 'dtf-film': '-dtf-film', 'dtf-pdf': '-dtf-film', 'dtg-white': '-dtg-white-underbase', 'sheet-pdf': '-film-mirrored', 'sheet-pdf-plain': '', proof: '-proof' };
 
   /** Pieces of a customer's gang sheet, laid out exactly as they saw it. */
@@ -3456,11 +3469,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const fmt = Object.hasOwn(FORMATS, format || 'png') ? FORMATS[format || 'png'] : null;
     if (!side || !fmt) throw new HttpError(404, 'notFound');
     if (format === 'svg' && design.replaced && design.replaced[sideId]) throw new HttpError(404, 'notFound');
+    if (fmt.laser && !(getProduct(design.productId) || {}).laser) throw new HttpError(404, 'notFound');
     const target = store.designFile(designId, fmt.file(sideId));
     if (!fs.existsSync(target)) {
       const png = fs.readFileSync(store.designFile(designId, `${sideId}-print.png`));
       let out;
-      if (fmt.make) out = await fmt.make(png, side);
+      if (fmt.make) out = await fmt.make(png, side, design);
       else if (fmt.ext === 'pdf') {
         const product = getProduct(design.productId);
         const label = `${order ? order.number + ' · ' : ''}${pickEn(design.productName)} · ${pickEn(design.size.label)} · ${pickEn(design.color.name)} · ${pickEn(side.name)} · trim ${side.widthIn} x ${side.heightIn} in${side.bleedIn ? ` + ${side.bleedIn} in bleed` : ''}${side.offsetCm ? ` · PLACEMENT moved ${placementEn(side.offsetCm)} from standard` : ''} · ${side.dpi} DPI · ${product ? product.process.toUpperCase() : ''}`;
@@ -3652,6 +3666,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   const FILE_LABELS = {
     pdf: t('Print PDF', 'ملف الطباعة PDF'), 'pdf-marks': t('Print PDF with crop marks', 'ملف الطباعة PDF بعلامات القص'), png: t('Print PNG (transparent)', 'ملف الطباعة PNG (خلفية شفافة)'), 'png-mirror': t('Print PNG (mirrored)', 'ملف الطباعة PNG (معكوس)'),
     tiff: t('Print TIFF (CMYK)', 'ملف الطباعة TIFF (CMYK)'), svg: t('Vector SVG', 'ملف فيكتور SVG'), 'dtf-film': t('DTF film PNG', 'فيلم DTF بصيغة PNG'), 'dtf-pdf': t('DTF film PDF', 'فيلم DTF بصيغة PDF'), 'dtg-white': t('DTG white underbase', 'طبقة الأبيض لطباعة DTG'),
+    'laser-svg': t('Laser file for LightBurn (SVG)', 'ملف الليزر لـ LightBurn (SVG)'), 'engrave-png': t('Engraving bitmap (PNG)', 'صورة الحفر (PNG)'), 'cut-svg': t('Cut lines (SVG)', 'خطوط القص (SVG)'),
     'preview-pdf': t('Preview PDF (customer design)', 'معاينة PDF (تصميم العميل)'), repeat: t('Repeat preview (whole fabric piece)', 'معاينة التكرار (قطعة القماش كاملة)'), dst: t('Embroidery file (DST)', 'ملف التطريز (DST)'), stitches: t('Stitch preview', 'معاينة الغرز'), 'book-pdf': t('Book print PDF', 'ملف طباعة الكتاب PDF'), proof: t('Preview image', 'صورة المعاينة'), 'sheet-pdf': t('Gang sheet PDF (mirrored)', 'شيت DTF بصيغة PDF (معكوس)'), 'sheet-pdf-plain': t('Gang sheet PDF', 'شيت DTF بصيغة PDF'),
     'photos-zip': t('All photos (ZIP, a folder per size)', 'كل الصور (ZIP، فولدر لكل مقاس)'),
     'merge-pdf': t('All names (PDF, one page per copy)', 'كل الأسماء (PDF، صفحة لكل نسخة)'), 'merge-pdf-marks': t('All names (PDF with crop marks)', 'كل الأسماء (PDF بعلامات القص)'), 'merge-zip': t('One PDF per name (ZIP)', 'ملف PDF لكل اسم (ZIP)'), 'merge-csv': t('Names list (CSV)', 'قائمة الأسماء (CSV)'), 'merge-names-zip': t('Names only (ZIP of PNGs)', 'الأسماء بس (ZIP صور PNG)'),
