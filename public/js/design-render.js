@@ -142,6 +142,76 @@
     })();
     return withMode(st, { pictures: true, clip: st.R.trim }, (c) => c.toCanvasElement(mult, region));
   }
+  /**
+   * A print all the way round a mug, on the photo of the mug seen from opposite the handle
+   * (photo-mockups.js "…:wrap"): each column of the visible face shows the part of the
+   * unrolled print that faces the camera there (as the preview window does). Null without a photo.
+   */
+  async function wrapPicture(st) {
+    const P = window.POD_PHOTOS;
+    const cfg = P && P[`${st.product.id}:${st.side.id}:wrap`];
+    if (!cfg || !cfg.cyl) return null;
+    let photo;
+    try {
+      photo = await P.render(cfg, st.color.hex, { width: 1000, cutout: true });
+    } catch (e) {
+      return null;
+    }
+    const k = photo.scale || photo.width / 1000;
+    const out = document.createElement('canvas');
+    out.width = photo.width;
+    out.height = photo.height;
+    const ctx = out.getContext('2d');
+    ctx.drawImage(photo, 0, 0);
+    const a = st.R.trim;
+    const ds = 3;
+    const layer = designLayer(st, ds);
+    const { cx, R } = cfg.cyl;
+    const rw = cfg.rect.w;
+    const rx = cfg.rect.cx - rw / 2;
+    const rh = (rw * a.h) / a.w;
+    for (let px = Math.ceil((cx - R) * k); px < (cx + R) * k; px++) {
+      const t = (px / k - cx) / R;
+      if (Math.abs(t) >= 0.999) continue;
+      const arc = cx + Math.asin(t) * R; // where this column sits on the unrolled print (photo units)
+      const bx = a.x + ((arc - rx) / rw) * a.w;
+      if (bx < a.x || bx >= a.x + a.w) continue;
+      const step = (a.w / rw) / (k * Math.sqrt(1 - t * t)); // print units per screen pixel here
+      ctx.drawImage(layer, bx * ds, a.y * ds, Math.max(1, step * ds), a.h * ds, px, cfg.rect.top * k, 1, rh * k);
+    }
+    return out;
+  }
+  /**
+   * The whole product with the design, as a square around the product itself (found from what
+   * is drawn: everything round it is see-through), with a small margin: small products fill the
+   * card, big ones (bags, posters, notebooks) show whole instead of just the printed part.
+   */
+  async function productPicture(st, mult = 1.2) {
+    const full = (st.side.wrap && (await wrapPicture(st))) || withMode(st, { pictures: true, clip: st.R.trim }, (c) => c.toCanvasElement(mult));
+    const w = full.width;
+    const h = full.height;
+    const d = full.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, w, h).data;
+    let x0 = w;
+    let y0 = h;
+    let x1 = -1;
+    let y1 = -1;
+    for (let y = 0; y < h; y += 2) {
+      for (let x = 0; x < w; x += 2) {
+        if (d[(y * w + x) * 4 + 3] < 40) continue;
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+        if (y < y0) y0 = y;
+        if (y > y1) y1 = y;
+      }
+    }
+    if (x1 < 0) return full;
+    const size = Math.ceil(Math.max(x1 - x0, y1 - y0) * 1.08);
+    const out = document.createElement('canvas');
+    out.width = size;
+    out.height = size;
+    out.getContext('2d').drawImage(full, Math.round(size / 2 - (x0 + x1) / 2), Math.round(size / 2 - (y0 + y1) / 2));
+    return out;
+  }
   /** A see-through layer for a side with nothing printed (the live previews need every side). */
   function emptyEntry(product, side, color, scale = 3) {
     const cv = document.createElement('canvas');
@@ -210,5 +280,5 @@
     return done;
   }
 
-  window.POD_RENDER = { W, H, rects, remap, placeDesign, stage, printBlob, previewBlob, picture, emptyEntry, svgText, designLayer, serialize, addToCart, inkFor };
+  window.POD_RENDER = { W, H, rects, remap, placeDesign, stage, printBlob, previewBlob, picture, productPicture, emptyEntry, svgText, designLayer, serialize, addToCart, inkFor };
 })();

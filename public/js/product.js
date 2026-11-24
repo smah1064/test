@@ -41,9 +41,6 @@
     hasDraft = false;
   }
 
-  // Close-up around the print area for small flat products, wider for garments.
-  const wide = product.category === 'apparel' || ['tote', 'apron'].includes(product.id);
-  const zoom = wide ? 1.75 : 1.25;
   const pictures = new Map(); // design id + colour -> object URL
   function pictureFor(d) {
     const key = `${d.id}:${color.id}`;
@@ -51,7 +48,7 @@
       const c = color;
       pictures.set(key, (async () => {
         const st = await POD_RENDER.stage(d, product, product.sides[0], c);
-        const cv = POD_RENDER.picture(st, 1.2, zoom);
+        const cv = await POD_RENDER.productPicture(st, 1.2); // the whole product, framed close round it
         const blob = await new Promise((r) => cv.toBlob(r, 'image/webp', 0.88));
         return URL.createObjectURL(blob);
       })().catch(() => null));

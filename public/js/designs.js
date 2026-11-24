@@ -61,7 +61,6 @@
   }
 
   // ---------- Pictures ----------
-  const ZOOM_CLOSE = ['mug', 'bottle', 'phonecase', 'notebook', 'poster', 'mousepad', 'cushion', 'magicmug', 'couplemugs', 'tumbler', 'coasters', 'tablecloth', 'prayermat', 'eidenvelopes', 'greetingcard', 'plaque', 'sign', 'deskmat', 'keychain', 'stickersheet', 'namelabels', 'lunchbag', 'pencilcase', 'bizcards', 'flyers', 'letterhead', 'dlenvelopes', 'logostickers', 'rollup', 'paperbags', 'invoicebook', 'idcards'];
   const shownOn = (d) => productById(state.product || d.product) || products[0];
   const pictures = new Map(); // design id + product id -> promise of an image URL
   const ready = new Map(); // the same, once drawn
@@ -74,8 +73,8 @@
         const full = d.kind === 'objects' ? await POD.api('/api/library/' + encodeURIComponent(d.id)) : d;
         const color = product.colors.find((c) => c.id === d.color) || product.colors[0];
         const st = await POD_RENDER.stage(full, product, product.sides[0], color);
-        // Square picture around the print area, so the words read clearly on a small card.
-        const cv = POD_RENDER.picture(st, 1.2, ZOOM_CLOSE.includes(product.id) ? 1.25 : 1.75);
+        // The whole product with the design, framed close round the product.
+        const cv = await POD_RENDER.productPicture(st, 1.2);
         const blob = await new Promise((r) => cv.toBlob(r, 'image/webp', 0.88));
         const url = URL.createObjectURL(blob);
         ready.set(key, url);
