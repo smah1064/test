@@ -173,7 +173,7 @@
     if (draft.pattern) st.pattern = draft.pattern;
     if (draft.method === 'embroidery') st.method = 'embroidery';
     if (draft.options && typeof draft.options === 'object') st.options = { ...draft.options };
-    if (draft.mergeList && draft.mergeList.columns && draft.mergeList.rows) st.mergeList = draft.mergeList;
+    if (st.product.merge && draft.mergeList && draft.mergeList.columns && draft.mergeList.rows) st.mergeList = draft.mergeList; // (clothing no longer takes name lists)
     if (draft.qty && typeof draft.qty === 'object') st.qty = draft.qty;
     if (draft.sizePicked) st.sizePicked = true;
     restoredDraft = true;

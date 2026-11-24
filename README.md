@@ -182,7 +182,7 @@ The customer makes the artwork once, then says how many pieces they want; the pr
 
 1. **Several identical items:** one colour and size, a quantity (e.g. 12 mugs).
 2. **The same artwork on different sizes or colours:** a small grid in the editor, colours down the side and sizes across (Black S×2, M×5, L×3, White M×2…). It's one design and one print file; each line is priced at its size (2XL costs more). Offered only where every size and colour uses the same print file (`product.mix`): shirts, hoodies, bags, cards… but not posters, mugs or certificates whose sizes are different print sizes (one size, any quantity), not canvas prints (the "colour" is the printed edge) and not fabric.
-3. **Related items with different names or numbers:** a name list (above), now also for T-shirts, kids tees, hoodies, sweatshirts, polos, oversized tees, zip hoodies and football jerseys. A **Size** (and **Colour**) column gives each row its own size: "Ahmed, 10, L". Sizes are matched loosely (xl, XL, ٨-١٠, 8–10 yrs); unknown ones are flagged with their row before ordering.
+3. **Related items with different names or numbers:** a name list (above). Name lists are on invitations, certificates, greeting cards, ID cards, business cards, name labels and sticker sheets only (the owner's choice: not on clothing).
 
 The design keeps `quantities: [{ color, size, qty, unitPrice }]`; orders, the cart, the order page, the account, the invoice and the admin show the breakdown and the total pieces; the accounts count each line's blank cost. For garment name lists the admin also gets **names only (ZIP)**: one transparent PNG per piece (`0001-Ahmed-10-L.png`) with where it goes, for printing names and numbers as separate transfers, and the full print PDF keeps garments transparent.
 

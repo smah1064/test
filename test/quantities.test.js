@@ -103,68 +103,15 @@ test('sizes and colours only mix where the print file is the same', async () => 
   assert.strictEqual(r.status, 201, await r.clone().text());
 });
 
-test('team kit: names and numbers on the back, each row in its own size', async () => {
-  const sides = { front: SIDE, back: { editor: { objects: [{ type: 'i-text', text: '{Name}' }, { type: 'i-text', text: '{Number}' }] } } };
-  const rows = [['Ahmed', '10', 'L'], ['منى', '7', 'm'], ['Omar', '9', 'أطفال 8–12'], ['Karim', '1', 'XL']];
-  const box = { x: 100, y: 200, w: 500, h: 300 };
-  // A size that the jersey doesn't come in is refused, with the row.
-  let r = await post('/api/designs', { productId: 'jersey', color: 'red', size: 'M', sides, merge: { columns: ['Name', 'Number', 'Size'], rows: [...rows, ['Zed', '4', 'XXXXL']], sides: { back: { box } } } });
-  assert.strictEqual(r.status, 400);
-  assert.match((await r.json()).error, /5/);
-  r = await post('/api/designs', { productId: 'jersey', color: 'red', size: 'M', sides, merge: { columns: ['Name', 'Number', 'Size'], rows, sides: { back: { box } } } });
-  assert.strictEqual(r.status, 201, await r.clone().text());
-  const created = await r.json();
-  const pics = await Promise.all(rows.map(() => png(box.w, box.h)));
-  const d = await upload(created, { 'back-merge.bin': Buffer.concat(pics) });
-  const want = unit('jersey', 'L', 2) + unit('jersey', 'M', 2) + unit('jersey', 'kids', 2) + unit('jersey', 'XL', 2);
-  assert.strictEqual(d.copies, 4);
-  assert.strictEqual(d.price, want);
-  const by = Object.fromEntries(d.quantities.map((l) => [l.size.id, l.qty]));
-  assert.deepStrictEqual(by, { L: 1, M: 1, kids: 1, XL: 1 });
-  // The shop gets the names alone (for transfers) with each piece's size in the file name.
-  const q = await (await post('/api/cart/quote', { designIds: [d.id] })).json();
-  const o = await post('/api/orders', { customer: CUSTOMER, designIds: [d.id], expectedTotal: q.total });
-  assert.strictEqual(o.status, 201, await o.clone().text());
-  const tok = (await (await post('/api/admin/login', { password: 'secret' })).json()).token;
-  const zip = await fetch(`${base}/api/admin/files/${d.id}/back?format=merge-names-zip`, { headers: { Authorization: `Bearer ${tok}` } });
-  assert.strictEqual(zip.status, 200);
-  const names = [...require('../src/merge-data').readZip(Buffer.from(await zip.arrayBuffer())).keys()];
-  assert.ok(names.includes('0001-Ahmed-10-L.png'), names.join(' '));
-  assert.ok(names.some((n) => n.startsWith('0003-Omar-9-')));
-  assert.ok(names.includes('back-placement.txt'));
-  // The full print PDF keeps garments transparent (no white box around the print).
-  const pdf = await fetch(`${base}/api/admin/files/${d.id}/back?format=merge-pdf`, { headers: { Authorization: `Bearer ${tok}` } });
-  assert.strictEqual(pdf.status, 200);
-  assert.match(Buffer.from(await pdf.arrayBuffer()).toString('latin1'), /\/SMask/);
-});
-
-test('team kit in the admin: one DTF transfer per name, no single-file replacement of the names, a names-only ZIP', async () => {
+test('name lists are only on paper and label products, not clothing (owner\'s choice)', async () => {
   const sides = { back: { editor: { objects: [{ type: 'i-text', text: '{Name}' }] } } };
-  const rows = [['Ahmed', 'L'], ['Mona', 'M'], ['Omar', 'XL']];
-  const box = { x: 100, y: 200, w: 500, h: 300 };
-  const r = await post('/api/designs', { productId: 'tshirt', color: 'white', size: 'M', sides, merge: { columns: ['Name', 'Size'], rows, sides: { back: { box } } } });
-  assert.strictEqual(r.status, 201, await r.clone().text());
-  // Each row's picture is a different colour, to see it on the film.
-  const pics = await Promise.all([[200, 0, 0], [0, 160, 0], [0, 0, 200]].map(([r1, g, b]) => sharp({ create: { width: box.w, height: box.h, channels: 4, background: { r: r1, g, b, alpha: 1 } } }).png().toBuffer()));
-  const d = await upload(await r.json(), { 'back-merge.bin': Buffer.concat(pics) });
-  const q = await (await post('/api/cart/quote', { designIds: [d.id] })).json();
-  const order = await (await post('/api/orders', { customer: CUSTOMER, designIds: [d.id], expectedTotal: q.total })).json();
-  const item = order.items[0];
-  const { token } = await (await post('/api/admin/login', { password: 'secret' })).json();
-  const admin = (url, opts = {}) => fetch(base + url, { ...opts, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...(opts.headers || {}) } });
-  assert.strictEqual((await admin(`/api/admin/items/${item.id}`, { method: 'PATCH', body: JSON.stringify({ process: 'dtf' }) })).status, 200);
-  const film = await admin('/api/admin/dtf-film', { method: 'POST', body: JSON.stringify({ itemIds: [item.id] }) });
-  assert.strictEqual(film.status, 200, await film.clone().text());
-  const pdf = Buffer.from(await film.arrayBuffer()).toString('latin1');
-  // Three different pictures on the film (the background with each row's name), not one picture three times.
-  assert.ok((pdf.match(/\/Subtype\s*\/Image/g) || []).length >= 3, 'three transfers');
-  // The name side can't be replaced by one file.
-  const rep = await admin(`/api/admin/items/${item.id}/replacement/back`, { method: 'PUT', headers: { 'Content-Type': 'image/png' }, body: await png(1200, 1600) });
-  assert.strictEqual(rep.status, 409);
-  assert.strictEqual((await rep.json()).code, 'replaceNames');
-  // The names-only ZIP keeps its name on every download.
-  const names = [];
-  for (let i = 0; i < 2; i++) names.push((await admin(`/api/admin/files/${d.id}/back?format=merge-names-zip`)).headers.get('content-disposition'));
-  assert.match(names[0], /-3-names-only\.zip/);
-  assert.strictEqual(names[0], names[1]);
+  const merge = { columns: ['Name', 'Size'], rows: [['Ahmed', 'L'], ['Mona', 'M']], sides: { back: { box: { x: 100, y: 200, w: 500, h: 300 } } } };
+  for (const productId of ['tshirt', 'kidstee', 'hoodie', 'kidshoodie', 'ziphoodie', 'sweatshirt', 'polo', 'oversized', 'jersey']) {
+    const p = PRODUCTS.find((x) => x.id === productId);
+    assert.ok(!p.merge, `${productId} has no name list`);
+    const r = await post('/api/designs', { productId, color: p.colors[0].id, size: p.sizes[0].id, sides, merge });
+    assert.strictEqual(r.status, 400, productId);
+  }
+  const withLists = PRODUCTS.filter((p) => p.merge).map((p) => p.id).sort();
+  assert.deepStrictEqual(withLists, ['bizcards', 'certificates', 'greetingcard', 'idcards', 'invitations', 'namelabels', 'stickersheet']);
 });
