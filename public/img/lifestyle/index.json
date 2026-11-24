@@ -502,5 +502,138 @@
       "en": "Business printing: business cards, flyers, letterhead and a roll-up banner in a bright office",
       "ar": "طباعة الشركات: كروت شخصية وفلايرز وورق رسمي ورول أب في مكتب مشرق"
     }
+  },
+  "postcards": {
+    "file": "/img/lifestyle/postcards.webp",
+    "alt": {
+      "en": "Printed postcards and a thank-you card in a kraft mailer box",
+      "ar": "كروت بوستال وكارت شكر مطبوع داخل علبة شحن كرافت"
+    }
+  },
+  "foldedcards": {
+    "file": "/img/lifestyle/foldedcards.webp",
+    "alt": {
+      "en": "Folded cards printed inside and out with white envelopes",
+      "ar": "كروت مطوية مطبوعة من الخارج والداخل مع ظروف بيضاء"
+    }
+  },
+  "giftvouchers": {
+    "file": "/img/lifestyle/giftvouchers.webp",
+    "alt": {
+      "en": "Gift vouchers with an arch design and a kraft envelope",
+      "ar": "قسائم هدايا بتصميم أقواس مع ظرف كرافت"
+    }
+  },
+  "bookmarks": {
+    "file": "/img/lifestyle/bookmarks.webp",
+    "alt": {
+      "en": "Printed bookmarks with gold tassels on an open book",
+      "ar": "فواصل كتب مطبوعة بشراشيب ذهبية على كتاب مفتوح"
+    }
+  },
+  "brochures": {
+    "file": "/img/lifestyle/brochures.webp",
+    "alt": {
+      "en": "Open tri-fold brochure next to folded brochures",
+      "ar": "بروشور ثلاثي الطيّ مفتوح بجانب بروشورات مطوية"
+    }
+  },
+  "menus": {
+    "file": "/img/lifestyle/menus.webp",
+    "alt": {
+      "en": "Café menu cards on a table with a cappuccino",
+      "ar": "منيو كافيه على طاولة مع كابتشينو"
+    }
+  },
+  "notepads": {
+    "file": "/img/lifestyle/notepads.webp",
+    "alt": {
+      "en": "Glued notepads with a printed header and a pen",
+      "ar": "نوت باد بلوك مطبوع الرأس مع قلم"
+    }
+  },
+  "folders": {
+    "file": "/img/lifestyle/folders.webp",
+    "alt": {
+      "en": "Presentation folders with a pocket and business card slot",
+      "ar": "فولدرات عرض بجيب ومكان لكارت شخصي"
+    }
+  },
+  "booklets": {
+    "file": "/img/lifestyle/booklets.webp",
+    "alt": {
+      "en": "Stapled A5 catalogue booklets, one open",
+      "ar": "كتالوجات A5 مدبّسة وواحد منها مفتوح"
+    }
+  },
+  "labels": {
+    "file": "/img/lifestyle/labels.webp",
+    "alt": {
+      "en": "Product labels on jars, a bottle and a box with a label roll",
+      "ar": "ستيكرز منتجات على برطمانات وزجاجة وعلبة مع رول ستيكرز"
+    }
+  },
+  "wrappingpaper": {
+    "file": "/img/lifestyle/wrappingpaper.webp",
+    "alt": {
+      "en": "Gifts wrapped in floral printed paper with a roll",
+      "ar": "هدايا مغلّفة بورق مطبوع بزهور مع رول ورق"
+    }
+  },
+  "windowstickers": {
+    "file": "/img/lifestyle/windowstickers.webp",
+    "alt": {
+      "en": "White vinyl leaf emblem sticker on a café glass door",
+      "ar": "ستيكر فينيل أبيض بشعار ورقة شجر على باب كافيه زجاج"
+    }
+  },
+  "calendar": {
+    "file": "/img/lifestyle/calendar.webp",
+    "alt": {
+      "en": "A3 wall calendar with artwork and a month pad",
+      "ar": "نتيجة حائط A3 بتصميم فني وبلوك شهور"
+    }
+  },
+  "deskcalendar": {
+    "file": "/img/lifestyle/deskcalendar.webp",
+    "alt": {
+      "en": "Tent desk calendar with botanical artwork on a desk",
+      "ar": "نتيجة مكتب بتصميم نباتي على المكتب"
+    }
+  },
+  "photobook": {
+    "file": "/img/lifestyle/photobook.webp",
+    "alt": {
+      "en": "Photo album with a printed photo cover, one open with photos",
+      "ar": "ألبوم صور بغلاف مطبوع وآخر مفتوح بالصور"
+    }
+  },
+  "magnets": {
+    "file": "/img/lifestyle/magnets.webp",
+    "alt": {
+      "en": "Printed photo magnets on a cream fridge door",
+      "ar": "مغناطيس ثلاجة مطبوع بالصور على باب ثلاجة كريمي"
+    }
+  },
+  "banners": {
+    "file": "/img/lifestyle/banners.webp",
+    "alt": {
+      "en": "Vinyl banner with eyelets tied to a wooden fence",
+      "ar": "بانر فينيل بحلقات معدنية مربوط على سور خشبي"
+    }
+  },
+  "tablenumbers": {
+    "file": "/img/lifestyle/tablenumbers.webp",
+    "alt": {
+      "en": "Floral tent table card on a wedding table",
+      "ar": "كارت ترابيزة بورود على ترابيزة فرح"
+    }
+  },
+  "placecards": {
+    "file": "/img/lifestyle/placecards.webp",
+    "alt": {
+      "en": "Small tent place cards on plates at a wedding table",
+      "ar": "كروت أماكن صغيرة على الأطباق في ترابيزة فرح"
+    }
   }
 }
