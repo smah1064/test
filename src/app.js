@@ -314,7 +314,7 @@ function orderTimeline(order) {
 /** The shop's own details, for invoices and the tracking page. */
 function shopInfo() {
   return {
-    name: { en: 'OneOff Print', ar: 'ون أوف برنت' },
+    name: { en: 'ebda3', ar: 'إبداع' },
     url: notify.siteUrl() || null,
     whatsapp: notify.shopWhatsApp() || null,
     email: process.env.MAIL_FROM || null,
@@ -1492,7 +1492,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       return t;
     });
     const text = `Rights / takedown request\nFrom: ${saved.name} (${saved.contact})\nRights holder: ${saved.owner}\nLink: ${saved.link}\n\n${saved.details}`;
-    if (notify.emailReady() && process.env.ADMIN_EMAIL) notify.emailTo(process.env.ADMIN_EMAIL, 'OneOff Print · Rights request', `<pre style="font:14px/1.5 sans-serif;white-space:pre-wrap">${text.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</pre>`, text).catch((e) => console.warn('[takedown] email failed:', e.message));
+    if (notify.emailReady() && process.env.ADMIN_EMAIL) notify.emailTo(process.env.ADMIN_EMAIL, 'ebda3 · Rights request', `<pre style="font:14px/1.5 sans-serif;white-space:pre-wrap">${text.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</pre>`, text).catch((e) => console.warn('[takedown] email failed:', e.message));
     res.status(201).json({ ok: true });
   });
 
@@ -2515,7 +2515,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (cust && cust.email && notify.emailReady() && site && !limiter.hit(`accountForgotId:${cust.id}`, LIMITS.accountForgotId)) {
         const link = `${site}/account?reset=${encodeURIComponent(customers.resetToken(auth.customerKey, cust))}`;
         const ar = lang === 'ar';
-        const subject = ar ? 'إعادة تعيين كلمة المرور · ون أوف برنت' : 'Reset your password · OneOff Print';
+        const subject = ar ? 'إعادة تعيين كلمة المرور · إبداع' : 'Reset your password · ebda3';
         const text = ar ? `اضغط الرابط ده خلال ساعة عشان تختار كلمة مرور جديدة:\n${link}\nلو مش انت اللي طلبت ده، تجاهل الرسالة.` : `Open this link within 1 hour to choose a new password:\n${link}\nIf you didn't ask for this, ignore this email.`;
         notify.emailTo(cust.email, subject, `<p dir="${ar ? 'rtl' : 'ltr'}">${text.replace(/\n/g, '<br>').replace(link, `<a href="${link}">${link}</a>`)}</p>`, text).catch((e) => console.warn('[account] reset email failed:', e.message));
       }
@@ -3391,7 +3391,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const sd = design.sides[0];
     try {
       const d = await embroidery.digitize(fs.readFileSync(store.designFile(design.id, `${sd.id}-print.png`)), sd.widthIn * 25.4, sd.heightIn * 25.4);
-      const dst = embroidery.toDst(d, `ONEOFF ${design.id.slice(0, 6)}`);
+      const dst = embroidery.toDst(d, `EBDA3 ${design.id.slice(0, 6)}`);
       store.writeDesignFile(design.id, `${sd.id}-stitches.dst`, dst.buffer);
       store.writeDesignFile(design.id, `${sd.id}-stitches.png`, await embroidery.stitchPreview(d, { pxPerMm: 8, background: (design.color && design.color.hex) || '#ffffff' }));
       design.emb = { colors: d.colors.map((c) => ({ name: c.name, hex: c.hex, stitches: c.stitches })), stitches: dst.stitches, trims: d.trims, warnings: d.warnings, widthMm: Math.round(d.widthMm), heightMm: Math.round(d.heightMm) };
@@ -3954,7 +3954,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     // The shop's own address (never whatever Host header the request came with).
     const origin = linkBase(req);
     const escAttr = (v) => String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-    const title = `${product ? product.name.ar : 'تصميم'} · ${product ? product.name.en : 'Design'} · OneOff Print`;
+    const title = `${product ? product.name.ar : 'تصميم'} · ${product ? product.name.en : 'Design'} · ebda3`;
     const tags = [
       `<meta property="og:title" content="${escAttr(title)}">`,
       `<meta property="og:description" content="${escAttr('شوف تصميمي وقولي رأيك · What do you think of my design?')}">`,

@@ -34,7 +34,7 @@
     'order.copyLink': ['Copy link', 'انسخ الرابط'],
     'order.linkCopied': ['Link copied ✓', 'اتنسخ الرابط ✓'],
     'order.linkCopyFailed': ["Couldn't copy. Copy the address from the browser bar.", 'معرفناش ننسخ. انسخ الرابط من شريط العنوان.'],
-    'order.waSelf': ['My order {n} at OneOff Print: {link}', 'طلبي رقم {n} من ون أوف برنت: {link}'],
+    'order.waSelf': ['My order {n} at ebda3: {link}', 'طلبي رقم {n} من إبداع: {link}'],
     'order.emailWhy': ['If you gave your email, order updates and any proof we need you to approve come there too.', 'لو كتبت إيميلك، هيوصلك عليه كمان تحديثات الطلب وأي بروفة محتاجين موافقتك عليها.'],
     // Orders placed on this phone / computer (kept in the browser, no account needed)
     'device.title': ['Orders on this device', 'طلبات من الجهاز ده'],

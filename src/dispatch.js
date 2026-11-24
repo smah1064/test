@@ -83,7 +83,7 @@ function cleanHouse(input) {
 // ---------- The message ----------
 const T = {
   en: {
-    dir: 'ltr', hello: (n) => `Hello ${n},`, intro: 'Please print the following job for OneOff Print:',
+    dir: 'ltr', hello: (n) => `Hello ${n},`, intro: 'Please print the following job for ebda3:',
     cm: 'cm', order: 'Order', product: 'Product', colour: 'Colour / size', method: 'Print method', sides: 'Print areas', qty: 'Quantity',
     placement: (v) => `moved ${v} from the standard position, see the preview PDF`,
     note: 'Note', files: 'Files', attached: 'attached to this email', expires: (d) => `Download links work until ${d}.`,
@@ -92,7 +92,7 @@ const T = {
     sample: '🧪 Sample first: print ONE piece first and send us a photo of it. Print the rest only after we confirm.',
   },
   ar: {
-    dir: 'rtl', hello: (n) => `أهلًا ${n}،`, intro: 'من فضلك اطبعوا الشغل ده لـ ون أوف برنت:',
+    dir: 'rtl', hello: (n) => `أهلًا ${n}،`, intro: 'من فضلك اطبعوا الشغل ده لـ إبداع:',
     cm: 'سم', order: 'الطلب', product: 'المنتج', colour: 'اللون / المقاس', method: 'طريقة الطباعة', sides: 'أماكن الطباعة', qty: 'الكمية',
     placement: (v) => `متحرك ${v} عن المكان القياسي، شوف ملف المعاينة`,
     note: 'ملاحظة', files: 'الملفات', attached: 'مرفقة في الإيميل ده', expires: (d) => `روابط التحميل شغالة لحد ${d}.`,

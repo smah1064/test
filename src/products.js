@@ -1808,7 +1808,9 @@ for (const [pid, e] of Object.entries(EMBROIDERY)) {
   let x = a.x + (a.w - w) / 2;
   let y = a.y + (a.h - h) * 0.4;
   if (e.at === 'same') [x, y] = [a.x, a.y];
-  if (e.at === 'chest') [x, y] = [a.x + a.w * 0.78 - w / 2, a.y + a.h * 0.03];
+  // Left chest: the print area's top is about 2.5 cm below the collar; a chest logo starts
+  // about 7 cm below it (adults; 5 cm on kids' sizes), as embroidered shirts are made.
+  if (e.at === 'chest') [x, y] = [a.x + a.w * 0.78 - w / 2, Math.min(a.y + (e.cm[0] >= 9 ? 4.5 : 2.5) * upc, a.y + a.h - h)];
   if (e.at === 'top') y = a.y + a.h * 0.05;
   const r1 = (v) => Math.round(v * 10) / 10;
   p.embroidery = {

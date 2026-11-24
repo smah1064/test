@@ -357,7 +357,7 @@ function readRecord(b0, b1, b2) {
  * The DST file for a digitised design. The design is centred on the hoop
  * centre (0, 0) as machines expect.
  */
-function toDst(d, label = 'ONEOFF') {
+function toDst(d, label = 'EBDA3') {
   const recs = [];
   const cx = d.widthMm / 2;
   const cy = d.heightMm / 2;

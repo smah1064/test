@@ -1,6 +1,6 @@
 /* Strings for the printable invoice page (/invoice). [English, Arabic] */
 Object.assign(window.POD_STRINGS, {
-  'invoice.pageTitle': ['Invoice · OneOff Print', 'فاتورة · ون أوف برنت'],
+  'invoice.pageTitle': ['Invoice · ebda3', 'فاتورة · إبداع'],
   'invoice.title': ['Invoice', 'فاتورة'],
   'invoice.docTitle': ['Invoice {n}', 'فاتورة {n}'],
   'invoice.number': ['Invoice no.', 'رقم الفاتورة'],

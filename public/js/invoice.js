@@ -7,7 +7,7 @@
   const orderId = params.get('id') || '';
   const content = document.getElementById('content');
   const actions = document.getElementById('inv-actions');
-  const FALLBACK_SHOP = { name: { en: 'OneOff Print', ar: 'ون أوف برنت' }, url: null, whatsapp: null, email: null };
+  const FALLBACK_SHOP = { name: { en: 'ebda3', ar: 'إبداع' }, url: null, whatsapp: null, email: null };
   let order = null;
   let error = null;
 
@@ -151,7 +151,7 @@
       <article class="card invoice" id="invoice">
         <header class="inv-head">
           <div class="inv-shop">
-            <div class="inv-brand"><span class="brand-mark">1</span>${esc(tr(shop.name))}</div>
+            <div class="inv-brand"><img class="inv-logo" src="/img/logo-${POD.lang === 'ar' ? 'ar' : 'en'}-header.svg" alt="${esc(tr(shop.name))}"></div>
             ${contacts ? `<ul class="inv-contact">${contacts}</ul>` : ''}
           </div>
           <div class="inv-title">

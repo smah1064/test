@@ -66,7 +66,7 @@ test('tracking, shipping details, delivery, payment and order again', async () =
   assert.deepStrictEqual(got.timeline.map((x) => x.step), ['placed', 'production', 'printed', 'shipped', 'delivered']);
   assert.ok(got.timeline[0].at && got.timeline.slice(1).every((x) => x.at === null));
   assert.strictEqual(got.invoice.number, `INV-${order.number}`);
-  assert.strictEqual(got.shop.name.en, 'OneOff Print');
+  assert.strictEqual(got.shop.name.en, 'ebda3');
   assert.strictEqual(got.items[0].unitPrice, got.items[0].price);
   assert.strictEqual(got.shipment, null);
   assert.strictEqual(got.payment.status, 'pending');

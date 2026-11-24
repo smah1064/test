@@ -78,7 +78,7 @@ test('Arabic order messages: quantities, names, photo sets, Arabic digits and th
   const wa = sent.find((s) => s.kind === 'whatsapp').text;
   const [toAdmin, toCustomer] = ['admin@example.test', 'mona@example.test'].map((to) => sent.find((s) => s.kind === 'email' && s.body.to[0].email === to).body);
 
-  assert.match(toCustomer.subject, /^تم استلام طلبك POD-2001 · ون أوف برنت$/);
+  assert.match(toCustomer.subject, /^تم استلام طلبك POD-2001 · إبداع$/);
   assert.match(wa, /٤ منتجات · الإجمالي/);
   assert.match(wa, /⚡ توصيل سريع: خلال يومين عمل/);
   for (const text of [wa, toAdmin.textContent, toCustomer.textContent, toAdmin.htmlContent, toCustomer.htmlContent]) {
@@ -87,13 +87,13 @@ test('Arabic order messages: quantities, names, photo sets, Arabic digits and th
     assert.match(text, /طباعة الصور · لامع · ٤ صور · ٧ نسخ \(10 × 15 سم ×٥، 13 × 18 سم ×١، 20 × 30 سم ×١\) · إطار أبيض/);
     assert.match(text, /مج · أبيض · 11 أونصة · جهة 1 · ١١ نسخة/);
     assert.match(text, /⚡ توصيل سريع خلال يومين عمل \(حتى /);
-    assert.doesNotMatch(text, /OneOff Print/);
+    assert.doesNotMatch(text, /ebda3/);
     assert.doesNotMatch(text, LATIN_COUNTS);
   }
   for (const mail of [toAdmin, toCustomer]) {
     assert.match(mail.textContent, /^١\. تيشيرت/m);
     assert.match(mail.textContent, /^٤\. مج/m);
-    assert.match(mail.htmlContent, />ون أوف برنت</);
+    assert.match(mail.htmlContent, />إبداع</);
     assert.match(mail.htmlContent, /٣\. طباعة الصور/);
   }
   // Customer text stays escaped in the HTML.
@@ -108,7 +108,7 @@ test('English order messages keep Latin digits and the English name', async () =
   const wa = sent.find((s) => s.kind === 'whatsapp').text;
   const mails = sent.filter((s) => s.kind === 'email').map((s) => s.body);
   assert.strictEqual(mails.length, 2);
-  assert.match(mails.find((m) => m.to[0].email === 'mona@example.test').subject, /We received your order POD-2001 · OneOff Print/);
+  assert.match(mails.find((m) => m.to[0].email === 'mona@example.test').subject, /We received your order POD-2001 · ebda3/);
   assert.match(wa, /4 items · Total/);
   for (const text of [wa, ...mails.flatMap((m) => [m.textContent, m.htmlContent])]) {
     assert.match(text, /T-shirt · 55 pieces \(White · M ×30, Black · L ×25\) · Front/);
@@ -120,7 +120,7 @@ test('English order messages keep Latin digits and the English name', async () =
   }
   for (const m of mails) {
     assert.match(m.textContent, /^1\. T-shirt/m);
-    assert.match(m.htmlContent, />OneOff Print</);
+    assert.match(m.htmlContent, />ebda3</);
   }
 });
 
@@ -138,19 +138,19 @@ test('Arabic standard delivery uses Arabic digits and counting', async () => {
 test('the shipped email shows quantities, names and photo sets in both languages', async () => {
   await notify.orderShipped(order(), {});
   const ar = sent[0].body;
-  assert.match(ar.subject, /^طلبك POD-2001 في الطريق ليك · ون أوف برنت$/);
+  assert.match(ar.subject, /^طلبك POD-2001 في الطريق ليك · إبداع$/);
   for (const text of [ar.textContent, ar.htmlContent]) {
     assert.match(text, /١\. تيشيرت · ٥٥ قطعة \(أبيض · M ×٣٠، أسود · L ×٢٥\)/);
     assert.match(text, /٢\. شهادة · أبيض · A4 · الأمام · قائمة أسماء: ٤٠ اسم/);
     assert.match(text, /٣\. طباعة الصور · لامع · ٤ صور · ٧ نسخ/);
     assert.match(text, /١١ نسخة/);
-    assert.doesNotMatch(text, /OneOff Print/);
+    assert.doesNotMatch(text, /ebda3/);
     assert.doesNotMatch(text, LATIN_COUNTS);
   }
   sent = [];
   await notify.orderShipped(order({ lang: 'en' }), {});
   const en = sent[0].body;
-  assert.match(en.subject, /Your order POD-2001 is on its way · OneOff Print/);
+  assert.match(en.subject, /Your order POD-2001 is on its way · ebda3/);
   assert.match(en.textContent, /1\. T-shirt · 55 pieces \(White · M ×30, Black · L ×25\) · Front/);
   assert.match(en.textContent, /Name list: 40 names/);
   assert.match(en.textContent, /4 photos · 7 copies/);
@@ -161,18 +161,18 @@ test('printing-house messages: Arabic name, digits and سم', () => {
   const design = { sides: [{ name: n('Front', 'الأمام'), widthIn: 10, heightIn: 12, offsetCm: { y: 3, x: -1.5 } }] };
   const args = { house: { name: 'مطبعة' }, order: o, item: { ...o.items[0], process: 'dtf', position: 1 }, design, files: [], expires: '2026-12-24T00:00:00Z' };
   const ar = dispatch.whatsappText({ ...args, lang: 'ar' });
-  assert.match(ar, /لـ ون أوف برنت:/);
+  assert.match(ar, /لـ إبداع:/);
   assert.match(ar, /POD-2001 \(١\/٤\)/);
   assert.match(ar, /أبيض · M ×٣٠، أسود · L ×٢٥/);
   assert.match(ar, /\*الكمية:\* ٥٥/);
   assert.match(ar, /الأمام ٢٥٫٤ × ٣٠٫٥ سم \(متحرك ٣ سم لتحت و١٫٥ سم شمال/);
   assert.match(ar, /٢٠٢٦-١٢-٢٤/);
-  assert.doesNotMatch(ar.replace('POD-2001', ''), /OneOff Print|\bcm\b|\d/); // the order number is an id
+  assert.doesNotMatch(ar.replace('POD-2001', ''), /ebda3|\bcm\b|\d/); // the order number is an id
   const mail = dispatch.emailBody({ ...args, lang: 'ar', attached: false });
-  assert.match(mail.text, /لـ ون أوف برنت:/);
+  assert.match(mail.text, /لـ إبداع:/);
   assert.match(mail.html, /٢٥٫٤ × ٣٠٫٥ سم/);
   const en = dispatch.whatsappText({ ...args, lang: 'en' });
-  assert.match(en, /for OneOff Print:/);
+  assert.match(en, /for ebda3:/);
   assert.match(en, /POD-2001 \(1\/4\)/);
   assert.match(en, /Front 25\.4 × 30\.5 cm \(moved 3 cm lower, 1\.5 cm left/);
   assert.match(en, /\*Quantity:\* 55/);

@@ -53,6 +53,13 @@
     'magicmug:front': { ...P('mug-front'), rect: { cx: 447, top: 393, w: 587 }, warp: 'cylinder', cyl: { cx: 447.5, R: 238.5 } },
     'couplemugs:mug1': { ...P('mug-front'), rect: { cx: 447, top: 393, w: 587 }, warp: 'cylinder', cyl: { cx: 447.5, R: 238.5 } },
     'couplemugs:mug2': { ...P('mug-front'), rect: { cx: 447, top: 393, w: 587 }, warp: 'cylinder', cyl: { cx: 447.5, R: 238.5 } },
+    // Mugs printed all the way round (products.js mugWrapSide): the mug seen from the side opposite the
+    // handle (a sliver of it shows behind), so the middle of the print faces you. The print rect is the
+    // whole wrap laid round the cylinder: 21.93 cm of the 25.93 cm round the mug = 0.8457 of 2πR.
+    'mug:front:wrap': { ...P('mug-wrap-front'), rect: { cx: 493.5, top: 407, w: 1225 }, warp: 'cylinder', cyl: { cx: 493.5, R: 230.5 } },
+    'magicmug:front:wrap': { ...P('mug-wrap-front'), rect: { cx: 493.5, top: 407, w: 1225 }, warp: 'cylinder', cyl: { cx: 493.5, R: 230.5 } },
+    'couplemugs:mug1:wrap': { ...P('mug-wrap-front'), rect: { cx: 493.5, top: 407, w: 1225 }, warp: 'cylinder', cyl: { cx: 493.5, R: 230.5 } },
+    'couplemugs:mug2:wrap': { ...P('mug-wrap-front'), rect: { cx: 493.5, top: 407, w: 1225 }, warp: 'cylinder', cyl: { cx: 493.5, R: 230.5 } },
     'tumbler:front': { ...P('tumbler-front'), rect: { cx: 499.5, top: 372, w: 405 }, warp: 'cylinder', cyl: { cx: 499.5, R: 163.5 } },
     'coasters:front': { ...P('coaster-front'), box: { x: 197, y: 314, w: 606, h: 600 }, fit: 'cover', warp: 'flat' },
     'tablecloth:front': { ...P('tablecloth-front'), box: { x: 122, y: 145, w: 754, h: 966 }, fit: 'cover', warp: 'fabric' },

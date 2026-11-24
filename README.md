@@ -1,4 +1,4 @@
-# OneOff Print: print-on-demand storefront
+# ebda3 (إبداع): print-on-demand storefront
 
 A print-on-demand website where shoppers customise products in a drag-and-drop editor, and every item is printed individually, one at a time.
 
@@ -27,7 +27,7 @@ Requires Node 18+. There is no database to set up: data is stored under `data/` 
 | `TRUST_PROXY` | `1` | Proxy hops in front of the app (Hostinger: 1, the last X-Forwarded-For entry); `false` if none |
 | `CALLMEBOT_PHONE`, `CALLMEBOT_APIKEY` | (none) | WhatsApp alert to the shop owner for each new order ([CallMeBot](https://www.callmebot.com), free, own number only) |
 | `BREVO_API_KEY`, `MAIL_FROM` | (none) | Email via [Brevo](https://www.brevo.com) (free plan); `MAIL_FROM` must be a verified sender |
-| `MAIL_FROM_NAME` | `OneOff Print` | Sender name on emails |
+| `MAIL_FROM_NAME` | `ebda3` | Sender name on emails |
 | `ADMIN_EMAIL` | (none) | Where new-order emails go |
 | `ADMIN_LANG` | `ar` | Language of the owner's alerts (`ar` or `en`) |
 | `SHOP_WHATSAPP` | (none) | Shop number for the customer's "Confirm on WhatsApp" button (e.g. `201012345678`) |

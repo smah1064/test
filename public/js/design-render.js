@@ -156,7 +156,7 @@
     fabric.Text.prototype.svgUnitsPerInch = u;
     const svg = withMode(st, { pictures: false, clip: null }, (c) => c.toSVG({ viewBox: { x: bleed.x, y: bleed.y, width: bleed.w, height: bleed.h }, width: `${+(bleed.w / u).toFixed(4)}in`, height: `${+(bleed.h / u).toFixed(4)}in` }));
     const fonts = await window.POD_FX.fontFaceCss(st.canvas.getObjects());
-    const note = `<!-- OneOff Print artwork: ${s.printWidthIn} x ${s.printHeightIn} in${b ? ` + ${s.bleedIn} in bleed each side` : ''}. sRGB. -->`;
+    const note = `<!-- ebda3 artwork: ${s.printWidthIn} x ${s.printHeightIn} in${b ? ` + ${s.bleedIn} in bleed each side` : ''}. sRGB. -->`;
     return svg.replace(/<defs>/, `${note}<defs><style>${fonts}</style>`);
   }
   /** Design layer only, in mockup coordinates, for the realistic and 3D previews. */

@@ -1,6 +1,6 @@
 /* Photo printing page: many photos, each cropped to its print size, one cart item (English, Arabic). */
 Object.assign(window.POD_STRINGS, {
-  'photos.pageTitle': ['Print your photos · OneOff Print', 'اطبع صورك · ون أوف برنت'],
+  'photos.pageTitle': ['Print your photos · ebda3', 'اطبع صورك · إبداع'],
   'photos.title': ['Print your photos', 'اطبع صورك'],
   'photos.lead': [
     'Pick your photos, we crop each one to its print size, you choose how many copies. Printed on real photo paper.',

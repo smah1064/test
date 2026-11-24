@@ -4192,7 +4192,7 @@
       svg = svg.split(url).join(await inlined.get(url).catch(() => ''));
     }
     const fonts = await window.POD_FX.fontFaceCss(canvas.getObjects());
-    const note = `<!-- OneOff Print artwork: ${side.printWidthIn} x ${side.printHeightIn} in${b ? ` + ${side.bleedIn} in bleed each side` : ''}. sRGB. -->`;
+    const note = `<!-- ebda3 artwork: ${side.printWidthIn} x ${side.printHeightIn} in${b ? ` + ${side.bleedIn} in bleed each side` : ''}. sRGB. -->`;
     return svg.replace(/<defs>/, `${note}<defs><style>${fonts}</style>`);
   }
   /** Design layer only, in mockup coordinates, for the live previews. */
@@ -4438,7 +4438,7 @@
   });
   $('share-native').addEventListener('click', () => {
     const url = $('share-url').value;
-    navigator.share({ title: 'OneOff Print', text: t('share.message', { url: '' }).trim(), url }).catch(() => {});
+    navigator.share({ title: 'ebda3', text: t('share.message', { url: '' }).trim(), url }).catch(() => {});
   });
   $('share-refresh').addEventListener('click', async () => {
     if (!st.share) return;

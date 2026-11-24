@@ -1073,3 +1073,9 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 .saved-box .saved-title { font-size: 17px; margin: 0 0 4px; }
 .saved-box .saved-item { padding: 12px 0; }
 .saved-box .saved-item img { opacity: .9; }
+
+/* Brand: the إبداع logo (Arabic pages) or ebda3 (English pages), with its magenta corner marks. */
+.brand-logo { display: block; height: 40px; width: auto; }
+html[lang="ar"] .brand-en, html:not([lang="ar"]) .brand-ar { display: none; }
+@media (max-width: 640px) { .brand-logo { height: 34px; } }
+@media (max-width: 400px) { .brand-logo { height: 26px; } }

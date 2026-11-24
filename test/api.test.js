@@ -662,7 +662,7 @@ test('new orders notify the shop on WhatsApp and email, and email the customer',
     const toAdmin = got.email.find((e) => e.to[0].email === 'owner@example.com');
     const toCustomer = got.email.find((e) => e.to[0].email === 'sara@example.com');
     assert.strictEqual(toAdmin.key, 'brevo-test');
-    assert.deepStrictEqual(toAdmin.sender, { email: 'shop@example.com', name: 'OneOff Print' });
+    assert.deepStrictEqual(toAdmin.sender, { email: 'shop@example.com', name: 'ebda3' });
     assert.match(toAdmin.subject, new RegExp(order.number));
     assert.match(toAdmin.htmlContent, /Ring &lt;twice&gt;/); // customer text is escaped
     assert.match(toCustomer.subject, /We received your order/); // the customer ordered in English

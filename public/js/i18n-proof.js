@@ -95,7 +95,7 @@ Object.assign(window.POD_STRINGS, {
   'checkout.approvalRequired': ['Please check and approve every proof first.', 'من فضلك راجع ووافق على كل البروفات الأول.'],
 
   // ---------- /proof page ----------
-  'proofPage.pageTitle': ['Check your proof · OneOff Print', 'راجع البروفة · ون أوف برنت'],
+  'proofPage.pageTitle': ['Check your proof · ebda3', 'راجع البروفة · إبداع'],
   'proofPage.title': ['Check your proof', 'راجع البروفة'],
   'proofPage.for': ['Order {n} · item {pos}: {product}', 'الطلب {n} · المنتج {pos}: {product}'],
   'proofPage.intro': ['Please check everything below. We print exactly this file.', 'من فضلك راجع كل حاجة تحت. إحنا بنطبع الملف ده بالظبط.'],

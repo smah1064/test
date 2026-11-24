@@ -66,7 +66,7 @@ function printPdf(pngBuf, spec, { marks = false, title = '', slug = '' } = {}) {
   const W = trimW + 2 * b + 2 * m;
   const H = trimH + 2 * b + 2 * m;
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: [W, H], margin: 0, autoFirstPage: true, info: { Title: title, Creator: 'OneOff Print' } });
+    const doc = new PDFDocument({ size: [W, H], margin: 0, autoFirstPage: true, info: { Title: title, Creator: 'ebda3' } });
     const chunks = [];
     doc.on('data', (c) => chunks.push(c));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
@@ -172,7 +172,7 @@ async function filmPdf(pieces, { rollWidthIn = 22, gapIn = 0.25, mirror = true, 
     return { y: fits(under) ? under : bottomPage * maxPageIn, page: fits(under) ? pageOf(under) : bottomPage };
   }
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ autoFirstPage: false, margin: 0, info: { Title: title, Creator: 'OneOff Print' } });
+    const doc = new PDFDocument({ autoFirstPage: false, margin: 0, info: { Title: title, Creator: 'ebda3' } });
     const chunks = [];
     doc.on('data', (c) => chunks.push(c));
     doc.on('end', () => resolve({ pdf: Buffer.concat(chunks), lengthIn, pieces: layout.placements.length }));
@@ -224,7 +224,7 @@ async function enhancePhoto(buf, scale) {
  */
 function previewPdf(pages, { title = '', lines = [] } = {}) {
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'A4', margin: 36, autoFirstPage: false, info: { Title: title, Creator: 'OneOff Print' } });
+    const doc = new PDFDocument({ size: 'A4', margin: 36, autoFirstPage: false, info: { Title: title, Creator: 'ebda3' } });
     const chunks = [];
     doc.on('data', (c) => chunks.push(c));
     doc.on('end', () => resolve(Buffer.concat(chunks)));

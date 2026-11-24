@@ -80,7 +80,7 @@ function cropMarks(doc, W, H, m, b, slug) {
  */
 function pdf(lays, rows, { marks = false, title = '', label = null, stream = null } = {}) {
   const pt = 72;
-  const doc = new PDFDocument({ autoFirstPage: false, margin: 0, info: { Title: title, Creator: 'OneOff Print' } });
+  const doc = new PDFDocument({ autoFirstPage: false, margin: 0, info: { Title: title, Creator: 'ebda3' } });
   const done = new Promise((resolve, reject) => {
     if (stream) {
       stream.on('finish', () => resolve(null));

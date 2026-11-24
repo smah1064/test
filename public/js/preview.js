@@ -568,8 +568,12 @@
     }
     return out;
   }
-  // Not for a print that goes all the way round (the photo shows the mug from the handle's side).
-  const photoFor = (product, sideId) => (window.POD_PHOTOS && !(product.sides.find((s) => s.id === sideId) || {}).wrap ? window.POD_PHOTOS[`${product.id}:${sideId}`] : null);
+  // A print all the way round has its own photo (the mug seen from opposite the handle).
+  const photoFor = (product, sideId) => {
+    if (!window.POD_PHOTOS) return null;
+    const wrap = (product.sides.find((s) => s.id === sideId) || {}).wrap;
+    return window.POD_PHOTOS[`${product.id}:${sideId}${wrap ? ':wrap' : ''}`] || null;
+  };
   /** Model photos for a product side ("On a model" view); [] if none. */
   const modelsFor = (product, sideId) => (window.POD_MODELS && window.POD_MODELS[`${product.id}:${sideId}`]) || [];
 

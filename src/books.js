@@ -537,7 +537,7 @@ async function renderPage({ book, answers, face, faceLine, redrawn }, index, px,
     const txt = await textImage(fill(page.text[lang], answers, lang), { font: 'Cairo Bold', pt: 22, px, width: px * 0.78, maxH: px * 0.6, color: '#1c2a55' });
     put(txt, px / 2, px * 0.6 - txt.h / 2);
   } else if (page.type === 'back') {
-    const named = await textImage(fill(lang === 'ar' ? 'صُنع خصيصًا لـ{name}' : 'Made especially for {name}', answers, lang) + '\nOneOff Print', { font: 'Cairo Bold', pt: 12, px, width: px * 0.8, color: '#ffffff' });
+    const named = await textImage(fill(lang === 'ar' ? 'صُنع خصيصًا لـ{name}' : 'Made especially for {name}', answers, lang) + '\nebda3', { font: 'Cairo Bold', pt: 12, px, width: px * 0.8, color: '#ffffff' });
     put(named, px / 2, px * 0.82);
   } else if (page.type === 'belongs' || page.type === 'draw') {
     // Generated colouring pages: a big frame to draw in, or the child's face in a frame.
@@ -574,7 +574,7 @@ async function pageJpeg(data, index, px, quality = 82) {
 /** Print-ready PDF: every page at 300 DPI with 1/8" bleed, 8 x 8" trim. */
 async function bookPdf(data, { title = 'Book' } = {}) {
   const ptSize = PAGE_IN * 72;
-  const doc = new PDFDocument({ size: [ptSize, ptSize], margin: 0, autoFirstPage: false, info: { Title: title, Creator: 'OneOff Print' } });
+  const doc = new PDFDocument({ size: [ptSize, ptSize], margin: 0, autoFirstPage: false, info: { Title: title, Creator: 'ebda3' } });
   const chunks = [];
   doc.on('data', (c) => chunks.push(c));
   const done = new Promise((resolve) => doc.on('end', resolve));
