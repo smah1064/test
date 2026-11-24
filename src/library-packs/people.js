@@ -11,10 +11,12 @@ const fe = (name) => `fluent-emoji-flat:${name}`;
 // Where the business designs go (the subject's list is in src/library.js FITS):
 // staff and crew shirts are worn and pinned on, not printed on the shop's paper;
 // events also get certificates, but no letterhead, invoices or shopping bags.
-const STAFF = { notProducts: ['bizcards', 'flyers', 'letterhead', 'dlenvelopes', 'logostickers', 'rollup', 'paperbags', 'invoicebook', 'sign', 'coasters', 'apron', 'deskmat', 'mousepad'] };
+const STAFF = { notProducts: ['bizcards', 'flyers', 'letterhead', 'dlenvelopes', 'logostickers', 'rollup', 'paperbags', 'invoicebook', 'sign', 'coasters', 'apron', 'deskmat', 'mousepad',
+  'giftvouchers', 'brochures', 'menus', 'notepads', 'folders', 'booklets', 'labels', 'windowstickers', 'calendar', 'deskcalendar', 'magnets', 'banners'] };
 // Teachers' designs: not on the children's clothes and school things.
 const TEACHER = { notProducts: ['kidstee', 'kidshoodie', 'jersey', 'namelabels', 'lunchbag', 'pencilcase', 'stickersheet', 'idcards'] };
-const EVENT = { alsoProducts: ['certificates'], notProducts: ['bizcards', 'letterhead', 'dlenvelopes', 'paperbags', 'invoicebook', 'apron', 'coasters'] };
+// Events keep the brochures, booklets (programmes), folders and notepads handed out there.
+const EVENT = { alsoProducts: ['certificates'], notProducts: ['bizcards', 'letterhead', 'dlenvelopes', 'paperbags', 'invoicebook', 'apron', 'coasters', 'giftvouchers', 'menus', 'labels', 'windowstickers', 'calendar', 'deskcalendar', 'magnets'] };
 
 const categories = [
   { id: 'kids', name: { en: 'Kids', ar: 'أطفال' } },

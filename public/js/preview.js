@@ -958,20 +958,26 @@
       if (data) c.getContext('2d').putImageData(data, 0, 0);
       return c;
     };
-    // Backdrop colour: the average along the picture's edges.
+    // Backdrop colour: the average along the picture's edges (transparent pixels don't count:
+    // drawn mockups usually have no backdrop at all, and theirs stays transparent).
     const sum = [0, 0, 0];
     let n = 0;
-    for (let x = 0; x < W0; x += 3) for (const y of [0, H0 - 1]) { const i = (y * W0 + x) * 4; sum[0] += sd[i]; sum[1] += sd[i + 1]; sum[2] += sd[i + 2]; n++; }
-    for (let y = 0; y < H0; y += 3) for (const x of [0, W0 - 1]) { const i = (y * W0 + x) * 4; sum[0] += sd[i]; sum[1] += sd[i + 1]; sum[2] += sd[i + 2]; n++; }
-    const fill = sum.map((v) => Math.round(v / n));
+    const edge = (i) => { if (sd[i + 3] < 128) return; sum[0] += sd[i]; sum[1] += sd[i + 1]; sum[2] += sd[i + 2]; n++; };
+    for (let x = 0; x < W0; x += 3) for (const y of [0, H0 - 1]) edge((y * W0 + x) * 4);
+    for (let y = 0; y < H0; y += 3) for (const x of [0, W0 - 1]) edge((y * W0 + x) * 4);
+    const fill = sum.map((v) => (n ? Math.round(v / n) : 255));
     const out = canvasOf(null);
     const ctx = out.getContext('2d');
     if (!md) {
       // No mask (drawn mockups): the picture smaller, on its backdrop colour.
-      ctx.fillStyle = `rgb(${fill.join(',')})`;
-      ctx.fillRect(0, 0, W0, H0);
       const x = (W0 - W0 * k) / 2;
       const y = (H0 - H0 * k) / 2;
+      if (!n) {
+        ctx.drawImage(cv, x, y, W0 * k, H0 * k);
+        return out;
+      }
+      ctx.fillStyle = `rgb(${fill.join(',')})`;
+      ctx.fillRect(0, 0, W0, H0);
       ctx.drawImage(cv, x, y, W0 * k, H0 * k);
       const f = Math.round(Math.min(W0, H0) * k * 0.22);
       const col = (a) => `rgba(${fill.join(',')},${a})`;

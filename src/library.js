@@ -247,36 +247,36 @@ const MUGS = ['mug', 'magicmug'];
 const WALL = ['poster', 'canvas', 'canvaswide'];
 
 const FITS = {
-  funny: { products: [...WEAR, 'denim', 'shorts', 'cap', ...MUGS, 'tumbler', 'bottle', 'apron', 'cushion', 'coasters', 'poster', 'tote', 'phonecase', 'mousepad', 'deskmat', 'keychain', 'notebook', 'lunchbag', 'pencilcase', 'stickersheet'] },
+  funny: { products: [...WEAR, 'denim', 'shorts', 'cap', ...MUGS, 'tumbler', 'bottle', 'apron', 'cushion', 'coasters', 'poster', 'tote', 'phonecase', 'mousepad', 'deskmat', 'keychain', 'notebook', 'lunchbag', 'pencilcase', 'stickersheet', 'magnets', 'notepads'] },
   // The prayer mat only takes the respectful greetings (alsoProducts in the packs), not the food jokes.
-  ramadan: { products: [...WEAR, ...KIDS_WEAR, ...MUGS, 'tumbler', 'cushion', ...WALL, 'tablecloth', 'apron', 'coasters', 'tote', 'notebook', 'sign', 'greetingcard', 'logostickers', 'paperbags', 'flyers'] },
+  ramadan: { products: [...WEAR, ...KIDS_WEAR, ...MUGS, 'tumbler', 'cushion', ...WALL, 'tablecloth', 'apron', 'coasters', 'tote', 'notebook', 'sign', 'greetingcard', 'logostickers', 'paperbags', 'flyers', 'postcards', 'foldedcards', 'magnets'] },
   football: { products: [...WEAR, 'jersey', 'shorts', 'polo', 'cap', ...KIDS_WEAR, ...MUGS, 'tumbler', 'bottle', 'cushion', 'poster', 'canvas', 'phonecase', 'mousepad', 'deskmat', 'keychain', 'coasters', 'notebook', 'lunchbag', 'pencilcase', 'stickersheet', 'tote'] },
-  eid: { products: [...WEAR, ...KIDS_WEAR, ...MUGS, 'cushion', 'poster', 'tablecloth', 'apron', 'coasters', 'tote', 'eidenvelopes', 'greetingcard', 'sign', 'logostickers', 'paperbags', 'flyers'] },
-  love: { products: [...WEAR, 'denim', ...MUGS, 'couplemugs', 'tumbler', 'cushion', ...WALL, 'plaque', 'keychain', 'phonecase', 'tote', 'coasters', 'greetingcard'] },
-  birthday: { products: [...WEAR, ...KIDS_WEAR, ...MUGS, 'tumbler', 'cushion', 'poster', 'plaque', 'sign', 'greetingcard', 'invitations', 'logostickers', 'paperbags', 'tote'] },
+  eid: { products: [...WEAR, ...KIDS_WEAR, ...MUGS, 'cushion', 'poster', 'tablecloth', 'apron', 'coasters', 'tote', 'eidenvelopes', 'greetingcard', 'sign', 'logostickers', 'paperbags', 'flyers', 'postcards', 'foldedcards', 'magnets'] },
+  love: { products: [...WEAR, 'denim', ...MUGS, 'couplemugs', 'tumbler', 'cushion', ...WALL, 'plaque', 'keychain', 'phonecase', 'tote', 'coasters', 'greetingcard', 'postcards', 'foldedcards', 'photobook', 'magnets'] },
+  birthday: { products: [...WEAR, ...KIDS_WEAR, ...MUGS, 'tumbler', 'cushion', 'poster', 'plaque', 'sign', 'greetingcard', 'invitations', 'logostickers', 'paperbags', 'tote', 'postcards', 'foldedcards', 'tablenumbers', 'banners'] },
   // Kids' clothes only for the son / daughter / siblings designs, the prayer mat only
   // for the gifts to mum, dad and the grandparents (alsoProducts in the packs).
-  family: { products: [...WEAR, ...MUGS, 'couplemugs', 'tumbler', 'cushion', ...WALL, 'plaque', 'sign', 'apron', 'greetingcard', 'keychain', 'coasters', 'tote'] },
-  egypt: { products: [...WEAR, 'denim', 'cap', ...KIDS_WEAR, ...MUGS, 'tumbler', 'cushion', ...WALL, 'tote', 'phonecase', 'mousepad', 'deskmat', 'keychain', 'coasters', 'notebook'] },
-  motivation: { products: [...WEAR, 'denim', 'cap', ...MUGS, 'tumbler', 'bottle', 'cushion', ...WALL, 'plaque', 'tote', 'phonecase', 'mousepad', 'deskmat', 'keychain', 'notebook', 'greetingcard', 'stickersheet'] },
-  wedding: { products: [...WEAR, 'denim', ...MUGS, 'couplemugs', 'cushion', ...WALL, 'plaque', 'sign', 'coasters', 'keychain', 'tote', 'greetingcard', 'invitations', 'logostickers', 'paperbags'] },
-  graduation: { products: [...WEAR, 'cap', ...MUGS, 'tumbler', 'cushion', 'poster', 'canvas', 'plaque', 'sign', 'keychain', 'tote', 'greetingcard', 'invitations', 'certificates', 'logostickers'] },
+  family: { products: [...WEAR, ...MUGS, 'couplemugs', 'tumbler', 'cushion', ...WALL, 'plaque', 'sign', 'apron', 'greetingcard', 'keychain', 'coasters', 'tote', 'postcards', 'foldedcards', 'photobook', 'magnets', 'calendar', 'deskcalendar'] },
+  egypt: { products: [...WEAR, 'denim', 'cap', ...KIDS_WEAR, ...MUGS, 'tumbler', 'cushion', ...WALL, 'tote', 'phonecase', 'mousepad', 'deskmat', 'keychain', 'coasters', 'notebook', 'postcards', 'magnets', 'calendar', 'bookmarks'] },
+  motivation: { products: [...WEAR, 'denim', 'cap', ...MUGS, 'tumbler', 'bottle', 'cushion', ...WALL, 'plaque', 'tote', 'phonecase', 'mousepad', 'deskmat', 'keychain', 'notebook', 'greetingcard', 'stickersheet', 'postcards', 'notepads', 'bookmarks', 'deskcalendar', 'magnets'] },
+  wedding: { products: [...WEAR, 'denim', ...MUGS, 'couplemugs', 'cushion', ...WALL, 'plaque', 'sign', 'coasters', 'keychain', 'tote', 'greetingcard', 'invitations', 'logostickers', 'paperbags', 'postcards', 'foldedcards', 'photobook', 'tablenumbers', 'placecards', 'banners'] },
+  graduation: { products: [...WEAR, 'cap', ...MUGS, 'tumbler', 'cushion', 'poster', 'canvas', 'plaque', 'sign', 'keychain', 'tote', 'greetingcard', 'invitations', 'certificates', 'logostickers', 'postcards', 'foldedcards', 'photobook', 'banners'] },
   // Mum / dad to be on adult T-shirts; the onesie and kids' clothes are added per design in the pack.
-  baby: { shownOn: ['onesie', 'kidstee'], products: ['tshirt', 'oversized', ...MUGS, 'cushion', ...WALL, 'plaque', 'sign', 'tote', 'greetingcard', 'invitations', 'logostickers', 'paperbags'] },
-  friends: { products: [...WEAR, 'cap', ...MUGS, 'couplemugs', 'tumbler', 'cushion', 'poster', 'plaque', 'keychain', 'phonecase', 'tote', 'greetingcard'] },
-  islamic: { products: [...WEAR, ...MUGS, 'tumbler', 'cushion', ...WALL, 'plaque', 'sign', 'prayermat', 'tablecloth', 'keychain', 'coasters', 'tote', 'phonecase', 'notebook', 'greetingcard'] },
+  baby: { shownOn: ['onesie', 'kidstee'], products: ['tshirt', 'oversized', ...MUGS, 'cushion', ...WALL, 'plaque', 'sign', 'tote', 'greetingcard', 'invitations', 'logostickers', 'paperbags', 'postcards', 'foldedcards', 'photobook', 'magnets', 'banners'] },
+  friends: { products: [...WEAR, 'cap', ...MUGS, 'couplemugs', 'tumbler', 'cushion', 'poster', 'plaque', 'keychain', 'phonecase', 'tote', 'greetingcard', 'postcards', 'photobook', 'magnets'] },
+  islamic: { products: [...WEAR, ...MUGS, 'tumbler', 'cushion', ...WALL, 'plaque', 'sign', 'prayermat', 'tablecloth', 'keychain', 'coasters', 'tote', 'phonecase', 'notebook', 'greetingcard', 'postcards', 'foldedcards', 'bookmarks', 'calendar', 'deskcalendar', 'magnets'] },
   fitness: { products: [...WEAR, 'polo', 'shorts', 'jersey', 'cap', ...KIDS_WEAR, 'bottle', 'tumbler', 'mug', 'tote', 'poster', 'notebook'] },
   gaming: { products: [...WEAR, 'cap', ...KIDS_WEAR, ...MUGS, 'cushion', 'poster', 'canvas', 'mousepad', 'deskmat', 'phonecase', 'keychain', 'coasters', 'notebook', 'pencilcase', 'lunchbag', 'stickersheet'] },
   music: { products: [...WEAR, 'denim', 'cap', ...MUGS, 'tumbler', 'cushion', ...WALL, 'tote', 'phonecase', 'mousepad', 'deskmat', 'keychain', 'coasters', 'notebook'] },
-  travel: { products: [...WEAR, 'shorts', 'cap', ...KIDS_WEAR, ...MUGS, 'tumbler', 'bottle', ...WALL, 'tote', 'phonecase', 'keychain', 'notebook', 'flyers'] },
-  kids: { shownOn: ['kidstee'], products: [...KIDS_WEAR, 'onesie', 'cap', 'magicmug', 'bottle', 'cushion', 'poster', 'canvas', 'lunchbag', 'pencilcase', 'notebook', 'stickersheet', 'namelabels', 'tote'] },
-  school: { products: [...WEAR, ...KIDS_WEAR, 'polo', 'jersey', 'cap', 'mug', 'tumbler', 'bottle', 'notebook', 'pencilcase', 'lunchbag', 'stickersheet', 'namelabels', 'greetingcard', 'certificates', 'idcards', 'poster', 'sign', 'tote'] },
-  pets: { products: [...WEAR, ...KIDS_WEAR, ...MUGS, 'cushion', 'poster', 'canvas', 'plaque', 'tote', 'phonecase', 'mousepad', 'keychain', 'coasters', 'notebook', 'stickersheet'] },
+  travel: { products: [...WEAR, 'shorts', 'cap', ...KIDS_WEAR, ...MUGS, 'tumbler', 'bottle', ...WALL, 'tote', 'phonecase', 'keychain', 'notebook', 'flyers', 'postcards', 'photobook', 'magnets', 'calendar'] },
+  kids: { shownOn: ['kidstee'], products: [...KIDS_WEAR, 'onesie', 'cap', 'magicmug', 'bottle', 'cushion', 'poster', 'canvas', 'lunchbag', 'pencilcase', 'notebook', 'stickersheet', 'namelabels', 'tote', 'bookmarks', 'magnets', 'photobook'] },
+  school: { products: [...WEAR, ...KIDS_WEAR, 'polo', 'jersey', 'cap', 'mug', 'tumbler', 'bottle', 'notebook', 'pencilcase', 'lunchbag', 'stickersheet', 'namelabels', 'greetingcard', 'certificates', 'idcards', 'poster', 'sign', 'tote', 'bookmarks', 'notepads'] },
+  pets: { products: [...WEAR, ...KIDS_WEAR, ...MUGS, 'cushion', 'poster', 'canvas', 'plaque', 'tote', 'phonecase', 'mousepad', 'keychain', 'coasters', 'notebook', 'stickersheet', 'postcards', 'photobook', 'magnets', 'calendar'] },
   // Shop and company logos: all the business print, work wear and give-aways. Staff
   // shirts and events take some of it out again in their pack (src/library-packs/people.js).
-  business: { cats: ['business'], products: ['tshirt', 'polo', 'hoodie', 'sweatshirt', 'ziphoodie', 'cap', 'apron', 'mug', 'tumbler', 'bottle', 'tote', 'notebook', 'mousepad', 'deskmat', 'keychain', 'coasters', 'sign'], not: ['certificates'] },
-  quotes: { products: [...WEAR, 'denim', ...MUGS, 'tumbler', 'cushion', ...WALL, 'plaque', 'coasters', 'tote', 'phonecase', 'mousepad', 'deskmat', 'keychain', 'notebook'] },
-  minimal: { products: [...WEAR, 'polo', 'denim', 'shorts', 'cap', ...MUGS, 'tumbler', 'bottle', 'cushion', ...WALL, 'coasters', 'tote', 'phonecase', 'mousepad', 'deskmat', 'keychain', 'notebook', 'pencilcase'] },
+  business: { cats: ['business'], products: ['tshirt', 'polo', 'hoodie', 'sweatshirt', 'ziphoodie', 'cap', 'apron', 'mug', 'tumbler', 'bottle', 'tote', 'notebook', 'mousepad', 'deskmat', 'keychain', 'coasters', 'sign', 'notepads', 'calendar', 'deskcalendar', 'magnets'], not: ['certificates'] },
+  quotes: { products: [...WEAR, 'denim', ...MUGS, 'tumbler', 'cushion', ...WALL, 'plaque', 'coasters', 'tote', 'phonecase', 'mousepad', 'deskmat', 'keychain', 'notebook', 'postcards', 'bookmarks', 'notepads', 'magnets', 'deskcalendar'] },
+  minimal: { products: [...WEAR, 'polo', 'denim', 'shorts', 'cap', ...MUGS, 'tumbler', 'bottle', 'cushion', ...WALL, 'coasters', 'tote', 'phonecase', 'mousepad', 'deskmat', 'keychain', 'notebook', 'pencilcase', 'notepads', 'postcards'] },
 };
 // A subject missing from the table (a new pack) still goes on the everyday products.
 const FITS_OTHER = { products: [...WEAR, ...MUGS, 'tumbler', 'cushion', 'poster', 'tote'] };

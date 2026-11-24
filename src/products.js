@@ -1676,6 +1676,592 @@ PRODUCTS.push(
 );
 const LASER_IDS = ['engrplaque', 'engrcoasters', 'engrtray', 'engrframe', 'engrcardholder', 'caketopper', 'weddingsign', 'doorsign', 'ramadandecor', 'namepuzzle'];
 
+// ---------- Cards, business print, packaging, calendars and events ----------
+// Each printArea has exactly the proportions of the real printed piece (its trim
+// size); printWidthIn is that width. Sizes that are bigger prints get a printScale
+// (SIZE_PRINT_SCALE below). `cardArt` is a sample design drawn on the shop's card
+// picture (these products have no studio photo yet), with the top layer included.
+const cmIn = (v) => Math.round((v / 2.54) * 10000) / 10000;
+const r1 = (v) => Math.round(v * 10) / 10;
+const svgInner = (s) => String(s || '').replace(/^<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '');
+const paperRect = (a, stroke = 3) => `<rect x="${a.x}" y="${a.y}" width="${a.w}" height="${a.h}" rx="${a.rx || 0}" fill="{{C}}" stroke="{{L}}" stroke-width="${stroke}"/>`;
+/** A card of a pack with another one turned a little behind it. */
+const cardPack = (a, deg) => {
+  const turn = `transform="rotate(${deg} ${a.x + a.w / 2} ${a.y + a.h / 2})"`;
+  return sv(
+    `<g ${turn}><rect x="${a.x + 6}" y="${a.y + 8}" width="${a.w}" height="${a.h}" rx="${a.rx || 0}" fill="#000" opacity=".07"/>` +
+      `<rect x="${a.x}" y="${a.y}" width="${a.w}" height="${a.h}" rx="${a.rx || 0}" fill="{{S}}" stroke="{{L}}" stroke-width="2"/></g>` +
+      shadowRect(a.x, a.y, a.w, a.h, a.rx || 0) + paperRect(a)
+  );
+};
+/** Sample artwork for card pictures: a tinted background, a motif and two lines of "text". */
+const sampleArt = (a, { bg = '#fde7dc', accent = '#ff5a36', ink = '#2b2d42', motif = 'circle' } = {}) => {
+  const u = Math.min(a.w, a.h);
+  const cx = a.x + a.w / 2;
+  const cy = a.y + a.h * 0.4;
+  const s = u * 0.17;
+  const shape = motif === 'heart'
+    ? `<path d="M${r1(cx)} ${r1(cy + s)} C${r1(cx - s * 1.6)} ${r1(cy - s * 0.2)} ${r1(cx - s * 0.9)} ${r1(cy - s * 1.4)} ${r1(cx)} ${r1(cy - s * 0.5)} C${r1(cx + s * 0.9)} ${r1(cy - s * 1.4)} ${r1(cx + s * 1.6)} ${r1(cy - s * 0.2)} ${r1(cx)} ${r1(cy + s)} Z" fill="${accent}"/>`
+    : `<circle cx="${r1(cx)}" cy="${r1(cy)}" r="${r1(s)}" fill="${accent}"/>`;
+  return `<rect x="${a.x}" y="${a.y}" width="${a.w}" height="${a.h}" rx="${a.rx || 0}" fill="${bg}"/>` + shape +
+    `<rect x="${r1(cx - a.w * 0.3)}" y="${r1(a.y + a.h * 0.66)}" width="${r1(a.w * 0.6)}" height="${r1(u * 0.07)}" rx="${r1(u * 0.035)}" fill="${ink}"/>` +
+    `<rect x="${r1(cx - a.w * 0.2)}" y="${r1(a.y + a.h * 0.66 + u * 0.12)}" width="${r1(a.w * 0.4)}" height="${r1(u * 0.045)}" rx="${r1(u * 0.022)}" fill="${ink}" opacity=".55"/>`;
+};
+/** A sample photo (sky, sun and hills) filling a box. */
+const photoArt = (a) =>
+  `<rect x="${a.x}" y="${a.y}" width="${a.w}" height="${a.h}" rx="${a.rx || 0}" fill="#9fd3f4"/>` +
+  `<circle cx="${r1(a.x + a.w * 0.72)}" cy="${r1(a.y + a.h * 0.28)}" r="${r1(Math.min(a.w, a.h) * 0.12)}" fill="#ffd54a"/>` +
+  `<path d="M${a.x} ${a.y + a.h} L${a.x} ${r1(a.y + a.h * 0.72)} L${r1(a.x + a.w * 0.32)} ${r1(a.y + a.h * 0.46)} L${r1(a.x + a.w * 0.55)} ${r1(a.y + a.h * 0.66)} L${r1(a.x + a.w * 0.75)} ${r1(a.y + a.h * 0.52)} L${a.x + a.w} ${r1(a.y + a.h * 0.7)} L${a.x + a.w} ${a.y + a.h} Z" fill="#5aa35a"/>`;
+/** A month page: a coloured title bar and a 7 × 5 grid of day numbers (Fridays in red). */
+const monthGrid = (x, y, w, h, bar) => {
+  const cw = w / 7;
+  const top = y + h * 0.2;
+  const rh = (h * 0.78) / 5;
+  let s = `<rect x="${x}" y="${y}" width="${w}" height="${r1(h * 0.14)}" fill="${bar}"/><rect x="${r1(x + w * 0.35)}" y="${r1(y + h * 0.045)}" width="${r1(w * 0.3)}" height="${r1(h * 0.05)}" rx="2" fill="#ffffff" opacity=".9"/>`;
+  for (let r = 0; r < 5; r++) {
+    for (let c = 0; c < 7; c++) {
+      if (r === 4 && c > 2) continue;
+      s += `<rect x="${r1(x + c * cw + cw * 0.3)}" y="${r1(top + r * rh + rh * 0.3)}" width="${r1(cw * 0.4)}" height="${r1(Math.max(3, rh * 0.25))}" rx="1" fill="${c === 6 ? bar : '#868e96'}"/>`;
+    }
+  }
+  for (let r = 1; r < 5; r++) s += `<path d="M${x + 4} ${r1(top + r * rh)} H${x + w - 4}" stroke="#e1e4e8" stroke-width="1"/>`;
+  return s;
+};
+
+// Postcards: 10 × 15 cm.
+const POSTCARD = { x: 140, y: 90, w: 220, h: 330, rx: 3 };
+// Folded cards: A5 folded to A6 (10.5 × 14.8 cm), printed on the cover and the inside right-hand page
+// (the server's side ids are front / back). The cover stands up; the inside is shown open.
+const FOLD_A6 = { x: 140, y: 100, w: 220, h: 310 };
+const FOLD_IN = { x: 250, y: 150, w: 210, h: 296 };
+const ENVELOPE_BEHIND = '<g transform="rotate(-8 200 390)"><rect x="76" y="308" width="260" height="180" rx="3" fill="#000" opacity=".07"/><rect x="70" y="300" width="260" height="180" rx="3" fill="#ffffff" stroke="#c9ccd2" stroke-width="2"/><path d="M70 300 L200 392 L330 300" fill="none" stroke="#c9ccd2" stroke-width="2"/></g>';
+const FOLDED_COVER = sv(
+  ENVELOPE_BEHIND +
+    // The back half, opened a little behind the cover; the fold is the cover's left edge.
+    '<path d="M360 100 L396 118 L396 428 L360 410 Z" fill="{{S}}" stroke="{{L}}" stroke-width="2" stroke-linejoin="round"/>' +
+    shadowRect(FOLD_A6.x, FOLD_A6.y, FOLD_A6.w, FOLD_A6.h) + paperRect(FOLD_A6) +
+    '<path d="M141.5 101 V409" stroke="{{S}}" stroke-width="3"/>'
+);
+// Gift vouchers: 21 × 10 cm.
+const VOUCHER = { x: 40, y: 200, w: 420, h: 200, rx: 4 };
+// Bookmarks: 5 × 15 cm, with a punched hole and a tassel.
+const BOOKMARK = { x: 180, y: 100, w: 140, h: 420, rx: 4 };
+const BOOKMARK_TASSEL = sv(
+  '<circle cx="250" cy="122" r="7" fill="#ffffff" stroke="{{L}}" stroke-width="2"/>' +
+    '<path d="M250 116 C250 62 168 64 160 132" fill="none" stroke="#c9a227" stroke-width="3" stroke-linecap="round"/>' +
+    '<circle cx="160" cy="136" r="7" fill="#b8901c"/>' +
+    '<path d="M154 142 L146 204 M158 142 L154 208 M162 142 L162 210 M166 142 L170 208 M170 141 L178 203" stroke="#c9a227" stroke-width="3" stroke-linecap="round"/>' +
+    '<rect x="150" y="146" width="20" height="7" rx="3" fill="#a8820f"/>'
+);
+// Tri-fold brochures: A4 landscape (29.7 × 21 cm) folded in three, outside and inside.
+const TRIFOLD = { x: 40, y: 150, w: 420, h: 297 };
+const TRIFOLD_SVG = sv(
+  shadowRect(TRIFOLD.x, TRIFOLD.y, TRIFOLD.w, TRIFOLD.h) + paperRect(TRIFOLD) +
+    // The brochure folded up, below the open sheet.
+    '<path d="M180 494 L230 504 L230 584 L180 574 Z" fill="{{C}}" stroke="{{L}}" stroke-width="2" stroke-linejoin="round"/>' +
+    '<path d="M230 504 L280 494 L280 574 L230 584 Z" fill="{{S}}" stroke="{{L}}" stroke-width="2" stroke-linejoin="round"/>' +
+    '<path d="M280 494 L330 504 L330 584 L280 574 Z" fill="{{C}}" stroke="{{L}}" stroke-width="2" stroke-linejoin="round"/>'
+);
+const TRIFOLD_FOLDS = sv(
+  '<path d="M180 150 V447 M320 150 V447" stroke="#7d838c" stroke-width="1.5" stroke-dasharray="7 6" opacity=".8"/>' +
+    '<path d="M180 138 V146 M320 138 V146 M180 451 V459 M320 451 V459" stroke="#7d838c" stroke-width="2"/>'
+);
+// Menus: A4 (21 × 29.7 cm); A3 prints at 1.414×.
+const MENU = { x: 110, y: 80, w: 280, h: 396, rx: 6 };
+const CUTLERY =
+  '<rect x="60" y="290" width="12" height="190" rx="6" fill="#c3c7cd"/><path d="M50 160 V230 Q50 262 66 266 Q82 262 82 230 V160" fill="none" stroke="#c3c7cd" stroke-width="6" stroke-linecap="round"/><path d="M61 160 V226 M71 160 V226" stroke="#c3c7cd" stroke-width="5" stroke-linecap="round"/>' +
+  '<rect x="430" y="300" width="12" height="180" rx="6" fill="#c3c7cd"/><path d="M430 304 V170 Q456 196 454 300 Z" fill="#d5d8dd" stroke="#c3c7cd" stroke-width="3" stroke-linejoin="round"/>';
+const menuSvg = (deg) => sv(CUTLERY + svgInner(cardPack(MENU, deg)));
+// Notepads: A5 (14.8 × 21 cm) pads; A6 prints at 0.709×. Glued at the top, a card back under the sheets.
+const NOTEPAD = { x: 139, y: 120, w: 222, h: 315 };
+const NOTEPAD_SVG = sv(
+  '<rect x="149" y="130" width="222" height="315" fill="#000" opacity=".12"/>' +
+    '<rect x="146" y="127" width="222" height="315" fill="#b9a27f" stroke="#8f7a59" stroke-width="2"/>' +
+    '<rect x="143" y="124" width="222" height="315" fill="#ffffff" stroke="#c9ccd2" stroke-width="1.5"/>' +
+    '<rect x="141" y="122" width="222" height="315" fill="#ffffff" stroke="#c9ccd2" stroke-width="1.5"/>' +
+    paperRect(NOTEPAD, 2.5) +
+    '<rect x="136" y="107" width="235" height="14" rx="3" fill="#3a3d44"/>' +
+    '<g transform="rotate(16 425 300)"><rect x="418" y="160" width="14" height="250" rx="4" fill="#2f5d9e"/><rect x="418" y="160" width="14" height="34" rx="4" fill="#20407a"/><path d="M418 410 L425 438 L432 410 Z" fill="#e9d3a8"/><path d="M423 430 L425 438 L427 430 Z" fill="#333"/></g>'
+);
+// Presentation folders: the outside printed flat, 44 × 31 cm (back | front, each 22 × 31 cm, holds A4).
+const FOLDER = { x: 30, y: 140, w: 440, h: 310 };
+const FOLDER_SVG = sv(
+  // The pocket flap (inside, unprinted) below the front half, with a business-card slot.
+  '<path d="M258 446 L466 446 L466 496 Q466 512 450 512 L300 512 Q262 512 258 482 Z" fill="{{S}}" stroke="{{L}}" stroke-width="2" stroke-linejoin="round"/>' +
+    '<path d="M370 480 L384 470 L428 470 L442 480" fill="none" stroke="{{L}}" stroke-width="1.5"/>' +
+    shadowRect(FOLDER.x, FOLDER.y, FOLDER.w, FOLDER.h) + paperRect(FOLDER)
+);
+const FOLDER_SPINE = sv('<path d="M246 140 V450 M254 140 V450" stroke="#7d838c" stroke-width="1.5" stroke-dasharray="7 6" opacity=".8"/>');
+// Booklets: A5 (14.8 × 21 cm), stapled on the spine.
+const BOOKLET = { x: 139, y: 100, w: 222, h: 315 };
+const bookletSvg = (front) => sv(
+  `<rect x="${front ? 146 : 132}" y="109" width="222" height="315" fill="#000" opacity=".12"/>` +
+    `<rect x="${front ? 143 : 135}" y="104" width="222" height="315" fill="#f3efe6" stroke="#cfc8b8" stroke-width="1.5"/>` +
+    paperRect(BOOKLET)
+);
+const bookletSpine = (front) => {
+  const x = front ? 139 : 355;
+  return sv(
+    `<rect x="${x}" y="100" width="6" height="315" fill="#000" opacity=".08"/>` +
+      `<rect x="${x - 1}" y="172" width="8" height="30" rx="2" fill="#b4b8bf" stroke="#6b7079" stroke-width="1"/>` +
+      `<rect x="${x - 1}" y="313" width="8" height="30" rx="2" fill="#b4b8bf" stroke="#6b7079" stroke-width="1"/>`
+  );
+};
+// Product labels: 5 × 3 cm (7.5 × 4.5 and 10 × 6 cm print at 1.5× and 2×), on their backing sheet.
+const LABEL = { x: 50, y: 180, w: 400, h: 240, rx: 12 };
+const LABEL_SVG = sv(
+  '<rect x="36" y="168" width="440" height="280" rx="8" fill="#000" opacity=".1"/>' +
+    '<rect x="30" y="160" width="440" height="280" rx="8" fill="#eef0f2" stroke="#c9ccd2" stroke-width="2"/>' +
+    paperRect(LABEL, 2.5) +
+    // A jar wearing one.
+    '<rect x="198" y="470" width="104" height="18" rx="5" fill="#8a6a46"/><rect x="205" y="486" width="90" height="100" rx="14" fill="#efe1c4" stroke="#bfae8c" stroke-width="2"/>' +
+    '<rect x="215" y="512" width="70" height="42" rx="4" fill="{{C}}" stroke="{{L}}" stroke-width="1.5"/>'
+);
+// Window stickers: square, 20 × 20 cm (30, 50, 70 cm print bigger), on a shop window.
+const WINDOW_STICKER = { x: 100, y: 150, w: 300, h: 300, rx: 6 };
+const WINDOW_SVG = sv(
+  '<rect x="20" y="20" width="460" height="560" rx="6" fill="#9aa3ad"/><rect x="36" y="36" width="428" height="528" fill="#cfe1ec"/>' +
+    '<rect x="36" y="470" width="428" height="94" fill="#b3c8d6" opacity=".7"/>' +
+    `<rect x="${WINDOW_STICKER.x}" y="${WINDOW_STICKER.y}" width="300" height="300" rx="6" fill="{{C}}" stroke="{{L}}" stroke-width="2" stroke-dasharray="8 5"/>`
+);
+const WINDOW_SHINE = sv('<path d="M64 36 L156 36 L36 268 L36 92 Z" fill="#ffffff" opacity=".24"/><path d="M318 36 L352 36 L118 564 L84 564 Z" fill="#ffffff" opacity=".12"/>');
+// Wall calendar: the whole A3 card (29.7 × 42 cm) is printed; a pad of 12 month sheets is stapled on its lower half.
+const WALL_CAL = { x: 105, y: 40, w: 290, h: 410.1 };
+const WALL_CAL_SVG = sv(
+  '<path d="M150 36 L250 9 L350 36" fill="none" stroke="#7b8088" stroke-width="2.5"/><circle cx="250" cy="9" r="5" fill="#5f656d"/>' +
+    shadowRect(WALL_CAL.x, WALL_CAL.y, WALL_CAL.w, WALL_CAL.h) + paperRect(WALL_CAL, 2.5)
+);
+const WALL_CAL_PAD = sv(
+  '<rect x="101" y="33" width="298" height="11" rx="3" fill="#b4b9c0" stroke="#7b8088" stroke-width="1.5"/>' +
+    '<rect x="131" y="256" width="244" height="184" fill="#000" opacity=".12"/>' +
+    '<rect x="128" y="253" width="244" height="184" fill="#e9eaec" stroke="#c9ccd2" stroke-width="1"/>' +
+    '<rect x="128" y="250" width="244" height="184" fill="#ffffff" stroke="#c9ccd2" stroke-width="1.5"/>' +
+    monthGrid(128, 250, 244, 184, '#d9480f') +
+    '<rect x="166" y="245" width="16" height="5" rx="1.5" fill="#8d939b"/><rect x="318" y="245" width="16" height="5" rx="1.5" fill="#8d939b"/>'
+);
+// Desk calendar (tent): A5 landscape sheets (21 × 14.8 cm), your design on the left half (A6) of every sheet,
+// the month on the right half; wire-bound on a card stand.
+const DESK_CAL = { x: 40, y: 140, w: 210, h: 296 };
+const DESK_CAL_SVG = sv(
+  '<path d="M26 470 L474 470 L494 488 L6 488 Z" fill="#000" opacity=".08"/>' +
+    '<polygon points="460,140 494,470 460,470" fill="{{S}}" stroke="{{L}}" stroke-width="2" stroke-linejoin="round"/>' +
+    '<rect x="34" y="436" width="432" height="34" rx="3" fill="#2f3237"/>' +
+    '<rect x="40" y="144" width="420" height="296" fill="#e9eaec" stroke="#c9ccd2" stroke-width="1"/>' +
+    '<rect x="40" y="140" width="420" height="296" fill="{{C}}" stroke="{{L}}" stroke-width="2.5"/>' +
+    '<rect x="252" y="140" width="208" height="296" fill="#ffffff"/>' +
+    monthGrid(262, 156, 188, 266, '#1c7ed6') +
+    '<rect x="40" y="140" width="420" height="296" fill="none" stroke="{{L}}" stroke-width="2.5"/>'
+);
+const DESK_CAL_RINGS = sv(Array.from({ length: 25 }, (_, i) => `<path d="M${54 + i * 16} 150 V133 a4 4 0 0 1 8 0 V150" fill="none" stroke="#50555c" stroke-width="2.5"/>`).join(''));
+// Photo album: hardcover with slip-in pockets, cover 20 × 25 cm (24 × 30 cm prints at 1.2×).
+const ALBUM = { x: 120, y: 70, w: 280, h: 350 };
+const ALBUM_SVG = sv(
+  '<rect x="128" y="80" width="290" height="350" rx="6" fill="#000" opacity=".12"/>' +
+    '<rect x="122" y="75" width="284" height="350" rx="5" fill="#f3efe6" stroke="#cfc8b8" stroke-width="1.5"/>' +
+    '<rect x="108" y="70" width="20" height="350" rx="4" fill="#3b3f46"/>' +
+    '<rect x="120" y="70" width="280" height="350" rx="4" fill="{{C}}" stroke="{{L}}" stroke-width="3"/>'
+);
+const ALBUM_HINGE = sv('<path d="M135 72 V418" stroke="#000" stroke-width="2.5" opacity=".13"/>');
+// Fridge magnets: 6 × 9 cm (8 × 12 and 10 × 15 cm print bigger), on a fridge door.
+const MAGNET = { x: 130, y: 120, w: 240, h: 360, rx: 14 };
+const MAGNET_SVG = sv(
+  '<rect x="0" y="0" width="500" height="600" fill="#eef1f4"/><rect x="474" y="0" width="26" height="600" fill="#dfe3e8"/>' +
+    '<rect x="450" y="170" width="14" height="260" rx="7" fill="#c3c8cf" stroke="#a7adb5" stroke-width="1.5"/>' +
+    '<rect x="139" y="132" width="240" height="360" rx="14" fill="#000" opacity=".06"/><rect x="135" y="127" width="240" height="360" rx="14" fill="#000" opacity=".1"/>' +
+    paperRect(MAGNET, 2)
+);
+// Vinyl banners: 100 × 50 cm (150 × 75 and 200 × 100 cm print bigger), hemmed, with eyelets and ropes.
+const BANNER = { x: 30, y: 190, w: 440, h: 220 };
+const BANNER_EYELETS = [[41, 201], [145.5, 201], [250, 201], [354.5, 201], [459, 201], [41, 399], [145.5, 399], [250, 399], [354.5, 399], [459, 399], [41, 300], [459, 300]];
+const BANNER_SVG = sv(
+  '<path d="M41 201 L6 150 M459 201 L494 150 M41 399 L6 450 M459 399 L494 450" stroke="#a3876a" stroke-width="3" stroke-linecap="round"/>' +
+    shadowRect(BANNER.x, BANNER.y, BANNER.w, BANNER.h) + paperRect(BANNER, 2.5)
+);
+const BANNER_RINGS = sv(
+  '<rect x="31.5" y="191.5" width="437" height="217" fill="none" stroke="#000" stroke-opacity=".1" stroke-width="3"/>' +
+    BANNER_EYELETS.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="5.5" fill="none" stroke="#9aa0a8" stroke-width="3"/><circle cx="${x}" cy="${y}" r="2.6" fill="#4b5058"/>`).join('')
+);
+// Tent cards standing on a table: table numbers 15 × 10 cm, place cards 9 × 5 cm (each face).
+const TABLE_NO = { x: 55, y: 190, w: 390, h: 260 };
+const PLACE_CARD = { x: 52, y: 200, w: 396, h: 220 };
+const tentSvg = (a, backFace) => {
+  const b = a.y + a.h;
+  const edge = backFace
+    ? `<polygon points="${a.x},${a.y} ${a.x - 34},${b} ${a.x},${b}" fill="{{S}}" stroke="{{L}}" stroke-width="2" stroke-linejoin="round"/>`
+    : `<polygon points="${a.x + a.w},${a.y} ${a.x + a.w + 34},${b} ${a.x + a.w},${b}" fill="{{S}}" stroke="{{L}}" stroke-width="2" stroke-linejoin="round"/>`;
+  return sv(`<ellipse cx="250" cy="${b + 12}" rx="236" ry="14" fill="#000" opacity=".1"/>` + edge + paperRect(a) + `<path d="M${a.x} ${a.y} H${a.x + a.w}" stroke="{{L}}" stroke-width="4"/>`);
+};
+
+const CARD_STOCK = [
+  { id: 'matte', name: t('Matte white', 'أبيض مطفي'), hex: '#ffffff' },
+  { id: 'pearl', name: t('Pearl shimmer', 'لؤلؤي لامع'), hex: '#f7f4ee' },
+  C.cream,
+  C.kraft,
+];
+const laminationOption = (help, price) => ({
+  id: 'lamination',
+  name: t('Lamination', 'سلوفان'),
+  help,
+  choices: [
+    { id: 'none', name: t('No lamination', 'بدون سلوفان'), price: 0 },
+    { id: 'matte', name: t('Matte lamination', 'سلوفان مط'), price },
+    { id: 'gloss', name: t('Glossy lamination', 'سلوفان لامع'), price },
+  ],
+});
+const withArt = (art, overlay) => art + svgInner(overlay);
+
+PRODUCTS.push(
+  {
+    id: 'postcards',
+    category: 'occasions',
+    name: t('Postcards & Thank-you Cards', 'كروت بوستال وكروت شكر'),
+    description: t('Thick 350 gsm cards, 10 × 15 cm, printed on one or both sides. Perfect as thank-you cards in your online orders, and for greetings, offers and small invitations.', 'كروت 350 جرام سميكة، 10 × 15 سم، طباعة وش أو وشين. مثالية ككروت شكر جوه أوردرات الأونلاين، وللتهاني والعروض والدعوات الصغيرة.'),
+    basePrice: 220,
+    extraSidePrice: 60,
+    colorLabel: t('Paper', 'الورق'),
+    colors: PAPER_FINISH,
+    sizes: qty([['50', '50 cards', '50 كارت', 0], ['100', '100 cards', '100 كارت', 120], ['250', '250 cards', '250 كارت', 380], ['500', '500 cards', '500 كارت', 700]]),
+    sides: [
+      { id: 'front', name: FRONT, svg: cardPack(POSTCARD, -6), printArea: { ...POSTCARD }, printWidthIn: cmIn(10) },
+      { id: 'back', name: BACK, svg: cardPack(POSTCARD, 6), printArea: { ...POSTCARD }, printWidthIn: cmIn(10) },
+    ],
+    cardArt: sampleArt(POSTCARD, { bg: '#fde2d6', accent: '#e8590c', motif: 'heart' }),
+  },
+  {
+    id: 'foldedcards',
+    category: 'occasions',
+    name: t('Folded Cards Printed Inside (packs)', 'كروت مطوية مطبوعة من جوه (باكتات)'),
+    description: t('A5 cards folded to A6 (10.5 × 14.8 cm) on 300 gsm card, printed on the cover and on the inside page for your message, with white envelopes. For thank-you notes, Eid and wedding cards and company greetings. Printing inside costs nothing extra.', 'كروت A5 بتتطوي A6 (10.5 × 14.8 سم) على كارت 300 جرام، مطبوعة على الغلاف وعلى الصفحة اللي جوه لرسالتك، ومعاها ظروف بيضاء. لكروت الشكر وتهاني العيد والأفراح وتهاني الشركات. طباعة الجوه من غير أي زيادة.'),
+    basePrice: 280,
+    extraSidePrice: 0,
+    colorLabel: t('Paper', 'الورق'),
+    colors: CARD_STOCK,
+    sizes: qty([['10', '10 cards + envelopes', '10 كروت + ظروف', 0], ['25', '25 cards + envelopes', '25 كارت + ظروف', 200], ['50', '50 cards + envelopes', '50 كارت + ظروف', 500], ['100', '100 cards + envelopes', '100 كارت + ظروف', 1000]]),
+    sides: [
+      { id: 'front', name: t('Cover', 'الغلاف'), svg: FOLDED_COVER, printArea: { ...FOLD_A6 }, printWidthIn: cmIn(10.5) },
+      {
+        id: 'back',
+        name: t('Inside', 'من جوه'),
+        svg: sv(
+          '<rect x="46" y="158" width="420" height="296" fill="#000" opacity=".1"/>' +
+            '<rect x="40" y="150" width="210" height="296" fill="{{S}}" stroke="{{L}}" stroke-width="2"/>' +
+            paperRect(FOLD_IN, 2) + '<path d="M250 150 V446" stroke="{{L}}" stroke-width="2"/>'
+        ),
+        overlay: sv('<defs><linearGradient id="fold" x1="0" x2="1"><stop offset="0" stop-color="#000" stop-opacity=".16"/><stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient></defs><rect x="250" y="150" width="16" height="296" fill="url(#fold)"/>'),
+        printArea: { ...FOLD_IN },
+        printWidthIn: cmIn(10.5),
+      },
+    ],
+    cardArt: sampleArt(FOLD_A6, { bg: '#e7f5ff', accent: '#1c7ed6', motif: 'heart' }),
+  },
+  {
+    id: 'giftvouchers',
+    category: 'business',
+    name: t('Gift Vouchers', 'كوبونات هدايا (جيفت فاوتشر)'),
+    description: t('Gift vouchers for your shop, salon, café or clinic on thick 350 gsm card, 21 × 10 cm, printed on one or both sides. Leave a space to write the value and the expiry date by hand.', 'كوبونات هدايا لمحلك أو الصالون أو الكافيه أو العيادة، على كارت 350 جرام سميك، 21 × 10 سم، طباعة وش أو وشين. سيب مكان تكتب فيه القيمة وتاريخ الصلاحية بخط إيدك.'),
+    basePrice: 250,
+    extraSidePrice: 60,
+    colorLabel: t('Paper', 'الورق'),
+    colors: CARD_STOCK,
+    options: [laminationOption(
+      t('A thin film over the print that protects the vouchers and makes them feel stronger.', 'طبقة رقيقة فوق الطباعة بتحمي الكوبونات وبتخليها أتقل في الإيد.'),
+      { 25: 40, 50: 70, 100: 120, 250: 250 },
+    )],
+    sizes: qty([['25', '25 vouchers', '25 كوبون', 0], ['50', '50 vouchers', '50 كوبون', 120], ['100', '100 vouchers', '100 كوبون', 300], ['250', '250 vouchers', '250 كوبون', 700]]),
+    sides: [
+      { id: 'front', name: FRONT, svg: cardPack(VOUCHER, -5), printArea: { ...VOUCHER }, printWidthIn: cmIn(21) },
+      { id: 'back', name: BACK, svg: cardPack(VOUCHER, 5), printArea: { ...VOUCHER }, printWidthIn: cmIn(21) },
+    ],
+    cardArt: `<rect x="40" y="200" width="420" height="200" rx="4" fill="#fff4e6"/><rect x="330" y="200" width="26" height="200" fill="#d6336c"/><circle cx="343" cy="250" r="20" fill="#e64980"/>` +
+      '<rect x="70" y="250" width="200" height="22" rx="11" fill="#2b2d42"/><rect x="70" y="290" width="150" height="12" rx="6" fill="#2b2d42" opacity=".55"/><rect x="70" y="340" width="110" height="26" rx="6" fill="none" stroke="#d6336c" stroke-width="3"/>',
+  },
+  {
+    id: 'bookmarks',
+    category: 'stationery',
+    name: t('Bookmarks', 'فواصل كتب'),
+    description: t('Bookmarks on thick 350 gsm card, 5 × 15 cm, printed on one or both sides, with a punched hole and a gold tassel. For bookshops, schools, Quran gifts and giveaways.', 'فواصل كتب على كارت 350 جرام سميك، 5 × 15 سم، طباعة وش أو وشين، بخرم وشرّابة دهبي. للمكتبات والمدارس وهدايا المصاحف والتوزيعات.'),
+    basePrice: 180,
+    extraSidePrice: 40,
+    colorLabel: t('Paper', 'الورق'),
+    colors: PAPER_FINISH,
+    sizes: qty([['25', '25 bookmarks', '25 فاصل', 0], ['50', '50 bookmarks', '50 فاصل', 80], ['100', '100 bookmarks', '100 فاصل', 200], ['250', '250 bookmarks', '250 فاصل', 450]]),
+    sides: [
+      { id: 'front', name: FRONT, svg: cardPack(BOOKMARK, 9), overlay: BOOKMARK_TASSEL, printArea: { ...BOOKMARK }, printWidthIn: cmIn(5) },
+      { id: 'back', name: BACK, svg: cardPack(BOOKMARK, 9), overlay: BOOKMARK_TASSEL, printArea: { ...BOOKMARK }, printWidthIn: cmIn(5) },
+    ],
+    cardArt: withArt(
+      '<rect x="180" y="100" width="140" height="420" rx="4" fill="#e6fcf5"/><path d="M180 380 Q250 330 320 380 L320 520 L180 520 Z" fill="#20c997"/><circle cx="250" cy="250" r="34" fill="#0ca678"/><rect x="205" y="310" width="90" height="10" rx="5" fill="#2b2d42"/>',
+      BOOKMARK_TASSEL,
+    ),
+  },
+  {
+    id: 'brochures',
+    category: 'business',
+    name: t('Tri-fold Brochures', 'بروشورات 3 طيّات'),
+    description: t('A4 brochures folded in three (to 10 × 21 cm) on 170 gsm satin paper, printed on both sides. Outside: the middle third is the back, and the front cover is the right-hand third (the left-hand one for Arabic brochures). Inside: the three panels seen when it opens.', 'بروشور A4 بيتطوي 3 طيّات (يبقى 10 × 21 سم) على ورق 170 جرام ساتان، مطبوع وشين. من بره: التلت اللي في النص هو الضهر، والغلاف هو التلت اليمين (أو الشمال لو البروشور عربي). من جوه: التلات أجزاء اللي بتبان لما يتفتح.'),
+    basePrice: 500,
+    extraSidePrice: 0,
+    colors: [{ id: 'satin', name: t('Satin white', 'أبيض ساتان'), hex: '#ffffff' }, { id: 'gloss', name: t('Glossy white', 'أبيض لامع'), hex: '#ffffff' }],
+    sizes: qty([['100', '100 brochures', '100 بروشور', 0], ['250', '250 brochures', '250 بروشور', 350], ['500', '500 brochures', '500 بروشور', 750], ['1000', '1000 brochures', '1000 بروشور', 1400]]),
+    sides: [
+      { id: 'front', name: t('Outside', 'من بره'), svg: TRIFOLD_SVG, overlay: TRIFOLD_FOLDS, printArea: { ...TRIFOLD }, printWidthIn: cmIn(29.7) },
+      { id: 'back', name: t('Inside', 'من جوه'), svg: TRIFOLD_SVG, overlay: TRIFOLD_FOLDS, printArea: { ...TRIFOLD }, printWidthIn: cmIn(29.7) },
+    ],
+    cardArt: withArt(
+      '<rect x="40" y="150" width="140" height="297" fill="#e7f5ff"/><rect x="180" y="150" width="140" height="297" fill="#ffffff"/><rect x="320" y="150" width="140" height="297" fill="#1c7ed6"/>' +
+        '<circle cx="390" cy="250" r="34" fill="#ffffff"/><rect x="345" y="310" width="90" height="12" rx="6" fill="#ffffff"/><rect x="62" y="190" width="96" height="10" rx="5" fill="#2b2d42"/><rect x="62" y="212" width="80" height="8" rx="4" fill="#868e96"/><rect x="202" y="190" width="96" height="70" rx="4" fill="#a5d8ff"/>',
+      TRIFOLD_FOLDS,
+    ),
+  },
+  {
+    id: 'menus',
+    category: 'business',
+    name: t('Restaurant & Café Menus', 'منيو مطاعم وكافيهات'),
+    description: t('Menus on thick 300 gsm card, A4 or A3, printed on both sides at no extra cost. Add lamination so they wipe clean and last.', 'منيو على كارت 300 جرام سميك، A4 أو A3، مطبوع وشين من غير زيادة. ضيف سلوفان عشان يتمسح بسهولة ويعيش.'),
+    basePrice: 250,
+    extraSidePrice: 0,
+    colorLabel: t('Paper', 'الورق'),
+    colors: [{ id: 'matte', name: t('Matte white', 'أبيض مطفي'), hex: '#ffffff' }, { id: 'gloss', name: t('Glossy white', 'أبيض لامع'), hex: '#ffffff' }, C.kraft],
+    options: [laminationOption(
+      t('A thick film on both sides: the menu wipes clean and lasts much longer.', 'طبقة سلوفان على الوشين: المنيو يتمسح بسهولة ويعيش أطول بكتير.'),
+      { 'A4-10': 100, 'A4-25': 200, 'A4-50': 350, 'A3-10': 180, 'A3-25': 400 },
+    )],
+    sizes: qty([['A4-10', 'A4 × 10', 'A4 × 10', 0], ['A4-25', 'A4 × 25', 'A4 × 25', 250], ['A4-50', 'A4 × 50', 'A4 × 50', 550], ['A3-10', 'A3 × 10', 'A3 × 10', 200], ['A3-25', 'A3 × 25', 'A3 × 25', 600]]),
+    sides: [
+      { id: 'front', name: FRONT, svg: menuSvg(-5), printArea: { ...MENU }, printWidthIn: cmIn(21) },
+      { id: 'back', name: BACK, svg: menuSvg(5), printArea: { ...MENU }, printWidthIn: cmIn(21) },
+    ],
+    cardArt: '<rect x="110" y="80" width="280" height="396" rx="6" fill="#fff9db"/><rect x="110" y="80" width="280" height="80" rx="6" fill="#e8590c"/><rect x="180" y="110" width="140" height="20" rx="10" fill="#ffffff"/>' +
+      [0, 1, 2, 3, 4, 5].map((i) => `<rect x="140" y="${190 + i * 44}" width="${150 - (i % 3) * 20}" height="10" rx="5" fill="#2b2d42"/><rect x="330" y="${190 + i * 44}" width="30" height="10" rx="5" fill="#e8590c"/><rect x="140" y="${206 + i * 44}" width="110" height="6" rx="3" fill="#adb5bd"/>`).join(''),
+  },
+  {
+    id: 'notepads',
+    category: 'stationery',
+    name: t('Notepads (50 sheets)', 'بلوك نوت (50 ورقة)'),
+    description: t('Glued pads of 50 sheets, A5 or A6, on 80 gsm paper with a card back. Every sheet is printed with your design: a logo at the top, lines or a to-do list. For offices, clinics, hotels and gifts.', 'بلوكات نوت متقفلة بالغِرا، 50 ورقة، A5 أو A6، على ورق 80 جرام بضهر كرتون. كل ورقة مطبوعة بتصميمك: لوجو فوق، سطور أو قائمة مهام. للمكاتب والعيادات والفنادق والهدايا.'),
+    basePrice: 90,
+    colorLabel: t('Paper', 'الورق'),
+    colors: [C.white, C.cream],
+    sizes: qty([['A6-1', 'A6 · 1 pad', 'A6 · بلوك واحد', 0], ['A6-5', 'A6 · 5 pads', 'A6 · 5 بلوكات', 280], ['A6-10', 'A6 · 10 pads', 'A6 · 10 بلوكات', 530], ['A5-1', 'A5 · 1 pad', 'A5 · بلوك واحد', 40], ['A5-5', 'A5 · 5 pads', 'A5 · 5 بلوكات', 400], ['A5-10', 'A5 · 10 pads', 'A5 · 10 بلوكات', 780]]),
+    sides: [{ id: 'front', name: t('Sheet', 'الورقة'), svg: NOTEPAD_SVG, printArea: { ...NOTEPAD }, printWidthIn: cmIn(14.8) }],
+    cardArt: '<rect x="139" y="120" width="222" height="315" fill="#ffffff"/><circle cx="178" cy="160" r="18" fill="#7048e8"/><rect x="206" y="152" width="110" height="10" rx="5" fill="#2b2d42"/>' +
+      Array.from({ length: 9 }, (_, i) => `<path d="M160 ${210 + i * 24} H340" stroke="#d0bfff" stroke-width="2"/>`).join(''),
+  },
+  {
+    id: 'folders',
+    category: 'business',
+    name: t('Presentation Folders', 'فولدرات شركات'),
+    description: t('A4 folders (22 × 31 cm) with a pocket inside and a business-card slot, on thick 350 gsm card. You design the outside as one piece: the right half is the front and the left half the back (the other way round for Arabic folders).', 'فولدرات A4 (22 × 31 سم) بجيب من جوه ومكان لكارت شخصي، على كارت 350 جرام سميك. بتصمم البرّه كله حتة واحدة: النص اليمين هو الوش والنص الشمال هو الضهر (والعكس لو الفولدر عربي).'),
+    basePrice: 750,
+    colorLabel: t('Paper', 'الورق'),
+    colors: [{ id: 'matte', name: t('Matte white', 'أبيض مطفي'), hex: '#ffffff' }, { id: 'gloss', name: t('Glossy white', 'أبيض لامع'), hex: '#ffffff' }, C.kraft],
+    options: [laminationOption(
+      t('A thin film over the print that keeps the folders clean and stops the folds cracking.', 'طبقة رقيقة فوق الطباعة بتحافظ على الفولدر نضيف وبتمنع الطباعة تتشرخ عند الطيّة.'),
+      { 25: 150, 50: 250, 100: 450, 250: 950 },
+    )],
+    sizes: qty([['25', '25 folders', '25 فولدر', 0], ['50', '50 folders', '50 فولدر', 450], ['100', '100 folders', '100 فولدر', 1200], ['250', '250 folders', '250 فولدر', 3200]]),
+    sides: [{ id: 'front', name: t('Outside', 'من بره'), svg: FOLDER_SVG, overlay: FOLDER_SPINE, printArea: { ...FOLDER }, printWidthIn: cmIn(44) }],
+    cardArt: withArt(
+      '<rect x="30" y="140" width="220" height="310" fill="#f1f3f5"/><rect x="250" y="140" width="220" height="310" fill="#343a40"/><circle cx="360" cy="260" r="40" fill="#fab005"/><rect x="305" y="330" width="110" height="14" rx="7" fill="#ffffff"/><rect x="100" y="380" width="80" height="10" rx="5" fill="#495057"/>',
+      FOLDER_SPINE,
+    ),
+  },
+  {
+    id: 'booklets',
+    category: 'business',
+    name: t('Booklets & Catalogues (A5, stapled)', 'كتيبات وكتالوجات (A5 دبوس)'),
+    description: t('A5 booklets stapled on the spine, 8 to 32 pages on 115 gsm paper with a 250 gsm cover; the page count is part of the size. Here you design the front and back covers. After you order, we contact you on WhatsApp for the inside pages (a PDF, Word or PowerPoint file).', 'كتيبات A5 متدبّسة من الجنب، من 8 لـ 32 صفحة على ورق 115 جرام بغلاف 250 جرام؛ عدد الصفحات جوه المقاس. هنا بتصمم الغلاف الأمامي والخلفي، وبعد ما تطلب هنكلمك على واتساب عشان الصفحات اللي جوه (ملف PDF أو Word أو PowerPoint).'),
+    basePrice: 900,
+    extraSidePrice: 0,
+    colors: [{ id: 'matte', name: t('Matte cover', 'غلاف مطفي'), hex: '#ffffff' }, { id: 'gloss', name: t('Glossy cover', 'غلاف لامع'), hex: '#ffffff' }],
+    sizes: qty([
+      ['8-50', '8 pages × 50 copies', '8 صفحات × 50 نسخة', 0], ['16-50', '16 pages × 50 copies', '16 صفحة × 50 نسخة', 500], ['24-50', '24 pages × 50 copies', '24 صفحة × 50 نسخة', 1000], ['32-50', '32 pages × 50 copies', '32 صفحة × 50 نسخة', 1500],
+      ['8-100', '8 pages × 100 copies', '8 صفحات × 100 نسخة', 600], ['16-100', '16 pages × 100 copies', '16 صفحة × 100 نسخة', 1500], ['32-100', '32 pages × 100 copies', '32 صفحة × 100 نسخة', 3100],
+    ]),
+    sides: [
+      { id: 'front', name: t('Front cover', 'الغلاف الأمامي'), svg: bookletSvg(true), overlay: bookletSpine(true), printArea: { ...BOOKLET }, printWidthIn: cmIn(14.8) },
+      { id: 'back', name: t('Back cover', 'الغلاف الخلفي'), svg: bookletSvg(false), overlay: bookletSpine(false), printArea: { ...BOOKLET }, printWidthIn: cmIn(14.8) },
+    ],
+    cardArt: withArt(sampleArt(BOOKLET, { bg: '#fff0f6', accent: '#c2255c' }), bookletSpine(true)),
+  },
+  {
+    id: 'labels',
+    category: 'business',
+    name: t('Product Labels', 'ليبلز للمنتجات'),
+    description: t('Rectangle labels with rounded corners for jars, bottles, boxes and packaging: 5 × 3, 7.5 × 4.5 or 10 × 6 cm. On paper, waterproof vinyl, clear or kraft, on sheets or on a roll.', 'ليبلز مستطيلة بحواف مدورة للبرطمانات والأزايز والعلب والتغليف: 5 × 3 أو 7.5 × 4.5 أو 10 × 6 سم. على ورق أو فينيل ضد المياه أو شفاف أو كرافت، على شيتات أو رول.'),
+    basePrice: 180,
+    colorLabel: t('Material', 'الخامة'),
+    colors: [
+      { id: 'paper', name: t('White glossy paper', 'ورق أبيض لامع'), hex: '#ffffff' },
+      { id: 'vinyl', name: t('White waterproof vinyl', 'فينيل أبيض ضد المياه'), hex: '#ffffff' },
+      { id: 'clear', name: t('Clear vinyl', 'فينيل شفاف'), hex: '#f3f5f7' },
+      C.kraft,
+    ],
+    options: [{
+      id: 'delivery',
+      name: t('Supplied', 'طريقة التسليم'),
+      help: t('Sheets are easy to peel by hand; a roll is quicker when you label many products.', 'الشيتات سهل تقشّرها بإيدك؛ والرول أسرع لو بتلزق على منتجات كتير.'),
+      choices: [
+        { id: 'sheets', name: t('On sheets', 'على شيتات'), price: 0 },
+        { id: 'roll', name: t('On a roll', 'على رول'), price: { '50x30-100': 40, '50x30-250': 60, '50x30-500': 90, '50x30-1000': 140, '75x45-100': 40, '75x45-250': 70, '75x45-500': 110, '100x60-100': 50, '100x60-250': 90, '100x60-500': 140 } },
+      ],
+    }],
+    sizes: qty([
+      ['50x30-100', '5 × 3 cm × 100', '5 × 3 سم × 100', 0], ['50x30-250', '5 × 3 cm × 250', '5 × 3 سم × 250', 150], ['50x30-500', '5 × 3 cm × 500', '5 × 3 سم × 500', 340], ['50x30-1000', '5 × 3 cm × 1000', '5 × 3 سم × 1000', 620],
+      ['75x45-100', '7.5 × 4.5 cm × 100', '7.5 × 4.5 سم × 100', 100], ['75x45-250', '7.5 × 4.5 cm × 250', '7.5 × 4.5 سم × 250', 340], ['75x45-500', '7.5 × 4.5 cm × 500', '7.5 × 4.5 سم × 500', 670],
+      ['100x60-100', '10 × 6 cm × 100', '10 × 6 سم × 100', 200], ['100x60-250', '10 × 6 cm × 250', '10 × 6 سم × 250', 570], ['100x60-500', '10 × 6 cm × 500', '10 × 6 سم × 500', 1070],
+    ]),
+    sides: [{ id: 'front', name: t('Label', 'الليبل'), svg: LABEL_SVG, printArea: { ...LABEL }, printWidthIn: cmIn(5) }],
+    cardArt: sampleArt(LABEL, { bg: '#fff3bf', accent: '#f08c00' }),
+  },
+  {
+    id: 'wrappingpaper',
+    category: 'occasions',
+    name: t('Custom Wrapping Paper', 'ورق تغليف هدايا بتصميمك'),
+    description: t('Gift-wrap sheets of 50 × 70 cm printed with your own repeating pattern: your logo for shop packaging, or names and photos for birthdays, weddings and Eid.', 'فرخ ورق تغليف 50 × 70 سم مطبوع بنقشتك المتكررة: لوجو محلك لتغليف الأوردرات، أو أسامي وصور لأعياد الميلاد والأفراح والعيد.'),
+    basePrice: 250,
+    colorLabel: t('Paper', 'الورق'),
+    colors: [
+      { id: 'gloss', name: t('Glossy white', 'أبيض لامع'), hex: '#ffffff' },
+      { id: 'matte', name: t('Matte white', 'أبيض مطفي'), hex: '#fbfbfa' },
+      C.kraft,
+    ],
+    sizes: [5, 10, 25, 50].map((n, i) => ({ id: String(n), label: t(`${n} sheets · 50 × 70 cm`, `${n} فرخ · 50 × 70 سم`), surcharge: [0, 150, 450, 950][i], cm: [50, 70] })),
+    sides: [fabricSide()],
+    pattern: {
+      tiles: [5, 8, 10, 15, 20],
+      tile: 10,
+      scene: {
+        svg: sv('<rect x="68" y="50" width="380" height="532" fill="#000" opacity=".1"/><rect x="60" y="40" width="380" height="532" fill="{{C}}" stroke="{{L}}" stroke-width="2"/>'),
+        overlay: sv(
+          // The corner curling up (the plain back of the paper) and a ribbon bow.
+          '<path d="M440 482 L440 572 L350 572 Q392 548 440 482 Z" fill="#eef0f2"/><path d="M440 482 Q392 548 350 572 Q408 556 440 482 Z" fill="#ffffff" stroke="#c9ccd2" stroke-width="1.5"/><path d="M350 572 Q392 548 440 482" fill="none" stroke="#000" stroke-opacity=".12" stroke-width="5"/>' +
+            '<g transform="translate(108 92)"><path d="M0 0 C-40 -36 -52 18 -6 10 Z M0 0 C40 -36 52 18 6 10 Z" fill="#e03131" stroke="#a51111" stroke-width="2"/><path d="M-4 8 L-22 52 M4 8 L22 52" stroke="#e03131" stroke-width="7" stroke-linecap="round"/><circle cx="0" cy="4" r="8" fill="#c92a2a"/></g>'
+        ),
+        fill: { x: 60, y: 40, w: 380, h: 532 },
+      },
+    },
+  },
+  {
+    id: 'windowstickers',
+    category: 'business',
+    name: t('Window & Glass Stickers', 'ستيكرات فاترينة وإزاز'),
+    description: t('Waterproof vinyl stickers for shop windows, glass doors and cars: opening hours, logos, offers and "Welcome". White or clear vinyl, square, from 20 to 70 cm.', 'ستيكرات فينيل ضد المياه لفاترينة المحل والأبواب الإزاز والعربيات: مواعيد العمل واللوجو والعروض و"أهلاً بيكم". فينيل أبيض أو شفاف، مربعة من 20 لـ 70 سم.'),
+    basePrice: 120,
+    colorLabel: t('Vinyl', 'الفينيل'),
+    colors: [
+      { id: 'white', name: t('White vinyl', 'فينيل أبيض'), hex: '#ffffff' },
+      { id: 'clear', name: t('Clear vinyl, stuck on the outside', 'فينيل شفاف، يتلزق من بره'), hex: '#e4eef3' },
+      { id: 'clearin', name: t('Clear vinyl, stuck inside the glass (printed mirrored, read from outside)', 'فينيل شفاف، يتلزق من جوه الإزاز (يتطبع معكوس ويتقري من بره)'), hex: '#e4eef3' },
+    ],
+    sizes: qty([['20', '20 × 20 cm', '20 × 20 سم', 0], ['30', '30 × 30 cm', '30 × 30 سم', 80], ['50', '50 × 50 cm', '50 × 50 سم', 280], ['70', '70 × 70 cm', '70 × 70 سم', 580]]),
+    sides: [{ id: 'front', name: t('Sticker', 'الستيكر'), svg: WINDOW_SVG, overlay: WINDOW_SHINE, printArea: { ...WINDOW_STICKER }, printWidthIn: cmIn(20) }],
+    cardArt: withArt(
+      '<rect x="100" y="150" width="300" height="300" rx="6" fill="#ffffff"/><circle cx="250" cy="250" r="54" fill="#2f9e44"/><rect x="160" y="330" width="180" height="18" rx="9" fill="#2b2d42"/><rect x="190" y="362" width="120" height="10" rx="5" fill="#2b2d42" opacity=".55"/>',
+      WINDOW_SHINE,
+    ),
+  },
+  {
+    id: 'calendar',
+    category: 'home',
+    name: t('Wall Calendar (A3)', 'نتيجة حائط (A3)'),
+    description: t('A sturdy A3 card printed with your design all over, with a pad of 12 month sheets (Arabic and English) stapled on its lower half, a metal strip and a hanger. Put your photo or logo on the top and your contact details round the pad. A classic New Year gift for clients.', 'كارت A3 مقوّى مطبوع بتصميمك كله، ومتدبّس على نصه اللي تحت بلوك 12 شهر (عربي وإنجليزي)، بشريط معدن وعلّاقة. حط صورتك أو اللوجو فوق، وبيانات التواصل حوالين البلوك. هدية رأس السنة الكلاسيك للعملاء.'),
+    basePrice: 200,
+    colorLabel: t('Card', 'الكارت'),
+    colors: [{ id: 'matte', name: t('Matte card', 'كارت مطفي'), hex: '#ffffff' }, { id: 'gloss', name: t('Glossy card', 'كارت لامع'), hex: '#ffffff' }],
+    sizes: qty([['1', '1 calendar', 'نتيجة واحدة', 0], ['10', '10 calendars', '10 نتايج', 1000], ['25', '25 calendars', '25 نتيجة', 2300], ['50', '50 calendars', '50 نتيجة', 4100], ['100', '100 calendars', '100 نتيجة', 7300]]),
+    sides: [{ id: 'front', name: FRONT, svg: WALL_CAL_SVG, overlay: WALL_CAL_PAD, printArea: { ...WALL_CAL }, printWidthIn: cmIn(29.7) }],
+    cardArt: withArt(photoArt({ x: 105, y: 40, w: 290, h: 205 }) + '<rect x="105" y="245" width="290" height="205" fill="#f8f9fa"/><rect x="190" y="440" width="120" height="6" rx="3" fill="#495057"/>', WALL_CAL_PAD),
+  },
+  {
+    id: 'deskcalendar',
+    category: 'home',
+    name: t('Desk Calendar (tent)', 'نتيجة مكتب (ستاند)'),
+    description: t('A tent-style desk calendar: 13 A5 sheets (a cover and 12 months) wire-bound on a sturdy stand. Your design is printed on the left half of every sheet, and we print the month (Arabic and English) on the right half.', 'نتيجة مكتب ستاند: 13 ورقة A5 (غلاف و12 شهر) بسلك على قاعدة مقوّاة. تصميمك بيتطبع على النص الشمال من كل ورقة، واحنا بنطبع الشهر (عربي وإنجليزي) على النص اليمين.'),
+    basePrice: 180,
+    colorLabel: t('Paper', 'الورق'),
+    colors: [{ id: 'matte', name: t('Matte white', 'أبيض مطفي'), hex: '#ffffff' }, { id: 'gloss', name: t('Glossy white', 'أبيض لامع'), hex: '#ffffff' }],
+    sizes: qty([['1', '1 calendar', 'نتيجة واحدة', 0], ['10', '10 calendars', '10 نتايج', 920], ['25', '25 calendars', '25 نتيجة', 2120], ['50', '50 calendars', '50 نتيجة', 3820], ['100', '100 calendars', '100 نتيجة', 6820]]),
+    sides: [{ id: 'front', name: t('Each sheet', 'كل ورقة'), svg: DESK_CAL_SVG, overlay: DESK_CAL_RINGS, printArea: { ...DESK_CAL }, printWidthIn: cmIn(10.5) }],
+    cardArt: withArt(photoArt(DESK_CAL), DESK_CAL_RINGS),
+  },
+  {
+    id: 'photobook',
+    category: 'photos',
+    name: t('Photo Album with Your Cover', 'ألبوم صور بغلاف بتصميمك'),
+    description: t('A hardcover photo album with slip-in pockets for 10 × 15 cm photos (100 or 200), with your photo or design printed on the cover. Order the photo prints to go in it from the Photo Prints page. (The pages are photo pockets, not printed pages.)', 'ألبوم صور بغلاف مقوّى وجيوب للصور مقاس 10 × 15 سم (100 أو 200 صورة)، والغلاف مطبوع بصورتك أو تصميمك. اطلب طباعة الصور اللي هتحطها فيه من صفحة طباعة الصور. (الصفحات جيوب للصور، مش صفحات مطبوعة.)'),
+    basePrice: 450,
+    colorLabel: t('Cover', 'الغلاف'),
+    colors: [{ id: 'matte', name: t('Matte cover', 'غلاف مطفي'), hex: '#ffffff' }, { id: 'gloss', name: t('Glossy cover', 'غلاف لامع'), hex: '#ffffff' }],
+    sizes: qty([['100', '100 photos · cover 20 × 25 cm', '100 صورة · غلاف 20 × 25 سم', 0], ['200', '200 photos · cover 24 × 30 cm', '200 صورة · غلاف 24 × 30 سم', 200]]),
+    sides: [{ id: 'front', name: t('Cover', 'الغلاف'), svg: ALBUM_SVG, overlay: ALBUM_HINGE, printArea: { ...ALBUM }, printWidthIn: cmIn(20) }],
+    cardArt: withArt(photoArt(ALBUM), ALBUM_HINGE),
+  },
+  {
+    id: 'magnets',
+    category: 'home',
+    name: t('Fridge Magnets', 'مغناطيس تلاجة'),
+    description: t('Glossy printed magnets with a strong magnetic back and rounded corners: 6 × 9, 8 × 12 or 10 × 15 cm. For photos and gifts, or your restaurant\'s menu and delivery number on every fridge.', 'مغناطيس تلاجة مطبوع بضهر مغناطيس قوي وحواف مدورة: 6 × 9 أو 8 × 12 أو 10 × 15 سم. للصور والهدايا، أو منيو مطعمك ورقم الدليفري على كل تلاجة.'),
+    basePrice: 50,
+    colors: [{ id: 'gloss', name: t('Glossy', 'لامع'), hex: '#ffffff' }, { id: 'matte', name: t('Matte', 'مطفي'), hex: '#ffffff' }],
+    sizes: qty([
+      ['60x90-1', '6 × 9 cm', '6 × 9 سم', 0], ['60x90-100', '6 × 9 cm × 100', '6 × 9 سم × 100', 1450],
+      ['80x120-1', '8 × 12 cm', '8 × 12 سم', 25], ['80x120-100', '8 × 12 cm × 100', '8 × 12 سم × 100', 2150],
+      ['100x150-1', '10 × 15 cm', '10 × 15 سم', 50], ['100x150-100', '10 × 15 cm × 100', '10 × 15 سم × 100', 2950],
+    ]),
+    sides: [{ id: 'front', name: FRONT, svg: MAGNET_SVG, printArea: { ...MAGNET }, printWidthIn: cmIn(6) }],
+    cardArt: photoArt(MAGNET),
+  },
+  {
+    id: 'banners',
+    category: 'business',
+    name: t('Vinyl Banners with Eyelets', 'بانر فليكس بحلقات'),
+    description: t('Strong, weatherproof vinyl banners with hemmed edges and metal eyelets for hanging: for shop fronts, events, weddings and sales. Keep text 3 cm in from the edge, clear of the eyelets.', 'بانر فليكس متين ضد الشمس والمطر، بحواف مخيطة وحلقات معدن للتعليق: لواجهات المحلات والإيفنتات والأفراح والأوكازيونات. خلّي الكلام بعيد عن الحرف 3 سم عشان الحلقات.'),
+    basePrice: 250,
+    colorLabel: t('Material', 'الخامة'),
+    colors: [
+      { id: 'flex', name: t('Glossy flex', 'فليكس لامع'), hex: '#ffffff' },
+      { id: 'matte', name: t('Matte flex', 'فليكس مطفي'), hex: '#fbfbfb' },
+      { id: 'mesh', name: t('Mesh (for windy places)', 'ميش (للأماكن اللي فيها هوا)'), hex: '#f1f2f3' },
+    ],
+    sizes: qty([['100x50', '100 × 50 cm', '100 × 50 سم', 0], ['150x75', '150 × 75 cm', '150 × 75 سم', 200], ['200x100', '200 × 100 cm', '200 × 100 سم', 500]]),
+    sides: [{ id: 'front', name: FRONT, svg: BANNER_SVG, overlay: BANNER_RINGS, printArea: { ...BANNER }, printWidthIn: cmIn(100) }],
+    cardArt: withArt('<rect x="30" y="190" width="440" height="220" fill="#e03131"/><rect x="80" y="250" width="240" height="34" rx="17" fill="#ffffff"/><rect x="80" y="304" width="170" height="16" rx="8" fill="#ffffff" opacity=".75"/><circle cx="390" cy="300" r="54" fill="#ffd43b"/>', BANNER_RINGS),
+  },
+  {
+    id: 'tablenumbers',
+    category: 'occasions',
+    name: t('Table Numbers (tent cards)', 'أرقام ترابيزات (كارت ستاند)'),
+    description: t('Standing tent cards for weddings, engagements and events, 15 × 10 cm on thick 350 gsm card, printed on one or both faces. Upload a list (1, 2, 3… or table names) and every card gets its own number.', 'كروت ستاند للأفراح والخطوبة والإيفنتات، 15 × 10 سم على كارت 350 جرام سميك، طباعة وش أو وشين. ارفع قائمة (1، 2، 3… أو أسامي الترابيزات) وكل كارت ياخد رقمه.'),
+    basePrice: 30,
+    extraSidePrice: 10,
+    colorLabel: t('Paper', 'الورق'),
+    colors: CARD_STOCK,
+    sizes: qty([['15x10', '15 × 10 cm tent card', 'كارت ستاند 15 × 10 سم', 0]]),
+    sides: [
+      { id: 'front', name: FRONT, svg: tentSvg(TABLE_NO, false), printArea: { ...TABLE_NO }, printWidthIn: cmIn(15) },
+      { id: 'back', name: BACK, svg: tentSvg(TABLE_NO, true), printArea: { ...TABLE_NO }, printWidthIn: cmIn(15) },
+    ],
+    cardArt: '<rect x="55" y="190" width="390" height="260" fill="#fff9f0"/><circle cx="250" cy="300" r="62" fill="none" stroke="#c9a227" stroke-width="6"/><rect x="236" y="262" width="28" height="76" rx="6" fill="#2b2d42"/><rect x="170" y="398" width="160" height="10" rx="5" fill="#c9a227"/>',
+  },
+  {
+    id: 'placecards',
+    category: 'occasions',
+    name: t('Place Cards (tent)', 'كروت أسامي المعازيم (ستاند)'),
+    description: t('Small standing name cards for wedding and event tables, 9 × 5 cm on 350 gsm card. Upload your guest list and every card is printed with one guest\'s name.', 'كروت ستاند صغيرة بأسامي المعازيم لترابيزات الفرح والإيفنتات، 9 × 5 سم على كارت 350 جرام. ارفع قائمة المعازيم ونطبع اسم كل ضيف على كارته.'),
+    basePrice: 12,
+    extraSidePrice: 5,
+    colorLabel: t('Paper', 'الورق'),
+    colors: CARD_STOCK,
+    sizes: qty([['9x5', '9 × 5 cm tent card', 'كارت ستاند 9 × 5 سم', 0]]),
+    sides: [
+      { id: 'front', name: FRONT, svg: tentSvg(PLACE_CARD, false), printArea: { ...PLACE_CARD }, printWidthIn: cmIn(9) },
+      { id: 'back', name: BACK, svg: tentSvg(PLACE_CARD, true), printArea: { ...PLACE_CARD }, printWidthIn: cmIn(9) },
+    ],
+    cardArt: '<rect x="52" y="200" width="396" height="220" fill="#fff9f0"/><path d="M200 250 Q250 220 300 250" fill="none" stroke="#c9a227" stroke-width="4"/><rect x="130" y="290" width="240" height="26" rx="13" fill="#2b2d42"/><rect x="190" y="340" width="120" height="10" rx="5" fill="#c9a227"/>',
+  },
+);
+
 /**
  * Print production details per product:
  *   process  how it is printed; decides which file the shop should use
@@ -1757,6 +2343,26 @@ const PRODUCTION = {
   photoprints: { process: 'paper', safeIn: 0, bleedIn: 0, model: { type: 'block', depthIn: 0.01, radiusIn: 0, edge: '#ffffff', material: 'paper' } },
   storybook: { process: 'paper', safeIn: 0.375, bleedIn: 0.125, model: { type: 'block', depthIn: 0.22, radiusIn: 0.04, edge: '#f3efe6', material: 'paper', plainBack: 'color' } },
   coloringbook: { process: 'paper', safeIn: 0.375, bleedIn: 0.125, model: { type: 'block', depthIn: 0.18, radiusIn: 0.04, edge: '#f3efe6', material: 'paper', plainBack: 'color' } },
+  // Cards, business print, packaging, calendars and events (2 mm bleed on cut paper).
+  postcards: { process: 'paper', safeIn: 0.15, bleedIn: 0.08, model: { type: 'block', depthIn: 0.03, radiusIn: 0.02, edge: '#f6f6f4', material: 'paper' } },
+  foldedcards: { process: 'paper', safeIn: 0.15, bleedIn: 0.08, model: { type: 'foldcard', material: 'paper' } },
+  giftvouchers: { process: 'paper', safeIn: 0.15, bleedIn: 0.08, model: { type: 'block', depthIn: 0.03, radiusIn: 0.04, edge: '#f6f6f4', material: 'paper' } },
+  bookmarks: { process: 'paper', safeIn: 0.12, bleedIn: 0.08, model: { type: 'block', depthIn: 0.03, radiusIn: 0.04, edge: '#f6f6f4', material: 'paper' } },
+  brochures: { process: 'paper', safeIn: 0.2, bleedIn: 0.08, model: { type: 'block', depthIn: 0.02, radiusIn: 0.02, edge: '#f6f6f4', material: 'paper' } },
+  menus: { process: 'paper', safeIn: 0.2, bleedIn: 0.08, model: { type: 'block', depthIn: 0.03, radiusIn: 0.06, edge: '#f6f6f4', material: 'paper' } },
+  notepads: { process: 'paper', safeIn: 0.2, bleedIn: 0.08, model: { type: 'pad', depthIn: 0.25, radiusIn: 0.02, edge: '#f2f2ee', material: 'paper' } },
+  folders: { process: 'paper', safeIn: 0.25, bleedIn: 0.12, model: { type: 'block', depthIn: 0.04, radiusIn: 0.04, edge: '#f6f6f4', material: 'paper', plainBack: '#f6f6f4' } },
+  booklets: { process: 'paper', safeIn: 0.2, bleedIn: 0.08, model: { type: 'block', depthIn: 0.12, radiusIn: 0.02, edge: '#f3efe6', material: 'paper' } },
+  labels: { process: 'paper', safeIn: 0.08, bleedIn: 0.04, model: { type: 'pad', depthIn: 0.02, radiusIn: 0.08, edge: '#f2f3f5', material: 'paper' } },
+  wrappingpaper: { process: 'paper', safeIn: 0, bleedIn: 0, model: { type: 'cloth', material: 'paper' } },
+  windowstickers: { process: 'uv', safeIn: 0.3, bleedIn: 0.08, model: { type: 'pad', depthIn: 0.02, radiusIn: 0.1, edge: '#eef1f4', material: 'plastic' } },
+  calendar: { process: 'paper', safeIn: 0.25, bleedIn: 0.08, model: { type: 'block', depthIn: 0.06, radiusIn: 0.02, edge: '#f6f6f4', material: 'paper', plainBack: '#f6f6f4' } },
+  deskcalendar: { process: 'paper', safeIn: 0.3, bleedIn: 0.08, model: { type: 'block', depthIn: 0.03, radiusIn: 0.02, edge: '#f6f6f4', material: 'paper', plainBack: '#f6f6f4' } },
+  photobook: { process: 'paper', safeIn: 0.3, bleedIn: 0.125, model: { type: 'block', depthIn: 1.2, radiusIn: 0.06, edge: '#f3efe6', material: 'paper', plainBack: 'color' } },
+  magnets: { process: 'paper', safeIn: 0.12, bleedIn: 0.08, model: { type: 'block', depthIn: 0.04, radiusIn: 0.2, edge: '#2b2c30', material: 'paper', plainBack: '#2b2c30' } },
+  banners: { process: 'uv', safeIn: 1.2, bleedIn: 0, model: { type: 'block', depthIn: 0.03, radiusIn: 0.01, edge: '#f2f2f2', material: 'paper', plainBack: '#e9eaec' } },
+  tablenumbers: { process: 'paper', safeIn: 0.15, bleedIn: 0.08, model: { type: 'block', depthIn: 0.03, radiusIn: 0.02, edge: '#f6f6f4', material: 'paper' } },
+  placecards: { process: 'paper', safeIn: 0.1, bleedIn: 0.06, model: { type: 'block', depthIn: 0.03, radiusIn: 0.02, edge: '#f6f6f4', material: 'paper' } },
 };
 /** Garments can be printed either way; the shop picks per order item. */
 const GARMENT_METHODS = ['dtg', 'dtf'];
@@ -1862,7 +2468,8 @@ for (const p of PRODUCTS) {
 // Garments too: team kits with each player's name and number (a Size column gives each row its size).
 // Business cards: one pack (100, 250… cards) per row, each with its person's name, position, phone, email…
 // Name lists (Excel / CSV): paper and label products only, as the owner chose (not clothing).
-const MERGE_PRODUCTS = ['invitations', 'certificates', 'greetingcard', 'idcards', 'bizcards', 'namelabels', 'stickersheet', 'flyers'];
+// Table numbers and place cards: one card per row (table number / guest name).
+const MERGE_PRODUCTS = ['invitations', 'certificates', 'greetingcard', 'idcards', 'bizcards', 'namelabels', 'stickersheet', 'flyers', 'tablenumbers', 'placecards'];
 for (const p of PRODUCTS) if (MERGE_PRODUCTS.includes(p.id)) p.merge = { maxRows: 1000 };
 
 // Sizes that change the physical print (the drawing area keeps its shape):
@@ -1887,6 +2494,13 @@ const SIZE_PRINT_SCALE = {
   stickersheet: { A4: 21 / 14.8 },
   flyers: { 'A5-100': 14.8 / 21, 'A5-500': 14.8 / 21, 'A5-1000': 14.8 / 21 },
   mug: { '15oz': 1.12 },
+  menus: { 'A3-10': 29.7 / 21, 'A3-25': 29.7 / 21 },
+  notepads: { 'A6-1': 10.5 / 14.8, 'A6-5': 10.5 / 14.8, 'A6-10': 10.5 / 14.8 },
+  labels: { '75x45-100': 1.5, '75x45-250': 1.5, '75x45-500': 1.5, '100x60-100': 2, '100x60-250': 2, '100x60-500': 2 },
+  windowstickers: { 30: 30 / 20, 50: 50 / 20, 70: 70 / 20 },
+  photobook: { 200: 24 / 20 },
+  magnets: { '80x120-1': 8 / 6, '80x120-100': 8 / 6, '100x150-1': 10 / 6, '100x150-100': 10 / 6 },
+  banners: { '150x75': 1.5, '200x100': 2 },
   // Phone models are different sizes (back of the phone, w × h mm): iPhone 16 71.6 × 147.6 is the reference.
   phonecase: { iphone16pro: 1.006, iphone16promax: 1.094, galaxys25: 0.99, galaxya55: 1.086 },
 };

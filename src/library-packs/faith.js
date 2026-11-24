@@ -16,7 +16,7 @@ const INK = '#16181d';
 const MAT = { alsoProducts: ['prayermat'] };
 const BABY = { alsoProducts: ['onesie'] };
 // Family sets are matching clothes: not for flyers, bags or signs; mum's and dad's not in kids' sizes.
-const SET_ONLY = ['flyers', 'logostickers', 'paperbags', 'sign', 'greetingcard', 'tablecloth', 'coasters'];
+const SET_ONLY = ['flyers', 'logostickers', 'paperbags', 'sign', 'greetingcard', 'tablecloth', 'coasters', 'postcards', 'foldedcards', 'magnets'];
 const GROWN_UP = { notProducts: [...SET_ONLY, 'kidstee', 'kidshoodie'] };
 const KID_SET = { notProducts: SET_ONLY };
 

@@ -113,5 +113,5 @@ test('name lists are only on paper and label products, not clothing (owner\'s ch
     assert.strictEqual(r.status, 400, productId);
   }
   const withLists = PRODUCTS.filter((p) => p.merge).map((p) => p.id).sort();
-  assert.deepStrictEqual(withLists, ['bizcards', 'certificates', 'flyers', 'greetingcard', 'idcards', 'invitations', 'namelabels', 'stickersheet']);
+  assert.deepStrictEqual(withLists, ['bizcards', 'certificates', 'flyers', 'greetingcard', 'idcards', 'invitations', 'namelabels', 'placecards', 'stickersheet', 'tablenumbers']);
 });

@@ -17,7 +17,9 @@ const onProduct = (pid) => SEED.filter((d) => productsFor(d).includes(pid));
 const general = (p) => !(p.laser || p.pattern || p.kind);
 // Products that take general designs but have only a few, or none because of
 // their shape (a tall design looks lost on a very wide desk mat or DL envelope).
-const FEW = { bizcards: 10, letterhead: 6, invoicebook: 6, rollup: 10, deskmat: 0, dlenvelopes: 0 };
+const FEW = { bizcards: 10, letterhead: 6, invoicebook: 6, rollup: 10, deskmat: 0, dlenvelopes: 0,
+  // Shop print (the business designs only) and very wide or very tall pieces.
+  brochures: 10, folders: 10, booklets: 10, menus: 6, labels: 6, windowstickers: 6, giftvouchers: 0, banners: 0, placecards: 0, bookmarks: 0 };
 const MIN = 15;
 
 test('the fit table names real subjects and products', () => {

@@ -230,5 +230,61 @@
  "namepuzzle": {
   "file": "/img/designed/namepuzzle.webp",
   "design": "lz-puzzle-laila-en"
+ },
+ "postcards": {
+  "file": "/img/designed/postcards.webp",
+  "design": "fa-eid-neon"
+ },
+ "foldedcards": {
+  "file": "/img/designed/foldedcards.webp",
+  "design": "ce-bday-family"
+ },
+ "brochures": {
+  "file": "/img/designed/brochures.webp",
+  "design": "pp-biz-conference"
+ },
+ "menus": {
+  "file": "/img/designed/menus.webp",
+  "design": "pp-biz-barber"
+ },
+ "notepads": {
+  "file": "/img/designed/notepads.webp",
+  "design": "wd-noor"
+ },
+ "folders": {
+  "file": "/img/designed/folders.webp",
+  "design": "pp-biz-salon"
+ },
+ "booklets": {
+  "file": "/img/designed/booklets.webp",
+  "design": "pp-biz-conference"
+ },
+ "labels": {
+  "file": "/img/designed/labels.webp",
+  "design": "pp-biz-restaurant"
+ },
+ "windowstickers": {
+  "file": "/img/designed/windowstickers.webp",
+  "design": "pp-biz-pharmacy"
+ },
+ "calendar": {
+  "file": "/img/designed/calendar.webp",
+  "design": "fa-isl-mashallah"
+ },
+ "deskcalendar": {
+  "file": "/img/designed/deskcalendar.webp",
+  "design": "wd-el-gar"
+ },
+ "photobook": {
+  "file": "/img/designed/photobook.webp",
+  "design": "pp-kids-little-dreamer"
+ },
+ "magnets": {
+  "file": "/img/designed/magnets.webp",
+  "design": "wd-ta2khira-kheira"
+ },
+ "tablenumbers": {
+  "file": "/img/designed/tablenumbers.webp",
+  "design": "birthday-squad"
  }
 }

@@ -475,7 +475,7 @@ window.POD_STRINGS = {
   'pat.mirror': ['Mirror', 'معكوس'],
   'pat.cm': ['cm', 'سم'],
   'pat.previewAlt': ['How the pattern looks on the product', 'شكل النقشة على المنتج'],
-  'pat.help': ['Design one square tile: it repeats across the whole fabric. Anything that crosses the tile edge continues on the other side, so the pattern joins up without seams.', 'صمّم مربع واحد بس: بيتكرر على القماش كله. أي حاجة بتعدي حرف المربع بتكمّل من الناحية التانية، فالنقشة بتتوصل من غير فواصل.'],
+  'pat.help': ['Design one square tile: it repeats across the whole piece (fabric or paper). Anything that crosses the tile edge continues on the other side, so the pattern joins up without seams.', 'صمّم مربع واحد بس: بيتكرر على القطعة كلها (قماش أو ورق). أي حاجة بتعدي حرف المربع بتكمّل من الناحية التانية، فالنقشة بتتوصل من غير فواصل.'],
   'process.textile': ['Roll-to-roll textile printing (sublimation on polyester, pigment or reactive on cotton). Load the 300 DPI tile in the RIP and step-and-repeat it as shown (repeat type, tile size, fabric width and length are on the item); the repeat preview shows the whole piece.', 'طباعة أقمشة رول (تسامي على البوليستر، أو بيجمنت/رياكتيف على القطن). حمّل الوحدة 300 DPI في برنامج الـ RIP وكررها زي المكتوب (طريقة التكرار ومقاس الوحدة وعرض وطول القماش مكتوبين على القطعة)؛ وصورة التكرار بتوريك القطعة كلها.'],
   'admin.pattern': ['Pattern', 'النقشة'],
   'admin.patternSpec': ['Tile {tile} × {tile} cm · {repeat} repeat · fabric {w} × {h} cm', 'وحدة {tile} × {tile} سم · تكرار {repeat} · قماش {w} × {h} سم'],
