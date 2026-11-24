@@ -1924,6 +1924,28 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       await drop('failed', e.reason || 'failed');
     }
   }
+  /**
+   * The cover painted by the AI with the child in it, for the preview (the same as after an
+   * order, which then skips it): a pasted face is what customers judge the book by first.
+   * The real photo is the likeness; within the shop's daily drawing budget.
+   */
+  async function redrawCover(design) {
+    const book = bookFor(design.bookId);
+    const i = book.pages.findIndex((p) => p.type === 'cover' && p.face);
+    if (i < 0 || !design.aiConsent || !cartoon.enabled()) return;
+    const file = store.designFile(design.id, `redraw-${i}.jpg`);
+    const photo = readIf(store.designFile(design.id, 'face.jpg'));
+    if (fs.existsSync(file) || !photo) return;
+    if (limiter.hit('redrawAll:*', LIMITS.redrawAll) || !takeShopBudget('redraw', LIMITS.redrawAll[0].max)) return;
+    try {
+      const data = { ...bookData(design, { withRedraws: false }), face: photo };
+      const input = await (await books.renderPage(data, i, 1024, { noText: true })).jpeg({ quality: 90 }).toBuffer();
+      const img = await cartoon.redrawPage(input, photo, book.kind);
+      store.writeDesignFile(design.id, `redraw-${i}.jpg`, await sharp()(img).resize(2048, 2048, { fit: 'cover' }).jpeg({ quality: 93 }).toBuffer());
+    } catch (e) {
+      console.warn('[redraw] preview cover failed:', e.reason || '', e.message);
+    }
+  }
   // Saves of one book run one after the other: a failed save restores the book as it was before
   // *it* started, which must not undo a save that finished in between (two tabs, a retry).
   const bookSaves = new Map();
@@ -1961,12 +1983,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const { answers, face, size, aiConsent } = body && typeof body === 'object' ? body : {};
     const book = bookFor(design.bookId);
     const product = bookProduct(book);
-    // AI-redrawn pages show this child as described: a new photo or new answers (boy/girl...) make them out of date.
-    const answersBefore = JSON.stringify(design.answers || null);
+    // AI-redrawn pages show this child: a new photo or boy/girl makes them out of date (names and
+    // other words are drawn on top of the picture afterwards, so they don't).
+    const genderBefore = design.answers ? design.answers.gender : undefined;
     let answersChanged = false;
     try {
       design.answers = books.cleanAnswers(book, answers);
-      answersChanged = JSON.stringify(design.answers) !== answersBefore;
+      answersChanged = (design.answers ? design.answers.gender : undefined) !== genderBefore;
     } catch (e) {
       if (e.message === 'bookMissing') throw new HttpError(400, 'fieldRequired', { field: e.field });
       if (e.message === 'bookLatin') throw new HttpError(400, 'bookLatin', { field: e.field });
@@ -1986,11 +2009,15 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (book.kind === 'coloring') store.writeDesignFile(design.id, 'face-line.png', await books.lineArt(jpg));
     }
     if (!fs.existsSync(store.designFile(design.id, 'face.jpg'))) throw new HttpError(400, 'bookPhoto');
-    if (face || answersChanged) {
+    if (face || answersChanged || (consentChanged && !consent)) {
       for (const f of fs.readdirSync(store.designDir(design.id))) if (/^redraw-\d+\.jpg$/.test(f)) fs.rmSync(store.designFile(design.id, f), { force: true });
     }
     // New photo, or the AI choice changed: make (or drop) the cartoon face.
-    if (face || consentChanged || (consent && cartoon.enabled() && !(design.cartoon && design.cartoon.status === 'ready'))) await makeCartoon(design, ip);
+    // With the AI, the cover is painted right away (the other pages after the order), at the same time as the cartoon face.
+    await Promise.all([
+      face || consentChanged || (consent && cartoon.enabled() && !(design.cartoon && design.cartoon.status === 'ready')) ? makeCartoon(design, ip) : null,
+      redrawCover(design),
+    ]);
     // Ordered while this save was running: the customer approved the book as it was, which is what prints.
     const fresh = store.getDesign(design.id);
     if (design.orderId || (fresh && fresh.orderId)) throw new HttpError(409, 'designOrdered');

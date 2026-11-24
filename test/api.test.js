@@ -822,16 +822,20 @@ test('AI books: one cartoon face for the preview, every page redrawn after the o
 
     const d = await (await post('/api/books/space-hero/designs', { answers, face: dataUrl, aiConsent: true })).json();
     assert.strictEqual(d.cartoon, 'ready', 'preview uses the AI cartoon face');
-    assert.strictEqual(calls.length, 1, 'only one image for the preview');
-    assert.ok(/:generateContent$/.test(calls[0].url) && calls[0].key === 'test-key' && calls[0].parts === 3);
-    // Changing an answer does not make another image.
+    assert.strictEqual(calls.length, 2, 'the cartoon face and the painted cover for the preview');
+    assert.ok(calls.every((c) => /:generateContent$/.test(c.url) && c.key === 'test-key' && c.parts === 3));
+    // The preview cover is the painted one (orange from the mock).
+    const cover = await fetch(`${base}/api/books/designs/${d.id}/pages/0.jpg?v=y`);
+    const cst = await sharp(Buffer.from(await cover.arrayBuffer())).extract({ left: 20, top: 300, width: 60, height: 60 }).stats();
+    assert.ok(cst.channels[0].mean > 200 && cst.channels[2].mean < 80, 'cover painted by the AI');
+    // Changing an answer (not the photo or boy/girl) does not make another image.
     await fetch(`${base}/api/books/designs/${d.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'x-edit-token': d.editToken }, body: JSON.stringify({ answers: { ...answers, friend: 'Salma' }, aiConsent: true }) });
-    assert.strictEqual(calls.length, 1);
+    assert.strictEqual(calls.length, 2);
 
     // Without consent: no AI at all.
     const plain = await (await post('/api/books/space-hero/designs', { answers, face: dataUrl })).json();
     assert.strictEqual(plain.cartoon, 'off');
-    assert.strictEqual(calls.length, 1);
+    assert.strictEqual(calls.length, 2);
 
     const order = await (await post('/api/orders', { customer: CUSTOMER, designIds: [d.id, plain.id] })).json();
     const itemId = order.items.find((i) => i.designId === d.id).id;
@@ -844,7 +848,7 @@ test('AI books: one cartoon face for the preview, every page redrawn after the o
     }
     assert.strictEqual(item.redraw.status, 'done');
     assert.strictEqual(item.redraw.done, 12);
-    assert.strictEqual(calls.length, 13, '1 preview + 12 redrawn pages');
+    assert.strictEqual(calls.length, 13, 'the cartoon face, the cover with the preview, the other 11 pages after the order');
     assert.ok(calls.slice(1).every((c) => c.config.imageConfig.imageSize === '2K'));
     const plainItem = (await (await admin('/api/admin/orders')).json()).orders.flatMap((o) => o.items).find((it) => it.designId === plain.id);
     assert.strictEqual(plainItem.redraw.status, 'off');

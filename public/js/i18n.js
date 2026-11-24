@@ -1144,7 +1144,7 @@ window.POD_STRINGS = {
   'book.badPhoto': ['Please choose a JPG or PNG photo.', 'من فضلك اختر صورة JPG أو PNG.'],
   'book.aiTitle': ['Draw my child as a cartoon (recommended)', 'ارسم طفلي كرتون (موصى به)'],
   'book.aiText': ["Your child's photo is sent to Google's AI service to draw their face in the book's style. After you order, every page is redrawn with your child. Google doesn't use it to train its models, and we delete the photo 30 days after delivery.", 'صورة طفلك بتتبعت لخدمة الذكاء الاصطناعي من Google عشان ترسم وشه بنفس ستايل الكتاب، وبعد الطلب كل صفحة بتترسم من جديد بطفلك. Google ما بتستخدمهاش لتدريب نماذجها، واحنا بنمسح الصورة بعد 30 يوم من التوصيل.'],
-  'book.drawing': ['Drawing your child as a cartoon… (about 15 seconds)', 'جاري رسم طفلك كرتون… (حوالي 15 ثانية)'],
+  'book.drawing': ['Drawing your child into the cover… (about 30 seconds)', 'جاري رسم طفلك على الغلاف… (حوالي 30 ثانية)'],
   'book.cartoonFailed': ["We couldn't draw the cartoon this time, so the preview uses the photo. Try another clear, front-facing photo.", 'ما قدرناش نرسم الكرتون المرة دي، فالمعاينة بالصورة. جرّب صورة تانية واضحة والوش للكاميرا.'],
   'book.cartoonLimit': ["You've reached today's cartoon previews; the preview uses the photo. Your book will still be drawn after you order.", 'وصلت لحد معاينات الكرتون النهارده، فالمعاينة بالصورة. الكتاب هيترسم برضه بعد الطلب.'],
   'admin.redraw.queued': ['AI drawing: waiting to start', 'الرسم بالذكاء الاصطناعي: في الانتظار'],
