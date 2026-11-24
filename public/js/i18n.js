@@ -451,7 +451,7 @@ window.POD_STRINGS = {
   'check.embOverPrint': ['{name} (embroidery) is on top of the print. Embroidery and print go in different places: move one of them.', '{name} (تطريز) فوق الطباعة. التطريز والطباعة لازم يبقوا في أماكن مختلفة: حرّك واحد منهم.'],
   'check.printOverEmb': ['{name} (print) is on top of the embroidery. Embroidery and print go in different places: move one of them.', '{name} (طباعة) فوق التطريز. التطريز والطباعة لازم يبقوا في أماكن مختلفة: حرّك واحد منهم.'],
   'check.overlapStop': ['The embroidery and the print overlap on the {side}. Move one of them so they don\'t touch, then try again.', 'التطريز والطباعة فوق بعض على {side}. حرّك واحد منهم بحيث ميلمسوش بعض، وبعدين جرّب تاني.'],
-  'emb.bothNote': ['The print on the {side} stays: switch to Print to edit it. Both show on the shirt.', 'الطباعة اللي على {side} زي ما هي: دوس طباعة عشان تعدّلها. الاتنين بيبانوا على القطعة.'],
+  'emb.bothNote': ['The print on the {side} stays: switch to Print to edit it. Both show on the product.', 'الطباعة اللي على {side} زي ما هي: دوس طباعة عشان تعدّلها. الاتنين بيبانوا على القطعة.'],
   'emb.printNote': ['You can add embroidery to the {side} too, next to or instead of the print: tap Embroidery.', 'تقدر تضيف تطريز على {side} كمان، جنب الطباعة أو بدالها: دوس تطريز.'],
   'emb.printNoteWith': ['You\'re editing the print. The embroidery on the {side} stays: tap Embroidery to edit it.', 'انت بتعدّل الطباعة. التطريز اللي على {side} زي ما هو: دوس تطريز عشان تعدّله.'],
   'emb.fee': ['Embroidery +{price}', 'تطريز +{price}'],
