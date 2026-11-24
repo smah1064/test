@@ -122,7 +122,7 @@ Object.assign(window.POD_STRINGS, {
   'pm.s.tech': ['Printing technology', 'طريقة الطباعة'],
   'pm.s.photos': ['Photos', 'الصور'],
   'pm.s.photosHelp': ['Real photos of the product. The main photo is the product\'s picture in the shop; all photos show first in its gallery.', 'صور حقيقية للمنتج. الصورة الرئيسية هي صورة المنتج في المحل، وكل الصور بتظهر الأول في معرضه.'],
-  'pm.s.danger': ['Undo or delete', 'تراجع أو مسح'],
+  'pm.s.danger': ['Undo or remove from the shop', 'تراجع أو شيل من المحل'],
 
   // Basics
   'pm.f.nameAr': ['Name (Arabic)', 'الاسم (عربي)'],
@@ -251,6 +251,10 @@ Object.assign(window.POD_STRINGS, {
   'pm.undoAllHelp': ['The product goes back to how it was built: name, colours, sizes, print setup, stock, photos and status. Prices stay (change them in Prices).', 'المنتج يرجع زي ما كان: الاسم والألوان والمقاسات وإعدادات الطباعة والمخزون والصور والحالة. الأسعار زي ما هي (غيّرها من الأسعار).'],
   'pm.undoAllConfirm': ['Undo every change to {name}? This can\'t be undone.', 'تلغي كل التعديلات على {name}؟ مينفعش ترجع فيها.'],
   'pm.undoAllDone': ['Back to the original product', 'المنتج رجع الأصلي'],
+  'pm.removeTitle': ['Remove from the shop', 'شيله من المحل'],
+  'pm.removeHelp': ['It disappears from the shop and can\'t be ordered. Nothing is deleted: its orders, photos, prices and history stay, and you can show it again any time.', 'هيختفي من المحل ومحدش هيقدر يطلبه. مفيش حاجة بتتمسح: طلباته وصوره وأسعاره وتاريخه موجودين، وتقدر ترجّعه في أي وقت.'],
+  'pm.showAgain': ['Show it in the shop again', 'رجّعه للمحل تاني'],
+  'pm.showAgainHelp': ['It\'s removed from the shop. Bring it back with everything as it was.', 'هو متشال من المحل. رجّعه بكل حاجة زي ما كانت.'],
   'pm.deleteProduct': ['Delete product', 'امسح المنتج'],
   'pm.deleteHelp': ['Only for products nobody has designed or ordered yet. Otherwise remove it from the shop.', 'بس للمنتجات اللي محدش صمّم عليها أو طلبها. غير كده شيله من المحل.'],
   'pm.deleteConfirm': ['Delete {name} for good?', 'تمسح {name} نهائي؟'],

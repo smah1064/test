@@ -1285,14 +1285,17 @@
   }
 
   // ---------- i) Danger zone ----------
+  // Products are never deleted (old orders, accounts and the change log keep naming them):
+  // they are removed from the shop, and can be shown again any time.
   function dangerBody(P) {
-    if (P.builtIn) {
-      return `<div class="pm-danger"><div><b>${esc(t('pm.undoAll'))}</b><p class="muted small">${esc(t('pm.undoAllHelp'))}</p></div>
-        <button type="button" class="btn btn-danger" data-pm-act="undo-all" ${P.edit ? '' : 'disabled'}>${esc(t('pm.undoAll'))}</button></div>`;
-    }
-    return `<div class="pm-danger"><div><b>${esc(t('pm.deleteProduct'))}</b><p class="muted small">${esc(t('pm.deleteHelp'))}</p></div>
-      <button type="button" class="btn btn-danger" data-pm-act="delete">${esc(t('pm.deleteProduct'))}</button></div>
-      <div class="pm-inuse" hidden><p class="notice small"></p><button type="button" class="btn" data-pm-act="remove-instead">${esc(t('pm.removeFromShop'))}</button></div>`;
+    const undo = P.builtIn ? `<div class="pm-danger"><div><b>${esc(t('pm.undoAll'))}</b><p class="muted small">${esc(t('pm.undoAllHelp'))}</p></div>
+        <button type="button" class="btn btn-danger" data-pm-act="undo-all" ${P.edit ? '' : 'disabled'}>${esc(t('pm.undoAll'))}</button></div>` : '';
+    const keep = P.status === 'removed'
+      ? `<div class="pm-danger"><div><b>${esc(t('pm.showAgain'))}</b><p class="muted small">${esc(t('pm.showAgainHelp'))}</p></div>
+        <button type="button" class="btn pm-btn-ok" data-pm-act="show-again">${esc(t('pm.showAgain'))}</button></div>`
+      : `<div class="pm-danger"><div><b>${esc(t('pm.removeTitle'))}</b><p class="muted small">${esc(t('pm.removeHelp'))}</p></div>
+        <button type="button" class="btn btn-danger" data-pm-act="remove-instead">${esc(t('pm.removeTitle'))}</button></div>`;
+    return undo + keep;
   }
 
   // ---------- Saving a section ----------
@@ -1488,8 +1491,8 @@
         setDirty('sizes');
         return rerender('sizes');
       case 'undo-all': return undoAll();
-      case 'delete': return deleteProduct();
       case 'remove-instead': return removeInstead();
+      case 'show-again': return showInShop(S.P, (P) => { S.P = P; refreshEdit('avail'); refreshEdit('danger'); });
       default: return undefined;
     }
   }
@@ -1543,28 +1546,12 @@
       secError('danger', e.message);
     }
   }
-  async function deleteProduct() {
-    if (!confirm(t('pm.deleteConfirm', { name: tr(S.P.name) }))) return;
-    try {
-      await api(`/api/admin/catalog/${enc(S.P.id)}`, { method: 'DELETE' });
-      const gone = S.P.id;
-      if (S.data) S.data.products = S.data.products.filter((p) => p.id !== gone);
-      toast(t('pm.deleted'));
-      S.dirty.clear();
-      backToList();
-    } catch (e) {
-      if (e.code === 'productInUse') {
-        const box = root.querySelector('.pm-inuse');
-        box.hidden = false;
-        box.querySelector('.notice').textContent = e.message;
-      } else secError('danger', e.message);
-    }
-  }
   async function removeInstead() {
     try {
       S.P = await send('PUT', `/api/admin/catalog/${enc(S.P.id)}`, { status: 'removed', hiddenReason: 'other', hiddenNote: S.P.hiddenNote || '' });
       putProduct(S.P);
       refreshEdit('avail');
+      refreshEdit('danger');
       toast(t('pm.removedOk', { name: tr(S.P.name) }));
       reloadLater();
     } catch (e) {

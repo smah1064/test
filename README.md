@@ -167,7 +167,8 @@ Admin → **Products** changes the real products without touching the code (`src
 - **Print setup per side**: on/off, physical print width, safe margin, bleed, and the print area on the product drawing (drag the box). New designs use them; designs already made keep their own sizes.
 - **Technology**: printing method within what the product can be made with (garments DTG/DTF, laser engraving/cutting...), embroidery on/off, its position, size, price and thread colours.
 - **Photos**: upload real product photos (JPG/PNG/WebP, stored as WebP in `DATA_DIR/catalog-photos/`); they lead the product page gallery and the main one is the product's picture on the home page.
-- **New product**: made from an existing one (its drawing, 3D model, print setup and ready designs), then changed. It starts hidden until it's published. An added product that was never ordered can be deleted; built-in products can be reset to the original.
+- **New product**: made from an existing one (its drawing, 3D model, print setup and ready designs), then changed. It starts hidden until it's published.
+- **Nothing is deleted**: products are hidden or removed from the shop, never deleted, so old orders, accounts and the change log keep naming them, and they can be shown again with everything as it was. Built-in products can also be reset to the original (the change log keeps what was changed).
 - **Staff**: the owner adds product managers (name, username, password ≥ 10 characters). They sign in on the admin page with "Staff sign-in" and see only the Products screen; every other admin route refuses their token. Changing their password signs them out everywhere. Every change is logged with who made it.
 
 ## Before going live

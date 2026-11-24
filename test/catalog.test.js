@@ -207,15 +207,18 @@ test('a new product made from another one: hidden until published, then designab
   assert.strictEqual(d.status, 201);
   assert.strictEqual(d.body.price, 180);
   assert.strictEqual((await order([d.body.id])).status, 201);
-  // Used in an order: can't be deleted, only removed from the shop.
+  // Products are never deleted (even one nobody ordered): removed from the shop, and back any time.
   assert.strictEqual((await req('DELETE', '/api/admin/catalog/kids-cap', undefined, owner)).status, 409);
-  await put('/api/admin/catalog/kids-cap', { status: 'removed' });
-  assert.ok(!(await shop()).some((p) => p.id === 'kids-cap'));
-  // A new one never used can be deleted.
   await post('/api/admin/catalog', { id: 'temp-mug', template: 'mug' }, owner);
   const del = await req('DELETE', '/api/admin/catalog/temp-mug', undefined, owner);
-  assert.strictEqual(del.status, 200);
-  assert.strictEqual((await req('GET', '/api/admin/catalog/temp-mug', undefined, owner)).status, 404);
+  assert.strictEqual(del.status, 409);
+  assert.strictEqual((await del.json()).code, 'productsKept');
+  assert.strictEqual((await req('GET', '/api/admin/catalog/temp-mug', undefined, owner)).status, 200);
+  await put('/api/admin/catalog/kids-cap', { status: 'removed' });
+  assert.ok(!(await shop()).some((p) => p.id === 'kids-cap'));
+  const back = await put('/api/admin/catalog/kids-cap', { status: 'live' });
+  assert.strictEqual((await back.json()).basePrice, 180, 'back with its price and everything');
+  assert.ok((await shop()).some((p) => p.id === 'kids-cap'));
 });
 
 test('product photos: uploaded, served, ordered, and the main one leads', async () => {

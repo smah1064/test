@@ -3603,23 +3603,19 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     }
     res.status(201).json(adminProduct(getProduct(n.id)));
   });
-  // Back to the product as written (built-in products), or delete an added one that was never ordered.
+  // Back to the product as written (built-in products). Products are never deleted, so old orders,
+  // accounts and the change log keep naming them: they are removed from the shop (status 'removed')
+  // and can be shown again any time.
   app.delete('/api/admin/catalog/:id', requireCatalog, (req, res) => {
     const p = getProduct(req.params.id);
     if (!p) throw new HttpError(404, 'unknownProduct');
-    const added = !catalog.isBuiltIn(p.id);
-    if (added) {
-      const used = store.listOrders().some((o) => o.items.some((it) => it.productId === p.id)) || Object.values(store.db.designs || {}).some((d) => d.productId === p.id);
-      if (used) throw new HttpError(409, 'productInUse');
-    }
+    if (!catalog.isBuiltIn(p.id)) throw new HttpError(409, 'productsKept');
     store.mutate((db) => {
       if (db.catalog && db.catalog.products) delete db.catalog.products[p.id];
-      if (added && db.pricing) delete db.pricing[p.id];
-      logCatalog(db, req, p.id, added ? 'deleted' : 'reset to the original');
+      logCatalog(db, req, p.id, 'reset to the original');
     });
-    if (added) fs.rmSync(path.join(dataDir, 'catalog-photos', p.id), { recursive: true, force: true });
     syncCatalog();
-    res.json(added ? { deleted: true } : adminProduct(getProduct(p.id)));
+    res.json(adminProduct(getProduct(p.id)));
   });
 
   // Product photos: stored in the data folder as WebP (up to 1600 px), the first (or chosen) one leads.

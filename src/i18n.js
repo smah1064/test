@@ -177,6 +177,7 @@ const MESSAGES = {
   badPhoto: { en: 'Upload a JPG, PNG or WebP photo (up to 15 MB).', ar: 'ارفع صورة JPG أو PNG أو WebP (لحد 15 ميجا).' },
   ownerOnly: { en: 'Only the shop owner can do this.', ar: 'صاحب المحل بس اللي يقدر يعمل ده.' },
   badStaff: { en: 'Enter a name, a username (small English letters and numbers) and a password of at least 10 characters.', ar: 'اكتب الاسم واسم مستخدم (حروف إنجليزي صغيرة وأرقام) وكلمة سر 10 حروف على الأقل.' },
+  productsKept: { en: 'Products are not deleted, so their orders and history stay. Remove it from the shop instead: you can show it again any time.', ar: 'المنتجات مش بتتمسح عشان طلباتها وتاريخها يفضلوا موجودين. شيله من المحل بدل كده، وتقدر ترجّعه في أي وقت.' },
   productInUse: { en: 'This product is in designs or orders already: hide it or remove it from the shop instead of deleting it.', ar: 'المنتج ده موجود في تصميمات أو طلبات: اخفيه أو شيله من المحل بدل ما تمسحه.' },
   staffTaken: { en: 'This username is taken.', ar: 'اسم المستخدم ده موجود.' },
 };
