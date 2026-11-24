@@ -765,8 +765,8 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
   .pp-photo { aspect-ratio: 1 / 1; }
 }
 
-/* Header on small phones: everything fits, the language button stays on screen. */
-@media (max-width: 440px) {
+/* Header on small screens: everything fits, the language button stays on screen. */
+@media (max-width: 600px) {
   .site-header .inner { gap: 8px; }
   .brand { font-size: 16px; white-space: nowrap; gap: 6px; flex: 0 0 auto; }
   .brand-mark { width: 22px; height: 22px; font-size: 13px; }
@@ -774,10 +774,17 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
   .site-header nav a { white-space: nowrap; }
   .site-header .lang-toggle { padding: 4px 8px; }
 }
+/* Menu links with a shorter name for phones ("Designs", "Photos"). */
+.site-header .nav-short { display: none; }
 /* With a cart count the links no longer fit next to the shop name: the logo mark alone stays. */
-@media (max-width: 440px) {
+@media (max-width: 600px) {
   .site-header .brand { font-size: 0; gap: 0; }
   .site-header nav { gap: 8px; }
+  .site-header .nav-long { display: none; }
+  .site-header .nav-short { display: inline; }
+}
+@media (max-width: 400px) {
+  .site-header nav { gap: 6px; font-size: 13.5px; }
 }
 @media (max-width: 380px) {
   .brand { font-size: 0; }
@@ -804,7 +811,7 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 
 /* Customer accounts */
 .acct-link { display: inline-flex; align-items: center; gap: 5px; }
-@media (max-width: 440px) { .acct-link span { display: none; } }
+@media (max-width: 600px) { .acct-link span { display: none; } }
 .acct { max-width: 860px; }
 .acct-card { padding: 20px; max-width: 460px; margin: 24px auto; }
 .acct-tabs { margin-bottom: 16px; }
@@ -927,6 +934,7 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 .dlv-expected { margin: 10px 0 0; font-weight: 600; }
 .dlv-express-pill { background: #fff3bf; color: #7a5800; font-size: 11px; vertical-align: middle; }
 @media (max-width: 340px) { .site-header nav a[href="/designs"] { display: none; } }
+@media (max-width: 300px) { .site-header nav a[href="/photos"] { display: none; } }
 
 /* CAPTCHA (Cloudflare Turnstile): takes no room unless Cloudflare asks the customer to tick a box. */
 .captcha-box:empty { display: none; }
