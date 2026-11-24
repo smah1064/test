@@ -40,6 +40,7 @@ const MESSAGES = {
   acctPasswordLong: { en: 'That password is too long', ar: 'كلمة المرور طويلة جدًا' },
   acctPhoneTaken: { en: 'There is already an account with this mobile number. Sign in instead.', ar: 'في حساب بالرقم ده. سجّل دخول بدل كده.' },
   acctEmailTaken: { en: 'There is already an account with this email', ar: 'في حساب بالإيميل ده' },
+  notInReview: { en: 'This job is no longer waiting for review (refresh the page).', ar: 'المهمة دي مش مستنية مراجعة دلوقتي (حدّث الصفحة).' },
   replaceNames: { en: "This side holds the customer's name list, so one file can't replace it. Ask the customer for changes instead.", ar: 'الوش ده عليه قائمة أسماء العميل، فمينفعش ملف واحد يحل محله. اطلب من العميل التعديل بدل كده.' },
   photosCount: { en: 'Choose between 1 and {max} photos', ar: 'اختار من صورة واحدة لحد {max} صورة' },
   photoCopies: { en: 'Copies of each photo: 1 to {max}', ar: 'عدد نسخ كل صورة: من 1 لحد {max}' },

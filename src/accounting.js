@@ -21,6 +21,8 @@ const localDay = (iso) => (/^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso : DAY_FMT.forma
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const money = (v, { min = 0, max = 1e7 } = {}) => {
   if (v === '' || v === null || v === undefined) return null;
+  // A number, or a number written as text: nothing else (a list or true is not a cost).
+  if (typeof v !== 'number' && typeof v !== 'string') return undefined;
   const n = Number(v);
   if (!Number.isFinite(n) || n < min || n > max) return undefined; // invalid
   return round2(n);

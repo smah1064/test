@@ -746,6 +746,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const found = store.findItem(req.params.itemId);
       if (!found) throw new HttpError(404, 'itemNotFound');
       const { order, item } = found;
+      // Only a job that is waiting for review (a Review tab left open must not send a shipped job back).
+      if (!REVIEW_STATUSES.includes(item.status)) throw new HttpError(409, 'notInReview');
       const d = store.getDesign(item.designId);
       const b = req.body || {};
       const note = String(b.note || '').trim().slice(0, 2000);
@@ -2853,7 +2855,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     }
     if ('eta' in b) {
       const d = text(b.eta, 10);
-      if (d && (!/^\d{4}-\d{2}-\d{2}$/.test(d) || new Date(d + 'T00:00:00Z').toISOString().slice(0, 10) !== d)) throw new HttpError(400, 'badDate');
+      if (d && (!/^\d{4}-\d{2}-\d{2}$/.test(d) || Number.isNaN(Date.parse(d + 'T00:00:00Z')) || new Date(d + 'T00:00:00Z').toISOString().slice(0, 10) !== d)) throw new HttpError(400, 'badDate');
       s.eta = d;
     }
     // A job still waiting for review or the customer's approval can't be shipped.
@@ -3160,6 +3162,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const { designId, side: sideId } = req.params;
       const design = UUID_RE.test(designId) && store.getDesign(designId);
       if (!design) throw new HttpError(404, 'notFound');
+      if (req.query.format !== undefined && typeof req.query.format !== 'string') throw new HttpError(404, 'notFound');
       const f = await makeFile(design, sideId, req.query.format, { now: req.query.now === '1' });
       res.download(f.path, f.name);
     } catch (e) {

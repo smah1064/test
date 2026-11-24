@@ -192,3 +192,37 @@ test('admin: an order still in review cannot be marked shipped; delivery dates m
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('admin: review actions only on jobs in review; bad dates, formats and costs are refused (no 500s)', async () => {
+  const { createApp: make } = require('../src/app');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pod-admin-guards-'));
+  const app = make({ dataDir: dir, adminPassword: 'secret', cleanupEvery: 0, requireApproval: false, limits: { designs: [{ max: 1e6, ms: 1000 }], orders: [{ max: 1e6, ms: 1000 }] } });
+  const srv = await new Promise((resolve) => { const s = app.listen(0, () => resolve(s)); });
+  const b = `http://127.0.0.1:${srv.address().port}`;
+  try {
+    const p = (url, body, headers = {}) => fetch(b + url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
+    const sharp = require('sharp');
+    const c = await (await p('/api/designs', { productId: 'mug', color: 'white', size: '11oz', sides: { front: { editor: { objects: [{ type: 'i-text', text: 'x' }] } } } })).json();
+    for (const name of c.files) {
+      const data = name.endsWith('.svg') ? Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>') : await sharp({ create: { width: name.includes('print') ? 1200 : 60, height: name.includes('print') ? 1050 : 52, channels: 4, background: '#c33' } }).png().toBuffer();
+      await fetch(`${b}/api/designs/${c.id}/files/${name}`, { method: 'PUT', headers: { 'x-upload-token': c.uploadToken }, body: data });
+    }
+    const d = await (await fetch(`${b}/api/designs/${c.id}/complete`, { method: 'POST', headers: { 'x-upload-token': c.uploadToken } })).json();
+    const q = await (await p('/api/cart/quote', { designIds: [d.id] })).json();
+    const order = await (await p('/api/orders', { customer: { name: 'منى', phone: '01012345678', governorate: 'cairo', city: 'نصر', address: '1' }, designIds: [d.id], expectedTotal: q.total })).json();
+    const { token } = await (await p('/api/admin/login', { password: 'secret' })).json();
+    const H = { Authorization: `Bearer ${token}` };
+    const json = (method, url, body) => fetch(b + url, { method, headers: { 'Content-Type': 'application/json', ...H }, body: JSON.stringify(body) });
+    assert.strictEqual((await json('PATCH', `/api/admin/orders/${order.id}/shipment`, { shipped: true })).status, 200);
+    const rv = await json('POST', `/api/admin/items/${order.items[0].id}/review`, { action: 'approve' });
+    assert.strictEqual(rv.status, 409);
+    assert.strictEqual((await rv.json()).code, 'notInReview');
+    assert.strictEqual((await json('PATCH', `/api/admin/orders/${order.id}/shipment`, { eta: '2026-13-01' })).status, 400);
+    assert.strictEqual((await fetch(`${b}/api/admin/files/${d.id}/front?format[]=png`, { headers: H })).status, 404);
+    assert.strictEqual((await json('PATCH', `/api/admin/orders/${order.id}/shipping-cost`, { actualShipping: true })).status, 400);
+    assert.strictEqual((await json('PATCH', `/api/admin/items/${order.items[0].id}/cost`, { actualCost: [5] })).status, 400);
+  } finally {
+    srv.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
