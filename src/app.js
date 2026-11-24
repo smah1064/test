@@ -91,7 +91,7 @@ const MAX_EDITOR_JSON_BYTES = 40 * 1024 * 1024;
 // merge: a name list's pictures, one per copy (up to 1,000 of them).
 const UPLOAD_LIMITS = { print: 60 * 1024 * 1024, preview: 8 * 1024 * 1024, svg: 40 * 1024 * 1024, source: 60 * 1024 * 1024, merge: 150 * 1024 * 1024, photo: 15 * 1024 * 1024, thumb: 300 * 1024 };
 // Sides: front/back, and the two mugs of the couple mugs set.
-const FILE_RE = /^(front|back|mug1|mug2)-(print|preview|merge-base)\.png$|^(front|back|mug1|mug2)-design\.svg$|^(front|back|mug1|mug2)-merge\.bin$|^src-\d{1,2}\.(png|jpg|webp)$|^(photo|thumb)-\d{3}\.jpg$/;
+const FILE_RE = /^(front|back|mug1|mug2|emb)-(print|preview)\.png$|^(front|back|mug1|mug2)-merge-base\.png$|^(front|back|mug1|mug2|emb)-design\.svg$|^(front|back|mug1|mug2)-merge\.bin$|^src-\d{1,2}\.(png|jpg|webp)$|^(photo|thumb)-\d{3}\.jpg$/;
 const SIGNATURES = {
   png: (b) => b.subarray(0, 8).equals(PNG_SIGNATURE),
   jpg: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
@@ -177,6 +177,18 @@ function cleanOffset(product, side, sizeId, offset) {
   return dx || dy ? { dx, dy } : null;
 }
 /** Embroidery: the stitch box moved from its standard spot, kept on the side's printable zone. */
+/**
+ * Embroidery is a layer of its own ('emb') on the side it is stitched on (the front):
+ * that side can be printed too, and the other sides print as usual.
+ */
+const EMB = 'emb';
+/** Its name: "Front embroidery" / "تطريز الأمام". */
+const embSideName = (host) => ({ en: `${pickEnName(host.name)} embroidery`, ar: `تطريز ${(host.name && host.name.ar) || ''}`.trim() });
+function pickEnName(n) { return n && typeof n === 'object' ? n.en || '' : String(n || ''); }
+/** How many sides of the product carry something (the embroidery counts as the side it is on). */
+function decoratedSides(d) {
+  return Math.max(1, new Set((d.sides || []).map((sd) => sd.on || sd.id)).size);
+}
 /** The side that is embroidered (the others print as usual); null for printed designs. Older designs had only that side. */
 function embSideOf(d) {
   return d && d.method === 'embroidery' ? d.embSide || (d.sides && d.sides[0] && d.sides[0].id) || null : null;
@@ -1001,7 +1013,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   }
   /** Total pieces and per-line prices of a design (for the cart, order and invoice). */
   function pieceInfo(product, d) {
-    const unit = (sizeId) => priceFor(product, sizeId, d.sides.length) + embExtra(product, d, sizeId);
+    const unit = (sizeId) => priceFor(product, sizeId, decoratedSides(d)) + embExtra(product, d, sizeId);
     if (d.quantities) {
       for (const l of d.quantities) l.unitPrice = round2(unit(l.size.id));
       const prices = new Set(d.quantities.map((l) => l.unitPrice));
@@ -1102,9 +1114,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (!sizeDef) throw new HttpError(400, 'unknownSize');
     if (!sides || typeof sides !== 'object' || Array.isArray(sides)) throw new HttpError(400, 'sidesRequired');
 
+    // Pages from before embroidery was a layer sent the stitched design as the front itself.
+    if ((req.body || {}).method === 'embroidery' && product.embroidery && !sides[EMB] && sides[product.embroidery.side]) {
+      sides[EMB] = sides[product.embroidery.side];
+      delete sides[product.embroidery.side];
+    }
     const sideIds = Object.keys(sides);
     if (sideIds.length === 0) throw new HttpError(400, 'designAtLeastOne');
-    const unknown = sideIds.filter((id) => !product.sides.some((s) => s.id === id));
+    const unknown = sideIds.filter((id) => !product.sides.some((s) => s.id === id) && !(id === EMB && product.embroidery && (req.body || {}).method === 'embroidery'));
     if (unknown.length) throw new HttpError(400, 'unknownSide', { side: unknown.join(', ') });
 
     // Embroidery instead of print on one area (left chest, cap front...), stitched from the print file;
@@ -1113,7 +1130,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     // Product options (business-card lamination…).
     const picked = cleanOptions(product, (req.body || {}).options);
     if (picked.error) throw new HttpError(400, 'badOption');
-    if (emb && !sideIds.includes(emb.side)) throw new HttpError(400, 'embEmpty');
+    if (emb && !sideIds.includes(EMB)) throw new HttpError(400, 'embEmpty');
     const editor = {};
     const storedSides = [];
     // Fabric: how the tile repeats and how big it prints (the tile is the print file).
@@ -1128,22 +1145,32 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         fabricCm: sizeDef.cm || [145, 100],
       };
     }
-    for (const side of product.sides) {
-      if (!sideIds.includes(side.id)) continue;
-      const s = sides[side.id] || {};
+    const editorOf = (id, name) => {
+      const s = sides[id] || {};
       if (!s.editor || typeof s.editor !== 'object' || !Array.isArray(s.editor.objects) || s.editor.objects.length === 0) {
-        throw new HttpError(400, 'sideEmpty', { side: side.name });
+        throw new HttpError(400, 'sideEmpty', { side: name });
       }
-      const offset = cleanOffset(product, side, sizeDef.id, s.editor.offset);
-      editor[side.id] = { ...s.editor, offset: offset || undefined, ...(pattern ? { pattern: { repeat: pattern.repeat, tileCm: pattern.tileCm } } : {}) };
-      if (emb && side.id === emb.side) {
-        const eo = cleanEmbOffset(side, emb, s.editor.offset);
-        editor[side.id] = { ...s.editor, offset: eo || undefined };
+      return s.editor;
+    };
+    for (const side of product.sides) {
+      // The embroidery on this side (after its print, if it has one): its own area, stitched from its own print file.
+      const embHere = () => {
+        if (!emb || side.id !== emb.side || !sideIds.includes(EMB)) return;
+        const name = embSideName(side);
+        const ed = editorOf(EMB, name);
+        const eo = cleanEmbOffset(side, emb, ed.offset);
+        editor[EMB] = { ...ed, offset: eo || undefined };
         const perCm = emb.area.w / (emb.widthIn * 2.54);
         const cm = (v) => Math.round((v / perCm) * 2) / 2;
-        storedSides.push({ id: side.id, name: side.name, widthIn: emb.widthIn, heightIn: emb.heightIn, bleedIn: 0, process: 'embroidery', ...(eo ? { offsetCm: { x: cm(eo.dx), y: cm(eo.dy) } } : {}) });
+        storedSides.push({ id: EMB, name, on: side.id, widthIn: emb.widthIn, heightIn: emb.heightIn, bleedIn: 0, process: 'embroidery', ...(eo ? { offsetCm: { x: cm(eo.dx), y: cm(eo.dy) } } : {}) });
+      };
+      if (!sideIds.includes(side.id)) {
+        embHere();
         continue;
       }
+      const ed = editorOf(side.id, side.name);
+      const offset = cleanOffset(product, side, sizeDef.id, ed.offset);
+      editor[side.id] = { ...ed, offset: offset || undefined, ...(pattern ? { pattern: { repeat: pattern.repeat, tileCm: pattern.tileCm } } : {}) };
       if (pattern) {
         const tileIn = round2(pattern.tileCm / 2.54);
         storedSides.push({ id: side.id, name: side.name, widthIn: tileIn, heightIn: tileIn, bleedIn: 0 });
@@ -1152,10 +1179,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       storedSides.push({
         // The physical size for the chosen size (a 30 x 40 poster prints smaller than a 45 x 60 one).
         id: side.id, name: side.name, widthIn: printWidthFor(product, side, sizeDef.id), heightIn: round2((heightIn(side) * printWidthFor(product, side, sizeDef.id)) / side.printWidthIn), bleedIn: side.bleedIn || 0,
-        // Embroidered with a printed back: this side is printed (DTF / DTG files, not stitches).
+        // With embroidery: this side is printed (DTF / DTG files, not stitches).
         ...(emb ? { process: product.process } : {}),
         ...(offset ? { offsetCm: offsetCm(product, side, sizeDef.id, offset) } : {}),
       });
+      embHere();
     }
     const editorJson = JSON.stringify(editor);
     if (Buffer.byteLength(editorJson) > MAX_EDITOR_JSON_BYTES) throw new HttpError(413, 'designTooLarge');
@@ -1177,7 +1205,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       productId: product.id,
       productName: product.name,
       process: emb ? 'embroidery' : product.process,
-      ...(emb ? { method: 'embroidery', embSide: emb.side } : {}),
+      ...(emb ? { method: 'embroidery', embSide: EMB } : {}),
       ...(picked.options ? { options: picked.options } : {}),
       color: { id: colorDef.id, name: colorDef.name, hex: colorDef.hex },
       // Options are shown with the size everywhere ("100 cards · Matte lamination"): cart, order, invoice, admin, labels.
@@ -1573,13 +1601,17 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (!product) throw new HttpError(400, 'unknownProduct', { id: String(b.productId || '').slice(0, 40) });
     const color = product.colors.find((c) => c.id === b.color) || product.colors[0];
     const size = product.sizes.find((z) => z.id === b.size) || product.sizes[0];
-    const sides = product.sides.filter((sd) => b.sides && b.sides[sd.id] && Array.isArray(b.sides[sd.id].objects) && b.sides[sd.id].objects.length);
+    const has = (id) => b.sides && b.sides[id] && Array.isArray(b.sides[id].objects) && b.sides[id].objects.length;
+    const sides = product.sides.filter((sd) => has(sd.id));
+    // The embroidery layer (on the front), shared with the rest.
+    const host = product.embroidery && product.sides.find((sd) => sd.id === product.embroidery.side);
+    if (host && has(EMB)) sides.push({ ...host, id: EMB, name: embSideName(host), emb: true });
     if (!sides.length) throw new HttpError(400, 'shareEmpty');
     const id = crypto.randomBytes(9).toString('base64url');
     fs.mkdirSync(path.join(sharesDir, id), { recursive: true });
     const editor = {};
     for (const sd of sides) {
-      const offset = cleanOffset(product, sd, size.id, b.sides[sd.id].offset);
+      const offset = sd.emb ? cleanEmbOffset(host, product.embroidery, b.sides[sd.id].offset) : cleanOffset(product, sd, size.id, b.sides[sd.id].offset);
       editor[sd.id] = { objects: b.sides[sd.id].objects, ...(offset ? { offset } : {}) };
       const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(String((b.previews || {})[sd.id] || ''));
       const png = m ? Buffer.from(m[1], 'base64') : null;
@@ -2270,7 +2302,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       return round2(sum);
     }
     const unit = (sizeId) => {
-      const p = priceFor(product, sizeId, d.sides.length);
+      const p = priceFor(product, sizeId, decoratedSides(d));
       return p == null ? null : p + embExtra(product, d, sizeId);
     };
     // Several colours / sizes: each line at its size's price.
@@ -2822,7 +2854,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       process: d.process || product.process,
       price: designPrice({ ...d, status: 'ready', orderId: null }),
       ...(copiesOf(d) > 1 || d.quantities ? pieceInfo(product, JSON.parse(JSON.stringify(d))) : {}),
-      ...(d.quantities ? { quantities: JSON.parse(JSON.stringify(d.quantities)).map((l) => ({ ...l, unitPrice: round2(priceFor(product, l.size.id, d.sides.length) + embExtra(product, d, l.size.id)) })) } : {}),
+      ...(d.quantities ? { quantities: JSON.parse(JSON.stringify(d.quantities)).map((l) => ({ ...l, unitPrice: round2(priceFor(product, l.size.id, decoratedSides(d)) + embExtra(product, d, l.size.id)) })) } : {}),
       ...(d.merge ? { merge: { count: d.merge.count, columns: d.merge.columns } } : {}),
       ...(d.method === 'embroidery' ? { method: 'embroidery', emb: d.emb || null } : {}),
       ...(d.options ? { options: JSON.parse(JSON.stringify(d.options)) } : {}),

@@ -1562,7 +1562,7 @@ test('embroidery: DST encoding is exact, logos are digitised, orders get the DST
   assert.strictEqual((await post('/api/designs', { productId: 'tshirt', color: 'white', size: 'M', method: 'embroidery', sides: { back: SIDE } })).status, 400, 'the stitched chest cannot be empty');
   // The embroidery box can be moved from the left chest, kept on the garment's printable zone; the shop gets the cm.
   const moved = await makeDesign({ productId: 'tshirt', color: 'white', size: 'M', method: 'embroidery', sides: { front: { editor: { ...SIDE.editor, offset: { dx: -40, dy: 30 } } } } });
-  const mf = moved.sides.find((x) => x.id === 'front');
+  const mf = moved.sides.find((x) => x.id === 'emb');
   assert.ok(mf.offsetCm && mf.offsetCm.x < 0 && mf.offsetCm.y > 0, JSON.stringify(mf));
   const far = await makeDesign({ productId: 'tshirt', color: 'white', size: 'M', method: 'embroidery', sides: { front: { editor: { ...SIDE.editor, offset: { dx: 0, dy: 5000 } } } } });
   const zone = PRODUCTS_BY_ID.tshirt.sides[0].moveZone || PRODUCTS_BY_ID.tshirt.sides[0].printArea;
@@ -1573,31 +1573,40 @@ test('embroidery: DST encoding is exact, logos are digitised, orders get the DST
   const item = (await (await admin('/api/admin/orders')).json()).orders.find((o) => o.id === order.id).items[0];
   assert.strictEqual(item.process, 'embroidery');
   assert.ok(item.emb, 'the item carries the thread list');
-  const r = await admin(`/api/admin/files/${emb.id}/front?format=dst`);
+  const r = await admin(`/api/admin/files/${emb.id}/emb?format=dst`);
   assert.strictEqual(r.status, 200);
   assert.match(r.headers.get('content-disposition'), /embroidery\.dst/);
   assert.strictEqual((await admin(`/api/admin/files/${plain.id}/front?format=dst`)).status, 404);
 
-  // Embroidered chest with a printed back: the chest is stitched (DST), the back prints as usual (DTF film).
-  const both = await makeDesign({ productId: 'tshirt', color: 'white', size: 'M', method: 'embroidery', sides: { front: SIDE, back: SIDE } });
+  // Pages from before embroidery was a layer sent the stitched design as the front: it becomes the embroidery layer.
+  assert.strictEqual(emb.embSide, 'emb');
+  assert.deepStrictEqual(emb.sides.map((x) => [x.id, x.on, x.process]), [['emb', 'front', 'embroidery']]);
+  // A print and embroidery on the front, and a printed back: the front's print, its embroidery and the back.
   const tee = PRODUCTS_BY_ID.tshirt;
+  const both = await makeDesign({ productId: 'tshirt', color: 'white', size: 'M', method: 'embroidery', sides: { front: SIDE, emb: SIDE, back: SIDE } });
   const plainBoth = await makeDesign({ productId: 'tshirt', color: 'white', size: 'M', sides: { front: SIDE, back: SIDE } });
-  assert.strictEqual(both.price, plainBoth.price + tee.embroidery.surcharge, 'two-sided price plus the embroidery');
-  assert.strictEqual(both.embSide, 'front');
-  const bf = both.sides.find((x) => x.id === 'front');
-  const bb = both.sides.find((x) => x.id === 'back');
-  assert.strictEqual(bf.process, 'embroidery');
-  assert.strictEqual(bf.widthIn, tee.embroidery.widthIn, 'the chest is the embroidery size');
-  assert.strictEqual(bb.process, tee.process, 'the back prints');
-  assert.strictEqual(bb.widthIn, tee.sides.find((x) => x.id === 'back').printWidthIn, 'the back is the full print size');
+  assert.strictEqual(both.price, plainBoth.price + tee.embroidery.surcharge, 'two printed sides plus the embroidery (on the front, not a third side)');
+  assert.strictEqual(both.embSide, 'emb');
+  assert.deepStrictEqual(both.sides.map((x) => [x.id, x.process]), [['front', tee.process], ['emb', 'embroidery'], ['back', tee.process]]);
+  const be = both.sides.find((x) => x.id === 'emb');
+  assert.strictEqual(be.on, 'front');
+  assert.strictEqual(be.widthIn, tee.embroidery.widthIn, 'the embroidery is its own size');
+  assert.strictEqual(both.sides.find((x) => x.id === 'front').widthIn, tee.sides[0].printWidthIn, 'the front print is the full print size');
+  // Print + embroidery on the front alone costs one side plus the embroidery.
+  const frontBoth = await makeDesign({ productId: 'tshirt', color: 'white', size: 'M', method: 'embroidery', sides: { front: SIDE, emb: SIDE } });
+  const plainFront = await makeDesign({ productId: 'tshirt', color: 'white', size: 'M', sides: { front: SIDE } });
+  assert.strictEqual(frontBoth.price, plainFront.price + tee.embroidery.surcharge);
+  // The embroidery layer only with embroidery asked for.
+  assert.strictEqual((await post('/api/designs', { productId: 'tshirt', color: 'white', size: 'M', sides: { emb: SIDE } })).status, 400);
   const proof = await (await fetch(`${base}/api/designs/${both.id}/proof`)).json();
-  assert.strictEqual(proof.embSide, 'front');
-  assert.deepStrictEqual(proof.sides.map((x) => x.process), ['embroidery', tee.process]);
+  assert.strictEqual(proof.embSide, 'emb');
+  assert.deepStrictEqual(proof.sides.map((x) => x.process), [tee.process, 'embroidery', tee.process]);
   const o2 = await (await post('/api/orders', { customer: CUSTOMER, designIds: [both.id] })).json();
   const it2 = (await (await admin('/api/admin/orders')).json()).orders.find((o) => o.id === o2.id).items[0];
-  assert.deepStrictEqual(it2.sides.map((x) => x.process), ['embroidery', tee.process]);
-  assert.strictEqual((await admin(`/api/admin/files/${both.id}/front?format=dst`)).status, 200, 'stitches for the chest');
-  assert.strictEqual((await admin(`/api/admin/files/${both.id}/back?format=dst`)).status, 404, 'no stitches for the printed back');
+  assert.deepStrictEqual(it2.sides.map((x) => x.process), [tee.process, 'embroidery', tee.process]);
+  assert.strictEqual((await admin(`/api/admin/files/${both.id}/emb?format=dst`)).status, 200, 'stitches for the embroidery');
+  assert.strictEqual((await admin(`/api/admin/files/${both.id}/front?format=dst`)).status, 404, 'no stitches for the printed front');
+  assert.strictEqual((await admin(`/api/admin/files/${both.id}/front?format=png`)).status, 200, 'print file for the front');
   assert.strictEqual((await admin(`/api/admin/files/${both.id}/back?format=png`)).status, 200, 'print file for the back');
 });
 

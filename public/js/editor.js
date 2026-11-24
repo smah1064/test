@@ -74,7 +74,7 @@
     history: {}, // sideId -> { stack: [json], i }
     offsets: {}, // sideId -> { dx, dy }: where the customer moved the print area
     pattern: null, // fabric products: { repeat, tileCm } (how the tile repeats, and its size)
-    method: 'print', // 'embroidery' on products that can be embroidered
+    method: 'print', // (older drafts) 'embroidery': the front was embroidered; now the embroidery is its own layer, st.designs.emb
     editingCartIndex: null,
     revise: null, // { orderId, itemId }: a new version of an ordered item the shop sent back for changes
     editingDesignId: null,
@@ -97,11 +97,18 @@
       st.colorId = saved.color.id;
       st.sizeId = saved.size.id;
       st.sizePicked = true; // a saved design or cart item: its size was chosen
-      if (saved.method === 'embroidery') st.method = 'embroidery';
+      if (saved.method === 'embroidery') st.method = 'embroidery'; // see below: older designs embroidered the front itself
       if (saved.options) st.options = Object.fromEntries(Object.entries(saved.options).map(([k, v]) => [k, v.id]));
       if (saved.quantities) st.qty = Object.fromEntries([...new Set(saved.quantities.map((l) => l.color.id))].map((c) => [c, Object.fromEntries(saved.quantities.filter((l) => l.color.id === c).map((l) => [l.size.id, l.qty]))]));
       if (saved.mergeList) st.mergeList = { columns: saved.mergeList.columns, rows: saved.mergeList.rows, total: saved.mergeList.rows.length, truncated: false, fileName: '' };
-      for (const [sideId, data] of Object.entries(saved.editor)) {
+      // Designs from before embroidery was a layer: their stitched front is the embroidery layer now.
+      const host = st.product.embroidery && st.product.embroidery.side;
+      const editorSides = { ...saved.editor };
+      if (saved.method === 'embroidery' && host && !editorSides.emb && editorSides[host] && saved.embSide !== 'emb') {
+        editorSides.emb = editorSides[host];
+        delete editorSides[host];
+      }
+      for (const [sideId, data] of Object.entries(editorSides)) {
         st.designs[sideId] = await blobifyImages(data.objects || []);
         if (data.offset) st.offsets[sideId] = data.offset;
         if (data.pattern) st.pattern = data.pattern;
@@ -139,7 +146,7 @@
       st.colorId = shared.color;
       st.sizeId = shared.size; // (the size is still asked: the friend may not have chosen one)
       for (const [sideId, data] of Object.entries(shared.editor || {})) {
-        if (st.product.sides.some((sd) => sd.id === sideId)) {
+        if (st.product.sides.some((sd) => sd.id === sideId) || (sideId === 'emb' && st.product.embroidery)) {
           st.designs[sideId] = await blobifyImages(data.objects || []);
           if (data.offset) st.offsets[sideId] = data.offset;
           if (data.pattern) st.pattern = data.pattern;
@@ -181,12 +188,22 @@
     st.libraryId = typeof draft.library === 'string' ? draft.library : null;
     st.colorId = draft.colorId;
     st.sizeId = draft.sizeId;
-    for (const [sideId, objs] of Object.entries(draft.designs)) {
-      if (st.product.sides.some((s) => s.id === sideId)) st.designs[sideId] = await blobifyImages(objs || []);
+    // Drafts from before embroidery was a layer: their stitched front is the embroidery layer now.
+    const host = st.product.embroidery && st.product.embroidery.side;
+    const dDesigns = { ...draft.designs };
+    const dOffsets = { ...(draft.offsets || {}) };
+    if (draft.method === 'embroidery' && host && !dDesigns.emb && dDesigns[host]) {
+      dDesigns.emb = dDesigns[host];
+      delete dDesigns[host];
+      if (dOffsets[host]) dOffsets.emb = dOffsets[host];
+      delete dOffsets[host];
     }
-    for (const [sideId, o] of Object.entries(draft.offsets || {})) if (st.product.sides.some((s) => s.id === sideId)) st.offsets[sideId] = o;
+    const known = (id) => st.product.sides.some((s) => s.id === id) || (id === 'emb' && Boolean(st.product.embroidery));
+    for (const [sideId, objs] of Object.entries(dDesigns)) {
+      if (known(sideId)) st.designs[sideId] = await blobifyImages(objs || []);
+    }
+    for (const [sideId, o] of Object.entries(dOffsets)) if (known(sideId)) st.offsets[sideId] = o;
     if (draft.pattern) st.pattern = draft.pattern;
-    if (draft.method === 'embroidery') st.method = 'embroidery';
     if (draft.options && typeof draft.options === 'object') st.options = { ...draft.options };
     if (st.product.merge && draft.mergeList && draft.mergeList.columns && draft.mergeList.rows) st.mergeList = draft.mergeList; // (clothing no longer takes name lists)
     if (draft.qty && typeof draft.qty === 'object') st.qty = draft.qty;
@@ -211,19 +228,43 @@
     return { repeat: REPEATS.includes(p && p.repeat) ? p.repeat : 'straight', tileCm: product.pattern.tiles.includes(tileCm) ? tileCm : product.pattern.tile };
   }
   st.pattern = normPattern(st.product, st.pattern);
-  if (params.get('method') === 'embroidery') st.method = 'embroidery';
-  if (!st.product.embroidery) st.method = 'print';
-  const emb = () => (st.method === 'embroidery' && st.product.embroidery) || null;
-  /** The sides that can carry a design (with embroidery too: the chest is stitched, the other sides print as usual). */
+  // ---------- Embroidery: a layer of its own on the side it is stitched on ----------
+  // The front can carry a print and embroidery together: the embroidery is
+  // edited as the side 'emb' (its own smaller area, thread checks and stitch
+  // file); the print is the front itself. Each shows on the shirt while the
+  // other is being edited (the "ghost", drawn under the artwork).
+  const EMB = 'emb';
+  st.method = 'print';
+  /** The product's embroidery (null when it can't be embroidered). */
+  const emb = () => st.product.embroidery || null;
+  /** The product sides (tabs); the embroidery layer is reached from its side with Print / Embroidery. */
   const activeSides = () => st.product.sides;
-  /** Is this side embroidered (rather than printed)? */
-  const embHere = (id = st.side) => Boolean(emb() && emb().side === id);
+  /** Every layer that can carry artwork: the sides, and the embroidery layer. */
+  const allSides = () => (emb() ? [...st.product.sides, baseSide(EMB)] : st.product.sides);
+  /** Is this the embroidery layer? */
+  const embHere = (id = st.side) => Boolean(emb() && id === EMB);
+  /** The product side a layer is on (the embroidery: its side). */
+  const hostOf = (id = st.side) => (id === EMB && emb() ? emb().side : id);
+  /** Does the design have embroidery? */
+  const usesEmb = () => Boolean(emb()) && (st.side === EMB ? canvas.getObjects().length : (st.designs[EMB] || []).length) > 0;
+  if (params.get('method') === 'embroidery' && emb()) st.side = EMB;
+  else if (!st.product.sides.some((s) => (st.designs[s.id] || []).length) && (st.designs[EMB] || []).length && emb()) st.side = EMB;
 
   // On garments and bags the print area can be moved (st.offsets, in mockup units);
   // sideDef() gives the side with its print area where the customer put it.
   // Garment sizes: the print is the same size in cm on every size, so on a
   // bigger garment the print box is smaller (scaled from just below the collar).
-  const baseSide = (id = st.side) => st.product.sides.find((s) => s.id === id);
+  const embLayers = new Map();
+  const baseSide = (id = st.side) => {
+    if (id === EMB) {
+      if (!emb()) return undefined;
+      const host = st.product.sides.find((s) => s.id === emb().side);
+      const key = st.product.id;
+      if (!embLayers.has(key)) embLayers.set(key, { ...host, id: EMB, host: host.id, name: { en: `${host.name.en} embroidery`, ar: `تطريز ${host.name.ar}` } });
+      return embLayers.get(key);
+    }
+    return st.product.sides.find((s) => s.id === id);
+  };
   function areaFor(product, sideId, sizeId, offset) {
     const a = product.sides.find((s) => s.id === sideId).printArea;
     const size = product.sizes.find((z) => z.id === sizeId);
@@ -239,7 +280,7 @@
     if (!s) return s;
     // Embroidery: its own smaller area (left chest, cap front...), movable like a print.
     const e = emb();
-    if (e && e.side === s.id) {
+    if (e && s.id === EMB) {
       const eo = st.offsets[s.id];
       const key = `emb:${st.product.id}:${s.id}:${eo ? eo.dx : 0}:${eo ? eo.dy : 0}`;
       const printArea = { ...e.area, x: e.area.x + ((eo && eo.dx) || 0), y: e.area.y + ((eo && eo.dy) || 0) };
@@ -347,6 +388,8 @@
     fireRightClick: false,
   });
   if (COARSE) canvas.selection = false; // one finger drags objects, two fingers zoom
+  // The other layer of the side shown under the artwork (print under embroidery and back): see refreshGhost.
+  const ghost = { el: null, key: '', token: 0, boxes: [] };
 
   function fit() {
     const stage = $('stage');
@@ -595,6 +638,10 @@
         if (!canvas.contains(o)) continue;
         const r = absRect(o);
         ctx.strokeRect(r.left - 3 * px, r.top - 3 * px, r.width + 6 * px, r.height + 6 * px);
+      }
+      // Print and embroidery on top of each other: the other layer's artwork is outlined too.
+      if (st.issues && st.issues.some((i) => i.overlap) && ghost.boxes) {
+        for (const b of ghost.boxes) ctx.strokeRect(b.left - 3 * px, b.top - 3 * px, b.width + 6 * px, b.height + 6 * px);
       }
     }
     // DPI badge on the selected photo.
@@ -970,7 +1017,7 @@
     let bg;
     let ov;
     // A print all the way round (mugs) is shown unrolled: the drawing, not the photo of one side.
-    const photo = !side.wrap && window.POD_PHOTOS && window.POD_PHOTOS.forSide ? window.POD_PHOTOS.forSide(st.product.id, side.id) : null;
+    const photo = !side.wrap && window.POD_PHOTOS && window.POD_PHOTOS.forSide ? window.POD_PHOTOS.forSide(st.product.id, side.host || side.id) : null;
     if (photo) {
       try {
         [bg, ov] = await photoMockup(photo, side, hex);
@@ -988,7 +1035,59 @@
     canvas.backgroundImage = bg;
     canvas.overlayImage = ov;
     canvas.requestRenderAll();
+    refreshGhost();
   }
+
+  // ---------- The other layer of this side, shown under the artwork ----------
+  // Editing the print on the front shows the embroidery there (and the other
+  // way round), so the customer sees both on the shirt. It is drawn with the
+  // product picture: never in print files, always in the product previews.
+  const GHOST_SCALE = 2;
+  const ghostSideOf = (id = st.side) => (!emb() ? null : id === EMB ? emb().side : id === emb().side ? EMB : null);
+  async function refreshGhost() {
+    const other = ghostSideOf();
+    const objs = other ? st.designs[other] || [] : [];
+    const my = ++ghost.token;
+    if (!objs.length) {
+      if (ghost.el) { ghost.el = null; ghost.key = ''; ghost.boxes = []; canvas.requestRenderAll(); }
+      return;
+    }
+    const a = area(other);
+    const key = JSON.stringify([other, st.product.id, a, objs]);
+    if (key === ghost.key) return;
+    await D.ensureFontsFor(objs);
+    const enlivened = await new Promise((resolve) => fabric.util.enlivenObjects(objs, resolve));
+    if (my !== ghost.token) return;
+    const el = document.createElement('canvas');
+    const sc = new fabric.StaticCanvas(el, { width: W * GHOST_SCALE, height: H * GHOST_SCALE, enableRetinaScaling: false, renderOnAddRemove: false });
+    sc.setViewportTransform([GHOST_SCALE, 0, 0, GHOST_SCALE, 0, 0]);
+    enlivened.forEach((o) => { o.clipPath = clipRect(a); sc.add(o); });
+    sc.renderAll();
+    // Where its artwork is (inside its area), so the two layers can be kept apart.
+    ghost.boxes = enlivened.filter((o) => o.visible !== false).map((o) => o.getBoundingRect(true, true)).map((b) => {
+      const x = Math.max(b.left, a.x);
+      const y = Math.max(b.top, a.y);
+      return { left: x, top: y, width: Math.min(b.left + b.width, a.x + a.w) - x, height: Math.min(b.top + b.height, a.y + a.h) - y };
+    }).filter((b) => b.width > 0 && b.height > 0);
+    ghost.el = sc.lowerCanvasEl;
+    ghost.key = key;
+    canvas.requestRenderAll();
+  }
+  /** Draws the other layer onto a picture of the whole mockup (`scale` pixels per unit). */
+  const withGhost = (cv, scale) => {
+    if (ghost.el) cv.getContext('2d').drawImage(ghost.el, 0, 0, W * scale, H * scale);
+    return cv;
+  };
+  canvas._renderBackground = function (ctx) {
+    fabric.StaticCanvas.prototype._renderBackground.call(this, ctx);
+    // Only with the product picture: print files (drawn without it) never get the other layer.
+    if (!ghost.el || !this.backgroundImage) return;
+    const v = this.viewportTransform;
+    ctx.save();
+    ctx.transform(v[0], v[1], v[2], v[3], v[4], v[5]);
+    ctx.drawImage(ghost.el, 0, 0, W, H);
+    ctx.restore();
+  };
 
   // ---------- Serialisation ----------
   function serialize() {
@@ -1468,7 +1567,7 @@
     }
   });
   /** True when any side uses a picture imported from another site. */
-  const hasImports = () => st.product.sides.some((sd) => (sd.id === st.side ? serialize() : st.designs[sd.id] || []).some((o) => o && o.importSource));
+  const hasImports = () => allSides().some((sd) => (sd.id === st.side ? serialize() : st.designs[sd.id] || []).some((o) => o && o.importSource));
   /** Ask the customer to confirm the rights to imported pictures (resolves true/false). */
   function confirmRights() {
     return new Promise((resolve) => {
@@ -2995,8 +3094,13 @@
     // Print or embroidery (garments, caps, totes, aprons).
     $('method-field').hidden = !p.embroidery;
     if (p.embroidery) {
-      $('method-chips').innerHTML = ['print', 'embroidery'].map((m) => `<button class="chip ${m === st.method ? 'active' : ''}" data-method="${m}">${esc(t('emb.' + m))}${m === 'embroidery' ? ` <span style="opacity:.7">+${esc(money(p.embroidery.surcharge))}</span>` : ''}</button>`).join('');
-      $('method-note').textContent = st.method === 'embroidery' ? t('emb.note', { w: POD.num(Math.round(p.embroidery.widthIn * 25.4) / 10), h: POD.num(Math.round(p.embroidery.heightIn * 25.4) / 10), n: POD.num(p.embroidery.maxColors) }) + (p.sides.length > 1 ? ' ' + t('emb.backPrint') : '') : '';
+      // Which layer of the front is being edited: its print or its embroidery (both can be used together).
+      const now = st.side === EMB ? 'embroidery' : 'print';
+      const hostName = tr(baseSide(p.embroidery.side).name);
+      $('method-chips').innerHTML = ['print', 'embroidery'].map((m) => `<button class="chip ${m === now ? 'active' : ''}" data-method="${m}" aria-pressed="${m === now}">${esc(t('emb.' + m))}${m === 'embroidery' ? ` <span style="opacity:.7">+${esc(money(p.embroidery.surcharge))}</span>` : ''}</button>`).join('');
+      $('method-note').textContent = st.side === EMB
+        ? t('emb.note', { w: POD.num(Math.round(p.embroidery.widthIn * 25.4) / 10), h: POD.num(Math.round(p.embroidery.heightIn * 25.4) / 10), n: POD.num(p.embroidery.maxColors) }) + ' ' + t('emb.bothNote', { side: hostName })
+        : t(usesEmb() ? 'emb.printNoteWith' : 'emb.printNote', { side: hostName });
     }
     // Fabric: how the tile repeats and how big it prints.
     $('pattern-field').hidden = !st.pattern;
@@ -3014,25 +3118,19 @@
   });
   $('method-chips').addEventListener('click', serial(async (e) => {
     const b = e.target.closest('[data-method]');
-    if (!b || b.dataset.method === st.method || !st.product.embroidery) return;
+    if (!b || !st.product.embroidery) return;
+    // Print / Embroidery: edit the front's print or its embroidery. Nothing is moved or deleted:
+    // each layer keeps its own design, and the other one stays on the shirt.
+    const to = b.dataset.method === 'embroidery' ? EMB : st.side === EMB ? st.product.embroidery.side : null;
+    if (!to || to === st.side) return;
     cancelCrop();
     commit();
     canvas.discardActiveObject();
-    const side = st.product.embroidery.side;
-    if (st.side !== side) await showSide(side);
-    const from = area();
-    st.method = b.dataset.method;
-    delete st.offsets[side]; // the new method starts at its standard spot
-    const to = area();
-    // The design follows into the new area (scaled to fit).
-    const objs = remap(serialize(), from, to);
-    st.designs[side] = objs;
-    await loadObjects(objs);
-    applyClips();
+    await showSide(to);
     seedHistory();
-    commit();
     renderOptions();
-    renderCheck();
+    refreshChrome();
+    renderProps();
     st.zoom = 1;
     fit();
     autoFocusPrint();
@@ -3083,7 +3181,7 @@
       const p = fix(o);
       if (Object.keys(p).length) { o.set(p); o.dirty = true; changed = true; }
     });
-    for (const s of st.product.sides) {
+    for (const s of allSides()) {
       if (s.id === st.side || !st.designs[s.id]) continue;
       st.designs[s.id] = st.designs[s.id].map((o) => ({ ...o, ...fix(o) }));
     }
@@ -3113,7 +3211,6 @@
     canvas.discardActiveObject();
     st.sizeId = sizeId;
     for (const sd of st.product.sides) {
-      if (emb() && emb().side === sd.id) continue; // the embroidery box is the same on every size
       const from = before(sd.id);
       const o = st.offsets[sd.id];
       if (o) {
@@ -3136,6 +3233,7 @@
     applyClips();
     fit(); // the garment is drawn at this size's scale
     schedulePatternPreview(0);
+    redrawn.then(() => refreshGhost()); // the print under the embroidery changed size too
     return redrawn;
   }
   $('product-select').addEventListener('change', serial(async (e) => changeProduct(e.target.value)));
@@ -3165,10 +3263,15 @@
         mapped[s.id] = remap(st.designs[sid], from(sid), to(s));
       }
     }
-    if (pending.length) {
-      const names = pending.map((sid) => tr(prev.sides.find((s) => s.id === sid).name)).join(' + ');
-      toast(t('msg.noRoom', { product: tr(next.name), sides: names }));
+    // The embroidery layer: to the new product's embroidery spot, or (no embroidery there) left out.
+    const embObjs = st.designs[EMB] || [];
+    const lost = pending.map((sid) => tr(prev.sides.find((s) => s.id === sid).name));
+    if (embObjs.length && prev.embroidery) {
+      if (next.embroidery) mapped[EMB] = remap(embObjs, sideDef(EMB).printArea, next.embroidery.area);
+      else lost.push(t('emb.embroidery'));
     }
+    if (lost.length) toast(t('msg.noRoom', { product: tr(next.name), sides: lost.join(' + ') }));
+    const wasEmb = st.side === EMB;
     st.product = next;
     st.designs = mapped;
     st.offsets = {}; // the new product starts at its standard print position
@@ -3176,8 +3279,7 @@
     if (!next.colors.some((c) => c.id === st.colorId)) st.colorId = next.colors[0].id;
     st.sizeId = nextSize;
     st.pattern = normPattern(next, st.pattern);
-    if (!next.embroidery) st.method = 'print';
-    st.side = next.sides.find((s) => s.id === st.side)?.id || next.sides[0].id;
+    st.side = wasEmb && next.embroidery ? EMB : next.sides.find((s) => s.id === hostOf(st.side))?.id || next.sides[0].id;
     const url = new URL(location.href);
     url.searchParams.set('product', next.id);
     history.replaceState(null, '', url);
@@ -3207,29 +3309,34 @@
   // ---------- Sides ----------
   function renderSideTabs() {
     if (heldOff('side-tabs', renderSideTabs)) return;
+    const n = (id) => (id === st.side ? canvas.getObjects().length : (st.designs[id] || []).length);
     $('side-tabs').innerHTML = activeSides().map((s) => {
-      const count = s.id === st.side ? canvas.getObjects().length : (st.designs[s.id] || []).length;
-      // Embroidered chest with a printed back: say which side is stitched.
-      const how = emb() ? ` <span class="side-how">· ${esc(t(embHere(s.id) ? 'emb.embroidery' : 'emb.print'))}</span>` : '';
-      return `<button class="side-tab ${s.id === st.side ? 'active' : ''}" data-side="${s.id}" role="tab" aria-selected="${s.id === st.side}">${esc(tr(s.name))}${how}${count ? '<span class="has"></span>' : ''}</button>`;
+      const on = hostOf() === s.id;
+      const stitched = emb() && emb().side === s.id && n(EMB) > 0;
+      const count = n(s.id) + (stitched ? n(EMB) : 0);
+      // The side with embroidery says so ("Front + embroidery").
+      const how = stitched ? ` <span class="side-how">+ ${esc(t('emb.embroidery'))}</span>` : '';
+      return `<button class="side-tab ${on ? 'active' : ''}" data-side="${s.id}" role="tab" aria-selected="${on}">${esc(tr(s.name))}${how}${count ? '<span class="has"></span>' : ''}</button>`;
     }).join('');
   }
   async function showSide(id) {
     if (st.mergePreview) endMergePreview();
     st.side = id;
     await Promise.all([applyMockup(id), loadObjects(st.designs[id])]);
+    await refreshGhost(); // the other layer of this side, before anything is drawn from it
     if (MOBILE.matches && st.sheet) fit();
     renderCheck();
   }
   $('side-tabs').addEventListener('click', serial(async (e) => {
     const b = e.target.closest('[data-side]');
-    if (!b || b.dataset.side === st.side) return;
+    if (!b || b.dataset.side === hostOf()) return;
     cancelCrop();
     commit();
     await showSide(b.dataset.side);
     seedHistory();
     refreshChrome();
     renderProps();
+    renderOptions(); // Print / Embroidery follows the side
   }));
 
   // ---------- Toolbar ----------
@@ -3443,6 +3550,21 @@
         }
       }
     }
+    // Print and embroidery on the same side go in different places: never on top of each other.
+    if (ghostSideOf() && ghost.el && ghost.boxes && ghost.boxes.length) {
+      const own = area();
+      for (const o of canvas.getObjects()) {
+        if (o.name === '__cropper' || o.visible === false) continue;
+        const r = absRect(o);
+        const x = Math.max(r.left, own.x);
+        const y = Math.max(r.top, own.y);
+        const w = Math.min(r.left + r.width, own.x + own.w) - x;
+        const h = Math.min(r.top + r.height, own.y + own.h) - y;
+        if (w <= 0 || h <= 0) continue;
+        const hit = ghost.boxes.some((b) => Math.min(x + w, b.left + b.width) - Math.max(x, b.left) > 0.5 && Math.min(y + h, b.top + b.height) - Math.max(y, b.top) > 0.5);
+        if (hit) issues.push({ level: 'error', key: st.side === EMB ? 'check.embOverPrint' : 'check.printOverEmb', obj: o, params: { name: layerName(o) }, overlap: true });
+      }
+    }
     // Embroidery (the stitched side only): no photos or gradients, at most 6 thread colours, text big enough to stitch.
     if (embHere()) {
       const colours = new Set();
@@ -3527,8 +3649,10 @@
 
   // ---------- Price & chrome ----------
   function designedSides() {
-    return activeSides().filter((s) => (s.id === st.side ? canvas.getObjects().length : (st.designs[s.id] || []).length) > 0);
+    return allSides().filter((s) => (s.id === st.side ? canvas.getObjects().length : (st.designs[s.id] || []).length) > 0);
   }
+  /** How many sides of the product carry something (the embroidery counts as the side it is on), as the shop prices it. */
+  const decoratedCount = () => new Set(designedSides().map((s) => hostOf(s.id))).size;
   /** The full price: every piece at its size's price (or every name of the list). */
   function refreshPrice(notes = null) {
     const p = st.product;
@@ -3569,9 +3693,9 @@
     if (hint) hint.hidden = st.preview || canvas.getObjects().length > 0;
     const p = st.product;
     const size = p.sizes.find((s) => s.id === st.sizeId);
-    const n = designedSides().length;
+    const n = decoratedCount();
     const perSide = p.extraSidePrice != null ? p.extraSidePrice : catalog.pricing.extraSide;
-    const embFee = emb() ? emb().surcharge : 0;
+    const embFee = usesEmb() ? emb().surcharge : 0;
     const unit = p.basePrice + size.surcharge + Math.max(0, n - 1) * perSide + embFee;
     const notes = [];
     refreshPrice(notes);
@@ -3620,9 +3744,9 @@
   function unitPrice(sizeId) {
     const p = st.product;
     const size = p.sizes.find((s) => s.id === sizeId) || p.sizes[0];
-    const n = designedSides().length;
+    const n = decoratedCount();
     const perSide = p.extraSidePrice != null ? p.extraSidePrice : catalog.pricing.extraSide;
-    return p.basePrice + size.surcharge + Math.max(0, n - 1) * perSide + (emb() ? emb().surcharge : 0) + optionsPrice(size.id);
+    return p.basePrice + size.surcharge + Math.max(0, n - 1) * perSide + (usesEmb() ? emb().surcharge : 0) + optionsPrice(size.id);
   }
   /** Product options (business-card lamination…): what the chosen ones add to one piece of a size. */
   function chosenOption(opt) {
@@ -4501,7 +4625,7 @@
   const shareKey = () => 'pod-share:' + st.product.id;
   function designSignature() {
     const designs = {};
-    for (const sd of st.product.sides) designs[sd.id] = sd.id === st.side ? serialize() : (st.designs[sd.id] || []);
+    for (const sd of allSides()) designs[sd.id] = sd.id === st.side ? serialize() : (st.designs[sd.id] || []);
     return hashStr(JSON.stringify([designs, st.colorId, st.sizeId, st.offsets]));
   }
   function readLastShare() {
@@ -4599,7 +4723,7 @@
     draftTimer = null;
     if (!draftMode || st.exporting || startingOver) return draftSaving;
     const designs = {};
-    for (const s of st.product.sides) designs[s.id] = s.id === st.side ? serialize() : (st.designs[s.id] || []);
+    for (const s of allSides()) designs[s.id] = s.id === st.side ? serialize() : (st.designs[s.id] || []);
     const empty = !Object.values(designs).some((o) => o.length);
     const productId = st.product.id;
     const meta = { productId, colorId: st.colorId, sizeId: st.sizeId, side: st.side, offsets: { ...st.offsets }, ...(st.pattern ? { pattern: { ...st.pattern } } : {}), method: st.method, options: st.options || {}, mergeList: st.mergeList || null, qty: st.qty || null, library: st.libraryId || null, sizePicked: Boolean(st.sizePicked) };
@@ -4639,7 +4763,7 @@
     if (!draftMode || st.exporting || startingOver || !st.product || !st.dirty) return;
     try {
       const designs = {};
-      for (const sd of st.product.sides) designs[sd.id] = sd.id === st.side ? serialize() : (st.designs[sd.id] || []);
+      for (const sd of allSides()) designs[sd.id] = sd.id === st.side ? serialize() : (st.designs[sd.id] || []);
       if (!Object.values(designs).some((o) => o.length)) return;
       let acct = '';
       try { const v = localStorage.getItem('pod-acct'); acct = v && v !== '1' ? v : ''; } catch (e) { /* private mode */ }
@@ -4776,9 +4900,11 @@
       const files = {};
       const problems = [];
       const clientChecks = []; // the same checks, kept with the design for the proof and the shop
+      let overlapAt = null; // print and embroidery on top of each other: not sent
       for (const s of sides) {
         await showSide(s.id);
         const issues = checkIssues();
+        if (!overlapAt && issues.some((i) => i.overlap)) overlapAt = s.id;
         issues.forEach((i) => problems.push(`• ${tr(s.name)}: ${t(i.key, { ...i.params, dpi: i.params.dpi, pt: i.params.pt })}`));
         clientChecks.push(...(await reportChecks(s.id, issues)));
         sidesPayload[s.id] = { editor: { version: fabric.version, objects: await inlineImages(st.designs[s.id]), ...(st.offsets[s.id] ? { offset: st.offsets[s.id] } : {}), ...(st.pattern ? { pattern: { ...st.pattern } } : {}) } };
@@ -4806,6 +4932,12 @@
         }
       }
       await showSide(original);
+      if (overlapAt) {
+        busy(false);
+        if (overlapAt !== st.side) { await showSide(overlapAt); renderOptions(); refreshChrome(); }
+        toast(t('check.overlapStop', { side: tr(baseSide(hostOf(overlapAt)).name) }), 'error');
+        return;
+      }
       if (problems.length) {
         busy(false);
         if (!confirm(t(st.revise ? 'revise.confirm' : 'check.confirm', { list: problems.join('\n') }))) return;
@@ -4817,7 +4949,7 @@
       const created = await POD.api('/api/designs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productId: st.product.id, color: st.colorId, size: st.sizeId, sides: sidesPayload, clientChecks: clientChecks.slice(0, 50), ...(imported ? { rightsConfirmed: true } : {}), ...(emb() ? { method: 'embroidery' } : {}), ...(st.product.options ? { options: st.options || {} } : {}), ...(useMerge ? { merge: { columns: st.mergeList.columns, rows: st.mergeList.rows, sides: mergeSidesPayload } } : { quantities: qtyLines() }) }),
+        body: JSON.stringify({ productId: st.product.id, color: st.colorId, size: st.sizeId, sides: sidesPayload, clientChecks: clientChecks.slice(0, 50), ...(imported ? { rightsConfirmed: true } : {}), ...(sides.some((s) => s.id === EMB) ? { method: 'embroidery' } : {}), ...(st.product.options ? { options: st.options || {} } : {}), ...(useMerge ? { merge: { columns: st.mergeList.columns, rows: st.mergeList.rows, sides: mergeSidesPayload } } : { quantities: qtyLines() }) }),
       });
       let done = 0;
       busy(true, t('busy.uploading', { n: 0, total: created.files.length }));
@@ -4915,11 +5047,12 @@
       sides.push({
         side: sd,
         rects: rects(sd.id),
-        design: exportDesignLayer(3),
+        // With the embroidery on this side drawn over the print.
+        design: withGhost(exportDesignLayer(3), 3),
         // Canvas prints: the artwork that wraps round the frame, for the 3D sides.
         wrap: st.product.model && st.product.model.type === 'canvas' ? exportDesignLayer(3, rects(sd.id).bleed) : null,
         designScale: 3,
-        hasDesign: canvas.getObjects().length > 0,
+        hasDesign: canvas.getObjects().length > 0 || Boolean(ghost.el),
         base: POD.mockupUrl(sd, color().hex),
         hex: color().hex,
         overlay: sd.overlay ? POD.mockupUrl(sd, color().hex, 'overlay') : null,
@@ -4927,7 +5060,7 @@
     }
     if (st.side !== original) await showSide(original);
     canvas.requestRenderAll();
-    window.POD_PREVIEW.open({ product: st.product, color: color(), sides, startSide: original, viewScale: POD.sizeView(st.product, st.sizeId) });
+    window.POD_PREVIEW.open({ product: st.product, color: color(), sides, startSide: hostOf(original), viewScale: POD.sizeView(st.product, st.sizeId) });
   }));
 
   $('preview-open-m').addEventListener('click', () => $('preview-open').click());

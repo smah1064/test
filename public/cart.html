@@ -90,15 +90,15 @@
       <form class="card summary" id="checkout" novalidate>
         <h2 style="font-size:18px" data-i18n="checkout.title"></h2>
         <p class="small acct-note" id="acct-note"></p>
-        <div class="field"><label for="name" data-i18n="checkout.name"></label><input type="text" id="name" name="name" autocomplete="name" maxlength="120" required></div>
+        <div class="field"><label for="name" data-i18n="checkout.name"></label><input type="text" id="name" name="name" autocomplete="name" maxlength="120" dir="auto" required></div>
         <div class="field"><label for="phone" data-i18n="checkout.phone"></label><input type="tel" id="phone" name="phone" autocomplete="tel" maxlength="30" inputmode="tel" dir="ltr" placeholder="01xxxxxxxxx" required></div>
         <div class="field"><label for="email" data-i18n="checkout.email"></label><input type="email" id="email" name="email" autocomplete="email" maxlength="200" dir="ltr" aria-describedby="email-why"><p class="field-hint" id="email-why" data-i18n="checkout.emailWhy"></p></div>
         <div class="field grid-2">
           <div><label for="governorate" data-i18n="checkout.governorate"></label><select id="governorate" name="governorate" required></select></div>
-          <div><label for="city" data-i18n="checkout.city"></label><input type="text" id="city" name="city" autocomplete="address-level2" maxlength="100" required></div>
+          <div><label for="city" data-i18n="checkout.city"></label><input type="text" id="city" name="city" autocomplete="address-level2" maxlength="100" dir="auto" required></div>
         </div>
-        <div class="field"><label for="address" data-i18n="checkout.address"></label><textarea id="address" name="address" rows="2" maxlength="300" autocomplete="street-address" data-i18n-placeholder="checkout.addressPh" required></textarea></div>
-        <div class="field"><label for="notes" data-i18n="checkout.notes"></label><input type="text" id="notes" name="notes" maxlength="500"></div>
+        <div class="field"><label for="address" data-i18n="checkout.address"></label><textarea id="address" name="address" rows="2" maxlength="300" autocomplete="street-address" dir="auto" data-i18n-placeholder="checkout.addressPh" required></textarea></div>
+        <div class="field"><label for="notes" data-i18n="checkout.notes"></label><input type="text" id="notes" name="notes" maxlength="500" dir="auto"></div>
 
         <div class="coupon-box">
           <label for="coupon" class="small" style="font-weight:700" data-i18n="coupon.label"></label>

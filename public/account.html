@@ -105,15 +105,15 @@
       <div id="v-drafts" hidden></div>
       <form class="card acct-card" id="v-profile" novalidate hidden>
         <p class="acct-phone-note" id="acct-phone-note" hidden data-i18n="acct.addPhone"></p>
-        <div class="field"><label for="pf-name" data-i18n="checkout.name"></label><input type="text" id="pf-name" autocomplete="name" maxlength="120"></div>
+        <div class="field"><label for="pf-name" data-i18n="checkout.name"></label><input type="text" id="pf-name" dir="auto" autocomplete="name" maxlength="120"></div>
         <div class="field"><label for="pf-phone" data-i18n="checkout.phone"></label><input type="tel" id="pf-phone" inputmode="tel" autocomplete="tel" dir="ltr" placeholder="01xxxxxxxxx" maxlength="30"></div>
         <div class="field"><label for="pf-email" data-i18n="checkout.email"></label><input id="pf-email" type="email" dir="ltr" maxlength="200"></div>
         <h3 style="font-size:15px;margin:16px 0 8px" data-i18n="acct.address"></h3>
         <div class="field grid-2">
           <div><label for="pf-gov" data-i18n="checkout.governorate"></label><select id="pf-gov"></select></div>
-          <div><label for="pf-city" data-i18n="checkout.city"></label><input type="text" id="pf-city" maxlength="100"></div>
+          <div><label for="pf-city" data-i18n="checkout.city"></label><input type="text" id="pf-city" dir="auto" maxlength="100"></div>
         </div>
-        <div class="field"><label for="pf-address" data-i18n="checkout.address"></label><textarea id="pf-address" rows="2" maxlength="300"></textarea></div>
+        <div class="field"><label for="pf-address" data-i18n="checkout.address"></label><textarea id="pf-address" dir="auto" rows="2" maxlength="300"></textarea></div>
         <div class="field"><label for="pf-notes" data-i18n="checkout.notes"></label><input type="text" id="pf-notes" maxlength="500"></div>
         <button class="btn btn-primary" type="submit" data-i18n="houses.save"></button>
       </form>
