@@ -1305,7 +1305,15 @@
   const tMid = (tt) => ({ x: (tt[0].clientX + tt[1].clientX) / 2, y: (tt[0].clientY + tt[1].clientY) / 2 });
   stageEl.addEventListener('touchstart', (e) => {
     if (e.touches.length !== 2) return;
-    pinch = { d: tDist(e.touches), z: st.zoom, m: tMid(e.touches), sl: stageEl.scrollLeft, stp: stageEl.scrollTop };
+    // Remember which spot of the product is under the fingers, as a share of the
+    // canvas, so zooming keeps that spot under them instead of drifting away.
+    const m0 = tMid(e.touches);
+    const r0 = canvas.wrapperEl.getBoundingClientRect();
+    pinch = {
+      d: Math.max(10, tDist(e.touches)), z: st.zoom,
+      fx: Math.min(1, Math.max(0, (m0.x - r0.left) / (r0.width || 1))),
+      fy: Math.min(1, Math.max(0, (m0.y - r0.top) / (r0.height || 1))),
+    };
     e.preventDefault();
     e.stopPropagation();
     // The first finger reached the canvas a moment earlier: undo whatever it started.
@@ -1325,8 +1333,9 @@
     if (e.touches.length !== 2) return;
     setZoom(pinch.z * (tDist(e.touches) / pinch.d));
     const m = tMid(e.touches);
-    stageEl.scrollLeft = pinch.sl - (m.x - pinch.m.x);
-    stageEl.scrollTop = pinch.stp - (m.y - pinch.m.y);
+    const r = canvas.wrapperEl.getBoundingClientRect();
+    stageEl.scrollLeft += r.left + pinch.fx * r.width - m.x;
+    stageEl.scrollTop += r.top + pinch.fy * r.height - m.y;
   }, { passive: false, capture: true });
   const endPinch = (e) => {
     if (!pinch) return;
