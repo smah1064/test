@@ -2810,6 +2810,65 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     res.json({ items, skipped });
   });
 
+  // ---------- The cart on the account ----------
+  // Signed-in customers: the cart follows them to their other devices. Only design ids are kept
+  // (with when they were added, and a book's edit token so it can still be edited); the entries
+  // are rebuilt from the designs, so prices are today's and nothing the browser sent is shown back.
+  const cartFile = (cust) => path.join(store.dataDir, 'accounts', cust.id, 'cart.json');
+  const MAX_CART = 60;
+  const BOOK_TOKEN_RE = /^[A-Za-z0-9_-]{16,128}$/;
+  function readAccountCart(cust) {
+    try {
+      const c = JSON.parse(fs.readFileSync(cartFile(cust), 'utf8'));
+      return c && Array.isArray(c.items) ? c : { items: [], updatedAt: null };
+    } catch (e) {
+      return { items: [], updatedAt: null };
+    }
+  }
+  /** Cart entries for the account's saved items that can still be ordered. */
+  function accountCartEntries(cust) {
+    const c = readAccountCart(cust);
+    const items = [];
+    for (const rec of c.items) {
+      const d = rec && UUID_RE.test(rec.designId || '') && store.getDesign(rec.designId);
+      if (!d || d.orderId || (d.status && d.status !== 'ready')) continue;
+      if (d.kind === 'book' && !rec.editToken) continue;
+      items.push({ ...cartEntry(d, rec.editToken), addedAt: rec.addedAt || c.updatedAt || new Date().toISOString() });
+    }
+    return { items, updatedAt: c.updatedAt };
+  }
+  app.get('/api/account/cart', (req, res) => {
+    const me = signedIn(req);
+    res.set('Cache-Control', 'no-store');
+    res.set('X-Account', me.id);
+    res.json(accountCartEntries(me));
+  });
+  app.put('/api/account/cart', (req, res, next) => {
+    rateLimit(req, 'draftSave');
+    next();
+  }, express.json({ limit: '64kb' }), (req, res) => {
+    const me = signedIn(req);
+    // Sent for another account than the one signed in now (signed out / switched in between): refused.
+    if (req.get('x-account') && req.get('x-account') !== me.id) throw new HttpError(409, 'acctSignIn');
+    const list = (req.body || {}).items;
+    if (!Array.isArray(list)) throw new HttpError(400, 'badRequest');
+    const seen = new Set();
+    const items = [];
+    for (const it of list.slice(0, MAX_CART)) {
+      if (!it || typeof it !== 'object' || !UUID_RE.test(it.designId || '') || seen.has(it.designId)) continue;
+      const d = store.getDesign(it.designId);
+      if (!d || d.orderId) continue;
+      seen.add(it.designId);
+      const at = typeof it.addedAt === 'string' && !Number.isNaN(Date.parse(it.addedAt)) ? new Date(it.addedAt).toISOString() : new Date().toISOString();
+      items.push({ designId: it.designId, addedAt: at, ...(d.kind === 'book' && BOOK_TOKEN_RE.test(it.editToken || '') ? { editToken: it.editToken } : {}) });
+    }
+    fs.mkdirSync(path.dirname(cartFile(me)), { recursive: true });
+    const updatedAt = new Date().toISOString();
+    writeFileAtomic(cartFile(me), JSON.stringify({ items, updatedAt }));
+    res.set('X-Account', me.id);
+    res.json(accountCartEntries(me));
+  });
+
   // Drafts saved to the customer's account, so a design started on the phone opens on the laptop.
   const draftDir = (cust) => path.join(store.dataDir, 'accounts', cust.id, 'drafts');
   const MAX_DRAFTS = 40;

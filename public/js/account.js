@@ -134,7 +134,7 @@
     me = null;
     orders = null;
     drafts = null;
-    try { localStorage.removeItem('pod-acct'); } catch (e) { /* private mode */ }
+    try { localStorage.removeItem('pod-acct'); localStorage.removeItem('pod-cart-base'); } catch (e) { /* private mode */ }
     // Their drafts are on their account; nothing of theirs stays in this browser
     // (a shared family phone): no drafts, no cart, no checkout choices, nothing typed in the forms.
     await POD.drafts.clearLocal();

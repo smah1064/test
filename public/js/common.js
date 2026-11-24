@@ -218,6 +218,7 @@
       ok = false;
     }
     updateCartBadge();
+    if (ok) cartToAccount();
     return ok;
   }
   /** Upload one file of a design; a dropped connection gives the shop's own message, not the browser's. */
@@ -526,6 +527,91 @@
       },
     };
   })();
+
+  // ---------- The cart on the account ----------
+  // Signed in: the cart is also kept on the account, so a design put in the cart on the laptop is in
+  // the cart on the phone. Each browser remembers what it last agreed with the account (CART_BASE),
+  // so an item removed on one device isn't brought back by another (a three-way merge).
+  const CART_BASE = 'pod-cart-base';
+  const cartAcct = () => {
+    try {
+      const v = localStorage.getItem('pod-acct');
+      return v && v !== '1' ? v : '';
+    } catch (e) {
+      return '';
+    }
+  };
+  function cartBase(acct) {
+    try {
+      const b = JSON.parse(localStorage.getItem(CART_BASE) || 'null');
+      return new Set(b && b.acct === acct && Array.isArray(b.ids) ? b.ids : []);
+    } catch (e) {
+      return new Set();
+    }
+  }
+  function setCartBase(acct, items) {
+    try { localStorage.setItem(CART_BASE, JSON.stringify({ acct, ids: items.map((i) => i.designId) })); } catch (e) { /* private mode */ }
+  }
+  let cartTimer = null;
+  let cartMerging = false;
+  async function pushCart(acct) {
+    cartTimer = null;
+    const items = getCart();
+    const body = JSON.stringify({ items: items.map((i) => ({ designId: i.designId, addedAt: i.addedAt, ...(i.editToken ? { editToken: i.editToken } : {}) })) });
+    try {
+      const res = await fetch('/api/account/cart', { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Account': acct }, body, keepalive: body.length < 60000 });
+      if (res.ok && cartAcct() === acct) setCartBase(acct, items);
+    } catch (e) { /* offline: sent with the next change or visit */ }
+  }
+  function cartToAccount() {
+    if (cartMerging) return;
+    const acct = cartAcct();
+    if (!acct) return;
+    clearTimeout(cartTimer);
+    cartTimer = setTimeout(() => pushCart(acct), 600);
+  }
+  // Leaving right after a change (add to cart, then off to the cart page): send it now.
+  window.addEventListener('pagehide', () => {
+    if (cartTimer) {
+      clearTimeout(cartTimer);
+      pushCart(cartAcct());
+    }
+  });
+  /** Bring this browser's cart and the account's together (on every page, when signed in). */
+  async function mergeAccountCart() {
+    const acct = cartAcct();
+    if (!acct) return;
+    let remote;
+    try {
+      const c = new AbortController();
+      setTimeout(() => c.abort(), 8000);
+      const res = await fetch('/api/account/cart', { credentials: 'same-origin', signal: c.signal });
+      if (!res.ok || res.headers.get('x-account') !== acct) return;
+      remote = (await res.json()).items || [];
+    } catch (e) {
+      return;
+    }
+    if (cartAcct() !== acct) return;
+    const local = getCart();
+    const base = cartBase(acct);
+    const inRemote = new Set(remote.map((i) => i.designId));
+    const inLocal = new Set(local.map((i) => i.designId));
+    // Kept: in both, or added here since the last sync. Dropped: in the last sync but gone from the
+    // account (removed on another device, or ordered). Added: new on the account since the last sync.
+    const out = local.filter((i) => inRemote.has(i.designId) || !base.has(i.designId));
+    for (const i of remote) if (!inLocal.has(i.designId) && !base.has(i.designId)) out.push(i);
+    const ids = (list) => list.map((i) => i.designId).join(',');
+    if (ids(out) !== ids(local)) {
+      cartMerging = true;
+      setCart(out);
+      cartMerging = false;
+      document.dispatchEvent(new CustomEvent('pod:cartsynced'));
+    }
+    if ([...inRemote].sort().join(',') !== out.map((i) => i.designId).sort().join(',')) await pushCart(acct);
+    else setCartBase(acct, out);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(mergeAccountCart, 0));
+  else setTimeout(mergeAccountCart, 0);
 
   // ---------- Garment sizes ----------
   // The print is the same size in cm on every garment size, so on a bigger

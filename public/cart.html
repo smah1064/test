@@ -821,6 +821,8 @@
       document.addEventListener('pod:langchange', () => { renderGovernorates(); render(); });
       // The cart changed in another tab (an order placed there, an item added).
       window.addEventListener('storage', (e) => { if (e.key === 'pod-cart-v2') refreshPrices().then(render); });
+      // The account's cart arrived (items added on another device, or removed there).
+      document.addEventListener('pod:cartsynced', () => refreshPrices().then(render));
     })();
   </script>
 </body>

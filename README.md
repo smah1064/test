@@ -195,6 +195,10 @@ The design keeps `quantities: [{ color, size, qty, unitPrice }]`; orders, the ca
 - **Drafts on every device:** while signed in, each editor draft is also saved to the account (`/api/account/drafts`, kept in `DATA_DIR/accounts/<customer>/drafts/`, newest 40); the editor opens the newest of this browser's copy and the account's. The account page lists them.
 - **Tracking:** `/order?id=` shows the timeline (placed, in production, printed, shipped, delivered) with dates, and the courier, tracking number, tracking link and expected date. The admin sets these per order (`PATCH /api/admin/orders/:id/shipment`, also "Mark shipped" / "Mark delivered") and the payment status (`PATCH /api/admin/orders/:id/payment`). When an order ships (all items shipped, or "Mark shipped") the customer gets a "your order is on its way" email once, with the tracking details and links to track and to the invoice.
 
+## The cart on the account
+
+Signed-in customers' carts follow them to their other devices. `GET/PUT /api/account/cart` keep only design ids (plus when they were added, and a book's edit token) in `accounts/<id>/cart.json`; entries are rebuilt from the designs, so prices are today's and ordered or deleted designs drop out. Each browser remembers what it last agreed with the account (`pod-cart-base` in localStorage), so the merge on every page load keeps additions from both sides and respects removals on either. Signing out empties the cart on that device (the account keeps it); another person signing in gets only their own cart.
+
 ## Name lists (variable data printing)
 
 For invitations, certificates, greeting cards, ID cards, **business cards**, name labels and sticker sheets (and the team-kit garments below), the editor has **Print a list of names**. It is easy to find: a **Names** button in the editor's tool bar (only on these products) opens it, the product page has a "Print a list of names" card that opens the editor right there (`/editor?product=…&names=1`), and on phones the chip under the price shows the number of names.
