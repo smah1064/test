@@ -1872,7 +1872,7 @@ function contactShadow(width, y) {
   return m;
 }
 
-export function mount(container, { product, color, textures, spin = true }) {
+export function mount(container, { product, color, textures, spin = true, viewScale = 1 }) {
   let renderer;
   try {
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
@@ -1969,7 +1969,8 @@ export function mount(container, { product, color, textures, spin = true }) {
     const center = box.getCenter(new THREE.Vector3());
     o.position.sub(center);
     scene.add(contactShadow(Math.max(size.x, size.z) * 1.6, -size.y / 2 - 0.05));
-    radius = Math.max(size.x, size.y, size.z) * 0.62;
+    // A smaller size of the product (viewScale < 1) stays as far away as the biggest one: it looks smaller.
+    radius = (Math.max(size.x, size.y, size.z) * 0.62) / Math.max(0.3, Math.min(1, viewScale || 1));
     if (o.userData.viewDir) viewDir = o.userData.viewDir;
     fitted = 0;
     resize();

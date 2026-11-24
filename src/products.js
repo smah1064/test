@@ -1887,6 +1887,8 @@ const SIZE_PRINT_SCALE = {
   stickersheet: { A4: 21 / 14.8 },
   flyers: { 'A5-100': 14.8 / 21, 'A5-500': 14.8 / 21, 'A5-1000': 14.8 / 21 },
   mug: { '15oz': 1.12 },
+  // Phone models are different sizes (back of the phone, w × h mm): iPhone 16 71.6 × 147.6 is the reference.
+  phonecase: { iphone16pro: 1.006, iphone16promax: 1.094, galaxys25: 0.99, galaxya55: 1.086 },
 };
 for (const [pid, sizes] of Object.entries(SIZE_PRINT_SCALE)) {
   const p = PRODUCTS.find((x) => x.id === pid);

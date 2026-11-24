@@ -699,15 +699,24 @@
     return { ...a, x: Math.round((a.x + a.w / 2 - w / 2) * 10) / 10, w, h, ...(a.rx ? { rx: a.rx * f } : {}) };
   }
   /**
-   * How big this size's garment is drawn (1 = the biggest size fills the
-   * picture): smaller sizes show a smaller garment, so the print looks the
-   * same size on screen and the garment grows or shrinks around it.
+   * How big this size is drawn (1 = the biggest size fills the picture), true to
+   * size. Garments: smaller sizes show a smaller garment, so the print looks the
+   * same size on screen and the garment grows or shrinks around it. Sizes that
+   * are bigger prints (signs A2/A1, posters, canvases, cushions, cards, flyers
+   * A5/A4, the 15 oz mug...): the product is drawn in proportion to the biggest.
    */
   function sizeView(product, sizeId) {
     const size = product.sizes.find((z) => z.id === sizeId);
-    if (!product.photoChestCm || !size || !size.chestCm) return 1;
-    const max = Math.max(...product.sizes.map((z) => z.chestCm || 0));
-    return max > 0 ? Math.min(1, size.chestCm / max) : 1;
+    if (!size) return 1;
+    if (product.photoChestCm && size.chestCm) {
+      const max = Math.max(...product.sizes.map((z) => z.chestCm || 0));
+      return max > 0 ? Math.min(1, size.chestCm / max) : 1;
+    }
+    if (!product.pattern && product.sizes.some((z) => z.printScale)) {
+      const max = Math.max(...product.sizes.map((z) => z.printScale || 1));
+      return Math.min(1, (size.printScale || 1) / max);
+    }
+    return 1;
   }
 
   // ---------- Canvas prints: the band that wraps round the frame ----------

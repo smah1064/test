@@ -763,7 +763,7 @@
         if (token !== state.token) return;
         setBody('');
         // Garment sizes: smaller sizes are shown smaller, like in the editor.
-        const shown = sizedPicture(cv, state.viewScale);
+        const shown = sizedPicture(cv, state.viewScale, { whole: !state.product.photoChestCm });
         shown.className = 'pv-canvas';
         $('pv-body').appendChild(shown);
       } else if (tab === 'model' && turning) {
@@ -807,7 +807,7 @@
           throw new Error(t('pv.no3d'));
         }
         setBody('<div class="pv-3d" id="pv-3d"></div>');
-        three = mod.mount($('pv-3d'), { product: state.product, color: state.color, textures, spin: $('pv-spin').checked });
+        three = mod.mount($('pv-3d'), { product: state.product, color: state.color, textures, spin: $('pv-spin').checked, viewScale: state.viewScale });
         if (!three) throw new Error(t('pv.no3d'));
       }
     } catch (e) {
@@ -836,14 +836,16 @@
    * the hole (and its old shadow) is filled from the backdrop around it, and
    * the garment goes back at its size with a soft shadow.
    */
-  function sizedPicture(cv, k) {
+  function sizedPicture(cv, k, { whole = false } = {}) {
     if (!k || k >= 1) return cv;
     const W0 = cv.width;
     const H0 = cv.height;
     const N = W0 * H0;
     const src = cv.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, W0, H0);
     const sd = src.data;
-    const md = cv.productMask && cv.productMask.length === N * 4 ? cv.productMask : null;
+    // whole: the photo shrinks as it is, its edges fading into the backdrop (products that stand on
+    // something, like a sign on its easel, where filling the gap round a garment would leave smudges).
+    const md = !whole && cv.productMask && cv.productMask.length === N * 4 ? cv.productMask : null;
     const canvasOf = (data) => {
       const c = document.createElement('canvas');
       c.width = W0;
@@ -863,7 +865,18 @@
       // No mask (drawn mockups): the picture smaller, on its backdrop colour.
       ctx.fillStyle = `rgb(${fill.join(',')})`;
       ctx.fillRect(0, 0, W0, H0);
-      ctx.drawImage(cv, (W0 - W0 * k) / 2, (H0 - H0 * k) / 2, W0 * k, H0 * k);
+      const x = (W0 - W0 * k) / 2;
+      const y = (H0 - H0 * k) / 2;
+      ctx.drawImage(cv, x, y, W0 * k, H0 * k);
+      const f = Math.round(Math.min(W0, H0) * k * 0.22);
+      const col = (a) => `rgba(${fill.join(',')},${a})`;
+      for (const [x0, y0, x1, y1, rx, ry, rw, rh] of [[x, 0, x + f, 0, x, y, f, H0 * k], [x + W0 * k, 0, x + W0 * k - f, 0, x + W0 * k - f, y, f, H0 * k], [0, y, 0, y + f, x, y, W0 * k, f], [0, y + H0 * k, 0, y + H0 * k - f, x, y + H0 * k - f, W0 * k, f]]) {
+        const g = ctx.createLinearGradient(x0, y0, x1, y1);
+        g.addColorStop(0, col(1));
+        g.addColorStop(1, col(0));
+        ctx.fillStyle = g;
+        ctx.fillRect(rx, ry, rw, rh);
+      }
       return out;
     }
     // 1. The hole: the garment plus a margin for its shadow.

@@ -57,7 +57,7 @@
       }
       if (my !== token) return;
       // Garment sizes: smaller sizes show a smaller garment, like in the editor.
-      cv = window.POD_PREVIEW.sizedPicture(cv, POD.sizeView(product, size.id));
+      cv = window.POD_PREVIEW.sizedPicture(cv, POD.sizeView(product, size.id), { whole: !product.photoChestCm });
       const blob = await new Promise((r) => cv.toBlob(r, 'image/webp', 0.9));
       const old = $('dp-img').src;
       $('dp-img').src = URL.createObjectURL(blob);
