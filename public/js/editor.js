@@ -3437,7 +3437,8 @@
    * (the text would print in a fallback font).
    */
   async function reportChecks(sideId, issues) {
-    const short = (v) => String(v || '').slice(0, 60);
+    // Text layers are named “like this” in the layers list; the warning texts add their own quotes.
+    const short = (v) => String(v || '').replace(/^“([\s\S]*)”$/, '$1').slice(0, 60);
     const out = [];
     for (const i of issues) {
       if (i.key === 'check.lowres') out.push({ id: 'lowResImage', level: 'fail', side: sideId, params: { name: short(i.params.name), dpi: i.params.dpi } });
@@ -3783,6 +3784,8 @@
   }
   /** Product options (business-card lamination…): what the chosen ones add to one piece of a size. */
   function chosenOption(opt) {
+    // Booklets: English shoppers start on the left binding (English reads left to right), Arabic on the right.
+    if (opt.id === 'binding' && st.options && st.options.binding == null && POD.lang === 'en' && opt.choices.some((c) => c.id === 'left')) st.options.binding = 'left';
     const id = st.options && st.options[opt.id];
     return opt.choices.find((c) => c.id === id) || opt.choices[0];
   }

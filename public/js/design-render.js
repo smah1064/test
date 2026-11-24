@@ -49,7 +49,7 @@
       return window.POD_DESIGN.buildTemplate({ id: design.id, items: design.items, aspect: design.aspect }, side.printArea, inkFor(surface), { inset: (side.safeIn || 0) * (side.printArea.w / side.printWidthIn) });
     }
     // Made on another product: in this one's ready-design zone (the calendar's top half, a folder's front), as templates are.
-    const to = design.product && design.product !== product.id ? window.POD_DESIGN.readyArea(side.printArea, null) : side.printArea;
+    const to = design.product && design.product !== product.id && design.product !== product.base ? window.POD_DESIGN.readyArea(side.printArea, null) : side.printArea;
     const objs = remap(design.objects || [], design.area || side.printArea, to);
     await window.POD_DESIGN.ensureFontsFor(objs);
     return new Promise((resolve) => fabric.util.enlivenObjects(objs, resolve));
@@ -65,7 +65,7 @@
   /** The product picture behind the design: the recoloured photo, or the drawn mockup. */
   async function background(product, side, hex) {
     const P = window.POD_PHOTOS;
-    const cfg = !side.wrap && P && P.forSide ? P.forSide(product.id, side.id) : null; // all-round prints: unrolled
+    const cfg = !side.wrap && P && P.forSide ? P.forSide(POD.assetId(product), side.id) : null; // all-round prints: unrolled
     if (cfg) {
       try {
         const at = P.placement(cfg, side.printArea);
@@ -151,7 +151,7 @@
    */
   async function wrapPicture(st) {
     const P = window.POD_PHOTOS;
-    const cfg = P && P[`${st.product.id}:${st.side.id}:wrap`];
+    const cfg = P && P[`${POD.assetId(st.product)}:${st.side.id}:wrap`];
     if (!cfg || !cfg.cyl) return null;
     let photo;
     try {

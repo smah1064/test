@@ -15,6 +15,16 @@
     $('pp-missing').hidden = false;
     return;
   }
+  /** Not in the shop (hidden, removed, out of stock, or an old link): say so and offer the catalogue. */
+  function unavailable() {
+    $('pp-missing').hidden = false;
+    $('pp-missing').classList.add('unavail');
+    $('pp-missing').innerHTML = `<div class="unavail-ico" aria-hidden="true">🛍️</div>
+      <h2>${esc(t('unavail.title'))}</h2>
+      <p class="muted">${esc(t('unavail.text'))}</p>
+      <div class="unavail-actions"><a class="btn btn-primary" href="/#products">${esc(t('unavail.browse'))}</a><a class="btn" href="/designs">${esc(t('unavail.designs'))}</a></div>`;
+    document.title = `${t('unavail.title')} · ${t('brand')}`;
+  }
   const product = catalog.products.find((p) => p.id === params.get('id'));
   if (product && product.kind === 'book') {
     location.replace(`/book?b=${encodeURIComponent(product.book)}`);
@@ -25,28 +35,30 @@
     return;
   }
   if (!product) {
-    $('pp-missing').hidden = false;
+    unavailable();
+    document.addEventListener('pod:langchange', unavailable);
     return;
   }
   $('pp').hidden = false;
 
-  let color = product.colors.find((c) => c.id === params.get('color')) || product.colors[0];
+  // Sold-out colours are shown (crossed out) but can't be picked.
+  let color = product.colors.find((c) => c.id === params.get('color') && POD.canPick(c)) || POD.firstPick(product.colors);
   // Until the customer picks a colour, each ready design is shown (and ordered) on its own
   // colour where this product has it: a design for a black T-shirt (white ink) on the black mug.
-  let picked = Boolean(product.colors.find((c) => c.id === params.get('color')));
+  let picked = Boolean(product.colors.find((c) => c.id === params.get('color') && POD.canPick(c)));
   const isDark = (hex) => POD.luminance(hex) < 0.45;
   const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
   const dist = (a, b) => rgb(a).reduce((sum, v, i) => sum + (v - rgb(b)[i]) ** 2, 0);
   /** The colour a ready design is shown on: the picked one, else the design's own (or the nearest of the same lightness). */
   function colorFor(d) {
     if (picked) return color;
-    const same = product.colors.find((c) => c.id === d.color);
+    const same = product.colors.find((c) => c.id === d.color && POD.canPick(c));
     if (same) return same;
     const own = catalog.products.find((p) => p.id === d.product);
     const ownColor = own && own.colors.find((c) => c.id === d.color);
     const hex = ownColor && (own.surface || ownColor.hex);
     if (!hex || product.surface || isDark(hex) === isDark(color.hex)) return color;
-    const alike = product.colors.filter((c) => isDark(c.hex) === isDark(hex));
+    const alike = product.colors.filter((c) => POD.canPick(c) && isDark(c.hex) === isDark(hex));
     return alike.length ? alike.reduce((best, c) => (dist(c.hex, hex) < dist(best.hex, hex) ? c : best)) : color;
   }
   let cat = 'all';
@@ -86,17 +98,33 @@
     }
   };
   const [lifeAll, designedAll] = await Promise.all([loadJson('/img/lifestyle/index.json'), loadJson('/img/designed/index.json')]);
-  const life = (lifeAll[product.id] && lifeAll[product.id].file) ? lifeAll[product.id] : null;
-  const designed = (designedAll[product.id] && designedAll[product.id].file) ? designedAll[product.id] : null;
-  let view = params.get('color') ? 'plain' : designed ? 'designed' : life ? 'life' : 'plain';
+  // (Products the manager made from another one use that one's pictures.)
+  const aid = POD.assetId(product);
+  const life = (lifeAll[aid] && lifeAll[aid].file) ? lifeAll[aid] : null;
+  const designed = (designedAll[aid] && designedAll[aid].file) ? designedAll[aid] : null;
+  // The manager's own photos (admin → Products) come first, the chosen main one leading.
+  const photos = (product.photos || []).filter((ph) => ph && ph.url);
+  photos.sort((a, b) => (b.url === product.mainPhoto) - (a.url === product.mainPhoto));
+  let view = params.get('color') ? 'plain' : photos.length ? 'photo0' : designed ? 'designed' : life ? 'life' : 'plain';
   const plainUrl = () => `/api/thumbs/${encodeURIComponent(product.id)}/${encodeURIComponent(color.id)}.webp`;
+  // The real photo can't be made (a colour only this product has): the drawn product instead.
+  $('pp-img').addEventListener('error', () => {
+    const img = $('pp-img');
+    if (img.dataset.fallback === img.src) return;
+    const fb = POD.thumbFallback(product, color);
+    if (fb && img.src !== fb) { img.dataset.fallback = fb; img.src = fb; }
+  });
   function renderPicture() {
-    const views = [designed && ['designed', designed.file, t('pp.viewDesigned')], life && ['life', life.file, t('pp.viewPrinted')], ['plain', plainUrl(), t('pp.viewPlain')]].filter(Boolean);
+    const views = [
+      ...photos.map((ph, i) => [`photo${i}`, ph.url, tr(ph.alt) || tr(product.name)]),
+      designed && ['designed', designed.file, t('pp.viewDesigned')], life && ['life', life.file, t('pp.viewPrinted')], ['plain', plainUrl(), t('pp.viewPlain')],
+    ].filter(Boolean);
     const cur = views.find((v) => v[0] === view) || views[views.length - 1];
     $('pp-img').src = cur[1];
     $('pp-img').alt = cur[0] === 'life' ? tr(life.alt) || tr(product.name) : tr(product.name);
     $('pp-img').classList.toggle('pp-life', cur[0] === 'life');
     $('pp-img').classList.toggle('pp-designed', cur[0] === 'designed');
+    $('pp-img').classList.toggle('pp-own-photo', cur[0].startsWith('photo'));
     $('pp-gallery').hidden = views.length < 2;
     $('pp-gallery').innerHTML = views.length < 2 ? '' : views
       .map(([v, src, label]) => `<button type="button" class="pp-thumb ${v === cur[0] ? 'active' : ''} ${v !== 'plain' ? 'is-life' : ''}" data-view="${v}" aria-pressed="${v === cur[0]}" aria-label="${esc(label)}" title="${esc(label)}"><img src="${esc(src)}" alt=""></button>`).join('');
@@ -113,11 +141,23 @@
     $('pp-name').textContent = tr(product.name);
     $('pp-desc').textContent = tr(product.description);
     $('pp-price').textContent = t('home.from', { price: money(product.basePrice) });
-    $('pp-sizes').textContent = product.sizes.length > 1 ? t('pp.sizes', { list: product.sizes.map((s) => tr(s.label)).join(' · ') }) : '';
+    // Sizes: sold-out ones crossed out.
+    // (Each size its own box, so a label in one language and the tag in the other keep their order.)
+    const sizeText = (s) => (s.soldOut
+      ? `<span class="pp-size is-sold" title="${esc(t('soldOut'))}"><s>${esc(tr(s.label))}</s> <span class="sold-tag">${esc(t('soldOut'))}</span></span>`
+      : `<span class="pp-size">${esc(tr(s.label))}</span>`);
+    const sizeList = product.sizes.map(sizeText).join(' · ');
+    $('pp-sizes').innerHTML = product.sizes.length > 1 ? esc(t('pp.sizes', { list: '\u0000' })).replace('\u0000', sizeList)
+      : product.sizes.length === 1 && product.sizes[0].soldOut ? sizeList : '';
+    // A few pieces left (stock counted by the shop).
+    $('pp-few').hidden = !product.fewLeft;
+    $('pp-few').textContent = product.fewLeft ? t('pp.fewLeft', { n: POD.num(product.fewLeft) }) : '';
     renderPicture();
     $('pp-color-name').textContent = tr(color.name);
     $('pp-color-label').textContent = product.colorLabel ? `${tr(product.colorLabel)}:` : t('panel.colour');
-    $('pp-swatches').innerHTML = product.colors.map((c) => `<button type="button" class="swatch ${c.id === color.id ? 'active' : ''}" data-color="${esc(c.id)}" title="${esc(tr(c.name))}" aria-label="${esc(tr(c.name))}" style="background:${esc(c.hex)}"></button>`).join('');
+    $('pp-swatches').innerHTML = product.colors.map((c) => (c.soldOut
+      ? `<button type="button" class="swatch sold-out" aria-disabled="true" data-sold="${esc(c.id)}" title="${esc(t('soldOutColor', { name: tr(c.name) }))}" aria-label="${esc(t('soldOutColor', { name: tr(c.name) }))}" style="background:${esc(c.hex)}"></button>`
+      : `<button type="button" class="swatch ${c.id === color.id ? 'active' : ''}" data-color="${esc(c.id)}" title="${esc(tr(c.name))}" aria-label="${esc(tr(c.name))}" style="background:${esc(c.hex)}"></button>`)).join('');
     $('pp-scratch').href = `/editor?${q()}`;
     // Embroidery on garments, caps, totes and aprons.
     $('pp-emb').hidden = !product.embroidery;
@@ -130,7 +170,7 @@
     $('pp-names').hidden = !product.merge;
     if (product.merge) {
       $('pp-names').href = `/editor?${q()}&names=1`;
-      $('pp-names-text').textContent = t(product.id === 'bizcards' || product.id === 'idcards' ? 'pp.namesTextCards' : 'pp.namesText');
+      $('pp-names-text').textContent = t(aid === 'bizcards' || aid === 'idcards' ? 'pp.namesTextCards' : 'pp.namesText');
     }
   }
 
@@ -178,6 +218,11 @@
   }
 
   $('pp-swatches').addEventListener('click', (e) => {
+    const sold = e.target.closest('[data-sold]');
+    if (sold) {
+      POD.toast(t('soldOutColor', { name: tr((product.colors.find((c) => c.id === sold.dataset.sold) || {}).name) }));
+      return;
+    }
     const b = e.target.closest('[data-color]');
     if (!b || b.dataset.color === color.id) return;
     color = product.colors.find((c) => c.id === b.dataset.color) || color;

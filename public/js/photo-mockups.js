@@ -394,8 +394,14 @@
     return { k, kx: k, ky: k, x: cx - (r.x + r.w / 2) * k, y: cy - (r.y + r.h / 2) * k };
   }
 
-  /** Photo config for a product side, or null if it only has a drawn mockup. */
-  const forSide = (productId, sideId) => window.POD_PHOTOS[`${productId}:${sideId}`] || null;
+  /**
+   * Photo config for a product side, or null if it only has a drawn mockup. Takes the product
+   * (products made from another one use that one's photos: p.base) or a product id.
+   */
+  const forSide = (product, sideId) => {
+    const id = product && typeof product === 'object' ? product.base || product.id : product;
+    return window.POD_PHOTOS[`${id}:${sideId}`] || null;
+  };
 
   Object.assign(window.POD_PHOTOS, { render, darkOverlay, placement, forSide });
 

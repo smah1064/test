@@ -321,6 +321,11 @@
         try { sessionStorage.setItem(APPROVALS_KEY, JSON.stringify(Object.fromEntries(approvals))); } catch (e) { /* private mode */ }
       };
       let placing = false;
+      // Items the shop can't make right now (hidden or sold-out product, colour or size: admin → Products),
+      // from its last prices: designId -> the shop's message. They block the order until removed or saved for later.
+      let blocked = new Map();
+      let savedBlocked = new Map();
+      const blockedIn = (cart) => cart.filter((it) => blocked.has(it.designId));
 
       const proofOf = (id) => { const p = proofs.get(id); return p && p.state === 'ok' ? p.proof : null; };
       function isApproved(id) {
@@ -408,19 +413,34 @@
       /** "Place order" only once every item's current proof is approved. */
       function updateApproval() {
         const cart = POD.getCart();
-        const done = cart.filter((it) => isApproved(it.designId)).length;
-        const all = cart.length > 0 && done === cart.length;
+        const stuck = blockedIn(cart);
+        const orderable = cart.filter((it) => !blocked.has(it.designId));
+        const done = orderable.filter((it) => isApproved(it.designId)).length;
+        const all = cart.length > 0 && !stuck.length && done === cart.length;
         const btn = document.getElementById('place-order');
         if (!placing) btn.disabled = !all;
         const status = document.getElementById('approve-status');
         status.classList.toggle('done', all);
-        status.innerHTML = all ? `✓ ${esc(t('proof.approved'))}`
+        status.classList.toggle('blocked', stuck.length > 0);
+        status.innerHTML = stuck.length
+          ? `${esc(stuck.length === 1 ? t('checkout.blockedOne') : t('checkout.blockedMany', { n: POD.num(stuck.length) }))} <button type="button" class="link-btn" data-next-blocked>${esc(t('checkout.blockedGo'))}</button>`
+          : all ? `✓ ${esc(t('proof.approved'))}`
           : `${esc(t('checkout.approveAll', { done: POD.num(done), total: POD.num(cart.length) }))} <button type="button" class="link-btn" data-next-proof>${esc(t('checkout.approveGo'))}</button>`;
         document.querySelectorAll('[data-proof-for]').forEach((el) => {
           const ok = isApproved(el.dataset.proofFor);
           el.classList.toggle('ok', ok);
           if (ok) el.classList.remove('needs');
         });
+      }
+      /** The first item that can't be ordered now: shown, with its buttons at hand. */
+      function goToBlocked() {
+        const it = blockedIn(POD.getCart())[0];
+        const el = it && [...document.querySelectorAll('[data-entry-for]')].find((x) => x.dataset.entryFor === it.designId);
+        if (!el) return false;
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const b = el.querySelector('[data-later]');
+        if (b) b.focus({ preventScroll: true });
+        return true;
       }
       function goToNextProof() {
         const cart = POD.getCart();
@@ -439,6 +459,7 @@
         PODSaved.render(document.getElementById('saved'), {
           meta: itemMeta,
           price: itemPrice,
+          unavailable: (it) => savedBlocked.get(it.designId) || '',
           onToCart: () => {
             render();
             refreshPrices().then(render);
@@ -458,17 +479,18 @@
           return;
         }
         let changed = false;
+        const before = JSON.stringify([...savedBlocked]);
+        savedBlocked = new Map();
         const keep = saved.filter((item, i) => {
           const r = q.items[i];
           if (!r || r.designId !== item.designId) return true;
           if (r.gone) { changed = true; return false; }
+          if (r.unavailable) savedBlocked.set(item.designId, r.unavailableText || t('cart.blocked'));
           if (r.price !== item.price) { item.price = r.price; changed = true; }
           return true;
         });
-        if (changed) {
-          POD.setSaved(keep);
-          renderSaved();
-        }
+        if (changed) POD.setSaved(keep);
+        if (changed || before !== JSON.stringify([...savedBlocked])) renderSaved();
       }
 
       function render() {
@@ -482,12 +504,13 @@
         // An empty cart: the orders placed from this device, to find them again.
         document.getElementById('device-orders').innerHTML = cart.length ? '' : PODAftercare.deviceOrdersHtml();
         document.getElementById('items').innerHTML = cart.map((item, i) => `
-          <div class="cart-entry">
+          <div class="cart-entry${blocked.has(item.designId) ? ' is-blocked' : ''}" data-entry-for="${esc(item.designId)}">
           <div class="cart-item">
             <img src="${esc(item.previewUrl)}" alt="${esc(t('cart.preview', { product: tr(item.productName) }))}">
             <div>
-              <h3>${esc(tr(item.productName))}</h3>
+              <h3>${esc(tr(item.productName))}${blocked.has(item.designId) ? ` <span class="saved-state blocked">${esc(t('cart.blocked'))}</span>` : ''}</h3>
               <div class="meta" data-meta-for="${esc(item.designId)}">${itemMeta(item)}</div>
+              ${blocked.has(item.designId) ? `<div class="cart-unavail" role="alert"><strong>${esc(blocked.get(item.designId))}</strong> <span>${esc(t('cart.blockedHint'))}</span></div>` : ''}
               <div class="actions">
                 ${item.productId === 'dtfsheet' || item.productId === 'photoprints' ? '' : item.bookId ? `<a class="btn btn-sm" href="/book?b=${encodeURIComponent(item.bookId)}&cart=${i}">${esc(t('cart.edit'))}</a>` : `<a class="btn btn-sm" href="/editor?design=${encodeURIComponent(item.designId)}&cart=${i}">${esc(t('cart.edit'))}</a>
                 ${item.bookId ? '' : `<a class="btn btn-sm" href="/editor?design=${encodeURIComponent(item.designId)}">${esc(t('cart.duplicate'))}</a>`}`}
@@ -497,10 +520,10 @@
             </div>
             <div class="price">${itemPrice(item)}</div>
           </div>
-          ${proofSlot(item, i)}
+          ${blocked.has(item.designId) ? '' : proofSlot(item, i)}
           </div>`).join('');
         if (focused && document.getElementById(focused)) document.getElementById(focused).focus();
-        for (const item of cart) if (!proofs.has(item.designId)) loadProof(item.designId);
+        for (const item of cart) if (!proofs.has(item.designId) && !blocked.has(item.designId)) loadProof(item.designId);
         updateApproval();
         const subtotal = Math.round(cart.reduce((s, i) => s + i.price, 0) * 100) / 100;
         const freeOver = quote ? quote.freeShippingOver : pricing.freeShippingOver;
@@ -601,6 +624,9 @@
           if (q.copies != null && (q.copies || 1) !== (item.copies || 1)) { item.copies = q.copies; synced = true; }
           return true;
         });
+        // Hidden or sold out since it was added: the shop's message on the item (cleared when it is back).
+        blocked = new Map(quote.items.filter((q) => q && q.unavailable && keep.some((it) => it.designId === q.designId))
+          .map((q) => [q.designId, q.unavailableText || t('cart.blocked')]));
         if (gone.length || changed || synced || ordered) POD.setCart(keep);
         if (ordered) {
           // Ordered from this tab (its answer got lost): that order, found by this tab's one-time key.
@@ -640,6 +666,7 @@
       });
       document.getElementById('checkout').addEventListener('click', (e) => {
         if (e.target.closest('[data-next-proof]')) goToNextProof();
+        if (e.target.closest('[data-next-blocked]')) goToBlocked();
       });
       document.getElementById('items').addEventListener('click', (e) => {
         const tog = e.target.closest('[data-proof-toggle]');
@@ -739,6 +766,10 @@
         e.preventDefault();
         const bad = checkFields();
         if (bad) return goToField(bad);
+        if (blockedIn(POD.getCart()).length) {
+          goToBlocked();
+          return POD.toast(blocked.get(blockedIn(POD.getCart())[0].designId), 'error');
+        }
         if (!POD.getCart().every((it) => isApproved(it.designId))) {
           goToNextProof();
           return POD.toast(t('checkout.approvalRequired'), 'error');
@@ -761,6 +792,9 @@
           if (codeBefore && quote && quote.couponError) throw Object.assign(new Error(quote.couponError), { code: 'couponRefused' });
           render();
           if (!POD.getCart().length) throw new Error(t('cart.emptyTitle'));
+          // Sold out or hidden while the customer was filling in the form.
+          const stuckNow = blockedIn(POD.getCart());
+          if (stuckNow.length) throw Object.assign(new Error(blocked.get(stuckNow[0].designId)), { code: 'itemUnavailable' });
           if (Math.abs(render.total - before) > 0.009) throw Object.assign(new Error(t('cart.pricesUpdated')), { code: 'priceChanged' });
           const cartNow = POD.getCart();
           // Each item's approval, against the exact proof the customer saw (and whether they want a sample first).
@@ -785,7 +819,10 @@
             couponNote = { code: couponCode || (couponNote && couponNote.code) || '', msg: err.message };
             setCoupon('');
           }
-          if (err.code === 'priceChanged' || err.code === 'designGone' || err.code === 'designOrdered' || /^coupon/.test(err.code || '')) {
+          // A product, colour, size or side the shop stopped selling, or fewer pieces left than ordered (409):
+          // the shop's message is shown and the cart asks for today's prices, which mark the items concerned.
+          const unavailable = /Unavailable$/.test(err.code || '') || err.code === 'notEnoughStock';
+          if (err.code === 'priceChanged' || err.code === 'designGone' || err.code === 'designOrdered' || unavailable || /^coupon/.test(err.code || '')) {
             await refreshPrices();
             render();
           }
@@ -807,6 +844,15 @@
           } else {
             POD.toast(err.message, 'error');
             if (couponRefused) document.querySelector('.coupon-box').scrollIntoView({ block: 'center', behavior: 'smooth' });
+            else if (unavailable) goToBlocked();
+          }
+          // Also above the order button (a toast goes away): the shop's own words.
+          if (unavailable && !blockedIn(POD.getCart()).length) {
+            const status = document.getElementById('approve-status');
+            updateApproval();
+            status.classList.add('blocked');
+            status.textContent = err.message;
+            return;
           }
           updateApproval();
         }
@@ -933,7 +979,8 @@
       }
       window.addEventListener('resize', updateBar);
       document.getElementById('bar-go').addEventListener('click', () => {
-        // Proofs left to check come first; then the first empty field, else the order button.
+        // Items that can't be ordered now come first, then proofs left to check; then the first empty field, else the order button.
+        if (blockedIn(POD.getCart()).length) return goToBlocked();
         if (!POD.getCart().every((it) => isApproved(it.designId))) return goToNextProof();
         const empty = FIELDS.find((el) => el.required && !el.value.trim());
         if (empty) return goToField(empty);
@@ -952,6 +999,9 @@
         renderGovernorates();
         render();
         renderAcctNote();
+        // The shop's messages about items it can't make now, in the new language.
+        if (blocked.size) refreshPrices().then(render);
+        if (savedBlocked.size) refreshSaved();
         // Errors under the fields, in the new language (the shop's own refusals by their code).
         for (const el of FIELDS) {
           if (el.getAttribute('aria-invalid') !== 'true') continue;

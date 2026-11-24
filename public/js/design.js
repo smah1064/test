@@ -13,11 +13,25 @@
     $('dp-missing').hidden = false;
     return;
   }
-  $('dp').hidden = false;
-
   // Only the products this design is offered on (the same check as the designs page, the product page and the editor).
+  // Products the shop doesn't sell right now (admin → Products) are not in the catalogue, so not offered here.
   const fitting = catalog.products.filter((p) => !p.kind && POD.designFor(design, p));
-  const products = fitting.length ? fitting : catalog.products.filter((p) => !p.kind);
+  const products = fitting.length ? fitting : catalog.products.filter((p) => !p.kind && !(p.laser || p.pattern));
+  if (!products.length) {
+    const box = $('dp-missing');
+    const show = () => {
+      box.hidden = false;
+      box.classList.add('unavail');
+      box.innerHTML = `<h2>${esc(t('dp.noProducts'))}</h2><div class="unavail-actions"><a class="btn btn-primary" href="/designs">${esc(t('design.browse'))}</a><a class="btn" href="/#products">${esc(t('unavail.browse'))}</a></div>`;
+    };
+    show();
+    document.addEventListener('pod:langchange', show);
+    return;
+  }
+  $('dp').hidden = false;
+  // A link to a product the shop doesn't sell now (an old link, a hidden product): say so, and show another one.
+  const askedFor = params.get('product');
+  const askedGone = Boolean(askedFor) && !products.some((p) => p.id === askedFor);
   const state = { product: null, color: null, size: null };
   // The design's own colour (a design for a black T-shirt: white ink), for products without that colour id.
   const isDark = (hex) => POD.luminance(hex) < 0.45;
@@ -28,15 +42,17 @@
   const ownHex = ownColor && (own.surface || ownColor.hex);
   /** The product's colour nearest the design's own, if the first colour is the wrong lightness for it. */
   function nearestOwn(product) {
-    const first = product.colors[0];
+    const first = POD.firstPick(product.colors);
     if (!ownHex || product.surface || isDark(first.hex) === isDark(ownHex)) return first;
-    const alike = product.colors.filter((c) => isDark(c.hex) === isDark(ownHex));
+    const alike = product.colors.filter((c) => POD.canPick(c) && isDark(c.hex) === isDark(ownHex));
     return alike.length ? alike.reduce((best, c) => (dist(c.hex, ownHex) < dist(best.hex, ownHex) ? c : best)) : first;
   }
   function choose(productId, colorId) {
     state.product = products.find((p) => p.id === productId) || products.find((p) => p.id === design.product) || products[0];
-    state.color = state.product.colors.find((c) => c.id === colorId) || state.product.colors.find((c) => c.id === design.color) || nearestOwn(state.product);
-    if (!state.size || !state.product.sizes.some((s) => s.id === state.size.id)) state.size = state.product.sizes[0];
+    // Sold-out colours and sizes are listed (crossed out) but never chosen.
+    const pickable = state.product.colors.filter(POD.canPick);
+    state.color = pickable.find((c) => c.id === colorId) || pickable.find((c) => c.id === design.color) || nearestOwn(state.product);
+    if (!state.size || !state.product.sizes.some((s) => s.id === state.size.id && POD.canPick(s))) state.size = POD.firstPick(state.product.sizes);
   }
   choose(params.get('product'), params.get('color'));
 
@@ -101,11 +117,19 @@
     $('dp-cat').href = cat ? `/designs?cat=${cat.id}` : '/designs';
     $('dp-name').textContent = tr(design.name);
     $('dp-img').alt = t('design.imgAlt', { design: tr(design.name), product: tr(product.name) });
-    $('dp-products').innerHTML = products.map((p) => `<button type="button" class="dp-product ${p.id === product.id ? 'active' : ''}" data-product="${p.id}" title="${esc(tr(p.name))}">
-      <img alt="" loading="lazy" src="/api/thumbs/${p.id}/${p.colors[0].id}.webp"><span>${esc(tr(p.name))}</span></button>`).join('');
-    $('dp-colors').innerHTML = product.colors.map((c) => `<button class="swatch ${c.id === color.id ? 'active' : ''}" data-color="${c.id}" title="${esc(tr(c.name))}" aria-label="${esc(tr(c.name))}" style="background:${c.hex}"></button>`).join('');
+    $('dp-gone').hidden = !askedGone;
+    $('dp-gone').innerHTML = askedGone ? `${esc(t('dp.productGone'))} <a href="/#products">${esc(t('unavail.browse'))}</a>` : '';
+    $('dp-products').innerHTML = products.map((p) => `<button type="button" class="dp-product ${p.id === product.id ? 'active' : ''}" data-product="${esc(p.id)}" title="${esc(tr(p.name))}">
+      <img alt="" loading="lazy" src="${esc(POD.productPicture(p))}" data-fallback="${esc(POD.thumbFallback(p))}"><span>${esc(tr(p.name))}</span></button>`).join('');
+    $('dp-colors').innerHTML = product.colors.map((c) => (c.soldOut
+      ? `<button type="button" class="swatch sold-out" aria-disabled="true" data-sold="${esc(c.id)}" title="${esc(t('soldOutColor', { name: tr(c.name) }))}" aria-label="${esc(t('soldOutColor', { name: tr(c.name) }))}" style="background:${esc(c.hex)}"></button>`
+      : `<button type="button" class="swatch ${c.id === color.id ? 'active' : ''}" data-color="${esc(c.id)}" title="${esc(tr(c.name))}" aria-label="${esc(tr(c.name))}" style="background:${esc(c.hex)}"></button>`)).join('');
     $('dp-color-name').textContent = tr(color.name);
-    $('dp-sizes').innerHTML = product.sizes.map((s) => `<button class="chip ${s.id === size.id ? 'active' : ''}" data-size="${s.id}">${esc(tr(s.label))}${s.surcharge ? ` <span style="opacity:.7">+${esc(money(s.surcharge))}</span>` : ''}</button>`).join('');
+    $('dp-sizes').innerHTML = product.sizes.map((s) => (s.soldOut
+      ? `<button type="button" class="chip sold-out" aria-disabled="true" data-sold-size="${esc(s.id)}" title="${esc(t('soldOut'))}">${esc(tr(s.label))} <span class="sold-tag">${esc(t('soldOut'))}</span></button>`
+      : `<button type="button" class="chip ${s.id === size.id ? 'active' : ''}" data-size="${esc(s.id)}">${esc(tr(s.label))}${s.surcharge ? ` <span style="opacity:.7">+${esc(money(s.surcharge))}</span>` : ''}</button>`)).join('');
+    $('dp-few').hidden = !product.fewLeft;
+    $('dp-few').textContent = product.fewLeft ? t('pp.fewLeft', { n: POD.num(product.fewLeft) }) : '';
     $('dp-price').textContent = money(product.basePrice + size.surcharge);
     $('dp-edit').href = `/editor?library=${encodeURIComponent(design.id)}&product=${product.id}&color=${color.id}`;
     document.title = `${tr(design.name)} · ${t('brand')}`;
@@ -124,7 +148,20 @@
     syncUrl();
     draw();
   });
+  // A product picture that can't be made: the drawn product.
+  $('dp-products').addEventListener('error', (e) => {
+    const img = e.target;
+    if (img.tagName !== 'IMG' || !img.dataset.fallback) return;
+    const fb = img.dataset.fallback;
+    img.dataset.fallback = '';
+    img.src = fb;
+  }, true);
   $('dp-colors').addEventListener('click', (e) => {
+    const sold = e.target.closest('[data-sold]');
+    if (sold) {
+      POD.toast(sold.title);
+      return;
+    }
     const b = e.target.closest('[data-color]');
     if (!b || b.dataset.color === state.color.id) return;
     choose(state.product.id, b.dataset.color);
@@ -133,6 +170,10 @@
     draw();
   });
   $('dp-sizes').addEventListener('click', (e) => {
+    if (e.target.closest('[data-sold-size]')) {
+      POD.toast(t('soldOut'));
+      return;
+    }
     const b = e.target.closest('[data-size]');
     if (!b) return;
     if (b.dataset.size === state.size.id) return;
@@ -165,8 +206,15 @@
       busy(false);
       btn.disabled = false;
       POD.toast(e.message, 'error');
+      // Sold out or hidden since the page opened (POST /api/designs answers 409): the shop's list again.
+      if (/Unavailable$/.test(e.code || '')) refreshCatalog();
     }
   });
+
+  /** The shop's catalogue changed under the page: open it again on what can be ordered now. */
+  function refreshCatalog() {
+    setTimeout(() => location.reload(), 2500);
+  }
 
   renderOptions();
   draw();

@@ -9,6 +9,7 @@
 window.PODSaved = (() => {
   const { t, tr, esc, money } = POD;
   let draftsPromise = null;
+  let catalogIds = null; // the products the shop sells right now (Set of ids), once loaded
   const urls = [];
 
   /** The unfinished designs (newest first); asked for once per page, again after a change. */
@@ -17,9 +18,26 @@ window.PODSaved = (() => {
       draftsPromise = (async () => {
         const [list, catalog] = await Promise.all([POD.drafts.list().catch(() => []), POD.loadCatalog().catch(() => ({ products: [] }))]);
         while (urls.length) URL.revokeObjectURL(urls.pop());
+        if (catalog.products && catalog.products.length) catalogIds = new Set(catalog.products.map((x) => x.id));
+        // The names of products the shop doesn't sell right now (not in the catalogue), for their drafts.
+        const names = {};
+        if (catalogIds) {
+          const missing = [...new Set(list.map((d) => d.productId).filter((id) => id && !catalogIds.has(id)))];
+          await Promise.all(missing.map((id) => POD.api(`/api/products/${encodeURIComponent(id)}/name`)
+            .then((r) => { if (r && r.name) names[id] = r.name; }, () => {})));
+        }
         return list.map((d) => {
           const p = (catalog.products || []).find((x) => x.id === d.productId);
-          if (!p) return null;
+          if (!p) {
+            // A product the shop doesn't sell right now (admin → Products): kept, with a note instead of a card.
+            if (!catalogIds) return null; // the catalogue didn't load: nothing to say about it
+            let src = d.previewUrl || '';
+            if (!src && d.preview instanceof Blob) {
+              src = URL.createObjectURL(d.preview);
+              urls.push(src);
+            }
+            return { ...d, product: null, name: names[d.productId] || null, unavailable: true, src, fallback: '' };
+          }
           const c = (p.colors || []).find((x) => x.id === d.colorId) || (p.colors || [])[0];
           let fallback = '';
           try { fallback = POD.mockupUrl(p.sides[0], c ? c.hex : '#ffffff', 'full') || ''; } catch (e) { /* no drawing */ }
@@ -54,12 +72,15 @@ window.PODSaved = (() => {
     }
     const meta = opts.meta || ((it) => [tr(it.colorName), tr(it.sizeLabel)].filter(Boolean).map(esc).join(' · '));
     const price = opts.price || ((it) => esc(money(it.price)));
+    // A ready item whose product isn't sold now: the shop's reason (opts.unavailable, from the cart's prices) or a general note.
+    const note = (it) => (opts.unavailable && opts.unavailable(it)) || (catalogIds && it.productId && !catalogIds.has(it.productId) ? t('saved.unavailable') : '');
     const ready = saved.map((it) => `
-      <div class="cart-item saved-item">
+      <div class="cart-item saved-item${note(it) ? ' is-unavailable' : ''}">
         <img src="${esc(it.previewUrl)}" alt="${esc(t('cart.preview', { product: tr(it.productName) }))}" loading="lazy">
         <div>
           <h3>${esc(tr(it.productName))} <span class="saved-state ready">${esc(t('saved.readyTag'))}</span></h3>
           <div class="meta">${meta(it)}</div>
+          ${note(it) ? `<p class="unavail-note" role="note">${esc(note(it))}</p>` : ''}
           <div class="actions">
             <button class="btn btn-sm btn-primary" type="button" data-to-cart="${esc(it.designId)}">${esc(t('cart.moveToCart'))}</button>
             <button class="btn btn-sm btn-danger" type="button" data-saved-remove="${esc(it.designId)}">${esc(t('cart.remove'))}</button>
@@ -68,6 +89,21 @@ window.PODSaved = (() => {
         <div class="price">${price(it)}</div>
       </div>`).join('');
     const unfinished = drafts.map((d) => {
+      if (d.unavailable) {
+        return `
+      <div class="cart-item saved-item is-unavailable">
+        ${d.src ? `<img src="${esc(d.src)}" alt="" loading="lazy">` : '<div class="saved-noimg" aria-hidden="true"></div>'}
+        <div>
+          <h3>${esc(d.name ? tr(d.name) : t('saved.unknownProduct'))} <span class="saved-state draft">${esc(t('saved.draftTag'))}</span></h3>
+          <p class="unavail-note" role="note">${esc(t('saved.unavailable'))}</p>
+          <div class="meta">${d.savedAt ? esc(t('acct.draftSaved', { date: POD.date(d.savedAt) })) : ''}</div>
+          <div class="actions">
+            <button class="btn btn-sm btn-danger" type="button" data-del-draft="${esc(d.productId)}">${esc(t('cart.remove'))}</button>
+          </div>
+        </div>
+        <div class="price"></div>
+      </div>`;
+      }
       const edit = `/editor?product=${encodeURIComponent(d.productId)}`;
       return `
       <div class="cart-item saved-item">
@@ -114,7 +150,7 @@ window.PODSaved = (() => {
         } else if (draft) {
           const id = draft.dataset.delDraft;
           const d = (await loadDrafts()).find((x) => x.productId === id);
-          if (!confirm(t('acct.deleteDraftConfirm', { name: d ? tr(d.product.name) : id }))) return;
+          if (!confirm(t('acct.deleteDraftConfirm', { name: d && d.product ? tr(d.product.name) : d && d.name ? tr(d.name) : d ? t('saved.unknownProduct') : id }))) return;
           draft.disabled = true;
           // From this browser and the account (the editor would bring it back otherwise).
           await POD.drafts.remove(id);

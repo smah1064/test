@@ -229,7 +229,8 @@ async function checkSide(design, side, { readFile, product }) {
       widthPx: size.width,
       heightPx: size.height,
       expectedW,
-      expectedH: Number(side.heightPx) || Math.round((expectedW * physH) / physW),
+      // The height the physical shape needs (the recorded height comes from the uploaded file itself).
+      expectedH: aspectOff > ASPECT_TOLERANCE ? Math.round((expectedW * physH) / physW) : expectedH,
     });
   }
 

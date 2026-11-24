@@ -117,7 +117,7 @@
     }
 
     if (type === 'card' || type === 'cloth') {
-      if (product.id === 'cap') {
+      if (POD.assetId(product) === 'cap') {
         const cx = 250;
         const R = 150;
         return {
@@ -130,7 +130,7 @@
           },
         };
       }
-      const amount = product.id === 'tote' ? 0.9 : 1.6;
+      const amount = POD.assetId(product) === 'tote' ? 0.9 : 1.6;
       const field = folds(amount);
       const D = 22; // how far the artwork is pushed by the folds
       const K = 7; // how strongly folds catch the light
@@ -575,10 +575,10 @@
   const photoFor = (product, sideId) => {
     if (!window.POD_PHOTOS) return null;
     const wrap = (product.sides.find((s) => s.id === sideId) || {}).wrap;
-    return window.POD_PHOTOS[`${product.id}:${sideId}${wrap ? ':wrap' : ''}`] || null;
+    return window.POD_PHOTOS[`${POD.assetId(product)}:${sideId}${wrap ? ':wrap' : ''}`] || null;
   };
-  /** Model photos for a product side ("On a model" view); [] if none. */
-  const modelsFor = (product, sideId) => (window.POD_MODELS && window.POD_MODELS[`${product.id}:${sideId}`]) || [];
+  /** Model photos for a product side ("On a model" view); [] if none. (Products made from another one: that one's.) */
+  const modelsFor = (product, sideId) => (window.POD_MODELS && window.POD_MODELS[`${POD.assetId(product)}:${sideId}`]) || [];
 
   // ---------- Modal ----------
   const $ = (id) => document.getElementById(id);
@@ -613,7 +613,7 @@
 
   /** The 360° turn photos of a model (POD_TURNS), or null when this model doesn't turn. */
   const turnsFor = (product, m) => {
-    const make = m && window.POD_TURNS && window.POD_TURNS[`${product.id}:${m.who}`];
+    const make = m && window.POD_TURNS && window.POD_TURNS[`${POD.assetId(product)}:${m.who}`];
     if (!make) return null;
     try {
       return make();

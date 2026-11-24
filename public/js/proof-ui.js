@@ -35,6 +35,8 @@
   const namesText = (n) => t(n === 2 ? 'proof.names.two' : n % 100 >= 3 && n % 100 <= 10 ? 'proof.names.few' : 'proof.names.many', { n: POD.num(n) });
   function checkText(c, sideNames) {
     const params = { ...(c.params || {}) };
+    // The customer's own text keeps its own direction inside the sentence (mixed Arabic / English).
+    if (typeof params.name === 'string') params.name = `\u2068${params.name.replace(/^“([\s\S]*)”$/, '$1')}\u2069`;
     let key = 'pf.' + c.id;
     if (c.id === 'exportSize' && params.error) key = 'pf.exportSize.error';
     if (c.id === 'outsideSafe' && !Number(params.mm)) key = params.name ? 'pf.outsideSafe.named' : 'pf.outsideSafe.edge';

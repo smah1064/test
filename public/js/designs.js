@@ -15,6 +15,10 @@
     const ids = new Set(lib.designs.filter((d) => POD.designFor(d, p)).map((d) => d.id));
     if (ids.size) fitting.set(p.id, ids);
   }
+  // Designs whose products the shop doesn't sell right now (admin → Products) are left out.
+  lib.designs = lib.designs.filter((d) => products.some((p) => fitting.has(p.id) && fitting.get(p.id).has(d.id)));
+  /** The first product (in catalogue order) a design is shown on. */
+  const firstFor = (d) => products.find((p) => fitting.has(p.id) && fitting.get(p.id).has(d.id));
 
   // ---------- Search ----------
   // Ignore case, Arabic short vowels and tatweel, the different alef / yaa /
@@ -61,7 +65,7 @@
   }
 
   // ---------- Pictures ----------
-  const shownOn = (d) => productById(state.product || d.product) || products[0];
+  const shownOn = (d) => productById(state.product) || (fitting.has(d.product) && fitting.get(d.product).has(d.id) && productById(d.product)) || firstFor(d) || products[0];
   const pictures = new Map(); // design id + product id -> promise of an image URL
   const ready = new Map(); // the same, once drawn
   function pictureFor(d, product) {
@@ -71,7 +75,7 @@
       pictures.set(key, (async () => {
         // Designs the owner added keep their objects on the server: fetch them to place on another product.
         const full = d.kind === 'objects' ? await POD.api('/api/library/' + encodeURIComponent(d.id)) : d;
-        const color = product.colors.find((c) => c.id === d.color) || product.colors[0];
+        const color = product.colors.find((c) => c.id === d.color && POD.canPick(c)) || POD.firstPick(product.colors);
         const st = await POD_RENDER.stage(full, product, product.sides[0], color);
         // The whole product with the design, framed close round the product.
         const cv = await POD_RENDER.productPicture(st, 1.2);

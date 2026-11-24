@@ -70,9 +70,54 @@
       catalogPromise = fetch('/api/products').then((r) => {
         if (!r.ok) throw new Error(t('msg.loadFailed'));
         return r.json();
+      }).then((catalog) => {
+        hideEmptyMenus(catalog);
+        return catalog;
       });
     }
     return catalogPromise;
+  }
+  /*
+   * The shop only lists what can be ordered now (admin → Products: hidden, removed and
+   * out-of-stock products are not in /api/products). Menu links to a part of the shop
+   * with nothing in it are hidden: "Kids' books" without any book, "Photos" without photo prints.
+   */
+  function hideEmptyMenus(catalog) {
+    const list = (catalog && catalog.products) || [];
+    const apply = () => {
+      const off = {
+        '.site-header nav .nav-books': !list.some((p) => p.category === 'kids'),
+        '.site-header nav a[href="/photos"]': !list.some((p) => p.kind === 'photoset'),
+      };
+      for (const [sel, hide] of Object.entries(off)) document.querySelectorAll(sel).forEach((a) => a.classList.toggle('nav-off', hide));
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', apply);
+    else apply();
+  }
+  /**
+   * The product whose pictures (photos, lifestyle and ready-design pictures, model photos)
+   * a product uses: products the manager made from another one use that one's.
+   */
+  const assetId = (p) => (p ? p.base || p.id : '');
+  /** A choice (colour or size) that can be picked: listed and not sold out. */
+  const canPick = (x) => Boolean(x) && !x.soldOut;
+  /** The first colour / size that can be picked (or the first one when all are sold out). */
+  const firstPick = (list) => (list || []).find(canPick) || (list || [])[0];
+  /**
+   * A product's picture on cards and lists: the photo the manager chose (admin → Products),
+   * else the real product photo recoloured on the server (products made from another one get that one's
+   * photo there), the drawn product if it fails: see thumbFallback.
+   */
+  function productPicture(p, color) {
+    if (p.mainPhoto) return p.mainPhoto;
+    const c = color || firstPick(p.colors) || {};
+    if (p.kind === 'book') return `/api/books/${encodeURIComponent(p.book)}/sample/0.jpg?lang=${lang}`;
+    return `/api/thumbs/${encodeURIComponent(p.id)}/${encodeURIComponent(c.id || '')}.webp`;
+  }
+  /** The drawn product in its colour: for a picture that didn't load. */
+  function thumbFallback(p, color) {
+    const c = color || firstPick(p.colors) || {};
+    try { return mockupUrl(p.sides[0], c.hex || '#ffffff', 'full') || ''; } catch (e) { return ''; }
   }
 
   // ---------- Colour helpers ----------
@@ -860,7 +905,7 @@
       return lang;
     },
     t, tr, setLang, applyI18n,
-    loadCatalog, fillMockup, mockupUrl, svgDataUrl, luminance,
+    loadCatalog, assetId, canPick, firstPick, productPicture, thumbFallback, fillMockup, mockupUrl, svgDataUrl, luminance,
     money, date, day, num, captcha,
     getCart, setCart, getSaved, setSaved, moveItem, designFor, putFile, updateCartBadge, toast, esc, api, drafts, forgetPersonal,
     sizedArea, sizeView, canvasEdges, drawPattern, wrapOffsets, fabricCm,

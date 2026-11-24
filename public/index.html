@@ -146,7 +146,7 @@
       const loose = (s) => s.replace(/ي/g, '').replace(/ +/g, ' ');
       const catName = (id) => (categories.find((c) => c.id === id) || {}).name || {};
       const hay = new Map(products.map((p) => {
-        const words = norm([p.id, p.name.en, p.name.ar, p.description && p.description.en, p.description && p.description.ar, catName(p.category).en, catName(p.category).ar, ALIASES[p.id] || ''].join(' '));
+        const words = norm([p.id, p.name.en, p.name.ar, p.description && p.description.en, p.description && p.description.ar, catName(p.category).en, catName(p.category).ar, ALIASES[p.id] || ALIASES[POD.assetId(p)] || ''].join(' '));
         return [p.id, { full: ` ${words} `, loose: ` ${loose(words)} `, name: ` ${norm(`${p.name.en} ${p.name.ar}`)} ` }];
       }));
       const terms = () => norm(q).split(' ').filter(Boolean);
@@ -154,7 +154,8 @@
 
       // Real product photos, recoloured on the server (small cached WebP);
       // the drawn mockup is the fallback if a picture can't load.
-      const thumbUrl = (p, color) => (p.kind === 'book' ? `/api/books/${encodeURIComponent(p.book)}/sample/0.jpg?lang=${POD.lang}` : `/api/thumbs/${encodeURIComponent(p.id)}/${encodeURIComponent(color.id)}.webp`);
+      // A photo the product manager uploaded comes first (POD.productPicture).
+      const thumbUrl = (p, color) => POD.productPicture(p, color);
       document.addEventListener('error', (e) => {
         const img = e.target;
         if (!(img instanceof HTMLImageElement) || !img.dataset.pid || img.dataset.fallback) return;
@@ -162,7 +163,7 @@
         const c = p && p.colors.find((x) => x.id === img.dataset.color);
         if (!c) return;
         img.dataset.fallback = '1';
-        img.src = POD.mockupUrl(p.sides[0], c.hex, 'full');
+        img.src = POD.thumbFallback(p, c);
       }, true);
       // Designs the shopper saved in the editor: shown on their product card.
       const drafts = {};
@@ -193,16 +194,20 @@
       };
       [life, designed] = await Promise.all([loadJson('/img/lifestyle/index.json'), loadJson('/img/designed/index.json')]);
       const byId = (id) => products.find((p) => p.id === id);
+      // Pictures kept per product id (lifestyle, designed): products made from another one use that one's.
+      const lifeOf = (p) => life[POD.assetId(p)];
+      const designedOf = (p) => designed[POD.assetId(p)];
       const hrefOf = (p) => (p.kind === 'book' ? `/book?b=${encodeURIComponent(p.book)}` : p.kind === 'photoset' ? '/photos' : `/product?id=${encodeURIComponent(p.id)}`);
-      /** The card picture: a saved draft, else the lifestyle photo, else the product photo. */
+      /** The card picture: a saved draft, else the manager's photo, else the lifestyle photo, else the product photo. */
       function cardPicture(p, eager) {
         const d = drafts[p.id];
         if (d && d.url) return `<img alt="" src="${d.url}"><span class="saved-badge">${esc(t('draft.badge'))}</span>`;
-        const l = life[p.id];
+        if (p.mainPhoto) return thumbImg(p, POD.firstPick(p.colors), eager);
+        const l = lifeOf(p);
         if (l && l.file) return `<img class="hm-life" alt="${esc(tr(l.alt) || tr(p.name))}" ${eager ? '' : 'loading="lazy" '}decoding="async" src="${esc(l.file)}">`;
-        const g = designed[p.id];
+        const g = designedOf(p);
         if (g && g.file) return `<img class="hm-designed" alt="${esc(tr(p.name))}" ${eager ? '' : 'loading="lazy" '}decoding="async" src="${esc(g.file)}">`;
-        return thumbImg(p, p.colors[0], eager);
+        return thumbImg(p, POD.firstPick(p.colors), eager);
       }
       /** "From 250 EGP" and, for products sold in quantities, the smallest pack ("A5 × 100"). */
       function priceLine(p) {
@@ -216,7 +221,7 @@
       const BEST = ['tshirt', 'mug', 'bizcards', 'stickersheet', 'hoodie', 'cushion', 'invitations', 'tote'];
       const NEW = ['menus', 'calendar', 'labels', 'postcards', 'photobook', 'magnets', 'wrappingpaper', 'brochures', 'engrplaque', 'caketopper'];
       const ROWS = [
-        { key: 'fresh', ids: [...NEW.slice(0, 4), ...BEST.slice(0, 6)], badge: (id) => (NEW.includes(id) ? 'new' : 'best') },
+        { key: 'fresh', ids: [...NEW.slice(0, 4), ...BEST.slice(0, 6)], badge: (id) => (NEW.includes(id) || (byId(id) || {}).base ? 'new' : 'best') },
         { key: 'cards', ids: ['invitations', 'greetingcard', 'postcards', 'foldedcards', 'giftvouchers', 'bookmarks', 'eidenvelopes', 'certificates'], link: '/?cat=occasions#products' },
         { key: 'wear', ids: ['tshirt', 'hoodie', 'sweatshirt', 'oversized', 'polo', 'kidstee', 'cap', 'tote', 'apron'], link: '/?cat=apparel#products' },
         { key: 'home', ids: ['mug', 'cushion', 'poster', 'canvas', 'coasters', 'calendar', 'deskcalendar', 'bedsheet', 'curtains', 'magnets'], link: '/?cat=home#products' },
@@ -225,15 +230,18 @@
         { key: 'events', ids: ['weddingsign', 'tablenumbers', 'placecards', 'caketopper', 'ramadandecor', 'invitations', 'eidenvelopes', 'tablecloth'], link: '/?cat=occasions#products' },
         { key: 'laser', ids: products.filter((p) => p.category === 'laser').map((p) => p.id), link: '/?cat=laser#products' },
       ];
+      // Products the manager made from another one show in that one's rows, right after it.
+      for (const row of ROWS) row.ids = row.ids.flatMap((id) => [id, ...products.filter((p) => p.base === id).map((p) => p.id)]);
       /** All products: the product printed with a design on light grey, like a print catalogue. */
       function gridPicture(p) {
         const d = drafts[p.id];
         if (d && d.url) return `<img alt="" src="${d.url}"><span class="saved-badge">${esc(t('draft.badge'))}</span>`;
-        const g = designed[p.id];
+        if (p.mainPhoto) return thumbImg(p, POD.firstPick(p.colors));
+        const g = designedOf(p);
         if (g && g.file) return `<img class="hm-designed" alt="${esc(tr(p.name))}" loading="lazy" decoding="async" src="${esc(g.file)}">`;
-        const l = life[p.id];
+        const l = lifeOf(p);
         if (l && l.file) return `<img class="hm-life" alt="${esc(tr(l.alt) || tr(p.name))}" loading="lazy" decoding="async" src="${esc(l.file)}">`;
-        return thumbImg(p, p.colors[0]);
+        return thumbImg(p, POD.firstPick(p.colors));
       }
       const editorHref = (p) => (p.kind === 'book' ? `/book?b=${encodeURIComponent(p.book)}` : p.kind === 'photoset' ? '/photos' : `/editor?product=${encodeURIComponent(p.id)}`);
       function rowCard(p, badge) {
@@ -270,17 +278,21 @@
 
       // ---------- Three picture tiles ----------
       function renderTiles() {
-        const pic = (key, fallbackId) => {
-          const l = life[key] || life[fallbackId];
+        // The shop's own pictures (hero-2, hero-3) first; else a product the shop sells now (hidden ones are not in the list).
+        const pic = (key, ids, cat) => {
+          const l = life[key];
           if (l && l.file) return `<img alt="" loading="lazy" decoding="async" src="${esc(l.file)}">`;
-          const p = byId(fallbackId);
-          return p ? thumbImg(p, p.colors[0]) : '';
+          const p = ids.map(byId).find(Boolean) || products.find((x) => x.category === cat && !x.kind);
+          if (!p) return '';
+          const pl = !p.mainPhoto && lifeOf(p);
+          return pl && pl.file ? `<img alt="" loading="lazy" decoding="async" src="${esc(pl.file)}">` : thumbImg(p, POD.firstPick(p.colors));
         };
+        const has = (c) => products.some((p) => p.category === c);
         const tiles = [
-          { key: 'gifts', img: pic('hero-2', 'mug'), href: '/?cat=occasions#products' },
-          { key: 'biz', img: pic('hero-3', 'bizcards'), href: '/?cat=business#products' },
-          { key: 'designs', img: pic('tshirt', 'tshirt'), href: '/designs' },
-        ];
+          has('occasions') && { key: 'gifts', img: pic('hero-2', ['mug', 'magicmug', 'couplemugs'], 'occasions'), href: '/?cat=occasions#products' },
+          has('business') && { key: 'biz', img: pic('hero-3', ['bizcards', 'flyers'], 'business'), href: '/?cat=business#products' },
+          { key: 'designs', img: pic('', ['tshirt', 'hoodie', 'mug', ...products.filter((p) => !p.kind).map((p) => p.id)]), href: '/designs' },
+        ].filter(Boolean);
         document.getElementById('hm-tiles').innerHTML = tiles.map((x) => `<a class="hm-tile" href="${x.href}">
           <div class="hm-tile-pic">${x.img}</div>
           <div class="hm-tile-body"><h3>${esc(t(`hm.tile.${x.key}`))}</h3><span class="hm-tile-link">${esc(t(`hm.tile.${x.key}.cta`))} <span aria-hidden="true">←</span></span></div>
@@ -290,7 +302,10 @@
       function render() {
         renderRows();
         renderTiles();
-        document.getElementById('cats').innerHTML = [{ id: 'all', name: null }, ...categories]
+        // Only categories with something in them (hidden products are not in the list).
+        const used = categories.filter((c) => products.some((p) => p.category === c.id));
+        if (cat !== 'all' && !used.some((c) => c.id === cat)) cat = 'all';
+        document.getElementById('cats').innerHTML = [{ id: 'all', name: null }, ...used]
           .map((c) => `<button class="chip ${c.id === cat ? 'active' : ''}" data-cat="${c.id}">${esc(c.name ? tr(c.name) : t('cat.all'))}</button>`)
           .join('');
         const ts = terms();
@@ -374,16 +389,26 @@
       // Coming back to the page: the browser may refill the box; the address is what counts.
       window.addEventListener('pageshow', () => { qInput.value = q; });
 
+      // (A product the shop doesn't sell now is left out; another one takes its place.)
       const pick = (id, colorId) => {
         const p = products.find((x) => x.id === id);
-        const c = p.colors.find((x) => x.id === colorId) || p.colors[0];
+        if (!p) return '';
+        const c = p.colors.find((x) => x.id === colorId && POD.canPick(x)) || POD.firstPick(p.colors);
         return thumbImg(p, c, true);
+      };
+      const trio = () => {
+        const out = [pick('tshirt', 'navy'), pick('hoodie', 'cream'), pick('mug', 'white')].filter(Boolean);
+        for (const p of products) {
+          if (out.length >= 3) break;
+          if (!p.kind && !['tshirt', 'hoodie', 'mug'].includes(p.id)) out.push(thumbImg(p, POD.firstPick(p.colors), true));
+        }
+        return out.join('');
       };
       // The hero: the big lifestyle picture of many printed products; until there is one, three product photos.
       const hero = document.getElementById('hero-art');
       hero.innerHTML = life['hero-1'] && life['hero-1'].file
         ? `<img class="hm-hero-photo" alt="" src="${esc(life['hero-1'].file)}" fetchpriority="high">`
-        : `<div class="hm-hero-trio">${[pick('tshirt', 'navy'), pick('hoodie', 'cream'), pick('mug', 'white')].join('')}</div>`;
+        : `<div class="hm-hero-trio">${trio()}</div>`;
 
       render();
       document.addEventListener('pod:langchange', render);

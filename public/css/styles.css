@@ -686,7 +686,7 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 .bk-thumbs img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .bk-sample { text-align: center; margin: 6px 0 0; }
 .bk-panel { padding: 18px; }
-.bk-panel h1 { font-size: 24px; margin: 0 0 6px; }
+.bk-panel h1 { font-size: 24px; margin: 0 0 6px; overflow-wrap: anywhere; }
 .bk-blurb { margin: 0 0 14px; line-height: 1.55; }
 .bk-panel textarea { width: 100%; font: inherit; border: 1px solid var(--line); border-radius: 10px; padding: 10px; resize: vertical; }
 .bk-crop canvas { width: 100%; max-width: 320px; aspect-ratio: 1; display: block; margin: 0 auto; border-radius: 12px; touch-action: none; cursor: grab; }
@@ -1252,5 +1252,43 @@ html[dir="rtl"] .hm-arrow { transform: scaleX(-1); }
 .pp-photo:has(img.pp-designed) { background: #ececec; }
 .pp-photo img.pp-designed { object-fit: contain; padding: 0; }
 /* Booklets: the page strip (Cover, 2, 3… Back) scrolls sideways. */
-.side-tabs.pages { flex-wrap: nowrap; overflow-x: auto; max-width: min(620px, 100%); scrollbar-width: thin; }
+.side-tabs.pages { flex-wrap: nowrap; overflow-x: auto; max-width: min(620px, 100%); scrollbar-width: thin; flex: 1 1 auto; min-width: min(62vw, 320px); }
 .side-tabs.pages .page-tab { min-width: 36px; padding: 6px 9px; justify-content: center; flex: none; }
+
+/* ---------- The product manager's catalogue in the shop (admin → Products) ---------- */
+/* Sold-out colours and sizes: still listed, faded and crossed, not selectable (shop pages and the editor). */
+.swatch.sold-out { opacity: .45; cursor: not-allowed; overflow: hidden; }
+.swatch.sold-out::before { content: ""; position: absolute; inset: 0; border-radius: 50%; background: linear-gradient(to top right, transparent calc(50% - 1.5px), #5b6170 calc(50% - 1.5px), #5b6170 calc(50% + 1.5px), transparent calc(50% + 1.5px)); pointer-events: none; }
+.swatch.sold-out.active::after { display: none; }
+.chip.sold-out { background: #f3f4f6; color: var(--ink-3); border-style: dashed; cursor: not-allowed; text-decoration: line-through; text-decoration-color: var(--ink-3); }
+.chip.sold-out .sold-tag { text-decoration: none; display: inline-block; }
+.sold-tag { font-size: 10.5px; font-weight: 700; line-height: 1.4; padding: 0 6px; border-radius: 999px; background: #e7e9ee; color: #5b6170; vertical-align: middle; white-space: nowrap; }
+.pp-size { display: inline-block; }
+.pp-size.is-sold s { color: var(--ink-3); text-decoration-thickness: 1.5px; }
+/* "Only 3 left" */
+.pp-few { display: inline-flex; align-items: center; gap: 6px; margin: 6px 0 0; padding: 3px 10px; border-radius: 999px; background: #fff4e0; color: var(--warn); font-size: 13px; font-weight: 700; }
+.pp-few::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.pp-few[hidden] { display: none; }
+/* The manager's own product photos lead the gallery. */
+.pp-photo img.pp-own-photo { object-fit: contain; padding: 0; }
+/* A product the shop doesn't sell right now (product page, ready-design page). */
+.card.empty.unavail { padding: 40px 22px; }
+.unavail h2 { margin: 6px 0 8px; font-size: 22px; }
+.unavail p { margin: 0 auto 18px; max-width: 420px; line-height: 1.7; }
+.unavail-ico { font-size: 40px; line-height: 1; }
+.unavail-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+.dp-gone { margin: 4px 0 12px; padding: 10px 12px; border-radius: 10px; background: #fff4e0; color: #7a4a00; font-size: 13.5px; line-height: 1.6; }
+.dp-gone a { color: inherit; font-weight: 700; }
+.dp-gone[hidden] { display: none; }
+/* Cart: an item the shop can't make now; checkout waits until it is removed or saved for later. */
+.cart-entry.is-blocked .cart-item img { opacity: .55; filter: grayscale(.6); }
+.cart-unavail { margin: 8px 0 10px; padding: 9px 12px; border-radius: 10px; background: #fdecea; color: #8e1c1c; font-size: 13.5px; line-height: 1.6; border-inline-start: 3px solid var(--bad); }
+.cart-unavail strong { display: block; font-weight: 700; }
+.cart-unavail span { color: #6b2a2a; }
+.saved-state.blocked { background: #fdecea; color: #a12020; }
+.approve-status.blocked { color: var(--bad); }
+/* Saved designs of products not sold right now. */
+.saved-item.is-unavailable img { opacity: .55; filter: grayscale(.6); }
+.unavail-note { margin: 6px 0 8px; padding: 7px 10px; border-radius: 8px; background: #f3f4f6; color: var(--ink-2); font-size: 13px; line-height: 1.55; }
+.saved-noimg { width: 80px; height: 80px; border-radius: 10px; background: #eef0f3; }
+.site-header nav .nav-off { display: none !important; }

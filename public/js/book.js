@@ -88,7 +88,7 @@
     .filter((q) => q.type !== 'choice' && q.type !== 'date' && RTL_RE.test(String(state.answers[q.id] || '')))
     .map((q) => [q, document.querySelector(`#bk-questions [data-q="${q.id}"]`)]);
   function renderForm() {
-    $('bk-title').textContent = tr(book.title).replace('{name}', state.answers.name || t('book.yourChild'));
+    $('bk-title').textContent = tr(book.title).replace('{name}', () => state.answers.name || t('book.yourChild'));
     $('bk-blurb').textContent = tr(book.blurb);
     $('bk-questions').innerHTML = book.questions.map((q) => {
       const v = state.answers[q.id] || '';
@@ -123,7 +123,7 @@
     state.dirty = true;
     remember();
     renderButtons();
-    $('bk-title').textContent = tr(book.title).replace('{name}', state.answers.name || t('book.yourChild'));
+    $('bk-title').textContent = tr(book.title).replace('{name}', () => state.answers.name || t('book.yourChild'));
   };
 
   $('bk-questions').addEventListener('input', (e) => {
