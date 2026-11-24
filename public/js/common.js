@@ -432,21 +432,66 @@
         return null;
       }
     }
-    const timers = new Map();
+    // Uploads not sent yet ({ productId: accountId }), kept so a page closed before the upload
+    // went out sends it on the next visit.
+    const PENDING = 'pod-draft-sync';
+    const pending = () => { try { return JSON.parse(localStorage.getItem(PENDING) || '{}') || {}; } catch (e) { return {}; } };
+    const setPending = (productId, account) => {
+      try {
+        const p = pending();
+        if (account) p[productId] = account;
+        else delete p[productId];
+        if (Object.keys(p).length) localStorage.setItem(PENDING, JSON.stringify(p));
+        else localStorage.removeItem(PENDING);
+      } catch (e) { /* private mode */ }
+    };
+    const timers = new Map(); // productId -> { timer, run }
+    async function upload(productId, draft, account) {
+      if (owner() !== account) return false; // signed out or someone else since
+      try {
+        const { preview, ...rest } = draft;
+        const body = JSON.stringify({ ...rest, previewDataUrl: await blobToDataUrl(preview) });
+        const res = await fetch(url(productId), { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Account': account }, body, keepalive: body.length < 60000 });
+        if (res.ok || res.status === 409) setPending(productId, null);
+        return res.ok;
+      } catch (e) {
+        return false; // offline: the copy in this browser is kept, and sent next time
+      }
+    }
     function toAccount(productId, draft) {
       if (!who || owner() !== who) return;
       const account = who;
-      clearTimeout(timers.get(productId));
-      timers.set(productId, setTimeout(async () => {
+      setPending(productId, account);
+      const old = timers.get(productId);
+      if (old) clearTimeout(old.timer);
+      const run = () => {
         timers.delete(productId);
-        if (owner() !== account) return; // signed out or someone else since
-        try {
-          const { preview, ...rest } = draft;
-          const body = JSON.stringify({ ...rest, previewDataUrl: await blobToDataUrl(preview) });
-          await fetch(url(productId), { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Account': account }, body, keepalive: body.length < 60000 });
-        } catch (e) { /* offline: the copy in this browser is kept */ }
-      }, 2500));
+        return upload(productId, draft, account);
+      };
+      timers.set(productId, { timer: setTimeout(run, 1500), run });
     }
+    /** Send a waiting upload now (Save, leaving the page); resolves when it's done. */
+    function flush(productId) {
+      const job = timers.get(productId);
+      if (!job) return Promise.resolve(true);
+      clearTimeout(job.timer);
+      return job.run();
+    }
+    window.addEventListener('pagehide', () => { for (const [id] of timers) flush(id); });
+    // Uploads a closed page didn't finish: send them from the copy kept in this browser.
+    setTimeout(async () => {
+      const p = pending();
+      if (!Object.keys(p).length) return;
+      const me = await identify();
+      if (!me) return;
+      for (const [productId, account] of Object.entries(p)) {
+        if (account !== me) { setPending(productId, null); continue; }
+        if (timers.has(productId)) continue;
+        const d = await raw.get(productId);
+        if (d && mine(d) && d.designs) await upload(productId, d, account);
+        else setPending(productId, null);
+      }
+    }, 1200);
     return {
       async get(productId) {
         const acct = await fromAccount(productId);
@@ -462,14 +507,23 @@
         if (ok) toAccount(productId, draft);
         return ok;
       },
+      flush,
       async remove(productId) {
-        clearTimeout(timers.get(productId));
+        const job = timers.get(productId);
+        if (job) clearTimeout(job.timer);
+        timers.delete(productId);
+        setPending(productId, null);
         await local.remove(productId);
         if (who) fetch(url(productId), { method: 'DELETE', credentials: 'same-origin' }).catch(() => {});
       },
       all: local.all,
       /** Forget every draft kept in this browser (signing out, another customer signing in). */
-      clearLocal: local.clear,
+      clearLocal: () => {
+        for (const [, job] of timers) clearTimeout(job.timer);
+        timers.clear();
+        try { localStorage.removeItem(PENDING); } catch (e) { /* private mode */ }
+        return local.clear();
+      },
     };
   })();
 

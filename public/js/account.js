@@ -355,6 +355,8 @@
       keep.textContent = t('acct.resetKeep');
     }
     if (!me || resetting) {
+      // Guests: the orders placed from this phone or computer, to find them again.
+      $('device-orders').innerHTML = me ? '' : PODAftercare.deviceOrdersHtml();
       if (resetting) showForm('f-reset');
       else if ($('f-in').hidden && $('f-up').hidden && $('f-forgot').hidden) showForm('f-in');
       return;

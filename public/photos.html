@@ -38,7 +38,7 @@
           <h1 data-i18n="photos.title"></h1>
           <p class="muted ph-lead" data-i18n="photos.lead"></p>
           <p class="ph-from"><span class="amount" id="ph-from"></span></p>
-          <p class="delivery-note" data-i18n="delivery.note"></p>
+          <ul class="ph-terms" id="ph-terms"></ul>
         </div>
         <div class="ph-hero-art" aria-hidden="true">
           <span class="ph-art ph-art-1"></span>
@@ -55,8 +55,23 @@
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-4.5-4.5L6 21"/></svg>
               <span id="ph-pick-label" data-i18n="photos.pick"></span>
             </button>
+            <input type="file" id="ph-file-one" class="ph-file" accept="image/*" tabindex="-1" aria-hidden="true">
+            <button type="button" class="ph-gallery-btn" id="ph-gallery-btn" hidden data-i18n="photos.fromGallery"></button>
             <p class="muted small ph-drop-hint" id="ph-drop-hint"></p>
             <p class="small ph-status" id="ph-status" role="status" aria-live="polite"></p>
+            <div class="ph-note ph-note-ok" id="ph-restored" role="status" hidden>
+              <p class="ph-note-text" id="ph-restored-text"></p>
+              <div class="ph-note-actions">
+                <button type="button" class="btn btn-sm" id="ph-start-over" data-i18n="photos.startOver"></button>
+              </div>
+              <button type="button" class="ph-note-x" data-dismiss="ph-restored" data-i18n-aria="photos.dismiss"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+            </div>
+            <div class="ph-note ph-note-warn" id="ph-skipped" role="status" hidden>
+              <p class="ph-note-title" id="ph-skipped-title"></p>
+              <ul class="ph-note-list" id="ph-skipped-list"></ul>
+              <p class="ph-note-text" id="ph-skipped-tips"></p>
+              <button type="button" class="ph-note-x" data-dismiss="ph-skipped" data-i18n-aria="photos.dismiss"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+            </div>
           </section>
 
           <section class="card ph-settings" aria-labelledby="ph-settings-title">
@@ -79,6 +94,7 @@
 
         <section class="ph-photos" aria-labelledby="ph-photos-title">
           <h2 class="ph-photos-title"><span id="ph-photos-title" data-i18n="photos.yours"></span> <span class="muted" id="ph-photos-count"></span></h2>
+          <p class="ph-filter" id="ph-filter" hidden><span id="ph-filter-text"></span> <button type="button" class="btn btn-sm" id="ph-filter-all" data-i18n="photos.showAll"></button></p>
           <p class="muted ph-empty card" id="ph-empty" data-i18n="photos.empty"></p>
           <div class="ph-grid" id="ph-grid"></div>
         </section>
@@ -86,6 +102,7 @@
 
       <div class="ph-bar" id="ph-bar">
         <div class="ph-bar-in">
+          <div class="ph-sizes" id="ph-sizes" role="group" data-i18n-aria="photos.bySize" hidden></div>
           <div class="ph-bar-main" id="ph-bar-main">
             <div class="ph-sum">
               <span class="ph-sum-count" id="ph-sum-count"></span>
@@ -95,7 +112,7 @@
           </div>
           <div class="ph-bar-up" id="ph-bar-up" hidden>
             <div class="ph-up-line">
-              <span class="ph-up-text" id="ph-up-text" role="status" aria-live="polite"></span>
+              <span class="ph-up-text"><span id="ph-up-text" role="status" aria-live="polite"></span> <span class="muted ph-up-eta" id="ph-up-eta"></span></span>
               <span class="muted small ph-up-keep" data-i18n="photos.keepOpen"></span>
             </div>
             <div class="ph-progress" id="ph-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="ph-progress-fill"></span></div>
@@ -138,6 +155,22 @@
           <button type="button" class="btn btn-primary" id="ph-crop-done" data-i18n="photos.done"></button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <div class="ph-modal ph-info-modal" id="ph-info" hidden>
+    <div class="ph-sheet ph-info" role="dialog" aria-modal="true" aria-labelledby="ph-info-title">
+      <div class="ph-sheet-head">
+        <h2 id="ph-info-title"></h2>
+        <button type="button" class="btn btn-icon ph-close" id="ph-info-close" data-i18n-aria="photos.close">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <div class="ph-info-body">
+        <p id="ph-info-what"></p>
+        <p id="ph-info-advice"></p>
+      </div>
+      <div class="ph-info-actions" id="ph-info-actions"></div>
     </div>
   </div>
 

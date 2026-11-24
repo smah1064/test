@@ -21,6 +21,24 @@
     'track.delivered.hint': ['Delivered. Enjoy it!', 'وصلك الطلب. بالهنا!'],
     'track.now': ['Now', 'دلوقتي'],
     'track.pending': ['Not yet', 'لسه'],
+    'track.expected': ['Expected {date}', 'متوقع {date}'],
+    // "Now:" while items wait for a check or an approval (instead of "printing starts soon")
+    'track.now.awaitingOne': ['One item is waiting for you to approve its proof. We print it as soon as you approve.', 'في منتج مستني موافقتك على البروفة بتاعته. هنطبعه أول ما توافق.'],
+    'track.now.awaitingMany': ['{n} items are waiting for you to approve their proofs. We print each one as soon as you approve.', 'عدد المنتجات المستنية موافقتك على البروفة: {n}. هنطبع كل واحد أول ما توافق.'],
+    'track.now.changes': ['We are making the changes to your design and will send you a new proof to approve.', 'بنعمل التعديلات على التصميم، وهنبعتلك بروفة جديدة توافق عليها.'],
+    'track.now.review': ['Our team is checking your design before printing. We will contact you if anything needs changing.', 'فريقنا بيراجع التصميم قبل الطباعة، وهنكلمك لو فيه حاجة محتاجة تتغير.'],
+    // After ordering: the way back to the order
+    'order.placedTitle': ['Thank you! Your order is placed.', 'شكرًا! طلبك اتسجّل.'],
+    'order.keepLink': ['This page’s link is how you follow your order, so keep it. We also saved it on this device (on the Account page).', 'رابط الصفحة دي هو طريقك لمتابعة الطلب، فاحتفظ بيه. وحفظناه كمان على الجهاز ده (في صفحة الحساب).'],
+    'order.sendWa': ['Send the order link to my WhatsApp', 'ابعت رابط الطلب على واتسابي'],
+    'order.copyLink': ['Copy link', 'انسخ الرابط'],
+    'order.linkCopied': ['Link copied ✓', 'اتنسخ الرابط ✓'],
+    'order.linkCopyFailed': ["Couldn't copy. Copy the address from the browser bar.", 'معرفناش ننسخ. انسخ الرابط من شريط العنوان.'],
+    'order.waSelf': ['My order {n} at OneOff Print: {link}', 'طلبي رقم {n} من ون أوف برنت: {link}'],
+    'order.emailWhy': ['If you gave your email, order updates and any proof we need you to approve come there too.', 'لو كتبت إيميلك، هيوصلك عليه كمان تحديثات الطلب وأي بروفة محتاجين موافقتك عليها.'],
+    // Orders placed on this phone / computer (kept in the browser, no account needed)
+    'device.title': ['Orders on this device', 'طلبات من الجهاز ده'],
+    'device.note': ['Orders placed from this phone or computer, so you can find them again without an account.', 'الطلبات اللي اتعملت من الموبايل أو الكمبيوتر ده، علشان ترجعلها من غير حساب.'],
     // Shipment
     'track.shipment': ['Delivery', 'الشحن'],
     'track.courier': ['Courier', 'شركة الشحن'],
@@ -69,8 +87,49 @@
   };
   for (const k of Object.keys(fallback)) if (!S[k]) S[k] = fallback[k];
 
+  // Orders placed from this browser: [{ number, link, date, total }], newest first, at most 10.
+  const DEVICE_KEY = 'pod-my-orders';
+  const DEVICE_MAX = 10;
+  const LINK_RE = /^\/order\?id=[\w-]+$/;
+  function deviceOrders() {
+    try {
+      const list = JSON.parse(localStorage.getItem(DEVICE_KEY) || '[]');
+      return Array.isArray(list) ? list.filter((o) => o && typeof o.number === 'string' && typeof o.link === 'string' && LINK_RE.test(o.link)).slice(0, DEVICE_MAX) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
   /** Order again: the server copies every item; they go to the end of the cart. */
   window.PODAftercare = {
+    /** Remember a placed order on this device (a guest's way back to it). Never throws. */
+    rememberOrder(order) {
+      try {
+        if (!order || !order.id || !order.number) return;
+        const link = '/order?id=' + encodeURIComponent(order.id);
+        if (!LINK_RE.test(link)) return;
+        const entry = { number: String(order.number), link, date: order.createdAt || new Date().toISOString(), total: Number(order.total) || 0 };
+        const list = [entry, ...deviceOrders().filter((o) => o.link !== link)].slice(0, DEVICE_MAX);
+        localStorage.setItem(DEVICE_KEY, JSON.stringify(list));
+      } catch (e) { /* private mode, storage full */ }
+    },
+    deviceOrders,
+    /** "Orders on this device" as a card ('' when there are none). */
+    deviceOrdersHtml() {
+      const list = deviceOrders();
+      if (!list.length) return '';
+      const { t, esc, money } = window.POD;
+      const when = (d) => { try { return window.POD.date(d); } catch (e) { return ''; } };
+      return `
+        <section class="card device-orders" aria-labelledby="device-orders-h">
+          <h2 id="device-orders-h">${esc(t('device.title'))}</h2>
+          <p class="muted small">${esc(t('device.note'))}</p>
+          <ul>${list.map((o) => `
+            <li><a href="${esc(o.link)}"><strong>${esc(t('order.title', { n: o.number }))}</strong></a>
+              <span class="muted small">${esc(when(o.date))}${o.total ? ` · ${esc(money(o.total))}` : ''}</span></li>`).join('')}
+          </ul>
+        </section>`;
+    },
     async reorder(orderId) {
       const r = await window.POD.api(`/api/orders/${encodeURIComponent(orderId)}/reorder`, { method: 'POST' });
       const items = (r && Array.isArray(r.items)) ? r.items : [];

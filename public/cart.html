@@ -12,6 +12,47 @@
   <link rel="stylesheet" href="/css/styles.css">
   <link rel="stylesheet" href="/css/quantities.css">
   <link rel="stylesheet" href="/css/proof.css">
+  <style>
+    /* A long name list never widens the page: the proof keeps to its column, long cells wrap. */
+    .cart-entry, .cart-proof, .cart-proof-inner > *, .proof > *, .proof-names { min-width: 0; }
+    .cart-proof-inner, .proof { grid-template-columns: minmax(0, 1fr); }
+    .proof-table td { white-space: normal; overflow-wrap: anywhere; min-width: 4.5em; }
+    .proof-table td:first-child { white-space: nowrap; min-width: 0; }
+    /* "e.g. EID20" as written (the code itself is typed in capitals). */
+    #coupon::placeholder { text-transform: none; }
+    /* Checkout: errors at the field */
+    .field-err { color: var(--bad); font-size: 13px; font-weight: 600; margin: 5px 0 0; line-height: 1.45; }
+    #checkout [aria-invalid="true"] { border-color: var(--bad); }
+    .field-hint { margin: 4px 0 0; font-size: 12.5px; color: var(--ink-3); line-height: 1.45; }
+    .sample-date { margin: 0; font-size: 13px; font-weight: 700; color: var(--ink-2); }
+    /* Photo prints: prints per size, and the photos the check flagged */
+    .proof-spec > .photo-sizes-row { grid-column: 1 / -1; }
+    .photo-sizes { display: grid; gap: 2px; }
+    .photo-size b { font-weight: 700; color: var(--ink-2); }
+    .proof-spec .photo-sizes { font-weight: 600; }
+    .proof-spec .photo-size b { color: var(--ink); }
+    .photo-flags { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; margin: 8px 0 0; padding: 0; }
+    .photo-flags li { display: grid; gap: 2px; justify-items: center; font-size: 12px; font-weight: 700; }
+    .photo-flags img { width: 60px; height: 60px; object-fit: cover; border-radius: 6px; border: 1px solid #f3d79b; background: #fff; }
+    .photo-flags-hint { margin: 6px 0 0; font-size: 12.5px; }
+    /* A checked proof folds to one line (it opens again on demand) */
+    .proof-fold { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; }
+    .proof-fold .approve-check { flex: 1 1 180px; }
+    .approve-box .proof-toggle { justify-self: start; }
+    .device-orders { margin-top: 16px; padding: 16px 18px; }
+    .device-orders h2 { font-size: 17px; margin: 0 0 4px; }
+    .device-orders ul { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
+    .device-orders li { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+    /* Phones: the total and the way to the order form stay at the bottom */
+    .cart-bar, .cart-bar[hidden] { display: none; }
+    @media (max-width: 960px) {
+      .cart-bar:not([hidden]) { position: fixed; inset-inline: 0; bottom: 0; z-index: 60; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 16px calc(8px + env(safe-area-inset-bottom)); background: #fff; border-top: 1px solid var(--line); box-shadow: 0 -4px 14px rgba(20, 24, 33, .08); }
+      .cart-bar-total { display: grid; line-height: 1.25; min-width: 0; }
+      .cart-bar-total strong { font-size: 17px; }
+      body.has-cart-bar { padding-bottom: 64px; }
+      body.has-cart-bar #toast-root { bottom: calc(76px + env(safe-area-inset-bottom)); }
+    }
+  </style>
 </head>
 <body data-title-key="cart.pageTitle">
   <header class="site-header">
@@ -35,6 +76,7 @@
       <p class="muted" data-i18n="cart.emptyText"></p>
       <a class="btn btn-primary" href="/#products" data-i18n="home.start"></a>
     </div>
+    <div id="device-orders"></div>
 
     <div class="cart-layout" id="cart-layout" hidden>
       <div>
@@ -47,7 +89,7 @@
         <p class="small acct-note" id="acct-note"></p>
         <div class="field"><label for="name" data-i18n="checkout.name"></label><input type="text" id="name" name="name" autocomplete="name" maxlength="120" required></div>
         <div class="field"><label for="phone" data-i18n="checkout.phone"></label><input type="tel" id="phone" name="phone" autocomplete="tel" maxlength="30" inputmode="tel" dir="ltr" placeholder="01xxxxxxxxx" required></div>
-        <div class="field"><label for="email" data-i18n="checkout.email"></label><input type="email" id="email" name="email" autocomplete="email" maxlength="200" dir="ltr"></div>
+        <div class="field"><label for="email" data-i18n="checkout.email"></label><input type="email" id="email" name="email" autocomplete="email" maxlength="200" dir="ltr" aria-describedby="email-why"><p class="field-hint" id="email-why" data-i18n="checkout.emailWhy"></p></div>
         <div class="field grid-2">
           <div><label for="governorate" data-i18n="checkout.governorate"></label><select id="governorate" name="governorate" required></select></div>
           <div><label for="city" data-i18n="checkout.city"></label><input type="text" id="city" name="city" autocomplete="address-level2" maxlength="100" required></div>
@@ -67,7 +109,7 @@
           <legend data-i18n="delivery.title"></legend>
           <label class="dlv-opt"><input type="radio" name="delivery" value="standard" checked>
             <span class="dlv-main"><strong data-i18n="delivery.standard"></strong> · <span data-i18n="delivery.standardText"></span><span class="dlv-by small" id="dlv-by-standard"></span></span>
-            <span class="dlv-fee small" data-i18n="delivery.noExtra"></span></label>
+            <span class="dlv-fee small" id="dlv-fee-standard"></span></label>
           <label class="dlv-opt"><input type="radio" name="delivery" value="express">
             <span class="dlv-main"><strong data-i18n="delivery.express"></strong> · <span data-i18n="delivery.expressText"></span><span class="dlv-by small" id="dlv-by-express"></span></span>
             <span class="dlv-fee small" id="dlv-fee-express"></span></label>
@@ -75,7 +117,8 @@
         </fieldset>
         <div class="line"><span data-i18n="checkout.subtotal"></span><span id="subtotal"></span></div>
         <div class="line discount-line" id="discount-line" hidden><span><span data-i18n="coupon.discount"></span> <bdi id="coupon-code" dir="ltr"></bdi> <button type="button" class="link-btn small" id="coupon-remove" data-i18n="coupon.remove"></button></span><span id="discount"></span></div>
-        <div class="line"><span id="shipping-label" data-i18n="checkout.shipping"></span><span id="shipping"></span></div>
+        <div class="line"><span data-i18n="checkout.shipping"></span><span id="shipping"></span></div>
+        <div class="line" id="express-line" hidden><span data-i18n="delivery.expressFee"></span><span id="express-fee"></span></div>
         <div class="line total"><span data-i18n="checkout.total"></span><span id="total"></span></div>
         <p class="muted small" id="free-note" style="margin:6px 0 0"></p>
         <div class="pay-box"><strong data-i18n="checkout.cod"></strong><span data-i18n="checkout.codText"></span></div>
@@ -86,9 +129,16 @@
     </div>
   </main>
 
+  <!-- Phones: the total and the way to the order form, always at hand on a long cart -->
+  <div class="cart-bar" id="cart-bar" hidden>
+    <div class="cart-bar-total"><span class="small muted" data-i18n="checkout.total"></span><strong id="bar-total"></strong></div>
+    <button class="btn btn-primary" type="button" id="bar-go" data-i18n="cart.barGo"></button>
+  </div>
+
   <footer class="site-footer"><div class="container" data-i18n="footer"></div></footer>
 
   <script src="/js/i18n.js"></script>
+  <script src="/js/i18n-aftercare.js"></script>
   <script src="/js/i18n-quantities.js"></script>
   <script src="/js/i18n-proof.js"></script>
   <script src="/js/common.js"></script>
@@ -96,7 +146,7 @@
   <script>
     (async () => {
       const { money, esc, t, tr } = POD;
-      const { pricing, governorates, delivery: deliveryInfo } = await POD.loadCatalog();
+      const { pricing, governorates, delivery: deliveryInfo, products = [] } = await POD.loadCatalog();
       // Delivery speed (standard 5 business days, express 2 for a fee), kept for this visit.
       let delivery = 'standard';
       try { delivery = sessionStorage.getItem('pod-delivery') === 'express' ? 'express' : 'standard'; } catch (e) { /* private mode */ }
@@ -134,16 +184,94 @@
             ${g.lines.map((l) => `<span class="qty-chip">${l.size && tr(l.size.label) ? `${esc(tr(l.size.label))}×` : '×'}<b>${esc(POD.num(Number(l.qty)))}</b></span>`).join('')}
           </div>`).join('')}</div>`;
       }
+      // ---------- Photo prints: what is printed in each size ----------
+      const countKey = (n) => (n === 1 ? 'one' : n === 2 ? 'two' : n % 100 >= 3 && n % 100 <= 10 ? 'few' : 'many');
+      const counted = (base, n) => t(`${base}.${countKey(n)}`, { n: POD.num(n) });
+      const photoProduct = () => products.find((p) => p.id === 'photoprints') || null;
+      /** The border chosen for the set (the product's first choice when none was kept). */
+      function photoBorder(proof) {
+        const chosen = proof.options && proof.options.border;
+        if (chosen && chosen.name) return tr(chosen.name);
+        const p = photoProduct();
+        const opt = p && (p.options || []).find((o) => o.id === 'border');
+        return opt && opt.choices[0] ? tr(opt.choices[0].name) : '';
+      }
+      /** [{ size, photos, prints, sum }] in the shop's size order; sums only when they add up to the item's price. */
+      function photoSizes(proof, item) {
+        const p = photoProduct();
+        const order = p ? p.sizes.map((z) => z.id) : [];
+        const groups = new Map();
+        for (const ph of proof.photos || []) {
+          const id = ph.size && ph.size.id;
+          if (!groups.has(id)) groups.set(id, { size: ph.size || {}, photos: 0, prints: 0 });
+          const g = groups.get(id);
+          g.photos += 1;
+          g.prints += Number(ph.copies) || 1;
+        }
+        const list = [...groups.values()].sort((a, b) => order.indexOf(a.size.id) - order.indexOf(b.size.id));
+        if (p && item) {
+          const optPrice = (sizeId) => (p.options || []).reduce((sum, o) => {
+            const chosen = proof.options && proof.options[o.id];
+            const c = chosen && o.choices.find((x) => x.id === chosen.id);
+            return sum + (!c ? 0 : typeof c.price === 'number' ? c.price : (c.price && c.price[sizeId]) || 0);
+          }, 0);
+          for (const g of list) {
+            const z = p.sizes.find((x) => x.id === g.size.id);
+            g.sum = z ? Math.round((Number(p.basePrice) + (Number(z.surcharge) || 0) + optPrice(z.id)) * g.prints * 100) / 100 : null;
+          }
+          const total = list.reduce((n, g) => n + (g.sum || 0), 0);
+          if (list.some((g) => g.sum == null) || Math.abs(total - item.price) > 0.009) list.forEach((g) => { g.sum = null; });
+        }
+        return list;
+      }
+      /** "10 × 15 cm: 25 photos · 29 prints · EGP 435", one line per size. */
+      const photoSizesHtml = (list) => `<span class="photo-sizes">${list.map((g) => `<span class="photo-size"><b><bdi>${esc(tr(g.size.label))}</bdi></b>: ${esc(counted('cart.photos', g.photos))} · ${esc(counted('cart.prints', g.prints))}${g.sum != null ? ` · ${esc(money(g.sum))}` : ''}</span>`).join('')}</span>`;
+      /** The photo set's proof: sizes instead of one "size", plural warnings, the flagged photos shown by number. */
+      function photoProofHtml(proof, item) {
+        const checks = ((proof.preflight && proof.preflight.checks) || []).map((c) => (c && c.id === 'photoLowRes' ? { ...c, id: 'photoLowRes.' + countKey(Number(c.params && c.params.count) || 0) } : c));
+        const tpl = document.createElement('template');
+        tpl.innerHTML = PODProof.html({ ...proof, version: null, size: {}, quantities: null, copies: 1, preflight: { ...(proof.preflight || { status: 'pass' }), checks } });
+        const dl = tpl.content.querySelector('.proof-spec');
+        if (dl) {
+          const row = (label, html, cls) => Object.assign(document.createElement('div'), { className: cls || '', innerHTML: `<dt>${esc(label)}</dt><dd>${html}</dd>` });
+          const prints = (proof.photos || []).reduce((n, ph) => n + (Number(ph.copies) || 1), 0);
+          const after = dl.children[1] || null;
+          const border = photoBorder(proof);
+          const rows = [
+            border ? row(t('cart.photoBorder'), esc(border)) : null,
+            row(t('cart.photoSizes'), `${photoSizesHtml(photoSizes(proof, item))}<span class="muted small">${esc(counted('cart.photos', (proof.photos || []).length))} · ${esc(counted('cart.prints', prints))}</span>`, 'photo-sizes-row'),
+          ].filter(Boolean);
+          for (const r of rows.reverse()) dl.insertBefore(r, after ? after.nextSibling : null);
+        }
+        // The low-resolution photos, small and numbered like on the photos page.
+        const low = checks.find((c) => c && /^photoLowRes/.test(c.id));
+        const warn = tpl.content.querySelector('.pf-warn > div, .pf-fail > div');
+        if (low && warn) {
+          const nums = String((low.params && low.params.photos) || '').split(/\s*,\s*/).map(Number).filter(Boolean);
+          const shown = nums.map((n) => (proof.photos || []).find((ph) => ph.n === n)).filter((ph) => ph && ph.url).slice(0, 12);
+          if (shown.length) {
+            warn.insertAdjacentHTML('beforeend', `<ul class="photo-flags">${shown.map((ph) => `<li><img src="${esc(ph.url)}" alt="${esc(t('proof.photoNo', { n: POD.num(ph.n) }))}" loading="lazy"><span>${esc(POD.num(ph.n))}</span></li>`).join('')}</ul><p class="photo-flags-hint">${esc(t('proof.photoNoHint'))}</p>`);
+          }
+        }
+        return tpl.innerHTML;
+      }
+      const photoNote = () => `<p class="proof-screen-note"><svg class="pf-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg><span>${esc(t('proof.photoNote'))}</span></p>`;
+
       function itemMeta(item) {
-        // Photo prints: the paper, then "12 photos · 18 prints" (the photos are on the proof below).
-        if (item.productId === 'photoprints') return `${esc(tr(item.colorName))} · ${esc(tr(item.sizeLabel))}`;
+        // Photo prints: the paper and border, then the prints per size once the proof (with every photo) is here.
+        if (item.productId === 'photoprints') {
+          const proof = proofOf(item.designId);
+          if (!proof || !Array.isArray(proof.photos)) return `${esc(tr(item.colorName))} · ${esc(tr(item.sizeLabel))}`;
+          const border = photoBorder(proof);
+          return `${esc(tr(item.colorName))}${border ? ` · ${esc(border)}` : ''}${photoSizesHtml(photoSizes(proof, item))}`;
+        }
         const lines = qtyLines(item);
         const isNames = Boolean(item.merge) || (!lines.length && item.copies > 1);
         const names = isNames ? (item.merge && item.merge.count) || item.copies : 0;
         const pieces = Math.max(1, Number(item.copies) || lines.reduce((n, l) => n + Number(l.qty), 0) || 1);
         const one = lines.length === 1 ? lines[0] : null;
         const printed = esc(t('cart.printed', { sides: item.sides.map(tr).join(' + ') }));
-        const badge = names > 1 ? `<span class="cart-copies">${esc(t('cart.copies', { n: POD.num(names) }))}</span>`
+        const badge = names > 1 ? `<span class="cart-copies">${esc(t(names % 100 >= 3 && names % 100 <= 10 ? 'cart.copies.few' : 'cart.copies', { n: POD.num(names) }))}</span>`
           : !isNames && pieces > 1 ? `<span class="qty-pieces">${esc(piecesText(pieces))}</span>` : '';
         if (lines.length > 1) return `${badge}${qtyBreakdown(lines)}${printed}`;
         const color = one && one.color ? one.color.name : item.colorName;
@@ -166,6 +294,8 @@
       const approvals = new Map();
       // Designs whose proof changed after the customer had approved it.
       const changed = new Set();
+      // Approved proofs fold to one line; the ones the customer opened again stay open.
+      const expanded = new Set();
       const APPROVALS_KEY = 'pod-proof-ok';
       try {
         const saved = JSON.parse(sessionStorage.getItem(APPROVALS_KEY) || '{}');
@@ -218,26 +348,46 @@
           const proof = st.proof;
           const a = approvals.get(id);
           const sample = Boolean(a && a.sample);
-          body = `
-            ${changed.has(id) ? `<p class="approve-changed" role="alert">${esc(t('proof.changed'))}</p>` : ''}
-            ${PODProof.html(proof)}
-            <div class="approve-box">
-              ${PODProof.screenNote()}
-              <label class="approve-check" for="ok-${i}"><input type="checkbox" id="ok-${i}" data-approve="${esc(id)}"${ok ? ' checked' : ''}><span>${esc(t('proof.ok'))}</span></label>
-              ${PODProof.pieces(proof) > 1 && !proof.photos ? `<label class="approve-check sample" for="sample-${i}"><input type="checkbox" id="sample-${i}" data-sample="${esc(id)}"${sample ? ' checked' : ''}><span>${esc(t('proof.sample'))}</span></label>` : ''}
-            </div>`;
+          const photos = Array.isArray(proof.photos);
+          const sampleBy = sample && quote && quote.delivery && quote.delivery.sampleDays ? quote.delivery.by : null;
+          if (ok && !expanded.has(id)) {
+            // Checked: one line (the box stays here to untick; the proof opens on demand).
+            body = `
+              <div class="proof-fold">
+                <label class="approve-check" for="ok-${i}"><input type="checkbox" id="ok-${i}" data-approve="${esc(id)}" checked><span>${esc(t('proof.checkedShort'))}</span></label>
+                ${sample ? `<span class="item-sample">${esc(t('item.sampleFirst'))}</span>` : ''}
+                <button class="btn btn-sm proof-toggle" type="button" id="tog-${i}" data-proof-toggle="${esc(id)}" aria-expanded="false">${esc(t('proof.show'))}</button>
+              </div>`;
+          } else {
+            body = `
+              ${changed.has(id) ? `<p class="approve-changed" role="alert">${esc(t('proof.changed'))}</p>` : ''}
+              ${photos ? photoProofHtml(proof, cartItemOf(id)) : PODProof.html(proof)}
+              <div class="approve-box">
+                ${photos ? photoNote() : PODProof.screenNote()}
+                <label class="approve-check" for="ok-${i}"><input type="checkbox" id="ok-${i}" data-approve="${esc(id)}"${ok ? ' checked' : ''}><span>${esc(t(photos ? 'proof.okPhotos' : 'proof.ok'))}</span></label>
+                ${PODProof.pieces(proof) > 1 && !photos ? `<label class="approve-check sample" for="sample-${i}"><input type="checkbox" id="sample-${i}" data-sample="${esc(id)}"${sample ? ' checked' : ''}><span>${esc(t('proof.sample'))}</span></label>` : ''}
+                ${sampleBy ? `<p class="sample-date" role="status">${esc(t('cart.sampleDate', { date: POD.day(sampleBy) }))}</p>` : ''}
+                ${ok ? `<button class="btn btn-sm proof-toggle" type="button" id="tog-${i}" data-proof-toggle="${esc(id)}" aria-expanded="true">${esc(t('proof.hide'))}</button>` : ''}
+              </div>`;
+          }
         }
-        return `<section class="cart-proof${ok ? ' ok' : ''}" data-proof-for="${esc(id)}" data-index="${i}" aria-labelledby="proof-h-${i}"><div class="cart-proof-inner">${head}${body}</div></section>`;
+        const folded = ok && st && st.state === 'ok' && !expanded.has(id);
+        return `<section class="cart-proof${ok ? ' ok' : ''}${folded ? ' folded' : ''}" data-proof-for="${esc(id)}" data-index="${i}" aria-labelledby="proof-h-${i}"><div class="cart-proof-inner">${head}${body}</div></section>`;
       }
+      const cartItemOf = (id) => POD.getCart().find((it) => it.designId === id) || null;
+      const slotOf = (id) => [...document.querySelectorAll('[data-proof-for]')].find((el) => el.dataset.proofFor === id) || null;
       /** Redraw one item's proof (after it loads) without touching the rest of the page. */
       function paintProof(id) {
         const cart = POD.getCart();
         const i = cart.findIndex((it) => it.designId === id);
-        const slot = [...document.querySelectorAll('[data-proof-for]')].find((el) => el.dataset.proofFor === id);
+        const slot = slotOf(id);
         if (i < 0 || !slot) return;
         const focused = document.activeElement && slot.contains(document.activeElement) ? document.activeElement.id : null;
         slot.outerHTML = proofSlot(cart[i], i);
-        if (focused && document.getElementById(focused)) document.getElementById(focused).focus();
+        // A photo set's line shows its sizes once the proof (with every photo) is here.
+        const meta = [...document.querySelectorAll('[data-meta-for]')].find((el) => el.dataset.metaFor === id);
+        if (meta) meta.innerHTML = itemMeta(cart[i]);
+        if (focused && document.getElementById(focused)) document.getElementById(focused).focus({ preventScroll: true });
       }
       /** "Place order" only once every item's current proof is approved. */
       function updateApproval() {
@@ -275,13 +425,15 @@
         // The note about editing quantities and duplicating designs doesn't apply to photo sets.
         document.getElementById('cart-note').hidden = cart.length > 0 && cart.every((it) => it.productId === 'photoprints');
         document.getElementById('cart-layout').hidden = cart.length === 0;
+        // An empty cart: the orders placed from this device, to find them again.
+        document.getElementById('device-orders').innerHTML = cart.length ? '' : PODAftercare.deviceOrdersHtml();
         document.getElementById('items').innerHTML = cart.map((item, i) => `
           <div class="cart-entry">
           <div class="cart-item">
             <img src="${esc(item.previewUrl)}" alt="${esc(t('cart.preview', { product: tr(item.productName) }))}">
             <div>
               <h3>${esc(tr(item.productName))}</h3>
-              <div class="meta">${itemMeta(item)}</div>
+              <div class="meta" data-meta-for="${esc(item.designId)}">${itemMeta(item)}</div>
               <div class="actions">
                 ${item.productId === 'dtfsheet' || item.productId === 'photoprints' ? '' : item.bookId ? `<a class="btn btn-sm" href="/book?b=${encodeURIComponent(item.bookId)}&cart=${i}">${esc(t('cart.edit'))}</a>` : `<a class="btn btn-sm" href="/editor?design=${encodeURIComponent(item.designId)}&cart=${i}">${esc(t('cart.edit'))}</a>
                 ${item.bookId ? '' : `<a class="btn btn-sm" href="/editor?design=${encodeURIComponent(item.designId)}">${esc(t('cart.duplicate'))}</a>`}`}
@@ -300,15 +452,17 @@
         const applied = quote && quote.coupon && couponCode ? quote.coupon : null;
         const discount = applied ? applied.discount : 0;
         const baseShipping = (applied && applied.freeShipping) || subtotal - discount >= freeOver ? 0 : (quote ? quote.shippingFlat : pricing.shipping);
-        const shipping = Math.round((baseShipping + (delivery === 'express' ? expressFee() : 0)) * 100) / 100;
+        const expressNow = delivery === 'express' ? expressFee() : 0;
+        const shipping = Math.round((baseShipping + expressNow) * 100) / 100;
         render.total = Math.round((subtotal - discount + shipping) * 100) / 100;
         document.querySelectorAll('input[name="delivery"]').forEach((r) => { r.checked = r.value === delivery; });
-        document.getElementById('dlv-fee-express').textContent = '+' + money(expressFee());
+        // Standard costs the normal shipping fee; express adds its fee on top.
+        document.getElementById('dlv-fee-standard').textContent = baseShipping ? t('delivery.feeStandard', { price: money(baseShipping) }) : t('delivery.feeFree');
+        document.getElementById('dlv-fee-express').textContent = baseShipping ? t('delivery.feeExpress', { fee: money(expressFee()) }) : '+' + money(expressFee());
         for (const opt of (quote && quote.deliveryOptions) || []) {
           const el = document.getElementById('dlv-by-' + opt.speed);
           if (el) el.textContent = t('delivery.by', { date: POD.day(opt.by) });
         }
-        document.getElementById('shipping-label').textContent = t(delivery === 'express' ? 'delivery.shipExpress' : 'checkout.shipping');
         document.getElementById('discount-line').hidden = !applied;
         document.getElementById('coupon-code').textContent = applied ? applied.code : '';
         document.getElementById('discount').textContent = applied ? (applied.freeShipping && !discount ? t('coupon.freeShipping') : '-' + money(discount)) : '';
@@ -317,7 +471,11 @@
         msg.classList.toggle('bad', Boolean(couponCode && quote && quote.couponError));
         if (document.activeElement !== document.getElementById('coupon')) document.getElementById('coupon').value = couponCode;
         document.getElementById('subtotal').textContent = money(subtotal);
-        document.getElementById('shipping').textContent = shipping ? money(shipping) : t('free');
+        document.getElementById('shipping').textContent = baseShipping ? money(baseShipping) : t('free');
+        document.getElementById('express-line').hidden = !expressNow;
+        document.getElementById('express-fee').textContent = expressNow ? money(expressNow) : '';
+        document.getElementById('bar-total').textContent = money(render.total);
+        updateBar();
         document.getElementById('total').textContent = money(render.total);
         document.getElementById('free-note').textContent = baseShipping ? t('checkout.freeOver', { price: money(freeOver) }) : '';
       }
@@ -380,11 +538,34 @@
         if (box.dataset.approve && box.checked) changed.delete(id);
         saveApprovals();
         updateApproval();
+        if (box.dataset.approve) {
+          // Checked: the proof folds to one line (keeping its place on the page); unchecked: it opens again.
+          expanded.delete(id);
+          const slot = slotOf(id);
+          const top = slot ? slot.getBoundingClientRect().top : 0;
+          paintProof(id);
+          const now = slotOf(id);
+          if (now && box.checked && top < 70) now.scrollIntoView({ block: 'start' });
+        } else {
+          // A sample first moves the expected day: ask the shop again right away.
+          refreshPrices().then(render);
+        }
       });
       document.getElementById('checkout').addEventListener('click', (e) => {
         if (e.target.closest('[data-next-proof]')) goToNextProof();
       });
       document.getElementById('items').addEventListener('click', (e) => {
+        const tog = e.target.closest('[data-proof-toggle]');
+        if (tog) {
+          const id = tog.dataset.proofToggle;
+          if (expanded.has(id)) expanded.delete(id); else expanded.add(id);
+          const togId = tog.id;
+          paintProof(id);
+          const again = document.getElementById(togId);
+          if (again) again.focus({ preventScroll: !expanded.has(id) });
+          if (!expanded.has(id)) { const slot = slotOf(id); if (slot && slot.getBoundingClientRect().top < 70) slot.scrollIntoView({ block: 'start' }); }
+          return;
+        }
         const retry = e.target.closest('[data-proof-retry]');
         if (retry) { loadProof(retry.dataset.proofRetry, { force: true }); paintProof(retry.dataset.proofRetry); return; }
         const btn = e.target.closest('[data-remove]');
@@ -398,13 +579,67 @@
       });
 
       const form = document.getElementById('checkout');
+      // ---------- Field errors: shown under the field, which is scrolled to and focused ----------
+      const FIELDS = ['name', 'phone', 'email', 'governorate', 'city', 'address'].map((id) => document.getElementById(id));
+      const SERVER_FIELD = { badPhone: 'phone', badEmail: 'email', badGovernorate: 'governorate' };
+      const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      /** The same check as the shop's: an Egyptian mobile, Arabic digits and +20 allowed. */
+      function egyptMobile(input) {
+        let v = String(input || '').replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 0x660)).replace(/[\u06f0-\u06f9]/g, (d) => String(d.charCodeAt(0) - 0x6f0));
+        v = v.replace(/[\s\-().\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff\u061c\u00a0\u2010-\u2015\u2212]/g, '');
+        if (v.startsWith('+20')) v = '0' + v.slice(3);
+        else if (v.startsWith('0020')) v = '0' + v.slice(4);
+        if (/^001[0125]\d{8}$/.test(v)) v = v.slice(1);
+        else if (/^20 ?1/.test(v) && v.length === 12) v = '0' + v.slice(2);
+        return /^01[0125]\d{8}$/.test(v);
+      }
+      function fieldProblem(el) {
+        const v = el.value.trim();
+        if (el.required && !v) return el.id === 'governorate' ? t('checkout.needGov') : t('checkout.needField', { field: (el.labels[0] && el.labels[0].textContent) || '' });
+        if (el.id === 'phone' && !egyptMobile(v)) return t('checkout.badPhone');
+        if (el.id === 'email' && v && !EMAIL_RE.test(v)) return t('checkout.badEmail');
+        return '';
+      }
+      function setFieldError(el, msg) {
+        const errId = 'err-' + el.id;
+        let p = document.getElementById(errId);
+        if (el.dataset.desc == null) el.dataset.desc = el.getAttribute('aria-describedby') || '';
+        if (!msg) {
+          if (p) p.remove();
+          el.removeAttribute('aria-invalid');
+          if (el.dataset.desc) el.setAttribute('aria-describedby', el.dataset.desc); else el.removeAttribute('aria-describedby');
+          return;
+        }
+        if (!p) {
+          p = Object.assign(document.createElement('p'), { id: errId, className: 'field-err' });
+          el.insertAdjacentElement('afterend', p);
+        }
+        p.textContent = msg;
+        el.setAttribute('aria-invalid', 'true');
+        el.setAttribute('aria-describedby', [errId, el.dataset.desc].filter(Boolean).join(' '));
+      }
+      /** Mark every field with a problem; the first one is returned. */
+      function checkFields() {
+        let first = null;
+        for (const el of FIELDS) {
+          const msg = fieldProblem(el);
+          setFieldError(el, msg);
+          if (msg && !first) first = el;
+        }
+        return first;
+      }
+      function goToField(el) {
+        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        el.focus({ preventScroll: true });
+      }
+      // A corrected field loses its error as soon as it is right (it never gains one while typing).
+      form.addEventListener('input', (e) => { const el = e.target; if (el.getAttribute && el.getAttribute('aria-invalid') && FIELDS.includes(el) && !fieldProblem(el)) setFieldError(el, ''); });
+      form.addEventListener('change', (e) => { const el = e.target; if (el.getAttribute && el.getAttribute('aria-invalid') && FIELDS.includes(el)) setFieldError(el, fieldProblem(el)); });
+
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const missing = [...form.querySelectorAll('[required]')].find((el) => !el.value.trim());
-        if (missing) {
-          missing.focus();
-          return POD.toast(t('checkout.fill', { field: missing.labels[0]?.textContent || '' }), 'error');
-        }
+        const bad = checkFields();
+        if (bad) return goToField(bad);
         if (!POD.getCart().every((it) => isApproved(it.designId))) {
           goToNextProof();
           return POD.toast(t('checkout.approvalRequired'), 'error');
@@ -455,7 +690,14 @@
             POD.toast(err.code === 'proofChanged' ? t('proof.changed') : err.message || t('checkout.approvalRequired'), 'error');
             return;
           }
-          POD.toast(err.message, 'error');
+          // A field the shop refused (the phone, the email…): the message goes under that field.
+          const field = SERVER_FIELD[err.code] && document.getElementById(SERVER_FIELD[err.code]);
+          if (field) {
+            setFieldError(field, err.message);
+            goToField(field);
+          } else {
+            POD.toast(err.message, 'error');
+          }
           updateApproval();
         }
       });
@@ -472,6 +714,8 @@
         return k;
       }
       function goToOrder(order) {
+        // Kept on this device: a guest's way back to the order (account page, empty cart).
+        PODAftercare.rememberOrder(order);
         const ordered = new Set((order.items || []).map((i) => i.designId));
         POD.setCart(POD.getCart().filter((it) => !ordered.has(it.designId)));
         try { sessionStorage.removeItem(KEY); } catch (e) { /* private mode */ }
@@ -543,6 +787,31 @@
           fill('notes', me.address.notes);
         }
       }
+
+      // ---------- Phones: the slim bar at the bottom (total + the way to the order form) ----------
+      const bar = document.getElementById('cart-bar');
+      let formInView = false;
+      function updateBar() {
+        const show = POD.getCart().length > 0 && !formInView;
+        bar.hidden = !show;
+        document.body.classList.toggle('has-cart-bar', show && getComputedStyle(bar).display !== 'none');
+      }
+      if ('IntersectionObserver' in window) {
+        new IntersectionObserver((entries) => {
+          formInView = entries.some((en) => en.isIntersecting);
+          updateBar();
+        }).observe(form);
+      }
+      window.addEventListener('resize', updateBar);
+      document.getElementById('bar-go').addEventListener('click', () => {
+        // Proofs left to check come first; then the first empty field, else the order button.
+        if (!POD.getCart().every((it) => isApproved(it.designId))) return goToNextProof();
+        const empty = FIELDS.find((el) => el.required && !el.value.trim());
+        if (empty) return goToField(empty);
+        const btn = document.getElementById('place-order');
+        btn.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        btn.focus({ preventScroll: true });
+      });
 
       renderGovernorates();
       render();

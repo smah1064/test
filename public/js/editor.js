@@ -95,6 +95,7 @@
       st.product = products.find((p) => p.id === saved.productId) || st.product;
       st.colorId = saved.color.id;
       st.sizeId = saved.size.id;
+      st.sizePicked = true; // a saved design or cart item: its size was chosen
       if (saved.method === 'embroidery') st.method = 'embroidery';
       if (saved.options) st.options = Object.fromEntries(Object.entries(saved.options).map(([k, v]) => [k, v.id]));
       if (saved.quantities) st.qty = Object.fromEntries([...new Set(saved.quantities.map((l) => l.color.id))].map((c) => [c, Object.fromEntries(saved.quantities.filter((l) => l.color.id === c).map((l) => [l.size.id, l.qty]))]));
@@ -133,6 +134,7 @@
       st.product = products.find((p) => p.id === shared.productId) || st.product;
       st.colorId = shared.color;
       st.sizeId = shared.size;
+      st.sizePicked = true;
       for (const [sideId, data] of Object.entries(shared.editor || {})) {
         if (st.product.sides.some((sd) => sd.id === sideId)) {
           st.designs[sideId] = await blobifyImages(data.objects || []);
@@ -173,12 +175,17 @@
     if (draft.options && typeof draft.options === 'object') st.options = { ...draft.options };
     if (draft.mergeList && draft.mergeList.columns && draft.mergeList.rows) st.mergeList = draft.mergeList;
     if (draft.qty && typeof draft.qty === 'object') st.qty = draft.qty;
+    if (draft.sizePicked) st.sizePicked = true;
     restoredDraft = true;
   }
   // A colour picked on the product page (?color=) wins over the draft's; a saved design keeps its own
   // (and so does a restored draft of a ready-made design: the link carries the design's first colour).
   if (!params.get('design') && !(restoredDraft && st.libraryId) && st.product.colors.some((c) => c.id === params.get('color'))) st.colorId = params.get('color');
   st.colorId = st.product.colors.some((c) => c.id === st.colorId) ? st.colorId : st.product.colors[0].id;
+  if (!params.get('design') && st.product.sizes.some((z) => z.id === params.get('size'))) {
+    st.sizeId = params.get('size');
+    st.sizePicked = true;
+  }
   st.sizeId = st.product.sizes.some((s) => s.id === st.sizeId) ? st.sizeId : st.product.sizes[0].id;
   st.side = st.product.sides.find((s) => (st.designs[s.id] || []).length)?.id || st.product.sides[0].id;
   /** Fabric products: a valid { repeat, tileCm } for this product (or null for other products). */
@@ -918,7 +925,7 @@
   }
 
   // ---------- Adding things ----------
-  function addObject(obj, { select = true, shrinkToFit = true } = {}) {
+  function addObject(obj, { select = true, shrinkToFit = true, behindText = false } = {}) {
     if (select) st.openSheetOnSelect = true;
     cancelCrop();
     const a = area();
@@ -929,7 +936,10 @@
       const s = Math.min(maxW / obj.getScaledWidth(), maxH / obj.getScaledHeight());
       obj.scale((obj.scaleX || 1) * s);
     }
-    canvas.add(obj);
+    // A new photo goes under the texts already there, so it never hides the customer's words.
+    const firstText = behindText ? canvas.getObjects().findIndex((x) => isText(x) && x.visible !== false) : -1;
+    if (firstText >= 0) canvas.insertAt(obj, firstText);
+    else canvas.add(obj);
     if (select) canvas.setActiveObject(obj);
     obj.setCoords();
     canvas.requestRenderAll();
@@ -974,8 +984,15 @@
       paintFirst: 'stroke',
       textAlign: 'center',
     });
+    tx.placeholder = text; // typing replaces it (not saved with the design)
     addObject(tx);
   }));
+  // The example words of a new text ("Your Text"): selected when the customer starts typing, so typing replaces them.
+  const stillPlaceholder = (o) => Boolean(o && o.placeholder && o.text === o.placeholder);
+  canvas.on('text:editing:entered', (e) => { if (stillPlaceholder(e.target)) { e.target.selectAll(); canvas.requestRenderAll(); } });
+  document.addEventListener('focusin', (e) => {
+    if (e.target && e.target.id === 'p-text' && stillPlaceholder(active())) setTimeout(() => { try { e.target.select(); } catch (err) { /* gone */ } }, 0);
+  });
 
   function renderShapes() {
     $('shape-grid').innerHTML = Object.entries(D.SHAPES)
@@ -1172,7 +1189,7 @@
       fimg.set({ name: file.name.replace(/\.[^.]+$/, '').slice(0, 40) || 'Image', ...(source ? { importSource: source } : {}) });
       const a = area();
       fimg.scale(Math.min((a.w * 0.8) / fimg.width, (a.h * 0.8) / fimg.height));
-      addObject(fimg);
+      addObject(fimg, { behindText: true });
       const dpi = imageDpi(fimg);
       if (dpi < dpiLimits().fail) toast(t('msg.lowResToast', { dpi: POD.num(dpi) }), 'error');
       // "Remove the background of my photos" is ticked in the upload panel.
@@ -2825,6 +2842,7 @@
   $('sizes').addEventListener('click', (e) => {
     const b = e.target.closest('[data-size]');
     if (!b) return;
+    st.sizePicked = true;
     if (b.dataset.size !== st.sizeId) {
       const fromSize = st.sizeId;
       changeSize(b.dataset.size);
@@ -3048,6 +3066,41 @@
     return out;
   }
 
+  /** Is this picture solid (not see-through) at a canvas point? Reads a small alpha map of the picture once. */
+  const alphaMaps = new WeakMap();
+  function solidAt(img, pt) {
+    const el = img.getElement && img.getElement();
+    if (!el || !(el.naturalWidth || el.width)) return false;
+    let map = alphaMaps.get(el);
+    if (!map) {
+      const N = 48;
+      const c = document.createElement('canvas');
+      c.width = N;
+      c.height = N;
+      const ctx = c.getContext('2d');
+      try {
+        ctx.drawImage(el, 0, 0, N, N);
+        map = { N, data: ctx.getImageData(0, 0, N, N).data };
+      } catch (e) {
+        map = { N, data: null }; // unreadable: treat as solid
+      }
+      alphaMaps.set(el, map);
+    }
+    const local = fabric.util.transformPoint(pt, fabric.util.invertTransform(img.calcTransformMatrix()));
+    const w = img.width;
+    const h = img.height;
+    const cx = img.cropX || 0;
+    const cy = img.cropY || 0;
+    const px = local.x + w / 2 + cx;
+    const py = local.y + h / 2 + cy;
+    const ew = el.naturalWidth || el.width;
+    const eh = el.naturalHeight || el.height;
+    if (local.x < -w / 2 || local.x > w / 2 || local.y < -h / 2 || local.y > h / 2) return false;
+    if (!map.data) return true;
+    const ix = Math.min(map.N - 1, Math.max(0, Math.floor((px / ew) * map.N)));
+    const iy = Math.min(map.N - 1, Math.max(0, Math.floor((py / eh) * map.N)));
+    return map.data[(iy * map.N + ix) * 4 + 3] > 200 && (img.opacity == null || img.opacity > 0.6);
+  }
   function checkIssues() {
     const R = rects();
     const sd = sideDef();
@@ -3078,6 +3131,40 @@
       if (isText(o)) {
         const pt = Math.round(((o.fontSize * Math.abs(o.scaleY)) / R.u) * 72 * 0.7); // cap height ≈ 70% of font size
         if (pt < 6) issues.push({ level: 'warn', key: 'check.tiny', obj: o, params: { name, pt } });
+      }
+    }
+    // Text covered by a picture above it (the picture is solid there): it would not show in print.
+    const objs = canvas.getObjects().filter((o) => o.name !== '__cropper' && o.visible !== false);
+    objs.forEach((o, i) => {
+      if (!isText(o)) return;
+      const above = objs.slice(i + 1).filter((x) => x.type === 'image');
+      if (!above.length) return;
+      const r = absRect(o);
+      const pts = [];
+      for (let gx = 1; gx <= 5; gx++) for (let gy = 1; gy <= 3; gy++) pts.push(new fabric.Point(r.left + (r.width * gx) / 6, r.top + (r.height * gy) / 4));
+      const hidden = pts.filter((pt) => above.some((img) => solidAt(img, pt))).length;
+      if (hidden >= pts.length * 0.6) issues.push({ level: 'error', key: 'check.hidden', obj: o, params: { name: layerName(o) } });
+    });
+    // Several garment colours in one order (name list colours or the quantities): words that disappear on one of them.
+    if (!st.product.surface && !emb()) {
+      const ids = new Set(Object.entries(qtyGrid()).filter(([, row]) => Object.values(row).some((n) => n > 0)).map(([c]) => c));
+      if (st.mergeList) {
+        const vc = mergeVariantCols();
+        if (vc.color >= 0) st.mergeList.rows.forEach((r) => { const c = matchColorId(r[vc.color]); if (c) ids.add(c); });
+      }
+      const garments = st.product.colors.filter((c) => ids.has(c.id) && c.hex);
+      if (garments.length > 1) {
+        const ratio = (a, b) => { const x = POD.luminance(a); const y = POD.luminance(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+        for (const o of objs) {
+          if (!isText(o)) continue;
+          const ink = typeof o.fill === 'string' && o.fill !== 'transparent' ? o.fill : typeof o.stroke === 'string' ? o.stroke : null;
+          if (!ink) continue;
+          let hex;
+          try { hex = new fabric.Color(ink).toHex(); } catch (e) { continue; }
+          const outline = o.stroke && o.strokeWidth > 0 && typeof o.stroke === 'string' && o.fill !== 'transparent' ? new fabric.Color(o.stroke).toHex() : null;
+          const lost = garments.find((g) => ratio('#' + hex, g.hex) < 1.6 && !(outline && ratio('#' + outline, g.hex) >= 1.6));
+          if (lost) issues.push({ level: 'warn', key: 'check.inkOnColour', obj: o, params: { name: layerName(o), colour: tr(lost.name) } });
+        }
       }
     }
     // Embroidery: no photos or gradients, at most 6 thread colours, text big enough to stitch.
@@ -3223,12 +3310,13 @@
     const clean = {};
     for (const [c, row] of Object.entries(g || {})) {
       if (!p.colors.some((x) => x.id === c) || (!mix().colors && c !== st.colorId)) continue;
+      if (mix().colors) clean[c] ||= {}; // a colour set to 0 for now keeps its row (not deleted under the customer's finger)
       for (const [z, n] of Object.entries(row || {})) {
         const v = Math.max(0, Math.min(1000, Math.floor(Number(n) || 0)));
         if (p.sizes.some((x) => x.id === z) && (mix().sizes || z === st.sizeId) && v > 0) (clean[c] ||= {})[z] = v;
       }
     }
-    if (!Object.keys(clean).length) clean[st.colorId] = { [st.sizeId]: 1 };
+    if (!Object.values(clean).some((row) => Object.keys(row).length)) (clean[st.colorId] ||= {})[st.sizeId] = 1;
     st.qty = clean;
     return clean;
   }
@@ -3257,11 +3345,11 @@
   }
   /** "1 piece in total", "6 قطع", "12 قطعة" (Arabic: 3–10 take the plural). */
   /** A count with its Arabic form: key.one / key.two / key.few when the strings have them, else key. */
-  function plural(key, n) {
+  function plural(key, n, params = {}) {
     const k = n % 100;
     const form = n === 1 ? 'one' : n === 2 ? 'two' : k >= 3 && k <= 10 ? 'few' : null;
-    const v = form ? t(`${key}.${form}`, { n: POD.num(n) }) : null;
-    return v && v !== `${key}.${form}` ? v : t(key, { n: POD.num(n) });
+    const v = form ? t(`${key}.${form}`, { ...params, n: POD.num(n) }) : null;
+    return v && v !== `${key}.${form}` ? v : t(key, { ...params, n: POD.num(n) });
   }
   /** Arabic: 3–10 (and 103–110…) take the plural form. */
   const few = (n) => n % 100 >= 3 && n % 100 <= 10;
@@ -3315,6 +3403,7 @@
       // At least one piece: clearing the last box puts 1 back.
       if (!Object.values(g).some((row) => Object.values(row).some((n) => n > 0))) g[c][z] = 1;
       st.qty = g;
+      st.sizePicked = true; // typed per size
     };
     $('qty-field').addEventListener('change', (e) => {
       const i = e.target.closest('.qty-in');
@@ -3575,9 +3664,9 @@
         <input type="range" id="merge-fit" min="20" max="100" step="5" value="${Math.round((fieldSel.mergeFit || 0.9) * 100)}">
         <p class="muted small" style="margin:4px 0 0;line-height:1.5">${esc(t('merge.fitHelp'))}</p>
       </div>` : ''}
-      ${mergeBadVariants().length ? `<p class="small merge-warn">${esc(t('merge.badVariant', { n: POD.num(mergeBadVariants().length), sizes: st.product.sizes.map((z) => tr(z.label)).join(POD.lang === 'ar' ? '، ' : ', ') }))} ${rowList(mergeBadVariants())}</p>` : ''}
-      ${rep && rep.small.length ? `<p class="small merge-warn">${esc(t('merge.small', { n: POD.num(rep.small.length) }))} ${rowList(rep.small)}</p>` : ''}
-      ${rep && rep.empty.length ? `<p class="small merge-warn">${esc(t('merge.empty', { n: POD.num(rep.empty.length) }))} ${rowList(rep.empty)}</p>` : ''}
+      ${mergeBadVariants().length ? `<p class="small merge-warn">${esc(plural('merge.badVariant', mergeBadVariants().length, { sizes: st.product.sizes.map((z) => tr(z.label)).join(POD.lang === 'ar' ? '، ' : ', ') }))} ${rowList(mergeBadVariants())}</p>` : ''}
+      ${rep && rep.small.length ? `<p class="small merge-warn">${esc(plural('merge.small', rep.small.length))} ${rowList(rep.small)}</p>` : ''}
+      ${rep && rep.empty.length ? `<p class="small merge-warn">${esc(plural('merge.empty', rep.empty.length))} ${rowList(rep.empty)}</p>` : ''}
       <p class="muted small" style="margin:8px 0 0">${esc(t(few(L.rows.length) ? 'merge.priceNoteFew' : 'merge.priceNote', { n: POD.num(L.rows.length) }))}</p>`;
   }
 
@@ -4212,16 +4301,18 @@
   let draftSaving = Promise.resolve(true);
   let startingOver = false; // "Start a new design": nothing is saved while the page reloads
   /** Save the current design for this product in the browser (or forget it when empty). */
-  function saveDraft() {
+  let lastPreview = null; // the thumbnail of the last full save (reused by quick saves when leaving)
+  function saveDraft({ quick = false } = {}) {
     clearTimeout(draftTimer);
+    draftTimer = null;
     if (!draftMode || st.exporting || startingOver) return draftSaving;
     const designs = {};
     for (const s of st.product.sides) designs[s.id] = s.id === st.side ? serialize() : (st.designs[s.id] || []);
     const empty = !Object.values(designs).some((o) => o.length);
     const productId = st.product.id;
-    const meta = { productId, colorId: st.colorId, sizeId: st.sizeId, side: st.side, offsets: { ...st.offsets }, ...(st.pattern ? { pattern: { ...st.pattern } } : {}), method: st.method, options: st.options || {}, mergeList: st.mergeList || null, qty: st.qty || null, library: st.libraryId || null };
+    const meta = { productId, colorId: st.colorId, sizeId: st.sizeId, side: st.side, offsets: { ...st.offsets }, ...(st.pattern ? { pattern: { ...st.pattern } } : {}), method: st.method, options: st.options || {}, mergeList: st.mergeList || null, qty: st.qty || null, library: st.libraryId || null, sizePicked: Boolean(st.sizePicked) };
     let preview = null;
-    if (!empty) {
+    if (!empty && !quick) {
       try {
         preview = exportPreview(); // a Blob promise for the products page thumbnail
       } catch (e) {
@@ -4235,7 +4326,8 @@
       }
       const inl = {};
       for (const [id, objs] of Object.entries(designs)) inl[id] = await inlineImages(objs);
-      const blob = preview ? await preview.catch(() => null) : null;
+      const blob = preview ? await preview.catch(() => null) : lastPreview;
+      if (blob) lastPreview = blob;
       return POD.drafts.set(productId, { ...meta, designs: inl, preview: blob, savedAt: new Date().toISOString() });
     });
     return draftSaving;
@@ -4243,19 +4335,70 @@
   function scheduleDraft() {
     if (!draftMode) return;
     clearTimeout(draftTimer);
-    draftTimer = setTimeout(saveDraft, 1200);
+    draftTimer = setTimeout(saveDraft, 600);
   }
+  // Leaving right after a change: save it now (quickly, without a new thumbnail), not after the short wait.
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden' && draftTimer) saveDraft();
+    if (document.visibilityState === 'hidden' && draftTimer) saveDraft({ quick: true });
   });
-  // Leaving or reloading the page right after a change: save it now, not after the short wait.
-  window.addEventListener('pagehide', () => { if (draftTimer) saveDraft(); });
+  window.addEventListener('pagehide', () => { if (draftTimer) saveDraft({ quick: true }); });
+  // A link in the shop tapped right after a change: finish saving first, then go.
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest && e.target.closest('a[href]');
+    if (!a || !draftMode || !draftTimer || a.target === '_blank' || a.hasAttribute('download') || e.defaultPrevented || e.metaKey || e.ctrlKey || e.shiftKey) return;
+    const to = new URL(a.href, location.href);
+    if (to.origin !== location.origin) return;
+    e.preventDefault();
+    Promise.race([saveDraft({ quick: true }).then(() => POD.drafts.flush && POD.drafts.flush(st.product.id)), new Promise((r) => setTimeout(r, 3000))])
+      .finally(() => { location.href = to.href; });
+  }, true);
 
   function busy(on, text) {
     $('busy').hidden = !on;
     if (text) $('busy-text').textContent = text;
   }
 
+  /** Clothes with sizes, and the customer hasn't picked one yet (a name list carries its own sizes). */
+  function needsSize() {
+    const p = st.product;
+    if (p.category !== 'apparel' || p.sizes.length < 2 || st.sizePicked || st.editingCartIndex !== null) return false;
+    if (p.merge && st.mergeList) return false;
+    return new Set(qtyLines().map((l) => l.size)).size < 2;
+  }
+  function askSize() {
+    const box = $('size-ask');
+    const lines = qtyLines();
+    const n = lines.reduce((m, l) => m + l.qty, 0);
+    $('size-ask-title').textContent = t('sizeAsk.title');
+    $('size-ask-note').textContent = n > 1 ? t('sizeAsk.many', { n: POD.num(n) }) : t('sizeAsk.one');
+    $('size-ask-chips').innerHTML = st.product.sizes.map((z) => `<button type="button" class="chip" data-ask-size="${esc(z.id)}">${esc(tr(z.label))}${z.surcharge ? ` <span style="opacity:.7">+${esc(money(z.surcharge))}</span>` : ''}</button>`).join('');
+    box.hidden = false;
+    const first = box.querySelector('[data-ask-size]');
+    if (first) first.focus();
+  }
+  if ($('size-ask')) {
+    $('size-ask').addEventListener('click', (e) => {
+      if (e.target.id === 'size-ask' || e.target.closest('#size-ask-cancel')) { $('size-ask').hidden = true; return; }
+      const b = e.target.closest('[data-ask-size]');
+      if (!b) return;
+      const lines = qtyLines();
+      const qty = lines.reduce((m, l) => m + l.qty, 0) || 1;
+      if (b.dataset.askSize !== st.sizeId) {
+        const fromSize = st.sizeId;
+        changeSize(b.dataset.askSize);
+        qtyFollow(st.colorId, fromSize);
+      }
+      // All the pieces in the size picked (one colour, one size so far).
+      st.qty = { [st.colorId]: { [st.sizeId]: qty } };
+      st.sizePicked = true;
+      $('size-ask').hidden = true;
+      renderOptions();
+      refreshChrome();
+      scheduleDraft();
+      $('add-to-cart').click();
+    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('size-ask').hidden) $('size-ask').hidden = true; });
+  }
   $('add-to-cart').addEventListener('click', serial(async () => {
     cancelCrop();
     commit();
@@ -4265,6 +4408,8 @@
       toast(t('msg.addFirst'), 'error');
       return;
     }
+    // Clothes: the size is asked once (never ordered silently in the first size).
+    if (needsSize()) return askSize();
     // Name list: the fields must match the list's columns (and a list needs a field).
     if (st.mergePreview) endMergePreview();
     const mergeSides = st.product.merge ? fieldSides() : [];
@@ -4279,7 +4424,7 @@
         return;
       }
       if (useMerge && mergeBadVariants().length) {
-        toast(t('merge.badVariant', { n: POD.num(mergeBadVariants().length), sizes: st.product.sizes.map((z) => tr(z.label)).join(POD.lang === 'ar' ? '، ' : ', ') }), 'error');
+        toast(plural('merge.badVariant', mergeBadVariants().length, { sizes: st.product.sizes.map((z) => tr(z.label)).join(POD.lang === 'ar' ? '، ' : ', ') }), 'error');
         return;
       }
       if (useMerge) {
@@ -4477,7 +4622,9 @@
     // Drafts are off here (the browser blocks site data, or a shared design): say so, keep the customer here.
     if (!draftMode) return toast(t('draft.saveOff'), 'error');
     busy(true, t('busy.saving'));
-    const ok = await saveDraft();
+    let ok = await saveDraft();
+    // Signed in: wait for the copy on the account too (a few seconds at most), so it opens on the other device.
+    if (ok && POD.drafts.flush) ok = (await Promise.race([POD.drafts.flush(st.product.id).then(() => true), new Promise((r) => setTimeout(() => r(true), 8000))])) && ok;
     busy(false);
     if (!ok) return toast(t('draft.saveFailed'), 'error');
     st.dirty = false;

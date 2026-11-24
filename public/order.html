@@ -12,6 +12,16 @@
   <link rel="stylesheet" href="/css/styles.css">
   <link rel="stylesheet" href="/css/aftercare.css">
   <link rel="stylesheet" href="/css/proof.css">
+  <style>
+    /* Just ordered: the delivery day and the way back to this page come first. */
+    .placed { margin-bottom: 16px; padding: 16px 18px; border-color: #9fd6b6; background: #f6fbf8; }
+    .placed h2 { font-size: 19px; margin: 0 0 6px; }
+    .placed p { margin: 6px 0 0; line-height: 1.55; }
+    .placed-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .placed-actions .btn { flex: 1 1 220px; }
+    .dlv-top { margin: 8px 0 0; font-size: 16px; font-weight: 700; color: var(--ink); }
+    .placed .dlv-top { font-size: 17px; }
+  </style>
 </head>
 <body data-title-key="order.pageTitle">
   <header class="site-header">
@@ -104,13 +114,23 @@
                 <span class="track-dot"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[s.step]}</svg></span>
                 <span class="track-text">
                   <span class="track-lbl">${esc(t('track.' + s.step))}</span>
-                  <span class="track-when">${s.at ? esc(POD.date(s.at)) : s.done ? '' : esc(t('track.pending'))}</span>
+                  <span class="track-when">${s.at ? esc(POD.date(s.at)) : s.done ? '' : s.step === 'delivered' && o.delivery && o.delivery.by ? esc(t('track.expected', { date: POD.day(o.delivery.by) })) : esc(t('track.pending'))}</span>
                 </span>
               </li>`).join('')}
             </ol>
-            ${cur ? `<p class="track-hint"><strong>${esc(t('track.now'))}:</strong> ${esc(t('track.' + cur.step + '.hint'))}</p>` : ''}
+            ${cur ? `<p class="track-hint"><strong>${esc(t('track.now'))}:</strong> ${esc(nowText(o, cur.step))}</p>` : ''}
             ${shipmentHtml(o)}
           </section>`;
+      }
+      /** The "Now:" line: what the order waits for while items are checked or wait for the customer's approval. */
+      function nowText(o, step) {
+        if (['placed', 'production'].includes(step) && o.status !== 'delivered') {
+          const waiting = o.items.filter((i) => i.status === 'awaiting_approval').length;
+          if (waiting) return waiting === 1 ? t('track.now.awaitingOne') : t('track.now.awaitingMany', { n: POD.num(waiting) });
+          if (o.items.some((i) => i.status === 'changes_requested')) return t('track.now.changes');
+          if (o.items.some((i) => i.status === 'review')) return t('track.now.review');
+        }
+        return t('track.' + step + '.hint');
       }
       function shipmentHtml(o) {
         const s = o.shipment;
@@ -181,15 +201,30 @@
         }
         const o = order;
         const place = [o.customer.city, tr(o.customer.governorate)].filter(Boolean).join(POD.lang === 'ar' ? '، ' : ', ');
-        const delivered = o.status === 'delivered';
+        const delivered = o.status === 'delivered' || Boolean(o.shipment && o.shipment.deliveredAt);
+        // The promised day (express or standard), shown at the top until the order is delivered.
+        const arrives = o.delivery && o.delivery.by && !delivered
+          ? `<p class="dlv-top">🚚 ${esc(t('delivery.line', { speed: t(o.delivery.speed === 'express' ? 'delivery.express' : 'delivery.standard'), date: POD.day(o.delivery.by) }))}</p>` : '';
+        const isNew = Boolean(params.get('new'));
         content.innerHTML = `
           <div class="page-head">
-            ${params.get('new') ? `<p class="notice" style="margin-bottom:16px">${esc(t('order.thanks'))}</p>` : ''}
+            ${isNew ? `
+            <section class="card placed" aria-labelledby="placed-h">
+              <h2 id="placed-h">${esc(t('order.placedTitle'))}</h2>
+              ${arrives}
+              <p>${esc(t('order.keepLink'))}</p>
+              <div class="placed-actions">
+                <a class="btn btn-whatsapp" target="_blank" rel="noopener" href="${esc(selfWhatsapp(o))}">${esc(t('order.sendWa'))}</a>
+                <button class="btn" type="button" data-act="copy-link">${esc(t('order.copyLink'))}</button>
+              </div>
+              <p class="muted small">${esc(t('order.emailWhy'))}</p>
+            </section>` : ''}
             <h1>${esc(t('order.title', { n: o.number }))}</h1>
             <p class="muted">${esc(t('order.meta', { status: t('order.' + o.status), date: POD.date(o.createdAt), n: POD.num(o.items.length) }))}</p>
+            ${isNew ? '' : arrives}
             <div class="order-actions">
               <a class="btn" href="/invoice?id=${encodeURIComponent(o.id)}">${esc(t('track.invoice'))}</a>
-              <button class="btn btn-primary" type="button" data-act="reorder"${reo.busy ? ' disabled' : ''}>${esc(t(reo.busy ? 'track.reordering' : 'track.reorder'))}</button>
+              <button class="btn" type="button" data-act="reorder"${reo.busy ? ' disabled' : ''}>${esc(t(reo.busy ? 'track.reordering' : 'track.reorder'))}</button>
               <span class="muted small">${esc(t('track.reorderNote'))}</span>
             </div>
             ${reorderNotice()}
@@ -223,15 +258,33 @@
           <div class="card summary" style="margin-top:16px;position:static">
             <div class="line"><span>${esc(t('checkout.subtotal'))}</span><span>${esc(money(o.subtotal))}</span></div>
             ${o.discount ? `<div class="line discount-line"><span>${esc(t('coupon.discount'))} <bdi dir="ltr">${esc(o.coupon || '')}</bdi></span><span>-${esc(money(o.discount))}</span></div>` : ''}
-            <div class="line"><span>${esc(t(o.delivery && o.delivery.speed === 'express' ? 'delivery.shipExpress' : 'checkout.shipping'))}</span><span>${o.shipping ? esc(money(o.shipping)) : esc(t('free'))}</span></div>
+            ${shippingLines(o)}
             <div class="line total"><span>${esc(t('checkout.total'))}</span><span>${esc(money(o.total))}</span></div>
-            ${o.delivery && !(o.shipment && o.shipment.deliveredAt) ? `<p class="dlv-expected">🚚 ${esc(t('delivery.line', { speed: t(o.delivery.speed === 'express' ? 'delivery.express' : 'delivery.standard'), date: POD.day(o.delivery.by) }))}</p>` : ''}
-            ${o.payment && o.payment.method === 'cod' && o.payment.status !== 'paid' ? `<div class="pay-box"><strong>${esc(t('order.payCod', { amount: money(o.total) }))}</strong><span>${esc(t('checkout.codText'))}</span></div>` : ''}
+            ${o.delivery && !delivered ? `<p class="dlv-expected">🚚 ${esc(t('delivery.line', { speed: t(o.delivery.speed === 'express' ? 'delivery.express' : 'delivery.standard'), date: POD.day(o.delivery.by) }))}</p>` : ''}
+            ${o.payment && o.payment.method === 'cod' && o.payment.status !== 'paid' && !delivered ? `<div class="pay-box"><strong>${esc(t('order.payCod', { amount: money(o.total) }))}</strong><span>${esc(t('checkout.codText'))}</span></div>` : ''}
             <p class="muted small" style="margin-bottom:0;overflow-wrap:anywhere">${esc(t('order.deliverTo', { name: o.customer.name, place }))}</p>
           </div>
           ${shopWa ? `<div class="order-wa"><p>${esc(t('order.waText'))}</p><a class="btn btn-whatsapp" id="order-wa" target="_blank" rel="noopener" href="${esc(whatsappLink(o))}">${esc(t('order.waButton'))}</a></div>` : ''}`;
       }
 
+      /** Shipping, then the express fee on its own line. */
+      function shippingLines(o) {
+        const fee = o.delivery && o.delivery.speed === 'express' ? Number(o.delivery.fee) || 0 : 0;
+        const base = Math.max(0, Math.round(((Number(o.shipping) || 0) - fee) * 100) / 100);
+        return `<div class="line"><span>${esc(t('checkout.shipping'))}</span><span>${base ? esc(money(base)) : esc(t('free'))}</span></div>
+          ${fee ? `<div class="line"><span>${esc(t('delivery.expressFee'))}</span><span>${esc(money(fee))}</span></div>` : ''}`;
+      }
+      const pageLink = (o) => `${location.origin}/order?id=${encodeURIComponent(o.id)}`;
+      /** WhatsApp with the order link typed in: the customer picks their own chat ("Message yourself"). */
+      const selfWhatsapp = (o) => `https://wa.me/?text=${encodeURIComponent(t('order.waSelf', { n: o.number, link: pageLink(o) }))}`;
+      async function copyLink() {
+        try {
+          await navigator.clipboard.writeText(pageLink(order));
+          POD.toast(t('order.linkCopied'));
+        } catch (e) {
+          POD.toast(t('order.linkCopyFailed'));
+        }
+      }
       async function reorder() {
         if (reo.busy || !order) return;
         Object.assign(reo, { busy: true, added: 0, skipped: null, error: null });
@@ -271,12 +324,15 @@
         if (!b) return;
         if (b.dataset.act === 'reorder') reorder();
         if (b.dataset.act === 'copy') copyNumber(b);
+        if (b.dataset.act === 'copy-link') copyLink();
       });
 
       async function load() {
         try {
           order = await POD.api('/api/orders/' + encodeURIComponent(params.get('id') || ''));
           error = null;
+          // Just placed here: remembered on this device (the cart does it too; this covers every way in).
+          if (params.get('new')) PODAftercare.rememberOrder(order);
         } catch (e) {
           // A failed refresh (weak signal) keeps showing the order already loaded.
           if (order && e.status !== 404) return;

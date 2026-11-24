@@ -190,7 +190,13 @@
           <div class="inv-totals">
             <div class="line"><span>${esc(t('checkout.subtotal'))}</span><span>${esc(money(o.subtotal))}</span></div>
             ${o.discount ? `<div class="line"><span>${esc(t('coupon.discount'))}${o.coupon ? ` (${ltr(o.coupon)})` : ''}</span><span>${esc(money(-o.discount))}</span></div>` : ''}
-            <div class="line"><span>${esc(t(o.delivery && o.delivery.speed === 'express' ? 'delivery.shipExpress' : 'checkout.shipping'))}</span><span>${o.shipping ? esc(money(o.shipping)) : esc(t('free'))}</span></div>
+            ${(() => {
+              // Express: the shipping and the express fee on their own lines (as in the cart and the order page).
+              const fee = o.delivery && o.delivery.speed === 'express' ? Number(o.delivery.fee) || 0 : 0;
+              const ship = Math.max(0, (Number(o.shipping) || 0) - fee);
+              return `<div class="line"><span>${esc(t('checkout.shipping'))}</span><span>${ship ? esc(money(ship)) : esc(t('free'))}</span></div>`
+                + (fee ? `<div class="line"><span>${esc(t('delivery.expressFee'))}</span><span>${esc(money(fee))}</span></div>` : '');
+            })()}
             <div class="line total"><span>${esc(t('checkout.total'))}</span><span>${esc(money(o.total))}</span></div>
             ${!paid ? `<div class="line due"><span>${esc(t('invoice.amountDue'))}</span><span>${esc(money(o.total))}</span></div>` : ''}
           </div>

@@ -39,6 +39,12 @@
     if (Array.isArray(params.fonts)) params.fonts = params.fonts.join(POD.lang === 'ar' ? '، ' : ', ');
     // Photo numbers ("4, 8, 12") in the page's digits and list commas.
     if (typeof params.photos === 'string') params.photos = params.photos.split(/\s*,\s*/).filter(Boolean).map((n) => POD.num(Number(n))).join(POD.lang === 'ar' ? '، ' : ', ');
+    // Low-resolution photos: Arabic counts (1 / 2 / 3–10 / more), English one / many.
+    if (c.id === 'photoLowRes' && typeof params.count === 'number') {
+      const n = params.count;
+      const form = n === 1 ? 'one' : n === 2 ? 'two' : n % 100 >= 3 && n % 100 <= 10 ? 'few' : 'many';
+      if (t(`pf.photoLowRes.${form}`) !== `pf.photoLowRes.${form}`) key = `pf.photoLowRes.${form}`;
+    }
     if (typeof params.count === 'number') params.count = POD.num(params.count);
     for (const k of ['dpi', 'mm', 'percent', 'pt', 'widthPx', 'heightPx', 'expectedW', 'expectedH', 'minDpi']) {
       if (typeof params[k] === 'number') params[k] = POD.num(params[k]);
