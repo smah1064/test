@@ -190,7 +190,7 @@
           <div class="inv-totals">
             <div class="line"><span>${esc(t('checkout.subtotal'))}</span><span>${esc(money(o.subtotal))}</span></div>
             ${o.discount ? `<div class="line"><span>${esc(t('coupon.discount'))}${o.coupon ? ` (${ltr(o.coupon)})` : ''}</span><span>${esc(money(-o.discount))}</span></div>` : ''}
-            <div class="line"><span>${esc(t('checkout.shipping'))}</span><span>${o.shipping ? esc(money(o.shipping)) : esc(t('free'))}</span></div>
+            <div class="line"><span>${esc(t(o.delivery && o.delivery.speed === 'express' ? 'delivery.shipExpress' : 'checkout.shipping'))}</span><span>${o.shipping ? esc(money(o.shipping)) : esc(t('free'))}</span></div>
             <div class="line total"><span>${esc(t('checkout.total'))}</span><span>${esc(money(o.total))}</span></div>
             ${!paid ? `<div class="line due"><span>${esc(t('invoice.amountDue'))}</span><span>${esc(money(o.total))}</span></div>` : ''}
           </div>

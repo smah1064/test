@@ -124,6 +124,14 @@
   function date(iso) {
     return new Date(iso).toLocaleString(lang === 'ar' ? 'ar-EG' : 'en-GB', { dateStyle: 'medium', timeStyle: 'short' });
   }
+  /** A calendar day (YYYY-MM-DD) as "Thursday 26 November". */
+  function day(ymd) {
+    try {
+      return new Date(ymd + 'T12:00:00Z').toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
+    } catch (e) {
+      return ymd;
+    }
+  }
   function num(n) {
     return new Intl.NumberFormat(lang === 'ar' ? 'ar-EG' : 'en-GB', { maximumFractionDigits: 1 }).format(n);
   }
@@ -467,7 +475,7 @@
     },
     t, tr, setLang, applyI18n,
     loadCatalog, fillMockup, mockupUrl, svgDataUrl, luminance,
-    money, date, num,
+    money, date, day, num,
     getCart, setCart, updateCartBadge, toast, esc, api, drafts,
     sizedArea, sizeView, canvasEdges, drawPattern, wrapOffsets, fabricCm,
   };

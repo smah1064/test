@@ -83,6 +83,7 @@ const MESSAGES = {
   badEmail: { en: 'Email address looks invalid', ar: 'البريد الإلكتروني غير صحيح' },
   badPhone: { en: 'Enter an Egyptian mobile number, e.g. 01012345678', ar: 'أدخل رقم موبايل مصري صحيح، مثل 01012345678' },
   badGovernorate: { en: 'Choose a governorate', ar: 'اختر المحافظة' },
+  badDelivery: { en: 'Choose standard or express delivery', ar: 'اختر التوصيل العادي أو السريع' },
   cartEmpty: { en: 'Your cart is empty', ar: 'سلة التسوق فارغة' },
   tooManyItems: { en: 'At most {max} items per order', ar: 'الحد الأقصى {max} منتج في الطلب الواحد' },
   duplicateDesign: { en: 'Each design can only be ordered once', ar: 'لا يمكن طلب نفس التصميم أكثر من مرة' },

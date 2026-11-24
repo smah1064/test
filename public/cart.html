@@ -59,9 +59,19 @@
           </div>
           <p class="small coupon-msg" id="coupon-msg"></p>
         </div>
+        <fieldset class="delivery-pick">
+          <legend data-i18n="delivery.title"></legend>
+          <label class="dlv-opt"><input type="radio" name="delivery" value="standard" checked>
+            <span class="dlv-main"><strong data-i18n="delivery.standard"></strong> · <span data-i18n="delivery.standardText"></span><span class="dlv-by small" id="dlv-by-standard"></span></span>
+            <span class="dlv-fee small" data-i18n="delivery.noExtra"></span></label>
+          <label class="dlv-opt"><input type="radio" name="delivery" value="express">
+            <span class="dlv-main"><strong data-i18n="delivery.express"></strong> · <span data-i18n="delivery.expressText"></span><span class="dlv-by small" id="dlv-by-express"></span></span>
+            <span class="dlv-fee small" id="dlv-fee-express"></span></label>
+          <p class="muted small dlv-days" data-i18n="delivery.days"></p>
+        </fieldset>
         <div class="line"><span data-i18n="checkout.subtotal"></span><span id="subtotal"></span></div>
         <div class="line discount-line" id="discount-line" hidden><span><span data-i18n="coupon.discount"></span> <bdi id="coupon-code" dir="ltr"></bdi> <button type="button" class="link-btn small" id="coupon-remove" data-i18n="coupon.remove"></button></span><span id="discount"></span></div>
-        <div class="line"><span data-i18n="checkout.shipping"></span><span id="shipping"></span></div>
+        <div class="line"><span id="shipping-label" data-i18n="checkout.shipping"></span><span id="shipping"></span></div>
         <div class="line total"><span data-i18n="checkout.total"></span><span id="total"></span></div>
         <p class="muted small" id="free-note" style="margin:6px 0 0"></p>
         <div class="pay-box"><strong data-i18n="checkout.cod"></strong><span data-i18n="checkout.codText"></span></div>
@@ -81,7 +91,11 @@
   <script>
     (async () => {
       const { money, esc, t, tr } = POD;
-      const { pricing, governorates } = await POD.loadCatalog();
+      const { pricing, governorates, delivery: deliveryInfo } = await POD.loadCatalog();
+      // Delivery speed (standard 5 business days, express 2 for a fee), kept for this visit.
+      let delivery = 'standard';
+      try { delivery = sessionStorage.getItem('pod-delivery') === 'express' ? 'express' : 'standard'; } catch (e) { /* private mode */ }
+      const expressFee = () => (quote && quote.deliveryOptions ? quote.deliveryOptions.find((d) => d.speed === 'express').fee : (deliveryInfo ? deliveryInfo.expressFee : 0));
       if (new URLSearchParams(location.search).get('added')) {
         POD.toast(t('cart.added'));
         history.replaceState(null, '', '/cart');
@@ -276,8 +290,16 @@
         const freeOver = quote ? quote.freeShippingOver : pricing.freeShippingOver;
         const applied = quote && quote.coupon && couponCode ? quote.coupon : null;
         const discount = applied ? applied.discount : 0;
-        const shipping = (applied && applied.freeShipping) || subtotal - discount >= freeOver ? 0 : (quote ? quote.shippingFlat : pricing.shipping);
+        const baseShipping = (applied && applied.freeShipping) || subtotal - discount >= freeOver ? 0 : (quote ? quote.shippingFlat : pricing.shipping);
+        const shipping = Math.round((baseShipping + (delivery === 'express' ? expressFee() : 0)) * 100) / 100;
         render.total = Math.round((subtotal - discount + shipping) * 100) / 100;
+        document.querySelectorAll('input[name="delivery"]').forEach((r) => { r.checked = r.value === delivery; });
+        document.getElementById('dlv-fee-express').textContent = '+' + money(expressFee());
+        for (const opt of (quote && quote.deliveryOptions) || []) {
+          const el = document.getElementById('dlv-by-' + opt.speed);
+          if (el) el.textContent = t('delivery.by', { date: POD.day(opt.by) });
+        }
+        document.getElementById('shipping-label').textContent = t(delivery === 'express' ? 'delivery.shipExpress' : 'checkout.shipping');
         document.getElementById('discount-line').hidden = !applied;
         document.getElementById('coupon-code').textContent = applied ? applied.code : '';
         document.getElementById('discount').textContent = applied ? (applied.freeShipping && !discount ? t('coupon.freeShipping') : '-' + money(discount)) : '';
@@ -288,7 +310,7 @@
         document.getElementById('subtotal').textContent = money(subtotal);
         document.getElementById('shipping').textContent = shipping ? money(shipping) : t('free');
         document.getElementById('total').textContent = money(render.total);
-        document.getElementById('free-note').textContent = shipping ? t('checkout.freeOver', { price: money(freeOver) }) : '';
+        document.getElementById('free-note').textContent = baseShipping ? t('checkout.freeOver', { price: money(freeOver) }) : '';
       }
 
       // Today's prices from the shop (the cart keeps the price from when an item was added).
@@ -304,7 +326,7 @@
         const cart = POD.getCart();
         if (!cart.length) { quote = null; return; }
         try {
-          quote = await POD.api('/api/cart/quote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ designIds: cart.map((i) => i.designId), couponCode }) });
+          quote = await POD.api('/api/cart/quote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ designIds: cart.map((i) => i.designId), couponCode, delivery }) });
         } catch (e) {
           quote = null;
           return;
@@ -374,6 +396,7 @@
         btn.textContent = t('checkout.placing');
         try {
           const customer = Object.fromEntries(new FormData(form));
+          delete customer.delivery;
           // Check prices again right before ordering: the customer must see what they will pay.
           const before = render.total;
           await refreshPrices();
@@ -389,7 +412,7 @@
           const order = await POD.api('/api/orders', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ customer, designIds: cartNow.map((i) => i.designId), expectedTotal: render.total, approvals: approvalsBody, ...(quote && quote.coupon && couponCode ? { couponCode } : {}) }),
+            body: JSON.stringify({ customer, designIds: cartNow.map((i) => i.designId), expectedTotal: render.total, delivery, approvals: approvalsBody, ...(quote && quote.coupon && couponCode ? { couponCode } : {}) }),
           });
           POD.setCart([]);
           approvals.clear();
@@ -414,6 +437,14 @@
           updateApproval();
         }
       });
+
+      document.querySelectorAll('input[name="delivery"]').forEach((r) => r.addEventListener('change', () => {
+        if (!r.checked) return;
+        delivery = r.value === 'express' ? 'express' : 'standard';
+        try { sessionStorage.setItem('pod-delivery', delivery); } catch (e) { /* private mode */ }
+        render();
+        refreshPrices().then(render);
+      }));
 
       // Coupon: apply / remove.
       const applyCoupon = async () => {

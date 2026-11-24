@@ -56,6 +56,8 @@ const L = {
     shippedBodyPaid: 'طلبك اتشحن وفي الطريق ليك!',
     courier: 'شركة الشحن', trackingNumber: 'رقم التتبع', trackingLink: 'تتبع الشحنة عند شركة الشحن', eta: 'الاستلام المتوقع',
     invoice: 'الفاتورة', copies: (n) => `${n} نسخ`, order: 'الطلب',
+    delivery: 'التوصيل', express: '⚡ توصيل سريع', expressAdmin: '⚡ توصيل سريع: خلال يومين عمل',
+    deliveryLine: (d, by) => `${d.speed === 'express' ? '⚡ توصيل سريع' : 'توصيل عادي'} خلال ${d.days === 2 ? 'يومين' : d.days + ' أيام'} عمل (حتى ${by})`,
   },
   en: {
     newOrder: 'New order', items: (n) => `${n} item${n === 1 ? '' : 's'}`,
@@ -72,6 +74,8 @@ const L = {
     shippedBodyPaid: 'Your order has shipped and is on its way to you!',
     courier: 'Courier', trackingNumber: 'Tracking number', trackingLink: 'Track the parcel with the courier', eta: 'Expected delivery',
     invoice: 'Invoice', copies: (n) => `${n} copies`, order: 'Order',
+    delivery: 'Delivery', express: '⚡ Express delivery', expressAdmin: '⚡ EXPRESS: deliver within 2 business days',
+    deliveryLine: (d, by) => `${d.speed === 'express' ? '⚡ Express' : 'Standard'} delivery within ${d.days} business days (by ${by})`,
   },
 };
 const tr = (v, lang) => (v && typeof v === 'object' ? v[lang] || v.en || '' : String(v == null ? '' : v));
@@ -85,6 +89,14 @@ function money(n, lang) {
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
 const govName = (id, lang) => tr((GOVERNORATES.find((g) => g.id === id) || {}).name, lang) || id;
 const itemLine = (it, lang) => `${tr(it.productName, lang)} · ${tr(it.color.name, lang)} · ${tr(it.size.label, lang)} · ${it.sides.map((s) => tr(s.name, lang)).join(L[lang].sides)}`;
+const dayOf = (ymd, lang) => {
+  try {
+    return new Intl.DateTimeFormat(lang === 'ar' ? 'ar-EG' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }).format(new Date(ymd + 'T12:00:00Z'));
+  } catch (e) {
+    return ymd;
+  }
+};
+const deliveryText = (order, lang) => (order.delivery ? L[lang].deliveryLine(order.delivery, dayOf(order.delivery.by, lang)) : '');
 const addressOf = (c, lang) => [c.address, c.city, govName(c.governorate, lang)].filter(Boolean).join(lang === 'ar' ? '، ' : ', ');
 
 // ---------- Messages ----------
@@ -93,7 +105,9 @@ function adminWhatsAppText(order, links, lang) {
   const c = order.customer;
   const lines = [
     `🛒 ${t.newOrder} ${order.number}`,
+    order.delivery && order.delivery.speed === 'express' ? t.expressAdmin : '',
     `${t.items(order.items.length)} · ${t.total} ${money(order.total, lang)} (${t.cod})`,
+    deliveryText(order, lang),
     `${c.name} · ${c.phone}`,
     addressOf(c, lang),
     ...order.items.slice(0, 10).map((it) => `- ${itemLine(it, lang)}`),
@@ -132,9 +146,10 @@ function emailHtml(order, links, lang, forAdmin) {
       <table style="width:100%;margin-top:12px;border-collapse:collapse">
         ${sum(t.subtotal, money(order.subtotal, lang))}
         ${order.discount ? sum(`${t.discount} (${order.coupon ? order.coupon.code : ''})`, `-${money(order.discount, lang)}`) : ''}
-        ${sum(t.shipping, order.shipping ? money(order.shipping, lang) : t.free)}
+        ${sum(order.delivery && order.delivery.speed === 'express' ? `${t.shipping} (${t.express})` : t.shipping, order.shipping ? money(order.shipping, lang) : t.free)}
         ${sum(`${t.total} (${t.cod})`, money(order.total, lang), true)}
       </table>
+      ${order.delivery ? `<p style="margin:12px 0 0;font-weight:700">🚚 ${esc(deliveryText(order, lang))}</p>` : ''}
       ${details}
       ${button}
     </div>
@@ -149,6 +164,7 @@ const emailText = (order, links, lang, forAdmin) => {
     ...order.items.map((it, i) => `${i + 1}. ${itemLine(it, lang)} · ${money(it.price, lang)}`),
     '',
     `${t.total} (${t.cod}): ${money(order.total, lang)}`,
+    deliveryText(order, lang),
     forAdmin ? `${t.customer}: ${c.name} · ${c.phone}${c.email ? ' · ' + c.email : ''}\n${t.address}: ${addressOf(c, lang)}${c.notes ? `\n${t.notes}: ${c.notes}` : ''}` : `${t.address}: ${addressOf(c, lang)}`,
     '',
     forAdmin ? links.admin : links.track,

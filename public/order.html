@@ -218,8 +218,9 @@
           <div class="card summary" style="margin-top:16px;position:static">
             <div class="line"><span>${esc(t('checkout.subtotal'))}</span><span>${esc(money(o.subtotal))}</span></div>
             ${o.discount ? `<div class="line discount-line"><span>${esc(t('coupon.discount'))} <bdi dir="ltr">${esc(o.coupon || '')}</bdi></span><span>-${esc(money(o.discount))}</span></div>` : ''}
-            <div class="line"><span>${esc(t('checkout.shipping'))}</span><span>${o.shipping ? esc(money(o.shipping)) : esc(t('free'))}</span></div>
+            <div class="line"><span>${esc(t(o.delivery && o.delivery.speed === 'express' ? 'delivery.shipExpress' : 'checkout.shipping'))}</span><span>${o.shipping ? esc(money(o.shipping)) : esc(t('free'))}</span></div>
             <div class="line total"><span>${esc(t('checkout.total'))}</span><span>${esc(money(o.total))}</span></div>
+            ${o.delivery && !(o.shipment && o.shipment.deliveredAt) ? `<p class="dlv-expected">🚚 ${esc(t('delivery.line', { speed: t(o.delivery.speed === 'express' ? 'delivery.express' : 'delivery.standard'), date: POD.day(o.delivery.by) }))}</p>` : ''}
             ${o.payment && o.payment.method === 'cod' && o.payment.status !== 'paid' ? `<div class="pay-box"><strong>${esc(t('order.payCod', { amount: money(o.total) }))}</strong><span>${esc(t('checkout.codText'))}</span></div>` : ''}
             <p class="muted small" style="margin-bottom:0;overflow-wrap:anywhere">${esc(t('order.deliverTo', { name: o.customer.name, place }))}</p>
           </div>

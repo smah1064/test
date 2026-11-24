@@ -1722,6 +1722,35 @@ function shippingFor(subtotal) {
   return subtotal >= FREE_SHIPPING_OVER ? 0 : SHIPPING_FLAT;
 }
 
+/*
+ * Delivery speed, chosen at checkout. Standard: within 5 business days. Express: within 2,
+ * for a flat fee on top of shipping (charged even when shipping is free). Business days are
+ * Sunday to Thursday in Egypt (Friday and Saturday off), counted from the day after the order.
+ * EXPRESS_FEE in the environment changes the fee (EGP, not scaled by PRICE_FACTOR).
+ */
+const DELIVERY_DAYS = { standard: 5, express: 2 };
+function expressFee() {
+  const f = Number(process.env.EXPRESS_FEE);
+  return Number.isFinite(f) && f >= 0 ? round2(f) : 100;
+}
+/** The Cairo calendar day `n` business days after `from` (YYYY-MM-DD). */
+function businessDaysAfter(from, n) {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Cairo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(from));
+  const d = new Date(parts + 'T12:00:00Z');
+  for (let left = n; left > 0;) {
+    d.setUTCDate(d.getUTCDate() + 1);
+    const wd = d.getUTCDay();
+    if (wd !== 5 && wd !== 6) left--;
+  }
+  return d.toISOString().slice(0, 10);
+}
+/** { speed, days, fee, by } for 'standard' (default) or 'express', for an order placed at `at`. */
+function deliveryFor(speed, at = new Date()) {
+  const s = speed === 'express' ? 'express' : 'standard';
+  const days = DELIVERY_DAYS[s];
+  return { speed: s, days, fee: s === 'express' ? expressFee() : 0, by: businessDaysAfter(at, days) };
+}
+
 module.exports = {
   PRODUCTS,
   matchSize,
@@ -1742,5 +1771,9 @@ module.exports = {
   cleanOptions,
   optionsPrice,
   shippingFor,
+  DELIVERY_DAYS,
+  expressFee,
+  deliveryFor,
+  businessDaysAfter,
   round2,
 };

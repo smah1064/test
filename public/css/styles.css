@@ -774,6 +774,11 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
   .site-header nav a { white-space: nowrap; }
   .site-header .lang-toggle { padding: 4px 8px; }
 }
+/* With a cart count the links no longer fit next to the shop name: the logo mark alone stays. */
+@media (max-width: 440px) {
+  .site-header .brand { font-size: 0; gap: 0; }
+  .site-header nav { gap: 8px; }
+}
 @media (max-width: 380px) {
   .brand { font-size: 0; }
   .brand-mark { font-size: 13px; }
@@ -906,3 +911,19 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 /* Name-list section: a short highlight when opened from the toolbar or the product page */
 @keyframes sec-flash { 0% { box-shadow: 0 0 0 3px var(--accent, #ff5a36); } 100% { box-shadow: 0 0 0 3px transparent; } }
 .panel-section.flash { animation: sec-flash 1.6s ease-out; border-radius: 12px; }
+
+/* Delivery: the note on the home and product pages, the choice at checkout, the expected day. */
+.delivery-note { display: inline-block; margin: 10px 0 0; padding: 6px 12px; border-radius: 999px; background: var(--accent-soft); color: var(--ink); font-size: 14px !important; font-weight: 600; line-height: 1.5; }
+.hero .delivery-note { margin-top: 14px; }
+.delivery-pick { border: 0; margin: 4px 0 10px; padding: 10px 0 0; border-top: 1px dashed var(--line); }
+.delivery-pick legend { font-weight: 700; font-size: 13px; padding: 0; margin-bottom: 6px; }
+.dlv-opt { display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; border: 1.5px solid var(--line); border-radius: 10px; margin-bottom: 6px; cursor: pointer; font-size: 14px; }
+.dlv-opt:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.dlv-opt input { margin-top: 3px; accent-color: var(--accent); }
+.dlv-main { flex: 1; min-width: 0; }
+.dlv-by { display: block; color: var(--ink-2); }
+.dlv-fee { white-space: nowrap; font-weight: 700; color: var(--ink-2); }
+.dlv-days { margin: 2px 0 0; }
+.dlv-expected { margin: 10px 0 0; font-weight: 600; }
+.dlv-express-pill { background: #fff3bf; color: #7a5800; font-size: 11px; vertical-align: middle; }
+@media (max-width: 340px) { .site-header nav a[href="/designs"] { display: none; } }

@@ -323,6 +323,8 @@ On any item in the print queue, **Send to printing house** opens a small form: t
 
 **Price switch:** `PRICE_FACTOR` in Hostinger's environment variables scales every selling price in `src/products.js` (base prices, size and pack surcharges, extra sides, embroidery, lamination), each rounded to the nearest 10 EGP, for example `0.5` for a half-price sale. It defaults to 1 (the prices as written). Prices changed in the admin below are not scaled; shipping is not affected.
 
+**Delivery:** the site says "delivery within 5 business days" (home, product page, checkout). At checkout the customer picks standard (5 business days, the usual shipping) or ⚡ express (2 business days, +100 EGP on top of the shipping, even when shipping is free). Business days are Sunday to Thursday, counted from the day after the order (public holidays are not counted out). The order keeps the speed and the expected day (`delivery: { speed, days, fee, by }`); the order page, invoice, admin (⚡ badge) and the order emails/WhatsApp show it. `EXPRESS_FEE` in the environment changes the fee.
+
 Admin → **Accounts** tab:
 
 - **Prices & costs**: for every product, the selling price, the price of each extra side and per-size price additions (these change the shop right away; saved in `db.pricing` over the defaults in `src/products.js`), and what a piece costs you: the blank product (plus extra per size), printing for the first side and for each extra side, and packaging/other. Shows the profit and margin per piece.

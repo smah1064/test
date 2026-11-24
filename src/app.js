@@ -19,6 +19,9 @@ const {
   cleanOptions,
   optionsPrice,
   shippingFor,
+  DELIVERY_DAYS,
+  expressFee,
+  deliveryFor,
   round2,
   printAreaFor,
   printWidthFor,
@@ -239,6 +242,7 @@ function publicOrder(order) {
     discount: order.discount || 0,
     coupon: order.coupon ? order.coupon.code : null,
     shipping: order.shipping,
+    delivery: order.delivery || null,
     total: order.total,
     payment: order.payment,
     shipment: publicShipment(order),
@@ -453,6 +457,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       currency: CURRENCY,
       mockup: { width: MOCKUP_WIDTH, height: MOCKUP_HEIGHT },
       pricing: { extraSide: EXTRA_SIDE_PRICE, shipping: SHIPPING_FLAT, freeShippingOver: FREE_SHIPPING_OVER },
+      delivery: { standardDays: DELIVERY_DAYS.standard, expressDays: DELIVERY_DAYS.express, expressFee: expressFee() },
       categories: CATEGORIES,
       governorates: GOVERNORATES,
       contact: { whatsapp: notify.shopWhatsApp() || null },
@@ -2170,8 +2175,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       else couponError = format(r.reason, r.params || {}, langOf(req));
     }
     const discount = coupon ? coupon.discount : 0;
-    const shipping = !lines.length || (coupon && coupon.freeShipping) ? 0 : shippingFor(round2(subtotal - discount));
-    res.json({ items, subtotal, discount, coupon, couponError, shipping, total: round2(subtotal - discount + shipping), freeShippingOver: FREE_SHIPPING_OVER, shippingFlat: SHIPPING_FLAT });
+    const delivery = deliveryFor((req.body || {}).delivery);
+    const baseShipping = !lines.length || (coupon && coupon.freeShipping) ? 0 : shippingFor(round2(subtotal - discount));
+    // `shipping` includes the express fee; `delivery` says how fast and by which day.
+    const shipping = round2(baseShipping + (lines.length ? delivery.fee : 0));
+    const deliveryOptions = ['standard', 'express'].map((s) => deliveryFor(s));
+    res.json({ items, subtotal, discount, coupon, couponError, shipping, baseShipping, delivery, deliveryOptions, total: round2(subtotal - discount + shipping), freeShippingOver: FREE_SHIPPING_OVER, shippingFlat: SHIPPING_FLAT });
   });
 
   app.post('/api/orders', express.json({ limit: '100kb' }), (req, res) => {
@@ -2274,7 +2283,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       applied = { id: findCoupon(code).id, code, type: findCoupon(code).type, discount: r.discount, freeShipping: r.freeShipping };
     }
     const discount = applied ? applied.discount : 0;
-    const shipping = applied && applied.freeShipping ? 0 : shippingFor(round2(subtotal - discount));
+    // Standard (5 business days) or express (2, for a fee added to the shipping).
+    if (body.delivery !== undefined && body.delivery !== 'standard' && body.delivery !== 'express') throw new HttpError(400, 'badDelivery');
+    const delivery = deliveryFor(body.delivery, new Date(now));
+    const shipping = round2((applied && applied.freeShipping ? 0 : shippingFor(round2(subtotal - discount))) + delivery.fee);
     const total = round2(subtotal - discount + shipping);
     // The customer must have seen this total: if a price changed since, show them the new one first.
     if (expectedTotal !== undefined && !(Math.abs(Number(expectedTotal) - total) <= 0.009)) {
@@ -2294,6 +2306,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       subtotal,
       ...(applied ? { discount, coupon: applied } : {}),
       shipping,
+      delivery,
       total,
       // Cash on delivery: collected by the courier.
       payment: { method: 'cod', status: 'pending' },
