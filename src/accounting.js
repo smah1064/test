@@ -113,7 +113,7 @@ function cleanPricing(product, body) {
 }
 
 // ---------- Costs ----------
-const COST_FIELDS = ['blank', 'printFirst', 'printExtra', 'other'];
+const COST_FIELDS = ['blank', 'printFirst', 'printExtra', 'embroidery', 'other'];
 function cleanCosts(product, body) {
   const out = {};
   for (const k of COST_FIELDS) {
@@ -141,20 +141,25 @@ function itemCostFrom(costs, item) {
   if (item.quantities && item.quantities.length) {
     const parts = item.quantities.map((l) => ({ ...itemCostFrom(costs, { ...item, quantities: null, copies: 1, size: l.size }), qty: l.qty }));
     const sum = (k) => round2(parts.reduce((n, x) => n + x[k] * x.qty, 0));
-    return { blank: sum('blank'), print: sum('print'), other: sum('other'), total: sum('total'), set: Boolean(costs && costs[item.productId]), copies: parts.reduce((n, x) => n + x.qty, 0) };
+    return { blank: sum('blank'), print: sum('print'), embroidery: sum('embroidery'), other: sum('other'), total: sum('total'), set: Boolean(costs && costs[item.productId]), copies: parts.reduce((n, x) => n + x.qty, 0) };
   }
   const c = (costs && costs[item.productId]) || {};
-  // The embroidery layer is stitched, not an extra printed side (its own price is the embroidery surcharge).
+  // The embroidery layer is stitched, not a printed side: it costs the product's embroidery cost
+  // (items saved before sides carried their process: the first side was the stitched one).
+  // Booklets: the blank booklet plus the pages that carry a design.
   const all = item.sides || [];
-  const printed = all.filter((sd) => sd && sd.process !== 'embroidery').length;
-  const sides = item.kind === 'book' ? 1 : Math.max(1, printed < all.length && printed ? printed : all.length);
+  const legacyEmb = item.process === 'embroidery' && !all.some((sd) => sd && sd.process);
+  const stitched = legacyEmb || all.some((sd) => sd && sd.process === 'embroidery');
+  const printed = item.kind === 'book' ? 1 : legacyEmb ? all.length - 1 : all.filter((sd) => sd && sd.process !== 'embroidery').length;
   const blank = round2((c.blank || 0) + ((c.sizes && item.size && c.sizes[item.size.id]) || 0));
-  const print = round2((c.printFirst || 0) + (sides - 1) * (c.printExtra || 0));
+  const print = printed > 0 ? round2((c.printFirst || 0) + (printed - 1) * (c.printExtra || 0)) : 0;
+  const embroidery = stitched ? round2(c.embroidery || 0) : 0;
   const other = round2(c.other || 0);
+  const each = round2(blank + print + embroidery + other);
   // Name lists: one printed copy per row.
   const n = Math.max(1, item.copies || 1);
-  if (n > 1) return { blank: round2(blank * n), print: round2(print * n), other: round2(other * n), total: round2((blank + print + other) * n), set: Boolean(costs && costs[item.productId]), copies: n };
-  return { blank, print, other, total: round2(blank + print + other), set: Boolean(costs && costs[item.productId]) };
+  if (n > 1) return { blank: round2(blank * n), print: round2(print * n), embroidery: round2(embroidery * n), other: round2(other * n), total: round2(each * n), set: Boolean(costs && costs[item.productId]), copies: n };
+  return { blank, print, embroidery, other, total: each, set: Boolean(costs && costs[item.productId]) };
 }
 /** The cost used in the books: the admin's correction, else the copy made at order time, else today's costs. */
 function itemCost(costs, item) {
@@ -209,7 +214,7 @@ function report({ orders, costs, expenses, settings, from, to }) {
       p.sales = round2(p.sales + it.price - share[idx]);
       p.cost = round2(p.cost + c.total);
       byProduct.set(pk, p);
-      return { id: it.id, productId: it.productId, productName: it.productName, size: it.size, sides: (it.sides || []).length, price: it.price, status: it.status, cost: c.total, costSource: c.source, costParts: c.source === 'actual' ? null : { blank: c.blank, print: c.print, other: c.other } };
+      return { id: it.id, productId: it.productId, productName: it.productName, size: it.size, sides: (it.sides || []).length, price: it.price, status: it.status, cost: c.total, costSource: c.source, costParts: c.source === 'actual' ? null : { blank: c.blank, print: c.print, embroidery: c.embroidery || 0, other: c.other } };
     });
     const shipCost = o.actualShipping != null ? o.actualShipping : defShip;
     const shipped = o.items.every((i) => i.status === 'shipped');
