@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node --test test/*.test.js",
+    "test": "PRICE_FACTOR=1 node --test test/*.test.js",
     "test:e2e": "node --test test/e2e/*.e2e.js"
   },
   "engines": {

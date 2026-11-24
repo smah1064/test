@@ -198,7 +198,7 @@ The design keeps `quantities: [{ color, size, qty, unitPrice }]`; orders, the ca
 
 For invitations, certificates, greeting cards, ID cards, **business cards**, name labels and sticker sheets (and the team-kit garments below), the editor has **Print a list of names**. It is easy to find: a **Names** button in the editor's tool bar (only on these products) opens it, the product page has a "Print a list of names" card that opens the editor right there (`/editor?product=…&names=1`), and on phones the chip under the price shows the number of names.
 
-**Business card paper and lamination:** the card's paper is chosen as matte, glossy or kraft (shown as "Paper / الورق" instead of "Colour"), and **lamination (سلوفان)** as none, matte or glossy. Lamination is priced per pack (60 / 120 / 200 / 350 EGP for 100 / 250 / 500 / 1000 cards; change in `options` of `bizcards` in `src/products.js`) and appears with the size everywhere ("500 cards · Matte lamination"): price, cart, order, invoice, admin and print labels. Other products can get options the same way (`product.options`).
+**Business card paper and lamination:** the card's paper is chosen as matte, glossy or kraft (shown as "Paper / الورق" instead of "Colour"), and **lamination (سلوفان)** as none, matte or glossy. Business cards come in packs of 100, 200, 300, 500 and 1000. Lamination is priced per pack (list 60 / 100 / 140 / 200 / 350 EGP for 100 / 200 / 300 / 500 / 1000 cards, sold at half; change in `options` of `bizcards` in `src/products.js`) and appears with the size everywhere ("500 cards · Matte lamination"): price, cart, order, invoice, admin and print labels. Other products can get options the same way (`product.options`).
 
 **Business cards for a whole team:** each row is one person's pack (100, 250… cards) with their own name, position, phone, email or any other column, priced per pack. Ready layouts with the fields in place ({الاسم} {الوظيفة} {الموبايل} {الإيميل} or {Name} {Position} {Phone} {Email}) are in Templates → Business & teams (`src/library-packs/cards.js`), and the example file has those columns. The shop prints each page of the PDF as one pack.
 
@@ -320,6 +320,8 @@ On any item in the print queue, **Send to printing house** opens a small form: t
 - Every send is recorded on the item ("Sent to … by … · date").
 
 ## Accounts (prices, costs, profit)
+
+**Selling prices are half the list prices for now.** The prices written in `src/products.js` are list prices; the shop sells at `PRICE_FACTOR` × list (default 0.5), each base price, size or pack surcharge, extra-side, embroidery and lamination charge rounded to the nearest 10 EGP. Set `PRICE_FACTOR=1` in Hostinger's environment variables to go back to the list prices. Prices changed in the admin below are laid over these and are not scaled. Shipping (75 EGP, free over 1,500) is not affected. `npm test` runs at list prices; a test checks the half prices.
 
 Admin → **Accounts** tab:
 

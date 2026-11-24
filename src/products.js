@@ -1,5 +1,11 @@
 'use strict';
 
+/** Selling prices = list prices × this (half for now; PRICE_FACTOR=1 in the environment for list prices). */
+function PRICE_FACTOR() {
+  const f = Number(process.env.PRICE_FACTOR);
+  return Number.isFinite(f) && f > 0 ? f : 0.5;
+}
+
 /**
  * Product catalog. All prices are in Egyptian pounds (EGP).
  *
@@ -985,11 +991,12 @@ PRODUCTS.push(
       help: t('A thin film over the print that protects the cards and makes them feel stronger.', 'طبقة رقيقة فوق الطباعة بتحمي الكروت وبتخليها أتقل في الإيد.'),
       choices: [
         { id: 'none', name: t('No lamination', 'بدون سلوفان'), price: 0 },
-        { id: 'matte', name: t('Matte lamination', 'سلوفان مط'), price: { 100: 60, 250: 120, 500: 200, 1000: 350 } },
-        { id: 'gloss', name: t('Glossy lamination', 'سلوفان لامع'), price: { 100: 60, 250: 120, 500: 200, 1000: 350 } },
+        { id: 'matte', name: t('Matte lamination', 'سلوفان مط'), price: { 100: 60, 200: 100, 300: 140, 500: 200, 1000: 350 } },
+        { id: 'gloss', name: t('Glossy lamination', 'سلوفان لامع'), price: { 100: 60, 200: 100, 300: 140, 500: 200, 1000: 350 } },
       ],
     }],
-    sizes: qty([['100', '100 cards', '100 كارت', 0], ['250', '250 cards', '250 كارت', 120], ['500', '500 cards', '500 كارت', 250], ['1000', '1000 cards', '1000 كارت', 450]]),
+    // Packs of hundreds.
+    sizes: qty([['100', '100 cards', '100 كارت', 0], ['200', '200 cards', '200 كارت', 100], ['300', '300 cards', '300 كارت', 170], ['500', '500 cards', '500 كارت', 250], ['1000', '1000 cards', '1000 كارت', 450]]),
     sides: [
       { id: 'front', name: FRONT, svg: flat(70, 220, 360, 220, 4), printArea: { x: 70, y: 220, w: 360, h: 220 }, printWidthIn: 3.54 },
       { id: 'back', name: BACK, svg: flat(70, 220, 360, 220, 4), printArea: { x: 70, y: 220, w: 360, h: 220 }, printWidthIn: 3.54 },
@@ -1493,7 +1500,7 @@ for (const [pid, e] of Object.entries(EMBROIDERY)) {
 }
 
 /** Extra charge for every printed side beyond the first. */
-const EXTRA_SIDE_PRICE = 100;
+const EXTRA_SIDE_PRICE = scalePrice(100);
 const SHIPPING_FLAT = 75;
 const FREE_SHIPPING_OVER = 1500;
 
@@ -1680,6 +1687,27 @@ function optionsPrice(product, options, sizeId) {
     sum += typeof choice.price === 'number' ? choice.price : (choice.price && choice.price[sizeId]) || 0;
   }
   return sum;
+}
+
+// ---------- Selling prices ----------
+// The prices written above are list prices. For now the shop sells at half of them, each
+// rounded to the nearest 10 EGP (PRICE_FACTOR, set it to 1 for the list prices). Prices the
+// owner changes in the admin (Accounts -> Prices) are laid over these and are not scaled.
+function scalePrice(v) {
+  const f = PRICE_FACTOR();
+  if (!v || f === 1) return v;
+  return Math.max(10, Math.round((v * f) / 10) * 10);
+}
+for (const p of PRODUCTS) {
+  p.basePrice = scalePrice(p.basePrice);
+  if (p.extraSidePrice != null) p.extraSidePrice = scalePrice(p.extraSidePrice);
+  p.sizes = p.sizes.map((s) => (s.surcharge ? { ...s, surcharge: scalePrice(s.surcharge) } : s));
+  if (p.embroidery) p.embroidery.surcharge = scalePrice(p.embroidery.surcharge);
+  for (const o of p.options || []) {
+    for (const c of o.choices) {
+      c.price = typeof c.price === 'number' ? scalePrice(c.price) : Object.fromEntries(Object.entries(c.price || {}).map(([k, v]) => [k, scalePrice(v)]));
+    }
+  }
 }
 
 function priceFor(product, sizeId, sideCount) {
