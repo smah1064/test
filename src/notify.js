@@ -11,6 +11,7 @@
  * Sending never blocks or fails an order: results are recorded on it.
  */
 const { GOVERNORATES } = require('./egypt');
+const { arabicDigits } = require('./i18n');
 
 const env = (k) => (process.env[k] || '').trim();
 const config = () => ({
@@ -93,7 +94,16 @@ const L = {
     deliveryLine: (d, by) => `${d.speed === 'express' ? '⚡ Express' : 'Standard'} delivery within ${d.days} business day${d.days === 1 ? '' : 's'} (by ${by})`,
   },
 };
-const tr = (v, lang) => (v && typeof v === 'object' ? v[lang] || v.en || '' : String(v == null ? '' : v));
+/**
+ * The shop's own bilingual words (product, colour, size, print area…) in the message language. In
+ * Arabic their numbers become ١٢٣ like the counts and prices around them ("١٠ × ١٥ سم ×٥", not
+ * "10 × 15 سم ×٥"); codes such as A4 or 2XL stay as they are. Plain strings (customer text) pass through.
+ */
+const tr = (v, lang) => {
+  if (!(v && typeof v === 'object')) return String(v == null ? '' : v);
+  const s = v[lang] || v.en || '';
+  return lang === 'ar' && v.ar ? arabicDigits(s) : s;
+};
 function money(n, lang) {
   try {
     return new Intl.NumberFormat(lang === 'ar' ? 'ar-EG' : 'en-EG', { style: 'currency', currency: 'EGP', maximumFractionDigits: 2 }).format(n);
@@ -423,7 +433,7 @@ async function proofMessage(order, item, { kind = 'proof', note = '', link = '' 
     if (!emailReady()) return { email: 'skipped', reason: 'emailOff' };
     const ar = order.lang !== 'en';
     const h = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-    const product = item && item.productName ? (ar ? item.productName.ar : item.productName.en) || '' : '';
+    const product = item && item.productName ? tr(item.productName, ar ? 'ar' : 'en') : '';
     const T = ar
       ? {
         subject: kind === 'proof' ? `طلبك ${order.number}: نحتاج موافقتك على البروفة` : `طلبك ${order.number}: مطلوب تعديل قبل الطباعة`,

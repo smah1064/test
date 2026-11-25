@@ -13,10 +13,20 @@
  */
 const crypto = require('crypto');
 const { normalizeEgyptMobile, normalizeDigits } = require('./egypt');
+const { arabicDigits } = require('./i18n');
 
 const LINK_DAYS = 30;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const pick = (v, lang) => (v && typeof v === 'object' ? v[lang] || v.en : v);
+/**
+ * The shop's own bilingual words (product, colour, size, print area) in the message language. In
+ * Arabic their numbers become ١٢٣ like the rest of the message ("٣٠ × ٤٠ سم ×٢", not "30 × 40 سم ×٢");
+ * codes such as A4 or 2XL stay as they are.
+ */
+const pick = (v, lang) => {
+  if (!(v && typeof v === 'object')) return v;
+  const s = v[lang] || v.en;
+  return lang === 'ar' && v.ar && s ? arabicDigits(s) : s;
+};
 
 // ---------- Signed download links ----------
 const b64 = (buf) => Buffer.from(buf).toString('base64url');

@@ -129,7 +129,10 @@
     const inv = invoiceNumber(o);
     const comma = POD.lang === 'ar' ? '، ' : ', ';
     const c = o.customer || {};
-    const place = [c.city, tr(c.governorate)].filter(Boolean).join(comma);
+    // What the customer typed (their name, their city) reads in its own direction but stays on the
+    // column's side (<bdi>, not dir="auto" on the paragraph, which moved an English name to the left
+    // of the Arabic invoice). Returned escaped.
+    const place = [c.city && `<bdi>${esc(c.city)}</bdi>`, esc(tr(c.governorate))].filter(Boolean).join(esc(comma));
     // Cash on delivery: once delivered, the courier has collected it.
     const delivered = o.status === 'delivered' || Boolean(o.shipment && o.shipment.deliveredAt);
     const cod = !o.payment || o.payment.method === 'cod';
@@ -168,8 +171,8 @@
         <section class="inv-parties">
           <div>
             <h2>${esc(t('invoice.billTo'))}</h2>
-            <p class="who" dir="auto">${esc(c.name || '')}</p>
-            ${place ? `<p>${esc(place)}</p>` : ''}
+            <p class="who"><bdi>${esc(c.name || '')}</bdi></p>
+            ${place ? `<p>${place}</p>` : ''}
           </div>
           <div>
             <h2>${esc(t('invoice.payment'))}</h2>

@@ -84,8 +84,8 @@ test('Arabic order messages: quantities, names, photo sets, Arabic digits and th
   for (const text of [wa, toAdmin.textContent, toCustomer.textContent, toAdmin.htmlContent, toCustomer.htmlContent]) {
     assert.match(text, /تيشيرت · ٥٥ قطعة \(أبيض · M ×٣٠، أسود · L ×٢٥\) · الأمام/);
     assert.match(text, /شهادة · أبيض · A4 · الأمام · قائمة أسماء: ٤٠ اسم/);
-    assert.match(text, /طباعة الصور · لامع · ٤ صور · ٧ نسخ \(10 × 15 سم ×٥، 13 × 18 سم ×١، 20 × 30 سم ×١\) · إطار أبيض/);
-    assert.match(text, /مج · أبيض · 11 أونصة · جهة 1 · ١١ نسخة/);
+    assert.match(text, /طباعة الصور · لامع · ٤ صور · ٧ نسخ \(١٠ × ١٥ سم ×٥، ١٣ × ١٨ سم ×١، ٢٠ × ٣٠ سم ×١\) · إطار أبيض/);
+    assert.match(text, /مج · أبيض · ١١ أونصة · جهة ١ · ١١ نسخة/);
     assert.match(text, /⚡ توصيل سريع خلال يومين عمل \(حتى /);
     assert.doesNotMatch(text, /ebda3/);
     assert.doesNotMatch(text, LATIN_COUNTS);

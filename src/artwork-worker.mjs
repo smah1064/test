@@ -9,6 +9,55 @@
 // memory, and WebAssembly otherwise reserves about 10 GB of it up front.
 import loadGs from '@okathira/ghostpdl-wasm';
 
+/** "0 0 200 100" → [0, 0, 200, 100] when it is a box with a size, else null. */
+function parseBox(value) {
+  const n = String(value).trim().split(/\s+/).map(Number);
+  return n.length >= 4 && n.slice(0, 4).every(Number.isFinite) && n[2] > n[0] && n[3] > n[1] ? n.slice(0, 4) : null;
+}
+/**
+ * An EPS file made sure that Ghostscript's -dEPSFitPage fits its artwork box into the picture.
+ * Ghostscript reads %%BoundingBox / %%HiResBoundingBox only from a header that ends with an
+ * %%EndComments line (and never from the trailer, for "(atend)"). Without one the file was drawn
+ * at 72 dpi in a corner of the page: a small picture that the editor flagged as low resolution.
+ * Then the box found anywhere in the header (or in the trailer) is written again right after the
+ * first line, with an %%EndComments line after it. Other files are returned as they are.
+ */
+function epsWithBox(bytes) {
+  const buf = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const head = buf.subarray(0, 128 * 1024).toString('latin1');
+  const first = /^\s*%![^\r\n]*(\r\n|\r|\n)/.exec(head);
+  if (!first) return bytes;
+  const box = {};
+  let ended = false;
+  // The header: the comment lines after the first one, up to %%EndComments or the first line of
+  // PostScript (or the next section, such as %%BeginProlog or a preview).
+  for (const line of head.slice(first[0].length).split(/\r\n|\r|\n/)) {
+    if (line.startsWith('%%EndComments')) { ended = true; break; }
+    if (!line.trim()) continue;
+    if (!line.startsWith('%') || /^%%(Begin|End|Page:|Trailer)/.test(line)) break;
+    const m = /^%%(HiResBoundingBox|BoundingBox):(.*)$/.exec(line);
+    if (m && !box[m[1]]) box[m[1]] = parseBox(m[2]);
+  }
+  if (ended && (box.HiResBoundingBox || box.BoundingBox)) return bytes; // Ghostscript reads it itself
+  if (!box.HiResBoundingBox && !box.BoundingBox) {
+    // "%%BoundingBox: (atend)": the box is in the trailer.
+    const tail = buf.subarray(Math.max(0, buf.length - 64 * 1024)).toString('latin1');
+    const at = tail.lastIndexOf('%%Trailer');
+    if (at >= 0) {
+      for (const m of tail.slice(at).matchAll(/^%%(HiResBoundingBox|BoundingBox):(.*)$/gm)) box[m[1]] = parseBox(m[2]) || box[m[1]];
+    }
+  }
+  if (!box.HiResBoundingBox && !box.BoundingBox) return bytes;
+  const eol = first[1];
+  const lines = [
+    box.BoundingBox && `%%BoundingBox: ${box.BoundingBox.join(' ')}`,
+    box.HiResBoundingBox && `%%HiResBoundingBox: ${box.HiResBoundingBox.join(' ')}`, // Ghostscript prefers it
+    '%%EndComments',
+  ].filter(Boolean);
+  const start = first.index + first[0].length;
+  return Buffer.concat([buf.subarray(0, start), Buffer.from(lines.join(eol) + eol, 'latin1'), buf.subarray(start)]);
+}
+
 process.once('message', async (msg) => {
   if (msg.job) return runJob(msg.job);
   const { data, kind, px, pages } = msg;
@@ -19,7 +68,8 @@ process.once('message', async (msg) => {
   try {
     const gs = await loadGs({ print: (s) => log.push(s), printErr: (s) => log.push(s) });
     const input = kind === 'pdf' ? 'in.pdf' : 'in.eps';
-    gs.FS.writeFile(input, new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
+    const bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+    gs.FS.writeFile(input, kind === 'pdf' ? bytes : epsWithBox(bytes));
     // Booklet pages: every page of a PDF (up to pages.max), each fitted into a w x h page, on white paper.
     const args = pages ? [
       '-dSAFER', '-dBATCH', '-dNOPAUSE', '-dQUIET', '-dNOINTERPOLATE',
