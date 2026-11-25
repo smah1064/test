@@ -198,3 +198,49 @@ test('Editor: a single postcard says its back side costs its share (EGP 5), not 
     await srv.close();
   }
 });
+
+test('Activity › more than 500 lines: "Show older" reads the next 500, and the CSV has every line of the period', { timeout: 90000 }, async () => {
+  const fs = require('fs');
+  const path = require('path');
+  const { chromium } = loadPlaywright();
+  const srv = await startServer();
+  // 1,200 older lines (20 Nov), written before anyone signs in.
+  const t0 = Date.parse('2026-11-20T08:00:00Z');
+  const lines = Array.from({ length: 1200 }, (x, i) => JSON.stringify({ id: (0x100000000000 + i).toString(16), at: new Date(t0 + i * 1000).toISOString(), whoId: 'owner', who: 'Owner', action: 'PUT /api/admin/coupons/:id', summary: { en: `Seeded change ${i}`, ar: `تعديل ${i}` }, status: 200 }));
+  fs.writeFileSync(path.join(srv.dataDir, 'activity.jsonl'), `${lines.join('\n')}\n`);
+  const browser = await chromium.launch();
+  try {
+    const ctx = await newContext(browser);
+    const page = await ctx.newPage();
+    await page.goto(`${srv.base}/admin`);
+    await page.fill('#password', 'secret');
+    await page.press('#password', 'Enter');
+    await page.waitForSelector('#dash:not([hidden])');
+    await page.click('[data-tab="activity"]');
+    await page.waitForSelector('.act-table');
+    const rows = () => page.$$eval('.act-table tbody tr', (r) => r.length);
+    assert.strictEqual(await rows(), 500);
+    assert.ok(await page.isVisible('#act-older'));
+    assert.match(await page.textContent('#act-count'), /Show older|اعرض الأقدم/);
+
+    // The CSV is the whole period, while only the first 500 are on the screen.
+    const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#act-csv')]);
+    const csv = fs.readFileSync(await dl.path(), 'utf8');
+    assert.ok(csv.includes('Seeded change 0') || csv.includes('تعديل 0'), 'the oldest line is in the file');
+    const csvLines = csv.trim().split(/\r?\n/).length - 1;
+    assert.ok(csvLines >= 1200, `CSV lines ${csvLines}`);
+    assert.strictEqual(await rows(), 500);
+
+    await page.click('#act-older');
+    await page.waitForFunction(() => document.querySelectorAll('.act-table tbody tr').length > 500);
+    assert.strictEqual(await rows(), 1000);
+    await page.click('#act-older');
+    await page.waitForFunction(() => !document.getElementById('act-older'));
+    assert.strictEqual(await rows(), csvLines);
+    assert.doesNotMatch(await page.textContent('#act-count'), /Show older|اعرض الأقدم/);
+    await ctx.close();
+  } finally {
+    await browser.close();
+    await srv.close();
+  }
+});

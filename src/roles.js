@@ -292,9 +292,13 @@ class ActivityLog {
       console.warn('[activity] could not write:', e.message);
     }
   }
-  /** Newest first. `who`: a person's id; from/to: YYYY-MM-DD days in the shop's time zone (Cairo), as the screen shows times. */
-  list({ who = null, from = null, to = null, limit = 200 } = {}) {
+  /**
+   * Newest first. `who`: a person's id; from/to: YYYY-MM-DD days in the shop's time zone (Cairo), as the screen shows times.
+   * `before`: { at, id } of the last line already shown: the lines older than it (the "Show older" page).
+   */
+  list({ who = null, from = null, to = null, limit = 200, before = null } = {}) {
     const out = [];
+    let passed = !before;
     for (const f of [this.file, ...Array.from({ length: this.keep - 1 }, (x, i) => `${this.file}.${i + 1}`)]) {
       let text = '';
       try { text = fs.readFileSync(f, 'utf8'); } catch (e) { continue; }
@@ -303,6 +307,12 @@ class ActivityLog {
         if (!lines[i]) continue;
         let e;
         try { e = JSON.parse(lines[i]); } catch (err) { continue; }
+        // (Until the line the last page ended on; a line gone since, its time decides.)
+        if (!passed) {
+          if (e.id === before.id) { passed = true; continue; }
+          if (!(String(e.at || '') < String(before.at || ''))) continue;
+          passed = true;
+        }
         if (who && e.whoId !== who) continue;
         const day = shopDay(e.at);
         if (from && day < from) continue;

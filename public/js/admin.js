@@ -2545,6 +2545,7 @@
       return `<div class="card house-row">
         <div>
           <strong dir="ltr" style="font-size:16px">${esc(c.code)}</strong> <span class="pill ${state === 'live' ? 'printed' : 'queued'}">${esc(t('cp.state.' + state))}</span>
+          ${(c.waiting || []).map((w) => `<div class="small" data-cp-waiting><span class="pill queued">${esc(t('ap.waitingHere'))}</span> ${esc(tr(w.summary))}</div>`).join('')}
           <div class="muted small">${esc(couponSummary(c))}</div>
           <div class="small">${esc(listed(t('cp.usage', { n: POD.num(c.uses), max: c.maxUses ? POD.num(c.maxUses) : '∞', v: money(c.discountGiven) })))}</div>
           ${c.note ? `<div class="muted small">${line(c.note)}</div>` : ''}
@@ -2660,6 +2661,8 @@
       }
     } catch (err) {
       toast(err.message, 'error');
+      // Sent for an owner's approval: the row now says it's waiting (so it isn't pressed again).
+      if (err && err.pending) adminApi('/api/admin/coupons').then((d) => renderCoupons((couponData = d))).catch(() => {});
     }
   });
 

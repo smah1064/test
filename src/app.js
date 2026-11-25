@@ -5102,6 +5102,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     type: { percent: enAr('percent off', 'نسبة خصم'), fixed: enAr('amount off', 'مبلغ خصم'), freeship: enAr('free shipping', 'شحن مجاني'), freeShipping: enAr('free shipping', 'شحن مجاني') },
     status: { live: enAr('in the shop', 'في الموقع'), hidden: enAr('paused', 'متوقف مؤقتًا'), removed: enAr('stopped selling', 'وقف البيع') },
     // (A pause's reason, as the Products tab says it. QA 25 Nov: the owner's card showed "stock".)
+    // (A printing method by its name, as the Products tab says it.)
+    process: {
+      dtg: enAr('DTG (direct to garment)', 'DTG (طباعة مباشرة على القماش)'), dtf: enAr('DTF transfer', 'DTF (طباعة بالنقل الحراري)'),
+      sublimation: enAr('Sublimation', 'سبلميشن (طباعة حرارية)'), uv: enAr('UV printing', 'طباعة UV'), paper: enAr('Paper (offset / digital)', 'ورق (أوفست / ديجيتال)'),
+      canvas: enAr('Canvas', 'كانفاس'), textile: enAr('Textile roll', 'طباعة قماش بالمتر'), engrave: enAr('Laser engraving', 'حفر ليزر'), lasercut: enAr('Laser cutting', 'قص ليزر'),
+    },
     hiddenReason: {
       stock: enAr('out of stock', 'المخزون خلص'), season: enAr('out of season', 'مش موسمه'), quality: enAr('quality problem', 'مشكلة في الجودة'),
       supplier: enAr('supplier problem', 'مشكلة مع المورّد'), other: enAr('other', 'سبب تاني'),
@@ -5125,6 +5131,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       return enAr(one('en') || '—', one('ar') || '—');
     };
     if (field === 'categories' && Array.isArray(v)) return listOf(v, (id) => { const c = CATEGORIES.find((x) => x.id === id); return c && c.name; });
+    if (field === 'methods' && Array.isArray(v)) return listOf(v, (id) => VALUE_WORDS.process[id] || null);
     if (field === 'products' && Array.isArray(v)) return listOf(v, (id) => { const p = PRODUCTS.find((x) => x.id === id); return p && p.name; });
     if ((field === 'colors' || field === 'sizes') && v && typeof v === 'object' && !Array.isArray(v)) {
       const nameOf = (id) => {
@@ -5135,7 +5142,52 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         return null;
       };
       const state = (x) => (x && x.off ? enAr('off', 'مقفول') : x && x.soldOut ? enAr('sold out', 'خلصان') : enAr('on', 'شغال'));
-      const one = (l) => Object.entries(v).slice(0, 30).map(([id, x]) => { const n = nameOf(id); return `\u2068${n ? n[l] || n.en : String(id).slice(0, 40)}\u2069: ${state(x)[l]}`; }).join(l === 'ar' ? '، ' : ', ');
+      // (A size's new name too: "M: on, renamed Medium / وسط". QA 25 Nov: a rename was hidden from the owner.)
+      const renamed = (x, l) => (x && x.label && typeof x.label === 'object' && (x.label.en || x.label.ar)
+        ? `${l === 'ar' ? '، اسمه يبقى' : ', renamed'} \u2068${[x.label.en, x.label.ar].filter(Boolean).map((t) => String(t).slice(0, 40)).join(' / ')}\u2069` : '');
+      const one = (l) => Object.entries(v).slice(0, 30).map(([id, x]) => { const n = nameOf(id); return `\u2068${n ? n[l] || n.en : String(id).slice(0, 40)}\u2069: ${state(x)[l]}${renamed(x, l)}`; }).join(l === 'ar' ? '، ' : ', ');
+      return enAr(one('en') || '—', one('ar') || '—');
+    }
+    // New colours and sizes: by their names (and a colour's code), not as data.
+    if ((field === 'addColors' || field === 'addSizes') && Array.isArray(v)) {
+      const one = (l) => v.slice(0, 20).map((x) => {
+        if (!x || typeof x !== 'object') return '';
+        const nm = field === 'addColors' ? x.name : x.label;
+        const name = nm && typeof nm === 'object' ? [nm[l] || nm.en || nm.ar, nm[l === 'ar' ? 'en' : 'ar']].filter(Boolean).filter((t, i, a) => a.indexOf(t) === i).join(' / ') : String(x.id || '');
+        const extra = field === 'addColors' && typeof x.hex === 'string' ? ` (${x.hex.slice(0, 9)})` : field === 'addSizes' && Number(x.surcharge) ? ` (+${moneyIn(Number(x.surcharge), l)})` : '';
+        return `\u2068${String(name).slice(0, 60)}\u2069${extra}`;
+      }).filter(Boolean).join(l === 'ar' ? '، ' : ', ');
+      return enAr(one('en') || '—', one('ar') || '—');
+    }
+    // Embroidery: off, or where, how big, the extra price and the thread colours.
+    if (field === 'embroidery') {
+      if (v === false || v === null) return enAr('off', 'مقفول');
+      if (typeof v === 'object' && !Array.isArray(v)) {
+        const AT = { chest: enAr('left chest', 'على الصدر (شمال)'), center: enAr('centre', 'في النص'), top: enAr('top', 'فوق'), same: enAr('same as the print area', 'نفس مكان الطباعة') };
+        const one = (l) => [
+          AT[v.at] ? AT[v.at][l] : '',
+          Array.isArray(v.cm) && v.at !== 'same' && v.cm[0] ? (l === 'ar' ? `${arNum(v.cm[0])}×${arNum(v.cm[1])} سم` : `${v.cm[0]}×${v.cm[1]} cm`) : '',
+          Number.isFinite(Number(v.surcharge)) ? `+${moneyIn(Number(v.surcharge), l)}` : '',
+          v.maxColors ? (l === 'ar' ? `${arNum(v.maxColors)} ألوان خيط` : `${v.maxColors} thread colours`) : '',
+        ].filter(Boolean).join(l === 'ar' ? '، ' : ', ');
+        return enAr(one('en') || '—', one('ar') || '—');
+      }
+    }
+    // Print areas, side by side: on/off, print width, safe margin, bleed, a moved area.
+    if (field === 'sides' && v && typeof v === 'object' && !Array.isArray(v)) {
+      const sideName = (id) => { for (const p of PRODUCTS) { const x = (p.sides || []).find((y) => y.id === id); if (x && x.name) return x.name; } return null; };
+      const one = (l) => Object.entries(v).slice(0, 12).map(([id, o]) => {
+        if (!o || typeof o !== 'object') return '';
+        const n = sideName(id);
+        const bits = [
+          o.off === true ? (l === 'ar' ? 'مقفول' : 'off') : o.off === false ? (l === 'ar' ? 'شغال' : 'on') : '',
+          typeof o.printWidthCm === 'number' ? (l === 'ar' ? `عرض الطباعة ${arNum(o.printWidthCm)} سم` : `print width ${o.printWidthCm} cm`) : '',
+          typeof o.safeMm === 'number' ? (l === 'ar' ? `هامش ${arNum(o.safeMm)} مم` : `safe margin ${o.safeMm} mm`) : '',
+          typeof o.bleedMm === 'number' ? (l === 'ar' ? `زيادة القص ${arNum(o.bleedMm)} مم` : `bleed ${o.bleedMm} mm`) : '',
+          o.area && typeof o.area === 'object' ? (l === 'ar' ? 'مكان الطباعة اتنقل' : 'print area moved') : '',
+        ].filter(Boolean).join(l === 'ar' ? '، ' : ', ');
+        return bits ? `\u2068${n ? n[l] || n.en : String(id).slice(0, 30)}\u2069: ${bits}` : '';
+      }).filter(Boolean).join(l === 'ar' ? '؛ ' : '; ');
       return enAr(one('en') || '—', one('ar') || '—');
     }
     if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
@@ -5160,7 +5212,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       return enAr(names('en'), names('ar'));
     }
     if (field === 'costs' && typeof v === 'object' && !Array.isArray(v)) {
-      const parts = (l) => Object.entries(v).slice(0, 12).filter(([, x]) => typeof x !== 'object').map(([k, x]) => `${(OWNER_FIELD_NAMES[k] || enAr(k, k))[l]} ${accounting.money(x) != null ? moneyIn(accounting.money(x), l) : String(x).slice(0, 20)}`).join(l === 'ar' ? '، ' : ', ');
+      // (A size's extra cost too, by size and amount: a change to one size read "costs: —". QA 25 Nov.)
+      const sizes = (l) => (v.sizes && typeof v.sizes === 'object' && !Array.isArray(v.sizes) ? Object.entries(v.sizes).slice(0, 12).map(([id, x]) => {
+        const m = accounting.money(x, { min: -1e6 });
+        return `${l === 'ar' ? 'مقاس' : 'size'} \u2068${String(id).slice(0, 20)}\u2069 ${m != null ? moneyIn(m, l) : String(x).slice(0, 20)}`;
+      }) : []);
+      const parts = (l) => [...Object.entries(v).slice(0, 12).filter(([, x]) => typeof x !== 'object').map(([k, x]) => `${(OWNER_FIELD_NAMES[k] || enAr(k, k))[l]} ${accounting.money(x) != null ? moneyIn(accounting.money(x), l) : String(x).slice(0, 20)}`), ...sizes(l)].join(l === 'ar' ? '، ' : ', ');
       return enAr(parts('en') || '—', parts('ar') || '—');
     }
     if (typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length && Object.keys(v).every((k) => k === 'en' || k === 'ar')) {
@@ -5548,6 +5605,15 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (mineOpen.length >= 50 || (Buffer.isBuffer(req.body) && mineOpen.filter((x) => x.file).length >= 20)) throw new HttpError(429, 'tooManyMine');
     const w = req.adminWho;
     const raw = Buffer.isBuffer(req.body);
+    // (The same change pressed again while it waits isn't a second request: the waiting one is answered.)
+    const sameHash = crypto.createHash('sha256').update(raw ? req.body : JSON.stringify(req.body === undefined ? null : req.body)).digest('hex');
+    const waitingSame = mineOpen.find((x) => x.status === 'pending' && x.action === key && x.path === req.originalUrl.slice(0, 500)
+      && (x.sameHash ? x.sameHash === sameHash : (!raw && !x.file && !x.bodyFile && JSON.stringify(x.body === undefined ? null : x.body) === JSON.stringify(req.body === undefined ? null : req.body))));
+    if (waitingSame) {
+      res.locals.approvalId = waitingSame.id;
+      res.locals.summary = waitingSame.summary;
+      return res.status(202).json({ pending: true, already: true, approval: { ...approvalRow(waitingSame), already: true }, ...(checked.extra || {}) });
+    }
     const id = crypto.randomBytes(8).toString('hex');
     const about = approvalAbout(key, req);
     const label = route.label || enAr(key, key);
@@ -5556,7 +5622,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       by: { id: w.id, name: w.shown || w.name, username: w.name }, roles: w.roles,
       action: key, label, summary: { en: [label.en, about.en].filter(Boolean).join(': '), ar: [label.ar, about.ar].filter(Boolean).join(': ') },
       method: req.method, path: req.originalUrl.slice(0, 500), contentType: String(req.get('content-type') || '').slice(0, 100),
-      lang: langOf(req),
+      lang: langOf(req), sameHash,
       ...(moneyNow(key, req.originalUrl) !== undefined ? { before: moneyNow(key, req.originalUrl) } : {}),
       ...(raw ? { file: `${id}.bin`, bytes: req.body.length } : { body: req.body === undefined ? null : req.body }),
     };
@@ -5742,14 +5808,19 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const day = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : null);
     const who = w.perms.has('activity.all') ? (typeof req.query.who === 'string' && req.query.who ? req.query.who.slice(0, 40) : null) : w.id;
     const limit = Math.min(500, Math.max(1, parseInt(req.query.limit, 10) || 200));
+    // before=<at>|<id>: the page after the last line shown ("Show older"); more: older lines are there.
+    const cursor = /^([0-9T:.Z-]{10,30})\|([0-9a-f]{1,24})$/.exec(String(req.query.before || ''));
+    const found = activity.list({ who, from: day(req.query.from), to: day(req.query.to), limit: limit + 1, before: cursor ? { at: cursor[1], id: cursor[2] } : null });
+    const more = found.length > limit;
     // (who: { id, name } for the screen; older lines without a summary read as what they did.)
-    const entries = activity.list({ who, from: day(req.query.from), to: day(req.query.to), limit })
+    const entries = found.slice(0, limit)
       .map((e) => {
         // (The username too: two people can share a name.)
         const u = staffAll().find((x) => x.id === e.whoId);
         return { ...e, who: { id: e.whoId, name: e.who, ...(u ? { username: u.username } : {}) }, summary: e.summary || e.label || null };
       });
-    res.json({ entries });
+    const last = entries[entries.length - 1];
+    res.json({ entries, more, ...(more && last ? { next: `${last.at}|${last.id}` } : {}) });
   });
 
   app.get('/api/admin/notifications', requireAdmin, (req, res) => {
@@ -6582,7 +6653,16 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     .map((p) => ({ id: p.id, name: p.name, category: p.category, ...(p.status === 'removed' ? { archived: true } : {}) }));
   app.get('/api/admin/coupons', requireAdmin, (req, res) => {
     const list = store.db.coupons || [];
-    res.json({ coupons: list.map(couponRow), products: adminProductList(new Set(list.flatMap((c) => c.products || []))), categories: CATEGORIES });
+    // A change to a coupon waiting for an owner: the row says so, so nobody presses it again (QA 25 Nov).
+    const waiting = {};
+    for (const a of approvalsAll()) {
+      const m = a.status === 'pending' && /^\/api\/admin\/coupons\/([^/?#]+)/.exec(a.path || '');
+      if (!m) continue;
+      let cid;
+      try { cid = decodeURIComponent(m[1]); } catch (e) { continue; }
+      (waiting[cid] ||= []).push({ id: a.id, summary: a.summary, by: a.by ? a.by.name : null, at: a.at });
+    }
+    res.json({ coupons: list.map((c) => ({ ...couponRow(c), ...(waiting[c.id] ? { waiting: waiting[c.id] } : {}) })), products: adminProductList(new Set(list.flatMap((c) => c.products || []))), categories: CATEGORIES });
   });
   const saveCoupon = (req, id) => {
     // An edit sends only what changed (the form, or the list's pause switch): merged onto the coupon as it is now,

@@ -96,6 +96,7 @@
 .act-filters select, .act-filters input { width: 100%; }
 .act-csv-f { display: flex; justify-content: flex-end; }
 .act-count { margin: 4px 0 0; }
+.act-older { display: flex; justify-content: center; margin: 12px 0; }
 .act-card { overflow-x: auto; }
 .act-empty { margin: 14px 16px; }
 .act-when { white-space: nowrap; }

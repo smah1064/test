@@ -470,3 +470,70 @@ test('blank-looking characters (Hangul filler, Braille blank) are no name or not
   assert.strictEqual(preview.cleanName('Sara 👩‍💻'), 'Sara 👩‍💻');
   assert.strictEqual(preview.cleanName('⠀⠀'), '');
 });
+
+test('approvals details in words: a size rename, new colours and sizes, embroidery, print areas, a size\'s cost', async () => {
+  const add = await call('/api/admin/staff', 'POST', { name: 'Cat Five', username: 'cat5x', roles: ['catalogue', 'finance'], password: 'catalogue-five-pass' }, owner);
+  assert.strictEqual(add.status, 201, add.text);
+  const cat = (await call('/api/admin/login', 'POST', { username: 'cat5x', password: 'catalogue-five-pass' })).json.token;
+  const ask = async (url, body) => { const r = await call(url, 'PUT', body, cat); assert.strictEqual(r.status, 202, `${url} ${r.text}`); return (r.json.approval || r.json).id; };
+  const ids = {
+    sizes: await ask('/api/admin/catalog/hoodie', { sizes: { S: { soldOut: true }, M: { label: { en: 'Medium', ar: 'وسط' } } } }),
+    colors: await ask('/api/admin/catalog/hoodie', { addColors: [{ id: 'sagegreen', name: { en: 'Sage', ar: 'زيتي فاتح' }, hex: '#9caf88' }] }),
+    newSizes: await ask('/api/admin/catalog/hoodie', { addSizes: [{ id: '4XL', label: { en: '4XL', ar: '4XL' }, surcharge: 40 }] }),
+    emb: await ask('/api/admin/catalog/cap', { embroidery: { at: 'center', cm: [10, 5.5], surcharge: 100, maxColors: 7 } }),
+    sides: await ask('/api/admin/catalog/tote', { sides: { front: { safeMm: 9 }, back: { off: true } } }),
+  };
+  const rows = (await call('/api/admin/approvals', 'GET', undefined, owner)).json.approvals;
+  const text = (id, l) => JSON.stringify((rows.find((x) => x.id === id).changes || []).map((c) => c.value[l]));
+  assert.match(text(ids.sizes, 'en'), /renamed.*Medium \/ وسط/);
+  assert.match(text(ids.sizes, 'ar'), /اسمه يبقى/);
+  assert.match(text(ids.colors, 'ar'), /زيتي/);
+  assert.match(text(ids.newSizes, 'en'), /4XL/);
+  assert.match(text(ids.emb, 'en'), /centre.*10×5\.5 cm.*7 thread colours/);
+  assert.match(text(ids.emb, 'ar'), /في النص/);
+  assert.match(text(ids.sides, 'en'), /safe margin 9 mm/);
+  assert.match(text(ids.sides, 'en'), /off/);
+  for (const id of Object.values(ids)) for (const l of ['en', 'ar']) assert.ok(!/[{}[\]"]{2}|"id"|"hex"/.test(text(id, l).replace(/^\["|"\]$/g, '')), `${l}: ${text(id, l)}`);
+});
+
+test('the same change pressed twice while it waits is one request; the coupon row says it is waiting', async () => {
+  const add = await call('/api/admin/staff', 'POST', { name: 'Fin Six', username: 'fin6x', roles: ['finance'], password: 'finance-six-pass' }, owner);
+  assert.strictEqual(add.status, 201, add.text);
+  const fin = (await call('/api/admin/login', 'POST', { username: 'fin6x', password: 'finance-six-pass' })).json.token;
+  const made = await call('/api/admin/coupons', 'POST', { code: 'TWICE10', type: 'percent', value: 10, active: true }, owner);
+  assert.ok(made.status < 300, made.text);
+  const c = (made.json.coupon || made.json);
+  const first = await call(`/api/admin/coupons/${c.id}`, 'PUT', { active: false }, fin);
+  assert.strictEqual(first.status, 202, first.text);
+  assert.ok(!first.json.already);
+  const again = await call(`/api/admin/coupons/${c.id}`, 'PUT', { active: false }, fin);
+  assert.strictEqual(again.status, 202, again.text);
+  assert.strictEqual(again.json.already, true);
+  assert.strictEqual(again.json.approval.id, first.json.approval.id);
+  // A different change on the same coupon is its own request.
+  const other = await call(`/api/admin/coupons/${c.id}`, 'PUT', { value: 15 }, fin);
+  assert.strictEqual(other.status, 202, other.text);
+  assert.notStrictEqual(other.json.approval.id, first.json.approval.id);
+  const pending = (await call('/api/admin/approvals', 'GET', undefined, owner)).json.approvals.filter((a) => a.path === `/api/admin/coupons/${c.id}` && a.status === 'pending');
+  assert.strictEqual(pending.length, 2);
+  const list = (await call('/api/admin/coupons', 'GET', undefined, fin)).json.coupons;
+  assert.strictEqual(list.find((x) => x.id === c.id).waiting.length, 2);
+});
+
+test('activity log pages: "more" and a "before" cursor reach the older lines, none repeated or skipped', async () => {
+  for (let i = 0; i < 5; i++) await call('/api/admin/coupons', 'POST', { code: `PAGE${i}X`, type: 'percent', value: 5, active: true }, owner);
+  const all = (await call('/api/admin/activity?limit=500', 'GET', undefined, owner)).json;
+  assert.ok(all.entries.length >= 5);
+  const seen = [];
+  let next = '';
+  for (let guard = 0; guard < 400; guard++) {
+    const r = (await call(`/api/admin/activity?limit=2${next ? `&before=${encodeURIComponent(next)}` : ''}`, 'GET', undefined, owner)).json;
+    seen.push(...r.entries.map((e) => e.id));
+    if (!r.more) { assert.ok(!r.next); break; }
+    assert.ok(r.next);
+    next = r.next;
+  }
+  assert.deepStrictEqual(seen, all.entries.map((e) => e.id));
+  // A bad cursor is the first page, not an error.
+  assert.strictEqual((await call('/api/admin/activity?limit=2&before=nope', 'GET', undefined, owner)).status, 200);
+});

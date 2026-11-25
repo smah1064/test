@@ -42,6 +42,7 @@ Object.assign(window.POD_STRINGS, {
 
   // ---------- A change waiting for an owner ----------
   'ap.sent': ['Sent to an owner for approval: {summary}', 'اتبعت لصاحب الموقع للموافقة: {summary}'],
+  'ap.already': ['Already waiting for an owner: {summary}', 'مستني صاحب الموقع بالفعل: {summary}'],
   'ap.aChange': ['your change', 'التعديل بتاعك'],
   'ap.waitingHere': ['Sent for approval: waiting for an owner', 'اتبعت للموافقة: مستني صاحب الموقع'],
   'ap.photoAlt': ['The photo asked for', 'الصورة المطلوبة'],
@@ -104,6 +105,10 @@ Object.assign(window.POD_STRINGS, {
   'act.emergency': ['Emergency login', 'دخول طوارئ'],
   'act.approval': ['Approval', 'موافقة'],
   'act.approvedBy': ['Approved by {name}', 'وافق عليه {name}'],
+  'act.moreThere': ['(the latest: “Show older” at the bottom for the rest)', '(الأحدث: «اعرض الأقدم» تحت عشان الباقي)'],
+  'act.older': ['Show older', 'اعرض الأقدم'],
+  'act.csvBusy': ['Preparing the file…', 'بنجهز الملف…'],
+  'act.csvCut': ['The file has the latest {n} lines: pick fewer days for the rest.', 'الملف فيه آخر {n} سطر: اختار أيام أقل عشان الباقي.'],
   'act.none': ['Nothing logged for these filters.', 'مفيش حاجة متسجلة بالفلاتر دي.'],
   'act.count.one': ['1 entry', 'سطر واحد'],
   'act.count.two': ['2 entries', 'سطرين'],

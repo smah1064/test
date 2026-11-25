@@ -111,8 +111,8 @@ window.AdminRoles = (() => {
     return String(v[L] || v.en || v.ar || '');
   }
   const t = (k, p) => (window.POD && window.POD.t ? window.POD.t(k, p) : k);
-  /** "Sent to an owner for approval: {summary}" for this approval. */
-  const pendingText = (approval) => t('ap.sent', { summary: inLang(approval && approval.summary) || t('ap.aChange') });
+  /** "Sent to an owner for approval: {summary}" for this approval ("Already waiting…" when it was pressed again). */
+  const pendingText = (approval) => t(approval && approval.already ? 'ap.already' : 'ap.sent', { summary: inLang(approval && approval.summary) || t('ap.aChange') });
   const said = new Map(); // message -> when it was said (a caller's red toast with the same words is left out)
   let hook = null;
   /** Neutral toast (not red), shown a little longer than the usual one: the summary can be long. */
