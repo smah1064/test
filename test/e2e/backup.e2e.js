@@ -31,6 +31,14 @@ test('Backups tab: an owner makes one and downloads it; the team doesn\'t see th
     await page.click('[data-tab="backup"]');
     await page.waitForSelector('#tab-backup [data-bk-make]');
     assert.match(await page.textContent('#tab-backup'), /نسخة احتياطية/);
+    // The top card has room inside, like the other dashboard cards: its title and button keep clear of its border.
+    const gaps = await page.evaluate(() => {
+      const card = document.querySelector('.bk-head').getBoundingClientRect();
+      const h = document.querySelector('.bk-head h2').getBoundingClientRect();
+      const b = document.querySelector('[data-bk-make]').getBoundingClientRect();
+      return { top: h.top - card.top, right: card.right - h.right, bottom: card.bottom - b.bottom, btnRight: card.right - b.right };
+    });
+    for (const [k, v] of Object.entries(gaps)) assert.ok(v >= 12, `${k}: ${v}px from the card's border`);
     await page.click('[data-bk-make]');
     await page.waitForSelector('#tab-backup .bk-row [data-bk-get]', { timeout: 30000 });
     const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#tab-backup .bk-row [data-bk-get]')]);
