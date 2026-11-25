@@ -169,6 +169,7 @@ const MESSAGES = {
   badStatus: { en: 'status must be one of {list}', ar: 'الحالة لازم تكون واحدة من {list}' },
   importBadUrl: { en: 'Paste a full link that starts with https://', ar: 'الصق رابط كامل بيبدأ بـ https://' },
   importBlocked: { en: "This link can't be opened", ar: 'الرابط ده مش ممكن نفتحه' },
+  importNoSite: { en: "We couldn't find that website. Check the address", ar: 'ملقيناش الموقع ده. اتأكد إن الرابط مكتوب صح' },
   importFailed: { en: "We couldn't open that link. Try again, or save the picture and upload it", ar: 'معرفناش نفتح الرابط. جرّب تاني، أو احفظ الصورة وارفعها' },
   importRefused: { en: "That site doesn't let us read its pages. Save the picture (or take a screenshot) and upload it", ar: 'الموقع ده مش بيسمح لنا نقرأ صفحاته. احفظ الصورة (أو خد سكرين شوت) وارفعها' },
   importTooBig: { en: 'That file is too big (15 MB at most)', ar: 'الملف كبير أوي (أقصى حاجة 15 ميجا)' },

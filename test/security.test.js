@@ -74,6 +74,40 @@ test('import: the API refuses links to the server itself before fetching anythin
   }
 });
 
+test('import: a site name that doesn\'t exist says so (not "paste a full link"), in both languages', async () => {
+  const dns = require('dns');
+  const realLookup = dns.lookup;
+  // (The internet replaced: "no-such-shop.invalid" has no address; "flaky.example" can't be looked up right now.)
+  dns.lookup = (host, opts, cb) => {
+    if (typeof opts === 'function') { cb = opts; opts = {}; }
+    const fail = (code) => process.nextTick(cb, Object.assign(new Error(`getaddrinfo ${code} ${host}`), { code, hostname: host }));
+    if (host === 'no-such-shop.invalid') return fail('ENOTFOUND');
+    if (host === 'flaky.example') return fail('EAI_AGAIN');
+    return realLookup(host, opts, cb);
+  };
+  try {
+    await assert.rejects(importer.safeGet('https://no-such-shop.invalid/p/1', { maxBytes: 1e6, accept: '*/*' }), (e) => e.code === 'importNoSite');
+    await assert.rejects(importer.safeGet('https://flaky.example/p/1', { maxBytes: 1e6, accept: '*/*' }), (e) => e.code === 'importFailed', 'a lookup that failed for now: try again');
+    for (const [lang, want] of [['en', "We couldn't find that website. Check the address"], ['ar', 'ملقيناش الموقع ده. اتأكد إن الرابط مكتوب صح']]) {
+      const res = await fetch(`${base}/api/import/link`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Lang': lang }, body: JSON.stringify({ url: 'https://no-such-shop.invalid/p/1' }) });
+      assert.strictEqual(res.status, 422, lang);
+      const j = await res.json();
+      assert.strictEqual(j.code, 'importNoSite', lang);
+      assert.strictEqual(j.error, want, lang);
+      assert.doesNotMatch(j.error, /https:\/\//, lang);
+      const img = await fetch(`${base}/api/import/image?url=${encodeURIComponent('https://no-such-shop.invalid/a.png')}`, { headers: { 'X-Lang': lang } });
+      assert.strictEqual(img.status, 422, lang);
+      assert.strictEqual((await img.json()).code, 'importNoSite', lang);
+    }
+    // A link that isn't one still asks for a full link.
+    const bad = await post('/api/import/link', { url: 'shop dot com' });
+    assert.strictEqual(bad.status, 400);
+    assert.strictEqual((await bad.json()).code, 'importBadUrl');
+  } finally {
+    dns.lookup = realLookup;
+  }
+});
+
 // ---------- Spreadsheets (name lists) ----------
 
 const xlsx = (sheetXml, extra = []) => mergeData.zipStore([{ name: 'xl/worksheets/sheet1.xml', data: Buffer.from(sheetXml) }, ...extra]);

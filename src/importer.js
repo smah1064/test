@@ -149,7 +149,8 @@ function safeGet(raw, { maxBytes, accept }) {
         stream.on('error', (e) => reject(new ImportError('importFailed', e.message)));
       });
       req.on('timeout', () => req.destroy(new ImportError('importFailed', 'timeout')));
-      req.on('error', (e) => reject(e instanceof ImportError ? e : new ImportError(e.code === 'ENOTFOUND' ? 'importBadUrl' : 'importFailed', e.message)));
+      // (A site name that doesn't exist has its own message; a link that isn't one was refused above.)
+      req.on('error', (e) => reject(e instanceof ImportError ? e : new ImportError(e.code === 'ENOTFOUND' ? 'importNoSite' : 'importFailed', e.message)));
     };
     try {
       go(checkUrl(raw));
