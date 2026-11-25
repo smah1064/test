@@ -2875,8 +2875,8 @@
         <figcaption><b>${esc(t('rv.artwork', { side: tr(s.name) }))}</b></figcaption>
         ${board}
         <dl class="rv-dims small">
-          <dt>${esc(t('rv.size'))}</dt><dd>${esc(t('rv.sizeLine', { w: Number(cm(w)), h: Number(cm(h)), wi: Math.round(w * 100) / 100, hi: Math.round(h * 100) / 100 }))}${extra ? `<div class="muted">${esc(extra)}</div>` : ''}</dd>
-          ${s.dpi || s.widthPx ? `<dt>DPI · px</dt><dd>${esc(t('rv.resolution', { dpi: s.dpi || '?', w: s.widthPx || '?', h: s.heightPx || '?' }))}</dd>` : ''}
+          ${w && h ? `<dt>${esc(t('rv.size'))}</dt><dd>${esc(t('rv.sizeLine', { w: Number(cm(w)), h: Number(cm(h)), wi: Math.round(w * 100) / 100, hi: Math.round(h * 100) / 100 }))}${extra ? `<div class="muted">${esc(extra)}</div>` : ''}</dd>` : ''}
+          ${s.widthPx && s.heightPx ? `<dt>DPI · px</dt><dd>${esc(t('rv.resolution', { dpi: s.dpi || '?', w: s.widthPx, h: s.heightPx }))}</dd>` : ''}
         </dl>
       </figure>`;
   }
@@ -3123,6 +3123,7 @@
   /**
    * Photo prints and kids' books (not made in the editor; owner's decision, 25 Nov): the team puts in a better photo
    * (usually from the customer by WhatsApp), with the note of what changed; the customer approves the new proof.
+   * (Each photo's size in brackets: after "·" it read as one number in Arabic, "صورة ١ · ١٠" as "١٠٠١". QA 25 Nov.)
    */
   function rvPhotos(item) {
     const isBook = item.kind === 'book';
@@ -3140,7 +3141,7 @@
           return `
           <div class="rv-photo-row" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:6px 0">
             ${p.url ? `<img src="${esc(p.url)}" alt="" width="48" height="48" style="object-fit:cover;border-radius:6px" loading="lazy">` : ''}
-            <span class="small">${esc(isBook ? t('rv.photoChild') : t('rv.photoN', { n: POD.num(p.n) }))}${p.size && p.size.label ? ` · ${esc(tr(p.size.label))}` : ''}</span>
+            <span class="small">${esc(isBook ? t('rv.photoChild') : t('rv.photoN', { n: POD.num(p.n) }))}${p.size && p.size.label ? ` <bdi>(${esc(tr(p.size.label))})</bdi>` : ''}</span>
             <label class="btn btn-sm${busy ? ' disabled' : ''}">${esc(t('rv.photoReplace'))}<input type="file" accept="image/*" hidden data-rv-photo="${id}" data-rv-n="${esc(String(p.n))}" ${busy ? 'disabled' : ''}></label>
             ${rvSideMsg[key] ? msgHtml(rvSideMsg[key]) : ''}
           </div>`;

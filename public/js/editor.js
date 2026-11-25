@@ -4459,8 +4459,9 @@
     }
     const g = qtyGrid();
     // (No size picked yet: the one piece kept for the first size isn't shown under it, so no size looks chosen and a
-    // number typed under another size is that size only. QA 25 Nov.)
-    const unpickedOne = !st.sizePicked && mix().sizes && qtyLines().length === 1 && qtyTotal() === 1;
+    // number typed under another size is that size only. QA 25 Nov. Not for packs: there the first pack is shown as
+    // chosen, so its box says 1, as the total does.)
+    const unpickedOne = !st.sizePicked && mix().sizes && !packs() && qtyLines().length === 1 && qtyTotal() === 1;
     const sizes = mix().sizes ? p.sizes.filter((z) => canPick(z) || z.id === st.sizeId) : p.sizes.filter((z) => z.id === st.sizeId);
     const colors = p.colors.filter((c) => g[c.id]);
     const total = qtyTotal();
@@ -4498,7 +4499,8 @@
     const setCell = (c, z, v) => {
       // No size picked yet: the one piece kept for the first size isn't the customer's. A number typed under another
       // size is that size only, and that size is the one picked (an S nobody chose was ordered too: QA 25 Nov).
-      const unpicked = !st.sizePicked && mix().sizes && qtyLines().length === 1 && qtyTotal() === 1;
+      // (Packs show their 1 under the first pack, so it stays as shown.)
+      const unpicked = !st.sizePicked && mix().sizes && !packs() && qtyLines().length === 1 && qtyTotal() === 1;
       const g = qtyGrid();
       if (unpicked && !(c === st.colorId && z === st.sizeId) && g[st.colorId]) delete g[st.colorId][st.sizeId];
       g[c] ||= {};

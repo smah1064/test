@@ -229,7 +229,8 @@
     if (e.target.id !== 'reject-form') return;
     e.preventDefault();
     const comment = st.comment.trim();
-    if (!comment) {
+    // (Words or numbers, not only spaces or invisible marks: the shop needs to know what to change.)
+    if (!/[\p{L}\p{N}]/u.test(comment.replace(/[\u061c\u0640\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, ''))) {
       st.formError = t('proofPage.commentNeeded');
       render();
       document.getElementById('comment').focus();

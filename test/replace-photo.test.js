@@ -115,3 +115,34 @@ test('kids\' book: the child\'s photo replaced; the drawings are made again from
   assert.match(view.note, /clearer photo/);
   assert.strictEqual((await post(`/api/proofs/${t}`, { decision: 'approve', proofHash: view.proof.proofHash })).status, 200);
 });
+
+test('photo prints: a sharp photo in place of a blurry one clears the "low resolution" warning', async () => {
+  // (The photos page sends each photo cut to its print size, with how sharp the original was: 60 DPI here.)
+  const photos = [{ size: '10x15', copies: 1, orientation: 'portrait', dpi: 60 }];
+  const c = await (await post('/api/photosets', { color: 'gloss', photos })).json();
+  const [a, b] = sizeCm('10x15').map(px);
+  for (const name of c.files) await fetch(`${base}/api/designs/${c.id}/files/${name}`, { method: 'PUT', headers: { 'x-upload-token': c.uploadToken }, body: name.startsWith('photo-') ? await jpeg(a, b) : await jpeg(200, 300) });
+  const done = await fetch(`${base}/api/designs/${c.id}/complete`, { method: 'POST', headers: { 'x-upload-token': c.uploadToken } });
+  assert.strictEqual(done.status, 200, await done.clone().text());
+  const o = await order(c.id);
+  const it = o.items[0];
+  const before = await (await admin(`/api/admin/items/${it.id}/review`)).json().catch(() => null);
+  const warned = (x) => JSON.stringify((x && (x.preflight || (x.item && x.item.preflight))) || {}).includes('photoLowRes');
+  await sendBack(it);
+  const r = await replace(it, 1, await jpeg(2400, 3600));
+  assert.strictEqual(r.status, 200, await r.clone().text());
+  const rv = await r.json();
+  assert.ok(rv.preflight, 'the item\'s checks are in the answer');
+  assert.ok(!warned(rv), `still warned: ${JSON.stringify(rv.preflight)}`);
+  assert.strictEqual(rv.preflight.status, 'pass');
+  if (before && (before.preflight || (before.item && before.item.preflight))) assert.ok(warned(before), 'the blurry one was warned about');
+  // "Ask for changes" on the new proof needs words: nothing, spaces or only invisible marks are refused.
+  const t = rv.proofLink.split('t=')[1];
+  for (const comment of ['', '   ', '\u200f\u200f', '\u0640\u0640']) {
+    const no = await post(`/api/proofs/${t}`, { decision: 'reject', comment });
+    assert.strictEqual(no.status, 400, JSON.stringify(comment));
+    assert.match((await no.json()).error, /needs to change|التعديل المطلوب/);
+  }
+  const yes = await post(`/api/proofs/${t}`, { decision: 'reject', comment: 'Crop it less on the left, please' });
+  assert.strictEqual(yes.status, 200, await yes.clone().text());
+});

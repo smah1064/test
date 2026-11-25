@@ -1079,6 +1079,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       item.status = 'queued';
       item.review = { ...(item.review || { needed: false, reasons: [] }), status: 'done' };
     } else if (b.decision === 'reject') {
+      // (What to change, in words: an empty or invisible-only comment gives the shop nothing to act on. QA 25 Nov.)
+      if (!noteText(comment, 1000)) throw new HttpError(400, 'noteRequired');
       item.status = 'changes_requested';
       newReviseLink(item);
       item.approvals = [...(item.approvals || []), { action: 'rejected', by: 'customer', at: now, proofHash: proofHashOf(d), version: d.version || 1, note: comment || null }];
@@ -1341,6 +1343,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       }
       d.version = v + 1;
       if (d.kind === 'book') store.writeDesignFile(d.id, 'book-preview.png', await (await books.renderPage(bookData(d), 0, 600)).png().toBuffer());
+      // The file checks again, for the new photo (a sharp one clears "low resolution"), as a replaced file does.
+      await runPreflight(d);
+      item.preflight = d.preflight;
       const now = new Date().toISOString();
       if (item.approval && item.approval.sample) item.sampleWanted = true;
       item.approval = null;
@@ -7164,10 +7169,15 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   const publicDir = path.join(__dirname, '..', 'public');
   const assetVersion = siteVersion(publicDir);
   const pages = new Map();
+  // The shop's pages, listed once: an address that isn't one of them is never looked up or kept (any made-up
+  // address used to be remembered, so endless made-up addresses could fill the server's memory; QA 25 Nov).
+  const pageNames = new Set(fs.readdirSync(publicDir).filter((f) => f.endsWith('.html')).map((f) => f.slice(0, -5)));
   const pageFor = (name) => {
+    if (!pageNames.has(name)) return null;
     if (!pages.has(name)) {
       const file = path.join(publicDir, name + '.html');
       const html = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null;
+      if (!html) return null;
       pages.set(name, html && html.replace(/((?:src|href)=")(\/(?:js|css|vendor|fonts)\/[^"?#]+\.(?:js|css))"/g, `$1$2?v=${assetVersion}"`));
       if (html) pageCsp.set(name, security.pageCsp(html, { captcha: Boolean(captcha) && CAPTCHA_PAGES.has(name) }));
     }
