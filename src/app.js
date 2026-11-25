@@ -465,7 +465,7 @@ function adminItem(order, item, index) {
     imports: item.imports || null,
     rightsConfirmedAt: item.rightsConfirmedAt || null,
     // Sent back to Review after the customer approved it: why, by the team (not shown to the customer).
-    ...(item.review && item.review.reopenReason ? { review: { ...publicItem(item).review, reasons: item.review.reasons || [], reopenReason: item.review.reopenReason } } : {}),
+    ...(item.review && item.review.reopenReason ? { review: { ...publicItem(item).review, reasons: item.review.reasons || [], reopenReason: item.review.reopenReason, ...(item.review.reopenWarnings ? { reopenWarnings: item.review.reopenWarnings } : {}) } } : {}),
     approvals: item.approvals || [],
   };
 }
@@ -1106,8 +1106,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         for (const sd of (item.sends || []).filter((x) => x.status === 'sent' || x.status === 'opened').slice(-3)) warnings.push({ kind: 'house', house: sd.houseName, at: sd.at });
         if (item.filmBatch) warnings.push({ kind: 'film', film: item.filmBatch.id, at: item.filmBatch.at });
         item.status = 'review';
-        item.review = { needed: true, reasons: [...new Set(['reopened', ...((item.review && item.review.reasons) || [])])], status: 'pending', reopenReason: note };
-        item.approvals = [...(item.approvals || []), { action: 'reopened', by: 'shop', at: now, note, proofHash: d ? proofHashOf(d) : null, version: d ? d.version || 1 : null }];
+        // (The printing house or film to stop stays with the job, on its Review card: it was only a 5-second toast.)
+        item.review = { needed: true, reasons: [...new Set(['reopened', ...((item.review && item.review.reasons) || [])])], status: 'pending', reopenReason: note, ...(warnings.length ? { reopenWarnings: warnings } : {}) };
+        item.approvals = [...(item.approvals || []), { action: 'reopened', by: 'shop', at: now, note, proofHash: d ? proofHashOf(d) : null, version: d ? d.version || 1 : null, ...(warnings.length ? { warnings } : {}) }];
         // A film made with the old artwork can't be used for it: it goes on a new film once approved again.
         delete item.filmBatch;
         item.history.push({ status: item.status, at: now });
@@ -5170,8 +5171,20 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (!same(b.basePrice, product.basePrice) || !same(b.extraSidePrice, extraNow) || !sizesSame) throw new HttpError(403, 'ownerOnly');
       const co = accounting.cleanCosts(product, b.costs);
       if (co.error) throw new HttpError(400, co.error);
-      // What waits for the owner is the costs alone (the prices shown on the screen are never part of it).
-      req.body = { costs: b.costs };
+      // What waits for the owner is the costs alone (the prices shown on the screen are never part of it), and only
+      // the boxes changed: two requests for one product approved in turn don't undo each other. QA 25 Nov.
+      const raw = (store.db.costs || {})[product.id] || {};
+      const num = (v, min) => accounting.money(v, min === undefined ? undefined : { min }) || 0;
+      const changed = {};
+      for (const k of ['blank', 'printFirst', 'printExtra', 'embroidery', 'other']) if (b.costs[k] !== undefined && num(b.costs[k]) !== num(raw[k])) changed[k] = b.costs[k];
+      const sz = {};
+      for (const z of product.sizes) {
+        const v = b.costs.sizes && typeof b.costs.sizes === 'object' ? b.costs.sizes[z.id] : undefined;
+        if (v !== undefined && num(v, -1e6) !== num((raw.sizes || {})[z.id], -1e6)) sz[z.id] = v;
+      }
+      if (Object.keys(sz).length) changed.sizes = sz;
+      if (!Object.keys(changed).length) throw new HttpError(400, 'nothingToApprove');
+      req.body = { costs: changed };
     },
     'PUT /api/admin/accounts/settings': (req) => {
       const ship = accounting.money((req.body || {}).shippingCost);
@@ -6328,7 +6341,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const ownPrices = req.adminWho.perms.has('prices.edit') && !(req.adminWho.approvalId && costsOnly);
     const pr = ownPrices ? accounting.cleanPricing(product, req.body || {}) : { pricing: null };
     if (pr.error) throw new HttpError(400, pr.error);
-    const co = accounting.cleanCosts(product, (req.body || {}).costs || {});
+    // (A held cost change carries only the boxes it changed: on top of the costs saved now.)
+    let costsBody = (req.body || {}).costs || {};
+    if (req.adminWho.approvalId && costsOnly && costsBody && typeof costsBody === 'object') {
+      const raw = (store.db.costs || {})[product.id] || {};
+      costsBody = { ...raw, ...costsBody, sizes: { ...(raw.sizes || {}), ...((costsBody.sizes && typeof costsBody.sizes === 'object') ? costsBody.sizes : {}) } };
+    }
+    const co = accounting.cleanCosts(product, costsBody);
     if (co.error) throw new HttpError(400, co.error);
     // (No costs sent: the saved ones stay; they're never wiped by a request about prices only.)
     const costsSent = (req.body || {}).costs !== undefined;

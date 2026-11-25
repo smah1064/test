@@ -2745,7 +2745,11 @@
   }
 
   function reasonText(item, r) {
-    if (r === 'reopened') return t('rv.reason.reopened', { why: (item.review && item.review.reopenReason) || '' });
+    if (r === 'reopened') {
+      // (Sent to a printing house or on a DTF film when it came back: said here until it's dealt with.)
+      const ws = (item.review && Array.isArray(item.review.reopenWarnings) ? item.review.reopenWarnings : []).map((w) => (w.kind === 'house' ? t('back.warnHouse', { house: w.house, date: POD.date(w.at) }) : t('back.warnFilm', { film: w.film })));
+      return [t('rv.reason.reopened', { why: (item.review && item.review.reopenReason) || '' }), ...ws.map((x) => `⚠ ${x}`)].join(' ');
+    }
     const m = proofOf(item).merge || item.merge;
     if (r === 'nameList' && m && m.count) return `${t('rv.reason.nameList')}${SEP()}${t('rv.copies', { n: POD.num(m.count) })}`;
     if (r === 'bulk') return `${t('rv.reason.bulk')}${SEP()}${countText(item)}`;

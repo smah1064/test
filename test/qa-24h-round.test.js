@@ -300,3 +300,21 @@ test('a stock count waiting for approval is marked "changed since" when pieces a
   await approvedMug();
   assert.ok((await row()).changedSince, 'a sale since the request is a change');
 });
+
+test('two waiting cost changes for one product, approved in turn, both stay (each carries only what it changed)', async () => {
+  const add = await call('/api/admin/staff', 'POST', { name: 'Fin Four', username: 'fin4x', roles: ['finance'], password: 'fourth-finance-pass' }, owner);
+  assert.strictEqual(add.status, 201, add.text);
+  const fin = (await call('/api/admin/login', 'POST', { username: 'fin4x', password: 'fourth-finance-pass' })).json.token;
+  const row = (await call('/api/admin/pricing', 'GET', undefined, owner)).json.products.find((p) => p.id === 'cap');
+  const body = (costs) => ({ basePrice: row.basePrice, extraSidePrice: row.extraSidePrice, sizes: Object.fromEntries(row.sizes.map((z) => [z.id, z.surcharge])), costs: { ...row.costs, ...costs } });
+  const a = await call('/api/admin/pricing/cap', 'PUT', body({ blank: 41 }), fin);
+  const b = await call('/api/admin/pricing/cap', 'PUT', body({ other: 7 }), fin);
+  assert.strictEqual(a.status, 202, a.text);
+  assert.strictEqual(b.status, 202, b.text);
+  for (const r of [a, b]) assert.strictEqual((await call(`/api/admin/approvals/${(r.json.approval || r.json).id}/approve`, 'POST', {}, owner)).status, 200);
+  const now = (await call('/api/admin/pricing', 'GET', undefined, owner)).json.products.find((p) => p.id === 'cap');
+  assert.strictEqual(now.costs.blank, 41, 'the first change stays');
+  assert.strictEqual(now.costs.other, 7);
+  const same = { basePrice: now.basePrice, extraSidePrice: now.extraSidePrice, sizes: Object.fromEntries(now.sizes.map((z) => [z.id, z.surcharge])), costs: now.costs };
+  assert.strictEqual((await call('/api/admin/pricing/cap', 'PUT', same, fin)).status, 400, 'nothing changed: nothing to approve');
+});
