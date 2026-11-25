@@ -18,36 +18,38 @@
   const origRenderChars = fabric.Text.prototype._renderChars;
   fabric.Text.prototype._renderChars = function (method, ctx, line, left, top, lineIndex) {
     if (ctx && ctx.canvas && ctx.canvas.removeAttribute) ctx.canvas.removeAttribute('dir');
-    if (mixedStyledLine(this, line, lineIndex)) return renderBidiLine.call(this, method, ctx, line, left, top, lineIndex);
+    if (styledBidiLine(this, line, lineIndex)) return renderBidiLine.call(this, method, ctx, line, left, top, lineIndex);
     return origRenderChars.call(this, method, ctx, line, left, top, lineIndex);
   };
 
-  // ---------- Arabic and English on one line, with a word in another colour ----------
+  // ---------- A word in another colour, on a line that is not plain text in the box's direction ----------
   // Fabric draws a line that has several colours piece by piece, in the order
-  // the letters were typed. With English and Arabic on one line that puts
-  // words in the wrong places (Arabic reads the other way). Such lines are
-  // laid out here in reading order instead, by the Unicode bidi rules (UAX #9)
-  // for one line of plain text: each letter gets a level (even: left to
-  // right, odd: right to left), the line is split into stretches of one
-  // level, the stretches are put in display order, and each coloured piece is
-  // drawn in its stretch's direction. So a number and the English letters
-  // around it ("3D", "2x1") stay together, and the line reads exactly as the
-  // browser shows it in one colour. A line in one colour keeps the browser's
-  // own layout.
+  // the letters were typed, from the line's start in the box's direction. That
+  // is only right for a line that runs the box's way all along. A line with
+  // English and Arabic on it, or a line written in the other script than the
+  // box's ("Second line here" under an Arabic first line, "أحب مصر جدا" under
+  // "Hello") came out with its words in the wrong order; and Arabic pieces were
+  // placed by Fabric's letter-by-letter (unjoined) widths, so the words around a
+  // coloured one moved. Such lines are laid out here in reading order instead,
+  // by the Unicode bidi rules (UAX #9) for one line of plain text: each letter
+  // gets a level (even: left to right, odd: right to left), the line is split
+  // into stretches of one level, the stretches are put in display order, and
+  // each coloured piece is measured and drawn in its stretch's direction, from
+  // where the browser starts the line in one colour. So a number and the
+  // English letters around it ("3D", "2x1") stay together, and the line reads
+  // and sits exactly as the browser shows it in one colour. A line in one
+  // colour keeps the browser's own layout; so does an English line with a
+  // coloured word in a left-to-right box (Fabric places it right).
   const RTL_CH = /[֐-ࣿיִ-﷿ﹰ-ﻼ]/;
-  const LETTER = /\p{L}/u;
-  const DIGIT = /[0-9٠-٩۰-۹]/;
-  function mixedStyledLine(o, line, lineIndex) {
+  /** Whether line `lineIndex` (with words in other colours or fonts) is drawn by renderBidiLine. */
+  function styledBidiLine(o, line, lineIndex) {
     if (o.path || o.charSpacing || (o.textAlign || '').includes('justify') || !line || line.length < 2) return false;
     if (o.isEmptyStyles(lineIndex)) return false;
-    let r = false;
-    let l = false;
-    for (const ch of line) {
-      if (RTL_CH.test(ch)) r = true;
-      else if (LETTER.test(ch) || DIGIT.test(ch)) l = true;
-      if (r && l) return true;
-    }
-    return false;
+    // Right-to-left letters anywhere (Arabic joins its letters: Fabric's widths are off).
+    if (line.some((ch) => RTL_CH.test(ch))) return true;
+    // Anything that does not run the box's way (English or numbers in a right-to-left box).
+    const rtl = o.direction === 'rtl';
+    return bidiLevels(line, rtl).some((lv) => lv !== (rtl ? 1 : 0));
   }
   /** The bidi type of one character (the types that matter for one line of text). */
   function bidiType(ch) {
@@ -241,11 +243,12 @@
       total += run.w;
     }
     ctx.restore();
-    // Fabric gives the line's start: its left edge, or its right edge for right-to-left text.
-    const lineW = o.getLineWidth(lineIndex);
-    const boxLeft = rtl ? left - lineW : left;
-    const align = o.textAlign || 'left';
-    let x = boxLeft + (align.includes('center') ? (lineW - total) / 2 : align.includes('right') ? lineW - total : 0);
+    // Fabric gives the line's start (its left edge, or its right edge for right-to-left text),
+    // already placed for the alignment, and draws a line in one colour from there with the
+    // browser's widths: start there too, so no word moves when one is coloured. (Fabric's own
+    // line width adds up its letter-by-letter measures, which differ from the drawn width for
+    // joined Arabic letters, vowel marks and some signs.)
+    let x = rtl ? left - total : left;
     const order = bidiOrder(runs);
     for (const run of order) {
       for (const p of run.pieces) {
@@ -267,6 +270,40 @@
     }
     ctx.restore();
   }
+  // Underline (and line-through, overline) of such a line: under each piece where it is drawn, in
+  // its colour. (Fabric draws it by its own letter-by-letter places, in the box's direction: the
+  // coloured stretch of the underline ended up under another word.) Fabric draws the other lines.
+  const origDecoration = fabric.Text.prototype._renderTextDecoration;
+  fabric.Text.prototype._renderTextDecoration = function (ctx, type) {
+    if (!this[type] && !this.styleHas(type)) return;
+    const lines = this._textLines;
+    const own = lines.map((line, i) => styledBidiLine(this, line, i));
+    if (!own.includes(true)) return origDecoration.call(this, ctx, type);
+    // Fabric's line measures are kept in its caches: fill them before it sees our lines as empty ones.
+    lines.forEach((line, i) => this._getLineLeftOffset(i) + this.getHeightOfLine(i));
+    this._textLines = lines.map((line, i) => (own[i] ? [] : line));
+    try {
+      origDecoration.call(this, ctx, type);
+    } finally {
+      this._textLines = lines;
+    }
+    let top = this._getTopOffset();
+    for (let i = 0; i < lines.length; i++) {
+      const lh = this.getHeightOfLine(i);
+      if (own[i] && (this[type] || this.styleHas(type, i))) {
+        const baseline = top + (lh / this.lineHeight) * (1 - this._fontSizeFraction);
+        for (const run of bidiLineLayout(this, ctx, lines[i], this._getLeftOffset() + this._getLineLeftOffset(i), i)) {
+          for (const p of run.pieces) {
+            const at = (prop) => this.getValueOfPropertyAt(i, p.first, prop);
+            if (!at(type) || !at('fill')) continue;
+            ctx.fillStyle = at('fill');
+            ctx.fillRect(p.x, baseline + this.offsets[type] * this.getHeightOfChar(i, p.first) + (at('deltaY') || 0), p.w, this.fontSize / 15);
+          }
+        }
+      }
+      top += lh;
+    }
+  };
 
   // ---------- Curved text ----------
   // The text is drawn straight into an offscreen canvas at the current
@@ -775,5 +812,5 @@
     o.dirty = true;
   }
 
-  window.POD_FX = { laserTone, maskPath, roundRectPath, removeBackground, fontFaceCss, bidiLevels, bidiRuns, bidiOrder, mixedStyledLine, bidiLineLayout };
+  window.POD_FX = { laserTone, maskPath, roundRectPath, removeBackground, fontFaceCss, bidiLevels, bidiRuns, bidiOrder, styledBidiLine, bidiLineLayout };
 })();

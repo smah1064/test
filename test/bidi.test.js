@@ -4,7 +4,9 @@
  * The editor's own layout of a line that mixes Arabic and English and has a
  * word in another colour (public/js/fabric-ext.js: bidiRuns / bidiOrder).
  * The line must read in the same order as the browser shows it in one colour
- * (the Unicode bidi algorithm), so colouring one word never moves another.
+ * (the Unicode bidi algorithm), so colouring one word never moves another; that
+ * goes for a line written in the other script than the box's direction too
+ * (English under Arabic, Arabic under English), and for its underline.
  */
 const test = require('node:test');
 const assert = require('node:assert');
@@ -13,7 +15,7 @@ const path = require('path');
 const vm = require('vm');
 
 /** Load fabric-ext.js with a stand-in for Fabric (anything it touches at load time just works). */
-function loadFx() {
+function loadFx(setup = () => {}) {
   const stub = () => {
     const props = new Map();
     return new Proxy(function () {}, {
@@ -28,10 +30,21 @@ function loadFx() {
     });
   };
   const window = {};
-  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../public/js/fabric-ext.js'), 'utf8'), { window, fabric: stub(), console });
+  const fabric = stub();
+  setup(fabric);
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../public/js/fabric-ext.js'), 'utf8'), { window, fabric, console });
   return window.POD_FX;
 }
-const { bidiRuns, bidiOrder } = loadFx();
+let fabricStub;
+const { bidiRuns, bidiOrder, styledBidiLine, bidiLineLayout } = loadFx((fabric) => {
+  fabricStub = fabric;
+  // Fabric's own test for "this letter is drawn in another style than the next one".
+  fabric.util.hasStyleChanged = (a, b) => a.fill !== b.fill || a.fontWeight !== b.fontWeight;
+  // Fabric's own underline drawing: records which lines it was given.
+  fabric.Text.prototype._renderTextDecoration = function () {
+    this.fabricDrew = this._textLines.map((l) => l.join(''));
+  };
+});
 
 /** The line as it is shown, left to right: each stretch's text, in display order (right-to-left stretches reversed by word). */
 function shown(text, baseRtl = true) {
@@ -123,4 +136,112 @@ test('brackets keep both ends around the words inside them (rule N0)', () => {
   assert.strictEqual(order('3D ؟ (مرحبا)', false), '3D )ابحرم( ؟');
   // A bracket without its pair is an ordinary sign: at the end of the line it goes to the box's side.
   assert.strictEqual(order('abc def)'), ')abc def');
+});
+
+/**
+ * A stand-in for a Fabric text box: `styles` as Fabric keeps them ({ line: { letter: style } }),
+ * and a measuring context where every letter is 10 wide (so places can be checked exactly).
+ */
+function textBox(text, direction, styles = {}) {
+  return {
+    direction,
+    textAlign: 'center',
+    charSpacing: 0,
+    _textLines: text.split('\n').map((l) => Array.from(l)),
+    isEmptyStyles: (li) => !styles[li] || !Object.keys(styles[li]).length,
+    getCompleteStyleDeclaration: (li, i) => ({ fill: '#111', fontWeight: 'normal', ...((styles[li] || {})[i] || {}) }),
+    _getFontDeclaration: (d) => `${d.fontWeight} 40px Cairo`,
+  };
+}
+const measure = { save() {}, restore() {}, measureText: (t) => ({ width: Array.from(t).length * 10 }) };
+/** Letters a..b-1 of line li in red. */
+const red = (li, a, b) => ({ [li]: Object.fromEntries(Array.from({ length: b - a }, (_, k) => [a + k, { fill: '#e03131' }])) });
+/** Line li laid out from Fabric's line start `left`: its pieces left to right, as [text, x, width]. */
+function drawn(o, li, left) {
+  const out = [];
+  for (const run of bidiLineLayout(o, measure, o._textLines[li], left, li)) for (const p of run.pieces) out.push([p.text, p.x, p.w]);
+  return out;
+}
+
+// QA 25 Nov: one coloured word reversed a line written in the other script than the box's direction
+// (Fabric drew the coloured pieces one after the other in the box's direction).
+test('a coloured word in an English line of an Arabic (right-to-left) box keeps the line in reading order', () => {
+  const o = textBox('مرحبا بكم\nSecond line here', 'rtl', red(1, 7, 11)); // "line" in red
+  assert.strictEqual(styledBidiLine(o, o._textLines[1], 1), true, 'laid out by fabric-ext, not piece by piece by Fabric');
+  assert.strictEqual(styledBidiLine(o, o._textLines[0], 0), false, 'a line in one colour stays the browser\'s');
+  // Fabric gives a right-to-left line's start as its right edge (here 100): the browser draws the
+  // one-colour line from there, 16 letters to the left, reading left to right.
+  assert.deepStrictEqual(drawn(o, 1, 100), [['Second ', -60, 70], ['line', 10, 40], [' here', 50, 50]]);
+  assert.strictEqual(shown('Second line here', true), 'Second line here');
+});
+
+test('a coloured word in an Arabic line of an English (left-to-right) box keeps the line in reading order', () => {
+  const o = textBox('Hello\nأحب مصر جدا', 'ltr', red(1, 4, 7)); // "مصر" in red
+  assert.strictEqual(styledBidiLine(o, o._textLines[1], 1), true);
+  // Read from the right: "أحب" first (rightmost), then "مصر", then "جدا"; the line starts at the left edge (-50) as in one colour.
+  assert.deepStrictEqual(drawn(o, 1, -50), [[' جدا', -50, 40], ['مصر', -10, 30], ['أحب ', 20, 40]]);
+  assert.strictEqual(shown('أحب مصر جدا', false), 'أحب مصر جدا'.split(' ').reverse().join(' '));
+});
+
+test('a bold word, numbers and a mixed line: every piece in its place, the line starting where Fabric starts it', () => {
+  // A bold word in an English line of an Arabic box.
+  const bold = textBox('Sale 50% off', 'rtl', { 0: { 5: { fontWeight: 'bold' }, 6: { fontWeight: 'bold' }, 7: { fontWeight: 'bold' } } });
+  assert.strictEqual(styledBidiLine(bold, bold._textLines[0], 0), true);
+  assert.deepStrictEqual(drawn(bold, 0, 0), [['Sale ', -120, 50], ['50%', -70, 30], [' off', -40, 40]]);
+  // Only numbers in an Arabic box: each number reads left to right, the numbers from the right (as the browser shows them).
+  const nums = textBox('2026 2027', 'rtl', red(0, 5, 9));
+  assert.strictEqual(styledBidiLine(nums, nums._textLines[0], 0), true);
+  assert.deepStrictEqual(drawn(nums, 0, 0), [['2027', -90, 40], [' ', -50, 10], ['2026', -40, 40]]);
+  // Mixed Arabic and English (the case fixed before): unchanged order, now also starting where Fabric starts the line.
+  const mixed = textBox('عرض 3D جديد', 'rtl', red(0, 7, 11));
+  assert.deepStrictEqual(drawn(mixed, 0, 0), [['جديد', -110, 40], [' ', -70, 10], ['3D', -60, 20], ['عرض ', -40, 40]]);
+});
+
+test('lines Fabric draws right are left to it', () => {
+  // English with a coloured word in an English box, a line in one colour, signs only.
+  const en = textBox('Hello big world', 'ltr', red(0, 6, 9));
+  assert.strictEqual(styledBidiLine(en, en._textLines[0], 0), false);
+  const plain = textBox('Second line here', 'rtl');
+  assert.strictEqual(styledBidiLine(plain, plain._textLines[0], 0), false);
+  const signs = textBox('!! ??', 'rtl', red(0, 0, 2));
+  assert.strictEqual(styledBidiLine(signs, signs._textLines[0], 0), false);
+  // Arabic in an Arabic box with a coloured word: in order already, but Fabric places the pieces by its
+  // letter-by-letter (unjoined) widths, so the words beside it moved: laid out here too.
+  const ar = textBox('أحب مصر جدا', 'rtl', red(0, 4, 7));
+  assert.strictEqual(styledBidiLine(ar, ar._textLines[0], 0), true);
+  assert.deepStrictEqual(drawn(ar, 0, 0), [[' جدا', -110, 40], ['مصر', -70, 30], ['أحب ', -40, 40]]);
+  // Letter spacing, text on a path and justified text keep Fabric's letter-by-letter drawing.
+  for (const extra of [{ charSpacing: 100 }, { path: {} }, { textAlign: 'justify' }]) {
+    const o = Object.assign(textBox('Second line here', 'rtl', red(0, 7, 11)), extra);
+    assert.strictEqual(styledBidiLine(o, o._textLines[0], 0), false, JSON.stringify(extra));
+  }
+});
+
+test('the underline of such a line is drawn under each piece where it is drawn, in its colour', () => {
+  const o = Object.assign(textBox('مرحبا بكم\nSecond line here', 'rtl', red(1, 7, 11)), {
+    underline: true,
+    fontSize: 40,
+    lineHeight: 1,
+    _fontSizeFraction: 0.2,
+    offsets: { underline: 0.1 },
+    styleHas: () => false,
+    getHeightOfLine: () => 40,
+    getHeightOfChar: () => 40,
+    _getTopOffset: () => -40,
+    _getLeftOffset: () => 100,
+    _getLineLeftOffset: () => 0,
+    getValueOfPropertyAt(li, i, prop) {
+      const v = this.getCompleteStyleDeclaration(li, i)[prop];
+      return v === undefined ? this[prop] : v;
+    },
+  });
+  const rects = [];
+  const ctx = { ...measure, fillRect(x, y, w, h) { rects.push([this.fillStyle, x, y, w, h]); } };
+  fabricStub.Text.prototype._renderTextDecoration.call(o, ctx, 'underline');
+  // Fabric draws the first line (one colour); the coloured line is left out of its drawing and done here.
+  assert.deepStrictEqual(Array.from(o.fabricDrew), ['مرحبا بكم', '']);
+  assert.strictEqual(o._textLines[1].join(''), 'Second line here', 'the text is given back');
+  // Baseline of line 2: top 0 + 40 * 0.8 = 32; underline 0.1 * 40 below it, 40/15 thick.
+  const h = 40 / 15;
+  assert.deepStrictEqual(rects, [['#111', -60, 36, 70, h], ['#e03131', 10, 36, 40, h], ['#111', 50, 36, 50, h]]);
 });

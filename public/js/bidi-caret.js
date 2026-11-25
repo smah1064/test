@@ -21,7 +21,7 @@
   'use strict';
 
   const FX = window.POD_FX;
-  if (!window.fabric || !FX || !FX.bidiLevels || !FX.bidiLineLayout) return;
+  if (!window.fabric || !FX || !FX.bidiLevels || !FX.bidiLineLayout || !FX.styledBidiLine) return;
   const IT = fabric.IText.prototype;
   const WORD = /[\p{L}\p{N}\p{M}]/u;
   // Scripts whose letters join up (Arabic and its neighbours): Fabric measures each letter
@@ -202,7 +202,7 @@
     const left = o._getLeftOffset() + o._getLineLeftOffset(li); // the line's start, as Fabric draws it
     const ctx = measureCtx();
     const L = { line, boxes: new Array(line.length), vis: [] };
-    if (FX.mixedStyledLine(o, line, li)) {
+    if (FX.styledBidiLine(o, line, li)) {
       // Drawn by fabric-ext.js piece by piece in display order: the same layout.
       for (const run of FX.bidiLineLayout(o, ctx, line, left, li)) {
         for (const p of run.pieces) place(L, bounds, p.first, p.last + 1, p.x, p.w, run.rtl, o._getFontDeclaration(o.getCompleteStyleDeclaration(li, p.last)));
@@ -478,7 +478,7 @@
   };
 
   // Left / right arrows on a mixed line move the caret one letter left / right on screen
-  // (with Shift, the moving end of the selection). Alt/Ctrl/Cmd jumps and Home/End stay Fabric's.
+  // (with Shift, the moving end of the selection). Alt/Ctrl/Cmd jumps stay Fabric's; Home/End below.
   function arrow(o, e) {
     if (!e || (e.keyCode !== 37 && e.keyCode !== 39) || e.altKey || e.metaKey || e.ctrlKey) return false;
     const collapsed = o.selectionStart === o.selectionEnd;
@@ -539,6 +539,12 @@
   IT.moveCursorRight = function (e) {
     if (!arrow(this, e)) origRight.call(this, e);
   };
+
+  // Home / End: to the start / end of the line in reading order (with Shift, select to there),
+  // as in a text field, right-to-left ones too: for Arabic the start is the right edge. Fabric
+  // swaps the two keys in right-to-left text boxes (it maps them like the arrows there). Its
+  // moveCursorLeft / moveCursorRight go back / forward in the text, whatever the box's direction.
+  IT.keysMapRtl = Object.assign({}, IT.keysMapRtl, { 35: 'moveCursorRight', 36: 'moveCursorLeft' });
 
   // Up / down arrows: to the letter drawn above / below the caret.
   function vertical(o, e, isRight, d) {

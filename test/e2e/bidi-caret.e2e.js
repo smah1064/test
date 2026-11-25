@@ -15,6 +15,13 @@
  *   2. dragging over "Hello", double-clicking it and Shift+Right select exactly it,
  *      and the highlight covers exactly it
  *   3. the left / right arrows walk a mixed line one letter at a time across the screen
+ *   4. Home / End go to the start / end of the line in reading order, as in a textarea of the
+ *      same direction (Fabric swapped them in right-to-left text boxes)
+ *   5. colouring one word of a line written in the other script than the box's (English under
+ *      Arabic, Arabic under English) moves no letter, on the canvas and in the print file, and
+ *      the caret still lands where it is clicked on that line (public/js/fabric-ext.js)
+ *   6. the reading order fabric-ext.js gives 840 lines (420 texts, each in both box directions:
+ *      numbers, signs, brackets, Arabic and English) is the browser's own
  */
 const test = require('node:test');
 const assert = require('node:assert');
@@ -307,5 +314,162 @@ test('3. the arrow keys walk a mixed line one letter at a time across the screen
     assert.deepStrictEqual(d.page.errors, []);
   } finally {
     await d.ctx.close();
+  }
+});
+
+test('4. Home / End go to the start / end of the line in reading order, as in a textarea', { timeout: 90000 }, async () => {
+  for (const [lang, text] of [['ar', 'مرحبا Hello 2026 يا عالم\nSecond line here'], ['en', 'Hello\nأحب مصر جدا']]) {
+    const d = await setup(lang);
+    try {
+      await d.setText(text);
+      const dir = await d.page.evaluate(() => window.__bidi.obj().direction);
+      assert.strictEqual(dir, lang === 'ar' ? 'rtl' : 'ltr');
+      const keys = ['Home', 'End', 'Shift+Home', 'Shift+End'];
+      const probes = [];
+      let first = 0;
+      for (const line of text.split('\n')) {
+        const n = Array.from(line).length;
+        probes.push(first, first + Math.floor(n / 2), first + n);
+        first += n + 1;
+      }
+      const canvas = [];
+      for (const pos of probes) {
+        for (const key of keys) {
+          await d.page.evaluate((p) => {
+            const o = window.__bidi.obj();
+            o.selectionStart = o.selectionEnd = p;
+            o._updateTextarea();
+          }, pos);
+          await d.page.keyboard.press(key);
+          const s = await d.state();
+          canvas.push([s.s, s.e]);
+        }
+      }
+      // The same key presses in a plain textarea of the same direction (these texts are one UTF-16 unit per letter).
+      await d.page.keyboard.press('Escape');
+      await d.page.evaluate(([t, dr]) => {
+        const ta = document.createElement('textarea');
+        ta.id = 'oracle';
+        ta.dir = dr;
+        ta.value = t;
+        ta.style.cssText = 'position:fixed;left:0;top:0;width:700px;height:200px;z-index:99999';
+        document.body.appendChild(ta);
+      }, [text, dir]);
+      let k = 0;
+      for (const pos of probes) {
+        for (const key of keys) {
+          await d.page.evaluate((p) => { const ta = document.getElementById('oracle'); ta.focus(); ta.setSelectionRange(p, p); }, pos);
+          await d.page.keyboard.press(key);
+          const want = await d.page.evaluate(() => { const ta = document.getElementById('oracle'); return [ta.selectionStart, ta.selectionEnd]; });
+          assert.deepStrictEqual(canvas[k++], want, `${dir} box "${text}": ${key} from ${pos} goes where a textarea goes`);
+        }
+      }
+      assert.deepStrictEqual(d.page.errors, []);
+    } finally {
+      await d.ctx.close();
+    }
+  }
+});
+
+test('5. colouring one word of a line in the other script than the box moves no letter (canvas, print file, caret)', { timeout: 120000 }, async () => {
+  for (const [lang, text, word] of [['ar', 'مرحبا بكم\nSecond line here', 'line'], ['en', 'Hello\nأحب مصر جدا', 'مصر']]) {
+    const d = await setup(lang);
+    try {
+      await d.setText(text);
+      await d.page.keyboard.press('Escape');
+      /** Where the ink is (alpha >= 100), colour left out: the text drawn alone, and the print file. */
+      const masks = () => d.page.evaluate(async () => {
+        const ed = window.__editor;
+        const o = window.__bidi.obj();
+        const clip = o.clipPath;
+        o.clipPath = null;
+        let el;
+        try {
+          el = o.toCanvasElement({ multiplier: 2 });
+        } finally {
+          o.clipPath = clip;
+        }
+        const own = el.getContext('2d').getImageData(0, 0, el.width, el.height).data;
+        const print = (await window.__t.decode(await ed.exportPrint({ id: ed.st.side }))).data;
+        const bits = (data) => { const m = []; for (let i = 3; i < data.length; i += 4) m.push(data[i] >= 100 ? 1 : 0); return m.join(''); };
+        return { own: bits(own), print: bits(print) };
+      });
+      const moved = (a, b) => {
+        let diff = 0;
+        let ink = 0;
+        for (let i = 0; i < a.length; i++) {
+          if (a[i] === '1' || b[i] === '1') ink++;
+          if (a[i] !== b[i]) diff++;
+        }
+        return a.length === b.length && ink > 0 ? diff / ink : 1;
+      };
+      const plain = await masks();
+      // Colour the word as a customer does: its button under "colour one word", then a colour.
+      const wi = text.split(/\s+/).indexOf(word);
+      await d.page.click(`.word-chip[data-word="${wi}"]`);
+      await d.page.click('[data-pal="word"] >> nth=3');
+      const styles = await d.page.evaluate(() => window.__bidi.obj().styles);
+      assert.strictEqual(Object.keys(styles[1] || {}).length, Array.from(word).length, `"${word}" is coloured`);
+      const coloured = await masks();
+      for (const where of ['own', 'print']) {
+        const r = moved(plain[where], coloured[where]);
+        assert.ok(r < 0.003, `${lang} UI, "${text}" with "${word}" coloured: ${(r * 100).toFixed(2)}% of the ink moved (${where === 'own' ? 'canvas' : 'print file'})`);
+      }
+      // The caret on the coloured line: a click after / before each word lands there.
+      await d.edit();
+      await clickEveryWord(d, text, `${lang} UI, "${word}" coloured`);
+      assert.deepStrictEqual(d.page.errors, []);
+    } finally {
+      await d.ctx.close();
+    }
+  }
+});
+
+test('6. the reading order of 840 lines (both box directions) is the browser\'s own', { timeout: 60000 }, async () => {
+  const words = ['مرحبا', 'Hello', '2026', 'يا', 'عالم', 'iPhone', '16', 'Pro', 'الآن', '3D', '2x1', '10:30', '2.5', '٥٠٪', '$5', '50%', '(Hello)', '(مرحبا)', '-', '!', '؟', '،', ',', '.', '"Hi"', 'A-B', 'كيلو', '#1', '+20', 'ok?', 'لا', 'e-mail', '@user', '٢٠٢٦', 'x', 'ب'];
+  const lines = ['abc def)', 'Pro (مرحبا) 5', 'السعر (USD) 250 جنيه', 'مرحبا Hello 2026 يا عالم', 'Hello مرحبا world', 'اطلب 3 iPhone 16 Pro الآن', 'abcمرحبا', 'مرحباabc', 'Price (USD) 5', 'السعر (USD) 5', 'abc (def)', 'مرحبا (abc) عالم', 'abc (مرحبا) def', 'عرض 3D جديد', 'خصم ٥٠٪ النهارده', 'Hello !', 'مرحبا !', '1 2 3', ' مرحبا ', ' Hello ', 'Second line here', 'أحب مصر جدا'];
+  let seed = 7;
+  const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+  while (lines.length < 420) {
+    const parts = [];
+    for (let k = 1 + Math.floor(rnd() * 6); k > 0; k--) parts.push(words[Math.floor(rnd() * words.length)]);
+    lines.push(parts.join(rnd() < 0.85 ? ' ' : ''));
+  }
+  const ctx = await newContext(browser);
+  try {
+    const page = await openEditor(ctx, srv.base, 'mug');
+    const bad = await page.evaluate((all) => {
+      const out = [];
+      for (const text of all) for (const rtl of [true, false]) {
+        const line = Array.from(text);
+        // The browser's order: the letters sorted by where it draws them.
+        const div = document.createElement('div');
+        div.style.cssText = `position:fixed;left:0;top:0;white-space:pre;font:40px Cairo;direction:${rtl ? 'rtl' : 'ltr'};unicode-bidi:isolate`;
+        div.textContent = text;
+        document.body.appendChild(div);
+        const range = document.createRange();
+        let off = 0;
+        const xs = line.map((g) => {
+          range.setStart(div.firstChild, off);
+          range.setEnd(div.firstChild, (off += g.length));
+          const rs = Array.from(range.getClientRects());
+          return (Math.min(...rs.map((q) => q.left)) + Math.max(...rs.map((q) => q.right))) / 2;
+        });
+        div.remove();
+        const dom = xs.map((x, i) => [x, i]).sort((a, b) => a[0] - b[0]).map((p) => p[1]);
+        const ours = [];
+        for (const run of window.POD_FX.bidiOrder(window.POD_FX.bidiRuns(line, rtl))) {
+          const idx = [];
+          for (let i = run.start; i < run.end; i++) idx.push(i);
+          ours.push(...(run.rtl ? idx.reverse() : idx));
+        }
+        if (dom.join() !== ours.join()) out.push(`${rtl ? 'rtl' : 'ltr'} box "${text}": browser ${dom.map((i) => line[i]).join('')} / ours ${ours.map((i) => line[i]).join('')}`);
+      }
+      return out;
+    }, lines);
+    assert.strictEqual(lines.length * 2, 840);
+    assert.deepStrictEqual(bad, []);
+  } finally {
+    await ctx.close();
   }
 });
