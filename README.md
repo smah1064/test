@@ -213,6 +213,17 @@ Admin → **Products** changes the real products without touching the code (`src
 - **Daily order work** (status, shipping, sending to printing houses, review decisions, payments) happens at once and is logged.
 - **Activity log**: every change, sign-in and approval, one line each in `DATA_DIR/activity.jsonl` (the previous file is kept as `activity.jsonl.1` once it passes 4 MB). Passwords and tokens are never written. `GET /api/admin/activity`: owners see everyone, others only their own. It answers 500 lines at most, newest first, with `more` and `next` when older lines are there; `before=<next>` reads the next page. The Activity tab shows the latest 500 with "Show older" for the rest, and its CSV holds every line of the chosen person and days (up to 50,000).
 
+## The shop as an app (install on the phone)
+
+The site installs like an app ("Add to Home Screen"): its own icon, full screen, no browser bar.
+
+- **Android and computers (Chrome, Edge, Samsung Internet):** the browser offers to install it, and the footer shows "Install the app / ثبّت التطبيق" while that offer is there. **iPhone and iPad:** the footer link says how (Share, then "Add to Home Screen").
+- `public/site.webmanifest`: the brand kit's name, colours and icons, plus `id`, `start_url` and `scope` (`/`) and shortcuts (ready designs, cart, account). It is served `no-cache`, so a changed name or icon reaches installed apps.
+- `public/sw.js` (served `no-cache` by `src/app.js`, with a policy a worker can run under): it only steps in when a page can't be reached at all, and shows `public/offline.html` (both languages, no scripts) at the address asked for. Nothing else is kept: pages, orders, prices and pictures always come from the shop, so an installed app is never out of date. A new `VERSION` in `sw.js` replaces the kept offline page.
+- `icon-maskable-512.png` is the brand kit's icon, scaled so the whole mark, corner marks included, sits inside the circle every phone shows (phones crop app icons to circles or rounded squares).
+- While the shop is private, the manifest, icons, the worker and the offline page load for everyone (none of them shows the shop); the shop itself still needs an invitation.
+- The dashboard (`/admin`) opens inside the same app; it has no separate icon.
+
 ## Private preview (before the shop opens)
 
 Until the owner opens the shop to everyone, only invited people get in (`src/preview.js`).

@@ -613,7 +613,7 @@
       f.textContent = '';
       f.append(span);
     }
-    f.insertAdjacentHTML('beforeend', ' · <a href="/privacy" data-i18n="pp2.link" style="color:inherit"></a> · <a href="/rights" data-rights-link data-i18n="rights.policy" style="color:inherit"></a>');
+    f.insertAdjacentHTML('beforeend', ' · <a href="/privacy" data-i18n="pp2.link" style="color:inherit"></a> · <a href="/rights" data-rights-link data-i18n="rights.policy" style="color:inherit"></a><span data-install-wrap hidden> · <a href="/" data-install-app data-i18n="app.install" style="color:inherit"></a></span>');
     // The white logo (from the brand kit) on the dark footer, in the page's language.
     const text = document.createElement('div');
     text.className = 'footer-text';
@@ -621,9 +621,41 @@
     f.append(text);
     f.insertAdjacentHTML('afterbegin', '<a class="footer-logo" href="/" data-i18n-aria="brand"><img class="for-ar" src="/img/logo-ar-white.svg" alt="" width="91" height="60"><img class="for-en" src="/img/logo-en-white.svg" alt="" width="147" height="60"></a>');
   }
+  // ---------- The shop as an app ----------
+  // Installed from the browser (Android, computers: the browser's own offer, or "Install the app" in the footer;
+  // iPhone and iPad: the footer link says how). The worker (/sw.js) only shows the "no connection" page.
+  const nav = window.navigator || {}; // (pages run without one in the tests)
+  const installed = () => Boolean(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || nav.standalone === true;
+  const appleMobile = () => /iPad|iPhone|iPod/.test(nav.userAgent || '') || (nav.platform === 'MacIntel' && nav.maxTouchPoints > 1);
+  let installOffer = null; // the browser's install offer, kept for the footer link
+  function showInstall() {
+    const can = !installed() && (Boolean(installOffer) || appleMobile());
+    document.querySelectorAll('[data-install-wrap]').forEach((el) => { el.hidden = !can; });
+  }
+  if (window.addEventListener) {
+    window.addEventListener('beforeinstallprompt', (e) => { installOffer = e; showInstall(); });
+    window.addEventListener('appinstalled', () => { installOffer = null; showInstall(); });
+  }
+  if (document.addEventListener) document.addEventListener('click', (e) => {
+    const a = e.target && e.target.closest && e.target.closest('[data-install-app]');
+    if (!a || !a.hasAttribute || !a.hasAttribute('data-install-app')) return;
+    e.preventDefault();
+    if (installOffer) {
+      const offer = installOffer;
+      installOffer = null; // (an offer is used once)
+      offer.prompt();
+      Promise.resolve(offer.userChoice).catch(() => {}).then(showInstall);
+    } else if (appleMobile()) {
+      toast(t('app.iosSteps'));
+    }
+  });
+  if (nav.serviceWorker && window.isSecureContext && window.addEventListener) {
+    window.addEventListener('load', () => { nav.serviceWorker.register('/sw.js').catch(() => { /* the shop works the same without it */ }); });
+  }
   function initChrome() {
     addAccountLink();
     addFooterLinks();
+    showInstall();
     // The header logo's name for screen readers: the shop's name in the page's language (the pages say
     // "إبداع · ebda3" in both), switched with the language like every other label.
     document.querySelectorAll('.site-header .brand').forEach((a) => a.setAttribute('data-i18n-aria', 'brand'));

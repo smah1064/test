@@ -348,6 +348,9 @@ window.POD_STRINGS = {
   'rights.text': ['Your design uses a picture imported from another site. We can only print designs you own or have permission to print (for example from the brand, club or artist).', 'تصميمك فيه صورة مستوردة من موقع تاني. بنطبع بس التصاميم اللي ملكك أو معاك إذن بطباعتها (مثلًا من الماركة أو النادي أو الفنان).'],
   'rights.check': ['I confirm I own this design or have permission to print it, and I take responsibility for it.', 'أؤكد إن التصميم ده ملكي أو معايا إذن بطباعته، وأتحمّل مسؤوليته.'],
   'rights.continue': ['Continue', 'متابعة'],
+  // ---------- The shop as an app (installed on the phone) ----------
+  'app.install': ['Install the app', 'ثبّت التطبيق'],
+  'app.iosSteps': ['To install: tap Share at the bottom of Safari, then “Add to Home Screen”.', 'عشان تثبّته: دوس على زرار المشاركة تحت في سفاري، وبعدين «إضافة إلى الشاشة الرئيسية».'],
   'rights.policy': ['Rights holders: request a takedown', 'لأصحاب الحقوق: طلب إزالة'],
   'rights.pageTitle': ['Rights & takedown requests', 'الحقوق وطلبات الإزالة'],
   'rights.tabTitle': ['Rights & takedown requests · ebda3', 'الحقوق وطلبات الإزالة · إبداع'],

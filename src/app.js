@@ -7100,6 +7100,19 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
 
   // ---------- Static site ----------
   app.use('/fonts', express.static(path.join(__dirname, '..', 'public', 'fonts'), { maxAge: '30d', immutable: true }));
+  // The installed app's worker (public/sw.js): always checked for a newer copy, and with a policy a worker can run
+  // under (the files' own one is sandboxed, which a service worker can't be). It only fetches from this shop.
+  const swFile = path.join(__dirname, '..', 'public', 'sw.js');
+  app.get('/sw.js', (req, res) => {
+    res.set({ 'Cache-Control': 'no-cache', 'Content-Security-Policy': "default-src 'self'; frame-ancestors 'none'; base-uri 'none'" });
+    res.type('application/javascript').send(fs.readFileSync(swFile));
+  });
+  // The manifest: checked again too (a changed name or icon reaches installed apps), read as a web manifest.
+  app.get('/site.webmanifest', (req, res, next) => {
+    res.set('Cache-Control', 'no-cache');
+    res.type('application/manifest+json');
+    next();
+  });
   // Pages are served with every script and stylesheet URL stamped with a
   // version (a hash of the site's files), so after a deploy no browser or CDN
   // cache can mix old and new code. Pages themselves are never cached.

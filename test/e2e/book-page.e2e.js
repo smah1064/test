@@ -15,7 +15,8 @@ async function photo() {
   return { name: 'child.jpg', mimeType: 'image/jpeg', buffer: await sharp(Buffer.from(svg)).jpeg().toBuffer() };
 }
 async function context(browser, lang, viewport = { width: 1280, height: 900 }) {
-  const ctx = await browser.newContext({ viewport, deviceScaleFactor: 1 });
+  // (No app worker: these tests stop the trip to the cart with page.route, which can't see a page the worker fetches.)
+  const ctx = await browser.newContext({ viewport, deviceScaleFactor: 1, serviceWorkers: 'block' });
   await ctx.addInitScript((l) => { try { localStorage.setItem('pod-lang', l); } catch (e) { /* ignore */ } }, lang);
   return ctx;
 }
