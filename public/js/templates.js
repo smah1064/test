@@ -399,8 +399,10 @@
    * shapes, so it prints sharp at any size; pictures (.png/.webp) a photo layer.
    */
   const fileArt = new Map();
-  async function makeImage(i) {
-    const src = String(i.src || '');
+  async function makeImage(i, ink) {
+    // A white copy of one-colour artwork (`dark`) for dark product colours (light ink).
+    const light = i.dark && /^#[0-9a-f]{6}$/i.test(ink || '') && parseInt(ink.slice(1, 3), 16) + parseInt(ink.slice(3, 5), 16) + parseInt(ink.slice(5, 7), 16) > 384;
+    const src = String((light ? i.dark : i.src) || '');
     if (!/^\/img\/art\/[\w/-]+\.(svg|png|webp|jpg)$/.test(src)) return null;
     if (/\.svg$/.test(src)) {
       if (!fileArt.has(src)) fileArt.set(src, fetch(src).then((r) => (r.ok ? r.text() : null)).catch(() => null));
@@ -442,7 +444,7 @@
     const SK = window.POD_STICKERS;
     const stickerObjs = await Promise.all(tpl.items.map((i) => {
       if (i.kind === 'art') return makeArt(i, ink);
-      if (i.kind === 'image') return makeImage(i);
+      if (i.kind === 'image') return makeImage(i, ink);
       if (i.kind !== 'sticker' || !SK) return null;
       const def = SK.STICKERS.find((x) => x.id === i.sticker);
       return def ? SK.makeSticker(def) : null;

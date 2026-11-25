@@ -356,7 +356,7 @@ function readsOn(d, dark) {
     && Math.abs(luminance(sh.fill) - luminance(t.fill)) > 0.3
     && Math.abs(t.x - sh.x) < sh.w / 2 && Math.abs(t.y - sh.y) < (sh.w / 2) * aspect);
   return d.items.every((i, k) => {
-    if (i.kind === 'image') return false;
+    if (i.kind === 'image') return Boolean(i.dark); // (artwork with a white copy for dark colours reads on both)
     if (i.kind === 'text') return !i.glow && (ok(i.bg || i.fill) || (!i.bg && onShape(i, k)));
     if (i.kind === 'shape') return Boolean(i.stroke) || ok(i.fill);
     if (i.kind === 'art') return ok(i.fill);

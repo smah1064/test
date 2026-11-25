@@ -57,8 +57,11 @@ test('every ready design is well formed', () => {
         if (!(i.w > 0.02 && i.w <= 1)) bad(`${at}: w out of range`);
       } else if (i.kind === 'image') {
         // Artwork files of the shop's own (public/img/art): the file must be there.
-        if (!/^\/img\/art\/(ai|svg)\/[\w-]+\.(png|svg)$/.test(i.src || '')) bad(`${at}: image src must be /img/art/ai/*.png or /img/art/svg/*.svg`);
-        else if (!require('fs').existsSync(require('path').join(__dirname, '..', 'public', i.src))) bad(`${at}: missing artwork ${i.src}`);
+        // (A pack's own folder too, e.g. /img/art/sarcastic/; `dark` is a white copy for dark colours.)
+        for (const src of [i.src, ...(i.dark === undefined ? [] : [i.dark])]) {
+          if (!/^\/img\/art\/[a-z0-9-]+\/[\w-]+\.(png|svg)$/.test(src || '')) bad(`${at}: image src must be /img/art/<folder>/*.png or *.svg`);
+          else if (!require('fs').existsSync(require('path').join(__dirname, '..', 'public', src))) bad(`${at}: missing artwork ${src}`);
+        }
         if (!(i.w > 0.02 && i.w <= 1)) bad(`${at}: w out of range`);
       } else {
         bad(`${at}: unknown kind ${i.kind}`);
