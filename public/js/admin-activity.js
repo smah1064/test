@@ -24,15 +24,18 @@ window.AdminActivity = (() => {
   const newestFirst = (list) => list.slice().sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
 
   // ---------- Drawing ----------
+  // The shared password's sign-in reads as the owner's emergency login, not its id.
+  const nameOf = (w) => (!w ? '—' : w.id === 'owner' ? t('me.emergencyName') : w.name || w.id || '—');
   function rowHtml(e, own) {
-    const res = AdminRoles.resultOf(e.status);
+    // (outcome 'failed': an approval whose change couldn't be applied.)
+    const res = e.outcome === 'failed' ? 'failed' : AdminRoles.resultOf(e.status);
     const what = AdminRoles.inLang(e.summary) || e.action || '';
     // (Who approved a change made by someone else; the method and address only go in the CSV.)
-    const by = e.approvedBy ? t('act.approvedBy', { name: e.approvedBy }) : '';
+    const by = e.approvedByEmergency ? t('act.approvedBy', { name: t('me.emergencyName') }) : e.approvedBy ? t('act.approvedBy', { name: e.approvedBy }) : '';
     return `
       <tr class="act-row act-${res}">
         <td data-label="${esc(t('act.col.when'))}"><span class="act-when">${esc(AdminRoles.cairoTime(e.at))}</span></td>
-        ${own ? `<td data-label="${esc(t('act.col.who'))}"><b dir="auto">${esc((e.who && e.who.name) || '—')}</b>${e.roles && e.roles.length ? `<div class="muted small">${esc(roleNames(e.roles))}</div>` : ''}</td>` : ''}
+        ${own ? `<td data-label="${esc(t('act.col.who'))}"><b dir="auto">${esc(nameOf(e.who))}</b>${e.roles && e.roles.length ? `<div class="muted small">${esc(roleNames(e.roles))}</div>` : ''}</td>` : ''}
         <td data-label="${esc(t('act.col.what'))}"><span dir="auto">${esc(what)}</span>${by ? `<div class="muted small" dir="auto">${esc(by)}</div>` : ''}</td>
         <td data-label="${esc(t('act.col.result'))}"><span class="ro-pill act-pill-${res}">${esc(t('act.res.' + res))}</span>${e.approvalId ? ` <span class="ro-pill act-pill-approval">${esc(t('act.approval'))}</span>` : ''}${e.emergency ? ` <span class="ro-pill act-pill-emergency">${esc(t('act.emergency'))}</span>` : ''}</td>
       </tr>`;
@@ -100,7 +103,7 @@ window.AdminActivity = (() => {
       const r = await cfg.api(`/api/admin/activity?${q}`);
       S.entries = Array.isArray(r && r.entries) ? r.entries : [];
       S.error = '';
-      for (const e of S.entries) if (e.who && e.who.id && !S.people.has(e.who.id)) S.people.set(e.who.id, e.who.name || e.who.id);
+      for (const e of S.entries) if (e.who && e.who.id && !S.people.has(e.who.id)) S.people.set(e.who.id, nameOf(e.who));
     } catch (e) {
       if (e.status === 401) throw e;
       S.error = e.message;

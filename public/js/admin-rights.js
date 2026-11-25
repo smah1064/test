@@ -12,6 +12,8 @@ window.AdminRights = (() => {
   const $ = (id) => document.getElementById(id);
   let api = null;
   let goToDesign = null;
+  // (Can this person open Ready designs? Operations can't: the page then doesn't ask for them, and says who pauses.)
+  let library = () => true;
   let data = null; // { takedowns, open }
   let error = '';
   let drawnSig = '';
@@ -79,7 +81,7 @@ window.AdminRights = (() => {
     return u && /^\/design(?:\.html)?\/?$/.test(u.pathname) && u.searchParams.get('id');
   });
   async function loadDesigns() {
-    if (!needDesigns() || (designs && Date.now() - designsAt < 5 * 60e3)) return;
+    if (!library() || !needDesigns() || (designs && Date.now() - designsAt < 5 * 60e3)) return;
     try {
       const lib = await api('/api/admin/library');
       designs = new Map((lib.designs || []).map((d) => [d.id, { id: d.id, name: d.name, deleted: Boolean(d.deleted) }]));
@@ -155,7 +157,7 @@ window.AdminRights = (() => {
     root.innerHTML = `
       <div class="card tk-intro">
         <h2>${esc(t('tk.tab'))}${data && data.open ? ` <span class="tk-open-n">${esc(POD.plural('tk.open', data.open))}</span>` : ''}</h2>
-        <p class="muted small">${esc(t('tk.help'))}</p>
+        <p class="muted small">${esc(t(library() ? 'tk.help' : 'tk.helpNoLibrary'))}</p>
       </div>
       ${error ? `<p class="notice small">${esc(error)}</p>` : ''}
       ${!data ? '' : !list.length ? `<div class="card empty tk-empty"><p class="muted">${esc(t('tk.none'))}</p></div>` : `
@@ -216,6 +218,8 @@ window.AdminRights = (() => {
   function init(opts) {
     api = opts.api;
     goToDesign = opts.goToDesign || null;
+    // (Asked each time: the sign-in can change while the page is open.)
+    library = typeof opts.library === 'function' ? opts.library : () => opts.library !== false;
     const root = box();
     root.addEventListener('input', (e) => {
       const id = e.target.dataset && e.target.dataset.tkNote;

@@ -3125,7 +3125,7 @@
   AdminProducts.init({ api: adminApi, role: () => role, can, legacyOwner: () => Boolean(access && access.owner && !access.system) });
   AdminPreview.init({ api: adminApi });
   // ("Find it in Ready designs" only for those who see that tab.)
-  AdminRights.init({ api: adminApi, goToDesign: (id, o) => (can('library.view') ? goToLibraryDesign(id, o) : undefined) });
+  AdminRights.init({ api: adminApi, library: () => can('library.view'), goToDesign: (id, o) => (can('library.view') ? goToLibraryDesign(id, o) : undefined) });
   AdminStaff.init({ api: adminApi, access: () => access });
   AdminApprovals.init({
     api: adminApi,
@@ -3203,7 +3203,12 @@
       const ok = form.querySelector('[type=submit]');
       ok.disabled = true;
       try {
-        await adminApi('/api/admin/me/password', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ current, password }) });
+        const r = await adminApi('/api/admin/me/password', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ current, password }) });
+        // A new password signs out every other browser: this one carries on with the new sign-in it got back.
+        if (r && typeof r.token === 'string' && r.token) {
+          token = r.token;
+          sessionStorage.setItem(KEY, token);
+        }
         d.close();
         toast(t('me.pwDone'));
       } catch (ex) {
@@ -3247,7 +3252,8 @@
       try { history.replaceState(null, '', location.pathname); } catch (err) { /* the address keeps it */ }
     } catch (ex) {
       // An expired or used link (or one that never was): ask for a new one. A password the server refuses: its words.
-      say(ex.status >= 400 && ex.status < 500 && !/password/i.test(ex.code || '') ? t('setup.bad') : ex.message);
+      // (Too many tries: the server's own "wait" message, not "the link expired".)
+      say(ex.status >= 400 && ex.status < 500 && ex.status !== 429 && !/password/i.test(ex.code || '') ? t('setup.bad') : ex.message);
     } finally {
       btn.disabled = false;
     }

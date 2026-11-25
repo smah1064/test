@@ -74,9 +74,10 @@ test('tabs follow the permissions: each role sees its own, everyone the Approval
   assert.deepStrictEqual(tabs(sess(['owner'])), ['queue', 'review', 'orders', 'film', 'library', 'houses', 'accounts', 'coupons', 'customers', 'products', 'preview', 'rights', 'staff', 'approvals', 'activity']);
   assert.deepStrictEqual(tabs(sess(['finance'])), ['orders', 'accounts', 'coupons', 'approvals', 'activity']);
   assert.deepStrictEqual(tabs(sess(['operations'])), ['queue', 'review', 'orders', 'film', 'houses', 'customers', 'rights', 'approvals', 'activity']);
-  assert.deepStrictEqual(tabs(sess(['catalogue'])), ['review', 'library', 'products', 'approvals', 'activity']);
+  // (Catalogue has no Review: customers' proofs are Operations' work, as on the server.)
+  assert.deepStrictEqual(tabs(sess(['catalogue'])), ['library', 'products', 'approvals', 'activity']);
   // Several roles: everything each of them has.
-  assert.deepStrictEqual(tabs(sess(['finance', 'catalogue'])), ['review', 'orders', 'library', 'accounts', 'coupons', 'products', 'approvals', 'activity']);
+  assert.deepStrictEqual(tabs(sess(['finance', 'catalogue'])), ['orders', 'library', 'accounts', 'coupons', 'products', 'approvals', 'activity']);
   // The tab each starts on.
   assert.strictEqual(R.pickTab(R.access(sess(['finance'])), 'queue'), 'accounts');
   assert.strictEqual(R.pickTab(R.access(sess(['catalogue'])), 'queue'), 'products');
@@ -115,7 +116,10 @@ test('owners get every permission; the emergency login is marked; the badge coun
   const ops = R.access(sess(['operations']));
   assert.ok(!R.can(ops, 'orders.amounts') && !R.can(ops, 'accounts.view') && !R.can(ops, 'prices.edit'), 'Operations never sees money');
   const cat = R.access(sess(['catalogue']));
-  assert.ok(R.can(cat, 'review.view') && !R.can(cat, 'review.work') && !R.can(cat, 'prices.edit'), 'Catalogue: Review read-only, prices read-only');
+  assert.ok(!R.can(cat, 'review.view') && !R.can(cat, 'review.work') && !R.can(cat, 'prices.edit'), 'Catalogue: no Review, prices read-only');
+  // The page's list is the server's (src/roles.js), role by role.
+  const server = require('../src/roles').ROLE_PERMS;
+  for (const r of R.ROLES) assert.deepStrictEqual([...R.ROLE_PERMS[r]].sort(), [...server[r]].sort(), r);
   assert.strictEqual(R.badgeCount(R.access({ role: 'owner' })), 0, 'no badge without the new server');
   assert.strictEqual(R.access({ perms: [], pendingApprovals: -1, myPending: 'x' }).myPending, 0);
 });
@@ -216,7 +220,8 @@ test('every admin request goes through settle(): no screen takes a 202 answer fo
   assert.match(UP, /if \(err\.pending\) return say\(\(\) => AdminRoles\.pendingText\(err\.approval\), false\);/);
   // Products: a section sent for approval keeps what was typed (it stays unsaved), and a dialog closes.
   const PM = read('js/admin-products.js');
-  assert.match(PM, /if \(!sentForApproval\(e\)\) secError\(name, e\.message\);/);
+  // (A section sent for approval is no longer "unsaved": Save isn't offered again for the same request, QA admin tester 4.)
+  assert.match(PM, /if \(sentForApproval\(e\)\) \{\s*setDirty\(name, false\);\s*if \(btn\) btn\.disabled = true;\s*return;\s*\}\s*secError\(name, e\.message\);/);
   assert.match(PM, /if \(sentForApproval\(ex\)\) return void d\.close\(\);/);
   // The page loads the helpers after common.js and before the screens.
   const html = read('admin.html');
@@ -304,5 +309,7 @@ test('the new words: both languages, the same placeholders, Egyptian Arabic, nev
   for (const r of R.ROLES) assert.ok(S[`role.${r}`] && S[`role.${r}.help`], r);
   // Every role's description says what it can do (and Operations: no money).
   assert.match(S['role.operations.help'][0], /never sees prices, amounts, costs or profit/);
-  assert.match(S['role.catalogue.help'][0], /look at Review but not decide/);
+  assert.doesNotMatch(S['role.catalogue.help'][0], /Review/);
+  // Only what really waits for an owner is said to (not printing houses or settings).
+  for (const k of ['role.rule', 'ap.help']) assert.doesNotMatch(S[k][0], /printing houses or settings|houses and settings/, k);
 });

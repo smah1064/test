@@ -23,9 +23,9 @@ window.AdminRoles = (() => {
   /** What each role is for (the server's list decides; this is for the words on the Staff tab and old sessions). */
   const ROLE_PERMS = {
     owner: PERMS.slice(),
-    finance: ['accounts.view', 'costs.edit', 'expenses.edit', 'prices.edit', 'coupons.view', 'coupons.edit', 'orders.view', 'orders.amounts', 'payments'],
-    operations: ['production', 'files', 'houses.view', 'houses.edit', 'review.view', 'review.work', 'orders.view', 'orders.work', 'customers.view', 'customers.contact', 'rights'],
-    catalogue: ['catalog.view', 'catalog.edit', 'library.view', 'library.edit', 'uploads', 'review.view'],
+    finance: ['accounts.view', 'costs.edit', 'expenses.edit', 'coupons.view', 'coupons.edit', 'orders.view', 'orders.amounts', 'payments'],
+    operations: ['production', 'files', 'houses.view', 'houses.edit', 'review.view', 'review.work', 'orders.view', 'orders.work', 'customers.view', 'rights'],
+    catalogue: ['catalog.view', 'catalog.edit', 'library.view', 'library.edit', 'uploads'],
   };
   /** A product manager's sign-in from before roles (the old server lets them use the catalogue routes only). */
   const LEGACY_PRODUCTS = ['catalog.view', 'catalog.edit', 'library.view', 'library.edit', 'uploads'];
@@ -222,7 +222,7 @@ window.AdminRoles = (() => {
         (e.who && e.who.name) || '',
         (e.roles || []).map((r) => (role ? role(r) : r)).join(lang === 'ar' ? '، ' : ', '),
         inLang(e.summary, lang) || e.action || '',
-        result ? result(resultOf(e.status)) : resultOf(e.status),
+        result ? result(e.outcome === 'failed' ? 'failed' : resultOf(e.status)) : e.outcome === 'failed' ? 'failed' : resultOf(e.status),
         e.status == null ? '' : String(e.status),
         e.method || '',
         e.path || '',

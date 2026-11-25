@@ -34,25 +34,28 @@ window.AdminApprovals = (() => {
   const when = (iso) => AdminRoles.cairoTime(iso);
   const roleNames = (roles) => (roles || []).filter((r) => AdminRoles.ROLES.includes(r)).map((r) => t('role.' + r)).join(POD.lang === 'ar' ? '، ' : ', ');
   /** Waiting ones first, then the newest. */
-  const order = (a, b) => (a.status === 'pending') !== (b.status === 'pending') ? (a.status === 'pending' ? -1 : 1) : String(b.at || '').localeCompare(String(a.at || ''));
+  const order = (a, b) => (open(a) !== open(b) ? (open(a) ? -1 : 1) : String(b.at || '').localeCompare(String(a.at || '')));
   function shown() {
     const list = (S.list || []).map((a) => S.decided.get(a.id) || a);
     // Decided here while "Waiting" is shown: kept on screen with the result.
     for (const [id, a] of S.decided) if (!list.some((x) => x.id === id)) list.push(a);
     return list.sort(order);
   }
-  const waitingCount = () => shown().filter((a) => a.status === 'pending').length;
+  // (Still to decide: waiting ones, and ones that failed when approved: those can be approved again or refused.)
+  const open = (a) => a.status === 'pending' || a.status === 'failed' || a.status === 'applying';
+  const waitingCount = () => shown().filter(open).length;
 
   // ---------- Drawing ----------
   function decidedHtml(a) {
-    const by = a.decidedBy && a.decidedBy.name;
+    // (The shared password's sign-in: "Owner (emergency login)", not its id.)
+    const by = a.decidedBy && (a.decidedBy.id === 'owner' ? t('me.emergencyName') : a.decidedBy.name);
     const status = t('ap.st.' + a.status);
     // (The name in its own direction: "Nour نور" next to the date stays in one piece.)
     const line = by ? t('ap.decidedBy', { status, name: `\u2068${by}\u2069`, when: when(a.decidedAt) }) : a.decidedAt ? `${status}${POD.sep()}${when(a.decidedAt)}` : status;
     return `
       <div class="ap-result">
         <p class="small ap-decided">${esc(line)}</p>
-        ${a.note ? `<p class="small ap-note" dir="auto">${esc(t('ap.ownerNote', { note: a.note }))}</p>` : ''}
+        ${a.note ? `<p class="small ap-note" dir="auto">${esc(t('ap.ownerNote', { note: inLang(a.note) }))}</p>` : ''}
         ${a.error ? `<p class="small ap-error" dir="auto">${esc(t('ap.error', { error: inLang(a.error) }))}</p>` : ''}
       </div>`;
   }
@@ -72,7 +75,10 @@ window.AdminApprovals = (() => {
   function itemHtml(a) {
     const st = ['pending', 'approved', 'rejected', 'cancelled', 'failed'].includes(a.status) ? a.status : 'pending';
     const mine = !owner();
-    const details = inLang(a.details);
+    // The values asked for, field by field (server: changes); older answers: the details text.
+    const changes = Array.isArray(a.changes) && a.changes.length
+      ? `<dl class="ap-changes">${a.changes.map((c) => `<dt>${esc(inLang(c.field))}</dt><dd dir="auto">${esc(inLang(c.value))}</dd>`).join('')}</dl>` : '';
+    const details = changes ? '' : inLang(a.details);
     const m = S.msg[a.id];
     const roles = roleNames(a.roles);
     return `
@@ -83,8 +89,11 @@ window.AdminApprovals = (() => {
           <span class="muted small ap-when">${esc(t('ap.sentAt', { when: when(a.at) }))}</span>
         </div>
         <p class="ap-summary" dir="auto">${esc(inLang(a.summary) || a.action || '')}</p>
+        ${a.thumb && /^data:image\/webp;base64,/.test(a.thumb) ? `<button type="button" class="ap-thumb-btn" data-ap-zoom aria-pressed="false" title="${esc(t('ap.photoZoom'))}"><img class="ap-thumb" src="${esc(a.thumb)}" alt="${esc(t('ap.photoAlt'))}" loading="lazy"></button>` : ''}
+        ${changes ? `<div class="ap-details"><div class="muted small">${esc(t('ap.details'))}</div>${changes}</div>` : ''}
         ${details ? `<div class="ap-details"><div class="muted small">${esc(t('ap.details'))}</div><div class="ap-details-text" dir="auto">${esc(details)}</div></div>` : ''}
-        ${st !== 'pending' ? decidedHtml(a) : mine ? `<div class="ap-btns"><button class="btn btn-sm" type="button" data-ap-act="cancel" data-ap-id="${esc(a.id)}" ${S.busy.has(a.id) ? 'disabled' : ''}>${esc(t('ap.cancel'))}</button></div>` : decideHtml(a)}
+        ${st !== 'pending' ? decidedHtml(a) : ''}
+        ${!open(a) ? '' : mine ? `<div class="ap-btns"><button class="btn btn-sm" type="button" data-ap-act="cancel" data-ap-id="${esc(a.id)}" ${S.busy.has(a.id) ? 'disabled' : ''}>${esc(t('ap.cancel'))}</button></div>` : decideHtml(a)}
         ${m ? `<p class="ro-msg ${m.ok ? 'ok' : 'bad'}" aria-live="polite">${esc(m.text)}</p>` : ''}
       </article>`;
   }
@@ -159,6 +168,12 @@ window.AdminApprovals = (() => {
         S.list = null;
         render();
         load().then(render).catch(() => {});
+        return;
+      }
+      // A waiting photo: tap to see it bigger, tap again for the small one.
+      const z = e.target.closest('[data-ap-zoom]');
+      if (z) {
+        z.setAttribute('aria-pressed', String(z.classList.toggle('big')));
         return;
       }
       const b = e.target.closest('[data-ap-act]');

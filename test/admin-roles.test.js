@@ -141,7 +141,7 @@ test('a catalogue change by the team waits for an owner, then happens exactly as
   // The activity log has both: the request and the approved change, with who approved it.
   const log = (await call('/api/admin/activity', 'GET', undefined, owner)).json.entries;
   assert.ok(log.some((e) => e.approvalId === a.id && e.status === 202 && e.whoId === cat.id));
-  assert.ok(log.some((e) => e.approvalId === a.id && e.status === 200 && e.whoId === cat.id && e.approvedBy === 'owner'));
+  assert.ok(log.some((e) => e.approvalId === a.id && e.status === 200 && e.whoId === cat.id && e.approvedByEmergency === true), 'approved with the shared password');
   // The screen reads who as { id, name } and what happened in both languages (not the route).
   const applied = log.find((e) => e.approvalId === a.id && e.status === 200 && e.whoId === cat.id);
   assert.deepStrictEqual(applied.who, { id: cat.id, name: 'CAT2' });
@@ -182,8 +182,25 @@ test('money changes by finance wait; their cost edit keeps the owner\'s prices',
   assert.strictEqual(c.status, 202, c.text);
   assert.match(c.json.approval.summary.en, /FIN10/);
   assert.ok(!(await call('/api/admin/coupons', 'GET', undefined, owner)).json.coupons.some((x) => x.code === 'FIN10'));
+  // The owner sees the values asked for, field by field (QA admin tester 2: no approving blind).
+  const asked = (await call('/api/admin/approvals', 'GET', undefined, owner)).json.approvals.find((x) => x.id === c.json.approval.id);
+  assert.deepStrictEqual(asked.changes.find((x) => x.field.en === 'value'), { field: { en: 'value', ar: 'القيمة' }, value: { en: '10', ar: '10' } });
+  assert.ok(asked.changes.some((x) => x.field.ar === 'النوع' && x.value.en === 'percent'));
   await call(`/api/admin/approvals/${c.json.approval.id}/approve`, 'POST', {}, owner);
   assert.ok((await call('/api/admin/coupons', 'GET', undefined, owner)).json.coupons.some((x) => x.code === 'FIN10'));
+  // A change that fails when approved (the code was taken meanwhile) stays to decide: listed, counted, approvable again.
+  const late = await call('/api/admin/coupons', 'POST', { code: 'LATE5', type: 'percent', value: 5 }, fin.token);
+  const mine = await call('/api/admin/coupons', 'POST', { code: 'LATE5', type: 'percent', value: 7 }, owner);
+  assert.strictEqual(mine.status, 201);
+  const failed = await call(`/api/admin/approvals/${late.json.approval.id}/approve`, 'POST', {}, owner);
+  assert.strictEqual(failed.json.approval.status, 'failed');
+  assert.match(failed.json.approval.error.en, /exists/);
+  assert.ok((await call('/api/admin/approvals?status=pending', 'GET', undefined, owner)).json.approvals.some((x) => x.id === late.json.approval.id));
+  const waiting = (await call('/api/admin/session', 'GET', undefined, owner)).json.pendingApprovals;
+  assert.ok(waiting >= 1);
+  await call(`/api/admin/coupons/${mine.json.id}`, 'DELETE', undefined, owner);
+  assert.strictEqual((await call(`/api/admin/approvals/${late.json.approval.id}/approve`, 'POST', {}, owner)).json.approval.status, 'approved', 'approved again once the cause is gone');
+  assert.strictEqual((await call('/api/admin/session', 'GET', undefined, owner)).json.pendingApprovals, waiting - 1);
   const e = await call('/api/admin/expenses', 'POST', { amount: 250, category: 'other', date: '2026-11-25', note: 'tape' }, fin.token);
   assert.strictEqual(e.status, 202, e.text);
   // Costs of a product: the prices stay the owner's (the screen sends them along).
@@ -295,4 +312,70 @@ test('switching someone off or changing their roles signs them out; they can cha
 test('a forged approval header gets nothing', async () => {
   const r = await call('/api/admin/catalog/apron', 'PUT', { lowStockAt: 1 }, undefined, { 'X-Approval-Replay': 'abc.def' });
   assert.strictEqual(r.status, 401);
+});
+
+test('QA admin round: limits, photos, words, lockouts and who may do what', async () => {
+  const cat = await addMember('cat9', ['catalogue']);
+  // An edit with nothing in it is refused at once; a junk "photo" too; a real photo comes with a small copy.
+  assert.strictEqual((await call('/api/admin/catalog/mug', 'PUT', {}, cat.token)).json.code, 'nothingToApprove');
+  assert.strictEqual((await call('/api/admin/catalog/mug', 'PUT', [], cat.token)).status, 400);
+  assert.strictEqual((await call('/api/admin/catalog/mug/photos', 'POST', Buffer.alloc(5000, 7), cat.token, { 'Content-Type': 'image/png' })).json.code, 'badPhoto');
+  const sharp = require('sharp');
+  const png = await sharp({ create: { width: 900, height: 600, channels: 3, background: '#3366cc' } }).png().toBuffer();
+  const ph = await call('/api/admin/catalog/mug/photos', 'POST', png, cat.token, { 'Content-Type': 'image/png' });
+  assert.strictEqual(ph.status, 202, ph.text);
+  const row = (await call('/api/admin/approvals', 'GET', undefined, owner)).json.approvals.find((x) => x.id === ph.json.approval.id);
+  assert.match(row.thumb, /^data:image\/webp;base64,/);
+  assert.strictEqual(row.changes[0].field.en, 'photo');
+  // One person can't fill the list: 50 waiting at most.
+  for (let i = 0; i < 60; i++) {
+    const r = await call('/api/admin/catalog/mug', 'PUT', { lowStockAt: i + 1 }, cat.token);
+    if (r.status === 429) { assert.strictEqual(r.json.code, 'tooManyMine'); break; }
+    assert.strictEqual(r.status, 202);
+  }
+  assert.strictEqual((await call('/api/admin/session', 'GET', undefined, cat.token)).json.myPending, 50);
+  // The sign-in answer already carries the counts (the badge shows at once).
+  const signIn2 = await signIn('cat9', 'cat9-long-password');
+  assert.strictEqual(signIn2.myPending, 50);
+  assert.ok((await call('/api/admin/login', 'POST', { password: 'secret-owner-pass' })).json.pendingApprovals >= 50);
+  // An expense reads in each language: its amount, category name and what it's for.
+  const fin = await addMember('fin9', ['finance']);
+  const ex = await call('/api/admin/expenses', 'POST', { amount: 99, category: 'other', date: '2026-11-25', description: 'شحن Aramex' }, fin.token);
+  assert.strictEqual(ex.status, 202, ex.text);
+  assert.match(ex.json.approval.summary.ar, /٩٩.*ج\.م\..*أخرى.*شحن Aramex/);
+  assert.match(ex.json.approval.summary.en, /EGP\s?99.*Other.*شحن Aramex/);
+  assert.doesNotMatch(ex.json.approval.summary.ar, /EGP|other/);
+  // A failed approval: its reason in both languages, and "failed" in the log (not done / refused).
+  const c1 = await call('/api/admin/coupons', 'POST', { code: 'CLASH9', type: 'percent', value: 5 }, fin.token);
+  const own = await call('/api/admin/coupons', 'POST', { code: 'CLASH9', type: 'percent', value: 9 }, owner);
+  assert.strictEqual(own.status, 201);
+  const failed = (await call(`/api/admin/approvals/${c1.json.approval.id}/approve`, 'POST', {}, owner)).json.approval;
+  assert.strictEqual(failed.status, 'failed');
+  assert.ok(failed.error.en && failed.error.ar && failed.error.en !== failed.error.ar, JSON.stringify(failed.error));
+  const log = (await call('/api/admin/activity?limit=500', 'GET', undefined, owner)).json.entries.filter((e) => e.approvalId === c1.json.approval.id && e.status !== 202);
+  assert.ok(log.length >= 2 && log.every((e) => e.outcome === 'failed'), JSON.stringify(log.map((e) => [e.status, e.outcome])));
+  // Decided with the shared password: marked as the emergency login, not a name.
+  assert.strictEqual(failed.decidedBy.id, 'owner');
+  // Nobody types an owner's password, nor their own here (set-up link / "Change my password").
+  const o3 = await addMember('owner3', ['owner']);
+  assert.strictEqual((await call(`/api/admin/staff/${o3.id}/password`, 'PUT', { password: 'taken-over-123' }, owner)).json.code, 'ownerPasswordLink');
+  assert.strictEqual((await call(`/api/admin/staff/${o3.id}/password`, 'PUT', { password: 'taken-over-123' }, o3.token)).json.code, 'ownerPasswordLink');
+  assert.strictEqual((await call(`/api/admin/staff/${cat.id}/password`, 'PUT', { password: 'a-new-password-1' }, owner)).status, 204, 'a team member\'s still can');
+  // A customer's password-reset link is the owners' alone (whoever holds it can sign in as the customer).
+  const ops = await addMember('ops9', ['operations']);
+  assert.strictEqual((await call('/api/admin/customers/nobody/reset-link', 'POST', {}, ops.token)).status, 403);
+  assert.strictEqual((await call('/api/admin/customers', 'GET', undefined, ops.token)).status, 200);
+});
+
+test('QA admin round: other people\'s wrong passwords don\'t lock a person out on their own browser', async () => {
+  await addMember('lock1', ['finance']);
+  const login = (body, headers = {}) => fetch(`${base}/api/admin/login`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
+  // Signed in once on this browser: it gets the person's own mark.
+  const first = await login({ username: 'lock1', password: 'lock1-long-password' });
+  const mark = first.headers.getSetCookie().map((c) => c.split(';')[0]).find((c) => c.startsWith('pod-staff-device='));
+  assert.ok(mark, 'a mark for this person on this browser');
+  // Someone else (other addresses) guesses wrong until the username is locked.
+  for (let i = 0; i < 6; i++) await login({ username: 'lock1', password: 'wrong-guess-123' }, { 'X-Forwarded-For': `10.9.9.${i}` });
+  assert.strictEqual((await login({ username: 'lock1', password: 'lock1-long-password' }, { 'X-Forwarded-For': '10.9.8.1' })).status, 429, 'a new browser waits');
+  assert.strictEqual((await login({ username: 'lock1', password: 'lock1-long-password' }, { Cookie: mark, 'X-Forwarded-For': '10.9.8.2' })).status, 200, 'their own browser gets in');
 });

@@ -1,6 +1,7 @@
 /* Admin → Rights requests (English, Egyptian Arabic). The site is إبداع / الموقع, never "محل". */
 Object.assign(window.POD_STRINGS, {
   'tk.tab': ['Rights requests', 'طلبات الحقوق'],
+  'tk.helpNoLibrary': ['Sent from the "Rights & takedown requests" page: someone says a design uses their work, logo or trademark without permission. Check the link; if they are right, ask an owner to pause or delete the design (Ready designs) before you mark the request handled, then reply to them.', 'بتيجي من صفحة «الحقوق وطلبات الإزالة»: حد بيقول إن تصميم بيستخدم شغله أو اللوجو أو العلامة التجارية بتاعته من غير إذن. افتح اللينك؛ ولو معاه حق، اطلب من صاحب الموقع يوقّف التصميم أو يمسحه (التصميمات الجاهزة) قبل ما تعلّم الطلب إنه خلص، وبعدين رد عليه.'],
   'tk.help': ['Sent from the "Rights & takedown requests" page: someone says a design uses their work, logo or trademark without permission. Check the design, pause or delete it in Ready designs if they are right, reply to them, then mark the request handled.', 'بتيجي من صفحة «الحقوق وطلبات الإزالة»: حد بيقول إن تصميم بيستخدم شغله أو اللوجو أو العلامة التجارية بتاعته من غير إذن. راجع التصميم، ولو معاه حق وقّفه أو امسحه من التصميمات الجاهزة، ورد عليه، وبعدين علّم الطلب إنه خلص.'],
   // The tab's badge and the heading: open requests (Arabic: 1, 2, 3–10, the rest).
   'tk.open.one': ['1 open request', 'طلب واحد مفتوح'],

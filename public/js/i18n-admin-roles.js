@@ -32,10 +32,10 @@ Object.assign(window.POD_STRINGS, {
   'role.operations': ['Operations', 'التشغيل'],
   'role.catalogue': ['Catalogue', 'المنتجات والتصميمات'],
   'role.owner.help': ['Everything: the team, the settings, and approving the team’s changes.', 'كل حاجة: الفريق والإعدادات والموافقة على تعديلات الفريق.'],
-  'role.finance.help': ['Accounts, profit, costs, expenses and coupons; sees orders with their amounts (no changes) and marks them paid.', 'الحسابات والمكسب والتكاليف والمصاريف والكوبونات؛ بيشوف الطلبات بمبالغها (من غير تعديل) ويعلّمها إنها اتدفعت.'],
+  'role.finance.help': ['Accounts, profit, costs, expenses and coupons; sees orders with their amounts (no changes) and marks them paid. Selling prices stay the owners’.', 'الحسابات والمكسب والتكاليف والمصاريف والكوبونات؛ بيشوف الطلبات بمبالغها (من غير تعديل) ويعلّمها إنها اتدفعت. أسعار البيع لأصحاب الموقع بس.'],
   'role.operations.help': ['Print queue, film sheets, printing houses, proof review, orders, shipping, customers and rights requests; never sees prices, amounts, costs or profit.', 'قايمة الطباعة وشيتات الفيلم والمطابع ومراجعة البروفات والطلبات والشحن والعملاء وطلبات الحقوق؛ من غير ما يشوف أي أسعار أو مبالغ أو تكاليف أو مكسب.'],
-  'role.catalogue.help': ['Products, print setup, stock, ready designs and zip uploads; can look at Review but not decide.', 'المنتجات وإعداد الطباعة والمخزون والتصميمات الجاهزة ورفع ملفات الـzip؛ بيشوف المراجعة من غير ما يقرر فيها.'],
-  'role.rule': ['When anyone who isn’t an owner changes products, prices, costs, coupons, ready designs, expenses, printing houses or settings, the change waits for an owner’s approval. Daily order work (review, printing, shipping, replying to customers) happens right away and is logged.', 'أي تعديل من حد غير صاحب الموقع على المنتجات أو الأسعار أو التكاليف أو الكوبونات أو التصميمات الجاهزة أو المصاريف أو المطابع أو الإعدادات بيستنى موافقة صاحب الموقع. وشغل الطلبات اليومي (المراجعة والطباعة والشحن والرد على العملاء) بيتنفذ على طول وبيتسجل.'],
+  'role.catalogue.help': ['Products, print setup, stock, ready designs and zip uploads.', 'المنتجات وإعداد الطباعة والمخزون والتصميمات الجاهزة ورفع ملفات الـzip.'],
+  'role.rule': ['When anyone who isn’t an owner changes products, ready designs, coupons, expenses or costs, the change waits for an owner’s approval (selling prices and settings are the owners’ alone). Daily order work (review, printing, shipping, printing houses, replying to customers) happens right away and is logged.', 'أي تعديل من حد غير صاحب الموقع على المنتجات أو التصميمات الجاهزة أو الكوبونات أو المصاريف أو التكاليف بيستنى موافقة صاحب الموقع (وأسعار البيع والإعدادات لأصحاب الموقع بس). وشغل الطلبات اليومي (المراجعة والطباعة والشحن والمطابع والرد على العملاء) بيتنفذ على طول وبيتسجل.'],
   'role.reviewReadOnly': ['Read only: approving a proof or asking for changes is for Operations and the owners.', 'للعرض بس: الموافقة على البروفة أو طلب تعديلات للتشغيل وأصحاب الموقع.'],
   'role.view': ['Open', 'افتح'],
   'role.cuOrders': ['{n} orders', '{n} طلب'],
@@ -43,11 +43,13 @@ Object.assign(window.POD_STRINGS, {
   // ---------- A change waiting for an owner ----------
   'ap.sent': ['Sent to an owner for approval: {summary}', 'اتبعت لصاحب الموقع للموافقة: {summary}'],
   'ap.aChange': ['your change', 'التعديل بتاعك'],
+  'ap.photoAlt': ['The photo asked for', 'الصورة المطلوبة'],
+  'ap.photoZoom': ['Tap to see it bigger', 'دوس عشان تكبّرها'],
 
   // ---------- Approvals tab ----------
   'ap.tab': ['Approvals', 'الموافقات'],
   'ap.mine': ['My requests', 'طلباتي'],
-  'ap.help': ['Changes the team made to products, prices, costs, coupons, ready designs, expenses, printing houses and settings wait here. Nothing changes in the shop until an owner approves.', 'التعديلات اللي الفريق عملها على المنتجات والأسعار والتكاليف والكوبونات والتصميمات الجاهزة والمصاريف والمطابع والإعدادات بتستنى هنا. مفيش حاجة بتتغير في الموقع غير لما صاحب الموقع يوافق.'],
+  'ap.help': ['Changes the team made to products, ready designs, coupons, expenses and costs wait here. Nothing changes in the shop until an owner approves.', 'التعديلات اللي الفريق عملها على المنتجات والتصميمات الجاهزة والكوبونات والمصاريف والتكاليف بتستنى هنا. مفيش حاجة بتتغير في الموقع غير لما صاحب الموقع يوافق.'],
   'ap.helpMine': ['Your changes to products and money wait for an owner’s approval. Here you see each one and what happened to it.', 'التعديلات بتاعتك على المنتجات والفلوس بتستنى موافقة صاحب الموقع. هنا بتشوف كل واحد وحصل فيه إيه.'],
   'ap.f.pending': ['Waiting', 'مستنية'],
   'ap.f.all': ['All', 'الكل'],

@@ -24,7 +24,8 @@ const ROLES = ['owner', 'finance', 'operations', 'catalogue'];
 const ROLE_PERMS = {
   owner: PERMS,
   finance: ['orders.view', 'orders.amounts', 'payments', 'accounts.view', 'costs.edit', 'expenses.edit', 'coupons.view', 'coupons.edit'],
-  operations: ['orders.view', 'orders.work', 'review.view', 'review.work', 'production', 'files', 'houses.view', 'houses.edit', 'customers.view', 'customers.contact', 'rights'],
+  // (A customer's password-reset link is the owners' alone: whoever holds it can sign in as the customer.)
+  operations: ['orders.view', 'orders.work', 'review.view', 'review.work', 'production', 'files', 'houses.view', 'houses.edit', 'customers.view', 'rights'],
   // (Each role only what its work needs: customers' files and proofs are operations' work.)
   catalogue: ['catalog.view', 'catalog.edit', 'library.view', 'library.edit', 'uploads'],
 };
@@ -225,6 +226,10 @@ function shortBody(v, depth = 0) {
   for (const [k, x] of Object.entries(v).slice(0, 40)) out[k] = REDACT.test(k) ? '•••' : shortBody(x, depth + 1);
   return out;
 }
+const dayFormat = new Intl.DateTimeFormat('en-CA', { timeZone: process.env.SHOP_TIMEZONE || 'Africa/Cairo', year: 'numeric', month: '2-digit', day: '2-digit' });
+const shopDay = (iso) => {
+  try { return dayFormat.format(new Date(iso)); } catch (e) { return String(iso).slice(0, 10); }
+};
 class ActivityLog {
   constructor(file, { maxBytes = 4 * 1024 * 1024 } = {}) {
     this.file = file;
@@ -243,7 +248,7 @@ class ActivityLog {
       console.warn('[activity] could not write:', e.message);
     }
   }
-  /** Newest first. `who`: a person's id; from/to: YYYY-MM-DD (Cairo days are close enough to UTC ones here). */
+  /** Newest first. `who`: a person's id; from/to: YYYY-MM-DD days in the shop's time zone (Cairo), as the screen shows times. */
   list({ who = null, from = null, to = null, limit = 200 } = {}) {
     const out = [];
     for (const f of [this.file, `${this.file}.1`]) {
@@ -255,7 +260,7 @@ class ActivityLog {
         let e;
         try { e = JSON.parse(lines[i]); } catch (err) { continue; }
         if (who && e.whoId !== who) continue;
-        const day = String(e.at).slice(0, 10);
+        const day = shopDay(e.at);
         if (from && day < from) continue;
         if (to && day > to) continue;
         out.push(e);

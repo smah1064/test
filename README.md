@@ -189,7 +189,7 @@ Admin → **Products** changes the real products without touching the code (`src
 - **Four roles**, and a person can hold more than one:
   - **Owner**: everything.
   - **Finance**: orders with amounts, payments, Accounts, costs, expenses, coupons.
-  - **Operations**: orders, review, production, files, printing houses, customers, rights requests. Operations sees **no amounts**: prices, totals, costs and discounts are taken out of every answer they get.
+  - **Operations**: orders, review, production, files, printing houses, customers, rights requests. Operations sees **no amounts**: prices, totals, costs and discounts are taken out of every answer they get. A customer's password-reset link is the owners' alone (whoever holds it can sign in as the customer).
   - **Catalogue**: products, ready designs, zip uploads.
 - **Permissions per route.** Every admin route needs one permission (`ROUTES` in `src/roles.js`). A route not listed there is for owners only. A refused route answers 403 `noPermission`; it never signs the person out.
 - **Personal sign-ins.**
@@ -202,7 +202,10 @@ Admin → **Products** changes the real products without touching the code (`src
   - Checks that can fail (bad fields, a taken coupon code, a selling price, a missing product) answer at once, so the person hears straight away.
   - An owner approves (`POST /api/admin/approvals/:id/approve`) or refuses (`…/reject`); the person can withdraw their own (`DELETE /api/admin/approvals/:id`).
   - Approving runs the kept request again **inside the app** (an in-memory connection, no network) as the person who made it. Their limits still apply (selling prices stay the owner's), and the log shows who made it and who approved it.
-  - A change that fails when approved is marked `failed` with the reason, and can be approved again or refused.
+  - A change that fails when approved is marked `failed` with the reason in both languages, and stays in the waiting list: it can be approved again or refused.
+  - Approving checks the person as they are now: someone switched off, removed or without the role any more can't have their change applied, and switching someone off, removing them or taking a role away cancels their waiting changes.
+  - Limits: an edit with nothing in it is refused, a photo is checked as a real picture before it waits (the owner sees a small copy), and one person has at most 50 changes waiting (20 pictures).
+- **Sign-in lockouts**: wrong passwords for a username from elsewhere don't lock a person out on a browser they signed in from before (a mark per person, like the owner's), only that address's own wrong tries.
 - **Daily order work** (status, shipping, sending to printing houses, review decisions, payments) happens at once and is logged.
 - **Activity log**: every change, sign-in and approval, one line each in `DATA_DIR/activity.jsonl` (the previous file is kept as `activity.jsonl.1` once it passes 4 MB). Passwords and tokens are never written. `GET /api/admin/activity`: owners see everyone, others only their own.
 

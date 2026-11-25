@@ -3811,8 +3811,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const mark = (/(?:^|;\s*)pod-admin-device=([^;]+)/.exec(req.get('cookie') || '') || [])[1];
     // Staff (product managers) sign in with their username; the owner with the shop password only.
     const username = typeof (req.body || {}).username === 'string' ? req.body.username.trim() : '';
+    // A team member's browser that signed in as them before: other people's wrong guesses don't lock them out.
+    const staffMark = (/(?:^|;\s*)pod-staff-device=([^;]+)/.exec(req.get('cookie') || '') || [])[1];
     const result = username
-      ? auth.staffLogin(req.ip, username, (req.body || {}).password, staffList())
+      ? auth.staffLogin(req.ip, username, (req.body || {}).password, staffList(), { knownDevice: (u) => Boolean(u && auth.knownDevice(staffMark, `staff-${u.id}`)) })
       : auth.login(req.ip, (req.body || {}).password, { knownDevice: auth.knownDevice(mark) });
     if (!result) throw new HttpError(401, username ? 'wrongStaffLogin' : 'wrongPassword');
     if (result.wait) {
@@ -3824,6 +3826,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     // This browser is now known: a flood of wrong passwords from elsewhere won't lock the owner out of it.
     // (The owner's sign-in only: a staff member's browser gets no pass round the owner's lock.)
     if (!result.user) res.append('Set-Cookie', `pod-admin-device=${auth.deviceMark()}; Path=/api/admin/login; Max-Age=${180 * 24 * 3600}; HttpOnly; SameSite=Strict${isHttps(req) ? '; Secure' : ''}`);
+    else res.append('Set-Cookie', `pod-staff-device=${auth.deviceMark(`staff-${result.user.id}`)}; Path=/api/admin/login; Max-Age=${180 * 24 * 3600}; HttpOnly; SameSite=Strict${isHttps(req) ? '; Secure' : ''}`);
     // The private preview lets this browser in too (the owner and staff see the shop as customers will).
     previewCookie(req, res, result.user ? staffWho(result.user) : ownerWho());
     const expiresAt = new Date(result.expiresAt).toISOString();
@@ -3835,12 +3838,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       });
       activity.add({ whoId: w.id, who: w.shown, roles: w.roles, action: 'signIn', label: { en: 'Signed in', ar: 'دخل' }, summary: { en: 'Signed in', ar: 'دخل' }, method: 'POST', path: '/api/admin/login', status: 200, ip: req.ip });
       // (name: the username; shown: the person's name, for the header.)
-      return res.json({ token: result.token, expiresAt, id: w.id, role: w.role, roles: w.roles, perms: [...w.perms], name: w.name, shown: w.shown });
+      return res.json({ token: result.token, expiresAt, id: w.id, role: w.role, roles: w.roles, perms: [...w.perms], name: w.name, shown: w.shown, ...approvalCounts(w) });
     }
     // The shared password: the emergency way in, always written to the log.
     activity.add({ whoId: 'owner', who: 'owner', roles: ['owner'], emergency: true, action: 'signIn', label: { en: 'Signed in with the shared password', ar: 'دخل بكلمة السر المشتركة' }, summary: { en: 'Signed in with the shared password', ar: 'دخل بكلمة السر المشتركة' }, method: 'POST', path: '/api/admin/login', status: 200, ip: req.ip });
     const w = emergencyWho();
-    res.json({ token: result.token, expiresAt, weakPassword: auth.weak, id: w.id, role: 'owner', roles: w.roles, perms: [...w.perms], name: 'owner', emergency: true });
+    res.json({ token: result.token, expiresAt, weakPassword: auth.weak, id: w.id, role: 'owner', roles: w.roles, perms: [...w.perms], name: 'owner', emergency: true, ...approvalCounts(w) });
   });
   app.post('/api/admin/logout', (req, res) => {
     auth.logout(security.bearer(req), staffList());
@@ -3860,6 +3863,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     return { id: u.id, name: u.username, shown: u.name || u.username, roles: rs, role: roles.mainRole(rs), perms: roles.permsOf(rs) };
   };
   const emergencyWho = () => ({ id: 'owner', name: 'owner', roles: ['owner'], role: 'owner', perms: roles.permsOf(['owner']), emergency: true });
+  /** Changes still to decide (waiting, or failed when approved): the owner's count, and the person's own. */
+  const approvalCounts = (w) => {
+    const open = (store.db.approvals || []).filter((a) => a.status === 'pending' || a.status === 'failed' || a.status === 'applying');
+    return { pendingApprovals: w.perms.has('approvals') ? open.length : 0, myPending: open.filter((a) => a.by && a.by.id === w.id).length };
+  };
   const activity = new roles.ActivityLog(path.join(dataDir, 'activity.jsonl'));
   // Changes an owner approved, while they run again (see the approvals below): id -> who made them.
   const approvalRuns = new Map();
@@ -3881,7 +3889,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const [k, id] = String(run).split('.');
       const r = sameText(k, replayKey) && approvalRuns.get(id);
       if (!r) throw new HttpError(401, 'signInAgain');
-      who = { ...r.who, perms: roles.permsOf(r.who.roles), approvalId: id, approvedBy: r.by };
+      who = { ...r.who, perms: roles.permsOf(r.who.roles), approvalId: id, approvedBy: r.by, approvedByEmergency: r.byEmergency };
     } else {
       const token = security.bearer(req);
       if (auth.verify(token)) who = emergencyWho();
@@ -3904,9 +3912,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       res.on('finish', () => activity.add({
         whoId: who.id, who: who.shown || who.name, roles: who.roles, ...(who.emergency ? { emergency: true } : {}),
         action: key, label: route.label || null, method: req.method, path: req.originalUrl.split('?')[0].slice(0, 300),
-        status: res.statusCode, ...(res.locals.approvalId || who.approvalId ? { approvalId: res.locals.approvalId || who.approvalId } : {}),
-        ...(who.approvedBy ? { approvedBy: who.approvedBy } : {}),
-        ...((res.locals.summary || (who.approvalId && (findApproval(who.approvalId) || {}).summary) || route.label) ? { summary: res.locals.summary || (who.approvalId && (findApproval(who.approvalId) || {}).summary) || route.label } : {}),
+        // (outcome 'failed': an approval whose change couldn't be applied, and that change's own line.)
+        status: res.statusCode, ...(res.locals.outcome || (who.approvalId && res.statusCode >= 400) ? { outcome: res.locals.outcome || 'failed' } : {}),
+        ...(res.locals.approvalId || who.approvalId ? { approvalId: res.locals.approvalId || who.approvalId } : {}),
+        ...(who.approvedBy ? { approvedBy: who.approvedBy } : {}), ...(who.approvedByEmergency ? { approvedByEmergency: true } : {}),
+        ...(() => {
+          const sum = res.locals.summary || (who.approvalId && (findApproval(who.approvalId) || {}).summary) || workAbout(route, req) || route.label;
+          return sum ? { summary: sum } : {};
+        })(),
         // (Never a password: those routes log no body at all.)
         body: route.noBody ? undefined : roles.shortBody(req.body && (Buffer.isBuffer(req.body) || Object.keys(req.body).length) ? req.body : undefined),
       }));
@@ -3916,6 +3929,33 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   };
   const requireAdmin = adminGate;
   const requireCatalog = adminGate;
+  // What daily work was about, for the activity log: the order and item, and what was set.
+  const WORK_WORDS = {
+    queued: ['queued', 'في الانتظار'], printing: ['printing', 'بيتطبع'], printed: ['printed', 'اتطبع'], shipped: ['shipped', 'اتشحن'], delivered: ['delivered', 'اتسلم'],
+    paid: ['paid', 'اتدفع'], pending: ['not paid yet', 'لسه متدفعش'], approve: ['approved', 'اتوافق عليه'], changes: ['changes asked', 'اتطلب تعديلات'],
+    done: ['handled', 'اتعمل'], new: ['open again', 'اتفتح تاني'], whatsapp: ['WhatsApp', 'واتساب'], email: ['email', 'إيميل'],
+  };
+  function workAbout(route, req) {
+    if (!route.label || route.approve) return null;
+    const b = req.body && !Buffer.isBuffer(req.body) && typeof req.body === 'object' ? req.body : {};
+    const p = req.params || {};
+    const found = p.itemId ? store.findItem(p.itemId) : null;
+    const order = found ? found.order : p.orderId ? store.getOrder(p.orderId) : null;
+    if (!order && !Object.keys(b).length) return null;
+    const prod = found && getProduct(found.item.productId);
+    const word = (v) => (WORK_WORDS[v] ? { en: WORK_WORDS[v][0], ar: WORK_WORDS[v][1] } : v == null ? null : { en: String(v).slice(0, 60), ar: String(v).slice(0, 60) });
+    const bits = [];
+    for (const k of ['status', 'decision', 'action', 'process', 'via', 'channel']) if (typeof b[k] === 'string') bits.push(word(b[k]));
+    if (typeof b.houseId === 'string') {
+      const h = (store.db.printHouses || []).find((x) => x.id === b.houseId);
+      if (h) bits.push({ en: h.name, ar: h.name });
+    }
+    for (const k of ['courier', 'trackingNumber']) if (typeof b[k] === 'string' && b[k].trim()) bits.push({ en: b[k].trim().slice(0, 40), ar: b[k].trim().slice(0, 40) });
+    const head = [order ? `#${order.number}` : '', prod ? null : ''].filter(Boolean);
+    const en = [route.label.en, [head.join(''), prod ? prod.name.en : ''].filter(Boolean).join(' · '), bits.map((x) => x.en).join(', ')].filter(Boolean);
+    const ar = [route.label.ar, [head.join(''), prod ? prod.name.ar : ''].filter(Boolean).join(' · '), bits.map((x) => x.ar).join('، ')].filter(Boolean);
+    return en.length > 1 ? { en: en.join(': '), ar: ar.join(': ') } : null;
+  }
   // ---------- Private preview: on/off and the people invited (owner only) ----------
   const previewView = (req) => ({ on: previewOn(), people: previewPeople().map((x) => preview.personRow(x, linkBase(req))) });
   app.get('/api/admin/preview', requireAdmin, (req, res) => res.json(previewView(req)));
@@ -3976,8 +4016,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     res.json({
       ok: true, id: w.id, role: w.role, roles: w.roles, perms: [...w.perms],
       ...(w.emergency ? { emergency: true, weakPassword: auth.weak } : { name: w.name, shown: w.shown || w.name }),
-      pendingApprovals: w.perms.has('approvals') ? list.filter((a) => a.status === 'pending').length : 0,
-      myPending: list.filter((a) => a.status === 'pending' && a.by && a.by.id === w.id).length,
+      ...approvalCounts(w),
     });
   });
 
@@ -4235,6 +4274,22 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   });
 
   // ---------- The team (owners only): personal sign-ins, roles, set-up links ----------
+  /** Cancels a person's changes still to decide (inside store.mutate), with why; their pictures go too. */
+  const cancelOpenOf = (db, personId, who, which, why) => {
+    const at = new Date().toISOString();
+    for (const a of db.approvals || []) {
+      if (!a.by || a.by.id !== personId || !(a.status === 'pending' || a.status === 'failed') || !which(a)) continue;
+      a.status = 'cancelled';
+      a.decidedBy = { id: who.id, name: who.shown || who.name };
+      a.decidedAt = at;
+      a.note = {
+        'switched off': { en: 'Cancelled: the person was switched off.', ar: 'اتلغى: الشخص اتوقف.' },
+        'role changed': { en: 'Cancelled: the person no longer has the role for it.', ar: 'اتلغى: الشخص مبقاش عنده الدور ده.' },
+        removed: { en: 'Cancelled: the person was removed.', ar: 'اتلغى: الشخص اتشال من الفريق.' },
+      }[why] || why;
+      for (const f of [a.file, a.thumb]) if (f) fs.rmSync(path.join(dataDir, 'approvals', f), { force: true });
+    }
+  };
   const staffRow = (u) => {
     const rs = roles.rolesOf(u);
     return {
@@ -4294,7 +4349,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         delete u.role;
       }
       if (typeof b.active === 'boolean') u.active = b.active;
-      if (JSON.stringify([roles.rolesOf(u), u.active !== false]) !== before) u.gen = (u.gen || 0) + 1;
+      if (JSON.stringify([roles.rolesOf(u), u.active !== false]) !== before) {
+        u.gen = (u.gen || 0) + 1;
+        // Their changes still waiting are cancelled (switched off), or the ones their new roles can't make.
+        const perms = roles.permsOf(roles.rolesOf(u));
+        cancelOpenOf(db, u.id, req.adminWho, (a) => u.active === false || !perms.has((roles.ROUTES[a.action] || {}).perm),
+          u.active === false ? 'switched off' : 'role changed');
+      }
       return u;
     });
     res.json(staffRow(user));
@@ -4305,6 +4366,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const user = store.mutate((db) => {
       const u = (db.staff || []).find((x) => x.id === req.params.id);
       if (!u) throw new HttpError(404, 'notFound');
+      // (A link for someone switched off wouldn't work: turn them on first.)
+      if (u.active === false) throw new HttpError(409, 'staffOffLink');
       u.setup = s.setup;
       return u;
     });
@@ -4312,6 +4375,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   });
   app.put('/api/admin/staff/:id/password', requireAdmin, express.json({ limit: '4kb' }), (req, res) => {
     const pw = (req.body || {}).password;
+    // (Not an owner's, and not your own: an owner gets a set-up link, and your own needs your current one.)
+    const target = staffAll().find((x) => x.id === req.params.id);
+    if (target && (target.id === req.adminWho.id || roles.rolesOf(target).includes('owner'))) throw new HttpError(403, 'ownerPasswordLink');
     if (!staffPassword(pw)) throw new HttpError(400, 'badStaff');
     store.mutate((db) => {
       const u = (db.staff || []).find((x) => x.id === req.params.id);
@@ -4328,6 +4394,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const before = (db.staff || []).length;
       db.staff = (db.staff || []).filter((x) => x.id !== req.params.id);
       if (db.staff.length === before) throw new HttpError(404, 'notFound');
+      cancelOpenOf(db, req.params.id, req.adminWho, () => true, 'removed');
     });
     res.status(204).end();
   });
@@ -4380,6 +4447,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   const approvalRow = (a) => ({
     id: a.id, at: a.at, by: a.by, roles: a.roles, action: a.action, label: a.label || null, summary: a.summary,
     details: a.file ? { bytes: a.bytes, type: a.contentType || null } : roles.shortBody(a.body),
+    // A picture waiting: a small copy to look at (the full one is applied as sent).
+    ...(a.thumb && a.status !== 'approved' ? (() => {
+      try { return { thumb: `data:image/webp;base64,${fs.readFileSync(path.join(approvalDir, a.thumb)).toString('base64')}` }; } catch (e) { return {}; }
+    })() : {}),
+    changes: changesOf(a),
     method: a.method, path: a.path, status: a.status,
     ...(a.decidedBy ? { decidedBy: a.decidedBy, decidedAt: a.decidedAt } : {}),
     ...(a.note ? { note: a.note } : {}), ...(a.error ? { error: a.error } : {}),
@@ -4398,18 +4470,68 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     sides: enAr('print areas', 'أماكن الطباعة'), process: enAr('printing method', 'طريقة الطباعة'), methods: enAr('printing methods', 'طرق الطباعة'), embroidery: enAr('embroidery', 'التطريز'),
     prices: enAr('prices', 'الأسعار'), photos: enAr('photos', 'الصور'), order: enAr('photo order', 'ترتيب الصور'), main: enAr('main photo', 'الصورة الأساسية'),
   };
+  // Every field a kept change can carry, as the owner reads it (the values asked for are shown under it).
+  const OWNER_FIELD_NAMES = {
+    ...CATALOG_FIELD_NAMES,
+    code: enAr('code', 'الكود'), type: enAr('type', 'النوع'), value: enAr('value', 'القيمة'), minOrder: enAr('minimum order', 'أقل طلب'),
+    maxDiscount: enAr('maximum discount', 'أقصى خصم'), maxUses: enAr('uses in all', 'عدد مرات الاستخدام'), perCustomer: enAr('uses per customer', 'مرات لكل عميل'),
+    startsOn: enAr('starts on', 'يبدأ يوم'), endsOn: enAr('ends on', 'ينتهي يوم'), active: enAr('on', 'شغال'), products: enAr('products', 'المنتجات'), categories: enAr('categories', 'الأقسام'),
+    note: enAr('note', 'ملاحظة'), amount: enAr('amount', 'المبلغ'), date: enAr('date', 'التاريخ'),
+    costs: enAr('costs', 'التكاليف'), blank: enAr('blank item', 'القطعة السادة'), printFirst: enAr('printing (first side)', 'الطباعة (أول وش)'), printExtra: enAr('printing (each extra side)', 'الطباعة (كل وش زيادة)'), other: enAr('other', 'أخرى'),
+    actualCost: enAr('actual cost', 'التكلفة الفعلية'), actualShipping: enAr('actual shipping cost', 'تكلفة الشحن الفعلية'), shippingCost: enAr('shipping cost', 'تكلفة الشحن'),
+    basePrice: enAr('base price', 'السعر الأساسي'), extraSidePrice: enAr('extra side', 'الوش الزيادة'),
+    ids: enAr('designs', 'التصميمات'), hidden: enAr('paused', 'متوقف'), deleted: enAr('deleted', 'ممسوح'), share: enAr('share link', 'لينك المشاركة'),
+    nameEn: enAr('English name', 'الاسم بالإنجليزي'), nameAr: enAr('Arabic name', 'الاسم بالعربي'), items: enAr('designs', 'التصميمات'),
+  };
+  /** One value as the owner reads it (both languages of a name, yes / no, short lists). */
+  const ownerValue = (v) => {
+    if (v === null || v === undefined || v === '') return enAr('(empty)', '(فاضي)');
+    if (typeof v === 'boolean') return v ? enAr('yes', 'أيوه') : enAr('no', 'لأ');
+    if (typeof v === 'number' || typeof v === 'string') return enAr(String(v).slice(0, 300), String(v).slice(0, 300));
+    if (typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length && Object.keys(v).every((k) => k === 'en' || k === 'ar')) {
+      const t = [v.en, v.ar].filter((x) => x !== undefined && x !== '').map(String).join(' / ').slice(0, 300);
+      return enAr(t, t);
+    }
+    if (Array.isArray(v) && v.every((x) => typeof x === 'string' || typeof x === 'number')) {
+      const t = v.slice(0, 30).join(', ') + (v.length > 30 ? ` … (${v.length})` : '');
+      return enAr(t, t.replace(/, /g, '، '));
+    }
+    const t = JSON.stringify(roles.shortBody(v)).slice(0, 400);
+    return enAr(t, t);
+  };
+  /** The values a kept change asks for, field by field. */
+  const changesOf = (a) => {
+    if (a.file) return [{ field: enAr('photo', 'صورة'), value: enAr(`${Math.max(1, Math.round((a.bytes || 0) / 1024))} KB`, `${Math.max(1, Math.round((a.bytes || 0) / 1024))} KB`) }];
+    if (!a.body || typeof a.body !== 'object' || Array.isArray(a.body)) return [];
+    return Object.entries(a.body).slice(0, 30).map(([k, v]) => ({ field: OWNER_FIELD_NAMES[k] || enAr(k, k), value: ownerValue(v) }));
+  };
+  const EXPENSE_NAMES = {
+    materials: enAr('Materials & blanks', 'خامات ومنتجات'), printing: enAr('Printing', 'طباعة'), shipping: enAr('Shipping', 'شحن'),
+    marketing: enAr('Marketing & ads', 'تسويق وإعلانات'), rent: enAr('Rent & bills', 'إيجار وفواتير'), salaries: enAr('Salaries', 'مرتبات'),
+    equipment: enAr('Equipment', 'معدات'), other: enAr('Other', 'أخرى'),
+  };
+  /** An amount as the site shows it ("٣٥٠ ج.م." / "EGP 350"). */
+  const moneyIn = (n, lang) => {
+    const v = Math.round((Number(n) || 0) * 100) / 100;
+    try {
+      return new Intl.NumberFormat(lang === 'ar' ? 'ar-EG' : 'en-EG', { style: 'currency', currency: 'EGP', minimumFractionDigits: v % 1 ? 2 : 0, maximumFractionDigits: 2 }).format(v);
+    } catch (e) {
+      return `${v} EGP`;
+    }
+  };
   /** What the change is about, in a few words (the product, coupon, order…), for the owner's list. */
   function approvalAbout(key, req) {
     const b = req.body && !Buffer.isBuffer(req.body) ? req.body : {};
     const p = req.params;
-    const money = (v) => `${v} ${CURRENCY}`;
     const orderNo = (id) => {
       const o = store.getOrder(id) || (store.findItem(id) || {}).order;
       return o ? `#${o.number}` : '';
     };
     if (key.includes('/catalog')) {
       const n = key === 'POST /api/admin/catalog' ? { en: String(b.id || ''), ar: String(b.id || '') } : nameOfProduct(p.id);
-      const fields = Buffer.isBuffer(req.body) ? [] : Object.keys(b).filter((k) => !['id', 'template'].includes(k)).map((k) => CATALOG_FIELD_NAMES[k] || enAr(k, k));
+      // (A status names what it does: pause, stop selling, back in the shop.)
+      const STATUS_WORDS = { live: enAr('back in the shop', 'يرجع الموقع'), hidden: enAr('pause', 'إيقاف مؤقت'), removed: enAr('stop selling', 'وقف البيع') };
+      const fields = Buffer.isBuffer(req.body) ? [] : Object.keys(b).filter((k) => !['id', 'template'].includes(k)).map((k) => (k === 'status' && STATUS_WORDS[b.status]) || CATALOG_FIELD_NAMES[k] || enAr(k, k));
       const list = (lang, comma) => (fields.length ? `(${[...new Set(fields.map((f) => f[lang]))].join(comma)})` : '');
       return enAr([n.en, list('en', ', ')].filter(Boolean).join(' '), [n.ar, list('ar', '، ')].filter(Boolean).join(' '));
     }
@@ -4433,14 +4555,21 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const code = String(b.code || (c && c.code) || '');
       return enAr(code, code);
     }
-    if (key === 'POST /api/admin/expenses') return enAr(`${money(b.amount)} · ${b.category || ''} ${b.note || ''}`.trim(), `${money(b.amount)} · ${b.category || ''} ${b.note || ''}`.trim());
+    // (Each language on its own: its digits, its currency and its words.)
+    const expense = (e) => {
+      const cat = EXPENSE_NAMES[e.category] || EXPENSE_NAMES.other;
+      const desc = String(e.description || e.note || '').trim().slice(0, 80);
+      return enAr([moneyIn(e.amount, 'en'), cat.en, desc].filter(Boolean).join(' — '), [moneyIn(e.amount, 'ar'), cat.ar, desc].filter(Boolean).join(' — '));
+    };
+    if (key === 'POST /api/admin/expenses') return expense(b);
     if (key === 'DELETE /api/admin/expenses/:id') {
       const e = (store.db.expenses || []).find((x) => x.id === p.id);
-      return e ? enAr(`${money(e.amount)} · ${e.category || ''}`, `${money(e.amount)} · ${e.category || ''}`) : enAr('', '');
+      return e ? expense(e) : enAr('', '');
     }
-    if (key === 'PATCH /api/admin/items/:itemId/cost') return enAr(`${orderNo(p.itemId)} → ${b.actualCost === null || b.actualCost === '' ? 'cleared' : money(b.actualCost)}`, `${orderNo(p.itemId)} ← ${b.actualCost === null || b.actualCost === '' ? 'اتمسحت' : money(b.actualCost)}`);
-    if (key === 'PATCH /api/admin/orders/:orderId/shipping-cost') return enAr(`${orderNo(p.orderId)} → ${b.actualShipping === null || b.actualShipping === '' ? 'cleared' : money(b.actualShipping)}`, `${orderNo(p.orderId)} ← ${b.actualShipping === null || b.actualShipping === '' ? 'اتمسحت' : money(b.actualShipping)}`);
-    if (key === 'PUT /api/admin/accounts/settings') return enAr(`shipping cost ${money(b.shippingCost)}`, `تكلفة الشحن ${money(b.shippingCost)}`);
+    const costText = (v, lang) => (v === null || v === '' ? (lang === 'ar' ? 'اتمسحت' : 'cleared') : accounting.money(v) === undefined ? String(v) : moneyIn(v, lang));
+    if (key === 'PATCH /api/admin/items/:itemId/cost') return enAr(`${orderNo(p.itemId)} → ${costText(b.actualCost, 'en')}`, `${orderNo(p.itemId)} ← ${costText(b.actualCost, 'ar')}`);
+    if (key === 'PATCH /api/admin/orders/:orderId/shipping-cost') return enAr(`${orderNo(p.orderId)} → ${costText(b.actualShipping, 'en')}`, `${orderNo(p.orderId)} ← ${costText(b.actualShipping, 'ar')}`);
+    if (key === 'PUT /api/admin/accounts/settings') return enAr(`shipping cost ${costText(b.shippingCost, 'en')}`, `تكلفة الشحن ${costText(b.shippingCost, 'ar')}`);
     if (key === 'PUT /api/admin/pricing/:productId') {
       const n = nameOfProduct(p.productId);
       return enAr(`${n.en} (costs)`, `${n.ar} (التكاليف)`);
@@ -4467,10 +4596,19 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (!p) throw new HttpError(404, 'unknownProduct');
       if (!catalog.isBuiltIn(p.id)) throw new HttpError(409, 'productsKept');
     },
-    'POST /api/admin/catalog/:id/photos': (req) => {
+    'POST /api/admin/catalog/:id/photos': async (req) => {
       const p = getProduct(req.params.id);
       if (!p) throw new HttpError(404, 'unknownProduct');
       if (((catalogEdits()[p.id] || {}).photos || []).length >= catalog.MAX_PHOTOS) throw new HttpError(400, 'tooManyPhotos', { max: catalog.MAX_PHOTOS });
+      // The same picture checks as the upload itself, now; and a small copy the owner sees before approving.
+      if (!Buffer.isBuffer(req.body) || req.body.length < 100) throw new HttpError(400, 'badPhoto');
+      try {
+        const meta = await sharp()(req.body, { limitInputPixels: 80e6 }).metadata();
+        if (!['jpeg', 'png', 'webp'].includes(meta.format)) throw new Error('type');
+        return { thumb: await sharp()(req.body, { limitInputPixels: 80e6 }).rotate().resize(480, 480, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 72 }).toBuffer() };
+      } catch (e) {
+        throw new HttpError(400, 'badPhoto');
+      }
     },
     'PUT /api/admin/catalog/:id/photos': (req) => { if (!getProduct(req.params.id)) throw new HttpError(404, 'unknownProduct'); },
     'DELETE /api/admin/catalog/:id/photos/:photoId': (req) => { if (!getProduct(req.params.id)) throw new HttpError(404, 'unknownProduct'); },
@@ -4546,8 +4684,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   /** A change kept for an owner: 202 { pending: true, approval } (nothing changes until it's approved). */
   async function holdForApproval(req, res, key, route) {
     await readBody(req, res, route);
-    const checked = (APPROVAL_CHECKS[key] && APPROVAL_CHECKS[key](req)) || {};
+    // (A change with nothing in it is refused: an empty edit would only fill the owner's list.)
+    if (req.method !== 'DELETE' && !Buffer.isBuffer(req.body) && (!req.body || typeof req.body !== 'object' || Array.isArray(req.body) || !Object.keys(req.body).length)) throw new HttpError(400, 'nothingToApprove');
+    const checked = (APPROVAL_CHECKS[key] && await APPROVAL_CHECKS[key](req)) || {};
     if (checked.answer) return res.json(checked.answer);
+    // One person's waiting changes are limited (50, of which 20 pictures), so nobody can fill the list for everyone.
+    const mineOpen = approvalsAll().filter((x) => (x.status === 'pending' || x.status === 'failed') && x.by && x.by.id === req.adminWho.id);
+    if (mineOpen.length >= 50 || (Buffer.isBuffer(req.body) && mineOpen.filter((x) => x.file).length >= 20)) throw new HttpError(429, 'tooManyMine');
     const w = req.adminWho;
     const raw = Buffer.isBuffer(req.body);
     const id = crypto.randomBytes(8).toString('hex');
@@ -4564,6 +4707,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (raw) {
       fs.mkdirSync(approvalDir, { recursive: true });
       fs.writeFileSync(path.join(approvalDir, a.file), req.body);
+      if (checked.thumb) {
+        fs.writeFileSync(path.join(approvalDir, `${id}.thumb.webp`), checked.thumb);
+        a.thumb = `${id}.thumb.webp`;
+      }
     }
     store.mutate((db) => {
       db.approvals ||= [];
@@ -4583,13 +4730,15 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   let replayServer = null;
   const findApproval = (id) => approvalsAll().find((x) => x.id === id);
   // A change that was being applied when the app stopped (5 minutes on) can be approved again.
-  const openForDecision = (a) => a.status === 'pending' || a.status === 'failed' || (a.status === 'applying' && Date.now() - Date.parse(a.applyingAt || 0) > 5 * 60e3);
+  // (A change being applied waits at most 2 minutes, the run's own time limit.)
+  const openForDecision = (a) => a.status === 'pending' || a.status === 'failed' || (a.status === 'applying' && Date.now() - Date.parse(a.applyingAt || 0) > 2 * 60e3);
   app.get('/api/admin/approvals', adminGate, (req, res) => {
     const w = req.adminWho;
     const status = typeof req.query.status === 'string' ? req.query.status : 'pending';
     const list = approvalsAll()
       .filter((a) => w.perms.has('approvals') || (a.by && a.by.id === w.id))
-      .filter((a) => status === 'all' || a.status === status)
+      // ("pending": everything still to decide, including changes that failed when approved.)
+      .filter((a) => status === 'all' || a.status === status || (status === 'pending' && (a.status === 'failed' || a.status === 'applying')))
       .slice(-300).reverse();
     res.json({ approvals: list.map(approvalRow) });
   });
@@ -4606,8 +4755,23 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     });
     res.locals.approvalId = a.id;
     res.locals.summary = a.summary;
+    // The person as they are now: still on, and still with the role the change needs (their current roles run it).
+    const person = staffAll().find((u) => u.id === a.by.id);
+    const nowRoles = person ? roles.rolesOf(person) : [];
+    const need = (roles.ROUTES[a.action] || {}).perm;
+    if (!person || person.active === false || (need && !roles.permsOf(nowRoles).has(need))) {
+      const done = store.mutate((db) => {
+        const x = (db.approvals || []).find((y) => y.id === a.id);
+        x.status = 'failed';
+        x.error = { en: format('approvalPersonGone', {}, 'en'), ar: format('approvalPersonGone', {}, 'ar') };
+        delete x.applyingAt;
+        return x;
+      });
+      res.locals.outcome = 'failed';
+      return res.json({ approval: approvalRow(done), result: null });
+    }
     let out;
-    approvalRuns.set(a.id, { who: { id: a.by.id, name: a.by.username, shown: a.by.name, roles: a.roles, role: roles.mainRole(a.roles) }, by: w.shown || w.name });
+    approvalRuns.set(a.id, { who: { id: a.by.id, name: a.by.username, shown: a.by.name, roles: nowRoles, role: roles.mainRole(nowRoles) }, by: w.emergency ? '' : w.shown || w.name, byEmergency: Boolean(w.emergency) });
     try {
       let body = null;
       if (a.file) body = fs.readFileSync(path.join(approvalDir, a.file));
@@ -4638,10 +4802,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       delete x.applyingAt;
       if (note) x.note = note;
       if (ok) delete x.error;
-      else x.error = String((result && result.error) || `HTTP ${out.status}`).slice(0, 300);
+      else x.error = result && result.errorText ? { en: String(result.errorText.en).slice(0, 300), ar: String(result.errorText.ar).slice(0, 300) } : String((result && result.error) || `HTTP ${out.status}`).slice(0, 300);
       return x;
     });
-    if (ok && a.file) fs.rmSync(path.join(approvalDir, a.file), { force: true });
+    if (ok && a.file) for (const f of [a.file, a.thumb]) if (f) fs.rmSync(path.join(approvalDir, f), { force: true });
+    if (!ok) res.locals.outcome = 'failed';
     res.json({ approval: approvalRow(done), result });
   }));
   const closeApproval = (req, status) => {
@@ -4660,7 +4825,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (note) x.note = note;
       return x;
     });
-    if (a.file) fs.rmSync(path.join(approvalDir, a.file), { force: true });
+    for (const f of [a.file, a.thumb]) if (f) fs.rmSync(path.join(approvalDir, f), { force: true });
     return a;
   };
   app.post('/api/admin/approvals/:id/reject', adminGate, express.json({ limit: '4kb' }), (req, res) => {
@@ -6025,7 +6190,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const message = format(key, err.params || {}, lang);
     // The field the admin's product screen should point at (admin → Products).
     const field = err.params && typeof err.params.field === 'string' && err.params.field ? { field: err.params.field } : {};
-    res.status(status).json({ error: message, code: key || undefined, ...field });
+    // (An approved change run again: both languages of the reason, so the owner and the person each read their own.)
+    const both = req.adminWho && req.adminWho.approvalId ? { errorText: { en: format(key, err.params || {}, 'en'), ar: format(key, err.params || {}, 'ar') } } : {};
+    res.status(status).json({ error: message, code: key || undefined, ...field, ...both });
   });
 
   return app;

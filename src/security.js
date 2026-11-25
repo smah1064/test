@@ -301,14 +301,16 @@ class AdminAuth {
   }
   /** Returns { token, expiresAt } or { wait } / null for a wrong password. */
   /** A signed "signed in from this browser before" mark (a cookie, 180 days). */
-  deviceMark() {
+  // kind 'device': the owner's shared-password sign-in; 'staff-<id>': one team member's own (a separate mark,
+  // so a team member's browser never gets past the owner's lock, nor someone else's).
+  deviceMark(kind = 'device') {
     const exp = (Date.now() + 180 * 24 * 3600e3).toString(36);
-    return `${exp}.${this.sign(`device.${exp}`)}`;
+    return `${exp}.${this.sign(`${kind}.${exp}`)}`;
   }
-  knownDevice(mark) {
+  knownDevice(mark, kind = 'device') {
     const m = /^([0-9a-z]+)\.([A-Za-z0-9_-]+)$/.exec(mark || '');
     if (!m || parseInt(m[1], 36) < Date.now()) return false;
-    const good = Buffer.from(this.sign(`device.${m[1]}`));
+    const good = Buffer.from(this.sign(`${kind}.${m[1]}`));
     const given = Buffer.from(m[2]);
     return good.length === given.length && crypto.timingSafeEqual(good, given);
   }
@@ -354,16 +356,22 @@ class AdminAuth {
     return { salt, hash: crypto.scryptSync(String(password), salt, 32).toString('hex') };
   }
   /** Staff sign-ins have their own count: wrong staff passwords never lock the owner out. */
-  staffLockedFor(ip, username) {
-    for (const [key, rules] of [['staff:*', ADMIN_ALL_RULES], [`staff:${ip}`, ADMIN_IP_RULES], [`staff-user:${username}`, ADMIN_IP_RULES]]) {
+  /**
+   * On a browser this person signed in from before (knownDevice), other people's wrong guesses (all staff
+   * sign-ins, or this username from anywhere) don't lock them out; this address's own wrong tries still do.
+   */
+  staffLockedFor(ip, username, { knownDevice = false } = {}) {
+    const keys = knownDevice ? [[`staff:${ip}`, ADMIN_IP_RULES]] : [['staff:*', ADMIN_ALL_RULES], [`staff:${ip}`, ADMIN_IP_RULES], [`staff-user:${username}`, ADMIN_IP_RULES]];
+    for (const [key, rules] of keys) {
       const v = this.fails.check(key, rules);
       if (typeof v === 'number') return v;
     }
     return 0;
   }
-  staffLogin(ip, username, password, staffList) {
+  staffLogin(ip, username, password, staffList, { knownDevice = null } = {}) {
     const name = String(username || '').trim().toLowerCase().slice(0, 40);
-    const wait = this.staffLockedFor(ip, name);
+    const known = typeof knownDevice === 'function' ? knownDevice((staffList || []).find((u) => u.username === name)) : false;
+    const wait = this.staffLockedFor(ip, name, { knownDevice: known });
     if (wait) return { wait };
     const user = (staffList || []).find((u) => u.username === name);
     // Always hash once, so a wrong username takes as long as a wrong password.

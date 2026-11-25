@@ -1676,12 +1676,14 @@
     if (ok.length > room) toast(t('pm.photoTooMany', { max: POD.num(max) }), 'error');
     const go = ok.slice(0, Math.max(0, room));
     secError('photos', '');
+    let saved = 0;
     for (let i = 0; i < go.length; i += 1) {
       if (msgEl()) msgEl().textContent = t('pm.uploading', { i: POD.num(i + 1), n: POD.num(go.length) });
       try {
         S.P = await api(`/api/admin/catalog/${enc(P.id)}/photos`, { method: 'POST', headers: { 'Content-Type': go[i].type }, body: go[i] });
         putProduct(S.P);
         room -= 1;
+        saved += 1;
       } catch (e) {
         // (Each photo sent for an owner's approval: the next one goes too.)
         if (sentForApproval(e)) continue;
@@ -1691,7 +1693,8 @@
     }
     if (S.view === 'edit') {
       refreshEdit('photos');
-      if (go.length) toast(t('pm.photosDone'));
+      // ("Saved" only for photos really added: ones sent for approval were said so already.)
+      if (saved) toast(t('pm.photosDone'));
     }
     reloadLater();
   }
@@ -1787,8 +1790,14 @@
       reloadLater();
     } catch (e) {
       if (btn) { btn.disabled = false; btn.textContent = t('pm.save'); }
-      // Sent for an owner's approval: the section keeps what was typed (it isn't live yet).
-      if (!sentForApproval(e)) secError(name, e.message);
+      // Sent for an owner's approval: the section keeps what was typed (it isn't live yet), but it's no longer
+      // "unsaved" (Save again would only send the same request twice); a new change makes it so again.
+      if (sentForApproval(e)) {
+        setDirty(name, false);
+        if (btn) btn.disabled = true;
+        return;
+      }
+      secError(name, e.message);
     }
   }
   function undo(name) {
