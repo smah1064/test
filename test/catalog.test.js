@@ -361,3 +361,21 @@ test('QA fixes: no free or negative sizes, added colours kept, refused orders ta
   await put('/api/admin/catalog/keychain', { stock: null });
   await put('/api/admin/catalog/coasters', { stock: null });
 });
+
+test('selling prices are the owner\'s, and wrong staff passwords never lock the owner out', async () => {
+  const add = await post('/api/admin/staff', { name: 'Hana', username: 'hana', password: 'hana-long-password' }, owner);
+  assert.strictEqual(add.status, 201);
+  const tok = (await (await post('/api/admin/login', { username: 'hana', password: 'hana-long-password' })).json()).token;
+  const r = await put('/api/admin/catalog/apron', { prices: { basePrice: 1 } }, tok);
+  assert.strictEqual(r.status, 403);
+  assert.strictEqual((await r.json()).code, 'ownerOnly');
+  // Other changes still work for them, and a new product they make starts at the template's prices.
+  assert.strictEqual((await put('/api/admin/catalog/apron', { lowStockAt: 4 }, tok)).status, 200);
+  const made = await (await post('/api/admin/catalog', { id: 'hana-mug', template: 'mug', name: { en: 'Hana mug', ar: 'مج هنا' }, prices: { basePrice: 2 } }, tok)).json();
+  assert.strictEqual(made.basePrice, byId('mug').basePrice);
+  // Five wrong staff passwords: staff sign-in waits, the owner signs in as usual.
+  for (let i = 0; i < 6; i++) await post('/api/admin/login', { username: 'hana', password: 'wrong-password-x' });
+  assert.strictEqual((await post('/api/admin/login', { username: 'hana', password: 'hana-long-password' })).status, 429);
+  const own = await post('/api/admin/login', { password: 'secret-owner-pass' });
+  assert.strictEqual(own.status, 200, 'the owner is not locked out');
+});

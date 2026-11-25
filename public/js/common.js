@@ -23,20 +23,35 @@
   }
   applyDir();
 
+  // Arabic pages never mix digits: the shop's own texts (labels, product data, messages) show
+  // numbers as ١٢٣. Codes stay as they are (A5, 3D, 2XL, links, colours), and so does anything
+  // the customer typed (only the shop's texts go through here).
+  const AR_DIGITS = '٠١٢٣٤٥٦٧٨٩';
+  const LATIN_NUM = /(?<![A-Za-z0-9_\-/@:#=?&%"'.])\d+(?:[.,]\d+)*(?![A-Za-z0-9_\-/@:%"']|[.,]\d)/g;
+  function arabicDigits(s) {
+    return String(s).replace(LATIN_NUM, (m) => m.replace(/\d/g, (d) => AR_DIGITS[d]).replace(/\./g, '٫').replace(/,/g, '٬'));
+  }
   function fill(str, params) {
-    return params ? str.replace(/\{(\w+)\}/g, (_, k) => (params[k] ?? '')) : str;
+    return params ? str.replace(/\{(\w+)\}/g, (_, k) => {
+      const v = params[k];
+      // Numbers passed as numbers are counts, not customer text: in the page's digits.
+      return typeof v === 'number' && lang === 'ar' ? arabicDigits(String(v)) : (v ?? '');
+    }) : str;
   }
 
   /** Translate a UI string key. */
   function t(key, params) {
     const pair = STRINGS[key];
     if (!pair) return key;
-    return fill(pair[lang === 'ar' ? 1 : 0], params);
+    return fill(lang === 'ar' ? arabicDigits(pair[1]) : pair[0], params);
   }
 
   /** Pick the current language from a { en, ar } value (plain strings pass through). */
   function tr(value) {
-    if (value && typeof value === 'object') return value[lang] || value.en || '';
+    if (value && typeof value === 'object') {
+      const v = value[lang] || value.en || '';
+      return lang === 'ar' && value.ar ? arabicDigits(v) : v;
+    }
     return value == null ? '' : String(value);
   }
 
@@ -904,7 +919,7 @@
     get lang() {
       return lang;
     },
-    t, tr, setLang, applyI18n,
+    t, tr, arabicDigits, setLang, applyI18n,
     loadCatalog, assetId, canPick, firstPick, productPicture, thumbFallback, fillMockup, mockupUrl, svgDataUrl, luminance,
     money, date, day, num, captcha,
     getCart, setCart, getSaved, setSaved, moveItem, designFor, putFile, updateCartBadge, toast, esc, api, drafts, forgetPersonal,

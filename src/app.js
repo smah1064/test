@@ -3459,7 +3459,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     // Staff (product managers) sign in with their username; the owner with the shop password only.
     const username = typeof (req.body || {}).username === 'string' ? req.body.username.trim() : '';
     const result = username
-      ? auth.staffLogin(req.ip, username, (req.body || {}).password, staffList(), { knownDevice: auth.knownDevice(mark) })
+      ? auth.staffLogin(req.ip, username, (req.body || {}).password, staffList())
       : auth.login(req.ip, (req.body || {}).password, { knownDevice: auth.knownDevice(mark) });
     if (!result) throw new HttpError(401, 'wrongPassword');
     if (result.wait) throw new HttpError(429, 'tooManyLogins', { min: Math.ceil(result.wait / 60) });
@@ -3519,6 +3519,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const c = catalog.clean(product, body, { categories: CATEGORIES.map((x) => x.id), prev: catalogEdits()[product.id] || null });
     if (c.error) throw new HttpError(400, c.error, { field: c.field || '' });
     let pricing = null;
+    // Selling prices are the owner's: a product manager sees them but can't change them.
+    if (body.prices !== undefined && req.adminWho.role !== 'owner') throw new HttpError(403, 'ownerOnly');
     if (body.prices !== undefined) {
       const pr = accounting.cleanPricing(product, body.prices || {});
       if (pr.error) throw new HttpError(400, pr.error);
@@ -3592,6 +3594,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const fields = { ...body };
     delete fields.id;
     delete fields.template;
+    // A product manager's new product starts at the template's prices (the owner sets its own).
+    if (req.adminWho.role !== 'owner') delete fields.prices;
     if (Object.keys(fields).length) {
       try {
         saveProductEdit(req, getProduct(n.id), fields);

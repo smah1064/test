@@ -607,7 +607,8 @@
     avail: (P) => sec('avail', t('pm.s.avail'), t('pm.s.availHelp'), availBody(P)),
     colors: (P) => sec('colors', t('pm.s.colors'), t('pm.s.colorsHelp'), colorsBody(P)),
     sizes: (P) => sec('sizes', t('pm.s.sizes'), t('pm.s.sizesHelp'), sizesBody(P)),
-    prices: (P) => sec('prices', t('pm.s.prices'), t(owner() ? 'pm.s.pricesHelpOwner' : 'pm.s.pricesHelp'), pricesBody(P)),
+    // Selling prices: the owner changes them; product managers see them only.
+    prices: (P) => sec('prices', t('pm.s.prices'), t(owner() ? 'pm.s.pricesHelpOwner' : 'pm.s.pricesReadOnly'), pricesBody(P), { save: owner() }),
     print: (P) => sec('print', t('pm.s.print'), t('pm.s.printHelp'), printBody(P)),
     tech: (P) => sec('tech', t('pm.s.tech'), '', techBody(P)),
     photos: (P) => sec('photos', t('pm.s.photos'), t('pm.s.photosHelp'), photosBody(P), { save: false }),
@@ -887,7 +888,7 @@
   // ---------- e) Prices ----------
   function pricesBody(P) {
     const multi = P.sides.length > 1;
-    return `
+    const html = `
       ${P.pricesChanged ? `<p class="pm-chg-line">${mark(true, 'prices')}<span class="muted small"> ${esc(t('pm.pricesChanged'))}</span></p>` : ''}
       <div class="pm-grid3">
         ${fld('basePrice', t('pm.basePrice'), inp('basePrice', P.basePrice, `type="number" min="1" step="0.01" dir="ltr" placeholder="${esc(t('pm.asBuilt'))}"`))}
@@ -903,6 +904,7 @@
         </div>`).join('')}
       </div>
       <p class="muted small">${esc(t('pm.pricesEmpty'))}</p>`;
+    return owner() ? html : html.replace(/<input /g, '<input disabled ');
   }
   function updateFinals() {
     const raw = val('basePrice');

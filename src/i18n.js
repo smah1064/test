@@ -202,10 +202,16 @@ function pick(value, lang) {
   return value;
 }
 
+// Arabic messages never mix digits: the shop's own words show numbers as ١٢٣ (codes such as
+// A5, 3D or 2XL stay; what a customer typed is passed in as text and isn't touched).
+const AR_DIGITS = '٠١٢٣٤٥٦٧٨٩';
+const LATIN_NUM = /(?<![A-Za-z0-9_\-/@:#=?&%"'.])\d+(?:[.,]\d+)*(?![A-Za-z0-9_\-/@:%"']|[.,]\d)/g;
+const arabicDigits = (s) => String(s).replace(LATIN_NUM, (m) => m.replace(/\d/g, (d) => AR_DIGITS[d]).replace(/\./g, '٫').replace(/,/g, '٬'));
+
 function format(key, params, lang) {
   const m = MESSAGES[key];
   if (!m) return key;
-  return m[lang].replace(/\{(\w+)\}/g, (_, k) => {
+  return (lang === 'ar' ? arabicDigits(m.ar) : m[lang]).replace(/\{(\w+)\}/g, (_, k) => {
     const v = params[k];
     // Amounts of money as the pages show them ("EGP 1,000" / "١٬٠٠٠ ج.م."); other numbers in the page's digits.
     if (typeof v === 'number' && (k === 'amount' || k === 'was' || k === 'now')) return money(v, lang);
@@ -216,6 +222,8 @@ function format(key, params, lang) {
       } catch (e) { /* as it is */ }
     }
     if (typeof v === 'number' && lang === 'ar') return new Intl.NumberFormat('ar-EG', { useGrouping: false }).format(v);
+    // The shop's own bilingual words (a product's name, a size) in the page's digits.
+    if (lang === 'ar' && v && typeof v === 'object' && v.ar) return arabicDigits(v.ar);
     return pick(v, lang) ?? '';
   });
 }
@@ -228,4 +236,4 @@ function money(n, lang) {
   }
 }
 
-module.exports = { MESSAGES, FIELDS, langOf, pick, format };
+module.exports = { MESSAGES, FIELDS, langOf, pick, format, arabicDigits };

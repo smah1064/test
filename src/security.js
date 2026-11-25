@@ -351,20 +351,31 @@ class AdminAuth {
     const salt = crypto.randomBytes(16).toString('hex');
     return { salt, hash: crypto.scryptSync(String(password), salt, 32).toString('hex') };
   }
-  staffLogin(ip, username, password, staffList, { knownDevice = false } = {}) {
-    const wait = this.lockedFor(ip, { knownDevice });
+  /** Staff sign-ins have their own count: wrong staff passwords never lock the owner out. */
+  staffLockedFor(ip, username) {
+    for (const [key, rules] of [['staff:*', ADMIN_ALL_RULES], [`staff:${ip}`, ADMIN_IP_RULES], [`staff-user:${username}`, ADMIN_IP_RULES]]) {
+      const v = this.fails.check(key, rules);
+      if (typeof v === 'number') return v;
+    }
+    return 0;
+  }
+  staffLogin(ip, username, password, staffList) {
+    const name = String(username || '').trim().toLowerCase().slice(0, 40);
+    const wait = this.staffLockedFor(ip, name);
     if (wait) return { wait };
-    const user = (staffList || []).find((u) => u.username === String(username || '').trim().toLowerCase());
+    const user = (staffList || []).find((u) => u.username === name);
     // Always hash once, so a wrong username takes as long as a wrong password.
     const given = crypto.scryptSync(typeof password === 'string' ? password : '', user ? user.salt : 'no-such-user', 32);
     const ok = user && crypto.timingSafeEqual(given, Buffer.from(user.hash, 'hex'));
     if (!ok) {
-      this.fails.hit('admin:*', ADMIN_ALL_RULES);
-      this.fails.hit(`admin:${ip}`, ADMIN_IP_RULES);
+      this.fails.hit('staff:*', ADMIN_ALL_RULES);
+      this.fails.hit(`staff:${ip}`, ADMIN_IP_RULES);
+      this.fails.hit(`staff-user:${name}`, ADMIN_IP_RULES);
       console.warn(`[admin] wrong staff sign-in from ${ip}`);
       return null;
     }
-    this.fails.clear(`admin:${ip}`);
+    this.fails.clear(`staff:${ip}`);
+    this.fails.clear(`staff-user:${name}`);
     const expiresAt = Date.now() + SESSION_MS;
     const body = `${expiresAt.toString(36)}.${crypto.randomBytes(18).toString('base64url')}.${user.id}`;
     console.log(`[admin] staff ${user.username} signed in from ${ip}`);

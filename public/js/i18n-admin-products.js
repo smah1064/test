@@ -116,6 +116,7 @@ Object.assign(window.POD_STRINGS, {
   'pm.s.sizesHelp': ['Rename sizes, mark them sold out or off, or add new ones.', 'غيّر أسامي المقاسات، علّمها خلصانة أو مقفولة، أو ضيف مقاسات جديدة.'],
   'pm.s.prices': ['Prices', 'الأسعار'],
   'pm.s.pricesHelp': ['The selling prices in the shop.', 'أسعار البيع في المحل.'],
+  'pm.s.pricesReadOnly': ['Selling prices are set by the shop owner. You can see them here; ask the owner to change them.', 'أسعار البيع بيحددها صاحب المحل. تقدر تشوفها هنا، واطلب من صاحب المحل يغيّرها.'],
   'pm.s.pricesHelpOwner': ['The selling prices in the shop (the same as Accounts → Prices; costs are there).', 'أسعار البيع في المحل (نفس الحسابات ← الأسعار؛ التكاليف هناك).'],
   'pm.s.print': ['Print setup', 'إعدادات الطباعة'],
   'pm.s.printHelp': ['Where the design goes on each side and how big it prints. Drag the box or its corners, or type the numbers.', 'مكان التصميم على كل وش وحجمه في الطباعة. اسحب المربع أو أركانه، أو اكتب الأرقام.'],
