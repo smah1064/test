@@ -1946,8 +1946,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   // Rights holders ask for a design to be taken down: kept for the admin and emailed to the shop.
   app.post('/api/takedown', express.json({ limit: '20kb' }), (req, res) => {
     const b = req.body || {};
-    const clean = (v, n) => String(v || '').trim().replace(/\s+/g, ' ').slice(0, n);
-    const reqst = { name: clean(b.name, 120), contact: clean(b.contact, 200), owner: clean(b.owner, 200), link: clean(b.link, 500), details: String(b.details || '').trim().slice(0, 3000) };
+    // (Text only, without invisible direction marks: "\u202Eدمحم" would show as another name to the team. QA 25 Nov.)
+    const clean = (v, n) => (typeof v === 'string' ? v : '').replace(/[\u061c\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/g, '').trim().replace(/\s+/g, ' ').slice(0, n);
+    const reqst = { name: clean(b.name, 120), contact: clean(b.contact, 200), owner: clean(b.owner, 200), link: clean(b.link, 500), details: (typeof b.details === 'string' ? b.details : '').replace(/[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '').trim().slice(0, 3000) };
     if (reqst.name.length < 2 || reqst.contact.length < 5 || reqst.details.length < 10) throw new HttpError(400, 'takedownMissing');
     rateLimit(req, 'takedown');
     const saved = store.mutate((db) => {
@@ -3366,7 +3367,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       email: cleanEmail(cleanString(customer.email, 'email', { max: 200, required: false })),
       governorate: typeof customer.governorate === 'string' ? customer.governorate : '',
       city: cleanString(customer.city, 'city', { max: 100 }),
-      address: cleanString(customer.address, 'address', { max: 300, lines: ', ' }),
+      // (An address typed on several lines: one line, its parts joined with the comma of its own language. QA 25 Nov.)
+      address: cleanString(customer.address, 'address', { max: 300, lines: /[\u0600-\u06ff]/.test(String(customer.address || '')) ? '، ' : ', ' }),
       notes: cleanString(customer.notes, 'notes', { max: 500, required: false }),
     };
     c.phone = normalizeEgyptMobile(c.phone);
@@ -3981,6 +3983,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const order = UUID_RE.test(req.params.orderId) && store.getOrder(req.params.orderId);
     if (!order) throw new HttpError(404, 'orderNotFound');
     const b = req.body || {};
+    // (Text or a number only: a list or an object showed as "[object Object]" on the customer's page. QA 25 Nov.)
+    for (const k of ['courier', 'trackingNumber', 'trackingUrl', 'eta']) if (b[k] != null && typeof b[k] !== 'string' && typeof b[k] !== 'number') throw new HttpError(400, 'badProductField', { field: k });
     const text = (v, max) => (v == null ? null : String(v).replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max) || null);
     const s = { ...(order.shipment || {}) };
     if ('courier' in b) s.courier = text(b.courier, 60);

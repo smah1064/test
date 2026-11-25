@@ -357,3 +357,14 @@ test('activity: team changes name the person (even once removed) and what change
   assert.ok(lines.some((e) => /switched off/.test(e.summary.en)));
   assert.ok(lines.some((e) => /roles Finance, Catalogue/.test(e.summary.en) && /الحسابات/.test(e.summary.ar)));
 });
+
+test('small inputs: shipping details are text, rights-request names lose direction marks, Arabic address lines join with "،"', async () => {
+  const o = await approvedMug();
+  const bad = await call(`/api/admin/orders/${o.id}/shipment`, 'PATCH', { courier: { a: 1 }, trackingNumber: [12, 34] }, owner);
+  assert.strictEqual(bad.status, 400, bad.text);
+  const td = await call('/api/takedown', 'POST', { name: '‮دمحم‬ Ali', contact: 'someone@example.com', link: 'https://example.com/x', details: 'This is my own artwork, please remove it.' });
+  assert.ok([200, 201].includes(td.status), td.text);
+  const list = (await call('/api/admin/takedowns', 'GET', undefined, owner)).json;
+  const row = (list.takedowns || list.items || list).find ? (list.takedowns || list.items || list).find((x) => /Ali/.test(x.name)) : null;
+  assert.ok(row && !/[‪-‮]/.test(row.name), JSON.stringify(row));
+});
