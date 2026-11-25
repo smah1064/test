@@ -9,6 +9,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const zlib = require('zlib');
+const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 const { createApp } = require('../src/app');
 const { Backups, tarStream, listFiles } = require('../src/backup');
@@ -213,5 +214,49 @@ test('one at a time; no room on the server is said; old backups and leftovers ar
     });
   } finally {
     setTimeout(() => fs.rmSync(dir, { recursive: true, force: true }), 500);
+  }
+});
+
+test('two copies of the app on one folder press "Make a backup" at the same moment: one makes it, the other is told one is being made, nothing failed', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pod-backup-two-'));
+  try {
+    fs.writeFileSync(path.join(dir, 'db.json'), JSON.stringify({ orders: [{ id: 'o1' }] }));
+    fs.mkdirSync(path.join(dir, 'files'));
+    fs.writeFileSync(path.join(dir, 'files', 'big.bin'), crypto.randomBytes(3 * 1024 * 1024));
+    const a = new Backups(dir);
+    const b = new Backups(dir);
+    // Both looked before either one's file was there (the same moment), then both start.
+    const looked = b.list();
+    assert.strictEqual(looked.making, null);
+    b.list = () => looked;
+    const { finished } = a.start();
+    assert.throws(() => b.start(), (e) => e.code === 'backupBusy');
+    delete b.list;
+    assert.strictEqual(b.job, null);
+    assert.deepStrictEqual(b.list().making, { elsewhere: true }, 'the other copy shows a backup being made');
+    // (Even when the two backups' names differ, e.g. pressed across a minute, the second start is refused: here a
+    // file with the first one's name makes the third copy pick another name.)
+    fs.writeFileSync(path.join(a.dir, a.job.name), 'placeholder');
+    const later = new Backups(dir);
+    later.list = () => looked;
+    assert.throws(() => later.start(), (e) => e.code === 'backupBusy');
+    delete later.list;
+    const done = await finished;
+    for (const x of [a, b, later]) {
+      const l = x.list();
+      assert.strictEqual(l.error, null, 'no failure recorded');
+      assert.strictEqual(l.making, null);
+      assert.deepStrictEqual(l.backups.map((k) => k.name), [done.name]);
+    }
+    assert.deepStrictEqual(fs.readdirSync(a.dir), [done.name], 'no half-made file left');
+    const got = untar(fs.readFileSync(path.join(a.dir, done.name)));
+    assert.strictEqual(got.get('files/big.bin').length, 3 * 1024 * 1024);
+    assert.match(got.get('db.json').toString(), /o1/);
+    // Once it is finished, the other copy can make the next one.
+    const done2 = await b.start().finished;
+    assert.notStrictEqual(done2.name, done.name);
+    assert.strictEqual(a.list().error, null);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });

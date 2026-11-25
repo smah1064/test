@@ -26,6 +26,10 @@ const SKIP_TOP = new Set(['backups', '.session-secret', '.signin-limits.json', '
 const SKIP_NAME = /(?:\.lock|\.tmp|\.part)$|^\.session-secret\./;
 const KEEP_DAYS = 3; // a finished backup waits this long on the server to be downloaded
 const KEEP_COUNT = 2; // and only the newest two are kept (each is as big as the shop's files)
+// The backup being made is written here, then renamed to its own name. One name for every start, created only when
+// it isn't there ('wx'): two copies of the app on one folder pressing at the same moment (even across a minute,
+// when their backups' names differ) can't both write it; the second one is told a backup is being made.
+const PART = 'ebda3-backup-making.tar.gz.part';
 
 /** Every file to back up, with its size: [{ abs, rel, size, mtime }] (relative paths with "/"). */
 function listFiles(dataDir) {
@@ -170,7 +174,7 @@ class Backups {
       if (i >= KEEP_COUNT || Date.now() - x.t > KEEP_DAYS * 864e5) fs.rmSync(path.join(this.dir, x.n), { force: true });
     });
     for (const n of names.filter((x) => x.endsWith('.part'))) {
-      if (this.job && `${this.job.name}.part` === n) continue;
+      if (this.job && n === PART) continue;
       if (!this.recent(n)) fs.rmSync(path.join(this.dir, n), { force: true });
     }
   }
@@ -203,13 +207,21 @@ class Backups {
     if (free !== null && free < total + 200 * 1024 * 1024) throw Object.assign(new Error('backupNoSpace'), { code: 'backupNoSpace', need: total, free });
     let name = `ebda3-backup-${cairoStamp(new Date())}.tar.gz`;
     for (let i = 2; fs.existsSync(path.join(this.dir, name)); i++) name = name.replace(/(?:-\d{1,3})?\.tar\.gz$/, `-${i}.tar.gz`);
-    const part = path.join(this.dir, `${name}.part`);
+    const part = path.join(this.dir, PART);
+    let fd;
+    try {
+      fd = fs.openSync(part, 'wx', 0o600);
+    } catch (e) {
+      // Another copy of the app started one a moment ago (after our look above): it carries on, nothing failed here.
+      if (e.code === 'EEXIST') throw Object.assign(new Error('backupBusy'), { code: 'backupBusy' });
+      throw e;
+    }
     const job = { name, startedAt: new Date().toISOString(), done: 0, total, files: files.length };
     this.job = job;
     this.lastError = null;
     const touch = setInterval(() => { try { const now = new Date(); fs.utimesSync(part, now, now); } catch (e) { /* not yet */ } }, 30e3);
     if (touch.unref) touch.unref();
-    const finished = pipeline(tarStream(files, (n) => { job.done += n; }), zlib.createGzip({ level: 4 }), fs.createWriteStream(part, { mode: 0o600 }))
+    const finished = pipeline(tarStream(files, (n) => { job.done += n; }), zlib.createGzip({ level: 4 }), fs.createWriteStream(part, { fd }))
       .then(() => {
         fs.renameSync(part, path.join(this.dir, name));
         this.tidy();
