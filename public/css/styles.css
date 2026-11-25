@@ -657,6 +657,17 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 .dp-price { display: flex; align-items: baseline; gap: 10px; margin: 8px 0 12px; }
 .dp-price .amount { font-size: 26px; font-weight: 800; }
 #dp-edit { margin-top: 8px; }
+/* The customer's own name in place of a sample one ("LAILA"), above Add to cart, and the question before printing the sample. */
+.dp-names { background: #f6f7f9; border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin: 0 0 12px; }
+.dp-names .field { margin-bottom: 10px; }
+.dp-names label { font-size: 14px; color: var(--ink); }
+.dp-names input[type=text] { font-size: 16px; } /* (16px: phones don't zoom in on it) */
+.dp-names input.dp-caps { text-transform: uppercase; }
+.dp-names p { margin: 0; line-height: 1.5; }
+.dp-names .dp-names-long { margin-top: 6px; color: #8a2b12; }
+.dp-names-peek { display: none; }
+@media (max-width: 900px) { .dp-names-peek[src] { display: block; width: 100%; height: 132px; object-fit: contain; background: #fff; border: 1px solid var(--line); border-radius: 10px; margin: 0 0 10px; } }
+.name-ask-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
 @media (max-width: 900px) { .dp-layout { grid-template-columns: minmax(0, 1fr); padding-top: 12px; } .dp-panel { position: static; } .dp-picture { min-height: 0; } }
 
 /* ---------- Ready designs (admin) ---------- */

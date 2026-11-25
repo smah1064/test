@@ -16,12 +16,12 @@ const categories = [
 const designs = [
   // ---------- Football ----------
   D('hb-kit-name-number', 'football', 'Team kit name and number', 'طقم فريق باسم ورقم', [
-    T('أحمد', 'Changa', 0.15, 0.5, 0.15, { weight: 'bold' }),
+    T('أحمد', 'Changa', 0.15, 0.5, 0.15, { weight: 'bold', sampleName: 'name' }),
     T('10', 'Anton', 0.6, 0.5, 0.5, { fill: GOLD }),
     T('اسم الفريق', 'Reem Kufi', 0.09, 0.5, 0.86, { weight: 'bold' }),
   ], 'navy'),
   D('hb-kit-en', 'football', 'Team kit (English)', 'طقم فريق إنجليزي', [
-    T('AHMED', 'Oswald', 0.13, 0.5, 0.14, { weight: 'bold', spacing: 200 }),
+    T('AHMED', 'Oswald', 0.13, 0.5, 0.14, { weight: 'bold', spacing: 200, sampleName: 'name' }),
     T('7', 'Anton', 0.64, 0.5, 0.5, { fill: RED }),
     S('line', 0.4, 0.5, 0.79, { fill: RED }),
     T('TEAM NAME', 'Bebas Neue', 0.09, 0.5, 0.87, { spacing: 300 }),
@@ -202,7 +202,7 @@ const designs = [
   D('hb-player-one', 'gaming', 'Player 1 with name', 'بلاير ١ بالاسم', [
     T('PLAYER', 'Bungee', 0.16, 0.5, 0.2),
     T('1', 'Bungee', 0.42, 0.5, 0.48, { fill: ACCENT, extrude: '#16181d' }),
-    T('AHMED', 'Montserrat', 0.09, 0.5, 0.8, { weight: 'bold', spacing: 300 }),
+    T('AHMED', 'Montserrat', 0.09, 0.5, 0.8, { weight: 'bold', spacing: 300, sampleName: 'name' }),
   ], 'white'),
   D('hb-net-fasal', 'gaming', 'The internet dropped while I was winning', 'النت فصل وأنا كسبان', [
     A('tabler:wifi-off', 0.3, 0.5, 0.2, { fill: RED }),

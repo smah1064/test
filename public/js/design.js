@@ -145,6 +145,70 @@
       : o.kind === 'text' || /text/i.test(o.type || '') ? [String(o.text || '')] : []));
   const hasFields = textsOf([...(design.items || []), ...(design.objects || [])]).some((s) => /\{\s*[\p{L}\p{N}_][^{}\n]{0,39}\}/u.test(s));
 
+  // ---------- The customer's own name ----------
+  // A design showing a sample name ("LAILA", "آدم", "The MAHMOUDS": the texts marked sampleName in the shop's
+  // designs) has a box for each one above "Add to cart". What is typed replaces the sample in the picture, in the
+  // cart and in the print files (all made from personal()); a box left empty keeps the sample, and Add to cart
+  // then asks once (askName) before printing it as it is.
+  const D = window.POD_DESIGN;
+  const samples = hasFields ? [] : D.sampleNames(design);
+  const names = samples.map(() => ''); // what is typed in each box
+  let keepSamples = false; // "Order it with LAILA" chosen (until a name is typed)
+  /** The design as it will be printed: with the customer's names. */
+  const personal = () => D.withNames(design, names);
+  const typed = (s, k) => D.cleanName(names[k], s.max);
+  /** The sample names nobody replaced (their box left empty). */
+  const unchanged = () => samples.filter((s, k) => !typed(s, k));
+  const namesKey = () => samples.map(typed).join('\n');
+  /** The names for the editor's link (in the order of the samples; empty keeps one). */
+  const nameParams = () => (samples.some(typed) ? samples.map((s, k) => `&name=${encodeURIComponent(typed(s, k))}`).join('') : '');
+  /** A box's label: the kind of name; two of a kind by language (Arabic / English), else numbered. */
+  function nameLabel(s) {
+    const label = t(`design.name.${s.role}`);
+    const twins = samples.filter((x) => x.role === s.role);
+    if (twins.length < 2) return label;
+    const ar = (x) => D.ARABIC_RE.test(x.sample);
+    if (twins.length === 2 && ar(twins[0]) !== ar(twins[1])) return t(ar(s) ? 'design.name.inArabic' : 'design.name.inEnglish', { label });
+    return t('design.name.nth', { label, n: twins.indexOf(s) + 1 });
+  }
+  /** An empty box shows its sample the way it reads; once typed in, the box follows what is typed. */
+  const boxDir = (input, s) => { input.dir = input.value.trim() ? 'auto' : D.ARABIC_RE.test(s.sample) ? 'rtl' : 'ltr'; };
+  function renderNames() {
+    const box = $('dp-names');
+    box.hidden = !samples.length;
+    if (!samples.length) return;
+    if (!box.firstChild) {
+      box.innerHTML = samples.map((s, k) => `<div class="field"><label for="dp-name-${k}"></label>`
+        + `<input type="text" id="dp-name-${k}" data-name="${k}" maxlength="${s.max}" autocomplete="off" autocapitalize="words" spellcheck="false" enterkeyhint="done" aria-describedby="dp-names-hint"${s.caps ? ' class="dp-caps"' : ''}></div>`).join('')
+        // (Phones: the big picture is above, out of sight while typing; a small copy of the design here.)
+        + '<img class="dp-names-peek" id="dp-names-peek" alt="" aria-hidden="true"><p class="muted small" id="dp-names-hint"></p>'
+        + '<p class="small dp-names-long" id="dp-names-long" role="status" hidden></p>';
+    }
+    samples.forEach((s, k) => {
+      const input = $(`dp-name-${k}`);
+      input.previousElementSibling.textContent = nameLabel(s);
+      input.placeholder = s.sample;
+      boxDir(input, s);
+    });
+    $('dp-names-hint').textContent = t('design.name.hint');
+    $('dp-names-long').textContent = t('design.name.long');
+  }
+  let nameTimer = null;
+  let drawnNames = null; // the names in the picture now
+  $('dp-names').addEventListener('input', (e) => {
+    const k = Number(e.target.dataset.name);
+    if (!samples[k]) return;
+    names[k] = e.target.value;
+    keepSamples = false;
+    boxDir(e.target, samples[k]);
+    $('dp-edit').href = editHref();
+    // The picture follows once typing pauses.
+    clearTimeout(nameTimer);
+    nameTimer = setTimeout(() => {
+      if (namesKey() !== drawnNames) draw();
+    }, 350);
+  });
+
   // ---------- Picture ----------
   let token = 0;
   let zoomReady = false; // hover / tap zoom on the picture, set up with the first picture
@@ -155,8 +219,9 @@
     $('dp-img').style.opacity = '.35';
     const { product, color, size } = state;
     const side = product.sides[0];
+    drawnNames = namesKey();
     try {
-      const st = await POD_RENDER.stage(design, product, side, color, size.id);
+      const st = await POD_RENDER.stage(personal(), product, side, color, size.id);
       const entry = {
         side,
         rects: st.R,
@@ -190,6 +255,15 @@
 
       if (old.startsWith('blob:')) URL.revokeObjectURL(old);
       current = { st, entry };
+      if (samples.length) {
+        // A name much longer than the sample is set smaller to fit its place (public/js/templates.js, fitName): said under the box.
+        $('dp-names-long').hidden = !st.objects.some((o) => o.nameScale && o.nameScale < 0.7);
+        const peek = await new Promise((r) => POD_RENDER.picture(st, 1.5, 1.08).toBlob(r, 'image/webp', 0.9));
+        if (my !== token) return;
+        const was = $('dp-names-peek').src;
+        $('dp-names-peek').src = URL.createObjectURL(peek);
+        if (was.startsWith('blob:')) URL.revokeObjectURL(was);
+      }
     } finally {
       if (my === token) {
         $('dp-spin').hidden = true;
@@ -228,7 +302,7 @@
     $('dp-few').hidden = !few;
     $('dp-few').textContent = few ? t('pp.fewLeft', { n: POD.num(few) }) : '';
     $('dp-price').textContent = money(product.basePrice + size.surcharge);
-    $('dp-edit').href = `/editor?library=${encodeURIComponent(design.id)}&product=${product.id}&color=${color.id}${sizeParam()}`;
+    $('dp-edit').href = editHref();
     // A design that is one picture (no words to change): "Make it yours in the editor".
     const hasWords = (design.items || []).some((i) => i.kind === 'text') || (design.objects || []).some((o) => /text/i.test(o.type || ''));
     // Places for the customer's details: no "Add to cart"; the way to the editor is the main button.
@@ -241,6 +315,10 @@
     document.title = `${tr(design.name)} · ${t('brand')}`;
     const active = $('dp-products').querySelector('.active');
     if (active) active.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }
+  /** The editor, on this product, colour and size, with the names typed here. */
+  function editHref() {
+    return `/editor?library=${encodeURIComponent(design.id)}&product=${state.product.id}&color=${state.color.id}${sizeParam()}${nameParams()}`;
   }
   /** Why the product in the link isn't shown: paused (back soon, or the day), stopped selling, or just not available. */
   function goneText() {
@@ -343,10 +421,68 @@
     renderOptions();
     syncUrl();
     if (changed) draw();
-    addToCart();
+    addOrAsk();
   });
+
+  // ---------- A sample name left as it is: "Put your own name?" (after the size, never with it) ----------
+  /** “LAILA”, or “Ahmed” and “Sara”: the samples as the sentence quotes them. */
+  function sampleList(list) {
+    const ar = POD.lang === 'ar';
+    const quoted = list.map((s) => (ar ? `«\u2068${s.sample}\u2069»` : `“\u2068${s.sample}\u2069”`));
+    try {
+      return new Intl.ListFormat(ar ? 'ar' : 'en', { type: 'conjunction' }).format(quoted);
+    } catch (e) {
+      return quoted.join(ar ? ' و' : ' & ');
+    }
+  }
+  function askName() {
+    const list = sampleList(unchanged());
+    $('name-ask-note').textContent = t('design.nameAsk.text', { name: list });
+    $('name-ask-keep').textContent = t('design.nameAsk.keep', { name: list });
+    $('name-ask').hidden = false;
+    $('name-ask-write').focus();
+  }
+  function closeNameAsk(focus = $('dp-add')) {
+    $('name-ask').hidden = true;
+    focus.focus();
+  }
+  $('name-ask').addEventListener('click', (e) => {
+    if (e.target.id === 'name-ask') {
+      closeNameAsk();
+      return;
+    }
+    if (e.target.closest('#name-ask-write')) {
+      // To the first box still showing its sample.
+      const first = unchanged()[0];
+      closeNameAsk($(`dp-name-${Math.max(0, samples.indexOf(first))}`));
+      return;
+    }
+    if (e.target.closest('#name-ask-keep')) {
+      keepSamples = true;
+      closeNameAsk();
+      addToCart();
+    }
+  });
+  // (The keyboard stays in the question while it is open.)
+  $('name-ask').addEventListener('keydown', (e) => {
+    if (e.key !== 'Tab') return;
+    const buttons = [...$('name-ask').querySelectorAll('button')];
+    const at = buttons.indexOf(document.activeElement);
+    e.preventDefault();
+    buttons[(at + (e.shiftKey ? -1 : 1) + buttons.length) % buttons.length].focus();
+  });
+  /** Add to the cart, or first ask about a sample name nobody replaced. */
+  function addOrAsk() {
+    if (unchanged().length && !keepSamples) {
+      askName();
+      return;
+    }
+    addToCart();
+  }
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !$('size-ask').hidden) closeAsk();
+    if (e.key !== 'Escape') return;
+    if (!$('size-ask').hidden) closeAsk();
+    if (!$('name-ask').hidden) closeNameAsk();
   });
 
   $('dp-add').addEventListener('click', () => {
@@ -355,7 +491,7 @@
       askSize();
       return;
     }
-    addToCart();
+    addOrAsk();
   });
   async function addToCart() {
     const btn = $('dp-add');
@@ -364,7 +500,7 @@
     busy(true, t('busy.preparing'));
     try {
       await POD_RENDER.addToCart({
-        design, product: state.product, color: state.color, size: state.size,
+        design: personal(), product: state.product, color: state.color, size: state.size,
         onProgress: (step) => busy(true, t(step === 'upload' ? 'busy.saving' : step === 'finish' ? 'busy.finishing' : 'busy.preparing')),
       });
       location.href = '/cart?added=1';
@@ -383,6 +519,10 @@
   }
 
   renderOptions();
+  renderNames();
   draw();
-  document.addEventListener('pod:langchange', renderOptions);
+  document.addEventListener('pod:langchange', () => {
+    renderOptions();
+    renderNames();
+  });
 })();

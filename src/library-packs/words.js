@@ -86,9 +86,9 @@ const designs = [
     S('heart', 0.12, 0.5, 0.72, { fill: '#ff8fc7' }),
   ], 'black'),
   D('wd-love-monogram', 'love', 'Couple initials monogram', 'حروف الكابل', [
-    T('A', 'Playfair Display', 0.34, 0.3, 0.45, { weight: 'bold' }),
+    T('A', 'Playfair Display', 0.34, 0.3, 0.45, { weight: 'bold', sampleName: 'hisInitial' }),
     S('heart', 0.16, 0.5, 0.45, { fill: '#e03131' }),
-    T('S', 'Playfair Display', 0.34, 0.7, 0.45, { weight: 'bold' }),
+    T('S', 'Playfair Display', 0.34, 0.7, 0.45, { weight: 'bold', sampleName: 'herInitial' }),
     T('EST. 2025', 'Montserrat', 0.06, 0.5, 0.68, { spacing: 400, weight: 'bold', fill: GOLD }),
   ]),
 

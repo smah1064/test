@@ -28,12 +28,12 @@ const designs = [
   D('ce-bday-ya-sara', 'birthday', 'Happy birthday with name', 'عيد ميلاد سعيد يا سارة', [
     K('balloons', 0.38, 0.5, 0.21),
     T('عيد ميلاد سعيد', 'Lalezar', 0.145, 0.5, 0.52),
-    T('يا سارة', 'Aref Ruqaa', 0.25, 0.5, 0.76, { weight: 'bold', fill: PINK }),
+    T('يا سارة', 'Aref Ruqaa', 0.25, 0.5, 0.76, { weight: 'bold', fill: PINK, sampleName: 'name', samplePart: 'سارة' }),
   ]),
   D('ce-happy-bday-arch', 'birthday', 'Happy birthday cake (name)', 'هابي بيرث داي بالاسم', [
     T('HAPPY BIRTHDAY', 'Bungee', 0.1, 0.5, 0.2, { curve: 35 }),
     A('fluent-emoji-flat:birthday-cake', 0.36, 0.5, 0.47),
-    T('Ahmed', 'Pacifico', 0.15, 0.5, 0.8, { fill: ACCENT }),
+    T('Ahmed', 'Pacifico', 0.15, 0.5, 0.8, { fill: ACCENT, sampleName: 'name' }),
   ]),
   D('ce-birthday-girl', 'birthday', 'Birthday girl', 'Birthday girl', [
     A('fluent-emoji-flat:crown', 0.24, 0.5, 0.22),
@@ -73,7 +73,7 @@ const designs = [
     K('party-hat', 0.2, 0.5, 0.12),
     T('صاحب', 'Lalezar', 0.12, 0.5, 0.36, { fill: WHITE }),
     T('العيد', 'Lalezar', 0.2, 0.5, 0.5, { fill: SUN }),
-    T('Ahmed', 'Pacifico', 0.12, 0.5, 0.84),
+    T('Ahmed', 'Pacifico', 0.12, 0.5, 0.84, { sampleName: 'name' }),
   ]),
   D('ce-kid-5-years', 'birthday', 'Kids birthday: I turned 5', 'أنا كملت 5 سنين', [
     A('fluent-emoji-flat:balloon', 0.22, 0.22, 0.43, { angle: -12 }),
@@ -99,7 +99,7 @@ const designs = [
   ], 'heather'),
   D('ce-team-bday', 'birthday', 'Team birthday girl (name)', 'تيم صاحبة العيد بالاسم', [
     T('TEAM', 'Bebas Neue', 0.14, 0.5, 0.2, { spacing: 300 }),
-    T('سارة', 'Aref Ruqaa', 0.32, 0.5, 0.45, { weight: 'bold', fill: PINK }),
+    T('سارة', 'Aref Ruqaa', 0.32, 0.5, 0.45, { weight: 'bold', fill: PINK, sampleName: 'name' }),
     T('عيد ميلاد سعيد', 'Changa', 0.085, 0.5, 0.71, { weight: 'bold' }),
     K('hearts', 0.16, 0.5, 0.87),
   ]),
@@ -148,7 +148,7 @@ const designs = [
     T('12.12', 'Abril Fatface', 0.28, 0.5, 0.38),
     T('2026', 'Montserrat', 0.07, 0.5, 0.56, { weight: 'bold', spacing: 500, fill: GOLD }),
     S('heart', 0.08, 0.5, 0.68, { fill: PINK }),
-    T('أحمد و سارة', 'Aref Ruqaa', 0.13, 0.5, 0.83, { weight: 'bold' }),
+    T('أحمد و سارة', 'Aref Ruqaa', 0.13, 0.5, 0.83, { weight: 'bold', sampleName: 'names' }),
   ]),
   D('ce-katabna-el-ketab', 'wedding', 'We signed the marriage contract', 'كتبنا الكتاب', [
     K('rings', 0.26, 0.5, 0.2),
@@ -159,7 +159,7 @@ const designs = [
     A('ph:flower-lotus', 0.26, 0.5, 0.18, { fill: SUN }),
     T('ليلة', 'Aref Ruqaa', 0.17, 0.5, 0.42, { weight: 'bold', fill: SUN }),
     T('الحنة', 'Aref Ruqaa', 0.3, 0.5, 0.64, { weight: 'bold', fill: WHITE }),
-    T('سارة', 'Lalezar', 0.12, 0.5, 0.86, { fill: SUN }),
+    T('سارة', 'Lalezar', 0.12, 0.5, 0.86, { fill: SUN, sampleName: 'name' }),
   ], 'red'),
   D('ce-3arousa-3la-wesh-gawaz', 'wedding', 'Bride to be (Arabic)', 'عروسة على وش جواز', [
     T('عروسة', 'Lalezar', 0.28, 0.5, 0.3, { fill: PINK }),
@@ -213,19 +213,19 @@ const designs = [
   D('ce-grad-doctora', 'graduation', 'Doctor graduate (her name)', 'الدكتورة سارة', [
     A('fluent-emoji-flat:stethoscope', 0.26, 0.5, 0.18),
     T('الدكتورة', 'Reem Kufi', 0.13, 0.5, 0.42, { weight: 'bold', fill: TEAL }),
-    T('سارة', 'Aref Ruqaa', 0.28, 0.5, 0.62, { weight: 'bold' }),
+    T('سارة', 'Aref Ruqaa', 0.28, 0.5, 0.62, { weight: 'bold', sampleName: 'name' }),
     T('دفعة 2025', 'Changa', 0.07, 0.5, 0.84, { weight: 'bold', fill: TEAL }),
   ]),
   D('ce-grad-bashmohandes', 'graduation', 'Engineer graduate (name)', 'الباشمهندس أحمد', [
     A('fluent-emoji-flat:gear', 0.24, 0.5, 0.18),
     T('الباشمهندس', 'Lalezar', 0.14, 0.5, 0.42),
-    T('أحمد', 'Lalezar', 0.28, 0.5, 0.63, { fill: BLUE }),
+    T('أحمد', 'Lalezar', 0.28, 0.5, 0.63, { fill: BLUE, sampleName: 'name' }),
     T('دفعة 2025', 'Changa', 0.07, 0.5, 0.85, { weight: 'bold' }),
   ], 'heather'),
   D('ce-grad-mo7ami', 'graduation', 'Lawyer graduate (name)', 'المحامي أحمد', [
     A('fluent-emoji-flat:balance-scale', 0.26, 0.5, 0.18),
     T('المحامي', 'Reem Kufi', 0.13, 0.5, 0.42, { weight: 'bold' }),
-    T('أحمد', 'Aref Ruqaa', 0.28, 0.5, 0.62, { weight: 'bold', fill: GOLD }),
+    T('أحمد', 'Aref Ruqaa', 0.28, 0.5, 0.62, { weight: 'bold', fill: GOLD, sampleName: 'name' }),
     T('دفعة 2025', 'Changa', 0.07, 0.5, 0.84, { weight: 'bold' }),
   ], 'navy'),
   D('ce-om-el-5areeg', 'graduation', 'Proud mum of the graduate', 'أم الخريج فخورة', [
@@ -268,14 +268,14 @@ const designs = [
     A('fluent-emoji-flat:baby-bottle', 0.24, 0.5, 0.18, { angle: 15 }),
     T('Welcome', 'Pacifico', 0.17, 0.5, 0.45, { fill: TEAL }),
     T('BABY', 'Bebas Neue', 0.16, 0.5, 0.65, { spacing: 400 }),
-    T('آدم', 'Aref Ruqaa', 0.18, 0.5, 0.84, { weight: 'bold', fill: TEAL }),
+    T('آدم', 'Aref Ruqaa', 0.18, 0.5, 0.84, { weight: 'bold', fill: TEAL, sampleName: 'baby' }),
   ], 'white', ONESIE),
   D('ce-sebou3', 'baby', 'Sebou3 party (name)', 'سبوع سارة', [
     A('fluent-emoji-flat:candle', 0.2, 0.34, 0.16, { angle: -12 }),
     A('fluent-emoji-flat:candle', 0.22, 0.5, 0.14),
     A('fluent-emoji-flat:candle', 0.2, 0.66, 0.16, { angle: 12 }),
     T('سبوع', 'Lalezar', 0.3, 0.5, 0.43, { fill: PINK }),
-    T('سارة', 'Aref Ruqaa', 0.22, 0.5, 0.66, { weight: 'bold' }),
+    T('سارة', 'Aref Ruqaa', 0.22, 0.5, 0.66, { weight: 'bold', sampleName: 'baby' }),
     T('حلقة برجالاتك', 'Marhey', 0.09, 0.5, 0.85, { weight: 'bold', fill: PINK }),
   ], 'white', ONESIE),
   D('ce-ahlan-bel-nono', 'baby', 'Welcome little one (Arabic)', 'أهلًا بالنونو', [

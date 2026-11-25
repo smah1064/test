@@ -258,25 +258,25 @@ const designs = [
 
   // ---------- Family ----------
   D('ev-fam-dad', 'family', 'Family set: Dad', 'طقم العيلة: بابا', [
-    T('عيلة المصري', 'Changa', 0.08, 0.5, 0.14, { weight: 'bold', fill: GOLD }),
+    T('عيلة المصري', 'Changa', 0.08, 0.5, 0.14, { weight: 'bold', fill: GOLD, sampleName: 'family', samplePart: 'المصري' }),
     K('crown', 0.22, 0.5, 0.3),
     T('بابا', 'Lalezar', 0.34, 0.5, 0.56),
     T('  كبير العيلة  ', 'Lemonada', 0.1, 0.5, 0.8, { weight: 'bold', fill: WHITE, bg: BLUE, bgShape: 'banner' }),
   ]),
   D('ev-fam-mum', 'family', 'Family set: Mum', 'طقم العيلة: ماما', [
-    T('عيلة المصري', 'Changa', 0.08, 0.5, 0.14, { weight: 'bold', fill: GOLD }),
+    T('عيلة المصري', 'Changa', 0.08, 0.5, 0.14, { weight: 'bold', fill: GOLD, sampleName: 'family', samplePart: 'المصري' }),
     K('heart', 0.22, 0.5, 0.3),
     T('ماما', 'Lalezar', 0.34, 0.5, 0.56),
     T('  قلب العيلة  ', 'Lemonada', 0.1, 0.5, 0.8, { weight: 'bold', fill: WHITE, bg: PINK, bgShape: 'banner' }),
   ]),
   D('ev-fam-son', 'family', 'Family set: Son', 'طقم العيلة: الابن', [
-    T('عيلة المصري', 'Changa', 0.08, 0.5, 0.14, { weight: 'bold', fill: GOLD }),
+    T('عيلة المصري', 'Changa', 0.08, 0.5, 0.14, { weight: 'bold', fill: GOLD, sampleName: 'family', samplePart: 'المصري' }),
     K('bolt', 0.2, 0.5, 0.3),
     T('البطل', 'Lalezar', 0.3, 0.5, 0.56),
     T('  سند العيلة  ', 'Lemonada', 0.1, 0.5, 0.8, { weight: 'bold', fill: WHITE, bg: TEAL, bgShape: 'banner' }),
   ], 'white', LITTLE),
   D('ev-fam-daughter', 'family', 'Family set: Daughter', 'طقم العيلة: البنت', [
-    T('عيلة المصري', 'Changa', 0.08, 0.5, 0.14, { weight: 'bold', fill: GOLD }),
+    T('عيلة المصري', 'Changa', 0.08, 0.5, 0.14, { weight: 'bold', fill: GOLD, sampleName: 'family', samplePart: 'المصري' }),
     K('sparkle', 0.2, 0.5, 0.3),
     T('الأميرة', 'Lalezar', 0.28, 0.5, 0.56),
     T('  دلّوعة العيلة  ', 'Lemonada', 0.1, 0.5, 0.8, { weight: 'bold', fill: WHITE, bg: PURPLE, bgShape: 'banner' }),
@@ -318,7 +318,7 @@ const designs = [
     A('fluent-emoji-flat:baby', 0.3, 0.5, 0.2),
     T('أصغر واحد', 'Lalezar', 0.2, 0.5, 0.48),
     T('في العيلة', 'Marhey', 0.14, 0.5, 0.68, { weight: 'bold', fill: PINK }),
-    T('سليم 2025', 'Changa', 0.07, 0.5, 0.86, { weight: 'bold', fill: BLUE }),
+    T('سليم 2025', 'Changa', 0.07, 0.5, 0.86, { weight: 'bold', fill: BLUE, sampleName: 'baby', samplePart: 'سليم' }),
   ], 'white', LITTLE),
 ];
 

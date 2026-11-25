@@ -436,6 +436,37 @@
     const z = area.readyZoneRtl && lead && ARABIC_RE.test(lead.text) ? area.readyZoneRtl : area.readyZone;
     return { x: area.x + area.w * z.x, y: area.y + area.h * z.y, w: area.w * z.w, h: area.h * z.h };
   }
+  /**
+   * The customer's own name in place of a sample one (withNames, `fitTo`: the sample): never wider than the sample
+   * was, so what is round it stays as drawn; with nothing beside it on its line, as wide as the line's free room
+   * inside the margin. A longer name is set smaller (`nameScale` on the object), a shorter one keeps the sample's size.
+   */
+  function fitName(o, i, built, area, box) {
+    if (!o || !i || i.kind !== 'text' || !i.fitTo || typeof i.fitTo.text !== 'string') return;
+    const was = new fabric.IText(i.bg ? i.fitTo.text.trim() : i.fitTo.text, {
+      fontFamily: i.fitTo.font || i.font,
+      fontSize: o.fontSize,
+      fontWeight: i.fitTo.weight || 'normal',
+      strokeWidth: o.strokeWidth,
+      charSpacing: ARABIC_RE.test(i.fitTo.text) ? 0 : i.spacing || 0,
+      direction: ARABIC_RE.test(i.fitTo.text) ? 'rtl' : 'ltr',
+    });
+    const wasW = Math.min(was.getScaledWidth(), area.w * 0.94);
+    const r = o.getBoundingRect(true, true);
+    const edge = r.height * 0.15;
+    const beside = built.some((x) => {
+      if (!x || x === o) return false;
+      const q = x.getBoundingRect(true, true);
+      return q.top < r.top + r.height - edge && q.top + q.height > r.top + edge;
+    });
+    const room = 2 * Math.min(o.left - box.x, box.x + box.w - o.left);
+    const most = beside ? wasW : Math.max(wasW, room);
+    if (o.getScaledWidth() > most) {
+      o.nameScale = most / o.getScaledWidth(); // (how much smaller than the sample's size: the design page says so)
+      o.scaleToWidth(most);
+      o.setCoords();
+    }
+  }
   async function buildTemplate(tpl, fullArea, ink, { inset = 0 } = {}) {
     const area = readyArea(fullArea, tpl);
     // A layout drawn for a box of a given shape (tpl.aspect = width / height,
@@ -443,7 +474,7 @@
     // boxes (mugs, envelopes, banners) sizes follow the height instead, so
     // lines placed by height don't run into each other.
     const U = tpl.aspect ? Math.min(area.w, area.h * tpl.aspect) : area.w;
-    await Promise.all(tpl.items.filter((i) => i.kind === 'text').map((i) => ensureFont(i.font, i.weight || 'normal', 'normal')));
+    await Promise.all(tpl.items.filter((i) => i.kind === 'text').flatMap((i) => [ensureFont(i.font, i.weight || 'normal', 'normal'), ...(i.fitTo ? [ensureFont(i.fitTo.font, i.fitTo.weight || 'normal', 'normal')] : [])]));
     // Stickers load from SVG, so build them first.
     const SK = window.POD_STICKERS;
     const stickerObjs = await Promise.all(tpl.items.map((i) => {
@@ -453,7 +484,7 @@
       const def = SK.STICKERS.find((x) => x.id === i.sticker);
       return def ? SK.makeSticker(def) : null;
     }));
-    const objs = tpl.items.map((i, idx) => {
+    const built = tpl.items.map((i, idx) => {
       let o;
       if (i.kind === 'sticker' || i.kind === 'art' || i.kind === 'image') {
         o = stickerObjs[idx];
@@ -483,7 +514,7 @@
           paintFirst: 'stroke',
           textAlign: 'center',
           charSpacing: ARABIC_RE.test(i.text) ? 0 : i.spacing || 0,
-          direction: ARABIC_RE.test(i.text) ? 'rtl' : 'ltr',
+          direction: i.direction || (ARABIC_RE.test(i.text) ? 'rtl' : 'ltr'),
           backgroundColor: i.bg || '',
           bgShape: i.bgShape || 'box',
           curve: i.curve || 0,
@@ -502,14 +533,16 @@
       o.set({ originX: 'center', originY: 'center', left: area.x + area.w * i.x, top: area.y + area.h * i.y });
       o.setCoords();
       return o;
-    }).filter(Boolean);
+    });
+    const pad = Math.max(inset, Math.min(area.w, area.h) * 0.08);
+    const box = { x: area.x + pad, y: area.y + pad, w: area.w - 2 * pad, h: area.h - 2 * pad };
+    built.forEach((o, idx) => fitName(o, tpl.items[idx], built, area, box));
+    const objs = built.filter(Boolean);
     // Keep everything well inside the edges: a margin of 8% of the area's short side (at least
     // the product's safe zone, `inset`) all round. Too big: shrunk round the middle; then
     // moved in if a part still sits in the margin.
     // (A design with an edge-to-edge picture keeps no margin.)
     if (tpl.items.some((i) => i.full && i.kind === 'image')) return objs;
-    const pad = Math.max(inset, Math.min(area.w, area.h) * 0.08);
-    const box = { x: area.x + pad, y: area.y + pad, w: area.w - 2 * pad, h: area.h - 2 * pad };
     const bounds = () => {
       const rs = objs.map((o) => o.getBoundingRect(true, true));
       return { x0: Math.min(...rs.map((r) => r.left)), y0: Math.min(...rs.map((r) => r.top)), x1: Math.max(...rs.map((r) => r.left + r.width)), y1: Math.max(...rs.map((r) => r.top + r.height)) };
@@ -616,5 +649,78 @@
     return svg;
   }
 
-  window.POD_DESIGN = { FONTS, BUNDLED, ARABIC_RE, ACCENT, SHAPES, TEXT_PRESETS, TEMPLATES, ensureFont, ensureFontsFor, buildTemplate, readyArea, templateThumb, usePrintSources, inlineSvgImages };
+  // ---------- The customer's own name in a ready design ----------
+  // Some ready designs show a sample name for the customer to replace ("LAILA", "آدم", "The MAHMOUDS"). Its
+  // text item has `sampleName`, the kind of name (one of NAME_ROLES), and `samplePart` when only part of the
+  // text is the name ('محمود' in 'عائلة محمود'). The design page (public/js/design.js) asks for the customer's
+  // own, and withNames puts it in: the preview, the cart and the print files are all made from that design.
+  const NAME_ROLES = ['name', 'his', 'her', 'names', 'family', 'initial', 'initials', 'hisInitial', 'herInitial', 'kid', 'baby', 'cat', 'dog', 'teacher', 'honoree'];
+  const NAME_MAX = { initial: 3, hisInitial: 3, herInitial: 3, initials: 9, names: 40 }; // letters; others NAME_LEN
+  const NAME_LEN = 30;
+  /** A ready design's sample names, in order: { index (of its item), role, sample, caps (printed in capitals), max (letters) }. */
+  function sampleNames(design) {
+    const items = design && design.kind === 'template' && Array.isArray(design.items) ? design.items : [];
+    const out = [];
+    items.forEach((it, index) => {
+      if (!it || it.kind !== 'text' || !it.sampleName || typeof it.text !== 'string' || !it.text.trim()) return;
+      const part = typeof it.samplePart === 'string' && it.samplePart.trim() && it.text.includes(it.samplePart) ? it.samplePart : null;
+      const sample = (part || it.text).trim();
+      const role = NAME_ROLES.includes(it.sampleName) ? it.sampleName : 'name';
+      out.push({ index, role, sample, caps: /[A-Z]/.test(sample) && !/[a-z]/.test(sample), max: Math.max(NAME_MAX[role] || NAME_LEN, sample.length) });
+    });
+    return out;
+  }
+  /**
+   * A typed name made printable: one line, at most `max` letters, without {…} (a place still to fill in, which the
+   * server refuses to print), emoji or invisible direction marks (the fonts have none of them).
+   */
+  function cleanName(v, max = NAME_LEN) {
+    const s = String(v == null ? '' : v)
+      .replace(/[\p{Extended_Pictographic}‍️‪-‮⁦-⁩]/gu, '')
+      .replace(/[\u0000-\u001f\u007f-\u009f{}]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return Array.from(s).slice(0, max).join('').trim();
+  }
+  // The English-only fonts have no Arabic letters: an Arabic name typed over an English sample is set in an
+  // Arabic font of the same feel (the editor does the same, with Cairo).
+  const ARABIC_FOR = {
+    'Dancing Script': 'Aref Ruqaa', Pacifico: 'Aref Ruqaa', Lobster: 'Aref Ruqaa', Caveat: 'Aref Ruqaa',
+    'Playfair Display': 'El Messiri', 'Abril Fatface': 'El Messiri', 'Roboto Slab': 'El Messiri',
+    Anton: 'Lalezar', Bungee: 'Lalezar', 'Bebas Neue': 'Lalezar', Oswald: 'Lalezar', Righteous: 'Lalezar', 'Permanent Marker': 'Lalezar',
+    Montserrat: 'Cairo',
+  };
+  /** Right to left when the first letter is Arabic (as the editor's text box shows it): "Omar & عمر" stays left to right. */
+  function textDirection(s) {
+    const first = /[A-Za-zÀ-ɏ֐-ࣿיִ-﷿ﹰ-ﻼ]/.exec(s || '');
+    return first && /[֐-ࣿיִ-﷿ﹰ-ﻼ]/.test(first[0]) ? 'rtl' : 'ltr';
+  }
+  /**
+   * The design with the customer's own names: `values` in the order of sampleNames (empty keeps the sample).
+   * A changed text remembers the sample it replaces (`fitTo`), so buildTemplate fits the name in its place.
+   */
+  function withNames(design, values) {
+    const list = sampleNames(design);
+    if (!list.length || !values) return design;
+    const items = design.items.slice();
+    let changed = false;
+    list.forEach((s, k) => {
+      let name = cleanName(values[k], s.max);
+      if (!name) return;
+      changed = true;
+      if (s.caps) name = name.toUpperCase();
+      const it = items[s.index];
+      const part = typeof it.samplePart === 'string' && it.samplePart.trim() && it.text.includes(it.samplePart) ? it.samplePart : null;
+      const text = part ? it.text.replace(part, () => name) : name;
+      const next = { ...it, text, direction: textDirection(text), fitTo: { text: it.text, font: it.font, weight: it.weight || 'normal' } };
+      if (ARABIC_RE.test(text) && FONTS.english.includes(it.font)) {
+        next.font = ARABIC_FOR[it.font] || 'Cairo';
+        next.weight = next.font === 'Lalezar' ? 'normal' : next.font === 'Aref Ruqaa' ? 'bold' : it.weight || 'normal';
+      }
+      items[s.index] = next;
+    });
+    return changed ? { ...design, items } : design;
+  }
+
+  window.POD_DESIGN = { FONTS, BUNDLED, ARABIC_RE, ACCENT, SHAPES, TEXT_PRESETS, TEMPLATES, ensureFont, ensureFontsFor, buildTemplate, readyArea, templateThumb, usePrintSources, inlineSvgImages, NAME_ROLES, sampleNames, cleanName, withNames };
 })();

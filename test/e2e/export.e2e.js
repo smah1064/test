@@ -683,11 +683,19 @@ test('6. add to cart: stored <side>-print.png is pixel-identical to the browser 
         return orig.apply(this, arguments);
       };
     });
+    // The editor goes on to the cart as soon as the answer comes, and the browser then drops its body:
+    // kept here on the way in (reading it afterwards raced the page, and failed on a busy machine).
+    let completeBody = '';
+    await page.route(/\/api\/designs\/[^/]+\/complete$/, async (route) => {
+      const res = await route.fetch();
+      completeBody = await res.text();
+      await route.fulfill({ response: res, body: completeBody });
+    });
     const completeP = page.waitForResponse((r) => /\/api\/designs\/[^/]+\/complete$/.test(r.url()), { timeout: 60000 });
     await page.click('#add-to-cart');
     const complete = await completeP;
-    assert.strictEqual(complete.status(), 200, await complete.text());
-    const design = await complete.json();
+    assert.strictEqual(complete.status(), 200, completeBody);
+    const design = JSON.parse(completeBody);
     await page.waitForURL(/\/cart/, { timeout: 30000 });
 
     const sent = uploads['front-print.png'];

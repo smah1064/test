@@ -119,7 +119,7 @@ const designs = [
   ]),
   D('st-pets-name', 'pets', 'Best dog ever (with the name)', 'أحلى كلب (بالاسم)', [
     I(ai('animals-dog-float'), 0.7, 0.5, 0.36),
-    T('Max', 'Pacifico', 0.17, 0.5, 0.74, { fill: '#0ca678' }),
+    T('Max', 'Pacifico', 0.17, 0.5, 0.74, { fill: '#0ca678', sampleName: 'dog' }),
     T('BEST DOG EVER', 'Bebas Neue', 0.07, 0.5, 0.9, { spacing: 300 }),
   ]),
 
@@ -183,7 +183,7 @@ const designs = [
   ]),
   D('st-gaming-tag', 'gaming', 'Gamer tag (with the name)', 'اسم الجيمر', [
     I(vec('gaming-pixel-hero'), 0.48, 0.5, 0.3),
-    T('AHMED', 'Bungee', 0.14, 0.5, 0.66, { fill: '#ffd43b' }),
+    T('AHMED', 'Bungee', 0.14, 0.5, 0.66, { fill: '#ffd43b', sampleName: 'name' }),
     T('GAMER TAG', 'Bungee', 0.06, 0.5, 0.8),
   ], 'black'),
   D('st-gaming-mesh-ha2oum', 'gaming', 'Not getting up until I win', 'مش هقوم غير لما أكسب', [
@@ -195,19 +195,19 @@ const designs = [
   D('st-gaming-esports', 'gaming', 'Esports team (name and number)', 'فريق إي سبورتس (اسم ورقم)', [
     I(vec('gaming-neon-controller'), 0.46, 0.5, 0.2),
     T('TEAM NAME', 'Bungee', 0.09, 0.5, 0.38, { fill: CYAN }),
-    T('AHMED', 'Bungee', 0.14, 0.5, 0.53),
+    T('AHMED', 'Bungee', 0.14, 0.5, 0.53, { sampleName: 'name' }),
     T('07', 'Anton', 0.3, 0.5, 0.78, { fill: NEON_PINK }),
   ], 'black'),
   D('st-gaming-lvl-99', 'gaming', 'Level 99 (name and hearts)', 'ليفل 99 (بالاسم)', [
     T('LVL 99', 'Bungee', 0.17, 0.5, 0.3, { fill: '#ffd43b' }),
     I(vec('gaming-pixel-hearts'), 0.56, 0.5, 0.5),
-    T('AHMED', 'Righteous', 0.13, 0.5, 0.7),
+    T('AHMED', 'Righteous', 0.13, 0.5, 0.7, { sampleName: 'name' }),
     T('MAX LEVEL PLAYER', 'Bebas Neue', 0.06, 0.5, 0.84, { spacing: 300 }),
   ], 'black'),
   D('st-gaming-ostoura', 'gaming', 'Gaming legend (with the name)', 'أسطورة الجيم (بالاسم)', [
     I(vec('gaming-pixel-hero'), 0.44, 0.5, 0.27),
     T('أسطورة الجيم', 'Lalezar', 0.15, 0.5, 0.6, { fill: '#ffd43b' }),
-    T('أحمد', 'Lalezar', 0.12, 0.5, 0.78),
+    T('أحمد', 'Lalezar', 0.12, 0.5, 0.78, { sampleName: 'name' }),
   ], 'black'),
   D('st-gaming-insert-coin', 'gaming', 'Insert coin (retro arcade)', 'حط فلوس (أركيد زمان)', [
     I(vec('gaming-synthwave-sunset'), 0.8, 0.5, 0.36),
@@ -367,8 +367,8 @@ const designs = [
   ], 'sand'),
   D('st-luxury-monogram', 'luxury', 'Monogram with a laurel (initial and name)', 'مونوجرام بإكليل (حرف واسم)', [
     I(vec('luxury-monogram-laurel-frame'), 0.68, 0.5, 0.4),
-    T('S', 'Playfair Display', 0.3, 0.5, 0.39, { fill: GOLD }),
-    T('SARA', 'Montserrat', 0.05, 0.5, 0.76, { spacing: 800, fill: GOLD }),
+    T('S', 'Playfair Display', 0.3, 0.5, 0.39, { fill: GOLD, sampleName: 'initial' }),
+    T('SARA', 'Montserrat', 0.05, 0.5, 0.76, { spacing: 800, fill: GOLD, sampleName: 'name' }),
   ], 'black'),
   D('st-luxury-aneek', 'luxury', 'Elegant (fine laurel wreath)', 'أنيق (إكليل رفيع)', [
     I(vec('luxury-fine-laurel-wreath'), 0.68, 0.5, 0.42),
@@ -390,8 +390,8 @@ const designs = [
   ], 'black'),
   D('st-luxury-mono-ar', 'luxury', 'Arabic monogram (initial and name)', 'مونوجرام عربي (حرف واسم)', [
     I(vec('luxury-monogram-laurel-frame'), 0.68, 0.5, 0.4),
-    T('م', 'Aref Ruqaa', 0.28, 0.5, 0.37, { fill: GOLD }),
-    T('محمد', 'El Messiri', 0.07, 0.5, 0.76),
+    T('م', 'Aref Ruqaa', 0.28, 0.5, 0.37, { fill: GOLD, sampleName: 'initial' }),
+    T('محمد', 'El Messiri', 0.07, 0.5, 0.76, { sampleName: 'name' }),
   ]),
 
   // ---------- 12. Music ----------

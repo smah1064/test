@@ -36,7 +36,7 @@ const designs = [
   D('pp-kids-princess-name', 'kids', 'Little princess with name', 'الأميرة الصغيرة باسمها', [
     A(fe('crown'), 0.28, 0.5, 0.2),
     T('الأميرة', 'Aref Ruqaa', 0.2, 0.5, 0.48, { weight: 'bold', fill: PINK }),
-    T('سارة', 'Lalezar', 0.26, 0.5, 0.74),
+    T('سارة', 'Lalezar', 0.26, 0.5, 0.74, { sampleName: 'kid' }),
     K('sparkle', 0.1, 0.2, 0.36),
     K('sparkle', 0.08, 0.8, 0.62),
   ]),
@@ -44,7 +44,7 @@ const designs = [
     A(fe('crown'), 0.26, 0.5, 0.18),
     T('LITTLE', 'Montserrat', 0.06, 0.5, 0.36, { spacing: 300, weight: 'bold' }),
     T('PRINCE', 'Abril Fatface', 0.17, 0.5, 0.5),
-    T('Adam', 'Pacifico', 0.14, 0.5, 0.74, { fill: GOLD }),
+    T('Adam', 'Pacifico', 0.14, 0.5, 0.74, { fill: GOLD, sampleName: 'kid' }),
   ], 'navy'),
   D('pp-kids-dino-roar', 'kids', 'Dino roar', 'ديناصور البيت', [
     A(fe('t-rex'), 0.5, 0.5, 0.3),
@@ -136,7 +136,7 @@ const designs = [
     A(fe('red-apple'), 0.24, 0.5, 0.18),
     T('أحسن', 'Marhey', 0.12, 0.5, 0.38, { weight: 'bold' }),
     T('مدرسة', 'Aref Ruqaa', 0.26, 0.5, 0.58, { weight: 'bold', fill: PINK }),
-    T('ميس منى', 'Lemonada', 0.08, 0.5, 0.84, { weight: 'bold', fill: WHITE, bg: PINK, bgShape: 'pill' }),
+    T('ميس منى', 'Lemonada', 0.08, 0.5, 0.84, { weight: 'bold', fill: WHITE, bg: PINK, bgShape: 'pill', sampleName: 'teacher', samplePart: 'منى' }),
   ], 'white', TEACHER),
   D('pp-sch-class-trip', 'school', 'School trip with school name', 'رحلة المدرسة باسم المدرسة', [
     A(fe('bus'), 0.34, 0.5, 0.2),
@@ -206,12 +206,12 @@ const designs = [
   D('pp-pet-cat-name', 'pets', 'Cat name emblem', 'اسم القطة مشمش', [
     S('circle', 0.58, 0.5, 0.36, { fill: TEAL }),
     A('ph:paw-print-fill', 0.2, 0.5, 0.3, { fill: WHITE }),
-    T('مشمش', 'Lalezar', 0.12, 0.5, 0.47, { fill: WHITE }),
+    T('مشمش', 'Lalezar', 0.12, 0.5, 0.47, { fill: WHITE, sampleName: 'cat' }),
     T('أحلى قطة في الدنيا', 'Changa', 0.08, 0.5, 0.82, { weight: 'bold' }),
   ]),
   D('pp-pet-good-boy', 'pets', 'Good boy dog name', 'اسم الكلب Good boy', [
     A('ph:bone-fill', 0.62, 0.5, 0.4, { fill: GOLD, angle: 45 }),
-    T('MAX', 'Bungee', 0.13, 0.5, 0.38, { fill: INK }),
+    T('MAX', 'Bungee', 0.13, 0.5, 0.38, { fill: INK, sampleName: 'dog' }),
     T('GOOD BOY', 'Bebas Neue', 0.1, 0.5, 0.72, { spacing: 200 }),
     A('ph:paw-print-fill', 0.08, 0.5, 0.86, { fill: GOLD }),
   ], 'black'),
@@ -346,7 +346,7 @@ const designs = [
   D('pp-biz-name-role', 'business', 'Name and role (sales team)', 'الاسم والوظيفة فريق المبيعات', [
     T('COMPANY', 'Montserrat', 0.055, 0.5, 0.16, { spacing: 400, weight: 'bold', fill: BLUE }),
     S('line', 0.3, 0.5, 0.24, { fill: BLUE }),
-    T('أحمد', 'Lalezar', 0.26, 0.5, 0.44),
+    T('أحمد', 'Lalezar', 0.26, 0.5, 0.44, { sampleName: 'name' }),
     T('SALES TEAM', 'Bebas Neue', 0.09, 0.5, 0.66, { spacing: 150, fill: WHITE, bg: BLUE, bgShape: 'pill' }),
     T('فريق المبيعات', 'Cairo', 0.07, 0.5, 0.82, { weight: 'bold' }),
   ], 'white', STAFF),
