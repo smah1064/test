@@ -80,6 +80,10 @@
       const reo = { busy: false, added: 0, skipped: null, error: null };
       const catalog = await POD.loadCatalog().catch(() => null);
       const shopWa = catalog && catalog.contact && catalog.contact.whatsapp;
+      // Arabic: "·" next to Arabic-Indic digits reads as the zero "٠" ("٥:٠٧ ص · …"), so items with numbers are
+      // separated with the Arabic comma there. English keeps the dot.
+      const SEP = () => (POD.lang === 'ar' ? '، ' : ' · ');
+      const listed = (s) => (POD.lang === 'ar' ? String(s).replace(/ · /g, '، ') : String(s));
       /** "3 names": Arabic takes the plural for 3–10 («٣ أسماء»), the singular otherwise («١١ اسم»). */
       const namesText = (n) => t(n % 100 >= 3 && n % 100 <= 10 ? 'cart.copies.few' : 'cart.copies', { n: POD.num(n) });
       /** A WhatsApp chat with the shop, the order details already typed. */
@@ -91,7 +95,7 @@
           else parts.push(tr(it.color.name), tr(it.size.label));
           if (A.isNameList(it)) parts.push(namesText(A.pieces(it)));
           else if (A.pieces(it) > 1) parts.push(A.piecesText(A.pieces(it)));
-          return `${POD.num(i + 1)}. ${parts.join(' · ')}`;
+          return `${POD.num(i + 1)}. ${parts.join(SEP())}`;
         }).join('\n');
         const text = t('order.waMessage', { n: o.number, items, total: money(o.total), name: o.customer.name });
         return `https://wa.me/${shopWa}?text=${encodeURIComponent(text)}`;
@@ -250,7 +254,7 @@
               <p class="muted small">${esc(t('order.emailWhy'))}</p>
             </section>` : ''}
             <h1>${esc(t('order.title', { n: o.number }))}</h1>
-            <p class="muted">${esc(t('order.meta', { status: t('order.' + shownStatus(o)), date: POD.date(o.createdAt), n: POD.num(o.items.length) }))}</p>
+            <p class="muted">${esc(listed(t('order.meta', { status: t('order.' + shownStatus(o)), date: POD.date(o.createdAt), n: POD.num(o.items.length) })))}</p>
             ${isNew ? '' : arrives}
             <div class="order-actions">
               <a class="btn" href="/invoice?id=${encodeURIComponent(o.id)}">${esc(t('track.invoice'))}</a>
@@ -274,7 +278,7 @@
                 ${pic ? `<img src="${esc(pic)}" alt="">` : '<span></span>'}
                 <div>
                   <h3>${POD.num(i + 1)}. ${esc(tr(item.productName))}</h3>
-                  <div class="meta">${breakdown ? '' : `${esc(tr(item.color.name))} · ${esc(tr(item.size.label))} · `}${esc((item.sides || []).map((s) => tr(s.name)).join(' + '))}${names ? ` · <span class="cart-copies">${esc(namesText(pieces))}</span>` : ''}</div>
+                  <div class="meta">${breakdown ? '' : `${esc(tr(item.color.name))}${SEP()}${esc(tr(item.size.label))}${SEP()}`}${esc((item.sides || []).map((s) => tr(s.name)).join(' + '))}${names ? `${SEP()}<span class="cart-copies">${esc(namesText(pieces))}</span>` : ''}</div>
                   ${breakdown ? PODAftercare.qtyHtml(item) : ''}
                   <div class="status-label st-${esc(status)}" style="margin-top:10px">${esc(t('item.' + status))}</div>
                   ${delivered ? '' : proofStateHtml(item)}

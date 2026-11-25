@@ -21,17 +21,123 @@
   const firstFor = (d) => products.find((p) => fitting.has(p.id) && fitting.get(p.id).has(d.id));
 
   // ---------- Search ----------
-  // Ignore case, Arabic short vowels and tatweel, the different alef / yaa /
-  // taa marbuta spellings, and Arabic vs Latin digits.
-  function norm(s) {
-    return String(s || '').toLowerCase()
-      .replace(/[ً-ٰٟـ]/g, '')
+  // search-kit:start (the same lines are in public/index.html and public/js/designs.js; test/search-kit.test.js checks both)
+  // Forgiving search: what the typed words find, plus plurals (hoodies, تيشيرتات), one word or two (t-shirt, tshirt),
+  // both spellings of تيشيرت, and the shop's words for the same thing in either language (mug, مج, كوباية).
+  const SEARCH = (() => {
+    // Ignore case, Arabic short vowels and tatweel (U+064B-U+065F stops before the Arabic-Indic digits U+0660-U+0669),
+    // the alef / yaa / taa marbuta spellings, and Arabic-Indic / Persian digits (100 typed in Arabic digits finds 100).
+    const norm = (s) => String(s || '').toLowerCase()
+      .replace(/[\u064B-\u065F\u0670\u0640]/g, '')
       .replace(/[أإآٱ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/ؤ/g, 'و').replace(/ئ/g, 'ي')
       .replace(/[٠-٩]/g, (c) => String(c.charCodeAt(0) - 0x0660))
       .replace(/[۰-۹]/g, (c) => String(c.charCodeAt(0) - 0x06F0))
       .replace(/[^\p{L}\p{N}]+/gu, ' ')
       .trim();
-  }
+    // Spelt with or without the long ي (تيشرت / تيشيرت).
+    const loose = (s) => s.replace(/ي/g, '').replace(/ +/g, ' ');
+    // The same thing said other ways, in both languages (two words keep their space; plurals are found anyway).
+    const SAME = {
+      tshirt: 'tshirt, t shirt, tee, tee shirt, shirt, تيشيرت, تي شيرت, تشيرت',
+      hoodie: 'hoodie, hoody, هودي',
+      sweatshirt: 'sweatshirt, sweat shirt, سويتشيرت, سويت شيرت',
+      cap: 'cap, hat, كاب, كاسكيت, قبعة, طاقية',
+      mug: 'mug, cup, مج, مجات, مجين, ماج, كوب, كوباية',
+      bag: 'bag, شنطة, شنط',
+      card: 'card, كارت, كروت, كارد, بطاقة',
+      bizcard: 'business card, visit card, visiting card, بيزنس كارد, كارت بيزنس, كارت شخصي, كروت شخصية, كارت فيزيت',
+      invitation: 'invitation, invite, دعوة',
+      wedding: 'wedding, فرح, أفراح, زفاف',
+      poster: 'poster, بوستر',
+      notebook: 'notebook, note book, كشكول, كشاكيل',
+      calendar: 'calendar, نتيجة, تقويم, نتايج',
+      sticker: 'sticker, ستيكر, استيكر',
+      pillow: 'pillow, cushion, مخدة, خدادية, وسادة',
+      phonecase: 'phone case, phone cover, mobile case, mobile cover, جراب, جراب موبايل, كفر موبايل',
+      christmas: 'christmas, xmas, كريسماس',
+      birthday: 'birthday, عيد ميلاد',
+      dog: 'dog, puppy, كلب, كلاب',
+      cat: 'cat, kitten, قطة, قطط',
+    };
+    const sameAs = new Map();
+    for (const [k, list] of Object.entries(SAME)) for (const w of list.split(',')) sameAs.set(norm(w), k);
+    /** A word and what else it may be written as: the singular of a plural (hoodies, boxes, puppies, wolves,
+        تيشيرتات, مدرسين, ستيكرز) and a word without its taa marbuta (شنطة → شنط finds شنط ورق). */
+    function forms(w) {
+      const out = [w];
+      if (/^[a-z]+$/.test(w) && w.length > 3) {
+        if (w.length > 4 && w.endsWith('ies')) out.push(w.slice(0, -3) + 'y');
+        if (w.length > 4 && w.endsWith('ves')) out.push(w.slice(0, -3) + 'f', w.slice(0, -3) + 'fe');
+        if (/(s|x|z|ch|sh)es$/.test(w)) out.push(w.slice(0, -2));
+        if (/[^siu]s$/.test(w)) out.push(w.slice(0, -1));
+      } else if (/^[\u0621-\u064A]+$/.test(w)) {
+        if (w.endsWith('ات') && w.length >= 5) out.push(w.slice(0, -2), w.slice(0, -2) + 'ه');
+        if ((w.endsWith('ين') || w.endsWith('ون')) && w.length >= 6) out.push(w.slice(0, -2));
+        if (w.endsWith('ز') && w.length >= 5) out.push(w.slice(0, -1));
+        if (w.endsWith('ه') && w.length >= 4) out.push(w.slice(0, -1));
+      }
+      return [...new Set(out)];
+    }
+    // The word without "the" / "for the" / "with the" in front (التيشيرتات, للأفراح), when 3 letters or more are left.
+    const bare = (w) => { const m = /^(?:وال|بال|لل|ال)(.{3,})$/.exec(w); return m ? [w, m[1]] : [w]; };
+    const allForms = (w) => [...new Set(bare(w).flatMap(forms))];
+    const conceptsOf = (w) => [...new Set(allForms(w).map((f) => sameAs.get(f)).filter(Boolean))];
+    /** Two words that name one thing: "t shirt", "business cards", "بيزنس كارد". */
+    function pairConcepts(a, b) {
+      const out = new Set();
+      for (const x of allForms(a)) {
+        for (const y of forms(b)) {
+          for (const k of [`${x} ${y}`, x + y]) if (sameAs.has(k)) out.add(sameAs.get(k));
+        }
+      }
+      return [...out];
+    }
+    /** A text to search in: its words (as before), the other forms of its words, and the things they name.
+        looseAnywhere: a typed word without its ي is looked for anywhere, however short (as the home page always
+        did); otherwise at the start of a word and with three letters or more, so تيشرت finds تيشيرت but رسم does
+        not find كريسماس (كرسماس) and في does not find every ف. */
+    function index(text, looseAnywhere) {
+      const ws = norm(text).split(' ').filter(Boolean);
+      const extra = new Set();
+      const concepts = new Set();
+      ws.forEach((w, i) => {
+        for (const f of allForms(w)) if (f !== w) extra.add(f);
+        for (const c of conceptsOf(w)) concepts.add(c);
+        if (i + 1 < ws.length) for (const c of pairConcepts(w, ws[i + 1])) concepts.add(c);
+      });
+      const all = ` ${ws.join(' ')} ${[...extra].join(' ')} `;
+      return { text: all, loose: loose(all), concepts, looseAnywhere: Boolean(looseAnywhere) };
+    }
+    /** The words of a search: each as typed, its other forms and what it names; two words that name one thing
+        ("t shirts", "بيزنس كارد") also count as one. */
+    function query(q) {
+      const ws = norm(q).split(' ').filter(Boolean);
+      const one = (w) => ({ word: w, forms: allForms(w).filter((f) => f !== w), concepts: conceptsOf(w) });
+      const terms = [];
+      for (let i = 0; i < ws.length; i++) {
+        const both = i + 1 < ws.length ? pairConcepts(ws[i], ws[i + 1]) : [];
+        if (both.length) {
+          terms.push({ word: '', forms: forms(ws[i] + ws[i + 1]), concepts: both, or: [one(ws[i]), one(ws[i + 1])] });
+          i++;
+        } else terms.push(one(ws[i]));
+      }
+      return terms;
+    }
+    // A word as typed is found anywhere in a word, as before (with start: at the start of one, to rank names).
+    // Its other forms only as whole words ("dogs" → dog, not dogma; "cars" → car, not card), or by what it names.
+    function has(h, term, start) {
+      const at = start ? ' ' : '';
+      const lw = loose(term.word);
+      const looseHit = h.looseAnywhere ? h.loose.includes(at + lw) : lw.length > 2 && h.loose.includes(` ${lw}`);
+      if (term.word && (h.text.includes(at + term.word) || looseHit)) return true;
+      if (term.forms.some((f) => h.text.includes(` ${f} `) || h.loose.includes(` ${loose(f)} `))) return true;
+      return term.concepts.some((c) => h.concepts.has(c)) || Boolean(term.or && term.or.every((x) => has(h, x, start)));
+    }
+    /** Every word of the search is in the indexed text. */
+    const match = (h, terms, start) => terms.every((term) => has(h, term, start));
+    return { norm, loose, forms, index, query, match };
+  })();
+  // search-kit:end
   const both = (v) => (v && typeof v === 'object' ? [v.en, v.ar] : [v]);
   const catById = new Map(lib.categories.map((c) => [c.id, c]));
   const haystack = new Map(lib.designs.map((d) => {
@@ -42,9 +148,9 @@
       // The words printed on the design (not the {Name} fields filled from a list).
       ...(d.items || []).filter((i) => i.kind === 'text').map((i) => String(i.text || '').replace(/\{[^{}]*\}/g, ' ')),
     ];
-    return [d.id, ` ${norm(words.join(' '))} `];
+    return [d.id, SEARCH.index(words.join(' '))];
   }));
-  const matches = (d, terms) => terms.every((w) => haystack.get(d.id).includes(w));
+  const matches = (d, terms) => SEARCH.match(haystack.get(d.id), terms);
 
   // ---------- State (kept in the address, so Back returns to the same list) ----------
   const params = new URLSearchParams(location.search);
@@ -103,7 +209,7 @@
   }
 
   function render() {
-    const terms = norm(state.q).split(' ').filter(Boolean);
+    const terms = SEARCH.query(state.q);
     const okProduct = state.product ? fitting.get(state.product) : null;
     const forProduct = lib.designs.filter((d) => !okProduct || okProduct.has(d.id));
     // Category chips: the ones with designs for the chosen product.
@@ -139,7 +245,7 @@
     if (state.cat !== 'all') btns.push(`<button type="button" class="btn" data-clear="cat">${esc(t('designs.allCats'))}</button>`);
     if (state.product) btns.push(`<button type="button" class="btn" data-clear="product">${esc(t('designs.anyProduct'))}</button>`);
     // Typed a product name ("mug", "تيشيرت")? Offer the designs on that product.
-    const named = terms.length ? products.filter((p) => fitting.has(p.id) && p.id !== state.product && terms.every((w) => norm(`${p.name.en} ${p.name.ar}`).includes(w))).slice(0, 6) : [];
+    const named = terms.length ? products.filter((p) => fitting.has(p.id) && p.id !== state.product && SEARCH.match(SEARCH.index(`${p.name.en} ${p.name.ar}`), terms)).slice(0, 6) : [];
     return `<div class="card empty design-empty">
       <h2>${esc(state.q.trim() ? t('designs.noMatch', { q: state.q.trim() }) : t('designs.noMatchFilters'))}</h2>
       <p class="muted">${esc(t('designs.noMatchHint'))}</p>

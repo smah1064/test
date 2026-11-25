@@ -125,6 +125,9 @@ if (typeof window !== 'undefined' && window.POD) (async () => {
     return Number(c && c.price) || 0;
   };
   const unitPrice = (sizeId) => Number(product.basePrice) + (Number(sizeById(sizeId).surcharge) || 0) + borderPrice();
+  /** A photo's size list entry, short so the price is never cut off on small phones: "10×15 · 15 EGP", all in the
+      page's digits (in Arabic with a comma: "·" next to Arabic digits reads as the zero "٠"). */
+  const sizeOption = (sizeId) => `${sizeShort(sizeId)}${POD.lang === 'ar' ? '، ' : ' · '}${money(unitPrice(sizeId))}`;
   const cheapest = () => {
     const opt = borderOpt ? Math.min(...borderOpt.choices.map((c) => Number(c.price) || 0)) : 0;
     return Number(product.basePrice) + Math.min(...product.sizes.map((s) => Number(s.surcharge) || 0)) + opt;
@@ -326,8 +329,7 @@ if (typeof window !== 'undefined' && window.POD) (async () => {
     return card ? state.photos.find((p) => p.uid === Number(card.dataset.uid)) : null;
   };
   function cardHtml(p) {
-    // Short labels ("10×15 · 15 EGP") so the price is never cut off on small phones.
-    const opts = product.sizes.map((s) => `<option value="${esc(s.id)}">${esc(s.cm ? `${s.cm[0]}×${s.cm[1]}` : tr(s.label))} · ${esc(money(unitPrice(s.id)))}</option>`).join('');
+    const opts = product.sizes.map((s) => `<option value="${esc(s.id)}">${esc(sizeOption(s.id))}</option>`).join('');
     return `
       <div class="ph-thumb">
         <button type="button" class="ph-print" data-act="crop"><span class="ph-area"><img alt="" draggable="false" decoding="async" src="${esc(p.url)}"></span></button>
@@ -828,7 +830,7 @@ if (typeof window !== 'undefined' && window.POD) (async () => {
     // Option prices may differ: the size lists show prices.
     state.photos.forEach((p) => {
       const card = cardOf(p);
-      if (card) card.querySelectorAll('.ph-size option').forEach((o) => { const z = sizeById(o.value); o.textContent = `${z.cm ? `${z.cm[0]}×${z.cm[1]}` : tr(z.label)} · ${money(unitPrice(o.value))}`; });
+      if (card) card.querySelectorAll('.ph-size option').forEach((o) => { o.textContent = sizeOption(o.value); });
     });
     repaintAll();
     update();

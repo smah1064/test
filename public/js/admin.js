@@ -6,6 +6,11 @@
   // The password is sent once to sign in; after that a session token is used.
   const KEY = 'pod-admin-token';
   const $ = (id) => document.getElementById(id);
+  // Arabic lists with numbers: a "·" next to Arabic-Indic digits reads as the zero "٠" ("١٣ طلب · ١٣ منتج" looks like
+  // "١٣ طلب ٠١٣ منتج"), so the Arabic page separates them with the Arabic comma. English keeps the dot.
+  const SEP = () => (POD.lang === 'ar' ? '، ' : ' · ');
+  /** A text from the strings with "·" between numbers: the same, Arabic comma in Arabic. */
+  const listed = (s) => (POD.lang === 'ar' ? String(s).replace(/ · /g, '، ') : String(s));
   try { sessionStorage.removeItem('pod-admin-password'); } catch (e) { /* old versions kept the password */ }
   let token = sessionStorage.getItem(KEY) || '';
   const authHeader = () => ({ Authorization: 'Bearer ' + token });
@@ -32,7 +37,7 @@
   function expressPill(item) {
     const d = deliveryOf(item);
     if (!d || d.speed !== 'express') return '';
-    return ` <span class="pill dlv-express-pill" title="${esc(t('delivery.by', { date: POD.day(d.by) }))}">${esc(d.by ? t('admin.expressBy', { date: day(d.by) }) : t('delivery.express'))}</span>`;
+    return ` <span class="pill dlv-express-pill" title="${esc(t('delivery.by', { date: POD.day(d.by) }))}">${esc(d.by ? listed(t('admin.expressBy', { date: day(d.by) })) : t('delivery.express'))}</span>`;
   }
   /** The customer asked at checkout for one sample first (printed and checked before the rest). */
   const wantsSample = (item) => Boolean(item && (item.sample === true || (item.approval && item.approval.sample === true)));
@@ -63,7 +68,7 @@
           <img src="${esc(it.sides[0].previewUrl)}" alt="" ${zoomAttr(it)}>
           <div>
             <strong>${esc(tr(it.productName))}</strong> ${pill(it.status)}${expressPill(it)}${samplePill(it)}${piecesPill(it)} ${it.filmBatch ? `<span class="pill printed">${esc(t('admin.onFilm', { id: it.filmBatch.id }))}</span>` : ''}
-            <div class="muted small">${esc([it.orderNumber, t('admin.spec.itemOf', { i: it.position, n: it.of }), ...colourSizeText(it), it.sides.map((sd) => `${tr(sd.name)} ${t('admin.cmSize', { w: POD.num(sd.widthIn * 2.54), h: POD.num(sd.heightIn * 2.54) })}`).join(' + ')].join(' · '))}</div>
+            <div class="muted small">${esc([it.orderNumber, t('admin.spec.itemOf', { i: it.position, n: it.of }), ...colourSizeText(it), it.sides.map((sd) => `${tr(sd.name)} ${t('admin.cmSize', { w: POD.num(sd.widthIn * 2.54), h: POD.num(sd.heightIn * 2.54) })}`).join(' + ')].join(SEP()))}</div>
             ${hasQty(it) ? qtySummary(it) : ''}
           </div>
         </label>`).join('')
@@ -287,7 +292,7 @@
     const r = item.redraw;
     if (!r) return esc(t('admin.redraw.off'));
     const line = esc(t('admin.redraw.' + r.status, { done: POD.num(r.done || 0), total: POD.num(r.total || 0) }));
-    const kept = r.failed && r.failed.length ? ` · ${esc(t('admin.redraw.kept', { n: POD.num(r.failed.length) }))}` : '';
+    const kept = r.failed && r.failed.length ? `${SEP()}${esc(t('admin.redraw.kept', { n: POD.num(r.failed.length) }))}` : '';
     const again = ['done', 'failed'].includes(r.status) ? ` <button class="btn btn-sm" data-redraw="${esc(item.id)}">${esc(t('admin.redraw.again'))}</button>` : '';
     return line + kept + again;
   }
@@ -303,11 +308,11 @@
       <dl class="spec">
         <dt>${esc(t('admin.spec.order'))}</dt><dd>${esc(item.orderNumber)} · ${esc(t('admin.spec.itemOf', { i: item.position, n: item.of }))}</dd>
         <dt>${esc(t('admin.spec.product'))}</dt><dd>${esc(tr(item.productName))}</dd>
-        ${hasQty(item) ? `<dt>${esc(t('adminQty.title'))}</dt><dd class="qty-dd">${qtyTable(item)}</dd>` : `<dt>${esc(t('admin.spec.colourSize'))}</dt><dd>${esc(tr(item.color.name))} <span class="dot" style="display:inline-block;vertical-align:middle;background:${esc(item.color.hex)}"></span> · ${esc(tr(item.size.label))}</dd>`}
-        ${item.kind === 'photoset' ? `<dt>${esc(t('fmt.photos-zip'))}</dt><dd>${esc(t('admin.photoFiles', { n: counted('admin.photos', (item.photos || []).length), prints: counted('admin.prints', (item.photos || []).reduce((n, p) => n + p.copies, 0)) }))} · ${esc(t('admin.photoSpec'))}${item.sides[0] && item.sides[0].dpi && item.sides[0].dpi < 150 ? `<div class="small" style="color:var(--warn);margin-top:4px">⚠ ${esc(t('admin.photoLowRes'))}</div>` : ''}</dd>` : item.sides.map((s) => `<dt>${esc(t('admin.spec.print', { side: tr(s.name) }))}</dt><dd><bdi dir="ltr">${cm(s.widthIn)} × ${cm(s.heightIn)} cm (${s.widthIn} × ${s.heightIn} in)${s.bleedIn ? ' ' + esc(t('admin.bleed', { mm: Math.round(s.bleedIn * 25.4) })) : ''} · ${s.widthPx} × ${s.heightPx} px · ${s.dpi} DPI · sRGB</bdi>${s.offsetCm ? `<div class="placement-note">📍 ${esc(t('admin.placement', { v: placementText(s.offsetCm) }))}</div>` : ''}</dd>`).join('')}
+        ${hasQty(item) ? `<dt>${esc(t('adminQty.title'))}</dt><dd class="qty-dd">${qtyTable(item)}</dd>` : `<dt>${esc(t('admin.spec.colourSize'))}</dt><dd>${esc(tr(item.color.name))} <span class="dot" style="display:inline-block;vertical-align:middle;background:${esc(item.color.hex)}"></span>${SEP()}${esc(tr(item.size.label))}</dd>`}
+        ${item.kind === 'photoset' ? `<dt>${esc(t('fmt.photos-zip'))}</dt><dd>${esc(listed(t('admin.photoFiles', { n: counted('admin.photos', (item.photos || []).length), prints: counted('admin.prints', (item.photos || []).reduce((n, p) => n + p.copies, 0)) })))}${SEP()}${esc(t('admin.photoSpec'))}${item.sides[0] && item.sides[0].dpi && item.sides[0].dpi < 150 ? `<div class="small" style="color:var(--warn);margin-top:4px">⚠ ${esc(t('admin.photoLowRes'))}</div>` : ''}</dd>` : item.sides.map((s) => `<dt>${esc(t('admin.spec.print', { side: tr(s.name) }))}</dt><dd><bdi dir="ltr">${cm(s.widthIn)} × ${cm(s.heightIn)} cm (${s.widthIn} × ${s.heightIn} in)${s.bleedIn ? ' ' + esc(t('admin.bleed', { mm: Math.round(s.bleedIn * 25.4) })) : ''} · ${s.widthPx} × ${s.heightPx} px · ${s.dpi} DPI · sRGB</bdi>${s.offsetCm ? `<div class="placement-note">📍 ${esc(t('admin.placement', { v: placementText(s.offsetCm) }))}</div>` : ''}</dd>`).join('')}
         ${item.emb ? `<dt>${esc(t('admin.emb'))}</dt><dd>
-          <div><strong>${esc(t('admin.embSummary', { n: POD.num(item.emb.stitches), c: item.emb.colors.length, w: item.emb.widthMm, h: item.emb.heightMm }))}</strong></div>
-          <ol class="emb-threads">${item.emb.colors.map((c) => `<li><span class="dot" style="display:inline-block;vertical-align:middle;background:${esc(c.hex)}"></span> ${esc(c.name)} <span class="muted">(${esc(c.hex)} · ${esc(POD.num(c.stitches))})</span></li>`).join('')}</ol>
+          <div><strong>${esc(listed(t('admin.embSummary', { n: POD.num(item.emb.stitches), c: item.emb.colors.length, w: item.emb.widthMm, h: item.emb.heightMm })))}</strong></div>
+          <ol class="emb-threads">${item.emb.colors.map((c) => `<li><span class="dot" style="display:inline-block;vertical-align:middle;background:${esc(c.hex)}"></span> ${esc(c.name)} <span class="muted">(${esc(c.hex)}${SEP()}${esc(POD.num(c.stitches))})</span></li>`).join('')}</ol>
           ${(item.emb.warnings || []).filter((w) => w !== 'empty').map((w) => `<div class="small" style="color:var(--warn)">⚠ ${esc(t('admin.embWarn.' + w))}</div>`).join('')}
         </dd>` : ''}
         ${item.merge ? `<dt>${esc(t('admin.mergeCopies'))}</dt><dd><strong>${esc(t('admin.mergeSpec', { n: POD.num(item.merge.count), cols: item.merge.columns.join(', ') }))}</strong></dd>` : ''}
@@ -319,13 +324,13 @@
           ${item.filmBatch ? `<div><span class="pill printed">${esc(t('admin.onFilm', { id: item.filmBatch.id }))}</span></div>` : ''}
         </dd>` : ''}
         ${item.kind === 'book' ? `<dt>${esc(t('admin.bookFiles'))}</dt><dd>${redrawLine(item)}</dd>` : ''}
-        ${item.kind === 'gangsheet' && item.sides[0] ? `<dt>${esc(t('admin.spec.print', { side: tr(item.sides[0].name) }))}</dt><dd>${esc(t('admin.sheetInfo', { w: POD.num(item.sides[0].widthIn * 2.54), l: POD.num(Math.round(item.sides[0].heightIn * 2.54)), n: POD.num(item.pieces || 0), dpi: item.sides[0].dpi || '?' }))}</dd>` : ''}
+        ${item.kind === 'gangsheet' && item.sides[0] ? `<dt>${esc(t('admin.spec.print', { side: tr(item.sides[0].name) }))}</dt><dd>${esc(listed(t('admin.sheetInfo', { w: POD.num(item.sides[0].widthIn * 2.54), l: POD.num(Math.round(item.sides[0].heightIn * 2.54)), n: POD.num(item.pieces || 0), dpi: item.sides[0].dpi || '?' })))}</dd>` : ''}
         <dt>${esc(t('admin.spec.shipTo'))}</dt><dd>${address(c)}</dd>
         ${c.phone ? `<dt>${esc(t('admin.spec.phone'))}</dt><dd><a href="tel:${esc(c.phone)}" dir="ltr">${esc(c.phone)}</a></dd>` : ''}
         ${c.email ? `<dt>${esc(t('admin.spec.email'))}</dt><dd>${esc(c.email)}</dd>` : ''}
         ${item.payment && item.payment.status === 'paid' ? `<dt>${esc(t('admin.spec.payment'))}</dt><dd><span class="pill pay-paid">${esc(t('admin.paidPill'))}</span> ${esc(t('admin.paidNothing', { amount: money(item.orderTotal) }))}</dd>`
     : item.payment && item.payment.method === 'cod' ? `<dt>${esc(t('admin.spec.payment'))}</dt><dd>${esc(t('admin.collect', { amount: money(item.orderTotal) }))}</dd>` : ''}
-        ${item.coupon ? `<dt>${esc(t('coupon.discount'))}</dt><dd><bdi dir="ltr">${esc(item.coupon.code)}</bdi> · -${esc(money(item.coupon.discount))}</dd>` : ''}
+        ${item.coupon ? `<dt>${esc(t('coupon.discount'))}</dt><dd><bdi dir="ltr">${esc(item.coupon.code)}</bdi>${SEP()}-${esc(money(item.coupon.discount))}</dd>` : ''}
       </dl>`;
   }
 
@@ -373,7 +378,7 @@
     // Name list: every copy with its own name. Shown once (with the first side); the side files below show copy 1.
     const mergeBlock = item.merge && item.sides[0] === s ? `
       <div class="print-files-block">
-        <div class="small muted" style="font-weight:700;margin-bottom:6px">${esc(t('admin.mergeFiles', { n: POD.num(item.merge.count) }))}</div>
+        <div class="small muted" style="font-weight:700;margin-bottom:6px">${esc(listed(t('admin.mergeFiles', { n: POD.num(item.merge.count) })))}</div>
         <div class="print-files">
           ${mergeFormats(item).map((f, k) => `<button class="btn btn-sm ${k === 0 ? 'btn-primary' : ''}" data-download="${esc(s.printUrl)}?format=${f}">⬇ ${esc(t('fmt.' + f))}${k === 0 ? ` <span class="rec">· ${esc(t('admin.recommended'))}</span>` : ''}</button>`).join('')}
         </div>
@@ -435,7 +440,7 @@
   function sendHistory(item) {
     const list = (item.sends || []).slice(-3).reverse();
     if (!list.length) return '';
-    return `<div class="send-history">${list.map((x) => `<div>📤 ${esc(t('houses.sentLine', { house: x.houseName, channel: t(x.channel === 'email' ? 'houses.byEmail' : 'houses.byWhatsApp'), date: when(x.at) }))}</div>`).join('')}</div>`;
+    return `<div class="send-history">${list.map((x) => `<div>📤 ${esc(listed(t('houses.sentLine', { house: x.houseName, channel: t(x.channel === 'email' ? 'houses.byEmail' : 'houses.byWhatsApp'), date: when(x.at) })))}</div>`).join('')}</div>`;
   }
   function sendButton(item, big) {
     return `<button class="btn ${big ? 'btn-lg shrink' : 'btn-sm'}" data-send-toggle="${item.id}" type="button">📤 ${esc(t('houses.send'))}</button>`;
@@ -557,7 +562,7 @@
         <div class="card house-row">
           <div>
             <strong>${esc(h.name)}</strong> <span class="pill queued">${esc(t(h.prefer === 'email' ? 'houses.byEmail' : 'houses.byWhatsApp'))}</span>
-            <div class="muted small">${[h.email ? `✉️ <bdi dir="ltr">${esc(h.email)}</bdi>` : '', h.whatsapp ? `💬 <bdi dir="ltr">+${esc(h.whatsapp)}</bdi>${waSavedBad(h.whatsapp) ? ` <span class="pill wa-bad-pill">${esc(t('houses.waCheck'))}</span>` : ''}` : '', esc(t(uses(h.id) === 1 ? 'houses.product1' : 'houses.products', { n: POD.num(uses(h.id)) }))].filter(Boolean).join(' · ')}</div>
+            <div class="muted small">${[h.email ? `✉️ <bdi dir="ltr">${esc(h.email)}</bdi>` : '', h.whatsapp ? `💬 <bdi dir="ltr">+${esc(h.whatsapp)}</bdi>${waSavedBad(h.whatsapp) ? ` <span class="pill wa-bad-pill">${esc(t('houses.waCheck'))}</span>` : ''}` : '', esc(t(uses(h.id) === 1 ? 'houses.product1' : 'houses.products', { n: POD.num(uses(h.id)) }))].filter(Boolean).join(SEP())}</div>
             ${h.notes ? `<div class="muted small">${esc(h.notes)}</div>` : ''}
           </div>
           <div class="row" style="gap:8px;flex:0 0 auto">
@@ -699,7 +704,7 @@
         <img src="${esc(item.sides[0].previewUrl)}" alt="" ${zoomAttr(item)}>
         <div>
           <strong>${esc(tr(item.productName))}</strong> ${pill(item.status)}${expressPill(item)}${samplePill(item)}${importBadge(item)}${piecesPill(item)}
-          <div class="muted small">${esc([item.orderNumber, t('admin.spec.itemOf', { i: item.position, n: item.of }), ...colourSizeText(item), item.sides.map((s) => tr(s.name)).join(' + ')].join(' · '))}</div>
+          <div class="muted small">${esc([item.orderNumber, t('admin.spec.itemOf', { i: item.position, n: item.of }), ...colourSizeText(item), item.sides.map((s) => tr(s.name)).join(' + ')].join(SEP()))}</div>
           ${hasQty(item) ? qtySummary(item) : ''}
         </div>
         <div class="queue-actions">
@@ -1135,7 +1140,7 @@
         <button type="button" class="rd-thumb" data-rd-view="${id}" aria-label="${esc(t('rd.bigger', { name }))}">${libPicHtml(d)}</button>
         <div class="rd-main">
           <div class="rd-title"><strong dir="auto">${esc(name)}</strong> <bdi class="rd-id" dir="ltr">${id}</bdi></div>
-          <div class="muted small">${esc([libCatName(d.category), d.uploaded ? t('rd.uploadedBy', { who: !d.by || d.by === 'owner' ? t('up.byOwner') : d.by }) : t(d.custom ? 'rd.yours' : 'rd.starter'), d.addedOn ? t('rd.added', { date: libAddedDay(d.addedOn) }) : ''].filter(Boolean).join(' · '))}</div>
+          <div class="muted small">${esc([libCatName(d.category), d.uploaded ? t('rd.uploadedBy', { who: !d.by || d.by === 'owner' ? t('up.byOwner') : d.by }) : t(d.custom ? 'rd.yours' : 'rd.starter'), d.addedOn ? t('rd.added', { date: libAddedDay(d.addedOn) }) : ''].filter(Boolean).join(SEP()))}</div>
           <div class="rd-pills">${libPill(st, t('rd.st.' + st))}${d.artwork ? libPill('art', t('rd.withArt')) : libPill('text', t('rd.textOnly'))}</div>
           ${note ? `<div class="small rd-note rd-note-${st}">${esc(note)}</div>` : ''}
         </div>
@@ -1601,8 +1606,8 @@
         <div>
           <strong>${line(c.name)}</strong>
           ${c.linked.google ? '<span class="pill">Google</span>' : ''}${c.linked.facebook ? '<span class="pill">Facebook</span>' : ''}${c.hasPassword ? '' : `<span class="pill queued">${esc(t('cu.noPassword'))}</span>`}
-          <div class="muted small"><bdi dir="ltr">${esc(c.phone || '—')}</bdi> · <bdi dir="ltr">${esc(c.email || '—')}</bdi> · ${esc(t('cu.since', { date: POD.date(c.createdAt) }))}</div>
-          <div class="small">${esc(t('cu.orders', { n: POD.num(c.orders), total: money(c.spent) }))}${c.lastOrder ? ` · ${esc(t('cu.last', { date: POD.date(c.lastOrder) }))}` : ''}</div>
+          <div class="muted small"><bdi dir="ltr">${esc(c.phone || '—')}</bdi>${SEP()}<bdi dir="ltr">${esc(c.email || '—')}</bdi>${SEP()}${esc(t('cu.since', { date: POD.date(c.createdAt) }))}</div>
+          <div class="small">${esc(listed(t('cu.orders', { n: POD.num(c.orders), total: money(c.spent) })))}${c.lastOrder ? `${SEP()}${esc(t('cu.last', { date: POD.date(c.lastOrder) }))}` : ''}</div>
           ${link ? `<div class="cu-link small"><div class="muted">${esc(t('cu.linkReady'))}</div><input type="text" readonly dir="ltr" value="${esc(link.url)}" data-cu-copy="${esc(c.id)}">
             <div class="row" style="gap:6px;margin-top:6px;flex-wrap:wrap">
               <button class="btn btn-sm" type="button" data-cu-copybtn="${esc(c.id)}">${esc(t('cu.copy'))}</button>
@@ -1733,7 +1738,7 @@
     $('acc-missing').textContent = t('acc.missing', { n: POD.num(tt.missingCosts) });
     const tile = (label, value, extra, c = '') => `<div class="card stat acc-stat ${c}"><b>${esc(value)}</b><span>${esc(label)}</span>${extra ? `<small class="muted">${esc(extra)}</small>` : ''}</div>`;
     $('acc-stats').innerHTML = [
-      tile(t('acc.revenue'), money(tt.revenue), t('acc.revenueSub', { orders: POD.num(tt.orders), items: POD.num(tt.items) })),
+      tile(t('acc.revenue'), money(tt.revenue), listed(t('acc.revenueSub', { orders: POD.num(tt.orders), items: POD.num(tt.items) }))),
       tile(t('acc.itemCost'), money(tt.itemCost), t('acc.itemCostSub')),
       tile(t('acc.shippingCost'), money(tt.shippingCost), t('acc.shipCharged', { v: money(tt.shippingCharged) })),
       tile(t('acc.grossProfit'), money(tt.grossProfit), t('acc.margin', { v: POD.num(tt.margin) }), cls(tt.grossProfit)),
@@ -1754,7 +1759,7 @@
   function orderRow(o) {
     const open = acc.openOrders.has(o.id);
     const main = `<tr class="${open ? 'is-open' : ''}">
-      <td><strong>${esc(o.number)}</strong><div class="muted small">${esc(POD.date(o.createdAt))} · ${esc(t(o.status === 'shipped' ? 'acc.shipped' : 'acc.open'))}</div></td>
+      <td><strong>${esc(o.number)}</strong><div class="muted small">${esc(POD.date(o.createdAt))}${SEP()}${esc(t(o.status === 'shipped' ? 'acc.shipped' : 'acc.open'))}</div></td>
       <td>${o.items.map((i) => esc(tr(i.productName))).join('<br>')}</td>
       <td>${money(o.total)}<div class="muted small">${esc(t('acc.inclShip', { v: money(o.shipping) }))}</div></td>
       <td>${money(o.itemCost)}</td><td>${money(o.shippingCost)}</td>
@@ -1763,7 +1768,7 @@
     if (!open) return main;
     const items = o.items.map((i) => `
       <div class="acc-cost-line">
-        <span>${esc(tr(i.productName))} · ${esc(tr(i.size && i.size.label))}${i.sides > 1 ? ` · ${esc(t('acc.sides', { n: POD.num(i.sides) }))}` : ''} · ${money(i.price)}</span>
+        <span>${esc(tr(i.productName))}${SEP()}${esc(tr(i.size && i.size.label))}${i.sides > 1 ? `${SEP()}${esc(t('acc.sides', { n: POD.num(i.sides) }))}` : ''}${SEP()}${money(i.price)}</span>
         <span class="muted small">${i.costParts ? esc(t('acc.parts', { blank: money(i.costParts.blank), print: money(i.costParts.print), other: money(i.costParts.other) }) + (Number(i.costParts.embroidery) ? t('acc.partsEmb', { emb: money(i.costParts.embroidery) }) : '')) : ''} (${esc(t(SRC[i.costSource]))})</span>
         <label class="small">${esc(t('acc.realCost'))} <input type="number" min="0" step="0.01" dir="ltr" value="${i.costSource === 'actual' ? i.cost : ''}" placeholder="${i.cost}" data-acc-item-cost="${i.id}"></label>
       </div>`).join('');
@@ -1993,7 +1998,7 @@
     // Limited to some products and / or categories: name them in the page language.
     const only = [(c.products || []).length ? cpList(c.products, couponData.products) : '', c.categories.length ? cpList(c.categories, couponData.categories) : ''].filter(Boolean);
     if (only.length) parts.push(t('cp.sumOnly', { list: only.join(POD.lang === 'ar' ? '، ' : ', ') }));
-    return parts.join(' · ');
+    return parts.join(SEP());
   }
   function renderCoupons(d) {
     if (!$('cp-cats').dataset.ready || $('cp-cats').dataset.lang !== POD.lang) {
@@ -2010,7 +2015,7 @@
         <div>
           <strong dir="ltr" style="font-size:16px">${esc(c.code)}</strong> <span class="pill ${state === 'live' ? 'printed' : 'queued'}">${esc(t('cp.state.' + state))}</span>
           <div class="muted small">${esc(couponSummary(c))}</div>
-          <div class="small">${esc(t('cp.usage', { n: POD.num(c.uses), max: c.maxUses ? POD.num(c.maxUses) : '∞', v: money(c.discountGiven) }))}</div>
+          <div class="small">${esc(listed(t('cp.usage', { n: POD.num(c.uses), max: c.maxUses ? POD.num(c.maxUses) : '∞', v: money(c.discountGiven) })))}</div>
           ${c.note ? `<div class="muted small">${esc(c.note)}</div>` : ''}
         </div>
         <div class="row" style="gap:8px;flex:0 0 auto">
@@ -2174,7 +2179,7 @@
         <img src="${esc(item.sides[0].previewUrl)}" alt="" ${zoomAttr(item)}>
         <div>
           <strong>${esc(tr(item.productName))}</strong> ${pill(item.status)} <span class="pill rv-noprint">${esc(t('rv.notPrintable'))}</span>${expressPill(item)}${samplePill(item)}${piecesPill(item)}
-          <div class="muted small">${esc([item.orderNumber, t('admin.spec.itemOf', { i: item.position, n: item.of }), ...colourSizeText(item)].join(' · '))}</div>
+          <div class="muted small">${esc([item.orderNumber, t('admin.spec.itemOf', { i: item.position, n: item.of }), ...colourSizeText(item)].join(SEP()))}</div>
         </div>
         <div class="queue-actions"><button class="btn btn-sm" type="button" data-rv-goto="${esc(item.id)}">${esc(t('rv.goReview'))}</button></div>
       </div>`;
@@ -2188,8 +2193,8 @@
 
   function reasonText(item, r) {
     const m = proofOf(item).merge || item.merge;
-    if (r === 'nameList' && m && m.count) return `${t('rv.reason.nameList')} · ${t('rv.copies', { n: POD.num(m.count) })}`;
-    if (r === 'bulk') return `${t('rv.reason.bulk')} · ${piecesText(piecesOf(item))}`;
+    if (r === 'nameList' && m && m.count) return `${t('rv.reason.nameList')}${SEP()}${t('rv.copies', { n: POD.num(m.count) })}`;
+    if (r === 'bulk') return `${t('rv.reason.bulk')}${SEP()}${piecesText(piecesOf(item))}`;
     return hasStr('rv.reason.' + r) ? t('rv.reason.' + r) : r;
   }
   function renderReview() {
@@ -2218,7 +2223,7 @@
           ${thumb ? `<img class="rv-thumb" src="${esc(thumb)}" alt="" ${item.sides ? zoomAttr(item) : ''}>` : '<span class="rv-thumb"></span>'}
           <div class="rv-sum">
             <div class="rv-line"><strong>${esc(item.orderNumber || '')}</strong> <span class="muted small">${esc(t('admin.spec.itemOf', { i: item.position, n: item.of }))}</span> ${pill(item.status)}${expressPill(item)}${samplePill(item)}</div>
-            <div class="rv-line"><b>${esc(tr(item.productName))}</b> · ${esc(m && m.count ? t('rv.copies', { n: POD.num(m.count) }) : piecesText(piecesOf(item)))}</div>
+            <div class="rv-line"><b>${esc(tr(item.productName))}</b>${SEP()}${esc(m && m.count ? t('rv.copies', { n: POD.num(m.count) }) : piecesText(piecesOf(item)))}</div>
             <div class="rv-line small">${c.name ? line(c.name) : ''} ${c.phone || c.email ? `<bdi dir="ltr" class="muted">${esc(c.phone || c.email)}</bdi>` : ''}</div>
             <ul class="rv-reasons">${rvReasons(item).map((r) => `<li class="rv-reason rv-r-${esc(r)}">${esc(reasonText(item, r))}</li>`).join('')}</ul>
             <div class="muted small">${esc(t('rv.ordered', { date: when(item.orderedAt) }))}</div>
@@ -2237,7 +2242,7 @@
     const process = proof.process || item.process;
     const facts = [
       [t('rv.product'), esc(tr((proof.product && proof.product.name) || item.productName))],
-      hasQty(item) ? [t('adminQty.title'), qtySummary(item)] : [t('rv.colourSize'), `${color.hex ? `<span class="qty-dot" style="background:${esc(color.hex)}"></span>` : ''}${esc(tr(color.name))} · ${esc(tr(size.label))}`],
+      hasQty(item) ? [t('adminQty.title'), qtySummary(item)] : [t('rv.colourSize'), `${color.hex ? `<span class="qty-dot" style="background:${esc(color.hex)}"></span>` : ''}${esc(tr(color.name))}${SEP()}${esc(tr(size.label))}`],
       process && hasStr('process.' + process) ? [t('rv.method'), esc(t('process.' + process))] : null,
     ].filter(Boolean);
     return `
@@ -2285,7 +2290,7 @@
         <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">${r(b, b, w, h, 'rv-trim')}${safe ? r(b + safe, b + safe, w - 2 * safe, h - 2 * safe, 'rv-safe') : ''}</svg>
       </div>
       <div class="rv-legend small"><span><i class="rv-key rv-key-trim"></i>${esc(t('rv.legendTrim'))}</span>${safe ? `<span><i class="rv-key rv-key-safe"></i>${esc(t('rv.legendSafe'))}</span>` : ''}</div>` : '';
-    const extra = [b ? t('rv.bleed', { mm: mm(b) }) : '', safe ? t('rv.safe', { mm: mm(safe) }) : ''].filter(Boolean).join(' · ');
+    const extra = [b ? t('rv.bleed', { mm: mm(b) }) : '', safe ? t('rv.safe', { mm: mm(safe) }) : ''].filter(Boolean).join(SEP());
     return `
       <figure class="rv-art">
         <figcaption><b>${esc(t('rv.artwork', { side: tr(s.name) }))}</b></figcaption>
@@ -2330,7 +2335,7 @@
   function rvComment(item) {
     const n = rvLastNote(item);
     if (!n) return '';
-    return `<blockquote class="rv-comment rv-comment-${n.who}"><div class="small"><b>${esc(t(n.who === 'customer' ? 'rv.customerComment' : 'rv.shopNote'))}</b>${n.at ? ` · <span class="muted">${esc(when(n.at))}</span>` : ''}</div><p dir="auto">${esc(n.note)}</p></blockquote>`;
+    return `<blockquote class="rv-comment rv-comment-${n.who}"><div class="small"><b>${esc(t(n.who === 'customer' ? 'rv.customerComment' : 'rv.shopNote'))}</b>${n.at ? `${SEP()}<span class="muted">${esc(when(n.at))}</span>` : ''}</div><p dir="auto">${esc(n.note)}</p></blockquote>`;
   }
   function rvHistory(item) {
     const list = (item.approvals || []).slice().reverse();

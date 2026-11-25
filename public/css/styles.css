@@ -961,6 +961,9 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 /* Number of pieces under the price (phones only); opens the quantities */
 .qty-chip { display: none; align-items: center; gap: 4px; margin-top: 2px; padding: 2px 9px; border: 1px solid var(--line); border-radius: 999px; background: #f8f9fb; color: var(--ink-2); font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; white-space: nowrap; }
 .qty-chip[hidden] { display: none !important; }
+/* Pack lines in the cart and its proof ("100 cards · Matte lamination×2"): on a narrow phone a long one wraps
+   inside its chip instead of running past the card; the count stays with the last word. */
+.qty-line .qty-chip { white-space: normal; overflow-wrap: break-word; max-width: 100%; min-width: 0; }
 /* Narrow phones: the Preview button as an icon, so the price and the pieces stay readable */
 @media (max-width: 460px) {
   .panel-foot #preview-open-m span { display: none; }
