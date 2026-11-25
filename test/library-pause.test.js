@@ -132,3 +132,23 @@ test('artwork needs enough designs on a product; the owner\'s text-only design i
     if (again.limited && !again.products.length) assert.strictEqual((await fetch(`${base}/api/library/${none.id}`)).status, 404);
   });
 });
+
+test('frozen: new picture designs never hide text designs; the owner decides (25 Nov)', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pod-libfreeze-'));
+  try {
+    const lib = new Library(dataDir);
+    lib.runOnce(['pause-no-artwork', 'unpause-artwork-enough', 'freeze-text-rule']);
+    const textOn = (pid) => lib.visible().filter((d) => !usesArtwork(d) && d.kind !== 'objects' && !d.uploaded && d.products.includes(pid)).length;
+    const before = textOn('apron');
+    assert.ok(before > 20, 'the apron shows its text designs');
+    assert.strictEqual(textOn('tshirt'), 0, 'T-shirts show only picture designs');
+    // Twelve picture designs uploaded for aprons: its text designs stay.
+    for (let i = 0; i < 12; i++) {
+      lib.addUploaded({ id: `u-${String(i).padStart(12, '0')}`, kind: 'template', uploaded: true, category: 'funny', name: { en: `P${i}`, ar: `P${i}` }, product: 'apron', color: 'white', products: ['apron'], aspect: 0.75, items: [{ kind: 'image', src: `/library-art/u-${String(i).padStart(12, '0')}/web.png`, fit: 0.92, x: 0.5, y: 0.5, w: 0.92 }] });
+    }
+    assert.strictEqual(textOn('apron'), before);
+    assert.strictEqual(lib.visible().filter((d) => d.uploaded && d.products.includes('apron')).length, 12);
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});

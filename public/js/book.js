@@ -117,7 +117,7 @@
     }).join('');
     $('bk-questions').insertAdjacentHTML('afterbegin', `<p class="muted small bk-en-hint" style="margin:0 0 10px">${esc(t('book.englishHint'))}</p>`);
     $('bk-questions').querySelectorAll('input[data-q], textarea[data-q]').forEach(markLatin);
-    $('bk-sizes').innerHTML = product.sizes.map((s) => `<button type="button" class="chip ${s.id === state.size.id ? 'active' : ''}" data-size="${s.id}">${esc(tr(s.label))}${s.surcharge ? ` <span style="opacity:.7">+${esc(money(s.surcharge))}</span>` : ''}</button>`).join('');
+    $('bk-sizes').innerHTML = product.sizes.map((s) => `<button type="button" class="chip ${s.id === state.size.id ? 'active' : ''}" data-size="${s.id}">${esc(tr(s.label))}${POD.sizeNote(product, s) ? ` <span style="opacity:.7">${esc(POD.sizeNote(product, s))}</span>` : ''}</button>`).join('');
     $('bk-price').textContent = money(product.basePrice + state.size.surcharge);
     document.title = `${tr(product.name)} · ebda3`;
     renderButtons();

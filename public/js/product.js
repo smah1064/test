@@ -141,7 +141,7 @@
     document.title = `${tr(product.name)} · ${t('brand')}`;
     $('pp-name').textContent = tr(product.name);
     $('pp-desc').textContent = tr(product.description);
-    $('pp-price').textContent = t('home.from', { price: money(product.basePrice) });
+    $('pp-price').textContent = t('home.from', { price: money(POD.fromPrice(product)) });
     // Sizes: sold-out ones crossed out (sold out in every colour, or in the chosen one when stock is
     // counted per colour and size), and "only n left" next to the ones nearly gone in the chosen colour.
     // (Each size its own box, so a label in one language and the tag in the other keep their order.)

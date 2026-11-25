@@ -126,7 +126,7 @@
         <div class="thumb"><img alt="${esc(tr(d.name))}" data-design="${esc(d.id)}"${src ? ` src="${esc(src)}"` : ''}></div>
         <div class="body">
           <h3 dir="auto">${esc(tr(d.name))}</h3>
-          <div class="foot"><span class="price">${esc(t('home.from', { price: money(on.basePrice) }))}</span><span class="muted small">${esc(tr((catById.get(d.category) || {}).name))}</span></div>
+          <div class="foot"><span class="price">${esc(t('home.from', { price: money(POD.fromPrice(on)) }))}</span><span class="muted small">${esc(tr((catById.get(d.category) || {}).name))}</span></div>
         </div>
       </a>`;
     }).join('') || emptyState(terms);

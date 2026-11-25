@@ -145,7 +145,7 @@
     // Sizes sold out (in every colour, or in the chosen one when stock is counted per colour and size): crossed out.
     $('dp-sizes').innerHTML = product.sizes.map((s) => {
       if (POD.sizeOk(product, color.id, s)) {
-        return `<button type="button" class="chip ${s.id === size.id ? 'active' : ''}" data-size="${esc(s.id)}" aria-pressed="${s.id === size.id}">${esc(tr(s.label))}${s.surcharge ? ` <span style="opacity:.7">+${esc(money(s.surcharge))}</span>` : ''}</button>`;
+        return `<button type="button" class="chip ${s.id === size.id ? 'active' : ''}" data-size="${esc(s.id)}" aria-pressed="${s.id === size.id}">${esc(tr(s.label))}${POD.sizeNote(product, s) ? ` <span style="opacity:.7">${esc(POD.sizeNote(product, s))}</span>` : ''}</button>`;
       }
       const why = s.soldOut ? t('soldOut') : t('soldOutCombo', { colour: tr(color.name), size: tr(s.label) });
       return `<button type="button" class="chip sold-out" aria-disabled="true" data-sold-size="${esc(s.id)}" title="${esc(why)}" aria-label="${esc(why)}"><span class="sold-label">${esc(tr(s.label))}</span> <span class="sold-tag">${esc(t('soldOut'))}</span></button>`;
