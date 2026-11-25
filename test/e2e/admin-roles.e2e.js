@@ -388,7 +388,8 @@ test('Owner: Staff & roles (add → one-time link by WhatsApp, can\'t take away 
       await me.locator('input[value="finance"]').check();
       await me.locator('[type=submit]').click();
       await page.waitForFunction(() => /Saved\./.test(document.querySelector('[data-st-row="u-nour"]').textContent));
-      assert.deepStrictEqual(log.find((r) => r.m === 'PATCH' && r.p === '/api/admin/staff/u-nour').body, { name: 'Nour نور', roles: ['owner', 'finance'] });
+      // (Only what changed is sent: the roles, not the name as the form showed it. QA 25 Nov.)
+      assert.deepStrictEqual(log.find((r) => r.m === 'PATCH' && r.p === '/api/admin/staff/u-nour').body, { roles: ['owner', 'finance'] });
       // Turn Hala off (signed out everywhere).
       await page.click('[data-st-row="u-hala"] [data-st-act="off"]');
       await page.waitForSelector('[data-st-row="u-hala"].is-off');
