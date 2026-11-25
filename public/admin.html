@@ -16,6 +16,7 @@
   <link rel="stylesheet" href="/css/review.css">
   <link rel="stylesheet" href="/css/admin-products.css">
   <link rel="stylesheet" href="/css/admin-library.css">
+  <link rel="stylesheet" href="/css/admin-uploads.css">
   <link rel="stylesheet" href="/css/admin-preview.css">
   <style>
     /* Orders: shipping, delivery and payment */
@@ -138,6 +139,7 @@
       </section>
 
       <section id="tab-library" hidden>
+        <div id="lib-up"></div>
         <div class="card rd-rule" id="lib-rule" hidden>
           <label class="rd-switch">
             <input type="checkbox" id="lib-limit" role="switch">
@@ -168,6 +170,7 @@
             <input type="search" id="lib-q" autocomplete="off" maxlength="60" data-i18n-placeholder="rd.search" data-i18n-aria="rd.search">
             <select id="lib-fcat" data-i18n-aria="rd.category"></select>
             <select id="lib-fart" data-i18n-aria="rd.art"><option value="" data-i18n="rd.art.any"></option><option value="yes" data-i18n="rd.art.yes"></option><option value="no" data-i18n="rd.art.no"></option></select>
+            <select id="lib-sort" data-i18n-aria="rd.sort"><option value="new" data-i18n="rd.sort.new"></option><option value="old" data-i18n="rd.sort.old"></option><option value="name" data-i18n="rd.sort.name"></option></select>
           </div>
         </div>
         <div class="rd-shown">
@@ -325,9 +328,11 @@
   <script src="/js/i18n-admin-products.js"></script>
   <script src="/js/i18n-admin-library.js"></script>
   <script src="/js/i18n-admin-preview.js"></script>
+  <script src="/js/i18n-admin-uploads.js"></script>
   <script src="/js/common.js"></script>
   <script src="/js/admin-products.js"></script>
   <script src="/js/admin-preview.js"></script>
+  <script src="/js/admin-uploads.js"></script>
   <script src="/js/admin.js"></script>
 </body>
 </html>

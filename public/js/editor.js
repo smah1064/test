@@ -19,7 +19,7 @@
   const MAX_VECTOR_BYTES = 40 * 1024 * 1024;
   const HISTORY_LIMIT = 60;
   const SNAP_PX = 7;
-  const EXTRA_PROPS = ['name', 'selectable', 'evented', 'curve', 'mask', 'maskBorder', 'maskBorderColor', 'lockRatio', 'bgShape', 'textFx', 'fxBase', 'boosted', 'importSource', 'mergeFit', 'pdfSrc'];
+  const EXTRA_PROPS = ['name', 'selectable', 'evented', 'curve', 'mask', 'maskBorder', 'maskBorderColor', 'lockRatio', 'bgShape', 'textFx', 'fxBase', 'boosted', 'importSource', 'mergeFit', 'pdfSrc', 'printSrc', 'printPx'];
   const $ = (id) => document.getElementById(id);
   const { esc, money, toast, t, tr } = POD;
   const D = window.POD_DESIGN;
@@ -1340,7 +1340,11 @@
   function addObject(obj, { select = true, shrinkToFit = true, behindText = false } = {}) {
     if (select) st.openSheetOnSelect = true;
     cancelCrop();
-    const a = area();
+    // Where a new thing goes: the part of the print area meant for designs where the product has one
+    // (a wall calendar's top half above the month pad, a folder's front, a brochure's cover panel).
+    const full = area();
+    const z = full.readyZone ? (POD.lang === 'ar' && full.readyZoneRtl ? full.readyZoneRtl : full.readyZone) : null;
+    const a = z ? { x: full.x + full.w * z.x, y: full.y + full.h * z.y, w: full.w * z.w, h: full.h * z.h } : full;
     obj.set({ originX: 'center', originY: 'center', left: a.x + a.w / 2, top: a.y + a.h / 2 });
     const maxW = a.w * 0.85;
     const maxH = a.h * 0.85;
@@ -1838,7 +1842,9 @@
   function imageDpi(o, sideId = st.side) {
     const s = sideDef(sideId);
     const widthIn = ((o.width * Math.abs(o.scaleX || 1)) / s.printArea.w) * s.printWidthIn;
-    return Math.round(o.width / widthIn);
+    // An uploaded design prints from its full-size original (printPx), not the screen copy.
+    const px = o.printSrc && Array.isArray(o.printPx) && o.printPx[0] > o.width && !o.printSwapped ? o.printPx[0] : o.width;
+    return Math.round(px / widthIn);
   }
 
   async function toDataUrl(url) {
@@ -3318,7 +3324,7 @@
     }).join('');
     $('sizes').innerHTML = p.sizes.map((s) => {
       const out = !sizeOk(p, st.colorId, s);
-      return `<button class="chip ${s.id === st.sizeId ? 'active' : ''}${out ? ' sold-out' : ''}" data-size="${s.id}"${out ? ' aria-disabled="true"' : ''}>${esc(tr(s.label))}${out ? ` <span class="sold-tag">${esc(tEd('ed.soldOut'))}</span>` : s.surcharge ? ` <span style="opacity:.7">${esc(addOn(s.surcharge))}</span>` : ''}</button>`;
+      return `<button class="chip ${s.id === st.sizeId ? 'active' : ''}${out ? ' sold-out' : ''}" data-size="${s.id}"${out ? ' aria-disabled="true"' : ''}>${esc(tr(s.label))}${out ? ` <span class="sold-tag">${esc(tEd('ed.soldOut'))}</span>` : POD.sizeNote(st.product, s) ? ` <span style="opacity:.7">${esc(POD.sizeNote(st.product, s))}</span>` : ''}</button>`;
     }).join('');
     // Print or embroidery (garments, caps, totes, aprons).
     $('method-field').hidden = !p.embroidery;
@@ -3390,6 +3396,7 @@
     if (b.classList.contains('sold-out')) return toast(tEd('ed.soldOutPick'));
     const oldInk = inkFor(surfaceHex());
     const fromColor = st.colorId;
+    const fromSize = st.sizeId; // (before a sold-out size is switched below: the pieces follow from here)
     st.colorId = b.dataset.color;
     // The chosen size sold out in this colour: the first size there is.
     if (!sizeOk(st.product, st.colorId, st.product.sizes.find((z) => z.id === st.sizeId))) {
@@ -3399,7 +3406,7 @@
         toast(tEd('ed.sizeSwitched'));
       }
     }
-    qtyFollow(fromColor, st.sizeId);
+    qtyFollow(fromColor, fromSize);
     const newInk = inkFor(surfaceHex());
     renderOptions();
     await applyMockup();
@@ -3995,7 +4002,8 @@
     refreshPrice(notes);
     if (embFee) notes.push(t('emb.fee', { price: money(embFee) }));
     if (activeSides().length > 1 && perSide > 0) notes.push(n > 1 ? t('price.bothSides') : t('price.addSide', { price: money(perSide) }));
-    if (size.surcharge) notes.push(`${tr(size.label)} ${addOn(size.surcharge)}`);
+    // (Products sold in packs show each pack's own price on its chip: no add-on note.)
+    if (size.surcharge && !p.sizes.some((z) => z.surcharge < 0)) notes.push(`${tr(size.label)} ${addOn(size.surcharge)}`);
     $('price-note').textContent = notes.join(' · ');
     const h = hist();
     $('undo').disabled = h.i <= 0;
@@ -4754,6 +4762,8 @@
       if (!inlined.has(url)) inlined.set(url, toDataUrl(url));
       svg = svg.split(url).join(await inlined.get(url).catch(() => ''));
     }
+    // (And the site's own design pictures: uploaded ready designs.)
+    if (D.inlineSvgImages) svg = await D.inlineSvgImages(svg);
     const fonts = await window.POD_FX.fontFaceCss(canvas.getObjects());
     const note = `<!-- ebda3 artwork: ${side.printWidthIn} x ${side.printHeightIn} in${b ? ` + ${side.bleedIn} in bleed each side` : ''}. sRGB. -->`;
     return svg.replace(/<defs>/, `${note}<defs><style>${fonts}</style>`);
@@ -5106,7 +5116,7 @@
     const n = lines.reduce((m, l) => m + l.qty, 0);
     $('size-ask-title').textContent = t('sizeAsk.title');
     $('size-ask-note').textContent = n > 1 ? t('sizeAsk.many', { n: POD.num(n) }) : t('sizeAsk.one');
-    $('size-ask-chips').innerHTML = st.product.sizes.filter((z) => sizeOk(st.product, st.colorId, z)).map((z) => `<button type="button" class="chip" data-ask-size="${esc(z.id)}">${esc(tr(z.label))}${z.surcharge ? ` <span style="opacity:.7">${esc(addOn(z.surcharge))}</span>` : ''}</button>`).join('');
+    $('size-ask-chips').innerHTML = st.product.sizes.filter((z) => sizeOk(st.product, st.colorId, z)).map((z) => `<button type="button" class="chip" data-ask-size="${esc(z.id)}">${esc(tr(z.label))}${POD.sizeNote(st.product, z) ? ` <span style="opacity:.7">${esc(POD.sizeNote(st.product, z))}</span>` : ''}</button>`).join('');
     box.hidden = false;
     const first = box.querySelector('[data-ask-size]');
     if (first) first.focus();
@@ -5217,6 +5227,8 @@
           mergeObjects().forEach((o) => applyRow(o, first));
         }
         try {
+          // (Uploaded designs: the full-size original goes into the print, not the screen copy.)
+          if (D.usePrintSources) await D.usePrintSources(canvas);
           files[`${s.id}-print.png`] = await exportPrint(s);
           // A booklet page from the customer's PDF with things added on top: those things on their own
           // (the print files put them over the PDF page itself).

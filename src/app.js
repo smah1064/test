@@ -59,6 +59,9 @@ catalog.init(PRODUCTS, { embroidery: productsMod.EMBROIDERY, embroideryFor: prod
 accounting.initPricing(PRODUCTS, EXTRA_SIDE_PRICE);
 const { Library, CATEGORIES: DESIGN_CATEGORIES, catalogChanged: libraryCatalogChanged, hasArtwork } = require('./library');
 const preview = require('./preview');
+// Zip uploads of designs (admin): loaded when first used.
+let designUploadMod = null;
+const designUpload = new Proxy({}, { get: (t, k) => (designUploadMod ||= require('./design-upload'))[k] });
 const security = require('./security');
 const books = require('./books');
 const cartoon = require('./cartoon');
@@ -432,6 +435,7 @@ const DEFAULT_LIMITS = {
   notify: [{ max: 30, ms: 3600e3 }, { max: 200, ms: 24 * 3600e3 }],
   couponTry: [{ max: 15, ms: 10 * 60e3 }, { max: 60, ms: 24 * 3600e3 }], // coupon codes that didn't work, per visitor
   previewCode: [{ max: 10, ms: 15 * 60e3 }, { max: 40, ms: 24 * 3600e3 }], // private-preview codes that didn't work, per visitor
+  designZip: [{ max: 20, ms: 3600e3 }, { max: 100, ms: 24 * 3600e3 }], // design zips uploaded in the admin
   notifyCustomer: [{ max: 5, ms: 3600e3 }, { max: 20, ms: 24 * 3600e3 }], // order confirmations to one email address
   notifyCustomerAll: [{ max: 500, ms: 24 * 3600e3 }],
   // Illustrator / EPS files turned into pictures for the editor.
@@ -2957,20 +2961,25 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       return { designId: String(id).slice(0, 40), price, gone: price === null, ...(d && d.orderId ? { ordered: true } : {}), ...(why ? { unavailable: why, unavailableText: format(why, { name: p ? p.name[langOf(req)] || p.name.en : '' }, langOf(req)) } : {}) };
     });
     // Counted stock: the cart says so before checkout when it asks for more pieces than are left.
-    const open = items.filter((i) => !i.gone && !i.unavailable).map((i) => store.getDesign(i.designId)).filter(Boolean);
-    const need = addNeeds(open);
+    // In cart order: the pieces that still fit what's left go through; only the items past it are flagged
+    // (three shirts with two left: the third one, not all three).
+    const taken = new Map();
     for (const i of items) {
       const d = !i.gone && !i.unavailable && store.getDesign(i.designId);
       if (!d) continue;
-      for (const x of stockNeeds(d)) {
-        const total = need.get(`${x.pid}#${x.combo || ''}`).n;
+      const needs = stockNeeds(d);
+      const short = needs.find((x) => {
         const left = leftOf(getProduct(x.pid), x.combo);
-        if (typeof left === 'number' && total > left) {
-          i.unavailable = 'notEnoughStock';
-          i.unavailableText = format('notEnoughStock', { name: stockName(x.pid, x.combo, langOf(req)), left }, langOf(req));
-          break;
-        }
+        return typeof left === 'number' && (taken.get(`${x.pid}#${x.combo || ''}`) || 0) + x.n > left;
+      });
+      if (short) {
+        const left = leftOf(getProduct(short.pid), short.combo);
+        const free = Math.max(0, left - (taken.get(`${short.pid}#${short.combo || ''}`) || 0));
+        i.unavailable = 'notEnoughStock';
+        i.unavailableText = format('notEnoughStock', { name: stockName(short.pid, short.combo, langOf(req)), left: free }, langOf(req));
+        continue;
       }
+      for (const x of needs) taken.set(`${x.pid}#${x.combo || ''}`, (taken.get(`${x.pid}#${x.combo || ''}`) || 0) + x.n);
     }
     // Only what can be ordered counts towards the subtotal, free shipping and coupons: an item the shop
     // can't take right now (paused, stopped, sold out, more than is left) blocks the order until it is
@@ -3712,7 +3721,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     else {
       const u = auth.verifyStaff(token, staffList());
       if (!u || u.role !== 'products') throw new HttpError(401, 'signInAgain');
-      req.adminWho = { role: u.role, name: u.username };
+      req.adminWho = { role: u.role, name: u.username, shown: u.name || u.username }; // (shown: the person's name, for "uploaded by")
     }
     res.set('Cache-Control', 'no-store');
     next();
@@ -4077,10 +4086,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   // Every design, deleted ones too (the admin filters): hidden = paused (out of the shop for now),
   // deleted = out of the shop and the main list (can be brought back), artwork = drawn with the shop's
   // own artwork files (not only text, shapes and icons).
-  app.get('/api/admin/library', requireAdmin, (req, res) => {
+  app.get('/api/admin/library', requireCatalog, (req, res) => {
     // settings.textOnlyLimited: text-only designs only on products with no artwork design in the shop;
     // limited = this design is offered on fewer products because of it (`products` are the ones left).
-    res.json({ categories: DESIGN_CATEGORIES, settings: library.settings(), designs: library.all().map((d) => ({ ...libraryCard(d), hidden: d.hidden, deleted: d.deleted, custom: d.kind === 'objects', artwork: hasArtwork(d), limited: Boolean(d.limited), createdAt: d.createdAt || null })) });
+    res.json({ categories: DESIGN_CATEGORIES, settings: library.settings(), designs: library.all().map((d) => ({ ...libraryCard(d), hidden: d.hidden, deleted: d.deleted, custom: d.kind === 'objects' || Boolean(d.uploaded), uploaded: Boolean(d.uploaded), artwork: hasArtwork(d), limited: Boolean(d.limited), createdAt: d.createdAt || null, addedOn: library.addedOn(d), by: d.by || null })) });
   });
   app.put('/api/admin/library/settings', requireAdmin, express.json({ limit: '1kb' }), (req, res) => {
     const b = req.body || {};
@@ -4088,7 +4097,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     res.json(library.setSettings({ textOnlyLimited: b.textOnlyLimited }));
   });
   // Publish a design made in the editor: the owner shares it, then pastes the link here.
-  app.post('/api/admin/library', requireAdmin, express.json({ limit: '8kb' }), (req, res) => {
+  app.post('/api/admin/library', requireCatalog, express.json({ limit: '8kb' }), (req, res) => {
     const b = req.body || {};
     const id = (String(b.share || '').match(/([A-Za-z0-9_-]{12})\/?(?:[?#].*)?$/) || [])[1];
     const sh = readShare(id);
@@ -4129,13 +4138,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     return flags;
   };
   // Several at once: { ids: [...], hidden?, deleted? }.
-  app.patch('/api/admin/library', requireAdmin, express.json({ limit: '64kb' }), (req, res) => {
+  app.patch('/api/admin/library', requireCatalog, express.json({ limit: '64kb' }), (req, res) => {
     const b = req.body || {};
     if (!Array.isArray(b.ids) || !b.ids.length || b.ids.length > 2000) throw new HttpError(400, 'badProductField', { field: 'ids' });
     const flags = libraryFlags(b);
     res.json({ ok: true, changed: library.setFlags(b.ids.map(String), flags) });
   });
-  app.patch('/api/admin/library/:id', requireAdmin, express.json({ limit: '1kb' }), (req, res) => {
+  app.patch('/api/admin/library/:id', requireCatalog, express.json({ limit: '1kb' }), (req, res) => {
     const b = req.body || {};
     // (Older dashboards send { hidden } only, possibly not as a boolean.)
     const flags = b.deleted === undefined && b.hidden !== undefined && typeof b.hidden !== 'boolean' ? { hidden: Boolean(b.hidden) } : libraryFlags(b);
@@ -4144,9 +4153,175 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   });
   // Delete: out of the shop and of the admin's main list, kept so it can be brought back (any design,
   // the starter ones too). Its files stay; orders made from it never depended on them.
-  app.delete('/api/admin/library/:id', requireAdmin, (req, res) => {
+  app.delete('/api/admin/library/:id', requireCatalog, (req, res) => {
     if (!library.setFlags([req.params.id], { deleted: true })) throw new HttpError(404, 'notFound');
     res.json({ ok: true });
+  });
+
+  // ---------- Upload designs (zip): Admin → Ready designs (src/design-upload.js) ----------
+  // The owner or a product manager uploads a zip of design pictures; each picture is checked, given
+  // product suggestions and kept in a batch to review; published ones become ready designs (artwork) on
+  // the products picked. Batches live in DATA_DIR/library/uploads/<batch>/ until published or discarded.
+  const uploadsDir = path.join(dataDir, 'library', 'uploads');
+  const BATCH_RE = /^[0-9a-f]{20}$/;
+  const ITEM_RE = /^[0-9a-f]{12}$/;
+  const batchDir = (id) => path.join(uploadsDir, id);
+  const readBatch = (id) => {
+    if (!BATCH_RE.test(String(id || ''))) return null;
+    try { return JSON.parse(fs.readFileSync(path.join(batchDir(id), 'batch.json'), 'utf8')); } catch (e) { return null; }
+  };
+  const writeBatch = (b) => {
+    const tmp = path.join(batchDir(b.id), `batch.json.${process.pid}.tmp`);
+    fs.writeFileSync(tmp, JSON.stringify(b));
+    fs.renameSync(tmp, path.join(batchDir(b.id), 'batch.json'));
+  };
+  /** A batch as the admin sees it (the pictures' web addresses filled in). */
+  const batchView = (b) => ({ ...b, items: b.items.map((it) => ({ ...it, web: `/library-upload/${b.id}/${it.id}.png` })) });
+  const liveProducts = () => PRODUCTS.filter((p) => catalog.visible(p));
+  app.post('/api/admin/library/uploads', requireCatalog, (req, res, next) => {
+    rateLimit(req, 'designZip');
+    next();
+  }, express.raw({ type: () => true, limit: '150mb' }), async (req, res, next) => {
+    try {
+      const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+      let entries;
+      try {
+        entries = designUpload.readZip(buf);
+      } catch (e) {
+        if (e instanceof designUpload.UploadError) throw new HttpError(400, e.code, e.params || {});
+        throw e;
+      }
+      const id = crypto.randomBytes(10).toString('hex');
+      fs.mkdirSync(batchDir(id), { recursive: true });
+      const products = liveProducts();
+      const items = [];
+      // (Files the zip reader left out: too big, an unusual compression…)
+      const skipped = [...(entries.skipped || [])].map((x) => ({ path: String(x.path).slice(0, 200), reason: x.reason || 'badPicture' }));
+      try {
+        // One picture at a time (memory stays low for big zips).
+        for (const ent of entries) {
+          let a;
+          try {
+            a = await designUpload.analyze(ent.data, ent.path);
+          } catch (e) {
+            a = { ok: false, reason: e instanceof designUpload.UploadError ? e.code : 'badPicture' };
+          }
+          if (!a.ok) { skipped.push({ path: String(ent.path).slice(0, 200), reason: a.reason || 'badPicture' }); continue; }
+          const itemId = crypto.randomBytes(6).toString('hex');
+          fs.writeFileSync(path.join(batchDir(id), `${itemId}.png`), a.web);
+          fs.writeFileSync(path.join(batchDir(id), `${itemId}.print.${a.printExt === 'jpg' ? 'jpg' : 'png'}`), a.print);
+          const suggestions = designUpload.suggest(a, products, { path: ent.path });
+          const picked = designUpload.pickProducts(suggestions, 8);
+          const color = {};
+          for (const x of suggestions) {
+            const p = products.find((q) => q.id === x.productId);
+            if (p) color[p.id] = designUpload.analysisColor(a, p);
+          }
+          items.push({
+            id: itemId, path: String(ent.path).slice(0, 200), name: designUpload.nameFrom(ent.path),
+            w: a.w, h: a.h, transparent: Boolean(a.transparent), ink: a.ink, colors: a.colors || [], printPx: a.printPx, printExt: a.printExt === 'jpg' ? 'jpg' : 'png',
+            textLike: Boolean(a.textLike), background: a.background || null, suggestions, picked, color,
+            dpiFor: Object.fromEntries(suggestions.map((x) => [x.productId, x.dpi])),
+            // (From a folder or file name like "ramadan/…"; otherwise "Painted art": these are pictures, not phrases.)
+            category: (() => { const c = designUpload.guessCategory(ent.path); return DESIGN_CATEGORIES.some((x) => x.id === c) ? c : DESIGN_CATEGORIES.some((x) => x.id === 'artsy') ? 'artsy' : DESIGN_CATEGORIES[0].id; })(),
+          });
+          if (items.length >= 300) break;
+        }
+      } catch (e) {
+        fs.rmSync(batchDir(id), { recursive: true, force: true });
+        throw e;
+      }
+      if (!items.length) {
+        fs.rmSync(batchDir(id), { recursive: true, force: true });
+        throw new HttpError(400, 'zipEmpty', { n: skipped.length });
+      }
+      // The zip's name (sent URL-encoded when it isn't plain ASCII, e.g. Arabic).
+      let fileName = String(req.get('x-file-name') || '');
+      try { fileName = decodeURIComponent(fileName); } catch (e) { /* as sent */ }
+      const batch = { id, createdAt: new Date().toISOString(), by: req.adminWho.shown || req.adminWho.name, file: fileName.replace(/[^\w .()؀-ۿ-]/g, '').slice(0, 120), items, skipped };
+      writeBatch(batch);
+      res.status(201).json({ batch: batchView(batch) });
+    } catch (e) {
+      next(e);
+    }
+  });
+  app.get('/api/admin/library/uploads', requireCatalog, (req, res) => {
+    let ids = [];
+    try { ids = fs.readdirSync(uploadsDir).filter((x) => BATCH_RE.test(x)); } catch (e) { ids = []; }
+    const batches = ids.map(readBatch).filter(Boolean).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map((b) => ({ id: b.id, createdAt: b.createdAt, by: b.by, file: b.file, count: b.items.length }));
+    res.json({ batches });
+  });
+  app.get('/api/admin/library/uploads/:batch', requireCatalog, (req, res) => {
+    const b = readBatch(req.params.batch);
+    if (!b) throw new HttpError(404, 'uploadGone');
+    res.json({ batch: batchView(b) });
+  });
+  app.delete('/api/admin/library/uploads/:batch', requireCatalog, (req, res) => {
+    if (!readBatch(req.params.batch)) throw new HttpError(404, 'uploadGone');
+    fs.rmSync(batchDir(req.params.batch), { recursive: true, force: true });
+    res.json({ ok: true });
+  });
+  // The light pictures of a batch, for the review screen (unguessable addresses; the admin's browser).
+  app.get('/library-upload/:batch/:item.png', (req, res) => {
+    const b = readBatch(req.params.batch);
+    const it = b && ITEM_RE.test(req.params.item) && b.items.find((x) => x.id === req.params.item);
+    if (!it) throw new HttpError(404, 'notFound');
+    res.set('Cache-Control', 'private, max-age=3600');
+    res.type('png').send(fs.readFileSync(path.join(batchDir(b.id), `${it.id}.png`)));
+  });
+  // Published ones: the screen copy and the full-size original (print files use it).
+  app.get('/library-art/:id/:file', (req, res) => {
+    const id = String(req.params.id);
+    const file = String(req.params.file);
+    if (!/^u-[0-9a-f]{12}$/.test(id) || !['web.png', 'print.png', 'print.jpg'].includes(file)) throw new HttpError(404, 'notFound');
+    const d = library.get(id);
+    const f = path.join(library.artDir(id), file);
+    if (!d || !fs.existsSync(f)) throw new HttpError(404, 'notFound');
+    res.set('Cache-Control', 'public, max-age=86400, no-transform');
+    res.type(file.endsWith('.jpg') ? 'jpeg' : 'png').send(fs.readFileSync(f));
+  });
+  app.post('/api/admin/library/uploads/:batch/publish', requireCatalog, express.json({ limit: '256kb' }), (req, res) => {
+    const b = readBatch(req.params.batch);
+    if (!b) throw new HttpError(404, 'uploadGone');
+    const asked = Array.isArray((req.body || {}).items) ? req.body.items.slice(0, 300) : [];
+    const live = new Map(liveProducts().map((p) => [p.id, p]));
+    const published = [];
+    const skipped = [];
+    const done = new Set();
+    for (const a of asked) {
+      const it = a && b.items.find((x) => x.id === a.id);
+      if (!it || done.has(it.id)) continue;
+      const products = [...new Set((Array.isArray(a.products) ? a.products : []).map(String))].filter((id) => live.has(id)).slice(0, 60);
+      if (!products.length) { skipped.push({ itemId: it.id, code: 'pickProducts' }); continue; }
+      const clean = (v) => (typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f<>]/g, '').trim().replace(/\s+/g, ' ').slice(0, 60) : '');
+      const en = clean(a.name && a.name.en) || clean(a.name && a.name.ar) || it.name.en;
+      const ar = clean(a.name && a.name.ar) || en;
+      const category = DESIGN_CATEGORIES.some((c) => c.id === a.category) ? a.category : it.category;
+      const first = live.get(products[0]);
+      const wantColor = a.color && typeof a.color === 'object' ? a.color[first.id] : typeof a.color === 'string' ? a.color : it.color[first.id];
+      const color = (first.colors.find((c) => c.id === wantColor) || first.colors.find((c) => c.id === it.color[first.id]) || first.colors[0]).id;
+      const designId = `u-${crypto.randomBytes(6).toString('hex')}`;
+      const dir = library.artDir(designId);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.copyFileSync(path.join(batchDir(b.id), `${it.id}.png`), path.join(dir, 'web.png'));
+      fs.copyFileSync(path.join(batchDir(b.id), `${it.id}.print.${it.printExt}`), path.join(dir, `print.${it.printExt}`));
+      library.addUploaded({
+        id: designId, kind: 'template', uploaded: true, category, name: { en, ar }, product: first.id, color, products, aspect: 0.75,
+        items: [{ kind: 'image', src: `/library-art/${designId}/web.png`, printSrc: `/library-art/${designId}/print.${it.printExt}`, printPx: it.printPx, fit: 0.92, x: 0.5, y: 0.5, w: 0.92 }],
+        createdAt: new Date().toISOString(), by: req.adminWho.shown || req.adminWho.name,
+      });
+      published.push({ itemId: it.id, designId });
+      done.add(it.id);
+    }
+    // What's published leaves the batch; an empty batch goes.
+    const left = b.items.filter((x) => !done.has(x.id));
+    for (const x of b.items.filter((y) => done.has(y.id))) {
+      for (const f of [`${x.id}.png`, `${x.id}.print.${x.printExt}`]) fs.rmSync(path.join(batchDir(b.id), f), { force: true });
+    }
+    if (!left.length) fs.rmSync(batchDir(b.id), { recursive: true, force: true });
+    else writeBatch({ ...b, items: left });
+    res.json({ published, skipped });
   });
   app.get('/api/admin/queue', requireAdmin, (req, res) => {
     const all = [];
@@ -4940,6 +5115,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   // the disk cannot fill up. Ordered designs are kept.
   const runCleanup = () => {
     try {
+      // Design uploads (admin) left unpublished for 14 days.
+      try {
+        const oldBatch = Date.now() - 14 * 864e5;
+        for (const f of fs.readdirSync(path.join(dataDir, 'library', 'uploads'))) {
+          const dir = path.join(dataDir, 'library', 'uploads', f);
+          if (/^[0-9a-f]{20}$/.test(f) && fs.statSync(dir).mtimeMs < oldBatch) fs.rmSync(dir, { recursive: true, force: true });
+        }
+      } catch (e) { /* none yet */ }
       // Uploaded booklet PDFs not used within 45 days (designs keep their own copy).
       try {
         const old = Date.now() - 45 * 864e5;

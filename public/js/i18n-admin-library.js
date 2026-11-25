@@ -1,8 +1,8 @@
 /* Admin → Ready designs: pause / show in the shop, delete / bring back, filters, bulk actions (English, Arabic). */
 Object.assign(window.POD_STRINGS, {
   // The shop's rule for text-only designs
-  'rd.rule': ['Text-only designs only on products without artwork designs', 'التصميمات اللي كلها كلام بس تظهر بس على المنتجات اللي مفيهاش تصميمات برسومات'],
-  'rd.ruleHelp': ['On T-shirts, mugs and the other products that have designs drawn with real artwork, only those are offered. Designs made only of text, shapes and icons stay on the other products (business cards, invitations, laser pieces…).', 'على التيشيرتات والمجات وباقي المنتجات اللي ليها تصميمات مرسومة برسومات حقيقية، بيظهر التصميمات دي بس. والتصميمات اللي كلها كلام وأشكال وأيقونات بتفضل على باقي المنتجات (الكروت الشخصية، الدعوات، قطع الليزر…).'],
+  'rd.rule': ['Text-only designs hidden on the picture-design products', 'التصميمات اللي كلها كلام مخفية على منتجات الرسومات'],
+  'rd.ruleHelp': ['T-shirts, hoodies, mugs and the other products you approved show only designs drawn with real artwork. The list is fixed: new picture designs never hide text designs; pause a text design yourself when it has a replacement. Text designs stay on every other product.', 'التيشيرتات والهوديز والمجات وباقي المنتجات اللي وافقت عليها بيظهر عليها التصميمات المرسومة برسومات حقيقية بس. القائمة ثابتة: التصميمات الجديدة بالرسومات عمرها ما بتخفي تصميمات الكلام؛ وقّف تصميم الكلام بنفسك لما يبقى له بديل. وتصميمات الكلام بتفضل على باقي المنتجات.'],
   'rd.ruleNow': ['Right now: {limited} on fewer products, {none} on none.', 'دلوقتي: {limited} على منتجات أقل، و{none} مش على أي منتج.'],
   'rd.ruleOn': ['Done: text-only designs now show only on products without artwork designs.', 'تمام: التصميمات اللي كلها كلام بقت تظهر بس على المنتجات اللي مفيهاش تصميمات برسومات.'],
   'rd.ruleOff': ['Done: text-only designs are back on every product they fit. Paused ones stay paused (see Paused).', 'تمام: التصميمات اللي كلها كلام رجعت على كل المنتجات اللي تناسبها. اللي موقوف مؤقتًا لسه موقوف (شوف «موقوف مؤقتًا»).'],

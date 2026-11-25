@@ -214,7 +214,7 @@
       function priceLine(p) {
         const first = p.sizes && p.sizes[0];
         const pack = first && /\d/.test(tr(first.label)) && !['apparel'].includes(p.category) && /×|x\b|\d{2,}/i.test(tr(first.label)) ? tr(first.label) : '';
-        return `<span class="hm-price">${esc(t('home.from', { price: money(p.basePrice) }))}</span>${pack ? `<span class="hm-pack" dir="auto">${esc(pack)}</span>` : ''}`;
+        return `<span class="hm-price">${esc(t('home.from', { price: money(POD.fromPrice(p)) }))}</span>${pack ? `<span class="hm-pack" dir="auto">${esc(pack)}</span>` : ''}`;
       }
 
       // ---------- Rows: new and best sellers, then by theme ----------

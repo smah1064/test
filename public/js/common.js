@@ -75,6 +75,7 @@
     }
     applyDir();
     applyI18n();
+    updateCartBadge(); // (its number in the new language's digits)
     document.dispatchEvent(new CustomEvent('pod:langchange', { detail: { lang } }));
   }
 
@@ -280,6 +281,22 @@
     return t(`${base}.${pluralForm(n)}`, { ...params, n: num(n) });
   }
 
+  // ---------- Prices of sizes ----------
+  /** The lowest price of a product (its cheapest size that can be picked): "from …" on cards and pages. */
+  function fromPrice(p) {
+    const ok = (p.sizes || []).filter((z) => !z.off && !z.soldOut);
+    const list = ok.length ? ok : p.sizes || [];
+    return list.length ? Math.min(...list.map((z) => p.basePrice + (z.surcharge || 0))) : p.basePrice;
+  }
+  /**
+   * What a size chip says about its price: "+50 ج.م." over the base price, or, for products sold in
+   * packs that start below the base (1 copy, 10 copies…), each pack's own price.
+   */
+  function sizeNote(p, z) {
+    if ((p.sizes || []).some((x) => (x.surcharge || 0) < 0)) return money(p.basePrice + (z.surcharge || 0));
+    return z.surcharge ? `+${money(z.surcharge)}` : '';
+  }
+
   // ---------- Products the shop doesn't sell right now ----------
   /*
    * GET /api/products only lists what can be ordered now. For any other product id (an old link, a saved
@@ -372,7 +389,7 @@
       grid = list.length ? `<div class="similar-grid${list.length < 3 ? ` n${list.length}` : ''}">${list.map((p) => `<a class="similar-card" href="${esc(productHref(p))}">
           <span class="similar-pic"><img alt="" loading="lazy" decoding="async" src="${esc(productPicture(p))}" data-fallback="${esc(thumbFallback(p))}"></span>
           <span class="similar-name">${esc(tr(p.name))}</span>
-          <span class="similar-price">${esc(t('home.from', { price: money(p.basePrice) }))}</span>
+          <span class="similar-price">${esc(t('home.from', { price: money(fromPrice(p)) }))}</span>
         </a>`).join('')}</div>` : '';
     }
     // More like it: the shop on its category, or every product when nothing of that kind is left.
@@ -1073,7 +1090,7 @@
     },
     t, tr, arabicDigits, setLang, applyI18n,
     loadCatalog, assetId, canPick, firstPick, comboOut, comboFew, sizeOk, colorOk, productPicture, thumbFallback, fillMockup, mockupUrl, svgDataUrl, luminance,
-    money, date, day, num, plural, pluralForm, captcha,
+    money, date, day, num, plural, pluralForm, captcha, fromPrice, sizeNote,
     productState, backOnDay, backText, similarProducts, similarHref, similarLabel, productHref, showUnavailable,
     getCart, setCart, getSaved, setSaved, moveItem, designFor, putFile, updateCartBadge, toast, esc, api, drafts, forgetPersonal,
     sizedArea, sizeView, canvasEdges, drawPattern, wrapOffsets, fabricCm,

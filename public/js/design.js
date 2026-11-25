@@ -145,7 +145,7 @@
     // Sizes sold out (in every colour, or in the chosen one when stock is counted per colour and size): crossed out.
     $('dp-sizes').innerHTML = product.sizes.map((s) => {
       if (POD.sizeOk(product, color.id, s)) {
-        return `<button type="button" class="chip ${s.id === size.id ? 'active' : ''}" data-size="${esc(s.id)}" aria-pressed="${s.id === size.id}">${esc(tr(s.label))}${s.surcharge ? ` <span style="opacity:.7">+${esc(money(s.surcharge))}</span>` : ''}</button>`;
+        return `<button type="button" class="chip ${s.id === size.id ? 'active' : ''}" data-size="${esc(s.id)}" aria-pressed="${s.id === size.id}">${esc(tr(s.label))}${POD.sizeNote(product, s) ? ` <span style="opacity:.7">${esc(POD.sizeNote(product, s))}</span>` : ''}</button>`;
       }
       const why = s.soldOut ? t('soldOut') : t('soldOutCombo', { colour: tr(color.name), size: tr(s.label) });
       return `<button type="button" class="chip sold-out" aria-disabled="true" data-sold-size="${esc(s.id)}" title="${esc(why)}" aria-label="${esc(why)}"><span class="sold-label">${esc(tr(s.label))}</span> <span class="sold-tag">${esc(t('soldOut'))}</span></button>`;
@@ -156,6 +156,10 @@
     $('dp-few').textContent = few ? t('pp.fewLeft', { n: POD.num(few) }) : '';
     $('dp-price').textContent = money(product.basePrice + size.surcharge);
     $('dp-edit').href = `/editor?library=${encodeURIComponent(design.id)}&product=${product.id}&color=${color.id}`;
+    // A design that is one picture (no words to change): "Make it yours in the editor".
+    const hasWords = (design.items || []).some((i) => i.kind === 'text') || (design.objects || []).some((o) => /text/i.test(o.type || ''));
+    $('dp-edit').dataset.i18n = hasWords ? 'design.customize' : 'design.customizePic';
+    $('dp-edit').textContent = t($('dp-edit').dataset.i18n);
     document.title = `${tr(design.name)} · ${t('brand')}`;
     const active = $('dp-products').querySelector('.active');
     if (active) active.scrollIntoView({ block: 'nearest', inline: 'center' });

@@ -1928,7 +1928,7 @@ PRODUCTS.push(
     extraSidePrice: 60,
     colorLabel: t('Paper', 'الورق'),
     colors: PAPER_FINISH,
-    sizes: qty([['50', '50 cards', '50 كارت', 0], ['100', '100 cards', '100 كارت', 120], ['250', '250 cards', '250 كارت', 380], ['500', '500 cards', '500 كارت', 700]]),
+    sizes: qty([['1', '1 card', 'كارت واحد', -200], ['10', '10 cards', '10 كروت', -130], ['25', '25 cards', '25 كارت', -80], ['50', '50 cards', '50 كارت', 0], ['100', '100 cards', '100 كارت', 120], ['250', '250 cards', '250 كارت', 380], ['500', '500 cards', '500 كارت', 700]]),
     sides: [
       { id: 'front', name: FRONT, svg: cardPack(POSTCARD, -6), printArea: { ...POSTCARD }, printWidthIn: cmIn(10) },
       { id: 'back', name: BACK, svg: cardPack(POSTCARD, 6), printArea: { ...POSTCARD }, printWidthIn: cmIn(10) },
@@ -1944,7 +1944,7 @@ PRODUCTS.push(
     extraSidePrice: 0,
     colorLabel: t('Paper', 'الورق'),
     colors: CARD_STOCK,
-    sizes: qty([['10', '10 cards + envelopes', '10 كروت + ظروف', 0], ['25', '25 cards + envelopes', '25 كارت + ظروف', 200], ['50', '50 cards + envelopes', '50 كارت + ظروف', 500], ['100', '100 cards + envelopes', '100 كارت + ظروف', 1000]]),
+    sizes: qty([['1', '1 card + envelope', 'كارت واحد + ظرف', -140], ['10', '10 cards + envelopes', '10 كروت + ظروف', 0], ['25', '25 cards + envelopes', '25 كارت + ظروف', 200], ['50', '50 cards + envelopes', '50 كارت + ظروف', 500], ['100', '100 cards + envelopes', '100 كارت + ظروف', 1000]]),
     sides: [
       { id: 'front', name: t('Cover', 'الغلاف'), svg: FOLDED_COVER, printArea: { ...FOLD_A6 }, printWidthIn: cmIn(10.5) },
       {
@@ -1973,9 +1973,9 @@ PRODUCTS.push(
     colors: CARD_STOCK,
     options: [laminationOption(
       t('A thin film over the print that protects the vouchers and makes them feel stronger.', 'طبقة رقيقة فوق الطباعة بتحمي الكوبونات وبتخليها أتقل في الإيد.'),
-      { 25: 40, 50: 70, 100: 120, 250: 250 },
+      { 1: 10, 10: 30, 25: 40, 50: 70, 100: 120, 250: 250 },
     )],
-    sizes: qty([['25', '25 vouchers', '25 كوبون', 0], ['50', '50 vouchers', '50 كوبون', 120], ['100', '100 vouchers', '100 كوبون', 300], ['250', '250 vouchers', '250 كوبون', 700]]),
+    sizes: qty([['1', '1 voucher', 'كوبون واحد', -200], ['10', '10 vouchers', '10 كوبونات', -50], ['25', '25 vouchers', '25 كوبون', 0], ['50', '50 vouchers', '50 كوبون', 120], ['100', '100 vouchers', '100 كوبون', 300], ['250', '250 vouchers', '250 كوبون', 700]]),
     sides: [
       { id: 'front', name: FRONT, svg: cardPack(VOUCHER, -5), printArea: { ...VOUCHER }, printWidthIn: cmIn(21) },
       { id: 'back', name: BACK, svg: cardPack(VOUCHER, 5), printArea: { ...VOUCHER }, printWidthIn: cmIn(21) },
@@ -1992,7 +1992,7 @@ PRODUCTS.push(
     extraSidePrice: 40,
     colorLabel: t('Paper', 'الورق'),
     colors: PAPER_FINISH,
-    sizes: qty([['25', '25 bookmarks', '25 فاصل', 0], ['50', '50 bookmarks', '50 فاصل', 80], ['100', '100 bookmarks', '100 فاصل', 200], ['250', '250 bookmarks', '250 فاصل', 450]]),
+    sizes: qty([['1', '1 bookmark', 'فاصل واحد', -145], ['10', '10 bookmarks', '10 فواصل', -40], ['25', '25 bookmarks', '25 فاصل', 0], ['50', '50 bookmarks', '50 فاصل', 80], ['100', '100 bookmarks', '100 فاصل', 200], ['250', '250 bookmarks', '250 فاصل', 450]]),
     sides: [
       { id: 'front', name: FRONT, svg: cardPack(BOOKMARK, 9), overlay: BOOKMARK_TASSEL, printArea: { ...BOOKMARK }, printWidthIn: cmIn(5) },
       { id: 'back', name: BACK, svg: cardPack(BOOKMARK, 9), overlay: BOOKMARK_TASSEL, printArea: { ...BOOKMARK }, printWidthIn: cmIn(5) },
@@ -2010,7 +2010,7 @@ PRODUCTS.push(
     basePrice: 500,
     extraSidePrice: 0,
     colors: [{ id: 'satin', name: t('Satin white', 'أبيض ساتان'), hex: '#ffffff' }, { id: 'gloss', name: t('Glossy white', 'أبيض لامع'), hex: '#ffffff' }],
-    sizes: qty([['100', '100 brochures', '100 بروشور', 0], ['250', '250 brochures', '250 بروشور', 350], ['500', '500 brochures', '500 بروشور', 750], ['1000', '1000 brochures', '1000 بروشور', 1400]]),
+    sizes: qty([['1', '1 brochure', 'بروشور واحد', -475], ['10', '10 brochures', '10 بروشورات', -400], ['25', '25 brochures', '25 بروشور', -340], ['100', '100 brochures', '100 بروشور', 0], ['250', '250 brochures', '250 بروشور', 350], ['500', '500 brochures', '500 بروشور', 750], ['1000', '1000 brochures', '1000 بروشور', 1400]]),
     sides: [
       { id: 'front', name: t('Outside', 'من بره'), svg: TRIFOLD_SVG, overlay: TRIFOLD_FOLDS, printArea: { ...TRIFOLD, ...TRIFOLD_COVER }, printWidthIn: cmIn(29.7) },
       { id: 'back', name: t('Inside', 'من جوه'), svg: TRIFOLD_SVG, overlay: TRIFOLD_FOLDS, printArea: { ...TRIFOLD }, printWidthIn: cmIn(29.7) },
@@ -2032,9 +2032,9 @@ PRODUCTS.push(
     colors: [{ id: 'matte', name: t('Matte white', 'أبيض مطفي'), hex: '#ffffff' }, { id: 'gloss', name: t('Glossy white', 'أبيض لامع'), hex: '#ffffff' }, C.kraft],
     options: [laminationOption(
       t('A thick film on both sides: the menu wipes clean and lasts much longer.', 'طبقة سلوفان على الوشين: المنيو يتمسح بسهولة ويعيش أطول بكتير.'),
-      { 'A4-10': 100, 'A4-25': 200, 'A4-50': 350, 'A3-10': 180, 'A3-25': 400 },
+      { 'A4-1': 50, 'A3-1': 90, 'A4-10': 100, 'A4-25': 200, 'A4-50': 350, 'A3-10': 180, 'A3-25': 400 },
     )],
-    sizes: qty([['A4-10', 'A4 × 10', 'A4 × 10', 0], ['A4-25', 'A4 × 25', 'A4 × 25', 250], ['A4-50', 'A4 × 50', 'A4 × 50', 550], ['A3-10', 'A3 × 10', 'A3 × 10', 200], ['A3-25', 'A3 × 25', 'A3 × 25', 600]]),
+    sizes: qty([['A4-1', 'A4 × 1', 'A4 × 1', -120], ['A3-1', 'A3 × 1', 'A3 × 1', -20], ['A4-10', 'A4 × 10', 'A4 × 10', 0], ['A4-25', 'A4 × 25', 'A4 × 25', 250], ['A4-50', 'A4 × 50', 'A4 × 50', 550], ['A3-10', 'A3 × 10', 'A3 × 10', 200], ['A3-25', 'A3 × 25', 'A3 × 25', 600]]),
     sides: [
       { id: 'front', name: FRONT, svg: menuSvg(-5), printArea: { ...MENU }, printWidthIn: cmIn(21) },
       { id: 'back', name: BACK, svg: menuSvg(5), printArea: { ...MENU }, printWidthIn: cmIn(21) },
@@ -2065,9 +2065,9 @@ PRODUCTS.push(
     colors: [{ id: 'matte', name: t('Matte white', 'أبيض مطفي'), hex: '#ffffff' }, { id: 'gloss', name: t('Glossy white', 'أبيض لامع'), hex: '#ffffff' }, C.kraft],
     options: [laminationOption(
       t('A thin film over the print that keeps the folders clean and stops the folds cracking.', 'طبقة رقيقة فوق الطباعة بتحافظ على الفولدر نضيف وبتمنع الطباعة تتشرخ عند الطيّة.'),
-      { 25: 150, 50: 250, 100: 450, 250: 950 },
+      { 1: 30, 10: 120, 25: 150, 50: 250, 100: 450, 250: 950 },
     )],
-    sizes: qty([['25', '25 folders', '25 فولدر', 0], ['50', '50 folders', '50 فولدر', 450], ['100', '100 folders', '100 فولدر', 1200], ['250', '250 folders', '250 فولدر', 3200]]),
+    sizes: qty([['1', '1 folder', 'فولدر واحد', -600], ['10', '10 folders', '10 فولدرات', -150], ['25', '25 folders', '25 فولدر', 0], ['50', '50 folders', '50 فولدر', 450], ['100', '100 folders', '100 فولدر', 1200], ['250', '250 folders', '250 فولدر', 3200]]),
     sides: [{ id: 'front', name: t('Outside', 'من بره'), svg: FOLDER_SVG, overlay: FOLDER_SPINE, printArea: { ...FOLDER, ...FOLDER_ZONES }, printWidthIn: cmIn(44) }],
     cardArt: withArt(
       '<rect x="30" y="140" width="220" height="310" fill="#f1f3f5"/><rect x="250" y="140" width="220" height="310" fill="#343a40"/><circle cx="360" cy="260" r="40" fill="#fab005"/><rect x="305" y="330" width="110" height="14" rx="7" fill="#ffffff"/><rect x="100" y="380" width="80" height="10" rx="5" fill="#495057"/>',
@@ -2083,6 +2083,10 @@ PRODUCTS.push(
     extraSidePrice: 0,
     colors: [{ id: 'matte', name: t('Matte cover', 'غلاف مطفي'), hex: '#ffffff' }, { id: 'gloss', name: t('Glossy cover', 'غلاف لامع'), hex: '#ffffff' }],
     sizes: qty([
+      // From one copy (price per copy falls with the pack: 1 copy = 5×, 10 = 2×, 25 = 1.25× the 50-copy rate).
+      ['8-1', '8 pages × 1 copy', '8 صفحات × نسخة واحدة', -810], ['16-1', '16 pages × 1 copy', '16 صفحة × نسخة واحدة', -760], ['24-1', '24 pages × 1 copy', '24 صفحة × نسخة واحدة', -710], ['32-1', '32 pages × 1 copy', '32 صفحة × نسخة واحدة', -660],
+      ['8-10', '8 pages × 10 copies', '8 صفحات × 10 نسخ', -540], ['16-10', '16 pages × 10 copies', '16 صفحة × 10 نسخ', -340], ['24-10', '24 pages × 10 copies', '24 صفحة × 10 نسخ', -140], ['32-10', '32 pages × 10 copies', '32 صفحة × 10 نسخ', 60],
+      ['8-25', '8 pages × 25 copies', '8 صفحات × 25 نسخة', -340], ['16-25', '16 pages × 25 copies', '16 صفحة × 25 نسخة', -20], ['24-25', '24 pages × 25 copies', '24 صفحة × 25 نسخة', 290], ['32-25', '32 pages × 25 copies', '32 صفحة × 25 نسخة', 600],
       ['8-50', '8 pages × 50 copies', '8 صفحات × 50 نسخة', 0], ['16-50', '16 pages × 50 copies', '16 صفحة × 50 نسخة', 500], ['24-50', '24 pages × 50 copies', '24 صفحة × 50 نسخة', 1000], ['32-50', '32 pages × 50 copies', '32 صفحة × 50 نسخة', 1500],
       ['8-100', '8 pages × 100 copies', '8 صفحات × 100 نسخة', 600], ['16-100', '16 pages × 100 copies', '16 صفحة × 100 نسخة', 1500], ['32-100', '32 pages × 100 copies', '32 صفحة × 100 نسخة', 3100],
     ]),
@@ -2520,7 +2524,7 @@ const SIZE_PRINT_SCALE = {
   stickersheet: { A4: 21 / 14.8 },
   flyers: { 'A5-100': 14.8 / 21, 'A5-500': 14.8 / 21, 'A5-1000': 14.8 / 21 },
   mug: { '15oz': 1.12 },
-  menus: { 'A3-10': 29.7 / 21, 'A3-25': 29.7 / 21 },
+  menus: { 'A3-1': 29.7 / 21, 'A3-10': 29.7 / 21, 'A3-25': 29.7 / 21 },
   notepads: { 'A6-1': 10.5 / 14.8, 'A6-5': 10.5 / 14.8, 'A6-10': 10.5 / 14.8 },
   labels: { '75x45-100': 1.5, '75x45-250': 1.5, '75x45-500': 1.5, '100x60-100': 2, '100x60-250': 2, '100x60-500': 2 },
   windowstickers: { 30: 30 / 20, 50: 50 / 20, 70: 70 / 20 },

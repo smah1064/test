@@ -12,7 +12,7 @@
   const TARGET_DPI = 300;
   const MAX_PRINT_PIXELS = 16e6;
   const MAX_PRINT_SIDE = 8000;
-  const EXTRA_PROPS = ['name', 'selectable', 'evented', 'curve', 'mask', 'maskBorder', 'maskBorderColor', 'lockRatio', 'bgShape', 'textFx', 'fxBase', 'boosted'];
+  const EXTRA_PROPS = ['name', 'selectable', 'evented', 'curve', 'mask', 'maskBorder', 'maskBorderColor', 'lockRatio', 'bgShape', 'textFx', 'fxBase', 'boosted', 'printSrc', 'printPx'];
   const inkFor = (hex) => (POD.luminance(hex) < 0.45 ? '#ffffff' : '#16181d');
 
   /** Trim, bleed and safe zone in mockup units (same as the editor). */
@@ -226,7 +226,9 @@
     const { bleed, b, u } = st.R;
     const s = st.side;
     fabric.Text.prototype.svgUnitsPerInch = u;
-    const svg = withMode(st, { pictures: false, clip: null }, (c) => c.toSVG({ viewBox: { x: bleed.x, y: bleed.y, width: bleed.w, height: bleed.h }, width: `${+(bleed.w / u).toFixed(4)}in`, height: `${+(bleed.h / u).toFixed(4)}in` }));
+    let svg = withMode(st, { pictures: false, clip: null }, (c) => c.toSVG({ viewBox: { x: bleed.x, y: bleed.y, width: bleed.w, height: bleed.h }, width: `${+(bleed.w / u).toFixed(4)}in`, height: `${+(bleed.h / u).toFixed(4)}in` }));
+    // (Uploaded designs' pictures are addresses on the site: the server keeps only embedded ones.)
+    if (window.POD_DESIGN.inlineSvgImages) svg = await window.POD_DESIGN.inlineSvgImages(svg);
     const fonts = await window.POD_FX.fontFaceCss(st.canvas.getObjects());
     const note = `<!-- ebda3 artwork: ${s.printWidthIn} x ${s.printHeightIn} in${b ? ` + ${s.bleedIn} in bleed each side` : ''}. sRGB. -->`;
     return svg.replace(/<defs>/, `${note}<defs><style>${fonts}</style>`);
@@ -249,6 +251,8 @@
     for (const side of printSides) {
       const st = await stage(design, product, side, color, size.id);
       onProgress('render');
+      // (Uploaded designs: the full-size original goes into the print, not the screen copy.)
+      if (window.POD_DESIGN.usePrintSources) await window.POD_DESIGN.usePrintSources(st.canvas);
       files[`${side.id}-print.png`] = await printBlob(st);
       files[`${side.id}-preview.png`] = await previewBlob(st);
       files[`${side.id}-design.svg`] = new Blob([await svgText(st)], { type: 'image/svg+xml' });

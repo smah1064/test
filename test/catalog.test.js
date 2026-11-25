@@ -257,9 +257,12 @@ test('product managers sign in with their own password and only reach the Produc
   const edit = await put('/api/admin/catalog/apron', { status: 'hidden', hiddenReason: 'season' }, tok);
   assert.strictEqual(edit.status, 200);
   assert.strictEqual((await edit.json()).updatedBy, 'mona');
-  for (const url of ['/api/admin/orders', '/api/admin/staff', '/api/admin/pricing', '/api/admin/accounts', '/api/admin/library']) {
+  for (const url of ['/api/admin/orders', '/api/admin/staff', '/api/admin/pricing', '/api/admin/accounts', '/api/admin/preview']) {
     assert.strictEqual((await req('GET', url, undefined, tok)).status, 401, url);
   }
+  // Ready designs too (they upload, pause and publish designs), but not the owner's switch for text designs.
+  assert.strictEqual((await req('GET', '/api/admin/library', undefined, tok)).status, 200);
+  assert.strictEqual((await req('PUT', '/api/admin/library/settings', { textOnlyLimited: false }, tok)).status, 401);
   assert.strictEqual((await post('/api/admin/staff', { name: 'Y', username: 'yasser', password: 'a-long-password' }, tok)).status, 401);
   // The log says who changed what.
   const cat = await (await req('GET', '/api/admin/catalog', undefined, owner)).json();
@@ -298,8 +301,9 @@ test('the cart warns about stock before checkout, books can be hidden, and hidde
   const a = await makeDesign('apron');
   const b = await makeDesign('apron');
   const q = await (await post('/api/cart/quote', { designIds: [a.body.id, b.body.id] })).json();
-  assert.ok(q.items.every((i) => i.unavailable === 'notEnoughStock'), JSON.stringify(q.items));
-  assert.match(q.items[0].unavailableText, /1/);
+  // Only the piece past what's left is flagged (QA 03:02): the first one still fits.
+  assert.deepStrictEqual(q.items.map((i) => i.unavailable || null), [null, 'notEnoughStock'], JSON.stringify(q.items));
+  assert.match(q.items[1].unavailableText, /0/);
   const one = await (await post('/api/cart/quote', { designIds: [a.body.id] })).json();
   assert.strictEqual(one.items[0].unavailable, undefined, 'one piece is fine');
   await put('/api/admin/catalog/apron', { stock: null });
@@ -396,8 +400,9 @@ test('stock per colour and size: each combination counted, sold out on its own, 
   const b = await makeDesign('sweatshirt', { color: 'black', size: 'L' });
   const c = await makeDesign('sweatshirt', { color: 'black', size: 'L' });
   const q = await (await post('/api/cart/quote', { designIds: [a.body.id, b.body.id, c.body.id] })).json();
-  assert.ok(q.items.every((i) => i.unavailable === 'notEnoughStock'), JSON.stringify(q.items));
-  assert.match(q.items[0].unavailableText, /XL|L\)/);
+  // Two left: the third one is flagged, the first two go through.
+  assert.deepStrictEqual(q.items.map((i) => i.unavailable || null), [null, null, 'notEnoughStock'], JSON.stringify(q.items));
+  assert.match(q.items[2].unavailableText, /XL|L\)/);
   assert.strictEqual((await order([a.body.id, b.body.id, c.body.id])).status, 409);
   assert.strictEqual((await order([a.body.id, b.body.id])).status, 201);
   const row = await (await req('GET', '/api/admin/catalog/sweatshirt', undefined, owner)).json();

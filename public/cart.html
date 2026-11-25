@@ -515,7 +515,7 @@
               <div class="meta" data-meta-for="${esc(item.designId)}">${itemMeta(item)}</div>
               ${blocked.has(item.designId) ? `<div class="cart-unavail" role="alert"><strong>${esc(blocked.get(item.designId))}</strong> ${(outOfShop.get(item.designId) || {}).similar
     ? `<a class="cart-similar" href="${esc(outOfShop.get(item.designId).similar)}">${esc(POD.similarLabel(outOfShop.get(item.designId).similar))}</a>`
-    : `<span>${(outOfShop.get(item.designId) || {}).backOn ? `${esc(t('avail.backOnLong', { date: POD.backOnDay(outOfShop.get(item.designId).backOn) }))} ` : ''}${esc(t('cart.blockedHint'))}</span>`}</div>` : ''}
+    : `<span>${(outOfShop.get(item.designId) || {}).backOn ? `${esc(t('avail.backOnLong', { date: POD.backOnDay(outOfShop.get(item.designId).backOn) }))} ` : ''}${esc(t(cart.some((x) => !blocked.has(x.designId)) ? 'cart.blockedHint' : 'cart.blockedHintOnly'))}</span>`}</div>` : ''}
               <div class="actions">
                 ${item.productId === 'dtfsheet' || item.productId === 'photoprints' ? '' : item.bookId ? `<a class="btn btn-sm" href="/book?b=${encodeURIComponent(item.bookId)}&cart=${i}">${esc(t('cart.edit'))}</a>` : `<a class="btn btn-sm" href="/editor?design=${encodeURIComponent(item.designId)}&cart=${i}">${esc(t('cart.edit'))}</a>
                 ${item.bookId ? '' : `<a class="btn btn-sm" href="/editor?design=${encodeURIComponent(item.designId)}">${esc(t('cart.duplicate'))}</a>`}`}
@@ -549,7 +549,7 @@
           ? quote.total : Math.round((subtotal - discount + shipping) * 100) / 100;
         document.querySelectorAll('input[name="delivery"]').forEach((r) => { r.checked = r.value === delivery; });
         // Standard costs the normal shipping fee; express adds its fee on top.
-        document.getElementById('dlv-fee-standard').textContent = baseShipping ? t('delivery.feeStandard', { price: money(baseShipping) }) : t('delivery.feeFree');
+        document.getElementById('dlv-fee-standard').textContent = !orderable.length ? '' : baseShipping ? t('delivery.feeStandard', { price: money(baseShipping) }) : t('delivery.feeFree');
         document.getElementById('dlv-fee-express').textContent = baseShipping ? t('delivery.feeExpress', { fee: money(expressFee()) }) : '+' + money(expressFee());
         for (const opt of (quote && quote.deliveryOptions) || []) {
           const el = document.getElementById('dlv-by-' + opt.speed);
@@ -566,7 +566,8 @@
         msg.classList.toggle('bad', Boolean(refused));
         markCoupon(Boolean(refused));
         document.getElementById('subtotal').textContent = money(subtotal);
-        document.getElementById('shipping').textContent = baseShipping ? money(baseShipping) : t('free');
+        // (Nothing that can be ordered: no "free" shipping to show.)
+        document.getElementById('shipping').textContent = !orderable.length ? t('cart.nothingToShip') : baseShipping ? money(baseShipping) : t('free');
         document.getElementById('express-line').hidden = !expressNow;
         document.getElementById('express-fee').textContent = expressNow ? money(expressNow) : '';
         document.getElementById('bar-total').textContent = money(render.total);

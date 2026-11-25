@@ -403,7 +403,9 @@
     // A white copy of one-colour artwork (`dark`) for dark product colours (light ink).
     const light = i.dark && /^#[0-9a-f]{6}$/i.test(ink || '') && parseInt(ink.slice(1, 3), 16) + parseInt(ink.slice(3, 5), 16) + parseInt(ink.slice(5, 7), 16) > 384;
     const src = String((light ? i.dark : i.src) || '');
-    if (!/^\/img\/art\/[\w/-]+\.(svg|png|webp|jpg)$/.test(src)) return null;
+    // The shop's own artwork files, and designs uploaded in the admin (published, or still being reviewed).
+    const uploaded = /^\/library-(?:art\/[0-9a-z-]{4,40}\/web|upload\/[0-9a-f]{16,40}\/[0-9a-f]{8,40})\.png$/.test(src);
+    if (!uploaded && !/^\/img\/art\/[\w/-]+\.(svg|png|webp|jpg)$/.test(src)) return null;
     if (/\.svg$/.test(src)) {
       if (!fileArt.has(src)) fileArt.set(src, fetch(src).then((r) => (r.ok ? r.text() : null)).catch(() => null));
       const text = await fileArt.get(src);
@@ -414,7 +416,9 @@
     }
     return new Promise((resolve) => fabric.Image.fromURL(src, (img, failed) => {
       if (failed || !img) return resolve(null);
-      img.set({ name: 'art:' + src.split('/').pop().replace(/\.\w+$/, '') });
+      img.set({ name: uploaded ? (i.name || 'Design') : 'art:' + src.split('/').pop().replace(/\.\w+$/, '') });
+      // An uploaded design shows a light copy; its print files use the full-size original (see POD_PRINTSRC).
+      if (uploaded && /^\/library-art\/[0-9a-z-]{4,40}\/print\.(png|jpg)$/.test(String(i.printSrc || ''))) img.set({ printSrc: i.printSrc, printPx: Array.isArray(i.printPx) ? i.printPx.slice(0, 2).map(Number) : null });
       resolve(img);
     }));
   }
@@ -454,8 +458,13 @@
       if (i.kind === 'sticker' || i.kind === 'art' || i.kind === 'image') {
         o = stickerObjs[idx];
         if (!o) return null;
-        o.scaleToWidth(U * i.w);
-        if (i.h && o.getScaledHeight() > U * i.h) o.scaleToHeight(U * i.h);
+        if (i.fit) {
+          // A whole picture (uploaded designs): as big as fits in the area, both ways.
+          o.scale(Math.min((area.w * i.fit) / o.width, (area.h * i.fit) / o.height));
+        } else {
+          o.scaleToWidth(U * i.w);
+          if (i.h && o.getScaledHeight() > U * i.h) o.scaleToHeight(U * i.h);
+        }
         o.set({ angle: i.angle || 0, opacity: i.opacity ?? 1 });
       } else if (i.kind === 'text') {
         const fill = i.fill || ink;
@@ -535,5 +544,72 @@
     return url;
   }
 
-  window.POD_DESIGN = { FONTS, BUNDLED, ARABIC_RE, ACCENT, SHAPES, TEXT_PRESETS, TEMPLATES, ensureFont, ensureFontsFor, buildTemplate, readyArea, templateThumb };
+  /**
+   * Before print files are made: pictures of uploaded designs (`printSrc`) swap their light screen copy for
+   * the full-size original, at the same size on the canvas, so the print gets every pixel. Done once per
+   * picture (their element stays the original afterwards).
+   */
+  const originals = new Map();
+  async function usePrintSources(canvas) {
+    const pics = [];
+    const walk = (list) => list.forEach((o) => { if (o.type === 'group' && o._objects) walk(o._objects); else if (o.type === 'image' && o.printSrc && !o.printSwapped) pics.push(o); });
+    walk(canvas.getObjects());
+    await Promise.all(pics.map(async (o) => {
+      if (!/^\/library-art\/[0-9a-z-]{4,40}\/print\.(png|jpg)$/.test(String(o.printSrc))) return;
+      if (!originals.has(o.printSrc)) {
+        originals.set(o.printSrc, new Promise((resolve) => {
+          const im = new Image();
+          im.onload = () => resolve(im);
+          im.onerror = () => resolve(null);
+          im.src = o.printSrc;
+        }));
+      }
+      const im = await originals.get(o.printSrc);
+      if (!im || !im.naturalWidth) return;
+      const shownW = o.width * o.scaleX;
+      const shownH = o.height * o.scaleY;
+      o.setElement(im);
+      o.set({ scaleX: shownW / im.naturalWidth, scaleY: shownH / im.naturalHeight, printSwapped: true });
+      o.setCoords();
+    }));
+  }
+
+  /**
+   * The SVG print file names the site's own design pictures by address (/library-art/…: uploaded ready
+   * designs), and the server keeps only embedded pictures in an SVG: embed them so the file shows them.
+   * A very big original goes in as the lighter web picture (the PNG print file always uses the original).
+   */
+  const EMBED_MAX = 12 * 2 ** 20;
+  const embedded = new Map();
+  const OWN_PIC = /^\/library-art\/[0-9a-z-]{4,40}\/(?:print\.(?:png|jpg)|web\.png)$/;
+  async function picDataUrl(p) {
+    try {
+      let blob = await (await fetch(p)).blob();
+      if (blob.size > EMBED_MAX && /\/print\.(png|jpg)$/.test(p)) blob = await (await fetch(p.replace(/print\.(png|jpg)$/, 'web.png'))).blob();
+      if (!/^image\/(png|jpeg)$/.test(blob.type)) return null;
+      return await new Promise((resolve) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result);
+        r.onerror = () => resolve(null);
+        r.readAsDataURL(blob);
+      });
+    } catch (e) {
+      return null;
+    }
+  }
+  async function inlineSvgImages(svg) {
+    const found = new Map();
+    for (const m of svg.matchAll(/href="([^"]+)"/g)) {
+      const p = m[1].startsWith(location.origin + '/') ? m[1].slice(location.origin.length) : m[1];
+      if (OWN_PIC.test(p)) found.set(m[1], p);
+    }
+    for (const [url, p] of found) {
+      if (!embedded.has(p)) embedded.set(p, picDataUrl(p));
+      const data = await embedded.get(p);
+      if (data) svg = svg.split(`"${url}"`).join(`"${data}"`);
+    }
+    return svg;
+  }
+
+  window.POD_DESIGN = { FONTS, BUNDLED, ARABIC_RE, ACCENT, SHAPES, TEXT_PRESETS, TEMPLATES, ensureFont, ensureFontsFor, buildTemplate, readyArea, templateThumb, usePrintSources, inlineSvgImages };
 })();

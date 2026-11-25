@@ -422,6 +422,26 @@ class Library {
     this.index = { hidden: [], deleted: [], custom: [], done: [] };
     this.stamp = null;
     this.reload();
+    this.noteFirstSeen();
+  }
+  /** Starter designs without a known day (added in code since the dates were written): today. */
+  noteFirstSeen() {
+    const seen = this.index.firstSeen || {};
+    const fresh = SEED.filter((d) => !DATES[d.id] && !seen[d.id]);
+    if (!fresh.length) return;
+    try {
+      this.withLock(() => {
+        const day = new Date().toISOString().slice(0, 10);
+        this.index.firstSeen ||= {};
+        for (const d of fresh) this.index.firstSeen[d.id] ||= day;
+        this.save();
+      });
+    } catch (e) { /* read-only data folder: no day for those */ }
+  }
+  /** The day a design was added (YYYY-MM-DD), or null. */
+  addedOn(d) {
+    if (d.createdAt) return String(d.createdAt).slice(0, 10);
+    return DATES[d.id] || (this.index.firstSeen || {})[d.id] || null;
   }
   /**
    * One-time changes to the shop's own list (each runs once per shop, then is remembered in the
@@ -504,8 +524,8 @@ class Library {
     this.reload();
     const hidden = new Set(this.index.hidden);
     const deleted = new Set(this.index.deleted || []);
-    const list = [...this.index.custom.slice().reverse().map((d) => this.withArtwork(d)), ...SEED].map((d) => ({ ...d, products: productsFor(d), hidden: hidden.has(d.id), deleted: deleted.has(d.id) }));
-    return this.index.textOnlyLimited ? limitTextOnly(list) : list;
+    const list = [...this.index.custom.slice().reverse().map((d) => (d.kind === 'objects' ? this.withArtwork(d) : d)), ...SEED].map((d) => ({ ...d, products: productsFor(d), hidden: hidden.has(d.id), deleted: deleted.has(d.id) }));
+    return this.index.textOnlyLimited ? limitTextOnly(list, this.index.textHiddenOn) : list;
   }
   /** An owner's design from before `artwork` was noted: read once from its file. */
   withArtwork(d) {
@@ -556,6 +576,21 @@ class Library {
   }
   previewPath(id) {
     return path.join(this.dir, `${id}.png`);
+  }
+  /** Where an uploaded design's pictures are kept (web.png for the screen, print.png / .jpg for printing). */
+  artDir(id) {
+    return path.join(this.dir, 'art', id);
+  }
+  /**
+   * A design uploaded in the admin (Ready designs → Upload designs): one picture, on the products picked,
+   * kept like the shop's own artwork designs (a "template" with one picture item).
+   */
+  addUploaded(meta) {
+    return this.withLock(() => {
+      this.index.custom.push(meta);
+      this.save();
+      return meta;
+    });
   }
   addCustom(d) {
     return this.withLock(() => this.addCustomNow(d));
@@ -628,10 +663,18 @@ const ARTWORK_ENOUGH = 12;
  * real artwork in the shop (business cards, invitations, laser pieces...), and shown on one of those.
  * `list`: designs with products / hidden / deleted set. Changed ones get `limited: true`.
  */
-function limitTextOnly(list) {
-  const count = new Map();
-  for (const d of list) if (!d.hidden && !d.deleted && hasArtwork(d)) for (const id of d.products) count.set(id, (count.get(id) || 0) + 1);
-  const covered = new Set([...count].filter(([, n]) => n >= ARTWORK_ENOUGH).map(([id]) => id));
+function limitTextOnly(list, frozen) {
+  let covered;
+  if (Array.isArray(frozen)) {
+    // The owner's fixed list (index.textHiddenOn): new picture designs never hide more text designs;
+    // products made later from one of these (admin → Products) follow it.
+    const on = new Set(frozen);
+    covered = new Set(PRODUCTS.filter((p) => on.has(p.id) || (p.base && on.has(p.base))).map((p) => p.id));
+  } else {
+    const count = new Map();
+    for (const d of list) if (!d.hidden && !d.deleted && hasArtwork(d)) for (const id of d.products) count.set(id, (count.get(id) || 0) + 1);
+    covered = new Set([...count].filter(([, n]) => n >= ARTWORK_ENOUGH).map(([id]) => id));
+  }
   return list.map((d) => {
     if (hasArtwork(d)) return d;
     const left = d.products.filter((id) => !covered.has(id));
@@ -650,6 +693,12 @@ function showOn(d, list) {
   const from = fromP && fromP.colors.find((c) => c.id === d.color);
   return { product: id, color: from ? to.colors.reduce((best, c) => (distance(c.hex, from.hex) < distance(best.hex, from.hex) ? c : best)).id : to.colors[0].id };
 }
+// The day each starter design was added (from the code's history: src/library-dates.json); ones added later
+// in code get the day this shop first saw them (index.firstSeen).
+let DATES = {};
+try { DATES = require('./library-dates.json'); } catch (e) { DATES = {}; }
+// The first 87 picture designs (src/library-packs/styles.js), the ones the owner's choice was made with.
+const FIRST_ARTWORK = new Set((require('./library-packs/styles').designs || []).filter((d) => (d.items || []).some((it) => it.kind === 'image')).map((d) => d.id));
 /** Products with at least `min` starter designs drawn with artwork (leaving out paused or deleted ones). */
 function artworkProducts(index, min) {
   const off = new Set([...(index.hidden || []), ...(index.deleted || [])]);
@@ -674,10 +723,33 @@ const ONCE = {
   'pause-no-artwork': (index) => {
     index.textOnlyLimited = true;
     const off = new Set([...(index.hidden || []), ...(index.deleted || [])]);
-    const covered = artworkProducts({ hidden: [...off] }, ARTWORK_ENOUGH);
+    // (Counted with the first 87 picture designs, as the owner approved: see 'freeze-text-rule'.)
+    const n = new Map();
+    for (const d of SEED) if (FIRST_ARTWORK.has(d.id) && !off.has(d.id)) for (const id of productsFor(d)) n.set(id, (n.get(id) || 0) + 1);
+    const covered = new Set([...n].filter(([, k]) => k >= ARTWORK_ENOUGH).map(([id]) => id));
+    // The products that show only picture designs, fixed (the owner decides from here on).
+    index.textHiddenOn = [...covered];
     const paused = new Set(index.hidden || []);
     for (const d of SEED) if (!usesArtwork(d) && productsFor(d).every((id) => covered.has(id))) paused.add(d.id);
     index.hidden = [...paused];
+  },
+  // The owner chose (25 Nov): no automatic hiding any more. The products that show only picture designs
+  // are fixed as approved before the later uploads (those with 12+ of the first 87 picture designs), and the
+  // text designs paused automatically only because of designs added since are shown again.
+  'freeze-text-rule': (index) => {
+    if (!index.textOnlyLimited || Array.isArray(index.textHiddenOn)) return;
+    const off = new Set([...(index.hidden || []), ...(index.deleted || [])]);
+    const count = (min) => {
+      const n = new Map();
+      for (const d of SEED) if (FIRST_ARTWORK.has(d.id) && !off.has(d.id)) for (const id of productsFor(d)) n.set(id, (n.get(id) || 0) + 1);
+      return new Set([...n].filter(([, k]) => k >= min).map(([id]) => id));
+    };
+    const any = count(1);
+    const enough = count(ARTWORK_ENOUGH);
+    index.textHiddenOn = [...enough];
+    const back = new Set(SEED.filter((d) => !usesArtwork(d)).map((d) => [d, productsFor(d)])
+      .filter(([, ps]) => ps.every((id) => any.has(id)) && ps.some((id) => !enough.has(id))).map(([d]) => d.id));
+    index.hidden = (index.hidden || []).filter((id) => !back.has(id));
   },
 };
 
