@@ -211,9 +211,11 @@
         return thumbImg(p, POD.firstPick(p.colors), eager);
       }
       /** "From 250 EGP" and, for products sold in quantities, the smallest pack ("A5 × 100"). */
+      // (Arabic pages show the label in Arabic digits, ٠-٩: they count as digits too.)
       function priceLine(p) {
         const first = p.sizes && p.sizes[0];
-        const pack = first && /\d/.test(tr(first.label)) && !['apparel'].includes(p.category) && /×|x\b|\d{2,}/i.test(tr(first.label)) ? tr(first.label) : '';
+        const label = first ? tr(first.label) : '';
+        const pack = label && /[\d٠-٩۰-۹]/.test(label) && !['apparel'].includes(p.category) && /×|x\b|[\d٠-٩۰-۹]{2,}/i.test(label) ? label : '';
         return `<span class="hm-price">${esc(t('home.from', { price: money(POD.fromPrice(p)) }))}</span>${pack ? `<span class="hm-pack" dir="auto">${esc(pack)}</span>` : ''}`;
       }
 

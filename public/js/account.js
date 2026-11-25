@@ -235,13 +235,25 @@
     await PODSaved.render(box, { showEmpty: true, note: 'saved.noteAccount', onToCart: () => { location.href = '/cart'; }, onChange: renderDrafts });
     box.hidden = view !== 'drafts';
   }
-  function renderProfile() {
+  // The account the profile form was last filled from: until it changes (saved, signed in again),
+  // a language switch only redraws the form's words and keeps what the customer typed, as the checkout does.
+  let profileFrom = null;
+  /** The governorates in the page's language, with this one chosen. */
+  function renderGovernorates(chosen) {
+    $('pf-gov').innerHTML = `<option value="">${esc(t('checkout.choose'))}</option>` + catalog.governorates.map((g) => `<option value="${g.id}">${esc(tr(g.name))}</option>`).join('');
+    $('pf-gov').value = chosen || '';
+  }
+  function renderProfile({ keepTyped = false } = {}) {
+    if (keepTyped && profileFrom === me) {
+      renderGovernorates($('pf-gov').value);
+      return;
+    }
+    profileFrom = me;
     $('pf-name').value = me.name;
     $('pf-phone').value = me.phone || '';
     $('pf-email').value = me.email || '';
     const a = me.address || {};
-    $('pf-gov').innerHTML = `<option value="">${esc(t('checkout.choose'))}</option>` + catalog.governorates.map((g) => `<option value="${g.id}">${esc(tr(g.name))}</option>`).join('');
-    $('pf-gov').value = a.governorate || '';
+    renderGovernorates(a.governorate);
     $('pf-city').value = a.city || '';
     $('pf-address').value = a.address || '';
     $('pf-notes').value = a.notes || '';
@@ -282,7 +294,8 @@
     });
   });
 
-  function render() {
+  /** keepTyped: only the words change (a language switch); what is typed in the profile form stays. */
+  function render({ keepTyped = false } = {}) {
     // A reset link opens the "choose a new password" form, also when someone is already
     // signed in on this browser (the link may even be for another account).
     const resetting = Boolean(params.get('reset'));
@@ -331,13 +344,13 @@
     $('pw-submit').textContent = t(me.hasPassword ? 'acct.changePassword' : 'acct.setPassword');
     if (view === 'orders') renderOrders();
     if (view === 'drafts') renderDrafts();
-    if (view === 'profile') renderProfile();
+    if (view === 'profile') renderProfile({ keepTyped });
   }
   if (params.get('mode') === 'signup') showForm('f-up');
   if (params.get('welcome')) {
     view = 'profile';
     history.replaceState(null, '', '/account');
   }
-  document.addEventListener('pod:langchange', render);
+  document.addEventListener('pod:langchange', () => render({ keepTyped: true }));
   await load();
 })();

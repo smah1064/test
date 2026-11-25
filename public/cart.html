@@ -979,8 +979,16 @@
       }));
 
       // Coupon: apply / remove.
+      // The code as the shop keeps it (as src/coupons.js normCode): Arabic (٠-٩, ۰-۹) and full-width digits and
+      // letters typed on a phone are the English ones, so "EID٢٠" shows and is kept as "EID20".
+      const couponOf = (s) => String(s || '')
+        .replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+        .replace(/[\u06f0-\u06f9]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+        .replace(/[\uff01-\uff5e]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0))
+        .replace(/[\u061c\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, '')
+        .trim().toUpperCase().replace(/\s+/g, '');
       const applyCoupon = async () => {
-        const code = document.getElementById('coupon').value.trim().toUpperCase().replace(/\s+/g, '');
+        const code = couponOf(document.getElementById('coupon').value);
         couponNote = null;
         setCoupon(code);
         document.getElementById('coupon').blur();

@@ -17,7 +17,18 @@ const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const TYPES = ['percent', 'fixed', 'freeship'];
 const DAY_FMT = new Intl.DateTimeFormat('en-CA', { timeZone: process.env.SHOP_TIMEZONE || 'Africa/Cairo', year: 'numeric', month: '2-digit', day: '2-digit' });
 const today = () => DAY_FMT.format(new Date());
-const normCode = (c) => String(c == null ? '' : c).trim().toUpperCase().replace(/\s+/g, '');
+/**
+ * A code as stored: capitals, no spaces. Typed however the phone types it, it is the same code:
+ * Arabic-Indic (٠-٩) and Persian (۰-۹) digits, as Arabic phone keyboards type them, and full-width
+ * letters and digits ("ＥＩＤ２０") count as the English ones, and invisible direction marks (pasted
+ * from a chat) are left out. "eid٢٠" and " E I D ２ ０ " are "EID20".
+ */
+const normCode = (c) => String(c == null ? '' : c)
+  .replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+  .replace(/[\u06f0-\u06f9]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+  .replace(/[\uff01-\uff5e]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0))
+  .replace(/[\u061c\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, '')
+  .trim().toUpperCase().replace(/\s+/g, '');
 const isDay = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && new Date(`${d}T00:00:00Z`).toISOString().slice(0, 10) === d;
 
 /** Checks a coupon from the admin form; returns { coupon } or { error }. */
