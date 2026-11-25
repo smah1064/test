@@ -261,7 +261,15 @@
   $('v-profile').addEventListener('submit', (e) => {
     e.preventDefault();
     submit($('v-profile'), async () => {
-      me = (await POD.api('/api/account', json('PUT', { name: $('pf-name').value, phone: $('pf-phone').value, email: $('pf-email').value, address: { governorate: $('pf-gov').value, city: $('pf-city').value, address: $('pf-address').value, notes: $('pf-notes').value } }))).customer;
+      try {
+        me = (await POD.api('/api/account', json('PUT', { name: $('pf-name').value, phone: $('pf-phone').value, email: $('pf-email').value, address: { governorate: $('pf-gov').value, city: $('pf-city').value, address: $('pf-address').value, notes: $('pf-notes').value } }))).customer;
+      } catch (err) {
+        // The site's words for these are for signing up ("…Sign in instead"): this customer is signed in already.
+        const taken = { acctPhoneTaken: ['acct.phoneUsedOther', 'pf-phone'], acctEmailTaken: ['acct.emailUsedOther', 'pf-email'] }[err.code];
+        if (!taken) throw err;
+        $(taken[1]).focus();
+        throw new Error(t(taken[0]));
+      }
       POD.toast(t('houses.saved'));
       render();
     });
@@ -329,7 +337,8 @@
       else if ($('f-in').hidden && $('f-up').hidden && $('f-forgot').hidden) showForm('f-in');
       return;
     }
-    $('acct-hello').textContent = t('acct.hello', { name: me.name.split(' ')[0] });
+    // (A first name of two words, عبد الرحمن, kept on one line: never "أهلًا، عبد" above "الرحمن".)
+    $('acct-hello').textContent = t('acct.hello', { name: POD.firstName(me.name).replace(/ /g, '\u00a0') });
     document.querySelectorAll('[data-acct-view]').forEach((b) => b.classList.toggle('active', b.dataset.acctView === view));
     $('v-orders').hidden = view !== 'orders';
     $('v-drafts').hidden = view !== 'drafts';

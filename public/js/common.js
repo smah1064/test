@@ -293,6 +293,21 @@
   function num(n) {
     return new Intl.NumberFormat(lang === 'ar' ? 'ar-EG' : 'en-GB', { maximumFractionDigits: 1 }).format(n);
   }
+  // A first word that is half of a compound first name: the next word goes with it (عبد الرحمن, أبو بكر, أم كلثوم,
+  // Abdel Rahman, Abu Bakr, Umm Kulthum, El Sayed). "عبد" alone means "servant".
+  const NAME_START = /^(?:عبد|[أاإ]بو|[أا]م|abd|abdel|abdul|abu|abo|abou|um|umm|el|al)$/i;
+  // "The" written on its own inside one (عبد ال رحمن, Abd El Rahman, Abu El Ela): one more word.
+  const NAME_THE = /^(?:ال|el|al)$/i;
+  /** The name to greet someone by: the first word of their name, or the first two or three when they make one name. */
+  function firstName(full) {
+    const words = String(full == null ? '' : full).trim().split(/\s+/).filter(Boolean);
+    let n = 1;
+    if (words.length > 1 && NAME_START.test(words[0])) {
+      n = 2;
+      while (n < words.length && NAME_THE.test(words[n - 1])) n++;
+    }
+    return words.slice(0, n).join(' ');
+  }
   /**
    * Which form of a counted word n takes: 'one', 'two', 'few' (3 to 10, also 103 to 110…) or 'many'
    * (11 and up, and 0). Arabic has all four ("منتج واحد", "منتجين", "٣ منتجات", "١١ منتج");
@@ -1150,7 +1165,7 @@
     },
     t, tr, arabicDigits, latinDigits, sep, setLang, applyI18n,
     loadCatalog, assetId, canPick, firstPick, comboOut, comboFew, sizeOk, colorOk, productPicture, thumbFallback, fillMockup, mockupUrl, svgDataUrl, luminance,
-    money, date, day, num, plural, pluralForm, packCopies, captcha, fromPrice, sizeNote,
+    money, date, day, num, plural, pluralForm, packCopies, captcha, fromPrice, sizeNote, firstName,
     productState, backOnDay, backText, similarProducts, similarHref, similarLabel, productHref, showUnavailable,
     getCart, setCart, getSaved, setSaved, moveItem, designFor, putFile, updateCartBadge, toast, esc, api, drafts, forgetPersonal,
     sizedArea, sizeView, canvasEdges, drawPattern, wrapOffsets, fabricCm,

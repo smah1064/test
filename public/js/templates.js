@@ -437,6 +437,20 @@
     return { x: area.x + area.w * z.x, y: area.y + area.h * z.y, w: area.w * z.w, h: area.h * z.h };
   }
   /**
+   * How wide a one-line text is drawn. Arabic: the browser's own width, its letters joined (Fabric adds up each
+   * letter alone, some 10% short in a joined script like Aref Ruqaa, so a long name fitted by it ran over the edge).
+   */
+  let measurer = null;
+  function drawnWidth(o) {
+    const w = o.getScaledWidth();
+    if (!ARABIC_RE.test(o.text || '') || /\n/.test(o.text) || o.charSpacing || !o.width || !o._getFontDeclaration) return w;
+    measurer ||= document.createElement('canvas').getContext('2d');
+    measurer.font = o._getFontDeclaration();
+    measurer.direction = o.direction === 'rtl' ? 'rtl' : 'ltr';
+    const shaped = measurer.measureText(o.text).width;
+    return shaped > o.width ? (w * shaped) / o.width : w;
+  }
+  /**
    * The customer's own name in place of a sample one (withNames, `fitTo`: the sample): never wider than the sample
    * was, so what is round it stays as drawn; with nothing beside it on its line, as wide as the line's free room
    * inside the margin. A longer name is set smaller (`nameScale` on the object), a shorter one keeps the sample's size.
@@ -451,7 +465,7 @@
       charSpacing: ARABIC_RE.test(i.fitTo.text) ? 0 : i.spacing || 0,
       direction: ARABIC_RE.test(i.fitTo.text) ? 'rtl' : 'ltr',
     });
-    const wasW = Math.min(was.getScaledWidth(), area.w * 0.94);
+    const wasW = Math.min(drawnWidth(was), area.w * 0.94);
     const r = o.getBoundingRect(true, true);
     const edge = r.height * 0.15;
     const beside = built.some((x) => {
@@ -461,9 +475,10 @@
     });
     const room = 2 * Math.min(o.left - box.x, box.x + box.w - o.left);
     const most = beside ? wasW : Math.max(wasW, room);
-    if (o.getScaledWidth() > most) {
-      o.nameScale = most / o.getScaledWidth(); // (how much smaller than the sample's size: the design page says so)
-      o.scaleToWidth(most);
+    const now = drawnWidth(o);
+    if (now > most) {
+      o.nameScale = most / now; // (how much smaller than the sample's size: the design page says so)
+      o.scaleToWidth((o.getBoundingRect(true, true).width * most) / now);
       o.setCoords();
     }
   }
@@ -655,8 +670,9 @@
   // text is the name ('محمود' in 'عائلة محمود'). The design page (public/js/design.js) asks for the customer's
   // own, and withNames puts it in: the preview, the cart and the print files are all made from that design.
   const NAME_ROLES = ['name', 'his', 'her', 'names', 'family', 'initial', 'initials', 'hisInitial', 'herInitial', 'kid', 'baby', 'cat', 'dog', 'teacher', 'honoree'];
-  const NAME_MAX = { initial: 3, hisInitial: 3, herInitial: 3, initials: 9, names: 40 }; // letters; others NAME_LEN
-  const NAME_LEN = 30;
+  // Letters; others NAME_LEN (a four-part Egyptian name, "عبد الرحمن محمد عبد الفتاح الشربيني", fits; fitName sets it smaller).
+  const NAME_MAX = { initial: 3, hisInitial: 3, herInitial: 3, initials: 9, names: 60 };
+  const NAME_LEN = 45;
   /** A ready design's sample names, in order: { index (of its item), role, sample, caps (printed in capitals), max (letters) }. */
   function sampleNames(design) {
     const items = design && design.kind === 'template' && Array.isArray(design.items) ? design.items : [];
@@ -673,6 +689,8 @@
   /**
    * A typed name made printable: one line, at most `max` letters, without {…} (a place still to fill in, which the
    * server refuses to print), emoji or invisible direction marks (the fonts have none of them).
+   * Too long: whole words only, never a word cut short ("…الشربي" for "…الشربيني" is another name); one long word is
+   * cut at `max`.
    */
   function cleanName(v, max = NAME_LEN) {
     const s = String(v == null ? '' : v)
@@ -680,7 +698,11 @@
       .replace(/[\u0000-\u001f\u007f-\u009f{}]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
-    return Array.from(s).slice(0, max).join('').trim();
+    const letters = Array.from(s);
+    if (letters.length <= max) return s;
+    const kept = letters.slice(0, max);
+    const space = kept.lastIndexOf(' ');
+    return (letters[max] !== ' ' && space > 0 ? kept.slice(0, space) : kept).join('').trim();
   }
   // The English-only fonts have no Arabic letters: an Arabic name typed over an English sample is set in an
   // Arabic font of the same feel (the editor does the same, with Cairo).

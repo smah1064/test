@@ -123,3 +123,34 @@ test('a design without a sample name: no box, no question', { timeout: 60000 }, 
     await ctx.close();
   }
 });
+
+test('a long name: a four-part Egyptian name whole; longer, whole words only (never "…الشربي"), and said so', { timeout: 90000 }, async () => {
+  const page = await openDesign('lz-card-name-title-ar');
+  try {
+    const four = 'عبد الرحمن محمد عبد الفتاح الشربيني';
+    const five = 'محمد أحمد عبد الرحمن مصطفى عبد العزيز الشربيني'; // 46 letters: one word over
+    const typeName = async (name) => {
+      const before = await page.getAttribute('#dp-img', 'src');
+      await page.fill('#dp-name-0', name);
+      await page.waitForFunction((b) => document.getElementById('dp-img').src !== b && document.getElementById('dp-spin').hidden, before, { timeout: 30000 });
+    };
+    const edit = async () => decodeURIComponent(/&name=([^&]*)/.exec(await page.getAttribute('#dp-edit', 'href'))[1]);
+    await typeName(four);
+    assert.strictEqual(await edit(), four);
+    assert.ok(!(await page.isVisible('#dp-names-cut')));
+    // The box takes the whole name (it never cuts one itself); the design keeps whole words.
+    await typeName(five);
+    assert.strictEqual(await page.inputValue('#dp-name-0'), five);
+    assert.strictEqual(await edit(), 'محمد أحمد عبد الرحمن مصطفى عبد العزيز');
+    assert.ok(await page.isVisible('#dp-names-cut'));
+    assert.match(await page.textContent('#dp-names-cut'), /only the whole words that fit are printed/);
+    const done = page.waitForResponse((r) => /\/api\/designs\/[^/]+\/complete$/.test(r.url()), { timeout: 60000 });
+    await page.click('#dp-add');
+    const res = await done;
+    assert.strictEqual(res.status(), 200);
+    assert.ok(storedTexts(doneId(res)).includes('محمد أحمد عبد الرحمن مصطفى عبد العزيز'));
+    assert.deepStrictEqual(page.errors, []);
+  } finally {
+    await page.context().close();
+  }
+});

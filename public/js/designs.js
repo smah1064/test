@@ -113,7 +113,7 @@
       sweatshirt: 'sweatshirt, sweat shirt, سويتشيرت, سويت شيرت',
       cap: 'cap, hat, كاب, كاسكيت, قبعة, طاقية',
       mug: 'mug, cup, مج, مجات, مجين, ماج, كوب, كوباية',
-      bag: 'bag, شنطة, شنط',
+      bag: 'bag, شنطة, شنط, كيس, اكياس',
       card: 'card, كارت, كروت, كارد, بطاقة',
       bizcard: 'business card, visit card, visiting card, بيزنس كارد, بيزنس كارت, بزنس كارد, بزنس كارت, كارت بيزنس, كارت بزنس, كروت بيزنس, كروت بزنس, كارت شخصي, كروت شخصية, كارت فيزيت',
       // (One word alone, as the English "business": everything for a business.)
@@ -203,10 +203,14 @@
     }
     // A word as typed is found anywhere in a word, as before (with start: at the start of one, to rank names).
     // Its other forms only as whole words ("dogs" → dog, not dogma; "cars" → car, not card), or by what it names.
+    // An Arabic word of three letters (most Arabic words are built on three) inside a longer word is another word:
+    // it counts at the start of a word only, and without its ي not at all, on both pages (كيس is not the كس of
+    // اكسسوارات, ليل not the لل of للأعمال). One or two letters are a word still being typed: found as before.
     function has(h, term, start) {
-      const at = start ? ' ' : '';
+      const short = term.word.length === 3 && /^[ء-ي]+$/.test(term.word);
+      const at = start || short ? ' ' : '';
       const lw = loose(term.word);
-      const looseHit = h.looseAnywhere ? h.loose.includes(at + lw) : lw.length > 2 && h.loose.includes(` ${lw}`);
+      const looseHit = h.looseAnywhere && !short ? h.loose.includes(at + lw) : lw.length > 2 && h.loose.includes(` ${lw}`);
       if (term.word && (h.text.includes(at + term.word) || looseHit)) return true;
       if (term.forms.some((f) => h.text.includes(` ${f} `) || h.loose.includes(` ${loose(f)} `))) return true;
       return term.concepts.some((c) => h.concepts.has(c)) || Boolean(term.or && term.or.every((x) => has(h, x, start)));

@@ -4,10 +4,12 @@
   const { esc, t, tr } = POD;
   const content = document.getElementById('content');
   const token = new URLSearchParams(location.search).get('t') || '';
-  // view: 'loading' | 'gone' | 'replaced' | 'proof' | 'done'
+  // view: 'loading' | 'gone' | 'failed' | 'replaced' | 'proof' | 'done'
   // 'replaced': the shop sent a newer proof while this page was open, so the answer could not be sent.
+  // 'failed': the proof could not be loaded (no connection, the site busy): st.failure is the error, with "Try again".
+  // error: the key of the text under "This proof link no longer works" (a key, so it follows a language switch).
   // editable: after "Request changes", the item is editor-made, so the customer can edit it themselves from the order page.
-  const st = { view: 'loading', data: null, error: null, rejecting: false, sending: false, result: null, formError: '', ok: false, comment: '', unsent: '', editable: false };
+  const st = { view: 'loading', data: null, error: null, failure: null, rejecting: false, sending: false, result: null, formError: '', ok: false, comment: '', unsent: '', editable: false };
 
   const icon = (d) => `<svg class="pf-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
   const orderLink = (d) => (d && d.order && d.order.id ? `<a class="btn btn-primary" href="/order?id=${encodeURIComponent(d.order.id)}">${esc(t('proofPage.toOrder'))}</a>` : '');
@@ -69,7 +71,12 @@
   function render() {
     if (st.view === 'loading') return;
     if (st.view === 'gone') {
-      content.innerHTML = goneHtml(st.error);
+      content.innerHTML = goneHtml(st.error && t(st.error));
+      return;
+    }
+    if (st.view === 'failed') {
+      const e = st.failure;
+      content.innerHTML = `<div class="card empty" role="alert"><p>${esc(e.network ? t('msg.network') : e.message)}</p><button class="btn" type="button" data-act="reload">${esc(t('proof.retry'))}</button></div>`;
       return;
     }
     if (st.view === 'replaced') {
@@ -155,6 +162,10 @@
   content.addEventListener('click', (e) => {
     const b = e.target.closest('[data-act]');
     if (!b || st.sending) return;
+    if (b.dataset.act === 'reload') {
+      location.reload();
+      return;
+    }
     if (b.dataset.act === 'copy') {
       copyUnsent();
       return;
@@ -214,7 +225,7 @@
 
   async function load() {
     if (!token) {
-      Object.assign(st, { view: 'gone', error: t('proofPage.noToken') });
+      Object.assign(st, { view: 'gone', error: 'proofPage.noToken' });
       return render();
     }
     try {
@@ -223,11 +234,7 @@
       Object.assign(st, { view: 'proof', data, error: null });
     } catch (e) {
       if (e.status === 404 || e.status === 410 || e.status === 400 || e.status === 403) Object.assign(st, { view: 'gone', error: null });
-      else {
-        content.innerHTML = `<div class="card empty" role="alert"><p>${esc(e.message)}</p><button class="btn" type="button" id="reload">${esc(t('proof.retry'))}</button></div>`;
-        document.getElementById('reload').addEventListener('click', () => location.reload());
-        return;
-      }
+      else Object.assign(st, { view: 'failed', failure: e });
     }
     render();
   }

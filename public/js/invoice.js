@@ -9,6 +9,8 @@
   const actions = document.getElementById('inv-actions');
   const FALLBACK_SHOP = { name: { en: 'ebda3', ar: 'إبداع' }, url: null, whatsapp: null, email: null };
   let order = null;
+  // Why the order could not be shown (the Error from POD.api: its status, or no connection). Kept as it is, not as a
+  // text, so the line under the heading follows the page's language after a switch, like the heading.
   let error = null;
 
   const round2 = (n) => Math.round(Number(n) * 100) / 100;
@@ -121,11 +123,15 @@
     }).join('');
   }
 
+  /** The line under "Order not found": none for a link to no order (the heading says it all), else what went wrong. */
+  const errorText = (e) => (e.status === 404 ? '' : e.network ? t('msg.network') : e.message);
+
   function render() {
     if (error) {
       actions.hidden = true;
       document.title = t('invoice.pageTitle');
-      content.innerHTML = `<div class="card empty" style="margin-top:32px"><h2>${esc(t('order.notFound'))}</h2>${error !== t('order.notFound') ? `<p class="muted">${esc(error)}</p>` : ''}<a class="btn" href="/">${esc(t('order.back'))}</a></div>`;
+      const why = errorText(error);
+      content.innerHTML = `<div class="card empty" style="margin-top:32px"><h2>${esc(t('order.notFound'))}</h2>${why ? `<p class="muted">${esc(why)}</p>` : ''}<a class="btn" href="/">${esc(t('order.back'))}</a></div>`;
       return;
     }
     const o = order;
@@ -227,12 +233,16 @@
       order = await POD.api('/api/orders/' + encodeURIComponent(orderId));
       error = null;
     } catch (e) {
-      error = e.message;
+      error = e;
     }
     render();
   }
 
   document.getElementById('inv-print').addEventListener('click', () => window.print());
-  document.addEventListener('pod:langchange', () => (order || error) && render());
+  // (The site's own message about a failure comes in the language it was asked in: asked again in the new one.)
+  document.addEventListener('pod:langchange', () => {
+    if (error && error.status && error.status !== 404) load();
+    else if (order || error) render();
+  });
   load();
 })();

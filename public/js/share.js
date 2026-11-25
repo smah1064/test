@@ -12,7 +12,8 @@
   }
   $('share-body').hidden = false;
   let side = share.sides[0].id;
-  const voted = (() => { try { return localStorage.getItem('pod-voted:' + share.id); } catch (e) { return null; } })();
+  // This visitor's vote (kept from an earlier visit, or sent just now): render() shows "thanks" in the page's language.
+  let voted = (() => { try { return localStorage.getItem('pod-voted:' + share.id); } catch (e) { return null; } })();
 
   function when(iso) {
     try {
@@ -65,11 +66,8 @@
       sending = false;
     }
     try { localStorage.setItem('pod-voted:' + share.id, vote); } catch (e) { /* private mode */ }
+    voted = vote; // (render(), now and after a language switch, keeps the buttons off and says thanks)
     $('change-form').hidden = true;
-    $('vote-up').disabled = true;
-    $('vote-change').disabled = true;
-    $('share-thanks').hidden = false;
-    $('share-thanks').textContent = t('share.thanks');
     render();
   }
 

@@ -161,6 +161,8 @@
   /** The design as it will be printed: with the customer's names. */
   const personal = () => D.withNames(design, names);
   const typed = (s, k) => D.cleanName(names[k], s.max);
+  /** A name longer than its place: only its first whole words are printed (D.cleanName); said under the boxes. */
+  const cutShort = () => samples.some((s, k) => typed(s, k) !== D.cleanName(names[k], Infinity));
   /** The sample names nobody replaced (their box left empty). */
   const unchanged = () => samples.filter((s, k) => !typed(s, k));
   const namesKey = () => samples.map(typed).join('\n');
@@ -183,10 +185,12 @@
     if (!samples.length) return;
     if (!box.firstChild) {
       box.innerHTML = samples.map((s, k) => `<div class="field"><label for="dp-name-${k}"></label>`
-        + `<input type="text" id="dp-name-${k}" data-name="${k}" maxlength="${s.max}" autocomplete="off" autocapitalize="words" spellcheck="false" enterkeyhint="done" aria-describedby="dp-names-hint"${s.caps ? ' class="dp-caps"' : ''}></div>`).join('')
+        // (The box takes more than fits, so a long name is never cut inside a word: cleanName keeps whole words.)
+        + `<input type="text" id="dp-name-${k}" data-name="${k}" maxlength="${s.max + 30}" autocomplete="off" autocapitalize="words" spellcheck="false" enterkeyhint="done" aria-describedby="dp-names-hint"${s.caps ? ' class="dp-caps"' : ''}></div>`).join('')
         // (Phones: the big picture is above, out of sight while typing; a small copy of the design here.)
         + '<img class="dp-names-peek" id="dp-names-peek" alt="" aria-hidden="true"><p class="muted small" id="dp-names-hint"></p>'
-        + '<p class="small dp-names-long" id="dp-names-long" role="status" hidden></p>';
+        + '<p class="small dp-names-long" id="dp-names-long" role="status" hidden></p>'
+        + '<p class="small dp-names-long" id="dp-names-cut" role="status" hidden></p>';
     }
     samples.forEach((s, k) => {
       const input = $(`dp-name-${k}`);
@@ -196,6 +200,8 @@
     });
     $('dp-names-hint').textContent = t('design.name.hint');
     $('dp-names-long').textContent = t('design.name.long');
+    $('dp-names-cut').textContent = t('design.name.cut');
+    $('dp-names-cut').hidden = !cutShort();
   }
   let nameTimer = null;
   let drawnNames = null; // the names in the picture now
@@ -205,6 +211,7 @@
     names[k] = e.target.value;
     keepSamples = false;
     boxDir(e.target, samples[k]);
+    $('dp-names-cut').hidden = !cutShort();
     $('dp-edit').href = editHref();
     // The picture follows once typing pauses.
     clearTimeout(nameTimer);

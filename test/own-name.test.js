@@ -208,12 +208,23 @@ test('cleanName: one printable line of a sensible length', () => {
   assert.strictEqual(D.cleanName('Laila 🌸✨'), 'Laila', 'no emoji (the fonts have none)');
   assert.strictEqual(D.cleanName('‮ليلى‬'), 'ليلى', 'no direction overrides');
   assert.strictEqual(D.cleanName('عبد الرحمن ٢٠٢٧'), 'عبد الرحمن ٢٠٢٧', 'Arabic digits kept');
-  assert.strictEqual(D.cleanName('x'.repeat(80)).length, 30);
+  assert.strictEqual(D.cleanName('x'.repeat(80)).length, 45, 'one long word: cut at the limit (45 letters for a name)');
   assert.strictEqual(D.cleanName('ABCDEFG', 3), 'ABC');
   const [initial] = D.sampleNames(byId('lz-card-initial-name'));
   assert.deepStrictEqual([initial.role, initial.sample, initial.caps, initial.max], ['initial', 'A', true, 3]);
   const [names] = D.sampleNames(byId('lz-tray-names-ar'));
-  assert.deepStrictEqual([names.role, names.caps, names.max], ['names', false, 40]);
+  assert.deepStrictEqual([names.role, names.caps, names.max], ['names', false, 60]);
+  // Long names (QA, 25 Nov): a four-part Egyptian name fits whole; too long, whole words only, never a word cut short.
+  const four = 'عبد الرحمن محمد عبد الفتاح الشربيني';
+  assert.strictEqual(D.cleanName(four), four);
+  // 46 letters: the last word is left out whole ("الشربي" would be another name).
+  assert.strictEqual(D.cleanName('محمد أحمد عبد الرحمن مصطفى عبد العزيز الشربيني'), 'محمد أحمد عبد الرحمن مصطفى عبد العزيز');
+  const cut = D.cleanName(`${four} ${four}`);
+  assert.ok(Array.from(cut).length <= 45 && `${four} ${four}`.startsWith(cut) && `${four} ${four}`[cut.length] === ' ', `whole words: ${cut}`);
+  assert.strictEqual(D.cleanName('Abdel Rahman Mohamed Abdel Fattah El Sherbiny Mostafa'), 'Abdel Rahman Mohamed Abdel Fattah El Sherbiny');
+  assert.strictEqual(D.cleanName('Omar Khaled', 8), 'Omar', 'the last word dropped, not cut');
+  assert.strictEqual(D.cleanName('Omar Khaled', 11), 'Omar Khaled');
+  assert.strictEqual(D.cleanName('Omar Khaled', 4), 'Omar', 'cut at a space: the words before it');
 });
 
 test('the words: every kind of name has a label, in English and Egyptian Arabic, kept together after design.fillNote', () => {

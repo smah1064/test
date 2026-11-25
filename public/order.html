@@ -101,6 +101,9 @@
         const text = t('order.waMessage', { n: o.number, items, total: money(o.total), name: o.customer.name });
         return `https://wa.me/${shopWa()}?text=${encodeURIComponent(text)}`;
       }
+      /** When the order was placed, for the line under its number: "25 November 2026 at 10:18" / "٢٥ نوفمبر ٢٠٢٦ في ١٠:١٨ ص"
+       *  (no comma inside, where the Arabic line's own commas part what it says). */
+      const placedOn = (iso) => new Date(iso).toLocaleString(POD.lang === 'ar' ? 'ar-EG' : 'en-GB', { dateStyle: 'long', timeStyle: 'short' });
       /** 'YYYY-MM-DD' as a calendar day (no time-zone shift). */
       function day(ymd) {
         const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(ymd || '');
@@ -262,7 +265,7 @@
               <p class="muted small">${esc(t('order.emailWhy'))}</p>
             </section>` : ''}
             <h1>${esc(t('order.title', { n: o.number }))}</h1>
-            <p class="muted">${esc(listed(POD.plural('order.meta', o.items.length, { status: t('order.' + shownStatus(o)), date: POD.date(o.createdAt) })))}</p>
+            <p class="muted">${esc(listed(POD.plural('order.meta', o.items.length, { status: t('order.' + shownStatus(o)), date: placedOn(o.createdAt) })))}</p>
             ${isNew ? '' : arrives}
             <div class="order-actions">
               <a class="btn" href="/invoice?id=${encodeURIComponent(o.id)}">${esc(t('track.invoice'))}</a>
