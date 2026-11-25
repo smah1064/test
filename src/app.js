@@ -4374,7 +4374,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         } catch (e) {
           a = { ok: false, reason: e instanceof designUpload.UploadError && SKIP_REASONS.has(e.code) ? e.code : 'badPicture' };
         }
-        if (!a.ok) b.skipped.push({ path: String(ent.path).slice(0, 200), reason: SKIP_REASONS.has(a.reason) ? a.reason : 'badPicture' });
+        if (!a.ok) b.skipped.push({ path: String(ent.path).slice(0, 200), reason: SKIP_REASONS.has(a.reason) ? a.reason : 'badPicture', ...(designUpload.skipSizes ? designUpload.skipSizes(a) : {}) });
         else if (here()) {
           const itemId = crypto.randomBytes(6).toString('hex');
           const printExt = a.printExt === 'jpg' ? 'jpg' : 'png';
