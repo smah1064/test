@@ -399,12 +399,14 @@
    * shapes, so it prints sharp at any size; pictures (.png/.webp) a photo layer.
    */
   const fileArt = new Map();
+  /** The full-size original of an uploaded design (or of its copy without the words), used by print files. */
+  const PRINT_SRC = /^\/library-art\/[0-9a-z-]{4,40}\/(?:nowords-)?print\.(png|jpg)$/;
   async function makeImage(i, ink) {
     // A white copy of one-colour artwork (`dark`) for dark product colours (light ink).
     const light = i.dark && /^#[0-9a-f]{6}$/i.test(ink || '') && parseInt(ink.slice(1, 3), 16) + parseInt(ink.slice(3, 5), 16) + parseInt(ink.slice(5, 7), 16) > 384;
     const src = String((light ? i.dark : i.src) || '');
     // The shop's own artwork files, and designs uploaded in the admin (published, or still being reviewed).
-    const uploaded = /^\/library-(?:art\/[0-9a-z-]{4,40}\/web|upload\/[0-9a-f]{16,40}\/[0-9a-f]{8,40})\.png$/.test(src);
+    const uploaded = /^\/library-(?:art\/[0-9a-z-]{4,40}\/(?:nowords-)?web|upload\/[0-9a-f]{16,40}\/[0-9a-f]{8,40})\.png$/.test(src);
     if (!uploaded && !/^\/img\/art\/[\w/-]+\.(svg|png|webp|jpg)$/.test(src)) return null;
     if (/\.svg$/.test(src)) {
       if (!fileArt.has(src)) fileArt.set(src, fetch(src).then((r) => (r.ok ? r.text() : null)).catch(() => null));
@@ -418,10 +420,65 @@
       if (failed || !img) return resolve(null);
       img.set({ name: uploaded ? (i.name || 'Design') : 'art:' + src.split('/').pop().replace(/\.\w+$/, '') });
       // An uploaded design shows a light copy; its print files use the full-size original (see POD_PRINTSRC).
-      if (uploaded && /^\/library-art\/[0-9a-z-]{4,40}\/print\.(png|jpg)$/.test(String(i.printSrc || ''))) img.set({ printSrc: i.printSrc, printPx: Array.isArray(i.printPx) ? i.printPx.slice(0, 2).map(Number) : null });
+      if (uploaded && PRINT_SRC.test(String(i.printSrc || ''))) img.set({ printSrc: i.printSrc, printPx: Array.isArray(i.printPx) ? i.printPx.slice(0, 2).map(Number) : null });
       resolve(img);
     }));
   }
+  /**
+   * Words drawn in a picture, as live text. A picture (`kind: 'image'`) may carry `words`:
+   *   { src, dark?, printSrc?, printPx?, texts: [{ text, font, size, x, y, w?, weight?, fill?, curve?, angle?, spacing?, lineHeight? }] }
+   * `src` (and `dark`, the white copy for dark colours; `printSrc`, an uploaded design's full-size original) is
+   * the same picture without its words, the same size and shape, so it lines up with the original. Each text is
+   * placed on that picture: x, y its centre as fractions of the picture's width and height; size the font size
+   * and w the width of the line, as fractions of the picture's width (w: the line is set to exactly that width,
+   * as the words were drawn). A text without `fill` takes the ink, like the rest of the design.
+   * The words then are ordinary text in the editor (tap, double-tap to type), and the picture its own layer.
+   */
+  function wordsArt(i) {
+    const w = i && i.words;
+    if (!w || typeof w.src !== 'string' || !Array.isArray(w.texts) || !w.texts.length) return null;
+    return { ...i, src: w.src, dark: w.dark || (i.dark === i.src ? w.src : w.dark), printSrc: w.printSrc, printPx: w.printPx, words: undefined };
+  }
+  /**
+   * The text objects of `words` on a picture drawn in `box` ({ cx, cy, w, h, angle?, flipX?, flipY? }: its centre,
+   * drawn size and turn on the canvas).
+   */
+  function wordsTexts(words, box, ink) {
+    const rad = ((box.angle || 0) * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    return (words.texts || []).filter((t) => t && typeof t.text === 'string' && t.text.trim()).map((t) => {
+      const text = t.text.slice(0, 500);
+      const arabic = ARABIC_RE.test(text);
+      const o = new fabric.IText(text, {
+        name: 'Text',
+        fontFamily: BUNDLED.has(t.font) ? t.font : 'Montserrat',
+        fontSize: Math.max(4, Math.round(box.w * (Number(t.size) || 0.08))),
+        fontWeight: t.weight || 'normal',
+        fill: t.fill || ink,
+        textAlign: 'center',
+        lineHeight: Number(t.lineHeight) || 1.16,
+        charSpacing: arabic ? 0 : Number(t.spacing) || 0,
+        direction: arabic ? 'rtl' : 'ltr',
+        curve: Math.max(-100, Math.min(100, Number(t.curve) || 0)),
+        originX: 'center',
+        originY: 'center',
+      });
+      if (t.w > 0 && !o.curve) o.scaleToWidth(box.w * t.w);
+      let dx = ((Number.isFinite(+t.x) ? +t.x : 0.5) - 0.5) * box.w;
+      let dy = ((Number.isFinite(+t.y) ? +t.y : 0.5) - 0.5) * box.h;
+      if (box.flipX) dx = -dx;
+      if (box.flipY) dy = -dy;
+      o.set({ left: box.cx + dx * cos - dy * sin, top: box.cy + dx * sin + dy * cos, angle: (box.angle || 0) + (Number(t.angle) || 0) });
+      o.setCoords();
+      return o;
+    });
+  }
+  /** Make sure the fonts of a picture's words are loaded before they are measured. */
+  function ensureWordsFonts(words) {
+    return Promise.all(((words && words.texts) || []).map((t) => ensureFont(t.font, t.weight || 'normal', 'normal')));
+  }
+
   /**
    * The part of a print area a layout goes in: printArea.readyZone (fractions of the
    * area) where the product has one: the wall calendar's top half above the month
@@ -482,7 +539,12 @@
       o.setCoords();
     }
   }
-  async function buildTemplate(tpl, fullArea, ink, { inset = 0 } = {}) {
+  async function buildTemplate(tpl, fullArea, ink, { inset = 0, words: liveWords = true } = {}) {
+    // Pictures with their words as live text (see wordsArt): the picture without the words, then the words.
+    if (liveWords && tpl.items.some((i) => i.kind === 'image' && wordsArt(i))) {
+      tpl = { ...tpl, items: tpl.items.map((i) => (i.kind === 'image' && wordsArt(i)) || i), wordsOf: tpl.items.map((i) => (i.kind === 'image' && wordsArt(i) ? i.words : null)) };
+      await Promise.all(tpl.wordsOf.filter(Boolean).map(ensureWordsFonts));
+    }
     const area = readyArea(fullArea, tpl);
     // A layout drawn for a box of a given shape (tpl.aspect = width / height,
     // e.g. 0.75 for the ready designs, made on a T-shirt): on wider, shorter
@@ -553,6 +615,12 @@
     const box = { x: area.x + pad, y: area.y + pad, w: area.w - 2 * pad, h: area.h - 2 * pad };
     built.forEach((o, idx) => fitName(o, tpl.items[idx], built, area, box));
     const objs = built.filter(Boolean);
+    // The words of pictures, on top, where they were drawn.
+    (tpl.wordsOf || []).forEach((words, idx) => {
+      const o = built[idx];
+      if (!words || !o) return;
+      objs.push(...wordsTexts(words, { cx: o.left, cy: o.top, w: o.getScaledWidth(), h: o.getScaledHeight(), angle: o.angle || 0 }, ink));
+    });
     // Keep everything well inside the edges: a margin of 8% of the area's short side (at least
     // the product's safe zone, `inset`) all round. Too big: shrunk round the middle; then
     // moved in if a part still sits in the margin.
@@ -608,7 +676,7 @@
     const walk = (list) => list.forEach((o) => { if (o.type === 'group' && o._objects) walk(o._objects); else if (o.type === 'image' && o.printSrc && !o.printSwapped) pics.push(o); });
     walk(canvas.getObjects());
     await Promise.all(pics.map(async (o) => {
-      if (!/^\/library-art\/[0-9a-z-]{4,40}\/print\.(png|jpg)$/.test(String(o.printSrc))) return;
+      if (!PRINT_SRC.test(String(o.printSrc))) return;
       if (!originals.has(o.printSrc)) {
         originals.set(o.printSrc, new Promise((resolve) => {
           const im = new Image();
@@ -634,11 +702,11 @@
    */
   const EMBED_MAX = 12 * 2 ** 20;
   const embedded = new Map();
-  const OWN_PIC = /^\/library-art\/[0-9a-z-]{4,40}\/(?:print\.(?:png|jpg)|web\.png)$/;
+  const OWN_PIC = /^\/library-art\/[0-9a-z-]{4,40}\/(?:nowords-)?(?:print\.(?:png|jpg)|web\.png)$/;
   async function picDataUrl(p) {
     try {
       let blob = await (await fetch(p)).blob();
-      if (blob.size > EMBED_MAX && /\/print\.(png|jpg)$/.test(p)) blob = await (await fetch(p.replace(/print\.(png|jpg)$/, 'web.png'))).blob();
+      if (blob.size > EMBED_MAX && /print\.(png|jpg)$/.test(p)) blob = await (await fetch(p.replace(/print\.(png|jpg)$/, 'web.png'))).blob();
       if (!/^image\/(png|jpeg)$/.test(blob.type)) return null;
       return await new Promise((resolve) => {
         const r = new FileReader();
@@ -744,5 +812,5 @@
     return changed ? { ...design, items } : design;
   }
 
-  window.POD_DESIGN = { FONTS, BUNDLED, ARABIC_RE, ACCENT, SHAPES, TEXT_PRESETS, TEMPLATES, ensureFont, ensureFontsFor, buildTemplate, readyArea, templateThumb, usePrintSources, inlineSvgImages, NAME_ROLES, sampleNames, cleanName, withNames };
+  window.POD_DESIGN = { FONTS, BUNDLED, ARABIC_RE, ACCENT, SHAPES, TEXT_PRESETS, TEMPLATES, ensureFont, ensureFontsFor, buildTemplate, readyArea, templateThumb, usePrintSources, inlineSvgImages, NAME_ROLES, sampleNames, cleanName, withNames, wordsTexts, ensureWordsFonts };
 })();
