@@ -1698,8 +1698,68 @@ PRODUCTS.push(
     cardArt: '<g fill="{{I}}" stroke="#000" stroke-opacity=".18" stroke-width="2"><rect x="90" y="262" width="62" height="76" rx="14"/><circle cx="208" cy="300" r="38"/><path d="M262 338 L297 262 L332 338 Z" stroke-linejoin="round"/><rect x="352" y="262" width="58" height="76" rx="29"/></g>',
     laser: { kind: 'cut', bridgeMm: 0, pieces: 'many', board: true },
   },
+  // (Owner's request, 25 Nov: engraved pens and wallets, 4 models each, with ready engraving designs.)
+  {
+    id: 'engrpen',
+    category: 'laser',
+    name: t('Engraved Pen', 'قلم محفور'),
+    description: t('A ballpoint pen in coated metal or bamboo, laser engraved along the barrel with a name, initials or a logo. One as a gift, or packs for your company and events.', 'قلم جاف معدن ملوّن أو بامبو، محفور بالليزر على جسم القلم بالاسم أو الحروف أو اللوجو. قلم واحد هدية، أو باكتات لشركتك ومناسباتك.'),
+    basePrice: 180,
+    colorLabel: t('Model', 'الموديل'),
+    // (A CO2 laser takes the colour coat off metal, so the engraving shows the bright metal under it; on bamboo it burns dark.)
+    colors: [
+      { id: 'black', name: t('Black metal', 'معدن أسود'), hex: '#232428', ink: '#d4d7db' },
+      { id: 'navy', name: t('Navy blue metal', 'معدن كحلي'), hex: '#1e3358', ink: '#d4d9e2' },
+      { id: 'gold', name: t('Gold metal', 'معدن دهبي'), hex: '#c9a14a', ink: '#f4f1ea' },
+      { id: 'bamboo', name: t('Bamboo wood', 'خشب بامبو'), hex: '#d6b07a', ink: '#5a3416' },
+    ],
+    // One pen, or packs for companies and events: cheaper per pen (180, 135, 120, 110 EGP).
+    sizes: qty([['1', '1 pen', 'قلم واحد', 0], ['10', '10 pens', '10 أقلام', 1170], ['25', '25 pens', '25 قلم', 2820], ['50', '50 pens', '50 قلم', 5320]]),
+    sides: [{
+      id: 'front',
+      name: t('Barrel', 'جسم القلم'),
+      svg: sv('<ellipse cx="250" cy="348" rx="215" ry="9" fill="#000" opacity=".12"/>'
+        + '<rect x="26" y="283" width="36" height="34" rx="12" fill="{{S}}" stroke="{{L}}" stroke-width="2"/>'
+        + '<path d="M414 282 L458 296 Q467 300 458 304 L414 318 Z" fill="{{S}}" stroke="{{L}}" stroke-width="2" stroke-linejoin="round"/><circle cx="469" cy="300" r="3" fill="#55585e"/>'
+        + '<rect x="52" y="277" width="364" height="46" rx="23" fill="{{C}}" stroke="{{L}}" stroke-width="3"/>'
+        + '<rect x="142" y="277" width="10" height="46" fill="{{S}}" stroke="{{L}}" stroke-width="1.5"/>'
+        + '<rect x="60" y="270" width="14" height="10" rx="3" fill="{{S}}" stroke="{{L}}" stroke-width="1.5"/><rect x="58" y="261" width="120" height="11" rx="5.5" fill="{{S}}" stroke="{{L}}" stroke-width="2"/>'
+        + '<rect x="70" y="284" width="334" height="7" rx="3.5" fill="#fff" opacity=".22"/>'),
+      printArea: { x: 166, y: 283, w: 236, h: 34 },
+      printWidthIn: 45 / 25.4,
+    }],
+    cardArt: '<path d="M180 300 l8 -8 l8 8 l-8 8z" fill="{{I}}"/><rect x="206" y="296" width="176" height="8" rx="4" fill="{{I}}"/>',
+    laser: { kind: 'engrave', cut: null },
+  },
+  {
+    id: 'engrwallet',
+    category: 'laser',
+    name: t('Engraved Leather Wallet', 'محفظة جلد محفورة'),
+    description: t('Real leather bifold wallet, laser engraved on the front with a name, initials or a short message. A gift that lasts.', 'محفظة جلد طبيعي بتتقفل نصين، محفور على وشها بالليزر اسم أو حروف أو جملة قصيرة. هدية بتعيش.'),
+    basePrice: 450,
+    colorLabel: t('Leather', 'الجلد'),
+    colors: [
+      { id: 'black', name: t('Black', 'أسود'), hex: '#1f1d1f', ink: '#5b544f' },
+      { id: 'brown', name: t('Brown', 'بني'), hex: '#6e4127', ink: '#2f1a0d' },
+      { id: 'tan', name: t('Tan', 'عسلي'), hex: '#b8834f', ink: '#5c3818' },
+      { id: 'burgundy', name: t('Burgundy', 'نبيتي'), hex: '#5e1f2a', ink: '#2c0d13' },
+    ],
+    // One wallet, or a few for a team or a family: cheaper per wallet (450, 410, 400 EGP).
+    sizes: qty([['1', '1 wallet', 'محفظة واحدة', 0], ['5', '5 wallets', '5 محافظ', 1600], ['10', '10 wallets', '10 محافظ', 3550]]),
+    sides: [{
+      id: 'front',
+      name: FRONT,
+      svg: sv(shadowRect(70, 170, 360, 270, 18) + '<rect x="70" y="170" width="360" height="270" rx="18" fill="{{C}}" stroke="{{L}}" stroke-width="3"/>'
+        + '<path d="M70 188 Q70 170 88 170 L96 170 L96 440 L88 440 Q70 440 70 422 Z" fill="{{S}}" opacity=".55"/>'
+        + '<rect x="108" y="186" width="306" height="238" rx="10" fill="none" stroke="{{S}}" stroke-width="2.5" stroke-dasharray="7 6"/>'),
+      printArea: { x: 150, y: 240, w: 230, h: 130 },
+      printWidthIn: 7 / 2.54,
+    }],
+    cardArt: '<circle cx="265" cy="290" r="34" fill="none" stroke="{{I}}" stroke-width="5"/><rect x="241" y="285" width="48" height="10" rx="5" fill="{{I}}"/><rect x="200" y="345" width="130" height="7" rx="3.5" fill="{{I}}"/>',
+    laser: { kind: 'engrave', cut: null },
+  },
 );
-const LASER_IDS = ['engrplaque', 'engrcoasters', 'engrtray', 'engrframe', 'engrcardholder', 'caketopper', 'weddingsign', 'doorsign', 'ramadandecor', 'namepuzzle'];
+const LASER_IDS = ['engrplaque', 'engrcoasters', 'engrtray', 'engrframe', 'engrcardholder', 'caketopper', 'weddingsign', 'doorsign', 'ramadandecor', 'namepuzzle', 'engrpen', 'engrwallet'];
 
 // ---------- Cards, business print, packaging, calendars and events ----------
 // Each printArea has exactly the proportions of the real printed piece (its trim
@@ -2334,6 +2394,9 @@ const PRODUCTION = {
   doorsign: { process: 'engrave', safeIn: 0.3, bleedIn: 0, model: { type: 'block', depthIn: 0.24, radiusIn: 0.31, material: 'laser' } },
   ramadandecor: { process: 'lasercut', safeIn: 0, bleedIn: 0, model: { type: 'cutout', depthIn: 0.12, hang: true, material: 'laser' } },
   namepuzzle: { process: 'lasercut', safeIn: 0.25, bleedIn: 0, model: { type: 'puzzle', depthIn: 0.35, material: 'laser' } },
+  // A pen lying down, the engraving along its barrel; a closed bifold wallet (11 × 9 cm).
+  engrpen: { process: 'engrave', safeIn: 0.03, bleedIn: 0, model: { type: 'pen', lengthIn: 5.6, diameterIn: 0.43, material: 'laser' } },
+  engrwallet: { process: 'engrave', safeIn: 0.12, bleedIn: 0, model: { type: 'wallet', outerIn: [4.33, 3.54], depthIn: 0.45, material: 'laser' } },
   tshirt: { process: 'dtg', safeIn: 0.25, bleedIn: 0, model: { type: 'card', material: 'fabric' } },
   kidstee: { process: 'dtg', safeIn: 0.25, bleedIn: 0, model: { type: 'card', material: 'fabric' } },
   hoodie: { process: 'dtg', safeIn: 0.25, bleedIn: 0, model: { type: 'card', material: 'fabric' } },
