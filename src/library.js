@@ -288,6 +288,8 @@ const FITS = {
   artsy: { products: [...STYLE, 'calendar', 'deskcalendar', 'bookmarks'] },
   luxury: { products: [...WEAR, 'polo', 'cap', ...MUGS, 'tumbler', 'cushion', ...WALL, 'plaque', 'tote', 'phonecase', 'notebook', 'coasters', 'keychain', 'deskmat', 'notepads', 'deskcalendar'] },
   trends: { products: [...STYLE] },
+  // Christmas cards (src/library-packs/christmas.js): whole printed cards, so the card products only.
+  christmas: { products: ['greetingcard', 'foldedcards', 'postcards'] },
 };
 // A subject missing from the table (a new pack) still goes on the everyday products.
 const FITS_OTHER = { products: [...WEAR, ...MUGS, 'tumbler', 'cushion', 'poster', 'tote'] };
