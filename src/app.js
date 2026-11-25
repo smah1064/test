@@ -481,7 +481,7 @@ const DEFAULT_LIMITS = {
   artwork: [{ max: 15, ms: 10 * 60e3 }, { max: 60, ms: 24 * 3600e3 }],
   mergeParse: [{ max: 30, ms: 10 * 60e3 }, { max: 150, ms: 24 * 3600e3 }],
   reorder: [{ max: 20, ms: 10 * 60e3 }, { max: 100, ms: 24 * 3600e3 }],
-  reorderOrder: [{ max: 3, ms: 3600e3 }, { max: 6, ms: 24 * 3600e3 }], // per order
+  reorderOrder: [{ max: 6, ms: 3600e3 }, { max: 12, ms: 24 * 3600e3 }], // per order (items can be ordered again one by one)
   reorderMB: 8000, // megabytes of files copied by "Order again", the whole shop, per day
   // Megabytes of booklet PDFs kept (45 days each) for the whole shop per day, so a few visitors can't
   // fill the disk (per visitor: the 'artwork' limit).
@@ -3505,18 +3505,22 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   });
 
   // Order again: an exact copy of every item, at today's prices, ready for the cart.
-  app.post('/api/orders/:id/reorder', (req, res) => {
+  app.post('/api/orders/:id/reorder', express.json({ limit: '8kb' }), (req, res) => {
     const order = UUID_RE.test(req.params.id) && store.getOrder(req.params.id);
     if (!order) throw new HttpError(404, 'orderNotFound');
+    // Only some of the items ({ items: [item ids] }), or the whole order.
+    const asked = Array.isArray((req.body || {}).items) ? new Set(req.body.items.filter((x) => typeof x === 'string').slice(0, 100)) : null;
+    const chosen = order.items.map((it, i) => ({ it, i })).filter(({ it }) => !asked || asked.has(it.id));
+    if (!chosen.length) throw new HttpError(400, 'badRequest');
     rateLimit(req, 'reorder');
-    // Each order again copies every file: a few times per order a day, and a shop-wide daily budget of
+    // Each order again copies the files it takes: a few times per order a day, and a shop-wide daily budget of
     // copied megabytes, so repeated requests can't fill the disk.
     rateLimit(req, 'reorderOrder', order.id);
-    const mb = Math.ceil(order.items.reduce((n, it) => n + dirBytes(store.designDir(it.designId)), 0) / 1e6);
+    const mb = Math.ceil(chosen.reduce((n, { it }) => n + dirBytes(store.designDir(it.designId)), 0) / 1e6);
     if (!takeShopBudget('reorderMB', LIMITS.reorderMB, Math.max(1, mb))) throw new HttpError(429, 'tooManyWait', { min: 60 });
     const items = [];
     const skipped = [];
-    order.items.forEach((it, i) => {
+    chosen.forEach(({ it, i }) => {
       const d = store.getDesign(it.designId);
       const product = getProduct(it.productId);
       let reason = null;

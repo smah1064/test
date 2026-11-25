@@ -152,8 +152,23 @@
     render();
   });
   const STATUS = { received: 'queued', in_production: 'printing', shipped: 'shipped', delivered: 'delivered' };
-  // "Order again" per order: { busy, added, skipped, error }, kept across re-renders.
+  // "Order again" per order: { busy, added, skipped, error, pick (item ids being ticked) }, kept across re-renders.
   const reo = {};
+  /** "Which items do you want again?" for an order with several items: every item ticked to start with. */
+  function pickHtml(o) {
+    const pick = reo[o.id].pick;
+    return `
+      <div class="reo-pick" role="group" aria-label="${esc(t('track.reorderPick'))}">
+        <h3>${esc(t('track.reorderPick'))}</h3>
+        <ul>${o.items.map((item, i) => `
+          <li><label><input type="checkbox" data-pick="${esc(item.id)}" data-order="${esc(o.id)}"${pick.has(item.id) ? ' checked' : ''}>
+            <span>${esc(POD.num(i + 1))}. ${esc(tr(item.productName))}</span></label></li>`).join('')}</ul>
+        <div class="row">
+          <button class="btn btn-sm btn-primary" type="button" data-reorder-picked="${esc(o.id)}"${pick.size ? '' : ' disabled'}>${esc(t('track.reorderAdd', { n: POD.num(pick.size) }))}</button>
+          <button class="btn btn-sm" type="button" data-reorder-cancel="${esc(o.id)}">${esc(t('track.reorderCancel'))}</button>
+        </div>
+      </div>`;
+  }
   function reorderNotice(id) {
     const r = reo[id];
     if (!r) return '';
@@ -184,6 +199,7 @@
           <a class="btn btn-sm" href="/invoice?id=${encodeURIComponent(o.id)}">${esc(t('track.invoice'))}</a>
           <button class="btn btn-sm btn-primary" type="button" data-reorder="${esc(o.id)}"${busyNow ? ' disabled' : ''}>${esc(t(busyNow ? 'track.reordering' : 'track.reorder'))}</button>
         </div>
+        ${reo[o.id] && reo[o.id].pick ? pickHtml(o) : ''}
         ${reorderNotice(o.id)}
       </div>`;
   }
@@ -201,15 +217,44 @@
   }
   // A preview whose file is gone: keep the grey box, not a broken-image icon.
   $('v-orders').addEventListener('error', (e) => { if (e.target.tagName === 'IMG') e.target.src = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 1 1%22/%3E'; }, true);
+  $('v-orders').addEventListener('change', (e) => {
+    const box = e.target.closest('[data-pick]');
+    const r = box && reo[box.dataset.order];
+    if (!r || !r.pick) return;
+    if (box.checked) r.pick.add(box.dataset.pick);
+    else r.pick.delete(box.dataset.pick);
+    const add = $('v-orders').querySelector(`[data-reorder-picked="${CSS.escape(box.dataset.order)}"]`);
+    if (add) {
+      add.textContent = t('track.reorderAdd', { n: POD.num(r.pick.size) });
+      add.disabled = !r.pick.size;
+    }
+  });
   $('v-orders').addEventListener('click', async (e) => {
-    const b = e.target.closest('[data-reorder]');
+    const cancel = e.target.closest('[data-reorder-cancel]');
+    if (cancel) {
+      delete reo[cancel.dataset.reorderCancel];
+      renderOrders();
+      return;
+    }
+    const picked = e.target.closest('[data-reorder-picked]');
+    const b = picked || e.target.closest('[data-reorder]');
     if (!b) return;
-    const id = b.dataset.reorder;
+    const id = picked ? picked.dataset.reorderPicked : b.dataset.reorder;
     if (reo[id] && reo[id].busy) return;
+    const o = (orders || []).find((x) => x.id === id);
+    // Several items: first the list to tick ("Order again" again closes it).
+    if (!picked && o && o.items.length > 1) {
+      if (reo[id] && reo[id].pick) delete reo[id];
+      else reo[id] = { pick: new Set(o.items.map((it) => it.id)) };
+      renderOrders();
+      return;
+    }
+    const itemIds = picked && reo[id] && reo[id].pick ? [...reo[id].pick] : undefined;
+    if (picked && !(itemIds && itemIds.length)) return;
     reo[id] = { busy: true };
     renderOrders();
     try {
-      const r = await PODAftercare.reorder(id);
+      const r = await PODAftercare.reorder(id, itemIds && o && itemIds.length < o.items.length ? itemIds : undefined);
       if (r.added && !r.skipped.length) {
         location.href = '/cart?added=1';
         return;

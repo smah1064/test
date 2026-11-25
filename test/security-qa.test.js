@@ -66,8 +66,9 @@ test('a design id does not lead to its order; order again is limited per order',
   const got = await (await fetch(`${base}/api/designs/${d.id}`)).json();
   assert.ok(!JSON.stringify(got).includes(o.id), 'the design does not name the order');
   const codes = [];
-  for (let i = 0; i < 4; i++) codes.push((await post(`/api/orders/${o.id}/reorder`, {})).status);
-  assert.deepStrictEqual(codes, [200, 200, 200, 429]);
+  // (6 an hour: items can be ordered again one by one.)
+  for (let i = 0; i < 7; i++) codes.push((await post(`/api/orders/${o.id}/reorder`, {})).status);
+  assert.deepStrictEqual(codes, [200, 200, 200, 200, 200, 200, 429]);
 });
 
 test('sign-in locks say nothing about which accounts exist; a known admin browser is never locked out by others', async () => {

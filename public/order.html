@@ -78,6 +78,8 @@
       let error = null;
       // "Order again" state, kept across the auto-refresh re-renders.
       const reo = { busy: false, added: 0, skipped: null, error: null };
+      // Only some items again: the list being ticked (item ids), or null when it isn't open.
+      let picking = null;
       // The shop's details (its WhatsApp number): asked again with the order while they couldn't load.
       let shop = null;
       const shopWa = () => (shop && shop.contact && shop.contact.whatsapp) || '';
@@ -269,9 +271,10 @@
             ${isNew ? '' : arrives}
             <div class="order-actions">
               <a class="btn" href="/invoice?id=${encodeURIComponent(o.id)}">${esc(t('track.invoice'))}</a>
-              <button class="btn" type="button" data-act="reorder"${reo.busy ? ' disabled' : ''}>${esc(t(reo.busy ? 'track.reordering' : 'track.reorder'))}</button>
+              <button class="btn" type="button" data-act="reorder" aria-expanded="${picking ? 'true' : 'false'}"${reo.busy ? ' disabled' : ''}>${esc(t(reo.busy ? 'track.reordering' : 'track.reorder'))}</button>
               <span class="muted small">${esc(t('track.reorderNote'))}</span>
             </div>
+            ${picking ? pickHtml(o) : ''}
             ${reorderNotice()}
           </div>
           ${timelineHtml(o)}
@@ -295,6 +298,7 @@
                   ${delivered ? '' : proofStateHtml(item)}
                   ${approvalHtml(item)}
                   <div class="status-steps">${STEPS.map((s, k) => `<div class="${k <= reached ? 'done' : ''}" title="${esc(t('item.' + s))}"></div>`).join('')}</div>
+                  ${o.items.length > 1 ? `<button class="btn btn-sm reo-one" type="button" data-act="reorder-item" data-item="${esc(item.id)}"${reo.busy ? ' disabled' : ''}>${esc(t('track.reorderItem'))}</button>` : ''}
                 </div>
                 <div class="price">${esc(money(item.price))}${pieces > 1 && item.unitPrice && POD.packCopies(item.quantities) == null ? `<div class="qty-each">${esc(t('qty.each', { price: money(item.unitPrice) }))}</div>` : ''}</div>
               </div>`;
@@ -330,12 +334,37 @@
           POD.toast(t('order.linkCopyFailed'));
         }
       }
-      async function reorder() {
+      /** "Which items do you want again?": every item ticked to start with. */
+      function pickHtml(o) {
+        const n = picking.size;
+        return `
+          <div class="card reo-pick" role="group" aria-labelledby="reo-pick-title">
+            <h3 id="reo-pick-title">${esc(t('track.reorderPick'))}</h3>
+            <ul>${o.items.map((item, i) => `
+              <li><label><input type="checkbox" data-pick="${esc(item.id)}"${picking.has(item.id) ? ' checked' : ''}>
+                <span>${POD.num(i + 1)}. ${esc(tr(item.productName))}${item.color && item.color.name ? `${SEP()}${esc(tr(item.color.name))}` : ''}</span></label></li>`).join('')}</ul>
+            ${n ? '' : `<p class="muted small" role="status">${esc(t('track.reorderPickNone'))}</p>`}
+            <div class="row">
+              <button class="btn btn-primary" type="button" data-act="reorder-picked"${n ? '' : ' disabled'}>${esc(t('track.reorderAdd', { n: POD.num(n) }))}</button>
+              <button class="btn" type="button" data-act="reorder-cancel">${esc(t('track.reorderCancel'))}</button>
+            </div>
+          </div>`;
+      }
+      async function reorder(itemIds) {
         if (reo.busy || !order) return;
+        // Several items: first the list to tick (unless a single item's own button was used).
+        if (!itemIds && order.items.length > 1 && !picking) {
+          picking = new Set(order.items.map((it) => it.id));
+          render();
+          const first = content.querySelector('[data-pick]');
+          if (first) first.focus();
+          return;
+        }
+        picking = null;
         Object.assign(reo, { busy: true, added: 0, skipped: null, error: null });
         render();
         try {
-          const r = await PODAftercare.reorder(order.id);
+          const r = await PODAftercare.reorder(order.id, itemIds && itemIds.length < order.items.length ? itemIds : undefined);
           if (r.added && !r.skipped.length) {
             location.href = '/cart?added=1';
             return;
@@ -364,10 +393,32 @@
       }
       // A preview whose file is gone: keep the grey box, not a broken-image icon.
       content.addEventListener('error', (e) => { if (e.target.tagName === 'IMG') e.target.src = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 1 1%22/%3E'; }, true);
+      content.addEventListener('change', (e) => {
+        const box = e.target.closest('[data-pick]');
+        if (!box || !picking) return;
+        if (box.checked) picking.add(box.dataset.pick);
+        else picking.delete(box.dataset.pick);
+        // (Only the count and the button change: the ticks stay under the finger.)
+        const add = content.querySelector('[data-act="reorder-picked"]');
+        if (add) {
+          add.textContent = t('track.reorderAdd', { n: POD.num(picking.size) });
+          add.disabled = !picking.size;
+        }
+      });
       content.addEventListener('click', (e) => {
         const b = e.target.closest('[data-act]');
         if (!b) return;
-        if (b.dataset.act === 'reorder') reorder();
+        if (b.dataset.act === 'reorder') {
+          if (picking) { picking = null; render(); } else reorder();
+        }
+        if (b.dataset.act === 'reorder-item') reorder([b.dataset.item]);
+        if (b.dataset.act === 'reorder-picked' && picking && picking.size) reorder([...picking]);
+        if (b.dataset.act === 'reorder-cancel') {
+          picking = null;
+          render();
+          const back = content.querySelector('[data-act="reorder"]');
+          if (back) back.focus();
+        }
         if (b.dataset.act === 'copy') copyNumber(b);
         if (b.dataset.act === 'copy-link') copyLink();
         if (b.dataset.act === 'retry') retry();

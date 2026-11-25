@@ -55,6 +55,12 @@
     'track.reorder': ['Order again', 'اطلبه تاني'],
     'track.reordering': ['Adding to cart…', 'بنضيفه للسلة…'],
     'track.track': ['Track', 'تتبّع'],
+    // Only some items again: a button on each item, and a list to tick when the order has several.
+    'track.reorderItem': ['Order this again', 'اطلب ده تاني'],
+    'track.reorderPick': ['Which items do you want again?', 'عايز أنهي منتجات تاني؟'],
+    'track.reorderAdd': ['Add to cart ({n})', 'ضيف للسلة ({n})'],
+    'track.reorderPickNone': ['Tick at least one item.', 'اختار منتج واحد على الأقل.'],
+    'track.reorderCancel': ['Cancel', 'إلغاء'],
     'track.reorderNote': ["Same designs, today's prices.", 'نفس التصميمات، بأسعار النهارده.'],
     'track.goCart': ['Go to cart', 'روح للسلة'],
     // Counted: POD.plural('track.reorderPartial', n); the plain key reads right for any number.
@@ -143,8 +149,12 @@
           </ul>
         </section>`;
     },
-    async reorder(orderId) {
-      const r = await window.POD.api(`/api/orders/${encodeURIComponent(orderId)}/reorder`, { method: 'POST' });
+    /** Copies the order's items (or only `itemIds`) into the cart, at today's prices. */
+    async reorder(orderId, itemIds) {
+      const r = await window.POD.api(`/api/orders/${encodeURIComponent(orderId)}/reorder`, {
+        method: 'POST',
+        ...(Array.isArray(itemIds) ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: itemIds }) } : {}),
+      });
       const items = (r && Array.isArray(r.items)) ? r.items : [];
       if (items.length) window.POD.setCart(window.POD.getCart().concat(items));
       return { added: items.length, skipped: (r && Array.isArray(r.skipped)) ? r.skipped : [] };

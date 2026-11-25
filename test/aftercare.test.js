@@ -123,6 +123,16 @@ test('tracking, shipping details, delivery, payment and order again', async () =
   const o2 = await json('POST', '/api/orders', { customer: CUSTOMER, designIds: again.items.map((x) => x.designId), expectedTotal: q2.total });
   assert.strictEqual(o2.status, 201, await o2.clone().text());
   assert.strictEqual((await json('POST', '/api/orders/00000000-0000-4000-8000-000000000000/reorder')).status, 404);
+
+  // Only some items again: the second one alone, copied with its own files; an unknown item is refused.
+  const one = await json('POST', `/api/orders/${order.id}/reorder`, { items: [got.items[1].id] });
+  assert.strictEqual(one.status, 200);
+  const oneAgain = await one.json();
+  assert.strictEqual(oneAgain.items.length, 1);
+  assert.strictEqual(oneAgain.items[0].price, got.items[1].price);
+  const copied = fs.readFileSync(path.join(dataDir, 'files', oneAgain.items[0].designId, 'front-print.png'));
+  assert.ok(copied.equals(fs.readFileSync(path.join(dataDir, 'files', ids[1], 'front-print.png'))));
+  assert.strictEqual((await json('POST', `/api/orders/${order.id}/reorder`, { items: ['not-an-item'] })).status, 400);
 });
 
 test('drafts kept on the account (open on another device)', async () => {
