@@ -173,7 +173,9 @@ test('coupons: the admin refuses amounts off and caps under 1 EGP, with a clear 
   assert.deepStrictEqual(clean({ type: 'percent', value: 101 }), { error: 'couponValueBad' });
   // 1 EGP and more are fine; so is a small percentage, and no cap at all.
   assert.strictEqual(clean({ type: 'fixed', value: 1 }).coupon.value, 1);
-  assert.strictEqual(clean({ type: 'fixed', value: '12.5' }).coupon.value, 12.5);
+  // (An amount off is whole pounds: 12.5 took 13 off. QA 25 Nov.)
+  assert.deepStrictEqual(clean({ type: 'fixed', value: '12.5' }), { error: 'couponFixedWhole' });
+  assert.strictEqual(clean({ type: 'fixed', value: '12' }).coupon.value, 12);
   assert.strictEqual(clean({ type: 'percent', value: 10, maxDiscount: 1 }).coupon.maxDiscount, 1);
   assert.strictEqual(clean({ type: 'percent', value: 0.5, maxDiscount: '' }).coupon.value, 0.5);
   assert.strictEqual(clean({ type: 'percent', value: 10 }).coupon.maxDiscount, undefined);

@@ -34,3 +34,15 @@ test('made-up page addresses: the 404 page every time, nothing kept; real pages 
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
 });
+
+test('a fixed coupon is whole pounds: 7.5 refused when made or changed, 7 accepted', () => {
+  const coupons = require('../src/coupons');
+  const { PRODUCTS } = require('../src/products');
+  const ctx = { products: PRODUCTS, categories: [] };
+  assert.strictEqual(coupons.cleanCoupon({ code: 'HALF75', type: 'fixed', value: 7.5, active: true }, ctx).error, 'couponFixedWhole');
+  const ok = coupons.cleanCoupon({ code: 'SEVEN', type: 'fixed', value: 7, active: true }, ctx);
+  assert.ok(!ok.error, ok.error);
+  assert.strictEqual(ok.coupon.value, 7);
+  // Percent coupons as before (10% of 35 is 4, rounded to the pound).
+  assert.ok(!coupons.cleanCoupon({ code: 'TEN', type: 'percent', value: 12.5, active: true }, ctx).error);
+});

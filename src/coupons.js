@@ -47,6 +47,8 @@ function cleanCoupon(body, { products, categories }) {
   const value = type === 'freeship' ? 0 : num(b.value, { max: type === 'percent' ? 100 : 1e7 });
   // Discounts are whole pounds (see discountOf): an amount off or a cap under 1 EGP would take nothing off.
   if (type === 'fixed' && value != null && value < 1) return { error: 'couponFixedMin' };
+  // (An amount off is whole pounds, as every discount is: 7.5 took 8 off. QA 25 Nov.)
+  if (type === 'fixed' && value != null && !Number.isInteger(value)) return { error: 'couponFixedWhole' };
   if (value === null || value === undefined || (type === 'percent' && value < 0.01)) return { error: 'couponValueBad' };
   const maxDiscount = num(b.maxDiscount);
   if (maxDiscount != null && maxDiscount < 1) return { error: 'couponMaxMin' };

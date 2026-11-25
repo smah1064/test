@@ -76,6 +76,7 @@ const MESSAGES = {
   libNameEnMissing: { en: 'Type the design\'s English name too (the English shop shows it)', ar: 'اكتب اسم التصميم بالإنجليزي كمان (بيظهر في الموقع بالإنجليزي)' },
   libNameEnArabic: { en: 'The English name has Arabic letters: type it in English letters', ar: 'الاسم الإنجليزي فيه حروف عربي: اكتبه بحروف إنجليزي' },
   couponFixedMin: { en: 'The amount off must be at least EGP 1 (discounts are in whole pounds)', ar: 'مبلغ الخصم لازم يكون ١ ج.م. على الأقل (الخصم بالجنيه الكامل)' },
+  couponFixedWhole: { en: 'An amount off is in whole pounds (for example 7 or 8, not 7.5).', ar: 'الخصم بمبلغ بيبقى جنيهات صحيحة (مثلاً ٧ أو ٨، مش ٧٫٥).' },
   couponMaxMin: { en: 'The maximum discount must be at least EGP 1 (discounts are in whole pounds)', ar: 'أقصى خصم لازم يكون ١ ج.م. على الأقل (الخصم بالجنيه الكامل)' },
   couponDatesBad: { en: 'Check the dates (the end must be after the start)', ar: 'راجع التواريخ (النهاية لازم تكون بعد البداية)' },
   couponExists: { en: 'A coupon with this code already exists', ar: 'في كوبون بنفس الكود ده' },
