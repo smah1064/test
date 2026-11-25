@@ -31,6 +31,7 @@ window.AdminPreview = (() => {
         <h3>${esc(t('pv.addTitle'))}</h3>
         <div class="pv-add-row">
           <div class="field"><label for="pv-name">${esc(t('pv.name'))}</label><input type="text" id="pv-name" maxlength="60" dir="auto" required placeholder="${esc(t('pv.namePh'))}"></div>
+          <div class="field pv-own"><label for="pv-own">${esc(t('pv.ownCode'))}</label><input type="text" id="pv-own" maxlength="30" dir="ltr" autocapitalize="characters" spellcheck="false" placeholder="${esc(t('pv.ownCodePh'))}"></div>
           <button class="btn btn-primary shrink" type="submit">${esc(t('pv.add'))}</button>
         </div>
         <p class="small pv-msg" id="pv-msg" role="status"></p>
@@ -91,9 +92,10 @@ window.AdminPreview = (() => {
       if (e.target.id !== 'pv-add') return;
       e.preventDefault();
       const name = $('pv-name').value.trim();
+      const code = $('pv-own').value.trim();
       if (!name) return;
       try {
-        const p = await api('/api/admin/preview/people', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+        const p = await api('/api/admin/preview/people', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, ...(code ? { code } : {}) }) });
         fresh = p.id;
         data = await api('/api/admin/preview');
         render();

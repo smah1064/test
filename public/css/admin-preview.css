@@ -10,6 +10,8 @@
 .pv-add h3, .pv-list-title { font-size: 15px; margin: 0 0 10px; }
 .pv-add-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
 .pv-add-row .field { flex: 1 1 240px; margin: 0; }
+.pv-add-row .pv-own { flex: 1 1 200px; }
+.pv-own input { text-transform: uppercase; letter-spacing: .06em; }
 .pv-msg { margin: 8px 0 0; min-height: 1em; color: #1d6b3a; }
 .pv-msg.bad { color: var(--bad); }
 .pv-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; }

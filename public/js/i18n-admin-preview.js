@@ -12,6 +12,8 @@ Object.assign(window.POD_STRINGS, {
   'pv.addTitle': ['Invite someone', 'ادعي حد'],
   'pv.name': ['Their name (only you see it)', 'اسمه (إنت بس اللي بتشوفه)'],
   'pv.namePh': ['e.g. Mona – designer', 'مثلًا: منى – مصممة'],
+  'pv.ownCode': ['Your own code (optional)', 'كود من اختيارك (اختياري)'],
+  'pv.ownCodePh': ['Leave empty for a made-up one', 'سيبه فاضي ونعملك كود'],
   'pv.add': ['Create invitation link', 'اعمل لينك دعوة'],
   'pv.added': ['Invitation ready. Copy the link or send it on WhatsApp.', 'الدعوة جاهزة. انسخ اللينك أو ابعته على واتساب.'],
   'pv.people': ['Invited people', 'المدعوين'],

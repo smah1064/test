@@ -60,6 +60,8 @@ const MESSAGES = {
   couponValueBad: { en: 'Check the discount amount and limits', ar: 'راجع قيمة الخصم والحدود' },
   couponDatesBad: { en: 'Check the dates (the end must be after the start)', ar: 'راجع التواريخ (النهاية لازم تكون بعد البداية)' },
   couponExists: { en: 'A coupon with this code already exists', ar: 'في كوبون بنفس الكود ده' },
+  previewCodeBad: { en: 'A code has 6 to 24 letters or digits.', ar: 'الكود من ٦ لـ ٢٤ حرف أو رقم.' },
+  previewCodeTaken: { en: 'Someone already has this code. Choose another.', ar: 'في حد واخد الكود ده. اختار كود تاني.' },
   previewOnly: { en: 'The shop is open to invited people only for now.', ar: 'الموقع مفتوح للمدعوين بس دلوقتي.' },
   couponNotFound: { en: 'This coupon code is not valid', ar: 'كود الخصم ده غير صحيح' },
   couponNotYet: { en: 'This coupon starts on {date}', ar: 'الكوبون ده بيبدأ يوم {date}' },

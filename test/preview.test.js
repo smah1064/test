@@ -99,6 +99,14 @@ test('private: Opening soon for everyone else, invited people, owner and staff g
     let state = await (await admin('/api/admin/preview')).json();
     assert.deepStrictEqual(state, { on: true, people: [] });
     assert.strictEqual((await fetch(base + '/api/admin/preview')).status, 401);
+    // The owner's own code: typed with "@", spaces or small letters, it is the same code.
+    const ezz = await (await admin('/api/admin/preview/people', 'POST', { name: 'Ezzat', code: '@ezzatinvite' })).json();
+    assert.strictEqual(ezz.code, 'EZZATINVITE');
+    assert.strictEqual((await admin('/api/admin/preview/people', 'POST', { name: 'Again', code: 'EzzatInvite' })).status, 409);
+    assert.strictEqual((await admin('/api/admin/preview/people', 'POST', { name: 'Short', code: 'ab' })).status, 400);
+    const typedOwn = await fetch(base + '/api/preview/enter', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'code=%40ezzatinvite', redirect: 'manual' });
+    assert.ok(cookieOf(typedOwn), 'typed as given, with the @');
+    await admin(`/api/admin/preview/people/${ezz.id}`, 'DELETE');
     // Invite someone: a personal link.
     assert.strictEqual((await admin('/api/admin/preview/people', 'POST', { name: '  ' })).status, 400);
     const mona = await (await admin('/api/admin/preview/people', 'POST', { name: 'Mona (designer)' })).json();

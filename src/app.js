@@ -3668,11 +3668,15 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   app.post('/api/admin/preview/people', requireAdmin, express.json({ limit: '2kb' }), (req, res) => {
     const name = preview.cleanName((req.body || {}).name);
     if (!name) throw new HttpError(400, 'fieldRequired', { field: { en: 'Name', ar: 'الاسم' } });
+    // The owner's own code ("@ezzatinvite" -> "EZZATINVITE": letters and digits, 6 to 24), or a made-up one.
+    const own = (req.body || {}).code ? preview.normCode(req.body.code) : '';
+    if ((req.body || {}).code && (own.length < 6 || own.length > 24)) throw new HttpError(400, 'previewCodeBad');
     const person = store.mutate((db) => {
       db.preview ||= { on: false, people: [] };
       if (db.preview.people.length >= 500) throw new HttpError(400, 'badProductField', { field: 'people' });
-      let code;
-      do code = preview.newCode(); while (db.preview.people.some((x) => x.code === code));
+      if (own && db.preview.people.some((x) => x.code === own)) throw new HttpError(409, 'previewCodeTaken');
+      let code = own;
+      while (!code || (!own && db.preview.people.some((x) => x.code === code))) code = preview.newCode();
       const p = { id: crypto.randomBytes(6).toString('hex'), name, code, createdAt: new Date().toISOString(), visits: 0 };
       db.preview.people.push(p);
       return p;
