@@ -334,8 +334,8 @@ test('Owner: Approvals (approve → live, approve → failed with the reason, re
   for (const [lang, width] of [['en', 1366], ['ar', 360], ['ar', 1366], ['en', 360]]) {
     const { ctx, page, log } = await signIn(browser, srv, 'owner', { lang, width });
     const tabs = await visibleTabs(page);
-    assert.deepStrictEqual(tabs.slice(-3), ['staff', 'approvals', 'activity']);
-    assert.strictEqual(tabs.length, 15);
+    assert.deepStrictEqual(tabs.slice(-4), ['staff', 'approvals', 'activity', 'backup']);
+    assert.strictEqual(tabs.length, 16);
     assert.strictEqual(await page.textContent('#ap-count'), lang === 'en' ? '3' : '٣');
     await openTab(page, 'approvals', '.ap-item');
     assert.deepStrictEqual(await page.$$eval('.ap-item', (els) => els.map((e) => e.dataset.ap)), ['ap5', 'ap2', 'ap1'], 'waiting, newest first');
