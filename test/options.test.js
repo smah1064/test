@@ -102,7 +102,11 @@ test('PRICE_FACTOR scales every selling price, rounded to the nearest 10 EGP (he
   for (const list of PRODUCTS) {
     const s = sold.p.find((x) => x.id === list.id);
     assert.strictEqual(s.base, r10(list.basePrice), list.id);
-    assert.deepStrictEqual(s.sizes, list.sizes.map((z) => r10(z.surcharge || 0)), list.id);
+    // (Packs below the base: their own price is halved, so they stay cheaper than the base pack.)
+    assert.deepStrictEqual(s.sizes, list.sizes.map((z) => ((z.surcharge || 0) < 0 ? r10(list.basePrice + z.surcharge) - r10(list.basePrice) : r10(z.surcharge || 0))), list.id);
+    for (const [i, z] of list.sizes.entries()) {
+      if ((z.surcharge || 0) < 0) assert.ok(s.base + s.sizes[i] >= 10 && s.sizes[i] <= 0, `${list.id} ${z.id}: ${s.base + s.sizes[i]}`);
+    }
     if (list.embroidery) assert.strictEqual(s.emb, r10(list.embroidery.surcharge), list.id);
     assert.ok(s.base % 10 === 0, `${list.id} rounded to 10`);
   }

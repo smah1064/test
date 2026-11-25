@@ -2709,9 +2709,12 @@ function scalePrice(v) {
   return Math.max(10, Math.round((v * f) / 10) * 10);
 }
 for (const p of PRODUCTS) {
+  const listBase = p.basePrice;
   p.basePrice = scalePrice(p.basePrice);
   if (p.extraSidePrice != null) p.extraSidePrice = scalePrice(p.extraSidePrice);
-  p.sizes = p.sizes.map((s) => (s.surcharge ? { ...s, surcharge: scalePrice(s.surcharge) } : s));
+  // Packs below the base (1, 10, 25 copies…): their own price is scaled, so they stay cheaper than the
+  // base pack and never free (scaling the amount off would make it +10 EGP: QA 25 Nov).
+  p.sizes = p.sizes.map((s) => (s.surcharge < 0 ? { ...s, surcharge: scalePrice(listBase + s.surcharge) - p.basePrice } : s.surcharge ? { ...s, surcharge: scalePrice(s.surcharge) } : s));
   if (p.embroidery) p.embroidery.surcharge = scalePrice(p.embroidery.surcharge);
   for (const o of p.options || []) {
     for (const c of o.choices) {
