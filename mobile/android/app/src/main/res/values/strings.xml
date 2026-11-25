@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Arabic is the app's default language; values-en has the English texts (used when the phone is in English). -->
+<resources>
+    <string name="app_name">إبداع</string>
+    <string name="title_activity_main">إبداع</string>
+    <string name="package_name" translatable="false">me.ebda3.app</string>
+    <string name="custom_url_scheme" translatable="false">me.ebda3.app</string>
+    <string name="choose_photo">اختار صورة أو ملف</string>
+    <!-- Notifications (Android settings show this name). -->
+    <string name="notification_channel_orders">طلباتي</string>
+</resources>

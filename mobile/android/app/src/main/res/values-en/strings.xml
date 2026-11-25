@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">إبداع</string>
+    <string name="title_activity_main">إبداع</string>
+    <string name="choose_photo">Choose a photo or file</string>
+    <string name="notification_channel_orders">My orders</string>
+</resources>

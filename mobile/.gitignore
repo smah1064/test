@@ -1,0 +1,18 @@
+# Signing keys, certificates and store credentials never go in the repository.
+*.jks
+*.keystore
+*.p12
+*.p8
+*.mobileprovision
+*.cer
+keystore.properties
+# Build output
+/android/app/build/
+/android/build/
+/android/.gradle/
+/android/.kotlin/
+/ios/App/build/
+/ios/App/DerivedData/
+/ios/ShellCoreTests/.build/
+/ios/ShellCoreTests/.swiftpm/
+/test-results/

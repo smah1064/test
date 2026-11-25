@@ -1,0 +1,163 @@
+# The إبداع phone apps (mobile/): tests, an Android test build and an iPhone simulator build, on GitHub's
+# computers. Runs only for the app branch and only when the apps (or this file) change; the website is untouched.
+name: Phone apps
+
+on:
+  push:
+    branches: [mobile-apps]
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/mobile-apps.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-apps-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  tests:
+    name: Tests (page features, settings)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            mobile/package-lock.json
+      - name: Website packages (the tests run a copy of the shop)
+        run: npm ci --no-audit --no-fund
+      - name: App packages
+        working-directory: mobile
+        run: npm ci --no-audit --no-fund
+      - name: Browser for the tests
+        working-directory: mobile
+        run: npx playwright install --with-deps chromium
+      - name: Tests
+        working-directory: mobile
+        run: npm test
+
+  android:
+    name: Android test build
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      # The same signing key for every test build, so a new test app installs over the last one.
+      - name: Test signing key (kept between runs, never in the repository)
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: android-debug-keystore-v1
+      - name: App packages
+        working-directory: mobile
+        run: npm ci --no-audit --no-fund
+      - name: Copy the app's files into the Android project
+        working-directory: mobile
+        run: npx cap sync android
+      - name: Logic tests, checks and the test app
+        working-directory: mobile/android
+        run: ./gradlew --no-daemon --stacktrace testDebugUnitTest lintDebug assembleDebug bundleRelease
+      - name: Name the test app
+        id: apk
+        run: |
+          version=$(node -p "require('./mobile/package.json').version")
+          name="ebda3-android-test-v${version}-run${GITHUB_RUN_NUMBER}.apk"
+          cp mobile/android/app/build/outputs/apk/debug/app-debug.apk "$name"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "### Android test app: $name" >> "$GITHUB_STEP_SUMMARY"
+          echo "SHA-256 of the test signing key (for assetlinks.json while testing):" >> "$GITHUB_STEP_SUMMARY"
+          keytool -list -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey \
+            | grep 'SHA256:' | sed 's/^[[:space:]]*/    /' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-test-app
+          path: ${{ steps.apk.outputs.name }}
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-reports
+          path: |
+            mobile/android/app/build/reports/
+            mobile/android/app/build/test-results/
+          retention-days: 14
+
+  ios:
+    name: iPhone build (simulator, not signed)
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Newest Xcode on this computer
+        run: |
+          xcode=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          sudo xcode-select -s "$xcode"
+          xcodebuild -version
+      - name: App packages
+        working-directory: mobile
+        run: npm ci --no-audit --no-fund
+      - name: Copy the app's files into the iPhone project
+        working-directory: mobile
+        run: npx cap sync ios
+      - name: Link-rule tests (Swift)
+        working-directory: mobile/ios/ShellCoreTests
+        run: swift test
+      - name: Build for the simulator
+        working-directory: mobile/ios/App
+        run: |
+          set -o pipefail
+          xcodebuild -project App.xcodeproj -scheme App -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build | tail -n 60
+      - name: Start it in a simulator and take a picture
+        run: |
+          set -e
+          udid=$(xcrun simctl list devices available -j | node -e '
+            let s = ""; process.stdin.on("data", (d) => (s += d)).on("end", () => {
+              const all = Object.entries(JSON.parse(s).devices).filter(([rt]) => rt.includes("iOS"))
+                .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true })).flatMap(([, d]) => d);
+              const phone = all.reverse().find((d) => /^iPhone \d+( Pro)?$/.test(d.name)) || all.find((d) => /^iPhone/.test(d.name));
+              process.stdout.write(phone.udid);
+            });')
+          echo "Simulator: $udid"
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b
+          xcrun simctl install "$udid" mobile/ios/App/build/Build/Products/Debug-iphonesimulator/App.app
+          xcrun simctl launch "$udid" me.ebda3.app
+          sleep 20
+          mkdir -p screenshots
+          xcrun simctl io "$udid" screenshot screenshots/iphone-launch.png
+          xcrun simctl openurl "$udid" "me.ebda3.app://open?url=https%3A%2F%2Febda3.me%2Fprivacy"
+          sleep 8
+          xcrun simctl io "$udid" screenshot screenshots/iphone-deep-link.png
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: iphone-screenshots
+          path: screenshots/
+          retention-days: 30

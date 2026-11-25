@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Test builds (debug) show this name under the icon. -->
+<resources>
+    <string name="app_name">إبداع (تجربة)</string>
+    <string name="title_activity_main">إبداع (تجربة)</string>
+</resources>
