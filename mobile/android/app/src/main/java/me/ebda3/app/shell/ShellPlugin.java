@@ -108,11 +108,9 @@ public class ShellPlugin extends Plugin {
         deepLinks = new DeepLinks(policy, APP_SCHEME);
         localOrigin = getBridge().getScheme() + "://" + getBridge().getHost();
 
-        WebView webView = getBridge().getWebView();
         // Bridge.loadWebView() installs the bridge's client after the plugins load; setWebViewClient() replaces
-        // the one it will install.
+        // the one it will install. (The page glue is added later, by MainActivity: see injectGlue.)
         getBridge().setWebViewClient(new ShellWebViewClient(getBridge(), this));
-        injectGlue(webView);
         keepInsideSystemBars();
         handleBackButton();
         createNotificationChannel();
@@ -145,7 +143,16 @@ public class ShellPlugin extends Plugin {
         return localOrigin + "/" + OFFLINE_FILE;
     }
 
-    private void injectGlue(WebView webView) {
+    /**
+     * Adds the page glue (www/app-glue.js) in front of every shop page. Must run after Capacitor has added its own
+     * bridge script (Bridge.loadWebView, after the plugins load): document-start scripts run in the order they were
+     * added, and the glue uses window.Capacitor. MainActivity calls it right after the bridge is created, before
+     * the first page can start.
+     */
+    public void injectGlue() {
+        if (glueInjected) return;
+        glueInjected = true;
+        WebView webView = getBridge().getWebView();
         String glue = readAsset("public/app-glue.js");
         if (glue == null) {
             Logger.error(TAG, "app-glue.js is missing from the app", null);
@@ -165,6 +172,7 @@ public class ShellPlugin extends Plugin {
     }
 
     private String fallbackScript;
+    private boolean glueInjected;
 
     String fallbackScript() {
         return fallbackScript;

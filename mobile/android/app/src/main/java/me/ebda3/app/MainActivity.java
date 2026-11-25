@@ -34,11 +34,14 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
         if (bridge == null) return; // no usable web view on this phone: Capacitor shows its own message
 
+        ShellPlugin shell = shell();
+        // After Capacitor's own page script (see ShellPlugin.injectGlue); the first page hasn't started yet.
+        if (shell != null) shell.injectGlue();
+
         // Replaces Capacitor's file picker with one that also offers the camera (see ShellChromeClient).
         bridge.getWebView().setWebChromeClient(new ShellChromeClient(bridge));
 
         if (savedInstanceState != null) {
-            ShellPlugin shell = shell();
             String url = savedInstanceState.getString(SAVED_URL);
             if (shell != null && url != null) shell.restorePage(url);
         }

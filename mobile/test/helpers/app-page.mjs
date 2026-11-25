@@ -27,6 +27,7 @@ export function launchBrowser() {
  * @param {'ar'|'en'} [o.lang] the site's language (localStorage pod-lang)
  * @param {object} [o.devices] requests to /api/app/devices are captured in this array when given
  * @param {string} [o.prelude] script run before the app's (e.g. what a web view already has)
+ * @param {boolean} [o.capacitorLate] add the stand-in bridge after the glue instead of before
  */
 export async function appPage(browser, site, o = {}) {
   const platform = o.platform || 'android';
@@ -43,8 +44,10 @@ export async function appPage(browser, site, o = {}) {
   let prelude = `window.__answers = ${JSON.stringify(o.answers || {})};\n`;
   if (o.lang) prelude += `try { localStorage.setItem('pod-lang', ${JSON.stringify(o.lang)}); } catch (e) {}\n`;
   if (o.prelude) prelude += `${o.prelude}\n`;
+  const injected = `window.__ebda3AppConfig = ${JSON.stringify(appConfig)};\n${GLUE}`;
   await context.addInitScript({
-    content: `${prelude}${FAKE}\nwindow.__ebda3AppConfig = ${JSON.stringify(appConfig)};\n${GLUE}`,
+    // o.capacitorLate: the app's bridge script arrives after the glue (the glue must cope with either order).
+    content: o.capacitorLate ? `${prelude}${injected}\n${FAKE}` : `${prelude}${FAKE}\n${injected}`,
   });
   if (o.config !== undefined) {
     await context.route('**/app/config.json', (route) =>

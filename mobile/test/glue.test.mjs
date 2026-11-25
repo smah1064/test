@@ -106,6 +106,17 @@ describe('sharing (Android)', () => {
     }
   });
 
+  it('works when the app\'s bridge script arrives after the glue (as it may on Android)', async () => {
+    const app = await open('/editor?product=tshirt', { config: null, capacitorLate: true });
+    try {
+      assert.equal(await app.page.evaluate(() => typeof navigator.share), 'function');
+      await app.page.evaluate(() => navigator.share({ url: '/s/AbCdEfGhIjKl' }));
+      assert.equal((await app.calls('Share', 'share')).length, 1);
+    } finally {
+      await app.close();
+    }
+  });
+
   it('closing the share sheet is an AbortError, like in browsers', async () => {
     const app = await open('/', { config: null, answers: { 'Share.share': { reject: 'Share canceled' } } });
     try {
@@ -405,6 +416,21 @@ describe('notifications', () => {
       } finally {
         await app.close();
       }
+    }
+  });
+
+  it('a tapped notification is handled even when the bridge arrives after the glue', async () => {
+    const app = await open('/', {
+      push: true, config: pushConfig, capacitorLate: true, answers: { 'PushNotifications.checkPermissions': { receive: 'denied' } },
+    });
+    try {
+      await Promise.all([
+        app.page.waitForURL('**/cart'),
+        app.page.evaluate((o) => window.__emit('PushNotifications', 'pushNotificationActionPerformed',
+          { notification: { data: { url: o + '/cart' } } }), site.origin),
+      ]);
+    } finally {
+      await app.close();
     }
   });
 

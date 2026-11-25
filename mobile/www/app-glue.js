@@ -247,7 +247,8 @@
   // ---------- 3. the share sheet (Android web views have no navigator.share; iPhone's is kept) ----------
 
   safe(function () {
-    if (navigator.share || !plugin('Share')) return;
+    // (On Android, window.Capacitor may only arrive just after this script: the plugin is looked up when used.)
+    if (navigator.share || (PLATFORM !== 'android' && !plugin('Share'))) return;
     define(navigator, 'canShare', function (data) {
       return !!data && !(data.files && data.files.length) && !!(data.title || data.text || data.url);
     });
@@ -577,9 +578,10 @@
     }).catch(report);
   }
 
-  safe(function () {
+  whenReady(function () {
     if (!cfg.push || !plugin('PushNotifications')) return;
-    // A tapped notification opens its page (only the shop's own pages).
+    // A tapped notification opens its page (only the shop's own pages). The plugin keeps a tap that started the
+    // app until this listener is added.
     listen('PushNotifications', 'pushNotificationActionPerformed', function (action) {
       var data = action && action.notification && action.notification.data;
       var url = data && parseUrl(data.url || data.link);
@@ -595,7 +597,7 @@
       var q = new URLSearchParams(location.search);
       if (location.pathname.replace(/\.html$/, '') === '/order' && q.get('new') === '1') setTimeout(offerNotifications, 1200);
     });
-  })();
+  });
 
   // ---------- 7. Google / Facebook sign-in through the phone's browser ----------
 
