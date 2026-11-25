@@ -3084,7 +3084,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (code) {
       // The phone typed at checkout (when there is one), so a coupon already used by this customer says so here too.
       const phone = typeof (req.body || {}).phone === 'string' ? normalizeEgyptMobile(req.body.phone) : null;
-      const r = coupons.apply(findCoupon(code), { lines, orders: store.listOrders(), ...(phone ? { phone } : {}) });
+      const r = coupons.apply(findCoupon(code), { lines, orders: store.listOrders(), ...(phone ? { phone } : {}), shipping: lines.length ? shippingFor(subtotal) : 0 });
       if (r.ok) coupon = { code, discount: r.discount, freeShipping: r.freeShipping };
       else couponError = format(r.reason, r.params || {}, langOf(req));
     }
@@ -3218,7 +3218,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const lines = designs.map((d, i) => couponLine(d, items[i].price));
     let applied = null;
     if (code) {
-      const r = coupons.apply(findCoupon(code), { lines, orders: store.listOrders(), phone: c.phone });
+      const r = coupons.apply(findCoupon(code), { lines, orders: store.listOrders(), phone: c.phone, shipping: shippingFor(subtotal) });
       if (!r.ok) throw new HttpError(409, r.reason, r.params || {});
       // The items it came off (a coupon for one product): the accounts charge the discount to those.
       applied = { id: findCoupon(code).id, code, type: findCoupon(code).type, discount: r.discount, freeShipping: r.freeShipping, items: r.lines.map((i) => items[i].id) };
@@ -3265,7 +3265,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       }
       // The coupon's limits, with every order saved so far (by any copy of the app).
       if (applied) {
-        const r = coupons.apply((db.coupons || []).find((x) => x.id === applied.id), { lines, orders: db.orders, phone: c.phone });
+        const r = coupons.apply((db.coupons || []).find((x) => x.id === applied.id), { lines, orders: db.orders, phone: c.phone, shipping: shippingFor(subtotal) });
         if (!r.ok) throw new HttpError(409, r.reason, r.params || {});
       }
       // Counted stock goes down by the pieces ordered (checked again with the latest count, every
