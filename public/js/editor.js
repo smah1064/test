@@ -3441,7 +3441,7 @@
       const hostName = tr(baseSide(p.embroidery.side).name);
       $('method-chips').innerHTML = ['print', 'embroidery'].map((m) => `<button class="chip ${m === now ? 'active' : ''}" data-method="${m}" aria-pressed="${m === now}">${esc(t('emb.' + m))}${m === 'embroidery' ? ` <span style="opacity:.7">+${esc(money(p.embroidery.surcharge))}</span>` : ''}</button>`).join('');
       $('method-note').textContent = st.side === EMB
-        ? t('emb.note', { w: POD.num(Math.round(p.embroidery.widthIn * 25.4) / 10), h: POD.num(Math.round(p.embroidery.heightIn * 25.4) / 10), n: POD.num(p.embroidery.maxColors) }) + ' ' + t('emb.bothNote', { side: hostName })
+        ? t('emb.noteN', { w: POD.num(Math.round(p.embroidery.widthIn * 25.4) / 10), h: POD.num(Math.round(p.embroidery.heightIn * 25.4) / 10), colours: POD.plural('emb.colours', p.embroidery.maxColors) }) + ' ' + t('emb.bothNote', { side: hostName })
         : t(usesEmb() ? 'emb.printNoteWith' : 'emb.printNote', { side: hostName });
     }
     // Fabric: how the tile repeats and how big it prints.
@@ -3833,7 +3833,7 @@
       else if (i.key === 'check.embSmallText') out.push({ id: 'embSmallText', level: 'warn', side: sideId, params: { name: short(i.params.name) } });
       else if (i.key === 'check.embPhoto') out.push({ id: 'embPhoto', level: 'warn', side: sideId, params: { name: short(i.params.name) } });
       else if (i.key === 'check.embGradient') out.push({ id: 'embGradient', level: 'warn', side: sideId, params: { name: short(i.params.name) } });
-      else if (i.key === 'check.embColors') out.push({ id: 'embColors', level: 'warn', side: sideId, params: { n: Number(i.params.count) || 0, max: Number(i.params.limit) || 0 } });
+      else if (i.key === 'check.embColorsN') out.push({ id: 'embColors', level: 'warn', side: sideId, params: { n: Number(i.params.count) || 0, max: Number(i.params.limit) || 0 } });
     }
     const missing = new Set();
     for (const o of canvas.getObjects()) {
@@ -4000,7 +4000,7 @@
         }
         if (isText(o) && o.fontSize * Math.abs(o.scaleY || 1) * 0.7 < 5 * ppmm) issues.push({ level: 'warn', key: 'check.embSmallText', obj: o, params: { name } });
       }
-      if (colours.size > emb().maxColors) issues.push({ level: 'warn', key: 'check.embColors', obj: null, params: { n: POD.num(colours.size), max: POD.num(emb().maxColors), count: colours.size, limit: emb().maxColors } });
+      if (colours.size > emb().maxColors) issues.push({ level: 'warn', key: 'check.embColorsN', obj: null, params: { n: POD.plural('emb.colours', colours.size), max: POD.plural('emb.threads', emb().maxColors), count: colours.size, limit: emb().maxColors } });
     }
     // Laser: photos can't be cut round, letters too small to engrave or cut cleanly, cut pieces that fall apart.
     if (laser()) {

@@ -129,7 +129,7 @@ test('what the editor warned about (past the edge, embroidery) reaches the proof
   const strings = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'i18n.js'), 'utf8');
   for (const c of checks) assert.match(strings, new RegExp(`'pf\\.${c.id}': \\['[^']+', '[^']+'\\]`), c.id);
   const editor = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'editor.js'), 'utf8');
-  for (const k of ['check.cut', 'check.embSmallText', 'check.embPhoto', 'check.embGradient', 'check.embColors']) assert.ok(editor.includes(`i.key === '${k}'`), k);
+  for (const k of ['check.cut', 'check.embSmallText', 'check.embPhoto', 'check.embGradient', 'check.embColorsN']) assert.ok(editor.includes(`i.key === '${k}'`), k);
 });
 
 test('links to a product, a ready design, a kids book and a shared design preview as themselves (WhatsApp)', async () => {

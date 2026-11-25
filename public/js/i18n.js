@@ -483,6 +483,20 @@ window.POD_STRINGS = {
   'check.embGradient': ['"{name}" has a gradient: it will be stitched in flat colours.', '"{name}" فيه تدرّج: هيتطرز بألوان سادة.'],
   'check.embSmallText': ['{name} is too small to stitch clearly: make letters at least 5 mm tall.', '{name} صغير أوي على التطريز: خلّي الحروف ٥ مم على الأقل.'],
   'check.embColors': ['{n} colours: embroidery uses up to {max} thread colours; similar colours will be joined.', 'عدد الألوان {n}، والتطريز بيستخدم لحد {max} من ألوان الخيط؛ الألوان القريبة هتتجمع.'],
+  // Counted colours for embroidery (Arabic: 1, 2, 3–10, the rest): «لون خيط واحد، لونين خيط، ٣ ألوان خيط، ١١ لون خيط».
+  // emb.threads: the admin's stitch summary. For the editor (public/js/editor.js), in place of "١٢ ألوان":
+  // check.embColorsN { n: POD.plural('emb.colours', used), max: POD.plural('emb.threads', most) } and
+  // emb.noteN { w, h, colours: POD.plural('emb.colours', most) }.
+  'emb.threads.one': ['1 thread colour', 'لون خيط واحد'],
+  'emb.threads.two': ['2 thread colours', 'لونين خيط'],
+  'emb.threads.few': ['{n} thread colours', '{n} ألوان خيط'],
+  'emb.threads.many': ['{n} thread colours', '{n} لون خيط'],
+  'emb.colours.one': ['1 colour', 'لون واحد'],
+  'emb.colours.two': ['2 colours', 'لونين'],
+  'emb.colours.few': ['{n} colours', '{n} ألوان'],
+  'emb.colours.many': ['{n} colours', '{n} لون'],
+  'check.embColorsN': ['{n}: embroidery uses up to {max}; similar colours will be joined.', '{n}: التطريز لحد {max}؛ الألوان القريبة هتتجمع.'],
+  'emb.noteN': ['Embroidered with thread on a {w} × {h} cm area, up to {colours}. Bold text and simple logos with flat colours look best; photos and gradients can\'t be stitched.', 'بيتطرّز بالخيط على مساحة {w} × {h} سم، لحد {colours}. الكلام التخين واللوجوهات البسيطة بألوان سادة بتطلع أحلى حاجة؛ الصور والتدرجات مش بتتطرز.'],
   'check.cutPieces': ['The cut would fall apart into {n} pieces. Make the letters and shapes touch (move them closer, or add a bar under the words) so it comes out as one piece.', 'القص هيطلع {n} حتت منفصلة. خلي الحروف والأشكال لازقة في بعض (قربها، أو حط خط تحت الكلام) عشان تطلع قطعة واحدة.'],
   'check.cutPhoto': ['{name} is a photo: the laser cuts round it as a plain rectangle. Use text and shapes for cut pieces.', '{name} صورة: الليزر هيقصها مستطيل عادي. استخدم كلام وأشكال للقطع المقصوصة.'],
   'check.cutSmallText': ['{name} is small for cutting: letters under {mm} mm high break easily.', '{name} صغير على القص: الحروف الأقل من {mm} مم بتتكسر بسهولة.'],
@@ -1116,6 +1130,7 @@ window.POD_STRINGS = {
   'num.bad': ['Type a number, e.g. 15 or 12.5', 'اكتب رقم، مثلًا 15 أو 12.5'],
   'num.whole': ['Type a whole number, without a fraction', 'اكتب رقم صحيح من غير كسور'],
   'num.min': ['Type {min} or more', 'اكتب {min} أو أكتر'],
+  'num.empty': ['Type a number (0 if there is none)', 'اكتب رقم (0 لو مفيش)'],
   'acc.tab': ['Accounts', 'الحسابات'],
   'acc.overview': ['Profit & orders', 'الأرباح والطلبات'],
   'acc.prices': ['Prices & costs', 'الأسعار والتكاليف'],
@@ -1260,8 +1275,11 @@ window.POD_STRINGS = {
   'fmt.stitches': ['Stitch preview', 'صورة الغرز'],
   'process.embroidery': ['Embroidery. Load the DST in the machine and sew the thread colours in the order listed (the file has the colour changes, jumps and trims). Made automatically: check the stitch preview, and have detailed designs re-digitised.', 'تطريز. حمّل ملف DST على المكنة وغيّر ألوان الخيط بالترتيب المكتوب (الملف فيه تغيير الألوان والقفزات والقص). معمول أوتوماتيك: بص على صورة الغرز، والتصاميم الدقيقة اعمل لها ديجيتايز يدوي.'],
   'method.embroidery': ['Embroidery', 'تطريز'],
+  // Embroidery with a printed side (the back, or the front next to the stitches): both, so the print isn't skipped.
+  'admin.methodBoth': ['Embroidery + {print} print', 'تطريز + طباعة {print}'],
   'admin.emb': ['Embroidery', 'التطريز'],
-  'admin.embSummary': ['{n} stitches · {c} thread colours · {w} × {h} mm', '{n} غرزة، {c} ألوان خيط، {w} × {h} مم'],
+  // {c}: emb.threads (لون خيط واحد، لونين خيط، ٣ ألوان خيط، ١١ لون خيط).
+  'admin.embSummary': ['{n} stitches · {c} · {w} × {h} mm', '{n} غرزة، {c}، {w} × {h} مم'],
   'admin.embWarn.soft': ['The design has soft edges or a photo: embroidery may lose detail. Check the stitch preview or re-digitise.', 'التصميم فيه حواف ناعمة أو صورة: التطريز ممكن يفقد تفاصيل. بص على صورة الغرز أو اعمل ديجيتايز يدوي.'],
   'admin.embWarn.thin': ['Many parts are thinner than 1 mm: they may not sew cleanly. Consider re-digitising (satin stitches).', 'أجزاء كتير أرفع من 1 مم: ممكن متتطرزش كويس. فكّر في ديجيتايز يدوي (غرزة ساتان).'],
   'admin.embWarn.failed': ['The stitches could not be made automatically: digitise this design by hand.', 'معرفناش نعمل الغرز أوتوماتيك: التصميم ده محتاج ديجيتايز يدوي.'],

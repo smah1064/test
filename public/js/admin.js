@@ -12,16 +12,18 @@
   /** A text from the strings with "·" between numbers: the same, Arabic comma in Arabic. */
   const listed = (s) => (POD.lang === 'ar' ? String(s).replace(/ · /g, '، ') : String(s));
   /*
-   * Number boxes (admin.html [data-num]: coupons, expenses, shipping cost) are text boxes with a number keyboard:
-   * a number box drops what an Arabic keyboard types ("١٥", "٢٫٥") and stays empty. What is typed is read with
-   * POD.latinDigits (Arabic-Indic and Persian digits, the Arabic decimal "٫"); grouping marks and spaces are
-   * left out. data-min and data-whole keep the checks the number boxes had (shown when the form is sent).
+   * Number boxes ([data-num]: coupons, expenses, the shipping cost in admin.html; Accounts' real costs and the
+   * prices & costs table drawn below) are text boxes with a number keyboard: a number box drops what an Arabic
+   * keyboard types ("١٥", "٢٫٥") and stays empty, which read as 0 or deleted a saved cost. What is typed is read
+   * with POD.latinDigits (Arabic-Indic and Persian digits, the Arabic decimal "٫"); grouping marks and spaces are
+   * left out. data-min and data-whole keep the checks the number boxes had (shown when the form is sent);
+   * data-need: an empty box is a mistake too (never taken as 0).
    */
-  const numText = (el) => POD.latinDigits(el.value).replace(/[\s\u066C\u200E\u200F]/g, '');
+  const numText = (el) => POD.latinDigits(el.value).replace(/[\s\u066C\u200E\u200F]/g, '').replace(/\u2212/g, '-');
   function numProblem(el) {
     const s = numText(el);
-    if (!s) return '';
-    if (!/^\d*\.?\d+$/.test(s)) return t('num.bad');
+    if (!s) return el.hasAttribute('data-need') ? t('num.empty') : '';
+    if (!/^-?\d*\.?\d+$/.test(s)) return t('num.bad');
     const v = Number(s);
     if (el.hasAttribute('data-whole') && !Number.isInteger(v)) return t('num.whole');
     if (el.dataset.min != null && v < Number(el.dataset.min)) return t('num.min', { min: POD.num(Number(el.dataset.min)) });
@@ -131,6 +133,7 @@
     sessionStorage.removeItem(ROLE_KEY);
     if (window.AdminProducts) AdminProducts.reset();
     if (window.AdminUploads) AdminUploads.reset();
+    if (window.AdminRights) AdminRights.reset();
     applyRole();
     $('weak-pw').hidden = true;
     $('dash').hidden = true;
@@ -236,6 +239,11 @@
     $('tab-coupons').hidden = tab !== 'coupons';
     $('tab-customers').hidden = tab !== 'customers';
     $('tab-preview').hidden = tab !== 'preview';
+    $('tab-rights').hidden = tab !== 'rights';
+    // /admin#rights (the link in the owner's alert for a rights request) opens Rights requests; the address
+    // follows that tab, so a reload stays on it and leaving it doesn't come back to it.
+    if (tab === 'rights' && location.hash !== '#rights') history.replaceState(null, '', '#rights');
+    else if (tab !== 'rights' && location.hash === '#rights') history.replaceState(null, '', location.pathname + location.search);
   }
 
   const NEXT = {
@@ -309,7 +317,8 @@
   const line = (v) => `<bdi dir="auto">${esc(v)}</bdi>`;
   function address(c) {
     if (c.governorate || c.address) {
-      return [c.name, c.address, [c.city, tr(c.governorateName)].filter(Boolean).join('، '), c.notes ? `(${c.notes})` : ''].filter(Boolean).map(line).join('<br>');
+      // City and governorate with the page's comma: "Dokki, Giza" / «الدقي، الجيزة» (not "Dokki، Giza" in English).
+      return [c.name, c.address, [c.city, tr(c.governorateName)].filter(Boolean).join(POD.lang === 'ar' ? '، ' : ', '), c.notes ? `(${c.notes})` : ''].filter(Boolean).map(line).join('<br>');
     }
     // Orders placed before the Egypt checkout.
     return [c.name, c.address1, c.address2, [c.city, c.region, c.postalCode].filter(Boolean).join(' '), c.country].filter(Boolean).map(line).join('<br>');
@@ -329,6 +338,17 @@
     if (o.x) parts.push(t(o.x > 0 ? 'area.right' : 'area.left', { n: POD.num(Math.abs(o.x)) }));
     return parts.join(POD.lang === 'ar' ? ' و' : ', ');
   }
+  /**
+   * How the item is made (as src/dispatch.js processesOf): embroidery with a printed side (the back, or the
+   * front next to the stitches) is ['embroidery', 'dtg'], so the print isn't missed; otherwise its one process.
+   * (Each side of an embroidery design records its own process; older ones were embroidery only.)
+   */
+  function processesOf(item, sides = item.sides) {
+    if (item.method !== 'embroidery') return item.process ? [item.process] : [];
+    return ['embroidery', ...new Set((sides || []).map((s) => s && s.process).filter((p) => p && p !== 'embroidery'))];
+  }
+  /** "Embroidery + DTG print" / «تطريز + طباعة DTG». */
+  const methodBoth = (procs) => t('admin.methodBoth', { print: procs.filter((p) => p !== 'embroidery').map((p) => (hasStr('method.' + p) ? t('method.' + p) : p.toUpperCase())).join(' + ') });
   function spec(item) {
     const c = item.customer;
     return `
@@ -338,7 +358,7 @@
         ${hasQty(item) ? `<dt>${esc(t('adminQty.title'))}</dt><dd class="qty-dd">${qtyTable(item)}</dd>` : `<dt>${esc(t('admin.spec.colourSize'))}</dt><dd>${esc(tr(item.color.name))} <span class="dot" style="display:inline-block;vertical-align:middle;background:${esc(item.color.hex)}"></span>${SEP()}${esc(tr(item.size.label))}</dd>`}
         ${item.kind === 'photoset' ? `<dt>${esc(t('fmt.photos-zip'))}</dt><dd>${esc(listed(t('admin.photoFiles', { n: counted('admin.photos', (item.photos || []).length), prints: counted('admin.prints', (item.photos || []).reduce((n, p) => n + p.copies, 0)) })))}${SEP()}${esc(t('admin.photoSpec'))}${item.sides[0] && item.sides[0].dpi && item.sides[0].dpi < 150 ? `<div class="small" style="color:var(--warn);margin-top:4px">⚠ ${esc(t('admin.photoLowRes'))}</div>` : ''}</dd>` : item.sides.map((s) => `<dt>${esc(t('admin.spec.print', { side: tr(s.name) }))}</dt><dd><bdi dir="ltr">${cm(s.widthIn)} × ${cm(s.heightIn)} cm (${s.widthIn} × ${s.heightIn} in)</bdi>${s.bleedIn ? ` <bdi>${esc(t('admin.bleed', { mm: Math.round(s.bleedIn * 25.4) }))}</bdi>` : ''}${SEP()}<bdi dir="ltr">${s.widthPx} × ${s.heightPx} px · ${s.dpi} DPI · sRGB</bdi>${s.offsetCm ? `<div class="placement-note">📍 ${esc(t('admin.placement', { v: placementText(s.offsetCm) }))}</div>` : ''}</dd>`).join('')}
         ${item.emb ? `<dt>${esc(t('admin.emb'))}</dt><dd>
-          <div><strong>${esc(listed(t('admin.embSummary', { n: POD.num(item.emb.stitches), c: item.emb.colors.length, w: item.emb.widthMm, h: item.emb.heightMm })))}</strong></div>
+          <div><strong>${esc(listed(t('admin.embSummary', { n: POD.num(item.emb.stitches), c: POD.plural('emb.threads', item.emb.colors.length), w: item.emb.widthMm, h: item.emb.heightMm })))}</strong></div>
           <ol class="emb-threads">${item.emb.colors.map((c) => `<li><span class="dot" style="display:inline-block;vertical-align:middle;background:${esc(c.hex)}"></span> ${esc(c.name)} <span class="muted">(${esc(c.hex)}${SEP()}${esc(POD.num(c.stitches))})</span></li>`).join('')}</ol>
           ${(item.emb.warnings || []).filter((w) => w !== 'empty').map((w) => `<div class="small" style="color:var(--warn)">⚠ ${esc(t('admin.embWarn.' + w))}</div>`).join('')}
         </dd>` : ''}
@@ -346,8 +366,10 @@
         ${item.pattern ? `<dt>${esc(t('admin.pattern'))}</dt><dd><strong>${esc(t('admin.patternSpec', { tile: item.pattern.tileCm, repeat: t('pat.' + item.pattern.repeat), w: item.pattern.fabricCm[0], h: item.pattern.fabricCm[1] }))}</strong></dd>` : ''}
         ${item.process ? `<dt>${esc(t('admin.method'))}</dt><dd>
           ${(item.methods || []).length > 1 ? `<div class="btn-group" style="max-width:180px;margin-bottom:6px">${item.methods.map((m) => `<button class="btn btn-sm ${m === item.process ? 'active' : ''}" data-item="${item.id}" data-method="${m}">${esc(t('method.' + m))}</button>`).join('')}</div>` : ''}
-          ${esc(t(item.kind === 'photoset' ? 'process.photo' : item.kind === 'book' ? 'process.book' : 'process.' + item.process))}
-          ${item.process === 'dtg' && anyDark(item) ? `<div class="small" style="color:var(--warn);margin-top:4px">${esc(t('admin.darkHint'))}</div>` : ''}
+          ${processesOf(item).length > 1
+    ? `<div class="method-both"><strong>${esc(methodBoth(processesOf(item)))}</strong></div>${processesOf(item).map((p) => `<div class="method-step">${esc(t('process.' + p))}</div>`).join('')}`
+    : esc(t(item.kind === 'photoset' ? 'process.photo' : item.kind === 'book' ? 'process.book' : 'process.' + item.process))}
+          ${processesOf(item).includes('dtg') && anyDark(item) ? `<div class="small" style="color:var(--warn);margin-top:4px">${esc(t('admin.darkHint'))}</div>` : ''}
           ${item.filmBatch ? `<div><span class="pill printed">${esc(t('admin.onFilm', { id: item.filmBatch.id }))}</span></div>` : ''}
         </dd>` : ''}
         ${item.kind === 'book' ? `<dt>${esc(t('admin.bookFiles'))}</dt><dd>${redrawLine(item)}</dd>` : ''}
@@ -1453,6 +1475,25 @@
     LIB.picked.clear();
     renderLibRows();
   });
+  /** Rights requests → "Find it in Ready designs": the list searched for that design (in Deleted when it was deleted). */
+  async function goToLibraryDesign(id, { deleted = false } = {}) {
+    LIB.q = String(id).slice(0, 60);
+    LIB.cat = '';
+    LIB.art = '';
+    LIB.view = deleted ? 'deleted' : 'all';
+    LIB.picked.clear();
+    $('lib-q').value = LIB.q;
+    $('lib-fcat').value = '';
+    $('lib-fart').value = '';
+    showTab('library');
+    try {
+      await refresh();
+    } catch (e) {
+      if (e && !e.ownerOnly && e.status !== 401) toast(e.message, 'error');
+    }
+    // The list, with the search box above it.
+    $('lib-q').closest('.card').scrollIntoView({ block: 'start' });
+  }
   let libTyping = null;
   $('lib-q').addEventListener('input', () => {
     clearTimeout(libTyping);
@@ -1578,6 +1619,7 @@
     else if (tab === 'coupons') renderCoupons((couponData = await adminApi('/api/admin/coupons')));
     else if (tab === 'customers') await loadCustomers();
     else if (tab === 'preview') await AdminPreview.show();
+    else if (tab === 'rights') await AdminRights.show({ auto });
     else if (tab === 'film') {
       const items = (await adminApi('/api/admin/dtf-items')).items;
       await ensureOrders(items);
@@ -1597,12 +1639,16 @@
     $('dash').hidden = false;
     $('logout').hidden = false;
     if (tab !== 'review' && role === 'owner') loadReviewCount();
+    // The Rights requests tab's badge: how many are still open (owner only).
+    if (tab !== 'rights' && role === 'owner') AdminRights.count().catch(() => {});
   }
 
   document.addEventListener('pod:langchange', () => {
     applyRole();
     if (tab === 'products' && window.AdminProducts) AdminProducts.onLang();
     if (tab === 'preview' && window.AdminPreview) AdminPreview.onLang();
+    if (tab === 'rights') AdminRights.onLang();
+    else AdminRights.badge();
     if (tab === 'queue' && lastQueue) renderQueue(lastQueue);
     if (tab === 'orders' && lastOrders) { renderOrders(lastOrders); renderNotifyStatus(); }
     if (tab === 'review' && reviewData) renderReview();
@@ -1839,12 +1885,12 @@
       <div class="acc-cost-line">
         <span>${esc(tr(i.productName))}${SEP()}${esc(tr(i.size && i.size.label))}${i.sides > 1 ? `${SEP()}${esc(t('acc.sides', { n: POD.num(i.sides) }))}` : ''}${SEP()}${money(i.price)}</span>
         <span class="muted small">${i.costParts ? esc(t('acc.parts', { blank: money(i.costParts.blank), print: money(i.costParts.print), other: money(i.costParts.other) }) + (Number(i.costParts.embroidery) ? t('acc.partsEmb', { emb: money(i.costParts.embroidery) }) : '')) : ''} (${esc(t(SRC[i.costSource]))})</span>
-        <label class="small">${esc(t('acc.realCost'))} <input type="number" min="0" step="0.01" dir="ltr" value="${i.costSource === 'actual' ? i.cost : ''}" placeholder="${i.cost}" data-acc-item-cost="${i.id}"></label>
+        <label class="small">${esc(t('acc.realCost'))} <input type="text" inputmode="decimal" autocomplete="off" data-num data-min="0" dir="ltr" value="${i.costSource === 'actual' ? i.cost : ''}" placeholder="${i.cost}" data-acc-item-cost="${i.id}"></label>
       </div>`).join('');
     return main + `<tr class="acc-detail"><td colspan="7">
       ${items}
       <div class="acc-cost-line"><span>${esc(t('acc.col.ship'))}</span><span class="muted small">${esc(t(o.shippingCostSet ? 'acc.src.actual' : 'acc.src.default'))}</span>
-        <label class="small">${esc(t('acc.realShip'))} <input type="number" min="0" step="0.01" dir="ltr" value="${o.shippingCostSet ? o.shippingCost : ''}" placeholder="${o.shippingCost}" data-acc-ship="${o.id}"></label></div>
+        <label class="small">${esc(t('acc.realShip'))} <input type="text" inputmode="decimal" autocomplete="off" data-num data-min="0" dir="ltr" value="${o.shippingCostSet ? o.shippingCost : ''}" placeholder="${o.shippingCost}" data-acc-ship="${o.id}"></label></div>
       <p class="muted small" style="margin:6px 0 0">${esc(t('acc.realHelp'))}</p>
     </td></tr>`;
   }
@@ -1862,10 +1908,24 @@
         <tr><td>${esc(day(e.date, true))}</td><td>${esc(t('acc.cat.' + e.category))}</td><td>${esc(e.description)}</td><td>${money(e.amount)}</td><td><button class="btn btn-sm" type="button" data-exp-del="${e.id}">${esc(t('houses.delete'))}</button></td></tr>`).join('')}</tbody>`
       : `<tbody><tr><td class="muted">${esc(t('acc.noExpenses'))}</td></tr></tbody>`;
   }
+  /*
+   * Prices & costs: number boxes like the others ([data-num], any digits). What the owner types is kept as typed
+   * (acc.edits) and read with priceNum; an empty or wrong box is never taken as 0 (QA: an emptied cost counted as
+   * 0 in the profit): the profit shows "—" and saving says which box to fix. Sizes' amounts may be below 0.
+   */
+  const priceMin = (key) => (key === 'basePrice' ? 1 : /^size(cost)?:/.test(key) ? -100000 : 0);
+  /** A box as typed (or a saved number) as a number: '' when empty, NaN when it isn't a number. */
+  const priceNum = (raw) => {
+    if (typeof raw === 'number') return raw;
+    const s = POD.latinDigits(raw).replace(/[\s\u066C\u200E\u200F]/g, '').replace(/\u2212/g, '-');
+    return s === '' ? '' : /^-?\d*\.?\d+$/.test(s) ? Number(s) : NaN;
+  };
+  /** What's wrong with a typed price or cost ('' when fine), as its box would say it. */
+  const priceProblem = (key, raw) => (typeof raw === 'number' ? '' : numProblem({ value: String(raw), dataset: { min: String(priceMin(key)) }, hasAttribute: (a) => a === 'data-need' }));
   function renderPrices() {
     const d = acc.pricing;
     if (!d) return;
-    const field = (pid, key, value, extra = '') => `<input type="number" step="0.01" min="0" dir="ltr" value="${value}" data-price-field="${pid}" data-key="${key}" ${extra}>`;
+    const field = (pid, key, value, extra = '') => `<input type="text" inputmode="decimal" autocomplete="off" data-num data-need data-min="${priceMin(key)}" dir="ltr" value="${esc(String(value))}" data-price-field="${esc(pid)}" data-key="${esc(key)}" ${extra}>`;
     $('acc-price-list').innerHTML = d.categories.map((c) => {
       const prods = d.products.filter((p) => p.category === c.id);
       if (!prods.length) return '';
@@ -1873,14 +1933,19 @@
         <thead><tr><th>${esc(t('acc.col.product'))}</th><th>${esc(t('acc.col.price'))}</th><th>${esc(t('acc.col.extraSide'))}</th><th>${esc(t('acc.col.blank'))}</th><th>${esc(t('acc.col.print1'))}</th><th>${esc(t('acc.col.printN'))}</th><th>${esc(t('acc.col.embroidery'))}</th><th>${esc(t('acc.col.other'))}</th><th>${esc(t('acc.col.unitProfit'))}</th><th></th></tr></thead>
         <tbody>${prods.map((p) => priceRow(p, field)).join('')}</tbody></table></div>`;
     }).join('');
+    // Boxes typed in before (redrawn): still say what's wrong with them.
+    $('acc-price-list').querySelectorAll('input[data-num]').forEach(checkNum);
   }
   function priceRow(p, field) {
     const e = acc.edits[p.id];
     const v = (k, def) => (e && e[k] !== undefined ? e[k] : def);
     // (The first regular pack: a 1-copy pack's price and cost per copy are another matter.)
     const ref = p.sizes.find((z) => z.id === p.refSize) || p.sizes[0];
-    const price = Number(v('basePrice', p.basePrice)) + Number(v('size:' + ref.id, ref.surcharge));
-    const cost = Number(v('blank', p.costs.blank)) + Number(v('sizecost:' + ref.id, ref.costExtra)) + Number(v('printFirst', p.costs.printFirst)) + Number(v('other', p.costs.other));
+    const parts = [v('basePrice', p.basePrice), v('size:' + ref.id, ref.surcharge), v('blank', p.costs.blank), v('sizecost:' + ref.id, ref.costExtra), v('printFirst', p.costs.printFirst), v('other', p.costs.other)].map(priceNum);
+    // A box left empty or not a number: no profit (it isn't 0).
+    const known = parts.every(Number.isFinite);
+    const price = parts[0] + parts[1];
+    const cost = parts[2] + parts[3] + parts[4] + parts[5];
     const profit = price - cost;
     const margin = price ? Math.round((profit / price) * 1000) / 10 : 0;
     const multi = p.sideCount > 1;
@@ -1889,19 +1954,19 @@
     let html = `<tr class="${changed ? 'is-edited' : ''}">
       <td><strong>${esc(tr(p.name))}</strong>${p.costsSet ? '' : `<div class="small" style="color:var(--danger,#c0392b)">${esc(t('acc.noCosts'))}</div>`}
         ${p.sizes.length > 1 ? `<div><button class="link-btn small" type="button" data-acc-sizes="${p.id}">${esc(t(sizesOpen ? 'acc.hideSizes' : 'acc.sizes', { n: POD.num(p.sizes.length) }))}</button></div>` : ''}</td>
-      <td>${field(p.id, 'basePrice', v('basePrice', p.basePrice), 'min="1"')}</td>
+      <td>${field(p.id, 'basePrice', v('basePrice', p.basePrice))}</td>
       <td>${multi ? field(p.id, 'extraSidePrice', v('extraSidePrice', p.extraSidePrice)) : '<span class="muted">—</span>'}</td>
       <td>${field(p.id, 'blank', v('blank', p.costs.blank))}</td>
       <td>${field(p.id, 'printFirst', v('printFirst', p.costs.printFirst))}</td>
       <td>${multi ? field(p.id, 'printExtra', v('printExtra', p.costs.printExtra)) : '<span class="muted">—</span>'}</td>
       <td>${p.embroidered ? field(p.id, 'embroidery', v('embroidery', p.costs.embroidery || 0)) : '<span class="muted">—</span>'}</td>
       <td>${field(p.id, 'other', v('other', p.costs.other))}</td>
-      <td class="${p.costsSet || changed ? cls(profit) : ''}">${p.costsSet || changed ? `<strong>${money(profit)}</strong><div class="muted small">${esc(t('acc.marginShort', { v: POD.num(margin) }))}</div>` : '<span class="muted">—</span>'}</td>
+      <td class="${(p.costsSet || changed) && known ? cls(profit) : ''}">${(p.costsSet || changed) && known ? `<strong>${money(profit)}</strong><div class="muted small">${esc(t('acc.marginShort', { v: POD.num(margin) }))}</div>` : '<span class="muted">—</span>'}</td>
       <td><button class="btn btn-sm ${changed ? 'btn-primary' : ''}" type="button" data-price-save="${p.id}" ${changed ? '' : 'disabled'}>${esc(t('houses.save'))}</button></td></tr>`;
     if (sizesOpen) {
       html += `<tr class="acc-detail"><td colspan="10"><div class="acc-sizes">${p.sizes.map((sz) => `
         <div class="acc-size"><strong>${esc(tr(sz.label))}</strong>
-          <label class="small">${esc(t('acc.sizePrice'))} ${field(p.id, 'size:' + sz.id, v('size:' + sz.id, sz.surcharge), 'min="-100000"')}</label>
+          <label class="small">${esc(t('acc.sizePrice'))} ${field(p.id, 'size:' + sz.id, v('size:' + sz.id, sz.surcharge))}</label>
           <label class="small">${esc(t('acc.sizeCost'))} ${field(p.id, 'sizecost:' + sz.id, v('sizecost:' + sz.id, sz.costExtra))}</label>
         </div>`).join('')}</div><p class="muted small" style="margin:6px 0 0">${esc(t('acc.sizesHelp'))}</p></td></tr>`;
     }
@@ -1920,13 +1985,28 @@
   function packWarnings(p) {
     if (!window.POD_PACKS || !window.AdminProducts) return '';
     const e = acc.edits[p.id] || {};
-    const v = (k, def) => (e[k] !== undefined ? e[k] : def);
+    // (As typed, any digits; a box that isn't a number yet counts as it was.)
+    const v = (k, def) => (e[k] !== undefined && Number.isFinite(priceNum(e[k])) ? priceNum(e[k]) : def);
     // (Which small packs have the owner's own price: the row doesn't say, so it's read from their amounts.)
     const now = POD_PACKS.withOwnPrices(p, p.defaults);
     const prices = POD_PACKS.savedPrices(now, p.defaults, { basePrice: v('basePrice', p.basePrice), sizes: Object.fromEntries(p.sizes.map((z) => [z.id, v('size:' + z.id, z.surcharge)])) });
     return AdminProducts.packWarnHtml(POD_PACKS.cheaperBiggerPacks(p.sizes, prices));
   }
 
+  /** A price or cost that can't be saved: its box (the sizes opened when it's a size's) says why. */
+  function showPriceProblem(pid, key, msg) {
+    const find = () => $('acc-price-list').querySelector(`[data-price-field="${CSS.escape(pid)}"][data-key="${CSS.escape(key)}"]`);
+    if (!find() && !acc.openSizes.has(pid)) {
+      acc.openSizes.add(pid);
+      renderPrices();
+    }
+    const el = find();
+    toast(msg, 'error');
+    if (!el) return;
+    el.setCustomValidity(msg);
+    el.focus();
+    el.reportValidity();
+  }
   document.querySelectorAll('[data-acc-view]').forEach((b) => b.addEventListener('click', () => {
     acc.view = b.dataset.accView;
     renderAccounts();
@@ -1955,7 +2035,10 @@
     if (save) {
       const p = acc.pricing.products.find((x) => x.id === save.dataset.priceSave);
       const ed = acc.edits[p.id] || {};
-      const v = (k, def) => (ed[k] !== undefined ? ed[k] : def);
+      // A box emptied or not a number: say so at the box, save nothing (never 0 in its place).
+      const bad = Object.keys(ed).find((k) => priceProblem(k, ed[k]));
+      if (bad) return void showPriceProblem(p.id, bad, priceProblem(bad, ed[bad]));
+      const v = (k, def) => (ed[k] !== undefined ? priceNum(ed[k]) : def);
       const body = {
         basePrice: v('basePrice', p.basePrice), extraSidePrice: v('extraSidePrice', p.extraSidePrice),
         sizes: Object.fromEntries(p.sizes.map((s) => [s.id, v('size:' + s.id, s.surcharge)])),
@@ -1990,12 +2073,13 @@
     const el = e.target;
     if (!el.dataset.priceField) return;
     const pid = el.dataset.priceField;
-    (acc.edits[pid] ||= {})[el.dataset.key] = el.value === '' ? 0 : Number(el.value);
+    // Kept as typed (any digits): an emptied box stays empty, it isn't 0.
+    (acc.edits[pid] ||= {})[el.dataset.key] = el.value;
     // Update just the profit cell and the save button, without losing the cursor.
     const p = acc.pricing.products.find((x) => x.id === pid);
     const tr0 = el.closest('tr').classList.contains('acc-detail') ? el.closest('tr').previousElementSibling : el.closest('tr');
     const tmp = document.createElement('tbody');
-    tmp.innerHTML = priceRow(p, (a, b, c, d = '') => `<input value="${c}" ${d}>`);
+    tmp.innerHTML = priceRow(p, (a, b, c, d = '') => `<input value="${esc(String(c))}" ${d}>`);
     // (The profit cell is the one before the save button. Since the embroidery column came in, the 8th cell
     // is the packaging cost box: redrawing that one swapped it for a plain box whose typing didn't count.)
     const PROFIT = tr0.cells.length - 2;
@@ -2023,8 +2107,15 @@
     const itemId = el.dataset.accItemCost;
     const orderId = el.dataset.accShip;
     if (!itemId && !orderId) return;
-    // The value as typed now: the admin may already be typing in the next box.
-    const value = el.value === '' ? null : Number(el.value);
+    // A wrong number is not saved (it used to read as empty and delete the saved cost): the box says why.
+    if (!checkNum(el)) {
+      toast(el.validationMessage, 'error');
+      return;
+    }
+    // The value as typed now (any digits): the admin may already be typing in the next box. Emptied: the
+    // estimate again, as the help under the boxes says.
+    const typed = numValue(el);
+    const value = typed === '' ? null : Number(typed);
     costSaving++;
     let saved = false;
     try {
@@ -2053,7 +2144,7 @@
   $('acc-ship-save').addEventListener('click', async () => {
     if (!checkNum($('acc-ship-cost'))) return void $('acc-ship-cost').reportValidity();
     try {
-      const st = await adminApi('/api/admin/accounts/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang }, body: JSON.stringify({ shippingCost: Number(numValue($('acc-ship-cost')) || 0) }) });
+      const st = await adminApi('/api/admin/accounts/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang }, body: JSON.stringify({ shippingCost: Number(numValue($('acc-ship-cost'))) }) });
       if (acc.pricing) acc.pricing.settings = st;
       toast(t('houses.saved'));
       await refreshAccounts();
@@ -2358,10 +2449,13 @@
     const color = proof.color || item.color || {};
     const size = proof.size || item.size || {};
     const process = proof.process || item.process;
+    // Embroidery with a printed side: both, each with how it's made.
+    const procs = processesOf({ method: proof.method === 'embroidery' ? 'embroidery' : item.method, process }, sides);
     const facts = [
       [t('rv.product'), esc(tr((proof.product && proof.product.name) || item.productName))],
       hasQty(item) ? [t('adminQty.title'), qtySummary(item)] : [t('rv.colourSize'), `${color.hex ? `<span class="qty-dot" style="background:${esc(color.hex)}"></span>` : ''}${esc(tr(color.name))}${SEP()}${esc(tr(size.label))}`],
-      process && hasStr('process.' + process) ? [t('rv.method'), esc(t('process.' + process))] : null,
+      procs.length > 1 ? [t('rv.method'), `<strong>${esc(methodBoth(procs))}</strong>${procs.filter((p) => hasStr('process.' + p)).map((p) => `<div class="method-step">${esc(t('process.' + p))}</div>`).join('')}`]
+        : process && hasStr('process.' + process) ? [t('rv.method'), esc(t('process.' + process))] : null,
     ].filter(Boolean);
     return `
       <div class="rv-detail">
@@ -2820,6 +2914,7 @@
 
   AdminProducts.init({ api: adminApi, role: () => role });
   AdminPreview.init({ api: adminApi });
+  AdminRights.init({ api: adminApi, goToDesign: goToLibraryDesign });
   AdminUploads.init({
     api: adminApi,
     token: () => token,
@@ -2828,6 +2923,14 @@
     categories: () => (lastLibrary ? lastLibrary.categories : []),
     // New designs published: the list below shows them.
     published: () => adminApi('/api/admin/library').then((lib) => tab === 'library' && renderLibrary(lib)).catch(() => {}),
+  });
+  // /admin#rights: the owner's WhatsApp / email alert for a rights request opens Rights requests (a product
+  // manager is sent to their own tabs as usual once the page knows who is signed in).
+  const tabFromHash = () => (location.hash === '#rights' ? 'rights' : '');
+  if (tabFromHash()) showTab(tabFromHash());
+  window.addEventListener('hashchange', () => {
+    const want = tabFromHash();
+    if (want && want !== tab && role !== 'products') document.querySelector(`[data-tab="${want}"]`).click();
   });
   // Who is signed in first (a product manager's page must never call the owner's routes), then the tab.
   refresh().catch(() => {});

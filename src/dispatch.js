@@ -126,10 +126,23 @@ const METHOD_NAMES = {
   photo: { en: 'Photo prints (photo paper)', ar: 'طباعة صور (ورق فوتوغرافي)' },
   book: { en: 'Printed book', ar: 'كتاب مطبوع' },
 };
+/**
+ * How the item is made, as process ids: an embroidered item whose other sides (or the same side, next to
+ * the stitches) are printed is ['embroidery', 'dtg'], so the print is never skipped (QA 25 Nov: a printed
+ * front with embroidery said only "Embroidery"). Each stored side of an embroidery design records how it is
+ * made (the stitched layer 'embroidery', the printed sides the product's process); items saved before sides
+ * carried their process were embroidery only.
+ */
+function processesOf(item) {
+  if (item.kind === 'photoset') return ['photo'];
+  if (item.kind === 'book') return ['book'];
+  if (item.method !== 'embroidery') return item.process ? [String(item.process).toLowerCase()] : [];
+  const printed = (item.sides || []).map((s) => s && s.process && String(s.process).toLowerCase()).filter((p) => p && p !== 'embroidery');
+  return ['embroidery', ...new Set(printed)];
+}
 function methodName(item, lang) {
-  const id = item.kind === 'photoset' ? 'photo' : item.kind === 'book' ? 'book' : item.method === 'embroidery' ? 'embroidery' : String(item.process || '').toLowerCase();
-  if (!id) return '';
-  return METHOD_NAMES[id] ? METHOD_NAMES[id][lang] || METHOD_NAMES[id].en : id.toUpperCase();
+  const name = (id) => (METHOD_NAMES[id] ? METHOD_NAMES[id][lang] || METHOD_NAMES[id].en : id.toUpperCase());
+  return processesOf(item).map(name).join(' + ');
 }
 /**
  * A calendar day (YYYY-MM-DD) in the message language: "Thursday 26 November" / "الخميس ٢٦ نوفمبر". The
@@ -246,4 +259,4 @@ ${note ? `<p><strong>${esc(t.note)}:</strong> ${esc(note)}</p>` : ''}
   return { subject: t.subject(order.number, pick(item.productName, lang)), html, text };
 }
 
-module.exports = { LINK_DAYS, signLink, readLink, whatsappDigits, cleanHouse, whatsappText, emailBody };
+module.exports = { LINK_DAYS, signLink, readLink, whatsappDigits, cleanHouse, processesOf, methodName, whatsappText, emailBody };

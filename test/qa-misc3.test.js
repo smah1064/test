@@ -100,7 +100,9 @@ test('accounts: saving a real cost never redraws the cost box being typed in', (
   const at = src.indexOf("$('tab-accounts').addEventListener('change'");
   const change = src.slice(src.indexOf('const itemId = el.dataset.accItemCost;', at), src.indexOf("$('acc-ship-save')"));
   // The value is read when the box is left, before anything is awaited...
-  assert.ok(change.indexOf("const value = el.value === '' ? null : Number(el.value);") < change.indexOf('await adminApi'));
+  // (Read as any digits since QA 25 Nov: "١٥٠" is 150, not an empty box that deleted the saved cost.)
+  const read0 = change.indexOf("const typed = numValue(el);\n    const value = typed === '' ? null : Number(typed);");
+  assert.ok(read0 > 0 && read0 < change.indexOf('await adminApi'));
   assert.doesNotMatch(change, /JSON\.stringify\(\{ actual(Cost|Shipping): el\.value/);
   // ...and the redraw after the save keeps the boxes while one is typed in (no full refreshAccounts()).
   assert.doesNotMatch(change, /refreshAccounts\(\)/);

@@ -1,0 +1,35 @@
+/* Admin → Rights requests (public/js/admin-rights.js). */
+.tk-intro { padding: 16px 18px; margin-bottom: 14px; }
+.tk-intro h2 { font-size: 17px; margin: 0 0 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.tk-intro p { margin: 0; line-height: 1.7; }
+.tk-open-n { font-size: 12.5px; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: var(--accent-soft); color: #8a2b12; }
+.tk-group { font-size: 15px; margin: 18px 0 10px; }
+.tk-list { display: grid; gap: 12px; }
+.tk-item { padding: 14px 16px; min-width: 0; }
+.tk-item.is-open { border-inline-start: 4px solid var(--accent); }
+.tk-item.is-done { background: #fbfbfc; }
+.tk-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 10px; }
+.pill.tk-new { background: var(--accent-soft); color: #8a2b12; }
+.pill.tk-done { background: #e3f5ea; color: var(--ok); }
+.tk-facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 14px; margin: 0 0 10px; font-size: 14px; }
+.tk-facts dt { color: var(--ink-3); }
+.tk-facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.tk-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.tk-link { overflow-wrap: anywhere; word-break: break-all; }
+.tk-acts-inline { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.tk-acts-inline .btn { white-space: normal; text-align: start; }
+.tk-wa { background: #25d366; border-color: #25d366; color: #fff; }
+.tk-details-label { margin-bottom: 4px; }
+.tk-details { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; background: #f6f7f9; border-radius: 10px; padding: 10px 12px; font-size: 14px; max-height: 320px; overflow-y: auto; }
+.tk-note { margin: 12px 0 8px; }
+.tk-note textarea { width: 100%; min-height: 52px; resize: vertical; }
+.tk-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.tk-msg { font-weight: 600; }
+.tk-msg.ok { color: var(--ok); }
+.tk-msg.bad { color: var(--bad); }
+.tk-all-done { margin: 0 0 6px; }
+@media (max-width: 520px) {
+  .tk-facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .tk-facts dd { margin-bottom: 6px; }
+  .tk-acts .btn { flex: 1 1 auto; }
+}

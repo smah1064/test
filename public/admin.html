@@ -18,6 +18,7 @@
   <link rel="stylesheet" href="/css/admin-library.css">
   <link rel="stylesheet" href="/css/admin-uploads.css">
   <link rel="stylesheet" href="/css/admin-preview.css">
+  <link rel="stylesheet" href="/css/admin-rights.css">
   <style>
     /* Orders: shipping, delivery and payment */
     .pill.delivered { background: #138a4a; color: #fff; }
@@ -46,6 +47,10 @@
     .ship-msg { font-size: 13px; font-weight: 600; }
     .ship-msg.ok { color: var(--ok); }
     .ship-msg.bad { color: var(--bad); }
+    /* Embroidery with a printed side: both ways it's made, each with its instructions. */
+    .method-step { margin-top: 4px; }
+    /* Number boxes ([data-num]) with something that isn't a number in them. */
+    #dash input[data-num]:invalid { border-color: var(--bad); }
     @media (max-width: 960px) { .ship-fields { grid-template-columns: 1fr 1fr; } }
     @media (max-width: 700px) {
       #tab-orders .orders-card { overflow: visible !important; background: transparent; border: 0; box-shadow: none; }
@@ -103,6 +108,7 @@
           <button class="btn btn-sm" data-tab="customers" data-i18n="cu.tab"></button>
           <button class="btn btn-sm" data-tab="products" data-i18n="pm.tab"></button>
           <button class="btn btn-sm" data-tab="preview" data-i18n="pv.tab"></button>
+          <button class="btn btn-sm rv-tab" data-tab="rights"><span data-i18n="tk.tab"></span><span class="rv-count" id="tk-count" hidden></span></button>
         </div>
       </div>
 
@@ -228,7 +234,7 @@
           <div class="stats acc-stats" id="acc-stats"></div>
           <div class="card acc-ship">
             <label for="acc-ship-cost"><strong data-i18n="acc.shipCost"></strong><br><span class="muted small" data-i18n="acc.shipCostHelp"></span></label>
-            <div class="row" style="gap:8px;flex:0 0 auto"><input type="text" inputmode="decimal" autocomplete="off" id="acc-ship-cost" data-num data-min="0" style="width:120px" dir="ltr"><button class="btn btn-sm" id="acc-ship-save" data-i18n="houses.save"></button></div>
+            <div class="row" style="gap:8px;flex:0 0 auto"><input type="text" inputmode="decimal" autocomplete="off" id="acc-ship-cost" data-num data-need data-min="0" style="width:120px" dir="ltr"><button class="btn btn-sm" id="acc-ship-save" data-i18n="houses.save"></button></div>
           </div>
           <h2 class="acc-h" data-i18n="acc.byProduct"></h2>
           <div class="card" style="overflow-x:auto"><table class="orders acc-table" id="acc-products"></table></div>
@@ -259,6 +265,8 @@
       </section>
 
       <section id="tab-preview" hidden></section>
+
+      <section id="tab-rights" hidden></section>
 
       <section id="tab-coupons" hidden>
         <form class="card house-form" id="cp-form">
@@ -329,11 +337,13 @@
   <script src="/js/i18n-admin-library.js"></script>
   <script src="/js/i18n-admin-preview.js"></script>
   <script src="/js/i18n-admin-uploads.js"></script>
+  <script src="/js/i18n-admin-rights.js"></script>
   <script src="/js/common.js"></script>
   <script src="/js/pack-prices.js"></script>
   <script src="/js/admin-products.js"></script>
   <script src="/js/admin-preview.js"></script>
   <script src="/js/admin-uploads.js"></script>
+  <script src="/js/admin-rights.js"></script>
   <script src="/js/admin.js"></script>
 </body>
 </html>
