@@ -250,6 +250,19 @@ function fieldsOf(designs) {
   return [...out.values()];
 }
 
+/** A pack size's marks for the cart, order and invoice: "100 cards" × 2 is 200 copies, not 2 pieces. */
+const packOf = (z) => (z && z.pack ? { pack: true, ...(z.copies ? { copies: z.copies } : {}) } : {});
+/** Quantity lines with their packs marked, from the product as it is now (designs saved before the marks too). */
+function withPacks(productId, lines) {
+  if (!Array.isArray(lines)) return lines || null;
+  const p = getProduct(productId);
+  if (!p) return lines;
+  return lines.map((l) => {
+    const z = l && l.size && p.sizes.find((x) => x.id === l.size.id);
+    return z && z.pack ? { ...l, size: { ...l.size, ...packOf(z) } } : l;
+  });
+}
+
 function publicProduct(p) {
   return { ...p, sides: p.sides.map((s) => ({ ...s, printHeightIn: heightIn(s) })) };
 }
@@ -297,7 +310,7 @@ function publicItem(item) {
     copies: item.copies || 1,
     // One price per piece when every piece costs the same; null when sizes are priced differently (see quantities).
     unitPrice: item.unitPrice != null ? item.unitPrice : item.quantities && new Set(item.quantities.map((l) => l.unitPrice)).size > 1 ? null : round2(item.price / (item.copies || 1)),
-    quantities: item.quantities || null,
+    quantities: withPacks(item.productId, item.quantities),
     approval: item.approval || null,
     approvals: item.approvals || [],
     review: item.review ? { needed: item.review.needed, reasons: item.review.reasons, status: item.review.status, note: item.review.note || null } : null,
@@ -867,7 +880,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       version: d.version || 1,
       proofHash: proofHashOf(d),
       product: product ? { id: product.id, name: product.name, ...(product.colorLabel ? { colorLabel: product.colorLabel } : {}) } : { id: d.productId, name: d.productName },
-      color: d.color, size: d.size, quantities: d.quantities || null, copies: copiesOf(d),
+      color: d.color, size: d.size, quantities: withPacks(d.productId, d.quantities), copies: copiesOf(d),
       method: d.method || 'print', process: d.process || (product && product.process) || null,
       ...(embSideOf(d) ? { embSide: embSideOf(d) } : {}),
       sides: d.kind === 'book' ? [] : d.sides.map(side),
@@ -1200,7 +1213,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const only = [...merged.values()][0];
       if (only.co.id === colorDef.id && only.sz.id === sizeDef.id) return null; // just one, as chosen
     }
-    return [...merged.values()].map(({ co, sz, qty }) => ({ color: { id: co.id, name: co.name, hex: co.hex }, size: { id: sz.id, label: sz.label }, qty }));
+    return [...merged.values()].map(({ co, sz, qty }) => ({ color: { id: co.id, name: co.name, hex: co.hex }, size: { id: sz.id, label: sz.label, ...packOf(sz) }, qty }));
   }
   /** Total pieces and per-line prices of a design (for the cart, order and invoice). */
   function pieceInfo(product, d) {
@@ -3308,7 +3321,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       process: d.process || product.process,
       price: designPrice({ ...d, status: 'ready', orderId: null }),
       ...(copiesOf(d) > 1 || d.quantities ? pieceInfo(product, JSON.parse(JSON.stringify(d))) : {}),
-      ...(d.quantities ? { quantities: JSON.parse(JSON.stringify(d.quantities)).map((l) => ({ ...l, unitPrice: round2(priceFor(product, l.size.id, decoratedSides(d)) + embExtra(product, d, l.size.id)) })) } : {}),
+      ...(d.quantities ? { quantities: withPacks(d.productId, JSON.parse(JSON.stringify(d.quantities))).map((l) => ({ ...l, unitPrice: round2(priceFor(product, l.size.id, decoratedSides(d)) + embExtra(product, d, l.size.id)) })) } : {}),
       ...(d.merge ? { merge: { count: d.merge.count, columns: d.merge.columns } } : {}),
       ...(d.method === 'embroidery' ? { method: 'embroidery', emb: d.emb || null } : {}),
       ...(d.options ? { options: JSON.parse(JSON.stringify(d.options)) } : {}),

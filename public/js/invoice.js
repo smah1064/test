@@ -44,6 +44,8 @@
   const countKey = (n) => (n === 1 ? 'one' : n === 2 ? 'two' : n % 100 >= 3 && n % 100 <= 10 ? 'few' : 'many');
   const copiesText = (n, price) => t(n === 2 || countKey(n) === 'few' ? `invoice.copies.${countKey(n)}` : 'invoice.copies', { n: POD.num(n), price });
   const namesText = (n) => t(n === 2 || countKey(n) === 'few' ? `invoice.qty.names.${countKey(n)}` : 'invoice.qty.names', { n: POD.num(n) });
+  /** Packs (100 cards × 2 + 1000 cards): their copies, else null (see POD.packCopies). */
+  const packCopies = (lines) => (POD.packCopies ? POD.packCopies(lines) : null);
   const piecesText = (n) => t('invoice.qty.' + (n === 1 ? 'one' : n === 2 ? 'two' : n % 100 >= 3 && n % 100 <= 10 ? 'few' : 'many'), { n: POD.num(n) });
   /** The colour/size lines of an item ordered in several colours or sizes (sorted by colour). */
   function qtyLines(item) {
@@ -73,7 +75,7 @@
         <td>
           <div class="prod">${esc(tr(item.productName))}</div>
           ${desc ? `<div class="desc">${esc(desc)}</div>` : ''}
-          ${copies > 1 ? `<div class="copies">${esc(one && !item.merge ? t('invoice.qty.same', { pieces: piecesText(copies), price: money(unit) }) : copiesText(copies, money(unit)))}</div>` : ''}
+          ${copies > 1 ? `<div class="copies">${esc(packCopies(lines) != null ? POD.plural('qty.copies', packCopies(lines)) : one && !item.merge ? t('invoice.qty.same', { pieces: piecesText(copies), price: money(unit) }) : copiesText(copies, money(unit)))}</div>` : ''}
         </td>
         <td class="num opt">${esc(POD.num(copies))}</td>
         <td class="num opt">${esc(money(unit))}</td>
@@ -97,7 +99,7 @@
         <td>
           <div class="prod">${esc(tr(item.productName))}</div>
           ${desc ? `<div class="desc">${esc(desc)}</div>` : ''}
-          <div class="copies">${esc(t('invoice.qty.mixed', { pieces: piecesText(copies) }))}</div>
+          <div class="copies">${esc(t('invoice.qty.mixed', { pieces: packCopies(lines) != null ? POD.plural('qty.copies', packCopies(lines)) : piecesText(copies) }))}</div>
         </td>
         <td class="num opt">${esc(POD.num(copies))}</td>
         <td class="num opt">${unit != null ? esc(money(unit)) : ''}</td>

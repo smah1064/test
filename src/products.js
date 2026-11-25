@@ -2779,6 +2779,22 @@ function pageSides(product, sizeId) {
   return [product.sides[0], ...product.sides.slice(1, n - 1), product.sides[product.sides.length - 1]];
 }
 
+// ---------- Copies in a pack ----------
+// Packs whose sizes count copies of one thing ("100 cards", "A5 × 500", "8 pages × 10 copies"): `copies` per
+// pack and `family` (the same paper size or page count), so the editor's "How many?" can move to bigger packs
+// when they cost less, and counts copies, not pieces (owner, 25 Nov). Window stickers are sizes in cm and photo
+// books count photos: not copies.
+const NOT_COPIES = new Set(['windowstickers', 'photobook']);
+for (const p of PRODUCTS) {
+  if (NOT_COPIES.has(p.id) || !p.sizes.length || !p.sizes.every((z) => z.pack)) continue;
+  const parsed = p.sizes.map((z) => /^(?:(.+)-)?(\d+)$/.exec(z.id));
+  if (!parsed.every(Boolean)) continue;
+  p.sizes.forEach((z, i) => {
+    z.copies = Number(parsed[i][2]);
+    z.family = parsed[i][1] || '';
+  });
+}
+
 module.exports = {
   PRODUCTS,
   EMBROIDERY,

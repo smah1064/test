@@ -32,3 +32,32 @@ test('a file sent to a made-up design is refused before its body is read (no mem
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
 });
+
+test('packs count copies: sizes carry their copies, and quantity lines are marked as packs', async () => {
+  const { PRODUCTS } = require('../src/products');
+  const by = (id) => PRODUCTS.find((p) => p.id === id);
+  assert.deepStrictEqual(by('bizcards').sizes.map((z) => z.copies), [100, 200, 300, 500, 1000]);
+  assert.deepStrictEqual(by('booklets').sizes.filter((z) => z.family === '8').map((z) => z.copies), [1, 10, 25, 50, 100]);
+  assert.deepStrictEqual(by('labels').sizes.slice(0, 2).map((z) => [z.family, z.copies]), [['50x30', 100], ['50x30', 250]]);
+  // Window stickers are sizes in cm, photo books count photos, T-shirts aren't packs.
+  for (const id of ['windowstickers', 'photobook', 'tshirt']) assert.ok(by(id).sizes.every((z) => z.copies === undefined), id);
+
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pod-qa0801p-'));
+  const app = createApp({ dataDir, adminPassword: 'secret-owner-pass', cleanupEvery: 0, requireApproval: false });
+  const server = await new Promise((resolve) => { const s = app.listen(0, () => resolve(s)); });
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const cat = await (await fetch(`${base}/api/products`)).json();
+    assert.strictEqual(cat.products.find((p) => p.id === 'bizcards').sizes[1].copies, 200, 'the shop gets the copies');
+    // 2 × 100 cards + 1 × 1000 cards: the lines say they are packs and how many cards each holds.
+    const r = await fetch(`${base}/api/designs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ productId: 'bizcards', color: 'gloss', size: '100', sides: { front: { editor: { objects: [{ type: 'i-text', text: 'Mona' }] } } }, quantities: [{ color: 'gloss', size: '100', qty: 2 }, { color: 'gloss', size: '1000', qty: 1 }] }) });
+    assert.strictEqual(r.status, 201);
+    const { id } = await r.json();
+    const db = JSON.parse(fs.readFileSync(path.join(dataDir, 'db.json'), 'utf8'));
+    const d = Array.isArray(db.designs) ? db.designs.find((x) => x.id === id) : db.designs[id];
+    assert.deepStrictEqual(d.quantities.map((l) => [l.size.id, l.size.pack, l.size.copies, l.qty]), [['100', true, 100, 2], ['1000', true, 1000, 1]]);
+  } finally {
+    server.close();
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});

@@ -395,6 +395,14 @@ window.POD_STRINGS = {
   'qty.priceNote': ['for {n} pieces', 'لـ {n} قطعة'],
   'qty.fromList': ['One piece per name on your list: {n} pieces.', 'قطعة لكل اسم في القائمة: {n} قطعة.'],
   'qty.fromListSizes': ['One piece per name on your list ({n}), each in the size from its Size column.', 'قطعة لكل اسم في القائمة ({n})، كل واحدة بالمقاس اللي في عمود المقاس.'],
+  // Packs (100 cards, A5 × 500, 8 pages × 10 copies…): counted in copies, not pieces (owner, 25 Nov).
+  'qty.copies.one': ['1 copy', 'نسخة واحدة'], 'qty.copies.two': ['2 copies', 'نسختين'], 'qty.copies.few': ['{n} copies', '{n} نسخ'], 'qty.copies.many': ['{n} copies', '{n} نسخة'],
+  'qty.copiesTotal.one': ['1 copy in total', 'الإجمالي نسخة واحدة'], 'qty.copiesTotal.two': ['2 copies in total', 'الإجمالي نسختين'], 'qty.copiesTotal.few': ['{n} copies in total', 'الإجمالي {n} نسخ'], 'qty.copiesTotal.many': ['{n} copies in total', 'الإجمالي {n} نسخة'],
+  'qty.copiesFor.one': ['for 1 copy', 'لنسخة واحدة'], 'qty.copiesFor.two': ['for 2 copies', 'لنسختين'], 'qty.copiesFor.few': ['for {n} copies', 'لـ {n} نسخ'], 'qty.copiesFor.many': ['for {n} copies', 'لـ {n} نسخة'],
+  'qty.copiesChip.one': ['1 copy ✎', 'نسخة واحدة ✎'], 'qty.copiesChip.two': ['2 copies ✎', 'نسختين ✎'], 'qty.copiesChip.few': ['{n} copies ✎', '{n} نسخ ✎'], 'qty.copiesChip.many': ['{n} copies ✎', '{n} نسخة ✎'],
+  'qty.helpPacks': ['How many of each amount. The price is for all of them.', 'كام مرة من كل كمية. السعر للكل.'],
+  // The typed number reached a bigger pack that costs less: the boxes move to it.
+  'qty.packSwitched': ['Cheaper as a bigger amount: changed to {list}. You save {save}.', 'أرخص بالكمية الأكبر: غيّرناها لـ {list}، وكده بتوفّر {save}.'],
   'merge.badVariant': ['{n} rows have a size or colour this product doesn\'t have (sizes: {sizes}). Rows:', '{n} صف فيهم مقاس أو لون مش موجود في المنتج (المقاسات: {sizes}). الصفوف:'],
   'merge.badVariant.one': ['1 row has a size or colour this product doesn\'t have (sizes: {sizes}). Row:', 'صف واحد فيه مقاس أو لون مش موجود في المنتج (المقاسات: {sizes}). الصف:'],
   'merge.badVariant.few': ['{n} rows have a size or colour this product doesn\'t have (sizes: {sizes}). Rows:', '{n} صفوف فيها مقاس أو لون مش موجود في المنتج (المقاسات: {sizes}). الصفوف:'],

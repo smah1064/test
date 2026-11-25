@@ -197,7 +197,9 @@
         return `<span class="qty-row">${hex ? `<span class="qty-dot" style="background:${hex}"></span>` : ''}${name ? `<span class="qty-color">${esc(name)}:</span> ` : ''}<span class="qty-sizes">${sizes(g)}</span></span>`;
       }).join('');
       const n = this.pieces(item);
-      const total = this.isNameList(item) ? '' : `<span class="qty-total">${esc(this.piecesText(n))}</span>`;
+      // Packs (100 cards × 2 + 1000 cards): the copies, never "3 pieces" (QA 25 Nov).
+      const copies = window.POD.packCopies ? window.POD.packCopies(item.quantities) : null;
+      const total = this.isNameList(item) ? '' : `<span class="qty-total">${esc(copies != null ? window.POD.plural('qty.copies', copies) : this.piecesText(n))}</span>`;
       return `<div class="qty-break${inline ? ' qty-inline' : ''}" aria-label="${esc(t('qty.breakdown'))}">${rows}${total}</div>`;
     },
     /** The same as plain text (WhatsApp messages): "Black: S×2, M×5 / White: M×2". */

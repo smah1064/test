@@ -293,7 +293,7 @@
                   ${approvalHtml(item)}
                   <div class="status-steps">${STEPS.map((s, k) => `<div class="${k <= reached ? 'done' : ''}" title="${esc(t('item.' + s))}"></div>`).join('')}</div>
                 </div>
-                <div class="price">${esc(money(item.price))}${pieces > 1 && item.unitPrice ? `<div class="qty-each">${esc(t('qty.each', { price: money(item.unitPrice) }))}</div>` : ''}</div>
+                <div class="price">${esc(money(item.price))}${pieces > 1 && item.unitPrice && POD.packCopies(item.quantities) == null ? `<div class="qty-each">${esc(t('qty.each', { price: money(item.unitPrice) }))}</div>` : ''}</div>
               </div>`;
             }).join('')}
           </div>

@@ -7,6 +7,7 @@ Object.assign(window.POD_STRINGS, {
   'proof.color': ['Colour', 'اللون'],
   'proof.size': ['Size', 'المقاس'],
   'proof.pieces': ['Pieces', 'القطع'],
+  'proof.copiesTotal': ['Copies', 'النسخ'],
   'proof.copies': ['Copies', 'النسخ'],
   'proof.method': ['Printing', 'طريقة الطباعة'],
   'proof.process.dtg': ['Direct-to-garment print', 'طباعة مباشرة على القماش (DTG)'],

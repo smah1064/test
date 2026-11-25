@@ -285,6 +285,15 @@
    * (11 and up, and 0). Arabic has all four ("منتج واحد", "منتجين", "٣ منتجات", "١١ منتج");
    * English uses the same words for few and many.
    */
+  /**
+   * Packs (100 cards, A5 × 500…): the copies in an item's quantity lines (100 cards × 2 = 200), or null when its
+   * sizes aren't packs (clothes count pieces). Lines carry `size.pack` / `size.copies` from the server.
+   */
+  function packCopies(lines) {
+    const list = (Array.isArray(lines) ? lines : []).filter((l) => l && Number(l.qty) > 0);
+    if (!list.length || !list.every((l) => l.size && l.size.pack)) return null;
+    return list.reduce((n, l) => n + Number(l.qty) * (Number(l.size.copies) || 1), 0);
+  }
   const pluralForm = (n) => (n === 1 ? 'one' : n === 2 ? 'two' : n % 100 >= 3 && n % 100 <= 10 ? 'few' : 'many');
   /** t() for a count, from the keys base.one / .two / .few / .many; {n} is in the page's digits. */
   function plural(base, n, params) {
@@ -1128,7 +1137,7 @@
     },
     t, tr, arabicDigits, setLang, applyI18n,
     loadCatalog, assetId, canPick, firstPick, comboOut, comboFew, sizeOk, colorOk, productPicture, thumbFallback, fillMockup, mockupUrl, svgDataUrl, luminance,
-    money, date, day, num, plural, pluralForm, captcha, fromPrice, sizeNote,
+    money, date, day, num, plural, pluralForm, packCopies, captcha, fromPrice, sizeNote,
     productState, backOnDay, backText, similarProducts, similarHref, similarLabel, productHref, showUnavailable,
     getCart, setCart, getSaved, setSaved, moveItem, designFor, putFile, updateCartBadge, toast, esc, api, drafts, forgetPersonal,
     sizedArea, sizeView, canvasEdges, drawPattern, wrapOffsets, fabricCm,

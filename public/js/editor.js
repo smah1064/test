@@ -4007,12 +4007,14 @@
       total = lines.reduce((a, l) => a + unitPrice(l.size) * l.qty, 0);
     }
     $('price').textContent = money(total);
-    if (notes && pieces > 1) notes.push(plural('qty.priceNote', pieces));
+    // Packs (100 cards, A5 × 500…): counted in copies ("for 300 copies"), not pieces.
+    const copies = packs() && !(p.merge && st.mergeList) ? copiesIn(qtyLines()) : null;
+    if (notes && pieces > 1) notes.push(copies != null ? POD.plural('qty.copiesFor', copies) : plural('qty.priceNote', pieces));
     // Phones: the number of pieces under the price; tapping it opens the quantities.
     const chip = $('qty-chip');
     if (chip) {
       chip.hidden = p.kind === 'book';
-      chip.textContent = plural(p.merge && st.mergeList ? 'qty.chipNames' : 'qty.chip', pieces);
+      chip.textContent = copies != null ? POD.plural('qty.copiesChip', copies) : plural(p.merge && st.mergeList ? 'qty.chipNames' : 'qty.chip', pieces);
     }
   }
   if ($('qty-chip')) {
@@ -4113,6 +4115,85 @@
   /** Arabic: 3–10 (and 103–110…) take the plural form. */
   const few = (n) => n % 100 >= 3 && n % 100 <= 10;
   const qtyTotalText = (n) => (n === 1 ? t('qty.totalOne') : n === 2 ? t('qty.total.two') : t(n % 100 >= 3 && n % 100 <= 10 ? 'qty.totalFew' : 'qty.total', { n: POD.num(n) }));
+  /** "12 pieces in total", or for packs "300 copies in total". */
+  const qtySumText = () => (packs() ? POD.plural('qty.copiesTotal', copiesIn(qtyLines())) : qtyTotalText(qtyTotal()));
+
+  // ---------- Packs: "100 cards", "A5 × 500", "8 pages × 10 copies"… ----------
+  /** Sold in packs whose sizes count copies (`copies` per pack, `family` = the same paper size / page count). */
+  const packs = () => st.product.sizes.length > 0 && st.product.sizes.every((z) => z.pack);
+  const sizeById = (id) => st.product.sizes.find((z) => z.id === id);
+  const copiesIn = (lines) => lines.reduce((n, l) => n + l.qty * ((sizeById(l.size) || {}).copies || 1), 0);
+  const counted = (z) => z && typeof z.copies === 'number' && z.copies > 0;
+  /** The cheapest packs of one family adding up to exactly `total` copies, as Map(sizeId → n), or null. */
+  function cheapestPacks(total, sizes) {
+    if (!sizes.length || total < 1 || total > 20000) return null;
+    const price = sizes.map((z) => unitPrice(z.id));
+    const cost = new Float64Array(total + 1).fill(Infinity);
+    const pick = new Int16Array(total + 1).fill(-1);
+    cost[0] = 0;
+    for (let n = 1; n <= total; n++) {
+      for (let i = 0; i < sizes.length; i++) {
+        const k = sizes[i].copies;
+        if (k <= n && cost[n - k] + price[i] < cost[n] - 1e-9) {
+          cost[n] = cost[n - k] + price[i];
+          pick[n] = i;
+        }
+      }
+    }
+    if (!Number.isFinite(cost[total])) return null;
+    const out = new Map();
+    for (let n = total; n > 0; n -= sizes[pick[n]].copies) out.set(sizes[pick[n]].id, (out.get(sizes[pick[n]].id) || 0) + 1);
+    return out;
+  }
+  /**
+   * The typed number reached a bigger pack that costs less ("10 × 1 bookmark" against "1 × 10 bookmarks"): the
+   * boxes move to the cheapest packs for the same number of copies (the owner's choice, 25 Nov), and say so.
+   * Products ordered in one size for all colours (flyers, menus, booklets) move to one bigger size when every
+   * colour's copies fit it exactly.
+   */
+  function packSwitch() {
+    const p = st.product;
+    if (!packs() || p.kind === 'book' || (p.merge && st.mergeList)) return;
+    const lines = qtyLines();
+    if (!lines.length || !lines.every((l) => counted(sizeById(l.size)))) return;
+    const before = lines.reduce((a, l) => a + unitPrice(l.size) * l.qty, 0);
+    const fits = (c, z) => sizeOk(p, c, z) && !(POD.comboFew(p, c, z.id) > 0);
+    let next = null;
+    let size = st.sizeId;
+    if (mix().sizes) {
+      next = {};
+      for (const c of [...new Set(lines.map((l) => l.color))]) {
+        const mine = lines.filter((l) => l.color === c);
+        for (const fam of [...new Set(mine.map((l) => sizeById(l.size).family))]) {
+          const typed = mine.filter((l) => sizeById(l.size).family === fam);
+          const best = cheapestPacks(copiesIn(typed), p.sizes.filter((z) => counted(z) && z.family === fam && fits(c, z)));
+          for (const [z, n] of best || typed.map((l) => [l.size, l.qty])) (next[c] ||= {})[z] = (next[c][z] || 0) + n;
+        }
+      }
+    } else {
+      const cur = sizeById(st.sizeId);
+      if (!counted(cur)) return;
+      let bestCost = before;
+      for (const z of p.sizes.filter((x) => counted(x) && x.family === cur.family && x.id !== cur.id)) {
+        const rows = lines.map((l) => ({ color: l.color, n: (l.qty * cur.copies) / z.copies }));
+        if (!rows.every((r) => Number.isInteger(r.n) && r.n >= 1 && r.n <= 1000 && fits(r.color, z))) continue;
+        const cost = rows.reduce((a, r) => a + unitPrice(z.id) * r.n, 0);
+        if (cost < bestCost - 0.5) {
+          bestCost = cost;
+          size = z.id;
+          next = Object.fromEntries(rows.map((r) => [r.color, { [z.id]: r.n }]));
+        }
+      }
+    }
+    if (!next) return;
+    const after = Object.values(next).reduce((a, row) => a + Object.entries(row).reduce((b, [z, n]) => b + unitPrice(z) * n, 0), 0);
+    if (!(after < before - 0.5)) return;
+    if (size !== st.sizeId) changeSize(size);
+    st.qty = next;
+    const list = Object.values(next).flatMap((row) => Object.entries(row).map(([z, n]) => `${POD.num(n)} × ${tr(sizeById(z).label)}`));
+    toast(t('qty.packSwitched', { list: [...new Set(list)].join(POD.lang === 'ar' ? '، ' : ', '), save: money(before - after) }));
+    renderOptions();
+  }
   let qtyRedraw = false;
   function renderQty() {
     const box = $('qty-field');
@@ -4162,8 +4243,8 @@
           </tr>`).join('')}</tbody>
         </table></div>
         ${mix().colors && colors.length < p.colors.length ? `<select class="qty-add" id="qty-add"><option value="">${esc(t('qty.addColour'))}</option>${p.colors.filter((c) => !g[c.id] && !c.soldOut).map((c) => `<option value="${c.id}">${esc(tr(c.name))}</option>`).join('')}</select>` : ''}`}
-      <p class="small qty-sum">${esc(qtyTotalText(total))}</p>
-      ${total > 1 ? `<p class="muted small" style="margin:2px 0 0;line-height:1.5">${esc(t(mix().sizes || mix().colors ? 'qty.help' : 'qty.helpSame'))}</p>` : ''}`;
+      <p class="small qty-sum">${esc(qtySumText())}</p>
+      ${total > 1 ? `<p class="muted small" style="margin:2px 0 0;line-height:1.5">${esc(t(packs() ? 'qty.helpPacks' : mix().sizes || mix().colors ? 'qty.help' : 'qty.helpSame'))}</p>` : ''}`;
   }
   function redrawQtyIfLeft() {
     const box = $('qty-field');
@@ -4200,8 +4281,16 @@
         // (After the tap that moved the focus has landed: a box being typed in is then never drawn
         // again under the finger; the boxes are drawn once the focus leaves them.)
         setTimeout(() => {
+          const was = JSON.stringify(st.qty);
+          packSwitch();
           refreshChrome();
-          redrawQtyIfLeft();
+          if (JSON.stringify(st.qty) !== was) {
+            // Moved to bigger packs: the boxes show it now, the keyboard on the box that holds them.
+            qtyRedraw = false;
+            const box = $('qty-field');
+            if (box && box.contains(document.activeElement)) document.activeElement.blur();
+            renderQty();
+          } else redrawQtyIfLeft();
         }, 0);
       }
       if (e.target.id === 'qty-add' && e.target.value) {
@@ -4219,7 +4308,7 @@
       setCell(i.dataset.qc, i.dataset.qz, i.value);
       refreshPrice();
       const sum = $('qty-field').querySelector('.qty-sum');
-      if (sum) sum.textContent = qtyTotalText(qtyTotal());
+      if (sum) sum.textContent = qtySumText();
     });
     $('qty-field').addEventListener('click', (e) => {
       const step = e.target.closest('[data-qstep]');
@@ -4227,6 +4316,7 @@
         const g = qtyGrid();
         const now = (g[st.colorId] && g[st.colorId][st.sizeId]) || 0;
         st.qty = { [st.colorId]: { [st.sizeId]: Math.max(1, Math.min(1000, now + Number(step.dataset.qstep))) } };
+        packSwitch();
         refreshChrome();
         renderQty();
       }
