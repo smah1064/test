@@ -88,6 +88,7 @@
     'rv.action.rejected': ['Asked for changes', 'طلب تعديلات'],
     'rv.action.reviewed': ['Checked and approved for printing', 'اتراجع واتوافق عليه للطباعة'],
     'rv.action.changes': ['Asked the customer for changes', 'طلب تعديلات من العميل'],
+    'rv.action.revised': ['Customer sent a new version', 'العميل بعت نسخة جديدة'],
     'rv.action.replaced': ['Uploaded a corrected file', 'رفع ملف متصلّح'],
     'rv.action.resent': ['Resent the proof link', 'بعت لينك البروفة تاني'],
     'rv.action.reopened': ['Sent back to Review', 'رجعت للمراجعة'],

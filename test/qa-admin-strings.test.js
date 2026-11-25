@@ -70,3 +70,19 @@ test('expense dates are shown as days, not YYYY-MM-DD', () => {
   assert.doesNotMatch(src, /<td>\$\{esc\(e\.date\)\}<\/td>/, 'the expense list formats its dates');
   assert.match(src, /<td>\$\{esc\(day\(e\.date, true\)\)\}<\/td>/);
 });
+
+test('review history: every step the server records has its own words in both languages (no raw "revised")', () => {
+  const S = strings();
+  const app = fs.readFileSync(path.join(__dirname, '../src/app.js'), 'utf8');
+  // Each entry added to an item's approvals: `approvals = [...(x.approvals || []), { action: '…'` or `approvals.push({ action: '…'`.
+  const actions = new Set([...app.matchAll(/approvals(?: = \[\.\.\.\([\w.]+ \|\| \[\]\), |\.push\()\{ action: '([a-z-]+)'/g)].map((m) => m[1]));
+  for (const a of ['approved', 'rejected', 'reopened', 'reviewed', 'changes', 'edited', 'revised']) assert.ok(actions.has(a), `found ${a} in src/app.js`);
+  for (const a of actions) {
+    const pair = S[`rv.action.${a}`];
+    assert.ok(Array.isArray(pair) && pair[0] && pair[1], `rv.action.${a}`);
+    assert.notStrictEqual(pair[0], a, `rv.action.${a} in English`);
+    assert.match(pair[1], /[؀-ۿ]/, `rv.action.${a} in Arabic`);
+  }
+  // After the customer sends a new version, the history says so.
+  assert.deepStrictEqual([...S['rv.action.revised']], ['Customer sent a new version', 'العميل بعت نسخة جديدة']);
+});
