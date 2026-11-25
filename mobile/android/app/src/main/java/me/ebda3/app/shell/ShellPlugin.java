@@ -26,6 +26,7 @@ import android.webkit.WebBackForwardList;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import androidx.activity.OnBackPressedCallback;
+import androidx.annotation.RequiresApi;
 import androidx.browser.customtabs.CustomTabColorSchemeParams;
 import androidx.browser.customtabs.CustomTabsIntent;
 import androidx.core.content.FileProvider;
@@ -527,6 +528,7 @@ public class ShellPlugin extends Plugin {
         }
     }
 
+    @RequiresApi(api = Build.VERSION_CODES.Q)
     private void saveToMediaStore(byte[] bytes, String name, String mime, boolean image) throws IOException {
         ContentResolver resolver = getContext().getContentResolver();
         ContentValues values = new ContentValues();
