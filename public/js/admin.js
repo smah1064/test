@@ -2974,7 +2974,7 @@
         <textarea id="rv-note-${id}" data-rv-note="${id}" rows="3" maxlength="1000" dir="auto" placeholder="${esc(t('rv.notePh'))}">${esc(rvNote[item.id] || '')}</textarea>
         <div class="rv-btns">
           <button class="btn btn-primary" type="button" data-rv-act="approve" data-rv-id="${id}" ${busy ? 'disabled' : ''}>✓ ${esc(t('rv.approve'))}</button>
-          <button class="btn" type="button" data-rv-act="changes" data-rv-id="${id}" ${busy ? 'disabled' : ''}>✎ ${esc(t('rv.askChanges'))}</button>
+          ${item.kind && item.kind !== 'product' ? '' : `<button class="btn" type="button" data-rv-act="changes" data-rv-id="${id}" ${busy ? 'disabled' : ''}>✎ ${esc(t('rv.askChanges'))}</button>`}
         </div>
         ${rvShopEdit(item)}
         ${msgHtml(rvMsg[item.id])}

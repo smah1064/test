@@ -392,6 +392,7 @@ window.POD_STRINGS = {
   'qty.chipNames': ['{n} names ✎', '{n} اسم ✎'],
   'qty.total': ['{n} pieces in total', 'الإجمالي {n} قطعة'],
   'qty.totalOne': ['1 piece in total', 'الإجمالي قطعة واحدة'],
+  'qty.chooseSize': ['Choose a size: type how many under it.', 'اختار المقاس: اكتب العدد تحته.'],
   'qty.totalFew': ['{n} pieces in total', 'الإجمالي {n} قطع'],
   'qty.addColour': ['+ Same design in another colour', '+ نفس التصميم بلون تاني'],
   'qty.removeColour': ['Remove {c}', 'شيل {c}'],

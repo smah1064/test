@@ -188,7 +188,7 @@ function cleanString(value, field, { max = 200, required = true, lines = ' ' } =
   // One line: line breaks, tabs and other control characters become a space (an address's lines: `lines`),
   // so a pasted name can't add lines of its own to the shop's WhatsApp alert or emails (QA tester 2, 25 Nov).
   const s = typeof value === 'string'
-    ? value.replace(/[\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/g, '')
+    ? value.replace(/[\u115f\u1160\u200b-\u200f\u202a-\u202e\u2060-\u2069\u2800\u3164\ufeff\uffa0]/g, '')
       .replace(/\s*(?:\r\n|[\r\n\u0085\u2028\u2029])+\s*/g, lines).replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/[ \t]{2,}/g, ' ').trim()
     : '';
   if (required && !s) throw new HttpError(400, 'fieldRequired', { field: FIELDS[field] });
@@ -1119,7 +1119,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const b = req.body || {};
       // (Invisible marks only isn't a note: a required note has to say something. QA 25 Nov.)
       const rawNote = String(b.note || '').trim().slice(0, 2000);
-      const note = /[\p{L}\p{N}\p{S}\p{P}]/u.test(rawNote.replace(/[\u00ad\u061c\u115f\u1160\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2069\u3164\ufeff\uffa0]/g, '')) ? rawNote : '';
+      const note = noteText(rawNote, 2000);
       const now = new Date().toISOString();
       if (b.action === 'reopen') {
         // An item the customer approved, that can't be printed as it is (owner's request, 25 Nov): back to Review,
@@ -1165,6 +1165,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         item.review = { ...(item.review || { reasons: [] }), needed: true, status: 'done', ...(note ? { note } : {}) };
         item.approvals = [...(item.approvals || []), { action: 'reviewed', by: 'shop', at: now, proofHash: d ? proofHashOf(d) : null, version: d ? d.version || 1 : null, ...(note ? { note } : {}) }];
       } else if (b.action === 'changes') {
+        // (Kids' books and photo prints aren't made in the editor: the customer has nothing to change them with. The
+        // shop replaces the photo in Review instead. QA 25 Nov.)
+        if (item.kind) throw new HttpError(409, 'changesNotForKind');
         if (!note) throw new HttpError(400, 'noteRequired');
         item.status = 'changes_requested';
         newReviseLink(item);
@@ -1214,7 +1217,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       // What the shop changed, for the customer (with the new proof, in the email and on the proof page).
       let changeNote = '';
       try { changeNote = decodeURIComponent(String(req.get('x-review-note') || '')).replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, ' ').trim().slice(0, 1000); } catch (e) { changeNote = ''; }
-      if (!/[\p{L}\p{N}\p{S}\p{P}]/u.test(changeNote.replace(/[\u00ad\u061c\u115f\u1160\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2069\u3164\ufeff\uffa0]/g, ''))) changeNote = '';
+      if (!noteText(changeNote, 1000)) changeNote = '';
       // The old file stays, so every version that was ever approved can be found again.
       const v = d.version || 1;
       const cur = store.designFile(d.id, `${sd.id}-print.png`);
@@ -1375,10 +1378,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   // like the customer's own (same product, same pieces, at the price agreed at checkout), then either goes to the
   // customer for approval with a note of what changed, or is printed without asking, with a note of why: that is an
   // owner's decision (held in Approvals for anyone else; an owner's own goes at once, logged).
-  const INVISIBLE_MARKS = /[\u00ad\u061c\u115f\u1160\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2069\u3164\ufeff\uffa0]/g;
+  const INVISIBLE_MARKS = /[\u00ad\u061c\u115f\u1160\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2069\u2800\u3164\ufeff\uffa0]/g;
+  // (A note says something in words or numbers: a Braille blank or symbols alone aren't one. QA 25 Nov.)
   const noteText = (v, max) => {
     const t = typeof v === 'string' ? v.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, ' ').trim().slice(0, max) : '';
-    return /[\p{L}\p{N}\p{S}\p{P}]/u.test(t.replace(INVISIBLE_MARKS, '')) ? t : '';
+    return /[\p{L}\p{N}]/u.test(t.replace(INVISIBLE_MARKS, '').replace(/\u0640/g, '')) ? t : '';
   };
   function shopEditCheck(req) {
     const found = store.findItem(req.params.itemId);

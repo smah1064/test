@@ -83,7 +83,8 @@ const personRow = (p, base) => ({
 /** A name for a person: plain text, one line, up to 60 characters. */
 const cleanName = (v) => {
   // (No invisible direction marks or blank-looking letters: a name has to show something. QA 25 Nov.)
-  const s = typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f\u00ad\u061c\u115f\u1160\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2069\u3164\ufeff\uffa0]/g, '').trim().replace(/\s+/g, ' ').slice(0, 60) : '';
+  // (The zero-width joiner stays: it holds emoji like 👩‍💻 together. QA 25 Nov.)
+  const s = typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f\u00ad\u061c\u115f\u1160\u180e\u200b\u200c\u200e\u200f\u202a-\u202e\u2060-\u2069\u2800\u3164\ufeff\uffa0]/g, '').trim().replace(/\s+/g, ' ').slice(0, 60) : '';
   return /[\p{L}\p{N}\p{S}]/u.test(s) ? s : '';
 };
 

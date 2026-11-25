@@ -3437,7 +3437,11 @@
     return def ? tr(def.name) : o.name || t('panel.shape');
   }
   function layerName(o) {
-    if (isText(o)) return `“${o.text.replace(/\s+/g, ' ').slice(0, 28)}”`;
+    if (isText(o)) {
+      // (Cut by whole characters, with "…" when it's longer: "100%" isn't shown as "1". QA 25 Nov.)
+      const all = Array.from(o.text.replace(/\s+/g, ' '));
+      return `“${all.length > 28 ? `${all.slice(0, 27).join('')}…` : all.join('')}”`;
+    }
     if (o.type === 'image') return o.name || t('panel.image');
     return shapeName(o);
   }
@@ -4348,7 +4352,9 @@
   const few = (n) => n % 100 >= 3 && n % 100 <= 10;
   const qtyTotalText = (n) => (n === 1 ? t('qty.totalOne') : n === 2 ? t('qty.total.two') : t(n % 100 >= 3 && n % 100 <= 10 ? 'qty.totalFew' : 'qty.total', { n: POD.num(n) }));
   /** "12 pieces in total", or for packs "300 copies in total". */
-  const qtySumText = () => (packs() ? POD.plural('qty.copiesTotal', copiesIn(qtyLines())) : qtyTotalText(qtyTotal()));
+  // (No size chosen yet: no box holds the piece, so the line asks for the size, not "1 piece in total". QA 25 Nov.)
+  const qtySumText = () => (!st.sizePicked && mix().sizes && !packs() && qtyLines().length === 1 && qtyTotal() === 1 ? t('qty.chooseSize')
+    : packs() ? POD.plural('qty.copiesTotal', copiesIn(qtyLines())) : qtyTotalText(qtyTotal()));
 
   // ---------- Packs: "100 cards", "A5 × 500", "8 pages × 10 copies"… ----------
   /** Sold in packs whose sizes count copies (`copies` per pack, `family` = the same paper size / page count). */

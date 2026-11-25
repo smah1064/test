@@ -97,6 +97,10 @@ test('kids\' book: the child\'s photo replaced; the drawings are made again from
   const o = await order(d.id);
   const it = o.items[0];
   await sendBack(it);
+  // "Ask for changes" isn't for a book: the customer has nothing to change it with.
+  const ask = await admin(`/api/admin/items/${it.id}/review`, 'POST', { action: 'changes', note: 'Send a clearer photo' });
+  assert.strictEqual(ask.status, 409);
+  assert.strictEqual((await ask.json()).code, 'changesNotForKind');
   const before = fs.readFileSync(path.join(dataDir, 'files', d.id, 'face.jpg'));
   const r = await replace(it, 'face', await jpeg(900, 1200, '#3399cc'), 'A clearer photo of Yousef');
   assert.strictEqual(r.status, 200, await r.clone().text());

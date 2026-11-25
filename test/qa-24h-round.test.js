@@ -455,3 +455,18 @@ test('delete my account: with the password; the account, its cart and drafts go;
   assert.ok([200, 201].includes(again.status), again.text);
   assert.ok(d.id);
 });
+
+test('blank-looking characters (Hangul filler, Braille blank) are no name or note; invite names keep emoji whole', async () => {
+  const d = (await call('/api/designs', 'POST', { productId: 'mug', color: 'white', size: '11oz', sides: { front: { editor: { objects: [{ type: 'i-text', text: 'x' }] } } } })).json;
+  for (const blank of ['ㅤㅤ', '⠀⠀']) {
+    const r = await call('/api/orders', 'POST', { customer: { ...CUSTOMER, name: blank }, designIds: [d.id] });
+    assert.strictEqual(r.status, 400, `${JSON.stringify(blank)} -> ${r.text}`);
+    const c = await call('/api/orders', 'POST', { customer: { ...CUSTOMER, city: blank }, designIds: [d.id] });
+    assert.strictEqual(c.status, 400, `city ${JSON.stringify(blank)} -> ${c.text}`);
+  }
+  const o = await approvedMug();
+  const r = await call(`/api/admin/items/${o.items[0].id}/review`, 'POST', { action: 'reopen', note: '⠀⠀ ✔' }, owner);
+  assert.strictEqual(r.status, 400, r.text);
+  assert.strictEqual(preview.cleanName('Sara 👩‍💻'), 'Sara 👩‍💻');
+  assert.strictEqual(preview.cleanName('⠀⠀'), '');
+});

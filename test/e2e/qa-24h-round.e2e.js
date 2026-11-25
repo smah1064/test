@@ -71,6 +71,7 @@ test('Editor, no size chosen yet: no size box holds the 1; a number typed under 
     await page.waitForSelector('#qty-field .qty-in[data-qz="M"]');
     const values = await page.$$eval('#qty-field .qty-in', (els) => els.map((e) => [e.dataset.qz, e.value]));
     assert.ok(values.every(([, v]) => v === ''), JSON.stringify(values));
+    assert.match(await page.textContent('#qty-field .qty-sum'), /Choose a size/, 'not "1 piece in total" over empty boxes');
     await page.fill('#qty-field .qty-in[data-qz="M"]', '2');
     await page.dispatchEvent('#qty-field .qty-in[data-qz="M"]', 'change');
     await page.waitForTimeout(300);
