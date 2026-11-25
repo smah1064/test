@@ -3074,7 +3074,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         const left = leftOf(getProduct(short.pid), short.combo);
         const free = Math.max(0, left - (taken.get(`${short.pid}#${short.combo || ''}`) || 0));
         i.unavailable = 'notEnoughStock';
-        i.unavailableText = format('notEnoughStock', { name: stockName(short.pid, short.combo, langOf(req)), left: free }, langOf(req));
+        // Nothing left for this item: the items above it in the cart take the last ones (never "Only 0 left").
+        i.unavailableText = free > 0
+          ? format('notEnoughStock', { name: stockName(short.pid, short.combo, langOf(req)), left: free }, langOf(req))
+          : format('stockInCart', { name: stockName(short.pid, short.combo, langOf(req)) }, langOf(req));
         continue;
       }
       for (const x of needs) taken.set(`${x.pid}#${x.combo || ''}`, (taken.get(`${x.pid}#${x.combo || ''}`) || 0) + x.n);

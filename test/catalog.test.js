@@ -306,6 +306,7 @@ test('the cart warns about stock before checkout, books can be hidden, and hidde
   // Nothing left for the second one: said so, never "Only 0 left… order fewer" (QA 25 Nov).
   assert.match(q.items[1].unavailableText, /Kitchen Apron/);
   assert.doesNotMatch(q.items[1].unavailableText, /\b0\b|Only|fewer/);
+  assert.match(q.items[1].unavailableText, /in another item in your cart/);
   const one = await (await post('/api/cart/quote', { designIds: [a.body.id] })).json();
   assert.strictEqual(one.items[0].unavailable, undefined, 'one piece is fine');
   await put('/api/admin/catalog/apron', { stock: null });

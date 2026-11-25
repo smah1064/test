@@ -146,6 +146,7 @@ test('cart: the second item for the last piece of a size never says "Only 0 left
     const text = q.items[1].unavailableText;
     assert.doesNotMatch(text, /\b0\b|٠|Only|fewer|عدد أقل/, `${lang}: ${text}`);
     assert.ok(text.includes(lang === 'ar' ? 'تيشيرت' : 'T-Shirt') && text.includes('L)'), text);
+    assert.match(text, lang === 'ar' ? /في منتج تاني في سلتك/ : /in another item in your cart/);
   }
   // The shop's answer to a code in Arabic letters, for anyone asking it directly: not valid (never the admin's code rule).
   for (const [lang, re] of [['en', /^This coupon code is not valid$/], ['ar', /^كود الخصم ده غير صحيح$/]]) {
