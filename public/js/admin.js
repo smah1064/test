@@ -1678,7 +1678,7 @@
     $('cu-count').textContent = t('cu.count', { n: POD.num(d.customers.length), total: POD.num(d.total) });
     $('cu-list').innerHTML = d.customers.length ? d.customers.map((c) => {
       const link = resetLinks.get(c.id);
-      const msg = link ? t('cu.waText', { name: c.name.split(' ')[0], url: link.url }) : '';
+      const msg = link ? t('cu.waText', { name: POD.firstName ? POD.firstName(c.name) : c.name.split(' ')[0], url: link.url }) : '';
       return `
       <div class="card queue-row cu-row">
         <div>
