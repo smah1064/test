@@ -203,6 +203,8 @@
       });
       token = res.token;
       sessionStorage.setItem(KEY, token);
+      // (Whether email is set up: right away, not only after a reload.)
+      if (typeof res.emailReady === 'boolean') emailReady = res.emailReady;
       setAccess(res, res.shown || res.name || username);
       sessionAt = Date.now();
       $('password').value = '';

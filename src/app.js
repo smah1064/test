@@ -3840,12 +3840,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       });
       activity.add({ whoId: w.id, who: w.shown, roles: w.roles, action: 'signIn', label: { en: 'Signed in', ar: 'دخل' }, summary: { en: 'Signed in', ar: 'دخل' }, method: 'POST', path: '/api/admin/login', status: 200, ip: req.ip });
       // (name: the username; shown: the person's name, for the header.)
-      return res.json({ token: result.token, expiresAt, id: w.id, role: w.role, roles: w.roles, perms: [...w.perms], name: w.name, shown: w.shown, ...approvalCounts(w) });
+      return res.json({ token: result.token, expiresAt, id: w.id, role: w.role, roles: w.roles, perms: [...w.perms], name: w.name, shown: w.shown, emailReady: notify.emailReady(), ...approvalCounts(w) });
     }
     // The shared password: the emergency way in, always written to the log.
     activity.add({ whoId: 'owner', who: 'owner', roles: ['owner'], emergency: true, action: 'signIn', label: { en: 'Signed in with the shared password', ar: 'دخل بكلمة السر المشتركة' }, summary: { en: 'Signed in with the shared password', ar: 'دخل بكلمة السر المشتركة' }, method: 'POST', path: '/api/admin/login', status: 200, ip: req.ip });
     const w = emergencyWho();
-    res.json({ token: result.token, expiresAt, weakPassword: auth.weak, id: w.id, role: 'owner', roles: w.roles, perms: [...w.perms], name: 'owner', emergency: true, ...approvalCounts(w) });
+    res.json({ token: result.token, expiresAt, weakPassword: auth.weak, id: w.id, role: 'owner', roles: w.roles, perms: [...w.perms], name: 'owner', emergency: true, emailReady: notify.emailReady(), ...approvalCounts(w) });
   });
   app.post('/api/admin/logout', (req, res) => {
     auth.logout(security.bearer(req), staffList());
@@ -3868,14 +3868,17 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (r.told) return;
       r.told = true;
     }
-    const name = String(username || '').slice(0, 30);
+    // (Only a username that exists is written: a password typed into the username box by mistake never is.)
+    const typed = String(username || '').trim().toLowerCase();
+    const name = typed && staffAll().some((u) => u.username === typed) ? typed : typed ? '?' : '';
     const many = r.n > 20;
     activity.add({
       whoId: name ? `try:${name}` : 'try:owner', who: name || 'owner', roles: [], action: locked ? 'signInLocked' : 'signInFailed', status: locked ? 429 : 401, ip: req.ip,
       ...(name ? {} : { emergency: true }),
       summary: many ? { en: 'Many wrong sign-ins from one address: the next ones in these 10 minutes are not listed', ar: 'محاولات دخول غلط كتير من نفس العنوان: اللي بعدها في العشر دقايق دي مش متسجلة' }
-        : locked ? { en: `Sign-in waiting (too many wrong passwords)${name ? `: ${name}` : ' (shared password)'}`, ar: `الدخول مستني (كلمات سر غلط كتير)${name ? `: ${name}` : ' (كلمة السر المشتركة)'}` }
-          : { en: `Wrong password${name ? `: ${name}` : ' (shared password)'}`, ar: `كلمة سر غلط${name ? `: ${name}` : ' (كلمة السر المشتركة)'}` },
+        : name === '?' ? { en: 'Wrong sign-in: a username that doesn\'t exist', ar: 'دخول غلط: اسم مستخدم مش موجود' }
+          : locked ? { en: `Sign-in waiting (too many wrong passwords)${name ? `: ${name}` : ' (shared password)'}`, ar: `الدخول مستني (كلمات سر غلط كتير)${name ? `: ${name}` : ' (كلمة السر المشتركة)'}` }
+            : { en: `Wrong password${name ? `: ${name}` : ' (shared password)'}`, ar: `كلمة سر غلط${name ? `: ${name}` : ' (كلمة السر المشتركة)'}` },
     });
   }
   // ---------- Who is signed in, and what they may do (src/roles.js) ----------

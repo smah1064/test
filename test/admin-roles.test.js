@@ -452,9 +452,13 @@ test('QA admin round, last wave: costs never wiped, wrong sign-ins logged, big r
   assert.strictEqual(nb.json.costs.blank, 30, 'costs kept');
   // Wrong sign-ins reach the activity log (the owner sees someone guessing).
   await call('/api/admin/login', 'POST', { username: 'nobody-here', password: 'wrong-wrong-1' });
+  await call('/api/admin/login', 'POST', { username: 'cat2', password: 'wrong-wrong-2' });
   await call('/api/admin/login', 'POST', { password: 'not-the-shared-one' });
   const log = (await call('/api/admin/activity?limit=500', 'GET', undefined, owner)).json.entries;
-  assert.ok(log.some((e) => e.action === 'signInFailed' && /nobody-here/.test(e.summary.en)));
+  assert.ok(log.some((e) => e.action === 'signInFailed' && /cat2/.test(e.summary.en)), 'a real username is named');
+  // (A username that doesn't exist, e.g. a password typed in the wrong box, is never written.)
+  assert.ok(!JSON.stringify(log).includes('nobody-here') && !fs.readFileSync(path.join(dataDir, 'activity.jsonl'), 'utf8').includes('nobody-here'));
+  assert.ok(log.some((e) => e.action === 'signInFailed' && /doesn't exist/.test(e.summary.en)));
   assert.ok(log.some((e) => e.action === 'signInFailed' && e.emergency === true));
   // A big change waits in its own file, and is applied whole when approved.
   const cat = await addMember('cat20', ['catalogue']);
