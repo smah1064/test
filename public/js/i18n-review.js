@@ -17,8 +17,6 @@
     'rv.screenNote': ['This is a screen proof, not a printed colour proof: screens show light (RGB) and prints use ink, so colours can differ.', 'دي بروفة على الشاشة، مش بروفة ألوان مطبوعة: الشاشة بتعرض ألوان ضوء (RGB) والطباعة بالحبر، فالألوان ممكن تختلف.'],
     'rv.empty': ['Nothing to review. New flagged jobs will show up here.', 'مفيش حاجة محتاجة مراجعة. الطلبات الجديدة اللي محتاجة مراجعة هتظهر هنا.'],
     'rv.loadFailed': ['Could not load the review list.', 'مقدرناش نحمّل قائمة المراجعة.'],
-    'rv.count': ['{n} waiting for review', '{n} مستني مراجعة'],
-    'rv.queueNotice': ['{n} job(s) are waiting for review or for the customer and cannot be printed yet.', 'فيه {n} طلب مستني مراجعة أو موافقة العميل ومينفعش يتطبع لسه.'],
     'rv.open': ['Open', 'افتح'],
     'rv.close': ['Close', 'اقفل'],
     'rv.ordered': ['Ordered {date}', 'اتطلب {date}'],
@@ -136,7 +134,6 @@
 
     'rv.notPrintable': ['Not approved for printing yet', 'لسه متوافقش عليه للطباعة'],
     'rv.goReview': ['Open in Review', 'افتح في المراجعة'],
-    'rv.orderInReview': ['{n} item(s) need review or customer approval', '{n} منتج محتاج مراجعة أو موافقة العميل'],
     'rv.notApproved': ['This file is not approved for printing: it changed after the customer approved it, or it still needs approval. Check the Review tab.', 'الملف ده متوافقش عليه للطباعة: اتغيّر بعد موافقة العميل أو لسه محتاج موافقة. راجع تبويب المراجعة.'],
   });
 })();
