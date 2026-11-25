@@ -14,12 +14,14 @@ const { PRODUCTS } = require('../src/products');
 
 const file = (src) => path.join(__dirname, '../public', src);
 const cards = pack.designs.filter((d) => d.id.startsWith('xm-card-'));
-const quotes = pack.designs.filter((d) => !d.id.startsWith('xm-card-'));
+const trees = pack.designs.filter((d) => d.id.startsWith('xm-trees-'));
+const quotes = pack.designs.filter((d) => !d.id.startsWith('xm-card-') && !d.id.startsWith('xm-trees-'));
 
-test('the Christmas pack has 4 cards and 28 quotes with unique ids, names and its category', () => {
+test('the Christmas pack has 4 cards, 28 quotes and 4 tree pictures with unique ids, names and its category', () => {
   assert.strictEqual(cards.length, 4);
   assert.strictEqual(quotes.length, 28);
-  assert.strictEqual(new Set(pack.designs.map((d) => d.id)).size, 32);
+  assert.strictEqual(trees.length, 4);
+  assert.strictEqual(new Set(pack.designs.map((d) => d.id)).size, 36);
   assert.ok(CATEGORIES.some((c) => c.id === 'christmas' && c.name.ar && c.name.en));
   for (const d of pack.designs) {
     assert.match(d.id, /^xm-[a-z-]+$/);
@@ -49,6 +51,17 @@ test('the Christmas quotes are clean one-colour vectors with a white copy', () =
       assert.doesNotMatch(svg, /<(script|image|foreignObject|style)|on\w+=|href=/i, src);
       assert.deepStrictEqual([...new Set([...svg.matchAll(/fill="([^"]+)"/g)].map((m) => m[1]))], [fill], src);
     }
+  }
+});
+
+test('the Christmas tree pictures are full-size transparent PNGs, on light and dark colours', async () => {
+  for (const d of trees) {
+    const [art] = d.items;
+    assert.match(art.src, /^\/img\/art\/christmas\/trees-[a-z-]+\.png$/);
+    assert.strictEqual(art.dark, art.src);
+    const m = await sharp(file(art.src)).metadata();
+    assert.ok(m.hasAlpha && Math.max(m.width, m.height) >= 3000, `${art.src} ${m.width}x${m.height}`);
+    assert.deepStrictEqual(productsFor(d), productsFor(quotes[0]));
   }
 });
 

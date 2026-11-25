@@ -8,6 +8,9 @@
  *    with a white copy (`dark`) for dark colours, for clothes, mugs, home and postcards
  *    (FITS in src/library.js). Two quotes in the bundle are misspelt in the artwork
  *    ("Belives", "Belive") and were left out.
+ *  - 4 colour pictures of two decorated Christmas trees with bows, full-size transparent
+ *    PNGs (300 DPI) with no words. They read on light and dark colours alike, so the
+ *    picture is its own `dark` copy.
  */
 const { I, D } = require('../library-dsl');
 
@@ -58,8 +61,20 @@ const QUOTES = [
 const vec = (id) => `/img/art/christmas/${id}.svg`;
 const white = (id) => `/img/art/christmas/${id}-white.svg`;
 
+// [file, English name, Arabic name, shop colour]
+const TREES = [
+  ['trees-plaid-bows', 'Two Christmas trees with plaid bows', 'شجرتين كريسماس بفيونكات كاروهات', 'white'],
+  ['trees-holly-plaid', 'Holly and plaid Christmas trees', 'شجرتين كريسماس بالهولي والكاروهات', 'black'],
+  ['trees-big-bows', 'Christmas trees with big bows', 'شجرتين كريسماس بفيونكات كبيرة', 'white'],
+  ['trees-gingham', 'Green and gingham Christmas trees', 'شجرتين كريسماس خضرا ومربعات', 'black'],
+];
+const png = (id) => `/img/art/christmas/${id}.png`;
+
 const designs = [
   ...cards,
+  ...TREES.map(([id, en, ar, color]) => D(`xm-${id}`, 'christmas', en, ar, [
+    I(png(id), 0.9, 0.5, 0.44, { h: 1.1, dark: png(id) }),
+  ], color)),
   // The quote sits a little above the middle (chest height on a T-shirt).
   ...QUOTES.map(([id, en, ar, color]) => D(`xm-${id}`, 'christmas', en, ar, [
     I(vec(id), 0.86, 0.5, 0.42, { h: 1.1, dark: white(id) }),
