@@ -57,7 +57,7 @@ const catalog = require('./catalog');
 const productsMod = require('./products');
 catalog.init(PRODUCTS, { embroidery: productsMod.EMBROIDERY, embroideryFor: productsMod.embroideryFor, scalePrice: productsMod.scalePrice });
 accounting.initPricing(PRODUCTS, EXTRA_SIDE_PRICE);
-const { Library, CATEGORIES: DESIGN_CATEGORIES, catalogChanged: libraryCatalogChanged, usesArtwork } = require('./library');
+const { Library, CATEGORIES: DESIGN_CATEGORIES, catalogChanged: libraryCatalogChanged, hasArtwork } = require('./library');
 const preview = require('./preview');
 const security = require('./security');
 const books = require('./books');
@@ -1153,7 +1153,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const qty = Number(line && line.qty);
       if (!co || !sz || !Number.isInteger(qty) || qty < 1 || qty > MAX_PIECES) throw new HttpError(400, 'qtyBad');
       if (co.id !== colorDef.id && !(product.mix && product.mix.colors)) throw new HttpError(400, 'qtyNoColors');
-      if (sz.id !== sizeDef.id && !(product.mix && product.mix.sizes)) throw new HttpError(400, 'qtyNoSizes');
+      if (sz.id !== sizeDef.id && !(product.mix && product.mix.sizes)) throw new HttpError(400, product.paged ? 'qtyOnePageCount' : 'qtyNoSizes');
       const key = `${co.id}|${sz.id}`;
       merged.set(key, { co, sz, qty: (merged.get(key) || { qty: 0 }).qty + qty });
       total += qty;
@@ -1588,13 +1588,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     res.json({ categories: DESIGN_CATEGORIES, designs: library.visible().map(libraryCard) });
   });
   app.get('/api/library/:id', (req, res) => {
-    const d = library.get(req.params.id);
-    if (!d || d.hidden || d.deleted) throw new HttpError(404, 'notFound');
+    const d = library.shown(req.params.id);
+    if (!d) throw new HttpError(404, 'notFound');
     const { hidden, deleted, ...pub } = d; // eslint-disable-line no-unused-vars
     res.json(pub);
   });
   app.get('/api/library/:id/preview.png', (req, res) => {
-    const d = library.get(req.params.id);
+    const d = library.shown(req.params.id);
     if (!d || d.kind !== 'objects' || !fs.existsSync(library.previewPath(d.id))) throw new HttpError(404, 'notFound');
     res.set('Cache-Control', 'public, max-age=86400, no-transform');
     res.type('png').send(fs.readFileSync(library.previewPath(d.id)));
@@ -2005,6 +2005,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const body = req.body && typeof req.body === 'object' ? req.body : {};
     const colorDef = product.colors.find((c) => c.id === body.color);
     if (!colorDef) throw new HttpError(400, 'unknownColor');
+    // Photo prints paused, or this border / size switched off or sold out: not orderable.
+    const name = product.name[langOf(req)] || product.name.en;
+    const off = catalog.unavailable(product, { colorId: colorDef.id });
+    if (off) throw new HttpError(409, off, { name });
     const picked = cleanOptions(product, body.options);
     if (picked.error) throw new HttpError(400, 'badOption');
     const cfg = product.photo;
@@ -2014,6 +2018,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const p = ph && typeof ph === 'object' ? ph : {};
       const sizeDef = product.sizes.find((z) => z.id === p.size);
       if (!sizeDef) throw new HttpError(400, 'unknownSize');
+      const sizeOff = catalog.unavailable(product, { colorId: colorDef.id, sizeId: sizeDef.id });
+      if (sizeOff) throw new HttpError(409, sizeOff, { name });
       const copies = Number(p.copies);
       if (!Number.isInteger(copies) || copies < 1 || copies > cfg.maxCopies) throw new HttpError(400, 'photoCopies', { max: cfg.maxCopies });
       const orientation = p.orientation === 'landscape' ? 'landscape' : 'portrait';
@@ -3234,6 +3240,20 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (!d || d.kind || (d.status && d.status !== 'ready')) throw new HttpError(400, 'designGone');
     if (d.orderId) throw new HttpError(409, 'designOrdered');
     if (d.productId !== item.productId) throw new HttpError(409, 'reviseOtherProduct');
+    // A colour / size / side the shop stopped selling or that sold out since can't come in this way (the
+    // product itself paused after the order doesn't stop the change the shop asked for).
+    const why = designUnavailable(d);
+    if (why && !['productUnavailable', 'productRetired'].includes(why)) {
+      const p = getProduct(d.productId);
+      throw new HttpError(409, why, { name: p ? p.name[langOf(req)] || p.name.en : '' });
+    }
+    // Counted stock: the old version's pieces go back, the new one's are taken (what changed only).
+    const oldDesign = store.getDesign(item.designId);
+    const delta = new Map([...addNeeds([d]).entries()].map(([k, x]) => [k, { ...x }]));
+    for (const [k, x] of addNeeds(oldDesign ? [oldDesign] : [])) {
+      if (delta.has(k)) delta.get(k).n -= x.n;
+      else delta.set(k, { ...x, n: -x.n });
+    }
     const fields = designItemFields(d);
     // Same pieces and options as before: the old and new designs at today's prices (the shop may have
     // changed its prices since the order); the customer keeps the price agreed at checkout.
@@ -3248,6 +3268,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const nd = db.designs[d.id];
       if (!it || it.status !== 'changes_requested') throw new HttpError(409, 'reviseNotNeeded');
       if (!nd || nd.orderId) throw new HttpError(409, 'designOrdered');
+      const counted = [...delta.values()].filter((x) => x.n).map((x) => ({ ...x, e: db.catalog && db.catalog.products && db.catalog.products[x.pid] })).filter((x) => x.e && typeof leftOf(x.e, x.combo) === 'number');
+      for (const x of counted) if (x.n > 0 && leftOf(x.e, x.combo) < x.n) throw new HttpError(409, 'notEnoughStock', { name: stockName(x.pid, x.combo, langOf(req)), left: leftOf(x.e, x.combo) });
+      for (const x of counted) {
+        if (x.combo) x.e.variantStock[x.combo] -= x.n;
+        else x.e.stock -= x.n;
+      }
       const prev = db.designs[it.designId];
       const now = new Date().toISOString();
       // The new design belongs to this order now (it can't be ordered again), as the next version.
@@ -3641,11 +3667,16 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const result = username
       ? auth.staffLogin(req.ip, username, (req.body || {}).password, staffList())
       : auth.login(req.ip, (req.body || {}).password, { knownDevice: auth.knownDevice(mark) });
-    if (!result) throw new HttpError(401, 'wrongPassword');
-    if (result.wait) throw new HttpError(429, 'tooManyLogins', { min: Math.ceil(result.wait / 60) });
+    if (!result) throw new HttpError(401, username ? 'wrongStaffLogin' : 'wrongPassword');
+    if (result.wait) {
+      // (Arabic counts: "دقيقة" for 1 and 11+, "دقيقتين" for 2, "دقائق" for 3 to 10.)
+      const min = Math.ceil(result.wait / 60);
+      throw new HttpError(429, min === 2 ? 'tooManyLoginsTwo' : min % 100 >= 3 && min % 100 <= 10 ? 'tooManyLoginsFew' : 'tooManyLogins', { min });
+    }
     res.set('Cache-Control', 'no-store');
     // This browser is now known: a flood of wrong passwords from elsewhere won't lock the owner out of it.
-    res.append('Set-Cookie', `pod-admin-device=${auth.deviceMark()}; Path=/api/admin/login; Max-Age=${180 * 24 * 3600}; HttpOnly; SameSite=Strict${isHttps(req) ? '; Secure' : ''}`);
+    // (The owner's sign-in only: a staff member's browser gets no pass round the owner's lock.)
+    if (!result.user) res.append('Set-Cookie', `pod-admin-device=${auth.deviceMark()}; Path=/api/admin/login; Max-Age=${180 * 24 * 3600}; HttpOnly; SameSite=Strict${isHttps(req) ? '; Secure' : ''}`);
     // The private preview lets this browser in too (the owner and staff see the shop as customers will).
     previewCookie(req, res, result.user ? staffWho(result.user) : ownerWho());
     if (result.user) return res.json({ token: result.token, expiresAt: new Date(result.expiresAt).toISOString(), role: result.user.role, name: result.user.name });
@@ -3756,8 +3787,27 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     db.catalogLog.push({ at: new Date().toISOString(), who: req.adminWho.name, productId, what: String(what).slice(0, 200) });
     if (db.catalogLog.length > 500) db.catalogLog.splice(0, db.catalogLog.length - 500);
   };
+  /** A product manager's edit with the money fields as they stand now (they can't change prices). */
+  function staffPrices(product, body) {
+    const prev = catalogEdits()[product.id] || {};
+    const out = { ...body };
+    if (Array.isArray(body.addSizes)) {
+      const before = new Map((prev.addSizes || []).map((z) => [z && z.id, (z && z.surcharge) || 0]));
+      out.addSizes = body.addSizes.map((z) => (z && typeof z === 'object' ? { ...z, surcharge: before.get(z.id) || 0 } : z));
+    }
+    if (body.embroidery && typeof body.embroidery === 'object') {
+      const now = product.embroidery ? product.embroidery.surcharge
+        : prev.embroidery && typeof prev.embroidery === 'object' ? prev.embroidery.surcharge
+          : (productsMod.EMBROIDERY[product.base || product.id] || { surcharge: 150 }).surcharge;
+      out.embroidery = { ...body.embroidery, surcharge: now };
+    }
+    return out;
+  }
   /** Save the fields sent for a product (others stay as they were); prices go to the owner's price list. */
   const saveProductEdit = (req, product, body) => {
+    // Every selling price is the owner's: a product manager's add-on for a new size and embroidery price
+    // are kept as they are (a new size adds nothing; embroidery costs what the owner or the shop set).
+    if (req.adminWho.role !== 'owner') body = staffPrices(product, body);
     const c = catalog.clean(product, body, { categories: CATEGORIES.map((x) => x.id), prev: catalogEdits()[product.id] || null });
     if (c.error) throw new HttpError(400, c.error, { field: c.field || '' });
     let pricing = null;
@@ -4020,7 +4070,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   app.get('/api/admin/library', requireAdmin, (req, res) => {
     // settings.textOnlyLimited: text-only designs only on products with no artwork design in the shop;
     // limited = this design is offered on fewer products because of it (`products` are the ones left).
-    res.json({ categories: DESIGN_CATEGORIES, settings: library.settings(), designs: library.all().map((d) => ({ ...libraryCard(d), hidden: d.hidden, deleted: d.deleted, custom: d.kind === 'objects', artwork: d.kind === 'objects' || usesArtwork(d), limited: Boolean(d.limited), createdAt: d.createdAt || null })) });
+    res.json({ categories: DESIGN_CATEGORIES, settings: library.settings(), designs: library.all().map((d) => ({ ...libraryCard(d), hidden: d.hidden, deleted: d.deleted, custom: d.kind === 'objects', artwork: hasArtwork(d), limited: Boolean(d.limited), createdAt: d.createdAt || null })) });
   });
   app.put('/api/admin/library/settings', requireAdmin, express.json({ limit: '1kb' }), (req, res) => {
     const b = req.body || {};

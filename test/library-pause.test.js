@@ -101,3 +101,34 @@ test('the real shop: artwork designs only where there are some, text-only ones o
     assert.ok(!all.some((d) => d.id === paused[1].id));
   });
 });
+
+test('artwork needs enough designs on a product; the owner\'s text-only design is text-only; a design on no product is not shown', async () => {
+  const { productsFor, ARTWORK_ENOUGH } = require('../src/library');
+  // The live shop's first run (one artwork design was enough): brought back where products now have room.
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pod-libenough-'));
+  try {
+    fs.mkdirSync(path.join(dataDir, 'library'), { recursive: true });
+    const once = new Set();
+    for (const d of SEED) if (usesArtwork(d)) productsFor(d).forEach((id) => once.add(id));
+    const hidden = SEED.filter((d) => !usesArtwork(d) && productsFor(d).every((id) => once.has(id))).map((d) => d.id);
+    fs.writeFileSync(path.join(dataDir, 'library', 'index.json'), JSON.stringify({ hidden, deleted: [], custom: [], done: ['pause-no-artwork'], textOnlyLimited: true }));
+    const lib = new Library(dataDir);
+    lib.runOnce(['pause-no-artwork', 'unpause-artwork-enough']);
+    const shown = lib.visible();
+    const on = (pid) => shown.filter((d) => d.products.includes(pid));
+    assert.ok(lib.all().filter((d) => d.hidden).length < hidden.length, 'some brought back');
+    assert.ok(on('greetingcard').length > 50, 'greeting cards are not left nearly empty');
+    assert.ok(on('tshirt').every((d) => usesArtwork(d)) && on('tshirt').length >= ARTWORK_ENOUGH);
+    assert.ok(usesArtwork(shown[0]), 'designs with artwork come first');
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+  await withServer({ libraryOnce: ['pause-no-artwork'] }, async ({ base, admin }) => {
+    // A text-only design the rule leaves on no product: shown in the admin, never opened in the shop.
+    const list = (await (await admin('/api/admin/library')).json()).designs;
+    const none = list.find((d) => d.hidden && !d.artwork);
+    await admin(`/api/admin/library/${none.id}`, 'PATCH', { hidden: false });
+    const again = (await (await admin('/api/admin/library')).json()).designs.find((d) => d.id === none.id);
+    if (again.limited && !again.products.length) assert.strictEqual((await fetch(`${base}/api/library/${none.id}`)).status, 404);
+  });
+});

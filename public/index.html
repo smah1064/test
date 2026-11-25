@@ -415,6 +415,10 @@
 
       render();
       document.addEventListener('pod:langchange', render);
+      // The "how it works" step numbers in the page's digits.
+      const stepNums = () => document.querySelectorAll('.hm-num').forEach((el, i) => { el.textContent = POD.num(i + 1); });
+      stepNums();
+      document.addEventListener('pod:langchange', stepNums);
     })();
   </script>
 </body>

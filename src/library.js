@@ -501,12 +501,31 @@ class Library {
     this.reload();
     const hidden = new Set(this.index.hidden);
     const deleted = new Set(this.index.deleted || []);
-    const list = [...this.index.custom.slice().reverse(), ...SEED].map((d) => ({ ...d, products: productsFor(d), hidden: hidden.has(d.id), deleted: deleted.has(d.id) }));
+    const list = [...this.index.custom.slice().reverse().map((d) => this.withArtwork(d)), ...SEED].map((d) => ({ ...d, products: productsFor(d), hidden: hidden.has(d.id), deleted: deleted.has(d.id) }));
     return this.index.textOnlyLimited ? limitTextOnly(list) : list;
+  }
+  /** An owner's design from before `artwork` was noted: read once from its file. */
+  withArtwork(d) {
+    if (typeof d.artwork === 'boolean') return d;
+    this.artworkOf ||= new Map();
+    if (!this.artworkOf.has(d.id)) {
+      let objs = [];
+      try { objs = JSON.parse(fs.readFileSync(path.join(this.dir, `${d.id}.json`), 'utf8')); } catch (e) { objs = []; }
+      this.artworkOf.set(d.id, objectsHavePicture(objs));
+    }
+    return { ...d, artwork: this.artworkOf.get(d.id) };
   }
   /** What the shop shows: neither paused nor deleted (nor a text-only design left with no product). */
   visible() {
-    return this.all().filter((d) => !d.hidden && !d.deleted && !(d.limited && !d.products.length));
+    // The owner's own designs first (newest first), then the ones drawn with artwork, then text-only ones.
+    const rank = (d) => (d.kind === 'objects' ? 0 : usesArtwork(d) ? 1 : 2);
+    return this.all().filter((d) => !d.hidden && !d.deleted && !(d.limited && !d.products.length))
+      .map((d, i) => [rank(d), i, d]).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map((x) => x[2]);
+  }
+  /** One design the shop shows (null when paused, deleted or offered on no product). */
+  shown(id) {
+    const d = this.get(id);
+    return d && !d.hidden && !d.deleted && !(d.limited && !d.products.length) ? d : null;
   }
   /** The shop's settings for its designs: { textOnlyLimited } (see limitTextOnly). */
   settings() {
@@ -542,7 +561,7 @@ class Library {
     const id = 'c-' + crypto.randomBytes(6).toString('hex');
     fs.writeFileSync(path.join(this.dir, `${id}.json`), JSON.stringify(objects));
     if (preview) fs.writeFileSync(this.previewPath(id), preview);
-    const meta = { id, category, name, kind: 'objects', product, color, area, createdAt: new Date().toISOString() };
+    const meta = { id, category, name, kind: 'objects', product, color, area, artwork: objectsHavePicture(objects), createdAt: new Date().toISOString() };
     this.index.custom.push(meta);
     this.save();
     return meta;
@@ -589,8 +608,17 @@ class Library {
 
 /** Whether a design is drawn with the shop's own artwork files (I(...) in the packs), not only text, shapes and icons. */
 const usesArtwork = (d) => (d.items || []).some((it) => it.kind === 'image');
-/** Designs with real artwork: the starter ones drawn with the shop's artwork files, and the owner's own. */
-const hasArtwork = (d) => d.kind === 'objects' || usesArtwork(d);
+/** Whether a list of editor objects (fabric JSON) holds a picture, groups included. */
+const objectsHavePicture = (objs) => (objs || []).some((o) => o && (o.type === 'image' || objectsHavePicture(o.objects)));
+/**
+ * Designs with real artwork: the starter ones drawn with the shop's artwork files, and the owner's own
+ * that hold a picture (one made only of text and shapes counts as text-only). `artwork` is noted on an
+ * owner's design when it is added (or read once from its file for older ones).
+ */
+const hasArtwork = (d) => (d.kind === 'objects' ? Boolean(d.artwork) : usesArtwork(d));
+// A product shows only designs with artwork once it has at least this many of them in the shop;
+// with fewer, its text-only designs stay too (so greeting cards, photobooks... aren't left nearly empty).
+const ARTWORK_ENOUGH = 12;
 /**
  * The shop's rule "text-only designs only where there's no artwork" (index.textOnlyLimited): a starter
  * design made only of text, shapes and icons is offered only on the products that have no design with
@@ -598,8 +626,9 @@ const hasArtwork = (d) => d.kind === 'objects' || usesArtwork(d);
  * `list`: designs with products / hidden / deleted set. Changed ones get `limited: true`.
  */
 function limitTextOnly(list) {
-  const covered = new Set();
-  for (const d of list) if (!d.hidden && !d.deleted && hasArtwork(d)) for (const id of d.products) covered.add(id);
+  const count = new Map();
+  for (const d of list) if (!d.hidden && !d.deleted && hasArtwork(d)) for (const id of d.products) count.set(id, (count.get(id) || 0) + 1);
+  const covered = new Set([...count].filter(([, n]) => n >= ARTWORK_ENOUGH).map(([id]) => id));
   return list.map((d) => {
     if (hasArtwork(d)) return d;
     const left = d.products.filter((id) => !covered.has(id));
@@ -618,18 +647,35 @@ function showOn(d, list) {
   const from = fromP && fromP.colors.find((c) => c.id === d.color);
   return { product: id, color: from ? to.colors.reduce((best, c) => (distance(c.hex, from.hex) < distance(best.hex, from.hex) ? c : best)).id : to.colors[0].id };
 }
+/** Products with at least `min` starter designs drawn with artwork (leaving out paused or deleted ones). */
+function artworkProducts(index, min) {
+  const off = new Set([...(index.hidden || []), ...(index.deleted || [])]);
+  const count = new Map();
+  for (const d of SEED) if (usesArtwork(d) && !off.has(d.id)) for (const id of productsFor(d)) count.set(id, (count.get(id) || 0) + 1);
+  return new Set([...count].filter(([, n]) => n >= min).map(([id]) => id));
+}
 const ONCE = {
+  // The first rule counted a product as having artwork designs with just one; now it takes
+  // ARTWORK_ENOUGH. The text-only designs that the first run paused and that have products to show on
+  // under the new count are shown again (the ones the first run would not have paused stay as they are).
+  'unpause-artwork-enough': (index) => {
+    if (!(index.done || []).includes('pause-no-artwork')) return;
+    const before = artworkProducts(index, 1);
+    const now = artworkProducts(index, ARTWORK_ENOUGH);
+    const back = new Set(SEED.filter((d) => !usesArtwork(d)).map((d) => [d, productsFor(d)])
+      .filter(([, ps]) => ps.every((id) => before.has(id)) && ps.some((id) => !now.has(id))).map(([d]) => d.id));
+    index.hidden = (index.hidden || []).filter((id) => !back.has(id));
+  },
   // Only the designs with real artwork where there are some: the rule above on, and the text-only
   // starter designs that would be left with no product paused (the owner can show them again).
   'pause-no-artwork': (index) => {
     index.textOnlyLimited = true;
     const off = new Set([...(index.hidden || []), ...(index.deleted || [])]);
-    const covered = new Set();
-    for (const d of SEED) if (usesArtwork(d) && !off.has(d.id)) for (const id of productsFor(d)) covered.add(id);
+    const covered = artworkProducts({ hidden: [...off] }, ARTWORK_ENOUGH);
     const paused = new Set(index.hidden || []);
     for (const d of SEED) if (!usesArtwork(d) && productsFor(d).every((id) => covered.has(id))) paused.add(d.id);
     index.hidden = [...paused];
   },
 };
 
-module.exports = { Library, catalogChanged, CATEGORIES, SEED, FITS, productsFor, fitsColour, productShape, usesArtwork };
+module.exports = { Library, catalogChanged, CATEGORIES, SEED, FITS, productsFor, fitsColour, productShape, usesArtwork, hasArtwork, ARTWORK_ENOUGH };

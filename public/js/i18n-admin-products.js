@@ -13,6 +13,7 @@ Object.assign(window.POD_STRINGS, {
   'pm.ownerOnly': ['Only the shop owner can do this.', 'صاحب الموقع بس اللي يقدر يعمل ده.'],
 
   // List
+  'pm.who.owner': ['Owner', 'صاحب الموقع'],
   'pm.title': ['Products', 'المنتجات'],
   'pm.help': ['Everything the shop sells. Pause a product for a while or stop selling it, change its colours, sizes, prices and print setup, add photos, or make a new product from an existing one.', 'كل حاجة إبداع بيبيعها. تقدر توقّف منتج مؤقتًا أو توقّف بيعه، تغيّر ألوانه ومقاساته وأسعاره وإعدادات الطباعة، تضيف صور، أو تعمل منتج جديد من منتج موجود.'],
   'pm.loading': ['Loading…', 'بيحمّل…'],

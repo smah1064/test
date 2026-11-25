@@ -86,9 +86,9 @@ test('a shared booklet keeps its binding for "Open a copy"', async () => {
   };
   const left = await share({ binding: 'left' });
   assert.strictEqual(left.options.binding.id, 'left');
-  // The first choice (on the right) isn't stored, as on a design: none means the first one.
+  // The binding is kept either way (it is shown on the cart, proof, order and admin).
   const right = await share({ binding: 'right' });
-  assert.ok(!right.options || !right.options.binding);
+  assert.strictEqual(right.options.binding.id, 'right');
   // Unknown options are simply left out (a share is not an order).
   const odd = await share({ binding: 'diagonal', glitter: 'yes' });
   assert.ok(!odd.options);

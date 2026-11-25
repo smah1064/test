@@ -69,6 +69,7 @@
     'ed.soldOut': ['Sold out', 'خلصان'],
     'ed.sizeSwitched': ['That size is sold out in this colour, so we picked the next size.', 'المقاس ده خلصان في اللون ده، فاخترنالك المقاس اللي بعده.'],
     'ed.soldOutPick': ['This one is sold out right now. Please pick another.', 'ده خلصان دلوقتي. اختار غيره.'],
+    'ed.designGone': ['This ready design isn\'t in the shop right now. Pick another one, or start your own.', 'التصميم الجاهز ده مش متاح دلوقتي. اختار تصميم تاني أو ابدأ تصميمك.'],
     'ed.productGone': ['This product isn\'t available right now, so we opened another one. You can pick a different product from the list.', 'المنتج ده مش متاح دلوقتي، ففتحنالك منتج تاني. تقدر تختار منتج غيره من القائمة.'],
     'ed.productPaused': ['{name} isn\'t available right now ({back}), so we opened another product. You can pick a different one from the list.', 'المنتج «{name}» مش متاح دلوقتي ({back})، ففتحنالك منتج تاني. تقدر تختار منتج غيره من القائمة.'],
     'ed.productRetired': ['{name} is no longer sold, so we opened a similar product: {other}.', 'المنتج «{name}» مبقاش بيتباع، ففتحنالك منتج شبهه: {other}.'],
@@ -76,6 +77,8 @@
   };
   const tEd = (k, vals) => (ED_TEXT[k] ? ED_TEXT[k][POD.lang === 'ar' ? 1 : 0].replace(/\{(\w+)\}/g, (m, v) => (vals && vals[v] != null ? vals[v] : m)) : t(k, vals));
   const firstPick = (list) => list.find(canPick) || list[0];
+  /** A size's add-on price: "+50 ج.م." or "−100 ج.م." (a cheaper size). */
+  const addOn = (v) => `${v < 0 ? '−' : '+'}${money(Math.abs(v))}`;
   // Stock per colour and size: a size can be sold out in one colour only.
   const comboOut = (p, colorId, sizeId) => Boolean(p && p.outCombos && p.outCombos.includes(`${colorId}|${sizeId}`));
   const sizeOk = (p, colorId, z) => canPick(z) && !comboOut(p, colorId, z.id);
@@ -181,12 +184,13 @@
   // until they go into the cart (editing a cart item never touches them).
   // Opened from the ready-made designs shop: load that design (and colour) as a new draft.
   let libraryDesign = null;
+  let libraryError = null;
   if (!params.get('design') && params.get('library')) {
     try {
       libraryDesign = await POD.api('/api/library/' + encodeURIComponent(params.get('library')));
       if (params.get('color')) st.colorId = params.get('color');
     } catch (e) {
-      toast(e.message, 'error');
+      libraryError = e; // said after the drafts: the customer's own version may still be here
     }
   }
   let fromShare = false;
@@ -268,6 +272,8 @@
   if (!params.get('design') && !(restoredDraft && st.libraryId) && canPick(st.product.colors.find((c) => c.id === params.get('color')))) st.colorId = params.get('color');
   st.colorId = canPick(st.product.colors.find((c) => c.id === st.colorId)) ? st.colorId : firstPick(st.product.colors).id;
   seedBinding(); // a new booklet: bound on the side its language reads from
+  // A ready design no longer in the shop: said only when the customer's own version of it isn't here.
+  if (libraryError && !restoredDraft) toast(libraryError.status === 404 ? tEd('ed.designGone') : libraryError.message, 'error');
   if (!params.get('design') && canPick(st.product.sizes.find((z) => z.id === params.get('size')))) {
     st.sizeId = params.get('size');
     st.sizePicked = true;
@@ -302,6 +308,16 @@
   };
   /** Every layer that can carry artwork: the sides (pages), and the embroidery layer. */
   const allSides = () => (emb() ? [...activeSides(), baseSide(EMB)] : activeSides());
+  /** What a draft keeps: every layer, and on booklets the pages a smaller page count hides too (they come back). */
+  const keptSides = () => (st.product.paged ? [...st.product.sides, ...(emb() ? [baseSide(EMB)] : [])] : allSides());
+  /** Booklets: pages a page count would leave out that have something on them. */
+  const designedBeyond = (sizeId) => {
+    if (!st.product.paged) return [];
+    const z = st.product.sizes.find((x) => x.id === sizeId);
+    const n = z && z.pages ? z.pages : st.product.sides.length;
+    const keep = new Set([...st.product.sides.slice(0, Math.max(1, n - 1)), st.product.sides[st.product.sides.length - 1]].map((sd) => sd.id));
+    return st.product.sides.filter((sd) => !keep.has(sd.id) && (sd.id === st.side ? canvas.getObjects().some((o) => !o.excludeFromExport) : (st.designs[sd.id] || []).length));
+  };
   /** Is this the embroidery layer? */
   const embHere = (id = st.side) => Boolean(emb() && id === EMB);
   /** The product side a layer is on (the embroidery: its side). */
@@ -473,7 +489,7 @@
       stage.scrollLeft = (a.x + a.w / 2) * vt[0] + vt[4] - stage.clientWidth / 2;
       stage.scrollTop = (a.y + a.h / 2 + (zoneOf() ? 20 : 0)) * vt[3] + vt[5] - stage.clientHeight / 2;
     }
-    $('zoom-label').textContent = Math.round(st.zoom * 100) + '%';
+    $('zoom-label').textContent = POD.num(Math.round(st.zoom * 100)) + '%';
     canvas.requestRenderAll();
   }
   new ResizeObserver(() => fit()).observe($('stage'));
@@ -1661,6 +1677,7 @@
   $('auto-bg').addEventListener('change', (e) => { try { localStorage.setItem('pod-auto-bg', e.target.checked ? '1' : '0'); } catch (err) { /* private mode */ } });
   // ---------- Booklets: a whole PDF, or several photos, on the pages in order ----------
   const isPdf = (f) => f && (f.type === 'application/pdf' || /\.pdf$/i.test(f.name || ''));
+  const isPicture = (f) => f && (/^image\//.test(f.type || '') || /\.(png|jpe?g|webp|gif|svg|ai|eps)$/i.test(f.name || ''));
   /** Pages from the current one on (several files), or every page from the cover (a PDF). */
   const addFiles = serial(async (list) => {
     const files = [...(list || [])].filter(Boolean);
@@ -1671,7 +1688,8 @@
     const pages = activeSides();
     const from = Math.max(0, pages.findIndex((s) => s.id === hostOf()));
     const room = pages.slice(from);
-    const use = files.filter((f) => !isPdf(f)).slice(0, room.length);
+    // Pictures only (a PDF among photos, or a file that isn't a picture, is left out).
+    const use = files.filter((f) => !isPdf(f) && isPicture(f)).slice(0, room.length);
     if (use.length < files.length) toast(tPg('ed.filesSkipped', { n: POD.num(files.length - use.length) }));
     for (let i = 0; i < use.length; i++) {
       if (room[i].id !== hostOf()) {
@@ -1719,7 +1737,7 @@
     const sameCopies = st.product.sizes.filter((z) => copies(z.id) === copies(st.sizeId) && canPick(z)).sort((a, b) => a.pages - b.pages);
     const biggest = sameCopies[sameCopies.length - 1];
     if (n !== activeSides().length) {
-      const fits = sameCopies.find((z) => z.pages >= n) || (biggest && biggest.pages > cur.pages ? biggest : null);
+      const fits = sameCopies.filter((z) => sizeOk(st.product, st.colorId, z)).find((z) => z.pages >= n) || (biggest && biggest.pages > cur.pages ? biggest : null);
       if (fits && fits.id !== st.sizeId && fits.pages !== cur.pages && window.confirm(tPg('ed.pdfSize', { n: POD.num(n), pages: POD.num(fits.pages), now: POD.num(cur.pages) }))) {
         st.sizePicked = true;
         await changeSize(fits.id);
@@ -1749,7 +1767,7 @@
         }
         const fimg = await new Promise((resolve) => fabric.Image.fromURL(used[i], resolve));
         const r = rects(page.id).bleed;
-        fimg.set({ name: `${(file.name || 'PDF').replace(/\.[^.]+$/, '').slice(0, 30)} · ${srcIdx[i] + 1}`, ...(got.pdfId ? { pdfSrc: { id: got.pdfId, page: srcIdx[i] } } : {}) });
+        fimg.set({ name: `${(file.name || 'PDF').replace(/\.[^.]+$/, '').slice(0, 30)} · ${POD.num(srcIdx[i] + 1)}`, ...(got.pdfId ? { pdfSrc: { id: got.pdfId, page: srcIdx[i] } } : {}) });
         fimg.scale(Math.max(r.w / fimg.width, r.h / fimg.height));
         addObject(fimg, { select: false, shrinkToFit: false });
         // The page fills the page with its bleed, under anything already designed there.
@@ -1782,7 +1800,8 @@
     'ed.pdfFewer': ['{n} pages placed: page 1 on the cover and the last one on the back cover, with {blank} blank pages before it.', 'اتحطت الصفحات (عددها {n}): أول صفحة على الغلاف وآخر صفحة على الغلاف الخلفي، وقبلها صفحات فاضية (عددها {blank}).'],
     'ed.pdfSize': ['The PDF has {n} pages and this booklet has {now}. Switch to the {pages}-page booklet?', 'صفحات الـ PDF: {n}، وصفحات الكتيب ده: {now}. تحب تغيّر لكتيب عدد صفحاته {pages}؟'],
     'ed.filesPlaced': ['{n} photos placed, one on each page from this one on.', 'اتحطت الصور (عددها {n})، صورة في كل صفحة من الصفحة دي ورايح.'],
-    'ed.filesSkipped': ['{n} files were left out (not enough pages after this one, or a PDF among photos).', 'سبنا {n} ملف (الصفحات اللي بعد دي مش كفاية، أو PDF وسط الصور).'],
+    'ed.filesSkipped': ['{n} files were left out (not enough pages after this one, or files that aren\'t photos).', 'سبنا ملفات (عددها {n}): الصفحات اللي بعد دي مش كفاية، أو ملفات مش صور.'],
+    'ed.pagesHidden': ['With this page count these pages won\'t be printed: {pages}. Their designs are kept, and come back if you pick more pages again. Continue?', 'بعدد الصفحات ده الصفحات دي مش هتتطبع: {pages}. تصميمها هيفضل محفوظ ويرجع لو اخترت صفحات أكتر تاني. نكمّل؟'],
   };
   const tPg = (k, params = {}) => (PG_TEXT[k] ? PG_TEXT[k][POD.lang === 'ar' ? 1 : 0].replace(/\{(\w+)\}/g, (m, x) => (params[x] != null ? params[x] : m)) : t(k, params));
   $('file-input').addEventListener('change', (e) => {
@@ -3287,7 +3306,7 @@
     }).join('');
     $('sizes').innerHTML = p.sizes.map((s) => {
       const out = !sizeOk(p, st.colorId, s);
-      return `<button class="chip ${s.id === st.sizeId ? 'active' : ''}${out ? ' sold-out' : ''}" data-size="${s.id}"${out ? ' aria-disabled="true"' : ''}>${esc(tr(s.label))}${out ? ` <span class="sold-tag">${esc(tEd('ed.soldOut'))}</span>` : s.surcharge ? ` <span style="opacity:.7">+${esc(money(s.surcharge))}</span>` : ''}</button>`;
+      return `<button class="chip ${s.id === st.sizeId ? 'active' : ''}${out ? ' sold-out' : ''}" data-size="${s.id}"${out ? ' aria-disabled="true"' : ''}>${esc(tr(s.label))}${out ? ` <span class="sold-tag">${esc(tEd('ed.soldOut'))}</span>` : s.surcharge ? ` <span style="opacity:.7">${esc(addOn(s.surcharge))}</span>` : ''}</button>`;
     }).join('');
     // Print or embroidery (garments, caps, totes, aprons).
     $('method-field').hidden = !p.embroidery;
@@ -3401,6 +3420,9 @@
     const b = e.target.closest('[data-size]');
     if (!b) return;
     if (b.classList.contains('sold-out')) return toast(tEd('ed.soldOutPick'));
+    // Booklets: fewer pages than are designed: say which won't print (their designs are kept).
+    const lost = b.dataset.size !== st.sizeId ? designedBeyond(b.dataset.size) : [];
+    if (lost.length && !window.confirm(tPg('ed.pagesHidden', { pages: lost.map((sd) => tr(sd.name)).join('، ') }))) return;
     st.sizePicked = true;
     if (b.dataset.size !== st.sizeId) {
       const fromSize = st.sizeId;
@@ -3414,6 +3436,7 @@
   /** Returns a promise that settles once the design on screen has been redrawn for the new size. */
   function changeSize(sizeId) {
     let redrawn = Promise.resolve();
+    let remapped = false; // the page on screen is redrawn (and its history seeded) once remapped
     const prev = st.sizeId;
     const before = (sid) => areaFor(st.product, sid, prev, st.offsets[sid]);
     cancelCrop();
@@ -3433,19 +3456,23 @@
       if (sd.id === st.side) {
         const objs = remap(serialize(), from, to);
         st.designs[sd.id] = objs;
+        remapped = true;
         redrawn = loadObjects(objs).then(() => { applyClips(); seedHistory(); commit(); renderCheck(); });
       } else if ((st.designs[sd.id] || []).length) {
         st.designs[sd.id] = remap(st.designs[sd.id], from, to);
       }
     }
-    // Undo works within one size: the history starts again at the new size.
+    // Undo works within one size: the history starts again at the new size (from what's on screen now).
     st.history = {};
+    if (!remapped) seedHistory();
     applyClips();
     fit(); // the garment is drawn at this size's scale
     schedulePatternPreview(0);
     redrawn.then(() => refreshGhost()); // the print under the embroidery changed size too
     // Booklets: a smaller page count drops the last pages from the strip (their designs are kept).
-    if (st.product.paged && !activeSides().some((sd) => sd.id === st.side)) redrawn = redrawn.then(() => showSide(activeSides()[0].id));
+    if (st.product.paged && !activeSides().some((sd) => sd.id === st.side)) {
+      redrawn = redrawn.then(() => showSide(activeSides()[0].id)).then(() => { seedHistory(); renderSideTabs(); refreshChrome(); tabInView(); });
+    }
     return redrawn;
   }
   $('product-select').addEventListener('change', serial(async (e) => changeProduct(e.target.value)));
@@ -3955,7 +3982,7 @@
     refreshPrice(notes);
     if (embFee) notes.push(t('emb.fee', { price: money(embFee) }));
     if (activeSides().length > 1 && perSide > 0) notes.push(n > 1 ? t('price.bothSides') : t('price.addSide', { price: money(perSide) }));
-    if (size.surcharge) notes.push(`${tr(size.label)} +${money(size.surcharge)}`);
+    if (size.surcharge) notes.push(`${tr(size.label)} ${addOn(size.surcharge)}`);
     $('price-note').textContent = notes.join(' · ');
     const h = hist();
     $('undo').disabled = h.i <= 0;
@@ -4979,7 +5006,7 @@
     draftTimer = null;
     if (!draftMode || st.exporting || startingOver) return draftSaving;
     const designs = {};
-    for (const s of allSides()) designs[s.id] = s.id === st.side ? serialize() : (st.designs[s.id] || []);
+    for (const s of keptSides()) designs[s.id] = s.id === st.side ? serialize() : (st.designs[s.id] || []);
     const empty = !Object.values(designs).some((o) => o.length);
     const productId = st.product.id;
     const meta = { productId, colorId: st.colorId, sizeId: st.sizeId, side: st.side, offsets: { ...st.offsets }, ...(st.pattern ? { pattern: { ...st.pattern } } : {}), method: st.method, options: st.options || {}, mergeList: st.mergeList || null, qty: st.qty || null, library: st.libraryId || null, sizePicked: Boolean(st.sizePicked) };
@@ -5019,7 +5046,7 @@
     if (!draftMode || st.exporting || startingOver || !st.product || !st.dirty) return;
     try {
       const designs = {};
-      for (const sd of allSides()) designs[sd.id] = sd.id === st.side ? serialize() : (st.designs[sd.id] || []);
+      for (const sd of keptSides()) designs[sd.id] = sd.id === st.side ? serialize() : (st.designs[sd.id] || []);
       if (!Object.values(designs).some((o) => o.length)) return;
       let acct = '';
       try { const v = localStorage.getItem('pod-acct'); acct = v && v !== '1' ? v : ''; } catch (e) { /* private mode */ }
@@ -5066,7 +5093,7 @@
     const n = lines.reduce((m, l) => m + l.qty, 0);
     $('size-ask-title').textContent = t('sizeAsk.title');
     $('size-ask-note').textContent = n > 1 ? t('sizeAsk.many', { n: POD.num(n) }) : t('sizeAsk.one');
-    $('size-ask-chips').innerHTML = st.product.sizes.filter(canPick).map((z) => `<button type="button" class="chip" data-ask-size="${esc(z.id)}">${esc(tr(z.label))}${z.surcharge ? ` <span style="opacity:.7">+${esc(money(z.surcharge))}</span>` : ''}</button>`).join('');
+    $('size-ask-chips').innerHTML = st.product.sizes.filter((z) => sizeOk(st.product, st.colorId, z)).map((z) => `<button type="button" class="chip" data-ask-size="${esc(z.id)}">${esc(tr(z.label))}${z.surcharge ? ` <span style="opacity:.7">${esc(addOn(z.surcharge))}</span>` : ''}</button>`).join('');
     box.hidden = false;
     const first = box.querySelector('[data-ask-size]');
     if (first) first.focus();

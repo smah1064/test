@@ -343,3 +343,25 @@ test('changes asked for: the customer edits the design and sends it again (same 
   assert.strictEqual((await yes.json()).status, 'queued');
   assert.strictEqual((await admin(`/api/admin/files/${early.id}/front`)).status, 200);
 });
+
+test('a revised item moves counted stock and can\'t switch to a sold-out colour (QA 02:01)', async () => {
+  const qtyC = (color, n) => ({ quantities: [{ color, size: '11oz', qty: n }] });
+  const put = (url, body) => admin(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  assert.strictEqual((await put('/api/admin/catalog/mug', { variantStock: { 'white|11oz': 70, 'black|11oz': 0 } })).status, 200);
+  const d = await makeDesign(qtyC('white', 60));
+  const o = await (await order([d.id], { [d.id]: { proofHash: (await proofOf(d.id)).proofHash } })).json();
+  const it = o.items[0];
+  const left = async () => (await (await admin('/api/admin/catalog')).json()).products.find((p) => p.id === 'mug').variantStock;
+  assert.strictEqual((await left())['white|11oz'], 10);
+  assert.strictEqual((await adminJson(`/api/admin/items/${it.id}/review`, { action: 'changes', note: 'Black please.' })).status, 200);
+  const black = await makeDesign(qtyC('black', 60));
+  const no = await post(`/api/orders/${o.id}/items/${it.id}/revise`, { designId: black.id });
+  assert.strictEqual(no.status, 409, 'black is sold out');
+  await put('/api/admin/catalog/mug', { variantStock: { 'white|11oz': 10, 'black|11oz': 60 } });
+  const black2 = await makeDesign(qtyC('black', 60));
+  const ok = await post(`/api/orders/${o.id}/items/${it.id}/revise`, { designId: black2.id });
+  assert.strictEqual(ok.status, 200, await ok.clone().text());
+  const now = await left();
+  assert.deepStrictEqual([now['white|11oz'], now['black|11oz']], [70, 0], 'white pieces back, black ones taken');
+  await put('/api/admin/catalog/mug', { variantStock: {} });
+});

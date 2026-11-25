@@ -99,7 +99,10 @@
   const aid = POD.assetId(product);
   const life = (lifeAll[aid] && lifeAll[aid].file) ? lifeAll[aid] : null;
   const offered = (id) => ((lib && lib.designs) || []).some((d) => d.id === id && (!d.products || d.products.includes(product.id) || d.products.includes(aid)));
-  const designed = (designedAll[aid] && designedAll[aid].file && (!designedAll[aid].design || offered(designedAll[aid].design))) ? designedAll[aid] : null;
+  // (Entries made without a ready design — a plain product, a pattern, a book cover, photos — always stay.)
+  const NOT_A_DESIGN = ['plain', 'pattern', 'book-cover', 'photos'];
+  const dsg = designedAll[aid];
+  const designed = (dsg && dsg.file && (!dsg.design || NOT_A_DESIGN.includes(dsg.design) || offered(dsg.design))) ? dsg : null;
   // The manager's own photos (admin → Products) come first, the chosen main one leading.
   const photos = (product.photos || []).filter((ph) => ph && ph.url);
   photos.sort((a, b) => (b.url === product.mainPhoto) - (a.url === product.mainPhoto));

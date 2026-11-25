@@ -184,7 +184,9 @@
     return pill('pm-pill-muted', t('pm.stock.n', { n: POD.num(p.stock) }));
   }
   const noteOf = (p) => (p.hiddenNote && (isPaused(p) || isArchived(p)) ? (p.hiddenNote === NEW_NOTE ? t('pm.newNote') : p.hiddenNote) : '');
-  const lastChange = (p) => (p.updatedAt ? t('pm.lastChange', { who: p.updatedBy || (p.edit && p.edit.updatedBy) || '—', when: when(p.updatedAt) }) : '');
+  /** Who made a change: "owner" in the shop's own words, a staff member's name as given. */
+  const whoName = (w) => (w === 'owner' ? t('pm.who.owner') : w || '—');
+  const lastChange = (p) => (p.updatedAt ? t('pm.lastChange', { who: '\u2068' + whoName(p.updatedBy || (p.edit && p.edit.updatedBy)) + '\u2069', when: when(p.updatedAt) }) : '');
   const priceFrom = (p) => {
     const on = p.sizes.filter((z) => !z.off);
     const min = Math.min(...(on.length ? on : p.sizes).map((z) => Number(z.surcharge) || 0));
@@ -352,7 +354,7 @@
     return `<ul class="pm-log-list">${rows.map((l) => {
       const p = products().find((x) => x.id === l.productId);
       return `<li><span class="pm-log-when">${esc(when(l.at))}</span>
-        <span><b>${esc(l.who || '—')}</b> · ${onlyId ? '' : `${p && canEdit(p) ? `<button type="button" class="link-btn" data-pm-act="edit" data-id="${esc(l.productId)}">${esc(tr(p.name))}</button>` : `<bdi dir="ltr">${esc(l.productId)}</bdi>`} · `}${esc(logWhat(l.what))}</span></li>`;
+        <span><b dir="auto">${esc(whoName(l.who))}</b> · ${onlyId ? '' : `${p && canEdit(p) ? `<button type="button" class="link-btn" data-pm-act="edit" data-id="${esc(l.productId)}">${esc(tr(p.name))}</button>` : `<bdi dir="ltr">${esc(l.productId)}</bdi>`} · `}${esc(logWhat(l.what))}</span></li>`;
     }).join('')}</ul>`;
   }
   function renderLog() {
@@ -933,7 +935,7 @@
         <div class="pm-state-lbl">${esc(t('pm.status'))}</div>
         <div class="pm-state-name"><span class="pm-state-dot" aria-hidden="true"></span><b>${esc(t('pm.status.' + st))}</b>${why ? `<span class="pm-state-why">${esc(why)}</span>` : ''}</div>
         ${lines.map((l) => `<p class="small">${esc(l)}</p>`).join('')}
-        ${note ? `<p class="small pm-note">${esc(t('pm.noteSaid', { note }))}</p>` : ''}
+        ${note ? `<p class="small pm-note">${esc(t('pm.noteSaid', { note: '\u2068' + note + '\u2069' }))}</p>` : ''}
       </div>
       <div class="pm-state-acts">${acts}</div>
     </div>`;

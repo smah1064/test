@@ -465,7 +465,7 @@
   function updateCartBadge() {
     const n = getCart().length;
     document.querySelectorAll('[data-cart-count]').forEach((el) => {
-      el.textContent = n;
+      el.textContent = num(n); // (Arabic digits on Arabic pages)
       el.hidden = n === 0;
     });
   }

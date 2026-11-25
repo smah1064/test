@@ -984,7 +984,7 @@
     $('lib-rule').hidden = !s;
     if (!s) return;
     if (!LIB.ruleBusy) $('lib-limit').checked = Boolean(s.textOnlyLimited);
-    const limited = lastLibrary.designs.filter((d) => d.limited && !d.deleted);
+    const limited = lastLibrary.designs.filter((d) => d.limited && !d.deleted && !d.hidden);
     $('lib-rule-now').textContent = s.textOnlyLimited
       ? t('rd.ruleNow', { limited: libWhat(limited.filter((d) => d.products.length).length), none: libWhat(limited.filter((d) => !d.products.length).length) })
       : '';
