@@ -318,9 +318,9 @@ test('Catalogue: Review read-only, prices read-only, a product change waits for 
   await page.waitForSelector('.toast.toast-pending');
   assert.match(await page.textContent('.toast.toast-pending'), /^اتبعت لصاحب الموقع للموافقة: تعديل ١ على catalog$/);
   assert.strictEqual(await page.inputValue('[name="name.en"]'), 'Classic Tee', 'the section as typed');
-  // Sent: no longer "unsaved" (Save again would send the same request twice) until something new is typed.
-  assert.strictEqual(await page.isHidden('#pm-sec-basics .pm-dirty'), true, 'not offered again');
-  assert.strictEqual(await page.isDisabled('[data-pm-save="basics"]'), true);
+  // Sent: says it's waiting for an owner (not "unsaved": Save again would send the same request twice).
+  assert.match(await page.textContent('#pm-sec-basics .pm-dirty'), /اتبعت للموافقة/, 'waiting, said on the section');
+  assert.strictEqual(await page.isDisabled('[data-pm-save="basics"]'), true, 'not offered again');
   assert.strictEqual(await page.isHidden('#pm-sec-basics > .pm-err'), true, 'nothing red');
   assert.strictEqual(await page.textContent('#ap-count'), '٢');
   assert.ok(log.some((r) => r.m === 'PUT' && r.p === '/api/admin/catalog/tshirt' && r.body.name));
