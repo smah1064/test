@@ -4559,7 +4559,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   };
   const cleanStaffName = (v) => {
     // (No invisible direction marks either: "\u202Enimda" would show as "admin" in the team list. QA 25 Nov.)
-    const s = typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f<>\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/g, '').trim().slice(0, 60) : '';
+    // (Blank-looking letters too, the Hangul fillers and the Mongolian vowel separator, and the Arabic letter mark. QA 25 Nov.)
+    const s = typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f<>\u00ad\u061c\u115f\u1160\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2069\u3164\ufeff\uffa0]/g, '').trim().slice(0, 60) : '';
     return /[\p{L}\p{N}]/u.test(s) ? s : '';
   };
   const COMMON_PASSWORDS = new Set(['password12', 'password123', 'password1234', 'qwertyuiop', 'qwerty1234', '1234567890', '0123456789', 'abcdefghij', 'abc1234567', 'iloveyou12', 'admin12345', 'admin123456', 'welcome123', 'ebda3ebda3', 'ebda312345']);
