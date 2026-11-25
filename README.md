@@ -249,9 +249,10 @@ Until the owner opens the shop to everyone, only invited people get in (`src/pre
 ## Before going live
 
 - **Prices** are starting points in `src/products.js` (`basePrice`, size `surcharge`) and the shipping constants at the bottom of that file. Adjust them to your costs.
-- **Online card payments:** orders are cash on delivery. To also take cards, add an Egyptian gateway such as Paymob or Fawry.
+- **Payment (owner's decision):** at launch the only way to pay is in advance (no cash on delivery). The private preview still shows cash on delivery; before opening, add an Egyptian gateway such as Paymob or Fawry and change every text and email that promises cash on delivery.
+- **Backups off Hostinger (planned, see Backups):** a nightly encrypted copy of the data folder to a cloud storage the owner chooses, old copies cleared, and a monthly test restore. Needs the owner's storage account and key (added in Hostinger's settings with their approval).
 - **Storage:** the JSON store suits a single server. For scale, move metadata into a database and print files into object storage.
-- **Admin auth** is a single shared password. Use real accounts if several people run the press.
+- **Team sign-ins:** each person has their own login and roles (see Team, roles and approvals); the shared password is the owner's emergency way in.
 
 ## Proofs, approval and file review
 
