@@ -63,6 +63,7 @@ catalog.init(PRODUCTS, { embroidery: productsMod.EMBROIDERY, embroideryFor: prod
 accounting.initPricing(PRODUCTS, EXTRA_SIDE_PRICE);
 const { Library, CATEGORIES: DESIGN_CATEGORIES, catalogChanged: libraryCatalogChanged, hasArtwork, SEED: LIBRARY_SEED } = require('./library');
 const preview = require('./preview');
+const { Backups } = require('./backup');
 // Zip uploads of designs (admin): loaded when first used.
 let designUploadMod = null;
 const designUpload = new Proxy({}, { get: (t, k) => (designUploadMod ||= require('./design-upload'))[k] });
@@ -5821,6 +5822,50 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       });
     const last = entries[entries.length - 1];
     res.json({ entries, more, ...(more && last ? { next: `${last.at}|${last.id}` } : {}) });
+  });
+
+  // ---------- Backups (owners): the whole data folder as one file, made in the background ----------
+  const backups = new Backups(dataDir);
+  app.get('/api/admin/backups', adminGate, (req, res) => {
+    const d = backups.list();
+    res.json({ ...d, error: d.error ? { ...d.error, message: format(d.error.code, {}, langOf(req)) } : null });
+  });
+  app.post('/api/admin/backups', adminGate, (req, res) => {
+    try {
+      const { job } = backups.start();
+      res.locals.summary = enAr(`Started a backup (${job.files} files)`, `بدأ نسخة احتياطية (${job.files} ملف)`);
+      res.status(202).json({ making: { name: job.name, startedAt: job.startedAt, done: job.done, total: job.total, files: job.files } });
+    } catch (e) {
+      if (e.code === 'backupBusy') throw new HttpError(409, 'backupBusy');
+      if (e.code === 'backupNoSpace') throw new HttpError(507, 'backupNoSpace');
+      throw e;
+    }
+  });
+  app.post('/api/admin/backups/:name/link', adminGate, (req, res) => {
+    const name = req.params.name;
+    if (!backups.fileOf(name)) throw new HttpError(404, 'backupGone');
+    res.locals.summary = enAr(`Downloaded the backup ${name}`, `نزّل النسخة الاحتياطية ${name}`);
+    res.json({ url: Backups.linkFor(auth.linkKey, name), name });
+  });
+  app.delete('/api/admin/backups/:name', adminGate, (req, res) => {
+    if (!backups.remove(req.params.name)) throw new HttpError(404, 'backupGone');
+    res.locals.summary = enAr(`Deleted the backup ${req.params.name}`, `مسح النسخة الاحتياطية ${req.params.name}`);
+    res.json({ ok: true });
+  });
+  // The download itself: a signed link (6 hours) the browser saves on its own, so a big file never sits in the
+  // page's memory; it can be resumed if the connection drops (the file is served with ranges).
+  app.get('/dl/backup/:name', (req, res, next) => {
+    try {
+      rateLimit(req, 'downloads');
+      const name = req.params.name;
+      const file = backups.fileOf(name);
+      if (!file || !Backups.linkOk(auth.linkKey, name, req.query.e, req.query.s)) throw new HttpError(404, 'linkExpired');
+      res.set('Cache-Control', 'private, no-store');
+      res.set('X-Robots-Tag', 'noindex');
+      res.download(file, name, { headers: { 'Content-Type': 'application/gzip' } });
+    } catch (e) {
+      next(e);
+    }
   });
 
   app.get('/api/admin/notifications', requireAdmin, (req, res) => {

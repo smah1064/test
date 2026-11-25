@@ -18,7 +18,7 @@ window.AdminRoles = (() => {
     'orders.view', 'orders.amounts', 'orders.work', 'review.view', 'review.work', 'production', 'files',
     'houses.view', 'houses.edit', 'customers.view', 'customers.contact', 'rights', 'catalog.view', 'catalog.edit',
     'library.view', 'library.edit', 'uploads', 'accounts.view', 'costs.edit', 'expenses.edit', 'coupons.view',
-    'coupons.edit', 'payments', 'prices.edit', 'staff', 'preview', 'settings', 'approvals', 'activity.all',
+    'coupons.edit', 'payments', 'prices.edit', 'staff', 'preview', 'settings', 'approvals', 'activity.all', 'backup',
   ];
   /** What each role is for (the server's list decides; this is for the words on the Staff tab and old sessions). */
   const ROLE_PERMS = {
@@ -33,7 +33,7 @@ window.AdminRoles = (() => {
   const TAB_PERM = {
     queue: 'production', review: 'review.view', orders: 'orders.view', film: 'production', library: 'library.view',
     houses: 'houses.view', accounts: 'accounts.view', coupons: 'coupons.view', customers: 'customers.view',
-    products: 'catalog.view', preview: 'preview', rights: 'rights', staff: 'staff', approvals: null, activity: null,
+    products: 'catalog.view', preview: 'preview', rights: 'rights', staff: 'staff', approvals: null, activity: null, backup: 'backup',
   };
   const TABS = Object.keys(TAB_PERM);
 
@@ -78,11 +78,11 @@ window.AdminRoles = (() => {
     };
   }
   const can = (acc, perm) => Boolean(acc && acc.perms && acc.perms.has(perm));
-  /** May this person see the tab? Staff, Approvals and Activity log need the server with roles. */
+  /** May this person see the tab? Staff, Approvals, Activity log and Backups need the server with roles. */
   function tabAllowed(acc, tab) {
     if (!acc || !(tab in TAB_PERM)) return false;
     if (tab === 'approvals' || tab === 'activity') return acc.system;
-    if (tab === 'staff') return acc.system && can(acc, 'staff');
+    if (tab === 'staff' || tab === 'backup') return acc.system && can(acc, TAB_PERM[tab]); // (routes of the server with roles)
     return can(acc, TAB_PERM[tab]);
   }
   const tabsFor = (acc) => TABS.filter((tab) => tabAllowed(acc, tab));

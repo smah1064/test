@@ -327,6 +327,7 @@
     $('tab-staff').hidden = tab !== 'staff';
     $('tab-approvals').hidden = tab !== 'approvals';
     $('tab-activity').hidden = tab !== 'activity';
+    $('tab-backup').hidden = tab !== 'backup';
     // /admin#rights (the link in the owner's alert for a rights request) opens Rights requests; the address
     // follows that tab, so a reload stays on it and leaving it doesn't come back to it.
     if (tab === 'rights' && location.hash !== '#rights') history.replaceState(null, '', '#rights');
@@ -1890,6 +1891,7 @@
     else if (tab === 'coupons') renderCoupons((couponData = await adminApi('/api/admin/coupons')));
     else if (tab === 'customers') await loadCustomers();
     else if (tab === 'preview') await AdminPreview.show();
+    else if (tab === 'backup') await AdminBackup.show();
     else if (tab === 'rights') await AdminRights.show({ auto });
     else if (tab === 'film') {
       const items = (await adminApi('/api/admin/dtf-items')).items;
@@ -1923,6 +1925,7 @@
     applyRole();
     if (tab === 'products' && window.AdminProducts) AdminProducts.onLang();
     if (tab === 'preview' && window.AdminPreview) AdminPreview.onLang();
+    if (tab === 'backup' && window.AdminBackup) AdminBackup.onLang();
     if (tab === 'rights') AdminRights.onLang();
     else AdminRights.badge();
     if (tab === 'queue' && lastQueue) renderQueue(lastQueue);
@@ -3384,6 +3387,7 @@
 
   AdminProducts.init({ api: adminApi, role: () => role, can, legacyOwner: () => Boolean(access && access.owner && !access.system) });
   AdminPreview.init({ api: adminApi });
+  AdminBackup.init({ api: adminApi });
   // ("Find it in Ready designs" only for those who see that tab.)
   AdminRights.init({ api: adminApi, library: () => can('library.view'), goToDesign: (id, o) => (can('library.view') ? goToLibraryDesign(id, o) : undefined) });
   AdminStaff.init({ api: adminApi, access: () => access });

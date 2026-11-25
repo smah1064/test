@@ -18,7 +18,7 @@ const PERMS = [
   'houses.view', 'houses.edit', 'customers.view', 'customers.contact', 'rights',
   'catalog.view', 'catalog.edit', 'library.view', 'library.edit', 'uploads',
   'accounts.view', 'costs.edit', 'expenses.edit', 'coupons.view', 'coupons.edit', 'payments',
-  'prices.edit', 'staff', 'preview', 'settings', 'approvals', 'activity.all',
+  'prices.edit', 'staff', 'preview', 'settings', 'approvals', 'activity.all', 'backup',
 ];
 const ROLES = ['owner', 'finance', 'operations', 'catalogue'];
 const ROLE_PERMS = {
@@ -143,6 +143,11 @@ const ROUTES = {
   'POST /api/admin/staff/:id/setup-link': { perm: 'staff', label: L('New set-up link', 'لينك تجهيز جديد') },
   'PUT /api/admin/staff/:id/password': { perm: 'staff', noBody: true, label: L('Set a team member\'s password', 'غيّر كلمة سر حد في الفريق') },
   'DELETE /api/admin/staff/:id': { perm: 'staff', label: L('Removed a team member', 'شال حد من الفريق') },
+  // Backups: the whole data folder (every customer's details): owners only.
+  'GET /api/admin/backups': { perm: 'backup' },
+  'POST /api/admin/backups': { perm: 'backup', noBody: true, label: L('Made a backup', 'عمل نسخة احتياطية') },
+  'POST /api/admin/backups/:name/link': { perm: 'backup', noBody: true, label: L('Downloaded a backup', 'نزّل نسخة احتياطية') },
+  'DELETE /api/admin/backups/:name': { perm: 'backup', label: L('Deleted a backup', 'مسح نسخة احتياطية') },
   'GET /api/admin/preview': { perm: 'preview' },
   'PUT /api/admin/preview': { perm: 'preview', label: L('Private preview on/off', 'المعاينة الخاصة تشغيل/إيقاف') },
   'POST /api/admin/preview/people': { perm: 'preview', label: L('Invited someone', 'دعا حد') },

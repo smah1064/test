@@ -71,7 +71,7 @@ const sess = (roles, extra = {}) => ({ ok: true, roles, perms: [...new Set(roles
 // ---------- Who sees which tab ----------
 test('tabs follow the permissions: each role sees its own, everyone the Approvals and Activity tabs', () => {
   const tabs = (s) => plain(R.tabsFor(R.access(s)));
-  assert.deepStrictEqual(tabs(sess(['owner'])), ['queue', 'review', 'orders', 'film', 'library', 'houses', 'accounts', 'coupons', 'customers', 'products', 'preview', 'rights', 'staff', 'approvals', 'activity']);
+  assert.deepStrictEqual(tabs(sess(['owner'])), ['queue', 'review', 'orders', 'film', 'library', 'houses', 'accounts', 'coupons', 'customers', 'products', 'preview', 'rights', 'staff', 'approvals', 'activity', 'backup']);
   assert.deepStrictEqual(tabs(sess(['finance'])), ['orders', 'accounts', 'coupons', 'approvals', 'activity']);
   assert.deepStrictEqual(tabs(sess(['operations'])), ['queue', 'review', 'orders', 'film', 'houses', 'customers', 'rights', 'approvals', 'activity']);
   // (Catalogue has no Review: customers' proofs are Operations' work, as on the server.)

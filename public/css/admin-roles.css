@@ -156,3 +156,14 @@
 
 /* Long emails, names or links without spaces wrap on phones (queue details, set-up link card). */
 .queue-item dd, .queue-item dt, .spec dd, .st-link, .st-link *, .ro-card, .ro-card * { overflow-wrap: anywhere; }
+
+/* ---------- Backups (owners): public/js/admin-backup.js ---------- */
+.bk-head h2 { margin: 0 0 6px; }
+.bk-private { margin: 8px 0 12px; }
+.bk-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.bk-bar { height: 8px; margin-top: 12px; border-radius: 999px; background: #e9e9e4; overflow: hidden; }
+.bk-bar span { display: block; height: 100%; background: currentColor; transition: width .4s ease; }
+.bk-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.bk-row-actions { display: flex; gap: 8px; }
+.bk-row [dir="ltr"] { unicode-bidi: plaintext; overflow-wrap: anywhere; }
+.bk-note { margin: 12px 4px; }
