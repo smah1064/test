@@ -110,11 +110,11 @@
     const loose = (s) => s.replace(/ي/g, '').replace(/ +/g, ' ');
     // The same thing said other ways, in both languages (two words keep their space; plurals are found anyway).
     const SAME = {
-      tshirt: 'tshirt, t shirt, tee, tee shirt, shirt, تيشيرت, تي شيرت, تشيرت',
+      tshirt: 'tshirt, t shirt, tee, tee shirt, shirt, تيشيرت, تي شيرت, تشيرت, قميص, قمصان',
       hoodie: 'hoodie, hoody, هودي',
       sweatshirt: 'sweatshirt, sweat shirt, سويتشيرت, سويت شيرت',
       cap: 'cap, hat, كاب, كاسكيت, قبعة, طاقية',
-      mug: 'mug, cup, مج, مجات, مجين, ماج, كوب, كوباية',
+      mug: 'mug, cup, مج, مجات, مجين, ماج, كوب, كوباية, فنجان, فناجين',
       bag: 'bag, شنطة, شنط, كيس, اكياس',
       card: 'card, كارت, كروت, كارد, بطاقة',
       bizcard: 'business card, visit card, visiting card, بيزنس كارد, بيزنس كارت, بزنس كارد, بزنس كارت, كارت بيزنس, كارت بزنس, كروت بيزنس, كروت بزنس, كارت شخصي, كروت شخصية, كارت فيزيت',
@@ -146,6 +146,11 @@
       // ("Mother's Day" is searched as "mother day": the 's is left out below.)
       mom: 'mom, mum, mommy, mummy, mama, mother, mother day, mothers day, ماما, الام, امي, عيد الام',
       dad: 'dad, daddy, papa, father, father day, fathers day, بابا, الاب, ابويا, عيد الاب',
+      // (Valentine's Day, Teacher's Day, a new baby and the prayer mat (مصلية), in either language. QA 25 Nov.)
+      valentine: 'valentine, valentines, valentine day, عيد الحب, عيد حب, فالنتاين, فلانتين',
+      teacher: 'teacher, teachers day, teacher day, معلم, المعلم, عيد المعلم, مدرس, يوم المعلم',
+      baby: 'baby, newborn, بيبي, نونو, مولود',
+      prayermat: 'prayer mat, prayer rug, سجادة صلاة, مصلية, مصلاية',
     };
     const sameAs = new Map();
     for (const [k, list] of Object.entries(SAME)) for (const w of list.split(',')) sameAs.set(norm(w), k);
@@ -166,8 +171,12 @@
       }
       return [...new Set(out)];
     }
-    // The word without "the" / "for the" / "with the" in front (التيشيرتات, للأفراح), when 3 letters or more are left.
-    const bare = (w) => { const m = /^(?:وال|بال|لل|ال)(.{3,})$/.exec(w); return m ? [w, m[1]] : [w]; };
+    // The word after "the" / "for the" / "with the" / "and the" in front (التيشيرتات, للأفراح), when 3 letters or more
+    // are left; after "the" / "for the", 2 are enough (الأم, للأب); "for" alone before an alef with 3 left (لأمي).
+    // A word of 2 is only looked for with its article (للأب: الأب, as the shop's words list it): أب alone is also the
+    // "up" of ليفل أب and ستارت أب.
+    const article = (w) => { const m = /^(?:وال|بال|لل|ال)([ء-ي]{3,})$|^(?:لل|ال)([ء-ي]{2})$|^ل(ا[ء-ي]{2,})$/.exec(w); return m ? m[1] || m[2] || m[3] : ''; };
+    const bare = (w) => { const c = article(w); return !c ? [w] : c.length === 2 ? [w, `ال${c}`] : [w, c]; };
     const allForms = (w) => [...new Set(bare(w).flatMap(forms))];
     const conceptsOf = (w) => [...new Set(allForms(w).map((f) => sameAs.get(f)).filter(Boolean))];
     /** Two words that name one thing: "t shirt", "business cards", "بيزنس كارد". */
@@ -217,12 +226,30 @@
     // An Arabic word of three letters (most Arabic words are built on three) inside a longer word is another word:
     // it counts at the start of a word only, and without its ي not at all, on both pages (كيس is not the كس of
     // اكسسوارات, ليل not the لل of للأعمال). One or two letters are a word still being typed: found as before.
+    // The same rule for a word of two or three letters after its article (الأم, للأب, لأمي): that word after an article
+    // (or none, for three letters) at the start of a word; one of the shop's words (الأم, الأب) as a whole word.
+    // الأم is not in الامتحانات, للأب not in للأبد, الأب not in الأبعاد, لأمي (without its ي, لام) not in لاما.
+    function hasShort(h, word, core, whole) {
+      const end = whole || (core.length === 2 && (sameAs.has(core) || sameAs.has(`ال${core}`))) ? ' ' : '';
+      const lc = loose(core);
+      return ['', 'ال', 'لل', 'بال', 'وال'].some((p) => [word, core].some((w) => (p || w.length > 2) && h.text.includes(` ${p}${w}${end}`))
+        || (lc.length > 2 && h.loose.includes(` ${p}${lc}${end}`)));
+    }
+    // start 'word': the words as whole words only (or another form, or what they name), to rank names: a mug (مج,
+    // the same as كوب) before كوبونات, the cap (كاب) before للكابلز, whose words only start with what was typed.
     function has(h, term, start) {
+      const whole = start === 'word';
+      const core = article(term.word);
+      if (core && core.length <= 3) {
+        if (hasShort(h, term.word, core, whole)) return true;
+        return term.forms.some((f) => h.text.includes(` ${f} `)) || term.concepts.some((c) => h.concepts.has(c));
+      }
       const short = term.word.length === 3 && /^[ء-ي]+$/.test(term.word);
       const at = start || short ? ' ' : '';
+      const end = whole ? ' ' : '';
       const lw = loose(term.word);
-      const looseHit = h.looseAnywhere && !short ? h.loose.includes(at + lw) : lw.length > 2 && h.loose.includes(` ${lw}`);
-      if (term.word && (h.text.includes(at + term.word) || looseHit)) return true;
+      const looseHit = h.looseAnywhere && !short && !whole ? h.loose.includes(at + lw) : lw.length > 2 && h.loose.includes(` ${lw}${end}`);
+      if (term.word && (h.text.includes(at + term.word + end) || looseHit)) return true;
       if (term.forms.some((f) => h.text.includes(` ${f} `) || h.loose.includes(` ${loose(f)} `))) return true;
       return term.concepts.some((c) => h.concepts.has(c)) || Boolean(term.or && term.or.every((x) => has(h, x, start)));
     }
