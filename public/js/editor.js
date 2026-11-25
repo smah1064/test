@@ -1708,7 +1708,7 @@
   });
   /** Every page of a PDF on the booklet's pages: page 1 on the cover, the last on the back cover. */
   async function addPdfPages(file) {
-    if (file.size > 60 * 1024 * 1024) return toast(t('msg.tooBigVector'), 'error');
+    if (file.size > 60 * 1024 * 1024) return toast(tPg('ed.pdfTooBig'), 'error');
     const first = activeSides()[0];
     const r0 = rects(first.id).bleed;
     // About 200 DPI over the page with its bleed.
@@ -1756,6 +1756,7 @@
     // Which page of the PDF each one is: the print files use that page of the PDF itself, not the picture.
     const srcIdx = pick.map((i) => nums[i]);
     busy(true, tPg('ed.pdfPlacing'));
+    let fitted = 0; // pages of another shape, fitted inside the page
     try {
       for (let i = 0; i < used.length && i < targets.length; i++) {
         const page = targets[i];
@@ -1767,8 +1768,15 @@
         }
         const fimg = await new Promise((resolve) => fabric.Image.fromURL(used[i], resolve));
         const r = rects(page.id).bleed;
+        // A page from an earlier PDF here is replaced (a corrected PDF takes its place, not hides under it).
+        for (const old of canvas.getObjects().filter((o) => o.pdfSrc)) canvas.remove(old);
         fimg.set({ name: `${(file.name || 'PDF').replace(/\.[^.]+$/, '').slice(0, 30)} · ${POD.num(srcIdx[i] + 1)}`, ...(got.pdfId ? { pdfSrc: { id: got.pdfId, page: srcIdx[i] } } : {}) });
-        fimg.scale(Math.max(r.w / fimg.width, r.h / fimg.height));
+        // Same shape as the booklet page: it fills the page with its bleed. Another shape (landscape,
+        // square...) fits inside the page whole, rather than losing what doesn't fit.
+        const t = rects(page.id).trim;
+        const off = Math.abs(Math.log((fimg.width / fimg.height) / (r.w / r.h))) > 0.08;
+        if (off) fitted += 1;
+        fimg.scale(off ? Math.min(t.w / fimg.width, t.h / fimg.height) : Math.max(r.w / fimg.width, r.h / fimg.height));
         addObject(fimg, { select: false, shrinkToFit: false });
         // The page fills the page with its bleed, under anything already designed there.
         fimg.set({ left: r.x + r.w / 2, top: r.y + r.h / 2 });
@@ -1789,10 +1797,14 @@
       toast(tPg(atMost ? 'ed.pdfTooMany' : 'ed.pdfCut', { n: POD.num(n), k: POD.num(k), first: POD.num(k - 1) }), 'error');
     } else if (n < k && n >= 2) {
       toast(tPg('ed.pdfFewer', { n: POD.num(n), blank: POD.num(k - n) }));
-    } else toast(tPg('ed.pdfPlaced', { n: POD.num(Math.min(n, k)) }));
+    } else toast(tPg(Math.min(n, k) === 1 ? 'ed.pdfPlacedOne' : 'ed.pdfPlaced', { n: POD.num(Math.min(n, k)) }));
+    if (fitted) setTimeout(() => toast(tPg('ed.pdfFitted', { n: POD.num(fitted) })), 2600);
   }
   const PG_TEXT = {
     'ed.pdfReading': ['Reading the PDF pages…', 'بنقرا صفحات الـ PDF…'],
+    'ed.pdfPlacedOne': ['The page was placed on the cover. Flip through the booklet in the preview.', 'اتحطت الصفحة على الغلاف. قلّب في الكتيب من المعاينة.'],
+    'ed.pdfFitted': ['{n} pages have another shape than the booklet (e.g. landscape): they were fitted inside the page whole. Resize them if you like.', 'صفحات شكلها مختلف عن الكتيب (عددها {n}، زي العرضي): اتحطت جوه الصفحة كاملة. تقدر تكبرها لو حابب.'],
+    'ed.pdfTooBig': ['That PDF is bigger than 60 MB. Save a smaller one (for example with compressed pictures), then upload it again.', 'الـ PDF ده أكبر من ٦٠ ميجابايت. احفظه أصغر (مثلًا بضغط الصور) وارفعه تاني.'],
     'ed.pdfPlacing': ['Putting the pages in the booklet…', 'بنحط الصفحات في الكتيب…'],
     'ed.pdfPlaced': ['{n} pages placed in order, page 1 on the cover. Flip through them in the preview.', 'اتحطت الصفحات بالترتيب (عددها {n})، أول صفحة على الغلاف. قلّب فيهم من المعاينة.'],
     'ed.pdfTooMany': ['The PDF has {n} pages, more than the biggest booklet ({k} pages). Its first {first} pages and its last one (on the back cover) were used.', 'صفحات الـ PDF (عددها {n}) أكتر من أكبر كتيب (عدد صفحاته {k}). استخدمنا أول صفحاته (عددها {first}) وآخر صفحة على الغلاف الخلفي.'],
@@ -3774,7 +3786,8 @@
       const important = isText(o) || isSticker(o);
       const unsafe = r.left < R.safe.x || r.top < R.safe.y || r.left + r.width > R.safe.x + R.safe.w || r.top + r.height > R.safe.y + R.safe.h;
       if (!cut && important && unsafe) issues.push({ level: 'warn', key: 'check.safe', obj: o, params: { name } });
-      if (o.type === 'image') {
+      // (A page of the customer's own PDF prints from the PDF itself, not from this picture.)
+      if (o.type === 'image' && !o.pdfSrc) {
         const dpi = imageDpi(o);
         const lim = dpiLimits();
         if (dpi < lim.fail) issues.push({ level: 'error', key: 'check.lowres', obj: o, params: { name, dpi } });

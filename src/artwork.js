@@ -229,7 +229,7 @@ async function gsJob(job, timeoutMs) {
 async function pdfInfo(buf, { max = 40, timeoutMs = 30000 } = {}) {
   // The first `max` pages, and the last one when the PDF is longer (a booklet's back cover).
   const ps = `(in.pdf) (r) file runpdfbegin
-/pbox { dup (PAGE ) print =only ( ) print pdfgetpage dup /CropBox pget { exch pop } { /MediaBox pget pop } ifelse (BOX ) print == } def
+/pbox { dup (PAGE ) print =only ( ) print pdfgetpage dup /Rotate pget { (ROT ) print =only ( ) print } if dup /CropBox pget { exch pop } { /MediaBox pget pop } ifelse (BOX ) print == } def
 (COUNT ) print pdfpagecount ==
 1 1 pdfpagecount ${max} .min { pbox } for
 pdfpagecount ${max} gt { pdfpagecount pbox } if
@@ -237,9 +237,11 @@ pdfpagecount ${max} gt { pdfpagecount pbox } if
   const out = await gsJob({ inputs: { 'in.pdf': buf }, ps, device: 'nullpage' }, timeoutMs);
   const count = Number((/COUNT (\d+)/.exec(out.log) || [])[1]);
   // boxes[i]: page i + 1 (null for the pages in between that weren't asked for).
-  const found = [...out.log.matchAll(/PAGE (\d+) BOX \[([-\d.\s]+)\]/g)].map((m) => {
-    const [x0, y0, x1, y1] = m[2].trim().split(/\s+/).map(Number);
-    return { page: Number(m[1]) - 1, box: { x: Math.min(x0, x1), y: Math.min(y0, y1), w: Math.abs(x1 - x0), h: Math.abs(y1 - y0) } };
+  // (A page turned by /Rotate says so: its print falls back to the picture, which is drawn turned.)
+  const found = [...out.log.matchAll(/PAGE (\d+) (?:ROT (-?\d+) )?BOX \[([-\d.\s]+)\]/g)].map((m) => {
+    const [x0, y0, x1, y1] = m[3].trim().split(/\s+/).map(Number);
+    const rotate = ((Number(m[2]) || 0) % 360 + 360) % 360;
+    return { page: Number(m[1]) - 1, box: { x: Math.min(x0, x1), y: Math.min(y0, y1), w: Math.abs(x1 - x0), h: Math.abs(y1 - y0), ...(rotate ? { rotate } : {}) } };
   });
   if (!count || !found.length || found.some((f) => !(f.box.w > 0 && f.box.h > 0) || !(f.page >= 0 && f.page < count))) {
     const err = new ArtworkError('failed');
@@ -328,14 +330,16 @@ async function bookletFromPdf({ sources, parts, pages, spec, imposed = false, rt
       const k = ids.indexOf(entry.pdf);
       const sx = entry.box.w / entry.src.w;
       const sy = entry.box.h / entry.src.h;
-      s += `gsave ${n2(entry.box.x)} ${n2(entry.box.y)} translate ${n2(sx)} ${n2(sy)} scale ${n2(-entry.src.x)} ${n2(-entry.src.y)} translate SRC${k} ${entry.page} .PDFDrawPage grestore\n`;
+      // (Only what the customer saw: clipped to the page's own box, its CropBox.)
+      s += `gsave ${n2(entry.box.x)} ${n2(entry.box.y)} translate ${n2(sx)} ${n2(sy)} scale ${n2(-entry.src.x)} ${n2(-entry.src.y)} translate ${n2(entry.src.x)} ${n2(entry.src.y)} ${n2(entry.src.w)} ${n2(entry.src.h)} rectclip SRC${k} ${entry.page} .PDFDrawPage grestore\n`;
       if (entry.overlay != null) s += `gsave PARTS ${entry.overlay} .PDFDrawPage grestore\n`;
     } else if (entry.part != null) {
       s += `gsave PARTS ${entry.part} .PDFDrawPage grestore\n`;
     }
     return `${s}grestore\n`;
   };
-  const boxes = `[ {ThisPage} << /TrimBox [${n2(b)} ${n2(b)} ${n2(W - b)} ${n2(H - b)}] /BleedBox [0 0 ${n2(W)} ${n2(H)}] >> /PUT pdfmark\n`;
+  // Every box of the sheet set here (a source page's own CropBox / ArtBox must not carry over).
+  const boxes = `[ {ThisPage} << /TrimBox [${n2(b)} ${n2(b)} ${n2(W - b)} ${n2(H - b)}] /BleedBox [0 0 ${n2(W)} ${n2(H)}] /CropBox [0 0 ${n2(W)} ${n2(H)}] /ArtBox [${n2(b)} ${n2(b)} ${n2(W - b)} ${n2(H - b)}] >> /PUT pdfmark\n`;
   if (!imposed) {
     for (const entry of list) ps += draw(entry, 0, 0, PW) + boxes + 'showpage\n';
   } else {

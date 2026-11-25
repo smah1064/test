@@ -479,6 +479,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
    * counted in the store under its lock): true if `n` more fit today.
    */
   const SHOP_DAY = new Intl.DateTimeFormat('en-CA', { timeZone: process.env.SHOP_TIMEZONE || 'Africa/Cairo' });
+  /** Room left today in a shop-wide budget for n more (nothing taken). */
+  const shopBudgetLeft = (name, max, n = 1) => {
+    const u = (store.db.usage || {})[name];
+    return !(u && u.day === SHOP_DAY.format(new Date()) && u.n + n > max);
+  };
   const takeShopBudget = (name, max, n = 1) => store.mutate((db) => {
     db.usage ||= {};
     const day = SHOP_DAY.format(new Date());
@@ -1269,7 +1274,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       return null; // the PDF is gone (older than 45 days): printed from the picture
     }
     const box = meta.boxes && meta.boxes[src.page];
-    if (!box || !fs.existsSync(path.join(pdfUploadsDir, `${src.id}.pdf`))) return null;
+    // (A page turned by /Rotate prints from its picture, which shows it turned.)
+    if (!box || box.rotate || !fs.existsSync(path.join(pdfUploadsDir, `${src.id}.pdf`))) return null;
     const turned = Math.abs(((Number(o.angle) || 0) % 360 + 360) % 360) > 0.01;
     if (turned || o.flipX || o.flipY || Number(o.skewX) || Number(o.skewY) || Number(o.cropX) || Number(o.cropY) || (o.filters && o.filters.length) || o.clipPath || (o.opacity != null && o.opacity < 0.999) || o.visible === false || (o.globalCompositeOperation && o.globalCompositeOperation !== 'source-over')) return null;
     const side = product.sides.find((s) => s.id === storedSide.id);
@@ -1780,7 +1786,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       rateLimit(req, 'artwork');
       const clamp = (v, lo, hi, d) => Math.min(hi, Math.max(lo, Math.round(Number(v)) || d));
       const max = clamp(req.get('x-max-pages'), 1, 40, 32);
-      if (!takeShopBudget('pdfPagesMB', LIMITS.pdfPagesMB, Math.max(1, Math.ceil(buf.length / 1048576)))) throw new HttpError(429, 'tooManyWait', { min: 60 });
+      // The shop's daily room for kept PDFs, checked before the work and taken only for a PDF that is kept.
+      const mb = buf.length / 1048576;
+      if (!shopBudgetLeft('pdfPagesMB', LIMITS.pdfPagesMB, mb)) throw new HttpError(429, 'pdfBudget');
       let out;
       try {
         out = await artwork.pdfPages(buf, { max });
@@ -1788,8 +1796,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         if (!(e instanceof artwork.ArtworkError)) throw e;
         if (e.reason === 'busy') throw new HttpError(429, 'tooFast');
         console.warn('[artwork] could not read the pages of a PDF of', buf.length, 'bytes:', e.reason, String(e.detail || '').slice(0, 400));
-        throw new HttpError(400, 'pdfBad');
+        // A PDF locked with a password says so (it can't be read until it's saved without one).
+        throw new HttpError(400, /\/Encrypt\b/.test(buf.subarray(0, Math.min(buf.length, 4e6)).toString('latin1')) || /\/Encrypt\b/.test(buf.subarray(Math.max(0, buf.length - 2e5)).toString('latin1')) ? 'pdfLocked' : 'pdfBad');
       }
+      if (!takeShopBudget('pdfPagesMB', LIMITS.pdfPagesMB, mb)) throw new HttpError(429, 'pdfBudget');
       // The PDF itself is kept (its pages are what gets printed; the pictures are only for the screen).
       const pdfId = crypto.randomBytes(12).toString('hex');
       fs.mkdirSync(pdfUploadsDir, { recursive: true });

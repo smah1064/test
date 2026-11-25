@@ -60,6 +60,8 @@ const MESSAGES = {
   couponValueBad: { en: 'Check the discount amount and limits', ar: 'راجع قيمة الخصم والحدود' },
   couponDatesBad: { en: 'Check the dates (the end must be after the start)', ar: 'راجع التواريخ (النهاية لازم تكون بعد البداية)' },
   couponExists: { en: 'A coupon with this code already exists', ar: 'في كوبون بنفس الكود ده' },
+  pdfBudget: { en: 'Booklet PDFs can\'t be taken any more today. Please try again tomorrow, or send the pages as pictures.', ar: 'مش هينفع نستقبل ملفات PDF للكتيبات تاني النهارده. جرب بكرة، أو ابعت الصفحات كصور.' },
+  pdfLocked: { en: 'This PDF is locked with a password. Save it again without a password, then upload it.', ar: 'الـ PDF ده مقفول بكلمة سر. احفظه تاني من غير كلمة سر وارفعه.' },
   previewCodeBad: { en: 'A code has 6 to 24 English letters or digits.', ar: 'الكود من ٦ لـ ٢٤ حرف إنجليزي أو رقم.' },
   previewCodeTaken: { en: 'Someone already has this code. Choose another.', ar: 'في حد واخد الكود ده. اختار كود تاني.' },
   previewOnly: { en: 'The shop is open to invited people only for now.', ar: 'الموقع مفتوح للمدعوين بس دلوقتي.' },

@@ -101,11 +101,12 @@ window.PODSaved = (() => {
     const gone = (it) => Boolean(catalogIds && it.productId && !catalogIds.has(it.productId));
     const note = (it) => {
       const info = gone(it) ? stateOf(it.productId) : null;
-      const why = opts.unavailable && opts.unavailable(it);
-      if (!why) return info ? unavailNote(info, true) : '';
-      // The shop's reason, and the day a paused product is back.
-      return info && info.state === 'paused' && info.backOn ? `${why} ${t('avail.backOnLong', { date: POD.backOnDay(info.backOn) })}` : why;
+      // A product not in the shop: the note for a saved design (the cart's words speak of the cart).
+      if (info) return unavailNote(info, true);
+      return (opts.unavailable && opts.unavailable(it)) || '';
     };
+    // No longer sold: "Move to cart" would only block the order.
+    const retired = (it) => { const info = gone(it) ? stateOf(it.productId) : null; return Boolean(info && info.state === 'retired'); };
     // No longer sold: a link to similar products in the shop.
     const moreLink = (it) => {
       const info = gone(it) ? stateOf(it.productId) : null;
@@ -121,7 +122,7 @@ window.PODSaved = (() => {
           <div class="meta">${meta(it)}</div>
           ${note(it) ? `<p class="unavail-note" role="note">${esc(note(it))}</p>` : ''}
           <div class="actions">
-            <button class="btn btn-sm btn-primary" type="button" data-to-cart="${esc(it.designId)}">${esc(t('cart.moveToCart'))}</button>
+            ${retired(it) ? '' : `<button class="btn btn-sm btn-primary" type="button" data-to-cart="${esc(it.designId)}">${esc(t('cart.moveToCart'))}</button>`}
             ${moreLink(it)}
             <button class="btn btn-sm btn-danger" type="button" data-saved-remove="${esc(it.designId)}">${esc(t('cart.remove'))}</button>
           </div>
