@@ -1322,4 +1322,9 @@ window.POD_STRINGS = {
   'checkout.blockedGo': ['Show me', 'وريني'],
   'saved.unavailable': ['This product isn\'t available right now. Your design is kept here until it\'s back.', 'المنتج ده مش متاح دلوقتي. تصميمك محفوظ هنا لحد ما يرجع.'],
   'saved.unknownProduct': ['A product not in the shop right now', 'منتج مش موجود في المحل دلوقتي'],
+
+  // ---------- Stock per colour and size (admin → Products) ----------
+  'soldOutCombo': ['{colour} in {size}: sold out', '{colour} مقاس {size}: خلصان'],
+  'fewLeftCombo': ['{colour} in {size}: only {n} left', '{colour} مقاس {size}: فاضل {n} بس'],
+  'sizeMovedTo': ['{size} is sold out in this colour, so {to} is picked', 'مقاس {size} خلصان في اللون ده، فاخترنالك {to}'],
 };

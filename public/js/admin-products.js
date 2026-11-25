@@ -92,6 +92,8 @@
     if (p.status === 'hidden' && !p.builtIn && p.hiddenNote === NEW_NOTE) return t('pm.st.new');
     if (p.status === 'hidden') return t('pm.st.hidden') + (p.hiddenReason ? ` · ${t('pm.reason.' + p.hiddenReason)}` : '');
     if (p.stock !== null && p.stock <= 0) return t('pm.st.noStock');
+    const vs = stockInfo(p);
+    if (vs && vs.kind === 'variant' && vs.counted && vs.left === 0) return t('pm.st.noStock');
     if (!p.colors.some((c) => !c.off && !c.soldOut)) return t('pm.st.noColor');
     if (!p.sizes.some((z) => !z.off && !z.soldOut)) return t('pm.st.noSize');
     return t('pm.st.hidden');
@@ -101,8 +103,44 @@
     if (p.visible) return pill('pm-pill-live', t('pm.st.live'));
     return pill(p.status === 'removed' ? 'pm-pill-removed' : 'pm-pill-hidden', whyHidden(p), p.hiddenNote || '');
   }
+  /**
+   * What the product's stock says: null when not counted; { kind: 'whole', total } for one count;
+   * { kind: 'variant', total, counted, left, out: [combos at 0], low: [combos running low] } per colour and size
+   * (only colours and sizes that are on; a combination left empty isn't counted).
+   */
+  function stockInfo(p) {
+    if (p.variantStock && typeof p.variantStock === 'object') {
+      const r = { kind: 'variant', total: 0, counted: 0, left: 0, out: [], low: [] };
+      for (const c of p.colors.filter((x) => !x.off)) {
+        for (const z of p.sizes.filter((x) => !x.off)) {
+          const v = p.variantStock[`${c.id}|${z.id}`];
+          if (typeof v !== 'number') continue;
+          r.counted += 1;
+          r.total += Math.max(0, v);
+          const name = `${tr(c.name)} · ${tr(z.label)}`;
+          if (v <= 0) r.out.push(name);
+          else {
+            r.left += 1;
+            if (v <= p.lowStockAt) r.low.push(name);
+          }
+        }
+      }
+      return r;
+    }
+    if (p.stock !== null && p.stock !== undefined) return { kind: 'whole', total: p.stock };
+    return null;
+  }
   function stockPill(p) {
-    if (p.stock === null || p.stock === undefined) return '';
+    const s = stockInfo(p);
+    if (!s) return '';
+    if (s.kind === 'variant') {
+      if (!s.counted) return '';
+      const sep = POD.lang === 'ar' ? '، ' : ', ';
+      if (!s.left) return pill('pm-pill-bad', t('pm.stock.out'), s.out.join(sep));
+      return pill('pm-pill-muted', t('pm.stock.vn', { n: POD.num(s.total) }))
+        + (s.out.length ? pill('pm-pill-bad', t('pm.stock.someOut', { n: POD.num(s.out.length) }), s.out.join(sep)) : '')
+        + (s.low.length ? pill('pm-pill-warn', t('pm.stock.someLow', { n: POD.num(s.low.length) }), s.low.join(sep)) : '');
+    }
     if (p.stock <= 0) return pill('pm-pill-bad', t('pm.stock.out'));
     if (p.stock <= p.lowStockAt) return pill('pm-pill-warn', t('pm.stock.low', { n: POD.num(p.stock) }));
     return pill('pm-pill-muted', t('pm.stock.n', { n: POD.num(p.stock) }));
@@ -159,7 +197,11 @@
     live: (p) => p.visible,
     hidden: (p) => !p.visible && p.status !== 'removed',
     removed: (p) => p.status === 'removed',
-    stock: (p) => p.stock !== null && p.stock <= p.lowStockAt,
+    stock: (p) => {
+      const s = stockInfo(p);
+      if (!s) return false;
+      return s.kind === 'variant' ? Boolean(s.out.length || s.low.length) : s.total <= p.lowStockAt;
+    },
     added: (p) => !p.builtIn,
   };
   function matches(p) {
@@ -246,7 +288,7 @@
   }
 
   // ---------- Change log ----------
-  const LOG_WORDS = ['name', 'description', 'category', 'status', 'stock', 'lowStockAt', 'colors', 'addColors', 'sizes', 'addSizes', 'sides', 'process', 'methods', 'embroidery', 'prices'];
+  const LOG_WORDS = ['name', 'description', 'category', 'status', 'stock', 'variantStock', 'lowStockAt', 'colors', 'addColors', 'sizes', 'addSizes', 'sides', 'process', 'methods', 'embroidery', 'prices'];
   function logWhat(what) {
     const s = String(what || '');
     let m = /^new product from (.+)$/.exec(s);
@@ -656,6 +698,7 @@
         <section class="card pm-sec" id="pm-sec-log"><header class="pm-sec-head"><h3>${esc(t('pm.log.forProduct'))}</h3></header><div id="pm-plog">${logHtml(P.id)}</div></section>
       </div>`;
     drawAllSides();
+    syncVariant();
   }
   /** After a save: redraw the header and every section without unsaved changes. */
   function refreshEdit(saved) {
@@ -674,6 +717,7 @@
     const el = document.getElementById('pm-sec-' + name);
     if (el) el.outerHTML = SEC_RENDER[name](S.P);
     if (name === 'print') drawAllSides(); // the boxes are placed after the section is drawn
+    if (name === 'avail') syncVariant(); // the colours and totals of the stock grid
   }
   function setDirty(name, on = true) {
     if (on) S.dirty.add(name); else S.dirty.delete(name);
@@ -740,7 +784,7 @@
   // ---------- b) Availability ----------
   function availBody(P) {
     const e = P.edit || {};
-    const counting = P.stock !== null;
+    const mode = stockModeOf(P);
     const reasons = (S.data && S.data.hideReasons) || [];
     const statusMark = mark(P.status !== 'live', 'status');
     const why = P.status === 'live' && !P.visible ? `<p class="notice small">${esc(t('pm.liveButHidden', { why: whyHidden(P) }))}</p>` : '';
@@ -757,13 +801,85 @@
         ${fld('hiddenNote', t('pm.note'), inp('hiddenNote', P.hiddenNote === 'New product: check it, then show it in the shop' ? t('pm.newNote') : P.hiddenNote || '', `type="text" maxlength="200" placeholder="${esc(t('pm.notePh'))}"`))}
       </div>
       <div class="pm-stock">
-        <label class="check"><input type="checkbox" name="stockOn" ${counting ? 'checked' : ''}> <span>${esc(t('pm.stockOn'))}</span> ${mark(e.stock !== undefined, 'stock')}</label>
-        <p class="muted small">${esc(t('pm.stockHelp'))}</p>
-        <div class="pm-grid2 pm-stock-fields" ${counting ? '' : 'hidden'}>
-          ${fld('stock', t('pm.stockNow'), inp('stock', counting ? P.stock : '', 'type="number" min="0" step="1" inputmode="numeric" dir="ltr"'))}
+        <fieldset class="pm-fs"><legend class="pm-lbl">${esc(t('pm.stockMode'))} ${mark(e.stock !== undefined || e.variantStock !== undefined, 'stock')}</legend>
+          <div class="pm-modes" role="radiogroup">
+            ${['none', 'whole', 'variant'].map((m) => `<label class="pm-mode"><input type="radio" name="stockMode" value="${m}" ${mode === m ? 'checked' : ''}><span>${esc(t('pm.sm.' + m))}</span></label>`).join('')}
+          </div>
+          <p class="muted small" data-pm-stock-help>${esc(stockHelp(mode))}</p>
+        </fieldset>
+        <div class="pm-vs" ${mode === 'variant' ? '' : 'hidden'}>${variantGrid(P)}</div>
+        <div class="pm-grid2 pm-stock-fields" ${mode === 'none' ? 'hidden' : ''}>
+          ${fld('stock', t('pm.stockNow'), inp('stock', P.stock !== null ? P.stock : '', 'type="number" min="0" step="1" inputmode="numeric" dir="ltr"'), '', 'pm-stock-whole' + (mode === 'whole' ? '' : ' is-hidden'))}
           ${fld('lowStockAt', t('pm.lowAt'), inp('lowStockAt', P.lowStockAt, 'type="number" min="0" step="1" inputmode="numeric" dir="ltr"'), '', '')}
         </div>
       </div>`;
+  }
+  const stockModeOf = (P) => (P.variantStock ? 'variant' : P.stock !== null ? 'whole' : 'none');
+  const stockHelp = (mode) => t(mode === 'whole' ? 'pm.stockHelp' : 'pm.sm.' + mode + 'Help');
+  const vsName = (cid, zid) => `vs.${cid}|${zid}`;
+  /** Pieces per colour and size: a grid (colours down, sizes across), or a list when there's one colour or one size. */
+  function variantGrid(P) {
+    const colors = P.colors.filter((c) => !c.off);
+    const sizes = P.sizes.filter((z) => !z.off);
+    const vs = P.variantStock || {};
+    const cell = (c, z) => {
+      const v = vs[`${c.id}|${z.id}`];
+      const label = t('pm.vs.cell', { colour: tr(c.name), size: tr(z.label) });
+      return `<input class="pm-vs-in" name="${esc(vsName(c.id, z.id))}" value="${typeof v === 'number' ? v : ''}" type="number" min="0" step="1" inputmode="numeric" dir="ltr" aria-label="${esc(label)}" title="${esc(label)}" data-c="${esc(c.id)}" data-z="${esc(z.id)}">`;
+    };
+    const sw = (c) => `<span class="pm-sw pm-sw-sm" style="background:${esc(c.hex)}" aria-hidden="true"></span>`;
+    const tools = `
+      <div class="pm-vs-tools">
+        <label class="pm-vs-all"><span>${esc(t('pm.vs.setAll'))}</span><input type="number" name="vsAll" min="0" step="1" inputmode="numeric" dir="ltr" data-no-dirty aria-label="${esc(t('pm.vs.setAll'))}"></label>
+        <button type="button" class="btn btn-sm" data-pm-act="vs-all">${esc(t('pm.vs.apply'))}</button>
+        <button type="button" class="btn btn-sm" data-pm-act="vs-clear">${esc(t('pm.vs.clear'))}</button>
+      </div>`;
+    const key = `<p class="pm-vs-key small"><span class="pm-key pm-key-out">${esc(t('pm.vs.keyOut'))}</span><span class="pm-key pm-key-low" data-pm-key-low>${esc(t('pm.vs.keyLow', { n: POD.num(P.lowStockAt) }))}</span><span class="pm-key pm-key-empty">${esc(t('pm.vs.keyEmpty'))}</span></p>`;
+    const offNote = P.colors.some((c) => c.off) || P.sizes.some((z) => z.off) ? `<p class="muted small">${esc(t('pm.vs.onlyOn'))}</p>` : '';
+    let body;
+    if (colors.length > 1 && sizes.length > 1) {
+      body = `<div class="pm-vs-scroll"><table class="pm-vs-grid">
+        <thead><tr><th scope="col" class="pm-vs-corner"><span class="pm-vs-sr">${esc(t('pm.f.colour'))}</span></th>${sizes.map((z) => `<th scope="col"><bdi>${esc(tr(z.label))}</bdi></th>`).join('')}<th scope="col" class="pm-vs-tot">${esc(t('pm.vs.total'))}</th></tr></thead>
+        <tbody>${colors.map((c) => `<tr><th scope="row"><span class="pm-vs-c">${sw(c)}<span>${esc(tr(c.name))}</span></span></th>${sizes.map((z) => `<td>${cell(c, z)}</td>`).join('')}<td class="pm-vs-tot" data-pm-rt="${esc(c.id)}"></td></tr>`).join('')}</tbody>
+        <tfoot><tr><th scope="row">${esc(t('pm.vs.total'))}</th>${sizes.map((z) => `<td class="pm-vs-tot" data-pm-ct="${esc(z.id)}"></td>`).join('')}<td class="pm-vs-tot pm-vs-grand" data-pm-gt></td></tr></tfoot>
+      </table></div>`;
+    } else {
+      // One colour (a list of sizes), one size (a list of colours), or just one of each.
+      const rows = colors.length > 1 ? colors.map((c) => [c, sizes[0], `${sw(c)}<span>${esc(tr(c.name))}</span>`])
+        : sizes.map((z) => [colors[0], z, `${sw(colors[0])}<span>${esc(sizes.length > 1 ? tr(z.label) : t('pm.vs.cell', { colour: tr(colors[0].name), size: tr(z.label) }))}</span>`]);
+      body = `<div class="pm-vs-list">${rows.map(([c, z, label]) => `<label class="pm-vs-item"><span class="pm-vs-c">${label}</span>${cell(c, z)}</label>`).join('')}
+        <div class="pm-vs-item pm-vs-sum"><span>${esc(t('pm.vs.total'))}</span><b data-pm-gt></b></div></div>`;
+    }
+    return `<h4 class="pm-vs-h">${esc(t('pm.vs.title'))}</h4>${tools}${body}${key}${offNote}`;
+  }
+  /** Colour the boxes (0 red, running low amber) and add up the rows and columns. */
+  function syncVariant() {
+    const box = root.querySelector('.pm-vs');
+    if (!box) return;
+    const lowRaw = val('lowStockAt');
+    const low = lowRaw !== '' && Number.isFinite(Number(lowRaw)) ? Number(lowRaw) : 5;
+    const rows = {};
+    const cols = {};
+    let grand = null;
+    const add = (o, k, v) => { o[k] = (o[k] || 0) + v; };
+    box.querySelectorAll('.pm-vs-in').forEach((el) => {
+      const raw = el.value.trim();
+      const v = raw === '' ? null : Number(raw);
+      const ok = v !== null && Number.isInteger(v) && v >= 0;
+      el.classList.toggle('is-out', ok && v === 0);
+      el.classList.toggle('is-low', ok && v > 0 && v <= low);
+      el.classList.toggle('is-bad', v !== null && !ok);
+      if (!ok) return;
+      add(rows, el.dataset.c, v);
+      add(cols, el.dataset.z, v);
+      grand = (grand || 0) + v;
+    });
+    const show = (v) => (v === undefined || v === null ? '—' : POD.num(v));
+    box.querySelectorAll('[data-pm-rt]').forEach((el) => { el.textContent = show(rows[el.dataset.pmRt]); });
+    box.querySelectorAll('[data-pm-ct]').forEach((el) => { el.textContent = show(cols[el.dataset.pmCt]); });
+    box.querySelectorAll('[data-pm-gt]').forEach((el) => { el.textContent = show(grand); });
+    const k = box.querySelector('[data-pm-key-low]');
+    if (k) k.textContent = t('pm.vs.keyLow', { n: POD.num(low) });
   }
   function saveAvail(P) {
     const status = val('status');
@@ -774,15 +890,39 @@
       if (note === t('pm.newNote') && P.hiddenNote === 'New product: check it, then show it in the shop') note = P.hiddenNote;
       body.hiddenNote = note;
     }
-    if (val('stockOn')) {
+    const mode = val('stockMode');
+    const lowOf = () => {
+      const low = val('lowStockAt');
+      if (low !== '' && (!Number.isInteger(Number(low)) || Number(low) < 0)) throw new Error(t('pm.badStock'));
+      return low === '' || Number(low) === 5 ? null : Number(low);
+    };
+    if (mode === 'whole') {
       const n = val('stock');
       if (n === '' || !Number.isInteger(Number(n)) || Number(n) < 0) throw new Error(t('pm.badStock'));
       body.stock = Number(n);
-      const low = val('lowStockAt');
-      if (low !== '' && (!Number.isInteger(Number(low)) || Number(low) < 0)) throw new Error(t('pm.badStock'));
-      body.lowStockAt = low === '' || Number(low) === 5 ? null : Number(low);
+      body.variantStock = null;
+      body.lowStockAt = lowOf();
+    } else if (mode === 'variant') {
+      // Counts kept for colours or sizes that are off now stay as they are.
+      const vs = {};
+      const shown = new Set();
+      root.querySelectorAll('.pm-vs .pm-vs-in').forEach((el) => {
+        const k = `${el.dataset.c}|${el.dataset.z}`;
+        shown.add(k);
+        const raw = el.value.trim();
+        if (raw === '') return;
+        const v = Number(raw);
+        if (!Number.isInteger(v) || v < 0) { el.focus(); throw new Error(t('pm.badStock')); }
+        vs[k] = v;
+      });
+      if (!Object.keys(vs).length) throw new Error(t('pm.vs.empty'));
+      for (const [k, v] of Object.entries(P.variantStock || {})) if (!shown.has(k)) vs[k] = v;
+      body.stock = null;
+      body.variantStock = vs;
+      body.lowStockAt = lowOf();
     } else {
       body.stock = null;
+      body.variantStock = null;
       body.lowStockAt = null;
     }
     return body;
@@ -1361,7 +1501,7 @@
       syncAvail();
       secName = 'avail';
     } else if (kind === 'stock') {
-      root.querySelector('[name=stockOn]').checked = false;
+      root.querySelector('[name=stockMode][value=none]').checked = true;
       syncAvail();
       secName = 'avail';
     } else if (kind === 'color') {
@@ -1406,10 +1546,17 @@
     if (box) box.hidden = st === 'live';
     const help = root.querySelector('[data-pm-status-help]');
     if (help) help.textContent = t('pm.status.' + st + 'Help');
-    const on = val('stockOn');
+    const mode = val('stockMode') || 'none';
     const sf = root.querySelector('.pm-stock-fields');
-    if (sf) sf.hidden = !on;
-    if (on && root.querySelector('[name=stock]').value === '') root.querySelector('[name=stock]').value = '0';
+    if (sf) sf.hidden = mode === 'none';
+    const whole = root.querySelector('.pm-stock-whole');
+    if (whole) whole.classList.toggle('is-hidden', mode !== 'whole');
+    const vs = root.querySelector('.pm-vs');
+    if (vs) vs.hidden = mode !== 'variant';
+    const sh = root.querySelector('[data-pm-stock-help]');
+    if (sh) sh.textContent = stockHelp(mode);
+    if (mode === 'whole' && root.querySelector('[name=stock]').value === '') root.querySelector('[name=stock]').value = '0';
+    syncVariant();
   }
 
   // =====================================================================
@@ -1492,6 +1639,20 @@
         S.sizes = S.sizes.filter((z) => z.id !== id);
         setDirty('sizes');
         return rerender('sizes');
+      case 'vs-all': {
+        const el = root.querySelector('[name=vsAll]');
+        const n = el ? el.value.trim() : '';
+        secError('avail', '');
+        if (n === '') { secError('avail', t('pm.vs.needN')); if (el) el.focus(); return undefined; }
+        if (!Number.isInteger(Number(n)) || Number(n) < 0) return secError('avail', t('pm.badStock'));
+        root.querySelectorAll('.pm-vs .pm-vs-in').forEach((x) => { x.value = String(Number(n)); });
+        setDirty('avail');
+        return syncVariant();
+      }
+      case 'vs-clear':
+        root.querySelectorAll('.pm-vs .pm-vs-in').forEach((x) => { x.value = ''; });
+        setDirty('avail');
+        return syncVariant();
       case 'undo-all': return undoAll();
       case 'remove-instead': return removeInstead();
       case 'show-again': return showInShop(S.P, (P) => { S.P = P; refreshEdit('avail'); refreshEdit('danger'); });

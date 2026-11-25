@@ -119,6 +119,17 @@
   /** The first colour / size that can be picked (or the first one when all are sold out). */
   const firstPick = (list) => (list || []).find(canPick) || (list || [])[0];
   /**
+   * Stock per colour and size (admin → Products): the shop gets the combinations at 0 ("black|XL")
+   * in outCombos and the ones nearly gone in fewLeftBy ({ "black|L": 2 }).
+   */
+  const comboOut = (p, colorId, sizeId) => Boolean(p && p.outCombos && p.outCombos.includes(`${colorId}|${sizeId}`));
+  /** How many are left of a colour in a size when only a few are (else 0). */
+  const comboFew = (p, colorId, sizeId) => (p && p.fewLeftBy && p.fewLeftBy[`${colorId}|${sizeId}`]) || 0;
+  /** A size that can be picked in this colour: not sold out, and not sold out in this colour. */
+  const sizeOk = (p, colorId, s) => canPick(s) && !comboOut(p, colorId, s.id);
+  /** A colour that can be picked: not sold out, and some size of it is left. */
+  const colorOk = (p, c) => canPick(c) && (!p || !(p.sizes || []).length || p.sizes.some((s) => sizeOk(p, c.id, s)));
+  /**
    * A product's picture on cards and lists: the photo the manager chose (admin → Products),
    * else the real product photo recoloured on the server (products made from another one get that one's
    * photo there), the drawn product if it fails: see thumbFallback.
@@ -920,7 +931,7 @@
       return lang;
     },
     t, tr, arabicDigits, setLang, applyI18n,
-    loadCatalog, assetId, canPick, firstPick, productPicture, thumbFallback, fillMockup, mockupUrl, svgDataUrl, luminance,
+    loadCatalog, assetId, canPick, firstPick, comboOut, comboFew, sizeOk, colorOk, productPicture, thumbFallback, fillMockup, mockupUrl, svgDataUrl, luminance,
     money, date, day, num, captcha,
     getCart, setCart, getSaved, setSaved, moveItem, designFor, putFile, updateCartBadge, toast, esc, api, drafts, forgetPersonal,
     sizedArea, sizeView, canvasEdges, drawPattern, wrapOffsets, fabricCm,

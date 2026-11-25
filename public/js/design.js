@@ -42,17 +42,24 @@
   const ownHex = ownColor && (own.surface || ownColor.hex);
   /** The product's colour nearest the design's own, if the first colour is the wrong lightness for it. */
   function nearestOwn(product) {
-    const first = POD.firstPick(product.colors);
+    const first = product.colors.find((c) => POD.colorOk(product, c)) || POD.firstPick(product.colors);
     if (!ownHex || product.surface || isDark(first.hex) === isDark(ownHex)) return first;
-    const alike = product.colors.filter((c) => POD.canPick(c) && isDark(c.hex) === isDark(ownHex));
+    const alike = product.colors.filter((c) => POD.colorOk(product, c) && isDark(c.hex) === isDark(ownHex));
     return alike.length ? alike.reduce((best, c) => (dist(c.hex, ownHex) < dist(best.hex, ownHex) ? c : best)) : first;
   }
   function choose(productId, colorId) {
     state.product = products.find((p) => p.id === productId) || products.find((p) => p.id === design.product) || products[0];
     // Sold-out colours and sizes are listed (crossed out) but never chosen.
-    const pickable = state.product.colors.filter(POD.canPick);
+    const pickable = state.product.colors.filter((c) => POD.colorOk(state.product, c));
     state.color = pickable.find((c) => c.id === colorId) || pickable.find((c) => c.id === design.color) || nearestOwn(state.product);
-    if (!state.size || !state.product.sizes.some((s) => s.id === state.size.id && POD.canPick(s))) state.size = POD.firstPick(state.product.sizes);
+    // A size sold out in this colour (stock per colour and size): the first size left in it instead.
+    const ok = (s) => POD.sizeOk(state.product, state.color.id, s);
+    const was = state.size;
+    if (!was || !state.product.sizes.some((s) => s.id === was.id && ok(s))) {
+      state.size = state.product.sizes.find(ok) || POD.firstPick(state.product.sizes);
+      return was && state.size && was.id !== state.size.id && state.product.sizes.some((s) => s.id === was.id) ? was : null;
+    }
+    return null;
   }
   choose(params.get('product'), params.get('color'));
 
@@ -121,15 +128,22 @@
     $('dp-gone').innerHTML = askedGone ? `${esc(t('dp.productGone'))} <a href="/#products">${esc(t('unavail.browse'))}</a>` : '';
     $('dp-products').innerHTML = products.map((p) => `<button type="button" class="dp-product ${p.id === product.id ? 'active' : ''}" data-product="${esc(p.id)}" title="${esc(tr(p.name))}">
       <img alt="" loading="lazy" src="${esc(POD.productPicture(p))}" data-fallback="${esc(POD.thumbFallback(p))}"><span>${esc(tr(p.name))}</span></button>`).join('');
-    $('dp-colors').innerHTML = product.colors.map((c) => (c.soldOut
+    $('dp-colors').innerHTML = product.colors.map((c) => (!POD.colorOk(product, c)
       ? `<button type="button" class="swatch sold-out" aria-disabled="true" data-sold="${esc(c.id)}" title="${esc(t('soldOutColor', { name: tr(c.name) }))}" aria-label="${esc(t('soldOutColor', { name: tr(c.name) }))}" style="background:${esc(c.hex)}"></button>`
       : `<button type="button" class="swatch ${c.id === color.id ? 'active' : ''}" data-color="${esc(c.id)}" title="${esc(tr(c.name))}" aria-label="${esc(tr(c.name))}" style="background:${esc(c.hex)}"></button>`)).join('');
     $('dp-color-name').textContent = tr(color.name);
-    $('dp-sizes').innerHTML = product.sizes.map((s) => (s.soldOut
-      ? `<button type="button" class="chip sold-out" aria-disabled="true" data-sold-size="${esc(s.id)}" title="${esc(t('soldOut'))}">${esc(tr(s.label))} <span class="sold-tag">${esc(t('soldOut'))}</span></button>`
-      : `<button type="button" class="chip ${s.id === size.id ? 'active' : ''}" data-size="${esc(s.id)}">${esc(tr(s.label))}${s.surcharge ? ` <span style="opacity:.7">+${esc(money(s.surcharge))}</span>` : ''}</button>`)).join('');
-    $('dp-few').hidden = !product.fewLeft;
-    $('dp-few').textContent = product.fewLeft ? t('pp.fewLeft', { n: POD.num(product.fewLeft) }) : '';
+    // Sizes sold out (in every colour, or in the chosen one when stock is counted per colour and size): crossed out.
+    $('dp-sizes').innerHTML = product.sizes.map((s) => {
+      if (POD.sizeOk(product, color.id, s)) {
+        return `<button type="button" class="chip ${s.id === size.id ? 'active' : ''}" data-size="${esc(s.id)}" aria-pressed="${s.id === size.id}">${esc(tr(s.label))}${s.surcharge ? ` <span style="opacity:.7">+${esc(money(s.surcharge))}</span>` : ''}</button>`;
+      }
+      const why = s.soldOut ? t('soldOut') : t('soldOutCombo', { colour: tr(color.name), size: tr(s.label) });
+      return `<button type="button" class="chip sold-out" aria-disabled="true" data-sold-size="${esc(s.id)}" title="${esc(why)}" aria-label="${esc(why)}"><span class="sold-label">${esc(tr(s.label))}</span> <span class="sold-tag">${esc(t('soldOut'))}</span></button>`;
+    }).join('');
+    // "Only n left": of the chosen colour in the chosen size, else of the whole product.
+    const few = POD.comboFew(product, color.id, size.id) || product.fewLeft || 0;
+    $('dp-few').hidden = !few;
+    $('dp-few').textContent = few ? t('pp.fewLeft', { n: POD.num(few) }) : '';
     $('dp-price').textContent = money(product.basePrice + size.surcharge);
     $('dp-edit').href = `/editor?library=${encodeURIComponent(design.id)}&product=${product.id}&color=${color.id}`;
     document.title = `${tr(design.name)} · ${t('brand')}`;
@@ -164,14 +178,16 @@
     }
     const b = e.target.closest('[data-color]');
     if (!b || b.dataset.color === state.color.id) return;
-    choose(state.product.id, b.dataset.color);
+    const moved = choose(state.product.id, b.dataset.color);
     renderOptions();
+    if (moved) POD.toast(t('sizeMovedTo', { size: tr(moved.label), to: tr(state.size.label) }));
     syncUrl();
     draw();
   });
   $('dp-sizes').addEventListener('click', (e) => {
-    if (e.target.closest('[data-sold-size]')) {
-      POD.toast(t('soldOut'));
+    const sold = e.target.closest('[data-sold-size]');
+    if (sold) {
+      POD.toast(sold.title || t('soldOut'));
       return;
     }
     const b = e.target.closest('[data-size]');

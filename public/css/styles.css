@@ -1318,3 +1318,6 @@ html[dir="rtl"] .hm-arrow { transform: scaleX(-1); }
 .fb-bar { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 10px; flex-wrap: wrap; }
 .fb-label { font-weight: 700; font-size: 14px; min-width: 140px; text-align: center; }
 @media (max-width: 640px) { .fb { padding: 10px 2px 4px; } .fb-label { min-width: 0; } }
+
+/* Stock per colour and size: "only n left" next to a size nearly gone in the chosen colour */
+.few-tag { font-size: 10.5px; font-weight: 700; line-height: 1.4; padding: 0 6px; border-radius: 999px; background: #fff4e0; color: var(--warn); vertical-align: middle; white-space: nowrap; }

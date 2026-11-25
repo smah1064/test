@@ -42,23 +42,25 @@
   $('pp').hidden = false;
 
   // Sold-out colours are shown (crossed out) but can't be picked.
-  let color = product.colors.find((c) => c.id === params.get('color') && POD.canPick(c)) || POD.firstPick(product.colors);
+  // (With stock per colour and size, a colour with nothing left in any size counts as sold out.)
+  const colorOk = (c) => POD.colorOk(product, c);
+  let color = product.colors.find((c) => c.id === params.get('color') && colorOk(c)) || product.colors.find(colorOk) || POD.firstPick(product.colors);
   // Until the customer picks a colour, each ready design is shown (and ordered) on its own
   // colour where this product has it: a design for a black T-shirt (white ink) on the black mug.
-  let picked = Boolean(product.colors.find((c) => c.id === params.get('color') && POD.canPick(c)));
+  let picked = Boolean(product.colors.find((c) => c.id === params.get('color') && colorOk(c)));
   const isDark = (hex) => POD.luminance(hex) < 0.45;
   const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
   const dist = (a, b) => rgb(a).reduce((sum, v, i) => sum + (v - rgb(b)[i]) ** 2, 0);
   /** The colour a ready design is shown on: the picked one, else the design's own (or the nearest of the same lightness). */
   function colorFor(d) {
     if (picked) return color;
-    const same = product.colors.find((c) => c.id === d.color && POD.canPick(c));
+    const same = product.colors.find((c) => c.id === d.color && colorOk(c));
     if (same) return same;
     const own = catalog.products.find((p) => p.id === d.product);
     const ownColor = own && own.colors.find((c) => c.id === d.color);
     const hex = ownColor && (own.surface || ownColor.hex);
     if (!hex || product.surface || isDark(hex) === isDark(color.hex)) return color;
-    const alike = product.colors.filter((c) => POD.canPick(c) && isDark(c.hex) === isDark(hex));
+    const alike = product.colors.filter((c) => colorOk(c) && isDark(c.hex) === isDark(hex));
     return alike.length ? alike.reduce((best, c) => (dist(c.hex, hex) < dist(best.hex, hex) ? c : best)) : color;
   }
   let cat = 'all';
@@ -141,21 +143,30 @@
     $('pp-name').textContent = tr(product.name);
     $('pp-desc').textContent = tr(product.description);
     $('pp-price').textContent = t('home.from', { price: money(product.basePrice) });
-    // Sizes: sold-out ones crossed out.
+    // Sizes: sold-out ones crossed out (sold out in every colour, or in the chosen one when stock is
+    // counted per colour and size), and "only n left" next to the ones nearly gone in the chosen colour.
     // (Each size its own box, so a label in one language and the tag in the other keep their order.)
-    const sizeText = (s) => (s.soldOut
-      ? `<span class="pp-size is-sold" title="${esc(t('soldOut'))}"><s>${esc(tr(s.label))}</s> <span class="sold-tag">${esc(t('soldOut'))}</span></span>`
-      : `<span class="pp-size">${esc(tr(s.label))}</span>`);
+    const sizeText = (s) => {
+      if (!POD.sizeOk(product, color.id, s)) {
+        const why = s.soldOut ? t('soldOut') : t('soldOutCombo', { colour: tr(color.name), size: tr(s.label) });
+        return `<span class="pp-size is-sold" title="${esc(why)}"><s>${esc(tr(s.label))}</s> <span class="sold-tag">${esc(t('soldOut'))}</span></span>`;
+      }
+      const few = POD.comboFew(product, color.id, s.id);
+      return few
+        ? `<span class="pp-size is-few" title="${esc(t('fewLeftCombo', { colour: tr(color.name), size: tr(s.label), n: POD.num(few) }))}">${esc(tr(s.label))} <span class="few-tag">${esc(t('pp.fewLeft', { n: POD.num(few) }))}</span></span>`
+        : `<span class="pp-size">${esc(tr(s.label))}</span>`;
+    };
     const sizeList = product.sizes.map(sizeText).join(' · ');
+    const lone = product.sizes.length === 1 && (!POD.sizeOk(product, color.id, product.sizes[0]) || POD.comboFew(product, color.id, product.sizes[0].id));
     $('pp-sizes').innerHTML = product.sizes.length > 1 ? esc(t('pp.sizes', { list: '\u0000' })).replace('\u0000', sizeList)
-      : product.sizes.length === 1 && product.sizes[0].soldOut ? sizeList : '';
+      : lone ? sizeList : '';
     // A few pieces left (stock counted by the shop).
     $('pp-few').hidden = !product.fewLeft;
     $('pp-few').textContent = product.fewLeft ? t('pp.fewLeft', { n: POD.num(product.fewLeft) }) : '';
     renderPicture();
     $('pp-color-name').textContent = tr(color.name);
     $('pp-color-label').textContent = product.colorLabel ? `${tr(product.colorLabel)}:` : t('panel.colour');
-    $('pp-swatches').innerHTML = product.colors.map((c) => (c.soldOut
+    $('pp-swatches').innerHTML = product.colors.map((c) => (!colorOk(c)
       ? `<button type="button" class="swatch sold-out" aria-disabled="true" data-sold="${esc(c.id)}" title="${esc(t('soldOutColor', { name: tr(c.name) }))}" aria-label="${esc(t('soldOutColor', { name: tr(c.name) }))}" style="background:${esc(c.hex)}"></button>`
       : `<button type="button" class="swatch ${c.id === color.id ? 'active' : ''}" data-color="${esc(c.id)}" title="${esc(tr(c.name))}" aria-label="${esc(tr(c.name))}" style="background:${esc(c.hex)}"></button>`)).join('');
     $('pp-scratch').href = `/editor?${q()}`;
