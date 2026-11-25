@@ -151,6 +151,41 @@ test('home search: كوب lists the mugs before the gift vouchers (كوبونا�
   assert.ok(tees.indexOf('tshirt') < tees.indexOf('sweatshirt') || !tees.includes('sweatshirt'));
 });
 
+test('home search: المج / للمج / والمج / بالمج find what مج finds (the mugs), in the same order', () => {
+  const { S, find } = home();
+  const mugs = find('مج');
+  for (const id of ['mug', 'magicmug', 'couplemugs']) assert.ok(mugs.includes(id), `مج finds ${id} (got ${mugs.join(', ')})`);
+  for (const q of ['المج', 'للمج', 'والمج', 'بالمج', 'المَج', 'المجات', 'المج الأبيض']) {
+    const want = q === 'المج الأبيض' ? find('مج ابيض') : mugs;
+    assert.deepStrictEqual(find(q), want, q);
+  }
+  // A design or product that says "المج" / "بالمج" is found by مج, mug and كوب.
+  for (const text of ['اشرب قهوتك بالمج', 'حوالين المج']) for (const q of ['مج', 'mug', 'كوب']) assert.ok(S.match(S.index(text), S.query(q)), `${q} finds "${text}"`);
+  // The earlier rules hold: أب alone is not after an article, and "with the" / "and the" + 2 letters is not an
+  // article unless the 2 are one of the shop's words (بالون, والده: as typed, not ون / ده).
+  assert.deepStrictEqual([...S.query('بالون')[0].forms], []);
+  assert.deepStrictEqual([...S.query('بالون')[0].concepts], []);
+  assert.ok(!S.match(S.index('ونش'), S.query('بالون')));
+  assert.ok(!S.match(S.index('ده هدية'), S.query('والده')));
+  assert.ok(S.match(S.index('بالونات عيد ميلاد'), S.query('بالون')));
+});
+
+test('ready designs: والمج / بالمج are the mug, والأب / بالأم the dad and the mum, not "forever" or the exams', () => {
+  const T = { ...D, mugAr: 'قهوة الصبح في المج القهوة', mug: 'Coffee first Coffee first coffee mug' };
+  const ix = Object.fromEntries(Object.entries(T).map(([id, t]) => [id, SEARCH.index(t)]));
+  const findT = (q) => Object.keys(T).filter((id) => SEARCH.match(ix[id], SEARCH.query(q)));
+  for (const q of ['مج', 'المج', 'للمج', 'والمج', 'بالمج']) {
+    const got = findT(q);
+    for (const id of ['mug', 'mugAr']) assert.ok(got.includes(id), `"${q}" finds ${id} (got ${got.join(', ') || 'nothing'})`);
+    for (const id of ['mum', 'dad', 'forever', 'exams']) assert.ok(!got.includes(id), `"${q}" is not ${id} (got ${got.join(', ')})`);
+  }
+  for (const [q, want, notWant] of [['والأب', ['dad'], ['forever', 'forever2', 'dimensions', 'heroes', 'mum']], ['بالأم', ['mum', 'mumAr'], ['exams', 'llama', 'dad']]]) {
+    const got = findT(q);
+    for (const id of want) assert.ok(got.includes(id), `"${q}" finds ${id} (got ${got.join(', ') || 'nothing'})`);
+    for (const id of notWant) assert.ok(!got.includes(id), `"${q}" is not ${id} (got ${got.join(', ')})`);
+  }
+});
+
 test('home search: مصلية / مصلاية find the prayer mat, فنجان the mugs, قميص the T-shirts', () => {
   const { find } = home();
   for (const w of ['مصلية', 'مصلاية', 'مصليه', 'المصلية', 'prayer mat', 'سجادة صلاة']) assert.strictEqual(find(w)[0], 'prayermat', `${w}: ${find(w).join(', ')}`);

@@ -174,9 +174,15 @@
     // The word after "the" / "for the" / "with the" / "and the" in front (التيشيرتات, للأفراح), when 3 letters or more
     // are left; after "the" / "for the", 2 are enough (الأم, للأب); "for" alone before an alef with 3 left (لأمي).
     // A word of 2 is only looked for with its article (للأب: الأب, as the shop's words list it): أب alone is also the
-    // "up" of ليفل أب and ستارت أب.
-    const article = (w) => { const m = /^(?:وال|بال|لل|ال)([ء-ي]{3,})$|^(?:لل|ال)([ء-ي]{2})$|^ل(ا[ء-ي]{2,})$/.exec(w); return m ? m[1] || m[2] || m[3] : ''; };
-    const bare = (w) => { const c = article(w); return !c ? [w] : c.length === 2 ? [w, `ال${c}`] : [w, c]; };
+    // "up" of ليفل أب and ستارت أب. One of the shop's words of 2 (مج, الأم, الأب) also after "with the" / "and the"
+    // (بالمج, والأب; not بالون or والده), and مج, a word of the shop alone, also without its article: المج, للمج, والمج
+    // and بالمج find what مج finds.
+    const article = (w) => {
+      const m = /^(?:وال|بال|لل|ال)([ء-ي]{3,})$|^(?:لل|ال)([ء-ي]{2})$|^ل(ا[ء-ي]{2,})$|^(?:وال|بال)([ء-ي]{2})$/.exec(w);
+      if (!m) return '';
+      return m[4] ? (sameAs.has(m[4]) || sameAs.has(`ال${m[4]}`) ? m[4] : '') : m[1] || m[2] || m[3];
+    };
+    const bare = (w) => { const c = article(w); return !c ? [w] : c.length === 2 ? [w, `ال${c}`, ...(sameAs.has(c) ? [c] : [])] : [w, c]; };
     const allForms = (w) => [...new Set(bare(w).flatMap(forms))];
     const conceptsOf = (w) => [...new Set(allForms(w).map((f) => sameAs.get(f)).filter(Boolean))];
     /** Two words that name one thing: "t shirt", "business cards", "بيزنس كارد". */
