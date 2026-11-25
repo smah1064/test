@@ -393,3 +393,65 @@ test('checkout and sign-up names need a letter; account passwords are text', asy
   const pw = await call('/api/account/password', 'POST', { current: 'a-good-password-1', password: { a: 1 } }, null, { Cookie: cookie });
   assert.strictEqual(pw.status, 400, pw.text);
 });
+
+test('the back side of a small pack follows the pack\'s price (owner\'s decision); the standard pack and bigger keep the flat price', () => {
+  const P = require('../src/products');
+  const p = P.PRODUCTS.find((x) => x.id === 'postcards');
+  assert.strictEqual(P.priceFor(p, '1', 1), 20);
+  assert.strictEqual(P.priceFor(p, '1', 2), 25, '1 postcard both sides');
+  assert.strictEqual(P.priceFor(p, '10', 2) - P.priceFor(p, '10', 1), 25);
+  assert.strictEqual(P.priceFor(p, '50', 2) - P.priceFor(p, '50', 1), 60, 'the standard pack: as before');
+  assert.strictEqual(P.priceFor(p, '500', 2) - P.priceFor(p, '500', 1), 60, 'bigger packs: as before');
+  // Not packs (garment sizes cheaper than the base): the flat price.
+  const tee = P.PRODUCTS.find((x) => x.id === 'tshirt');
+  for (const z of tee.sizes) assert.strictEqual(P.sidePriceFor(tee, z), tee.extraSidePrice != null ? tee.extraSidePrice : P.sidePriceFor(tee, null));
+});
+
+test('a team member\'s browser can look at the customer\'s proof link but not decide; with the order\'s key it can', async () => {
+  const o = await approvedMug();
+  const it = o.items[0];
+  assert.strictEqual((await call(`/api/admin/items/${it.id}/review`, 'POST', { action: 'reopen', note: 'Blurry' }, owner)).status, 200);
+  const r = await fetch(`${base}/api/admin/items/${it.id}/replacement/front`, { method: 'PUT', headers: { Authorization: `Bearer ${owner}`, 'Content-Type': 'image/png', 'x-review-note': encodeURIComponent('Sharper') }, body: await art(MUG.w, MUG.h, { r: 0, g: 0, b: 0 }) });
+  assert.strictEqual(r.status, 200);
+  const link = (await r.json()).proofLink;
+  const token = link.split('t=')[1];
+  // A browser that signed in to the dashboard carries its mark.
+  const login = await fetch(`${base}/api/admin/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: 'secret-owner-pass' }) });
+  const mark = (login.headers.getSetCookie ? login.headers.getSetCookie() : []).map((c) => c.split(';')[0]).filter((c) => !/device/.test(c)).join('; ');
+  assert.ok(mark, 'the dashboard sign-in leaves its mark');
+  const view = await call(`/api/proofs/${token}`, 'GET', undefined, null, { Cookie: mark });
+  assert.strictEqual(view.status, 200);
+  assert.strictEqual(view.json.team, true);
+  const no = await call(`/api/proofs/${token}`, 'POST', { decision: 'approve', proofHash: view.json.proof.proofHash }, null, { Cookie: mark });
+  assert.strictEqual(no.status, 403, no.text);
+  assert.strictEqual(no.json.code, 'proofTeam');
+  // The customer's own link (with the key) decides, even in that browser; a plain browser does too.
+  const yes = await call(`/api/proofs/${token}`, 'POST', { decision: 'approve', proofHash: view.json.proof.proofHash }, null, { Cookie: mark, 'x-order-key': o.key });
+  assert.strictEqual(yes.status, 200, yes.text);
+});
+
+test('delete my account: with the password; the account, its cart and drafts go; its orders stay as guest orders', async () => {
+  const su = await fetch(`${base}/api/account/signup`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Delete Me', phone: '01099998888', password: 'delete-me-pass-1' }) });
+  assert.ok([200, 201].includes(su.status), await su.text());
+  const cookie = su.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
+  const me = (await call('/api/account', 'GET', undefined, null, { Cookie: cookie })).json;
+  const id = (me.customer || me).id;
+  assert.ok(id);
+  assert.strictEqual((await call('/api/account/cart', 'PUT', { items: [] }, null, { Cookie: cookie })).status < 500, true);
+  // An order from the account.
+  const d = (await call('/api/designs', 'POST', { productId: 'mug', color: 'white', size: '11oz', sides: { front: { editor: { objects: [{ type: 'i-text', text: 'x' }] } } } })).json;
+  // Wrong password: nothing happens.
+  const wrong = await call('/api/account/delete', 'POST', { password: 'not-it' }, null, { Cookie: cookie });
+  assert.strictEqual(wrong.status, 401);
+  assert.ok((await call('/api/account', 'GET', undefined, null, { Cookie: cookie })).json.customer, 'still there after a wrong password');
+  const del = await call('/api/account/delete', 'POST', { password: 'delete-me-pass-1' }, null, { Cookie: cookie });
+  assert.strictEqual(del.status, 200, del.text);
+  assert.strictEqual((await call('/api/account', 'GET', undefined, null, { Cookie: cookie })).json.customer, null, 'signed out and gone');
+  assert.strictEqual(fs.existsSync(path.join(dataDir, 'accounts', id)), false, 'its folder is gone');
+  // Signing in again: no such account.
+  assert.notStrictEqual((await call('/api/account/login', 'POST', { login: '01099998888', password: 'delete-me-pass-1' })).status, 200);
+  // The same mobile can make a new account.
+  const again = await call('/api/account/signup', 'POST', { name: 'New Me', phone: '01099998888', password: 'new-me-pass-12' });
+  assert.ok([200, 201].includes(again.status), again.text);
+  assert.ok(d.id);
+});

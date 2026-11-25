@@ -144,3 +144,56 @@ test('Editor: red text on a black shirt shows (no warning); navy on black is war
     await srv.close();
   }
 });
+
+test('Account › Password › Delete my account (Arabic): asks to be sure and for the password, then the account is gone', { timeout: 90000 }, async () => {
+  const { chromium } = loadPlaywright();
+  const srv = await startServer();
+  const browser = await chromium.launch();
+  try {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
+    await ctx.addInitScript(() => { try { localStorage.setItem('pod-lang', 'ar'); } catch (e) { /* ignore */ } });
+    const page = await ctx.newPage();
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(String(e)));
+    page.on('dialog', (d) => d.accept().catch(() => {}));
+    await page.goto(`${srv.base}/account`);
+    const made = await page.evaluate(async () => (await fetch('/api/account/signup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'سارة', phone: '01066665555', password: 'sara-password-1' }) })).status);
+    assert.ok([200, 201].includes(made));
+    await page.goto(`${srv.base}/account?view=security`);
+    await page.waitForSelector('#del-open:visible');
+    assert.match(await page.textContent('.acct-delete h3'), /امسح حسابي/);
+    await page.click('#del-open');
+    await page.click('#del-go');
+    await page.waitForSelector('#del-msg:visible');
+    assert.match(await page.textContent('#del-msg'), /متأكد/);
+    await page.check('#del-sure');
+    await page.click('#del-go');
+    await page.waitForFunction(() => /كلمة المرور/.test(document.getElementById('del-msg').textContent));
+    await page.fill('#del-pw', 'sara-password-1');
+    await Promise.all([page.waitForURL(`${srv.base}/`), page.click('#del-go')]);
+    const me = await page.evaluate(async () => (await (await fetch('/api/account')).json()).customer);
+    assert.strictEqual(me, null);
+    assert.deepStrictEqual(errors, []);
+  } finally {
+    await browser.close();
+    await srv.close();
+  }
+});
+
+test('Editor: a single postcard says its back side costs its share (EGP 5), not the 50-card pack\'s 60', { timeout: 90000 }, async () => {
+  const { chromium } = loadPlaywright();
+  const { openEditor } = require('./helpers');
+  const srv = await startServer();
+  const browser = await chromium.launch();
+  try {
+    const ctx = await newContext(browser);
+    const page = await openEditor(ctx, srv.base, 'postcards', '&size=1');
+    await page.waitForFunction(() => document.body.innerText.includes('Add a second side for'));
+    const note = await page.evaluate(() => (document.body.innerText.match(/Add a second side for \+?[^\n]*/) || [''])[0]);
+    assert.match(note, /\b5\b/, note);
+    assert.doesNotMatch(note, /60/, note);
+  } finally {
+    await browser.close();
+    await srv.close();
+  }
+});

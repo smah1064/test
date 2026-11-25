@@ -122,7 +122,7 @@
       <section class="card proof-card" style="margin-top:16px" aria-labelledby="decide-h">
         <h2 id="decide-h" style="font-size:18px;margin:0">${esc(t('proofPage.decide'))}</h2>
         ${PODProof.screenNote()}
-        ${waiting ? decideHtml() : `<p class="notice" role="status">${esc(t('proofPage.notWaiting', { status: statusText(d.status) }))}</p><div>${editAgain(d) || orderLink(d)}</div>`}
+        ${waiting && d.team ? `<p class="notice" role="status">${esc(t('proofPage.team'))}</p>` : waiting ? decideHtml() : `<p class="notice" role="status">${esc(t('proofPage.notWaiting', { status: statusText(d.status) }))}</p><div>${editAgain(d) || orderLink(d)}</div>`}
       </section>`;
     if (focused && document.getElementById(focused)) document.getElementById(focused).focus();
   }
@@ -132,9 +132,11 @@
     st.formError = '';
     render();
     try {
+      // (With the order's key when the link has it: a team member's own order, opened from its email, still decides.)
+      const oid = st.data.order && st.data.order.id;
       const r = await POD.api('/api/proofs/' + encodeURIComponent(token), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(oid ? POD.orderHeaders(POD.orderKey(oid, linkKey)) : {}) },
         body: JSON.stringify(decision === 'reject' ? { decision, comment } : { decision, proofHash: st.data.proof.proofHash }),
       });
       if (r && r.orderId && st.data.order && !st.data.order.id) st.data.order.id = r.orderId;
@@ -244,7 +246,7 @@
       return render();
     }
     try {
-      const data = await POD.api('/api/proofs/' + encodeURIComponent(token));
+      const data = await POD.api('/api/proofs/' + encodeURIComponent(token), { headers: POD.orderHeaders(linkKey) });
       if (!data || !data.proof || !data.order) throw Object.assign(new Error(''), { status: 404 });
       Object.assign(st, { view: 'proof', data, error: null });
     } catch (e) {

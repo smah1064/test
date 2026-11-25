@@ -335,6 +335,30 @@
       b.disabled = false;
     }
   });
+  // Delete my account: with the password (or, with no password, ticking that they're sure).
+  $('del-open').addEventListener('click', () => {
+    $('del-box').hidden = false;
+    $('del-pw-field').hidden = !me.hasPassword;
+    $('del-msg').hidden = true;
+    (me.hasPassword ? $('del-pw') : $('del-sure')).focus();
+  });
+  $('del-cancel').addEventListener('click', () => { $('del-box').hidden = true; $('del-pw').value = ''; $('del-sure').checked = false; });
+  $('del-go').addEventListener('click', async () => {
+    const say = (m) => { $('del-msg').textContent = m; $('del-msg').hidden = false; };
+    if (!$('del-sure').checked) return say(t('acct.deleteTick'));
+    if (me.hasPassword && !$('del-pw').value) return say(t('acct.deleteNeedPw'));
+    $('del-go').disabled = true;
+    try {
+      await POD.api('/api/account/delete', json('POST', me.hasPassword ? { password: $('del-pw').value } : { confirm: true }));
+      try { localStorage.removeItem('pod-acct'); } catch (e) { /* private mode */ }
+      alert(t('acct.deleted'));
+      location.href = '/';
+    } catch (err) {
+      say(err.message);
+    } finally {
+      $('del-go').disabled = false;
+    }
+  });
   $('v-security').addEventListener('submit', (e) => {
     e.preventDefault();
     submit($('v-security'), async () => {

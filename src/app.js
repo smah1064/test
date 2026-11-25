@@ -664,6 +664,16 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     return null;
   }
   /**
+   * A team member's (or the owner's) browser deciding for the customer from the customer's own link (the proof link or
+   * the edit link shown in Review): refused, unless this browser has the order's key or the customer's account. The
+   * shop decides for a customer in Review, with a note of how they confirmed (owner's decision, 25 Nov).
+   */
+  function teamActingAsCustomer(req, order) {
+    const pw = previewWho(req);
+    if (!pw || !(pw.startsWith('owner-') || pw.startsWith('s-'))) return false;
+    return !(order.linkKey ? orderOpenFor(req, order) : false);
+  }
+  /**
    * Where to send someone back to on this site: a path starting with exactly one "/" (never
    * "//other.site" or "/\\other.site"), else the home page; `code` adds ?code=wrong / wait.
    */
@@ -1045,7 +1055,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (!d) throw new HttpError(404, 'proofNotFound');
       res.set('Cache-Control', 'no-store');
       const reviseLink = item.status === 'changes_requested' ? reviseLinkOf(order, item) : null;
-      res.json({ order: { id: order.id, number: order.number }, item: { id: item.id, position: order.items.indexOf(item) + 1, productName: item.productName }, proof: await proofFor(d), note: (item.review && item.review.note) || null, status: item.status, ...(reviseLink ? { reviseLink } : {}) });
+      const team = teamActingAsCustomer(req, order);
+      res.json({ ...(team ? { team: true } : {}), order: { id: order.id, number: order.number }, item: { id: item.id, position: order.items.indexOf(item) + 1, productName: item.productName }, proof: await proofFor(d), note: (item.review && item.review.note) || null, status: item.status, ...(reviseLink ? { reviseLink } : {}) });
     } catch (e) {
       next(e);
     }
@@ -1055,6 +1066,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (!found) throw new HttpError(404, 'proofNotFound');
     const { order, item } = found;
     if (item.status !== 'awaiting_approval') throw new HttpError(409, 'proofDone');
+    if (teamActingAsCustomer(req, order)) throw new HttpError(403, 'proofTeam');
     const d = store.getDesign(item.designId);
     const b = req.body || {};
     const comment = String(b.comment || '').replace(/[\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 1000);
@@ -3179,6 +3191,35 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     setSession(req, res, null);
     res.json({ ok: true });
   });
+  // ---------- Delete my account (owner's decision, 25 Nov; the privacy page and the app stores ask for it) ----------
+  // The account and everything kept for it go at once: name, mobile, email, password, address, Google / Facebook
+  // links, the cart and the designs saved on the account. Orders already placed stay (delivery and the shop's
+  // accounts need them): they become guest orders, still opened from their links. With the password, or (an account
+  // with none, made with Google) ticking that they're sure.
+  app.post('/api/account/delete', express.json({ limit: '10kb' }), (req, res) => {
+    if (req.get('sec-fetch-site') === 'cross-site') throw new HttpError(403, 'notFound');
+    const origin = req.get('origin');
+    if (origin && origin !== 'null' && linkBase(req) && origin !== linkBase(req) && !SHOP_HOSTS.some((h) => origin.endsWith('//' + h))) throw new HttpError(403, 'notFound');
+    const me = signedIn(req);
+    limitCheck(req, 'accountLoginId', me.id);
+    const b = req.body || {};
+    if (me.passHash) {
+      if (typeof b.password !== 'string' || !customers.checkPassword(me, b.password)) {
+        limitHit('accountLoginId', me.id);
+        throw new HttpError(401, 'acctWrongCurrent');
+      }
+    } else if (b.confirm !== true) throw new HttpError(400, 'acctDeleteConfirm');
+    store.mutate((db) => {
+      db.customers = (db.customers || []).filter((x) => x.id !== me.id);
+      for (const o of db.orders || []) if (o.customerId === me.id) delete o.customerId;
+    });
+    // (Its own folder only: never the folder of all accounts.)
+    const own = String(me.id || '').replace(/[^A-Za-z0-9_-]/g, '');
+    if (own) fs.rmSync(path.join(store.dataDir, 'accounts', own), { recursive: true, force: true });
+    setSession(req, res, null);
+    console.log('[account] a customer deleted their account');
+    res.json({ ok: true });
+  });
   app.put('/api/account', express.json({ limit: '10kb' }), (req, res) => {
     const me = signedIn(req);
     const b = req.body || {};
@@ -3513,11 +3554,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   // The editor's "edit it and send it again": is the item still waiting for changes, and the shop's note.
   app.get('/api/orders/:id/items/:itemId/revise', (req, res) => {
     res.set({ 'Cache-Control': 'private, no-store' });
-    const { item } = reviseItemFor(req);
+    const { order, item, byLink } = reviseItemFor(req);
     const hist = Array.isArray(item.approvals) ? item.approvals : [];
     const last = [...hist].reverse().find((h) => h && (h.action === 'changes' || h.action === 'rejected'));
     const note = (last && last.note) || (item.review && item.review.note) || null;
-    res.json({ status: item.status, note, by: last ? last.by : null });
+    res.json({ status: item.status, note, by: last ? last.by : null, ...(byLink && teamActingAsCustomer(req, order) ? { team: true } : {}) });
   });
   /** The order the customer asks about, or 404 / 403 (the link without its key: "open it from your email"). */
   function customerOrderFor(req, id) {
@@ -3765,6 +3806,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const { order, item, byLink } = reviseItemFor(req);
     if (item.status !== 'changes_requested') throw new HttpError(409, 'reviseNotNeeded');
     if (item.kind) throw new HttpError(409, 'reviseNotEditable'); // books, photo sets, film sheets
+    if (byLink && teamActingAsCustomer(req, order)) throw new HttpError(403, 'reviseTeam');
     const { d, delta, fields } = checkNewVersion(req, item, (req.body || {}).designId);
     // Checked again and changed under the store's lock, on the latest data (another copy of the app
     // may have answered the same item or ordered the same design a moment ago).

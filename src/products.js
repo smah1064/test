@@ -2762,12 +2762,22 @@ for (const p of PRODUCTS) {
   }
 }
 
+/**
+ * What a second printed side adds to one piece of a size. For packs smaller than the product's standard one
+ * (1, 10, 25 cards…) it follows the pack's price: 1 postcard at 20 EGP gets its back for 5, not the 60 of the
+ * standard 50-card pack (owner's decision, 25 Nov). The standard pack and bigger ones keep the flat price.
+ */
+function sidePriceFor(product, size) {
+  const perSide = product.extraSidePrice != null ? product.extraSidePrice : EXTRA_SIDE_PRICE;
+  // (In whole pounds, as the pack prices are; never free when the back costs something.)
+  if (size && size.pack && size.surcharge < 0 && product.basePrice > 0 && perSide > 0) return Math.max(1, Math.round((perSide * Math.max(0, product.basePrice + size.surcharge)) / product.basePrice));
+  return perSide;
+}
 function priceFor(product, sizeId, sideCount) {
   const size = product.sizes.find((s) => s.id === sizeId);
   if (!size) return null;
   const extraSides = Math.max(0, sideCount - 1);
-  const perSide = product.extraSidePrice != null ? product.extraSidePrice : EXTRA_SIDE_PRICE;
-  return round2(product.basePrice + size.surcharge + extraSides * perSide);
+  return round2(product.basePrice + size.surcharge + extraSides * sidePriceFor(product, size));
 }
 
 function shippingFor(subtotal) {
@@ -2833,6 +2843,7 @@ for (const p of PRODUCTS) {
 }
 
 module.exports = {
+  sidePriceFor,
   PRODUCTS,
   EMBROIDERY,
   embroideryFor,

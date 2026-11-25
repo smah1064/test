@@ -93,6 +93,7 @@
     'rv.action.reopened': ['Sent back to Review', 'رجعت للمراجعة'],
     'rv.action.edited': ['Edited by the shop in the editor', 'إبداع عدّلها في المحرر'],
     'rv.via.shop-edit': ['by the shop, without asking the customer', 'من إبداع، من غير ما يسأل العميل'],
+    'rv.linkForCustomer': ['For the customer only: copy it and send it to them. Opened from the team\'s browsers it shows the proof but can\'t approve; to approve for them, use "Approve for printing" with a note.', 'للعميل بس: انسخه وابعته له. لو اتفتح من متصفحات الفريق هيعرض البروفة بس مش هيوافق؛ عشان توافق بالنيابة عنه استخدم "وافق على الطباعة" مع ملاحظة.'],
     'rv.shopEdit': ['Edit the design in the editor', 'عدّل التصميم في المحرر'],
     'rv.shopEditHelp': ['Opens the customer\'s design in a new tab. When you save, send it to the customer to approve, or print it without asking them.', 'بيفتح تصميم العميل في تاب جديد. لما تحفظ، ابعته للعميل يوافق عليه، أو اطبعه من غير ما تسأله.'],
     'rv.shopEditHelpTeam': ['Opens the customer\'s design in a new tab. When you save, send it to the customer to approve, or ask an owner to approve printing it without asking the customer.', 'بيفتح تصميم العميل في تاب جديد. لما تحفظ، ابعته للعميل يوافق عليه، أو اطلب من صاحب الموقع يوافق إنه يتطبع من غير ما نسأل العميل.'],

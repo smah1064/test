@@ -151,6 +151,7 @@ Object.assign(window.POD_STRINGS, {
   'item.changesHint': ['We’ll send you a new proof once the changes are made.', 'هنبعتلك بروفة جديدة بعد التعديلات.'],
   'item.shopNote': ['Note from our team: {note}', 'ملاحظة من فريقنا: {note}'],
   'item.yourNote': ['You asked: {note}', 'طلبك: {note}'],
+  'proofPage.team': ['This is the customer’s own proof link: you can look, but the customer decides here. To approve for them, use “Approve for printing” in Review with a note of how they confirmed.', 'ده لينك البروفة بتاع العميل: تقدر تشوف بس، والعميل هو اللي يقرر من هنا. عشان توافق بالنيابة عنه، استخدم “وافق على الطباعة” في المراجعة مع ملاحظة إزاي أكّد.'],
   'item.approvedOn': ['Approved on {date} (version {v})', 'وافقت عليها يوم {date} (النسخة {v})'],
   'item.approvedByShop': ['Adjusted and approved by the shop on {date} (version {v})', 'إبداع ظبطتها ووافقت عليها يوم {date} (النسخة {v})'],
   'item.sampleFirst': ['A sample is printed first', 'هتتطبع عينة الأول'],

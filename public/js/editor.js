@@ -4259,7 +4259,7 @@
     const p = st.product;
     const size = p.sizes.find((s) => s.id === st.sizeId);
     const n = decoratedCount();
-    const perSide = p.extraSidePrice != null ? p.extraSidePrice : catalog.pricing.extraSide;
+    const perSide = sidePrice(p, size);
     const embFee = usesEmb() ? emb().surcharge : 0;
     const unit = p.basePrice + size.surcharge + Math.max(0, n - 1) * perSide + embFee;
     const notes = [];
@@ -4307,11 +4307,17 @@
     const lines = qtyLines();
     if (lines.length === 1 && lines[0].color === fromColor && lines[0].size === fromSize) st.qty = { [st.colorId]: { [st.sizeId]: lines[0].qty } };
   }
+  /** What a second printed side adds to one piece of a size (small packs: their share of it, as the server's sidePriceFor). */
+  function sidePrice(p, size) {
+    const perSide = p.extraSidePrice != null ? p.extraSidePrice : catalog.pricing.extraSide;
+    if (size && size.pack && size.surcharge < 0 && p.basePrice > 0 && perSide > 0) return Math.max(1, Math.round((perSide * Math.max(0, p.basePrice + size.surcharge)) / p.basePrice));
+    return perSide;
+  }
   function unitPrice(sizeId) {
     const p = st.product;
     const size = p.sizes.find((s) => s.id === sizeId) || p.sizes[0];
     const n = decoratedCount();
-    const perSide = p.extraSidePrice != null ? p.extraSidePrice : catalog.pricing.extraSide;
+    const perSide = sidePrice(p, size);
     return p.basePrice + size.surcharge + Math.max(0, n - 1) * perSide + (usesEmb() ? emb().surcharge : 0) + optionsPrice(size.id);
   }
   /** Product options (business-card lamination…): what the chosen ones add to one piece of a size. */
@@ -5646,6 +5652,7 @@
     // Pictures imported from other sites: the customer confirms the rights first.
     const imported = hasImports();
     if (imported && !(await confirmRights())) return;
+    if (st.revise && st.revise.team) return toast(t('revise.team'), 'error');
     // The shop's own edit: what changed, and where it goes (asked before anything is saved).
     let shopChoice = null;
     if (st.shopEdit) {
@@ -6046,6 +6053,11 @@
       if (!state || state.status !== 'changes_requested') {
         reviseOver();
         return;
+      }
+      // (A team member's browser with the customer's own edit link: said now, not after the whole upload.)
+      if (state.team) {
+        st.revise.team = true;
+        toast(t('revise.team'), 'error');
       }
       // The shop's note, kept in view while the customer makes the change.
       const last = { by: state.by };

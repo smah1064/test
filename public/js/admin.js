@@ -3032,7 +3032,8 @@
     return `
       <section class="rv-box">
         <h3>${esc(t('rv.link'))}</h3>
-        ${link ? `<div class="rv-link"><input type="text" readonly dir="ltr" id="rv-link-${id}" value="${esc(absLink(link))}" aria-label="${esc(t('rv.link'))}"><button class="btn btn-sm" type="button" data-rv-copy="${id}">${esc(t('rv.copy'))}</button></div>` : edit ? '' : `<p class="muted small">${esc(t('rv.linkNone'))}</p>`}
+        ${link ? `<div class="rv-link"><input type="text" readonly dir="ltr" id="rv-link-${id}" value="${esc(absLink(link))}" aria-label="${esc(t('rv.link'))}"><button class="btn btn-sm" type="button" data-rv-copy="${id}">${esc(t('rv.copy'))}</button></div>
+          <p class="muted small" style="margin:4px 0 0">${esc(t('rv.linkForCustomer'))}</p>` : edit ? '' : `<p class="muted small">${esc(t('rv.linkNone'))}</p>`}
         ${edit ? `<p class="small" style="margin:8px 0 4px"><b>${esc(t('rv.editLink'))}</b></p>
           <div class="rv-link"><input type="text" readonly dir="ltr" id="rv-link-edit-${id}" value="${esc(absLink(edit))}" aria-label="${esc(t('rv.editLink'))}"><button class="btn btn-sm" type="button" data-rv-copy="edit-${id}">${esc(t('rv.copy'))}</button></div>
           <p class="muted small" style="margin:4px 0 0">${esc(t('rv.editLinkHelp'))}</p>` : ''}
