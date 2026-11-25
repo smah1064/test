@@ -34,6 +34,8 @@ const money = (v, { min = 0, max = 1e7 } = {}) => {
 };
 
 // ---------- Prices ----------
+// Shared with the admin's price screens (they warn about the same packs before saving).
+const packPrices = require('../public/js/pack-prices.js');
 let defaults = null;
 /** Remember the built-in prices; give each product its own size objects so prices can differ. */
 function initPricing(products, extraSideDefault) {
@@ -188,6 +190,19 @@ function cleanPricing(product, body) {
     if (finalBase + sur < 1) return { error: 'badPrice' };
   }
   return { pricing: out };
+}
+
+/**
+ * Bigger packs that cost less in total than a smaller pack of the same kind, at the product's prices as
+ * they stand (the owner's own price for 1 brochure stays 40 while a lower product price takes 10 brochures
+ * down to 35: customers would buy the 10). Prices as the shop charges them: one of each size with one
+ * printed side and no extras (those cost the same, or more, on a bigger pack). Only a warning for the
+ * owner: nothing is refused because of it.
+ * -> [{ bigger: { id, label, price }, smaller: { id, label, price } }]
+ */
+function cheaperBiggerPacks(product) {
+  const prices = Object.fromEntries(product.sizes.map((s) => [s.id, round2(product.basePrice + (s.surcharge || 0))]));
+  return packPrices.cheaperBiggerPacks(product.sizes, prices);
 }
 
 // ---------- Costs ----------
@@ -364,6 +379,6 @@ function cleanExpense(body) {
 module.exports = {
   catalogChanged,
   defaultsFor: (id) => (defaults && defaults[id]) || null,
-  round2, money, localDay, initPricing, applyPricing, cleanPricing, cleanCosts, itemCostFrom, itemCost, report, reportCsv, cleanExpense, EXPENSE_CATEGORIES,
+  round2, money, localDay, initPricing, applyPricing, cleanPricing, cheaperBiggerPacks, cleanCosts, itemCostFrom, itemCost, report, reportCsv, cleanExpense, EXPENSE_CATEGORIES,
   defaultsFor: (id) => defaults && defaults[id],
 };

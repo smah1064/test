@@ -1184,32 +1184,41 @@
           <span role="cell" class="pm-final" data-final="${esc(z.id)}">${esc(POD.money((Number(P.basePrice) || 0) + (Number(z.surcharge) || 0)))}</span>
         </div>`).join('')}
       </div>
-      <p class="muted small">${esc(t('pm.pricesEmpty'))}</p>`;
+      <p class="muted small">${esc(t('pm.pricesEmpty'))}</p>
+      <div data-pack-warn aria-live="polite">${packWarnHtml(POD_PACKS.cheaperBiggerPacks(P.sizes, Object.fromEntries(P.sizes.map((z) => [z.id, r2(P.basePrice + (Number(z.surcharge) || 0))]))))}</div>`;
     return owner() ? html : html.replace(/<input /g, '<input disabled ');
   }
   function updateFinals() {
     const raw = val('basePrice');
-    const b = Number(raw) || 0;
     const P = S.P;
-    const built = P && P.original && P.original.prices;
+    // Each size's price once saved, worked out as the server will (public/js/pack-prices.js): a small pack
+    // (1, 10, 25 copies) left as shown stays as it is (the owner's own price for it stays that price
+    // whatever the product's price, and a pack that follows the product's price gets its share of the new
+    // price, never under 1 EGP), and an emptied box goes back to the original price.
+    const prices = POD_PACKS.savedPrices(P, P.original && P.original.prices, { basePrice: raw, sizes: Object.fromEntries(P.sizes.map((z) => [z.id, val('ps.' + z.id)])) });
     root.querySelectorAll('[data-final]').forEach((el) => {
-      if (raw === '') { el.textContent = t('pm.asBuilt'); return; }
-      const id = el.dataset.final;
-      const typedRaw = val('ps.' + id);
-      const typed = Number(typedRaw) || 0;
-      // A small pack (1, 10, 25 copies) left as shown stays as it is, as the server will save it: the
-      // owner's own price for it stays that price whatever the product's price, and a pack that follows
-      // the product's price (or whose box was emptied) gets its share of the new price, never under 1 EGP.
-      const z = P && P.sizes.find((x) => x.id === id);
-      const defS = built && built.sizes ? Number(built.sizes[id]) : 0;
-      const defB = built ? Number(built.basePrice) : 0;
-      const share = (base) => Math.max(1, Math.round((base * (defB + defS)) / defB));
-      if (z && z.smallPack && defB > 0 && (typedRaw === '' || typed === (Number(z.surcharge) || 0))) {
-        el.textContent = POD.money(z.ownPrice && typedRaw !== '' ? (Number(P.basePrice) || 0) + typed : share(b));
-        return;
-      }
-      el.textContent = POD.money(b + typed);
+      el.textContent = raw === '' ? t('pm.asBuilt') : POD.money(prices[el.dataset.final]);
     });
+    showPackWarnings(P, prices);
+  }
+  /** Bigger packs that would cost less than smaller ones at the prices typed (a warning: saving still works). */
+  function showPackWarnings(P, prices) {
+    const box = root.querySelector('[data-pack-warn]');
+    if (box) box.innerHTML = packWarnHtml(POD_PACKS.cheaperBiggerPacks(P.sizes, prices));
+  }
+  /**
+   * The owner's warning about packs priced the wrong way round (POD_PACKS.cheaperBiggerPacks), one line
+   * each: "10 brochures (EGP 35) costs less than 1 brochure (EGP 40)". Also used by Accounts → Prices.
+   */
+  function packWarnHtml(list) {
+    if (!owner() || !list || !list.length) return '';
+    const b = (s) => `<bdi>${esc(s)}</bdi>`;
+    const line = (w) => t('pm.packWarn.line', { big: b(tr(w.bigger.label)), bigPrice: b(POD.money(w.bigger.price)), small: b(tr(w.smaller.label)), smallPrice: b(POD.money(w.smaller.price)) });
+    return `<div class="pack-warn">
+      <b class="pack-warn-title">${esc(t('pm.packWarn.title'))}</b>
+      <ul>${list.map((w) => `<li>${line(w)}</li>`).join('')}</ul>
+      <p class="small">${esc(t('pm.packWarn.help'))}</p>
+    </div>`;
   }
   function savePrices(P) {
     const sizes = Object.fromEntries(P.sizes.map((z) => [z.id, val('ps.' + z.id) == null ? '' : val('ps.' + z.id)]));
@@ -2046,5 +2055,5 @@
     if (root) root.innerHTML = '';
   }
 
-  window.AdminProducts = { init, show, onLang, reset: reset_, busy: () => S.view === 'edit' && S.dirty.size > 0 };
+  window.AdminProducts = { init, show, onLang, reset: reset_, busy: () => S.view === 'edit' && S.dirty.size > 0, packWarnHtml };
 })();

@@ -1879,7 +1879,26 @@
           <label class="small">${esc(t('acc.sizeCost'))} ${field(p.id, 'sizecost:' + sz.id, v('sizecost:' + sz.id, sz.costExtra))}</label>
         </div>`).join('')}</div><p class="muted small" style="margin:6px 0 0">${esc(t('acc.sizesHelp'))}</p></td></tr>`;
     }
+    // Products sold in small packs: a warning when a bigger pack would cost less than a smaller one.
+    if (p.sizes.some((z) => z.smallPack)) {
+      const warn = packWarnings(p);
+      html += `<tr class="acc-pack-warn" data-pack-warn="${esc(p.id)}" ${warn ? '' : 'hidden'}><td colspan="10" aria-live="polite">${warn}</td></tr>`;
+    }
     return html;
+  }
+  /**
+   * Bigger packs that cost less than smaller ones at the row's prices as they will be saved (as they are
+   * now when nothing is typed), worked out as the server will (public/js/pack-prices.js): a warning under
+   * the product's row, saving still works.
+   */
+  function packWarnings(p) {
+    if (!window.POD_PACKS || !window.AdminProducts) return '';
+    const e = acc.edits[p.id] || {};
+    const v = (k, def) => (e[k] !== undefined ? e[k] : def);
+    // (Which small packs have the owner's own price: the row doesn't say, so it's read from their amounts.)
+    const now = POD_PACKS.withOwnPrices(p, p.defaults);
+    const prices = POD_PACKS.savedPrices(now, p.defaults, { basePrice: v('basePrice', p.basePrice), sizes: Object.fromEntries(p.sizes.map((z) => [z.id, v('size:' + z.id, z.surcharge)])) });
+    return AdminProducts.packWarnHtml(POD_PACKS.cheaperBiggerPacks(p.sizes, prices));
   }
 
   document.querySelectorAll('[data-acc-view]').forEach((b) => b.addEventListener('click', () => {
@@ -1951,12 +1970,22 @@
     const tr0 = el.closest('tr').classList.contains('acc-detail') ? el.closest('tr').previousElementSibling : el.closest('tr');
     const tmp = document.createElement('tbody');
     tmp.innerHTML = priceRow(p, (a, b, c, d = '') => `<input value="${c}" ${d}>`);
-    tr0.cells[7].innerHTML = tmp.rows[0].cells[7].innerHTML;
-    tr0.cells[7].className = tmp.rows[0].cells[7].className;
+    // (The profit cell is the one before the save button. Since the embroidery column came in, the 8th cell
+    // is the packaging cost box: redrawing that one swapped it for a plain box whose typing didn't count.)
+    const PROFIT = tr0.cells.length - 2;
+    tr0.cells[PROFIT].innerHTML = tmp.rows[0].cells[PROFIT].innerHTML;
+    tr0.cells[PROFIT].className = tmp.rows[0].cells[PROFIT].className;
     const btn = tr0.querySelector('[data-price-save]');
     btn.disabled = false;
     btn.classList.add('btn-primary');
     tr0.classList.add('is-edited');
+    // The pack-price warning follows the prices as typed.
+    const warnRow = $('tab-accounts').querySelector(`[data-pack-warn="${CSS.escape(pid)}"]`);
+    if (warnRow) {
+      const warn = packWarnings(p);
+      warnRow.hidden = !warn;
+      warnRow.cells[0].innerHTML = warn;
+    }
   });
   $('tab-accounts').addEventListener('change', async (e) => {
     const el = e.target;

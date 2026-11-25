@@ -185,6 +185,14 @@
 .pm-pt-row.is-off { opacity: .6; }
 .pm-pt-row input { padding: 6px 9px; }
 .pm-final { font-weight: 700; font-variant-numeric: tabular-nums; }
+/* A bigger pack cheaper than a smaller one (here and in Accounts → Prices): a warning, saving still works. */
+.pack-warn { margin-top: 12px; padding: 10px 14px; border-radius: 10px; background: #fff1d6; color: #6b4200; border: 1px solid #f1d9a6; line-height: 1.6; white-space: normal; max-width: 760px; }
+.pack-warn-title::before { content: "⚠ "; }
+.pack-warn ul { margin: 4px 0 6px; padding-inline-start: 20px; }
+.pack-warn li { margin: 2px 0; font-weight: 600; }
+.pack-warn p { margin: 0; color: #7a5410; }
+.acc-prices tr.acc-pack-warn > td { padding-top: 0; background: transparent; }
+.acc-pack-warn .pack-warn { margin-top: 0; }
 
 /* Print setup */
 .pm-preview-colors { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }

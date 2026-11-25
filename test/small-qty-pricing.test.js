@@ -96,7 +96,7 @@ function productsPreview(P, form) {
   assert.ok(m, 'updateFinals in admin-products.js');
   const cells = P.sizes.map((z) => ({ dataset: { final: z.id }, textContent: '' }));
   vm.runInNewContext(`${m[0]}\nupdateFinals();`, {
-    S: { P }, POD: { money: (v) => v }, t: (k) => k,
+    S: { P }, POD: { money: (v) => v }, t: (k) => k, POD_PACKS: require('../public/js/pack-prices.js'), showPackWarnings: () => {},
     val: (name) => (form[name] !== undefined ? String(form[name]) : undefined),
     root: { querySelectorAll: () => cells },
   });

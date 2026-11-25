@@ -233,6 +233,10 @@ Object.assign(window.POD_STRINGS, {
   'pm.finalPrice': ['Customer pays', 'الزبون بيدفع'],
   'pm.pricesEmpty': ['Empty a box to go back to the original price.', 'فضّي الخانة عشان يرجع السعر الأصلي.'],
   'pm.pricesChanged': ['The prices are not the original ones.', 'الأسعار مش الأصلية.'],
+  // A bigger pack cheaper than a smaller one (Products → Prices and Accounts → Prices); a warning only.
+  'pm.packWarn.title': ['Check the pack prices', 'راجع أسعار الكميات'],
+  'pm.packWarn.line': ['{big} ({bigPrice}) costs less than {small} ({smallPrice}). Customers would buy the bigger pack.', '{big} ({bigPrice}) أرخص من {small} ({smallPrice}). الزباين هيشتروا الكمية الأكبر.'],
+  'pm.packWarn.help': ['This is only a warning: you can still save. To fix it, lower the smaller pack\'s price or raise the bigger one\'s.', 'ده تنبيه بس، وتقدر تحفظ عادي. عشان تظبطها، نزّل سعر الكمية الأصغر أو زوّد سعر الكمية الأكبر.'],
 
   // Print setup
   'pm.previewColour': ['Drawing colour', 'لون الرسمة'],
