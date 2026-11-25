@@ -10,7 +10,8 @@
  * - backups/ itself (a backup never holds older backups);
  * - .session-secret: the key that signs sign-ins and download links. A backup that went astray can't be used to
  *   sign in as anyone; restoring one only signs everyone out once (and links sent to printing houses are sent again);
- * - .signin-limits.json and half-written files (*.lock, *.tmp, *.part): they mean nothing in another copy.
+ * - .signin-limits.json and half-written files (*.lock, *.tmp, *.part): they mean nothing in another copy;
+ * - models/: the background-removal model (178 MB, src/bgremove.js), downloaded again on first need when missing.
  * The site's code is on GitHub, and its passwords and keys are in the host's settings, not in this folder.
  */
 const fs = require('fs');
@@ -21,7 +22,7 @@ const { Readable } = require('stream');
 const { pipeline } = require('stream/promises');
 
 const NAME_RE = /^ebda3-backup-\d{8}-\d{4}(?:-\d{1,3})?\.tar\.gz$/;
-const SKIP_TOP = new Set(['backups', '.session-secret', '.signin-limits.json']);
+const SKIP_TOP = new Set(['backups', '.session-secret', '.signin-limits.json', 'models']);
 const SKIP_NAME = /(?:\.lock|\.tmp|\.part)$|^\.session-secret\./;
 const KEEP_DAYS = 3; // a finished backup waits this long on the server to be downloaded
 const KEEP_COUNT = 2; // and only the newest two are kept (each is as big as the shop's files)

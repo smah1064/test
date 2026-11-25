@@ -229,7 +229,7 @@ The site installs like an app ("Add to Home Screen"): its own icon, full screen,
 Everything the shop saves is in one folder (`DATA_DIR`; on Hostinger `/home/u893141490/pod-data`, outside the website folder, so deploys never touch it): `db.json` (orders, customers, coupons, the team, approvals), `files/` (customers' designs and print files), `catalog-photos/`, `library/`, `shares/`, `approvals/`, `models/`, `pdf-uploads/`, `activity.jsonl`. The code is on GitHub; passwords and keys are in Hostinger's environment variables (keep a copy in a password manager).
 
 - **Dashboard → Backups (النسخ الاحتياطي), owners only** (permission `backup`): "Make a backup now" builds one `.tar.gz` of the folder in the background (`src/backup.js`; progress on the page), then **Download** gets a signed link (`/dl/backup/<name>?e=&s=`, 6 hours) that the browser saves itself: no size limit in the page, and an interrupted download can be resumed. Made, downloaded and deleted backups are in the activity log.
-- Left out: `backups/` itself, `.session-secret` (the key that signs sign-ins and download links: a backup that went astray can't be used to sign in as anyone), `.signin-limits.json` and half-written files.
+- Left out: `backups/` itself, `.session-secret` (the key that signs sign-ins and download links: a backup that went astray can't be used to sign in as anyone), `.signin-limits.json`, `models/` (the 178 MB background-removal model: a restored shop downloads it again the first time it is needed) and half-written files.
 - Kept on the server for 3 days (the newest 2), then deleted; one is made at a time, and a backup is refused when the server hasn't room for another copy of the folder.
 - The file has customers' details: keep it private and delete old copies.
 

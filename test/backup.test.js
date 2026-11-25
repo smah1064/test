@@ -51,7 +51,7 @@ function untar(buf) {
   return out;
 }
 
-test('the archive: every file with its bytes, long and Arabic names whole, the sign-in key and backups left out', async () => {
+test('the archive: every file with its bytes, long and Arabic names whole, the sign-in key, backups and the AI model left out', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pod-backup-unit-'));
   try {
     fs.writeFileSync(path.join(dir, 'db.json'), JSON.stringify({ orders: [{ id: 'o1' }] }));
@@ -59,6 +59,13 @@ test('the archive: every file with its bytes, long and Arabic names whole, the s
     fs.writeFileSync(path.join(dir, '.signin-limits.json'), '{}');
     fs.mkdirSync(path.join(dir, 'backups'));
     fs.writeFileSync(path.join(dir, 'backups', 'old.tar.gz'), 'x');
+    // The background-removal model (178 MB, downloaded again when missing) stays out of every backup.
+    fs.mkdirSync(path.join(dir, 'models'));
+    fs.writeFileSync(path.join(dir, 'models', 'isnet-general-use.onnx'), 'model');
+    fs.writeFileSync(path.join(dir, 'models', 'isnet-general-use.onnx.lock'), '');
+    // (Only the top-level models/ folder: one with that name deeper inside, e.g. a customer's, is kept.)
+    fs.mkdirSync(path.join(dir, 'files', 'models'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'files', 'models', 'a.txt'), 'kept');
     const deep = path.join(dir, 'library', 'uploads', 'b1', 'تصميمات رمضان', 'a-very-long-folder-name-that-goes-on-and-on-and-on');
     fs.mkdirSync(deep, { recursive: true });
     const big = Buffer.alloc(70000, 7);
@@ -70,7 +77,8 @@ test('the archive: every file with its bytes, long and Arabic names whole, the s
     const gz = tarStream(files, () => {}).pipe(zlib.createGzip());
     for await (const c of gz) chunks.push(c);
     const got = untar(Buffer.concat(chunks));
-    assert.deepStrictEqual([...got.keys()].sort(), ['db.json', 'empty.txt', 'library/uploads/b1/تصميمات رمضان/a-very-long-folder-name-that-goes-on-and-on-and-on/فانوس-رمضان-كريم-٢٠٢٦.png'].sort());
+    assert.ok(![...got.keys()].some((k) => k.startsWith('models/')), 'no models/ folder in the archive');
+    assert.deepStrictEqual([...got.keys()].sort(), ['db.json', 'empty.txt', 'files/models/a.txt', 'library/uploads/b1/تصميمات رمضان/a-very-long-folder-name-that-goes-on-and-on-and-on/فانوس-رمضان-كريم-٢٠٢٦.png'].sort());
     assert.strictEqual(JSON.parse(got.get('db.json')).orders[0].id, 'o1');
     assert.ok(got.get([...got.keys()].find((k) => k.endsWith('.png'))).equals(big));
     // The system's own tar unpacks it the same way (Arabic and long names, the picture's bytes).
