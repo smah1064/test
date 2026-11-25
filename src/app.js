@@ -4958,7 +4958,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   };
   /** One value as the owner reads it (both languages of a name, yes / no, short lists). */
   const VALUE_WORDS = {
-    type: { percent: enAr('percent off', 'نسبة خصم'), fixed: enAr('amount off', 'مبلغ خصم'), freeShipping: enAr('free shipping', 'شحن مجاني') },
+    type: { percent: enAr('percent off', 'نسبة خصم'), fixed: enAr('amount off', 'مبلغ خصم'), freeship: enAr('free shipping', 'شحن مجاني'), freeShipping: enAr('free shipping', 'شحن مجاني') },
     status: { live: enAr('in the shop', 'في الموقع'), hidden: enAr('paused', 'متوقف مؤقتًا'), removed: enAr('stopped selling', 'وقف البيع') },
     // (A pause's reason, as the Products tab says it. QA 25 Nov: the owner's card showed "stock".)
     hiddenReason: {
@@ -5480,6 +5480,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       // (Named on the activity line even when someone decided it first.)
       res.locals.approvalId = x.id;
       res.locals.summary = x.summary;
+      // (Withdrawn by the person who asked, or cancelled when they were switched off: said so, not "decided by them".)
+      if (x.status === 'cancelled') throw new HttpError(409, 'approvalWithdrawn');
       if (!openForDecision(x)) throw new HttpError(409, 'approvalDecidedBy', { name: x.decidedBy && x.decidedBy.id === 'owner' ? (langOf(req) === 'ar' ? 'صاحب الموقع (دخول الطوارئ)' : 'the owner (emergency login)') : (x.decidedBy && x.decidedBy.name) || '—' });
       x.status = 'applying';
       x.applyingAt = new Date().toISOString();
@@ -5573,6 +5575,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       }
       // (A team member withdraws only their own; an owner any.)
       if (status === 'cancelled' && !(x.by && x.by.id === w.id) && !w.perms.has('approvals')) throw new HttpError(403, 'noPermission');
+      // (Withdrawn by the person who asked, or cancelled when they were switched off: said so, not "decided by them".)
+      if (x.status === 'cancelled') throw new HttpError(409, 'approvalWithdrawn');
       if (!openForDecision(x)) throw new HttpError(409, 'approvalDecidedBy', { name: x.decidedBy && x.decidedBy.id === 'owner' ? (langOf(req) === 'ar' ? 'صاحب الموقع (دخول الطوارئ)' : 'the owner (emergency login)') : (x.decidedBy && x.decidedBy.name) || '—' });
       x.status = status;
       x.decidedBy = { id: w.id, name: w.shown || w.name };

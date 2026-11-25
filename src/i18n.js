@@ -249,6 +249,7 @@ const MESSAGES = {
   approvalPersonGone: { en: 'The person who asked was switched off or removed, or no longer has the role for this change.', ar: 'الشخص اللي طلبه اتوقف أو اتشال، أو مبقاش عنده الدور اللي يسمح بالتعديل ده.' },
   tooManyMine: { en: 'You have many changes waiting for approval. Wait for an owner to go through them, or withdraw some.', ar: 'عندك تعديلات كتير مستنية موافقة. استنى صاحب الموقع يراجعها، أو اسحب شوية منها.' },
   ownerPasswordLink: { en: 'An owner\'s password isn\'t typed by someone else: send them a new set-up link. For your own, use "Change my password".', ar: 'كلمة سر صاحب الموقع محدش بيكتبها غيره: ابعتله لينك تجهيز جديد. ولو بتاعتك: من "غيّر كلمة السر".' },
+  approvalWithdrawn: { en: 'This change was withdrawn (by the person who asked, or when they were switched off): there is nothing to decide. The list is up to date now.', ar: 'التعديل ده اتسحب (من اللي طلبه، أو لما اتقفل حسابه): مفيش حاجة تتقرر. القايمة اتحدّثت.' },
   approvalDecidedBy: { en: 'Already decided by {name}: the list is up to date now.', ar: 'اتاخد فيه قرار خلاص من {name}: القايمة اتحدّثت.' },
   approvalDecided: { en: 'This change was already decided.', ar: 'التعديل ده اتاخد فيه قرار خلاص.' },
   tooManyApprovals: { en: 'Too many changes are waiting for approval. Ask an owner to go through them first.', ar: 'فيه تعديلات كتير مستنية موافقة. اطلب من صاحب الموقع يراجعها الأول.' },
