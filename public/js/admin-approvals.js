@@ -57,6 +57,7 @@ window.AdminApprovals = (() => {
         <p class="small ap-decided">${esc(line)}</p>
         ${a.note ? `<p class="small ap-note" dir="auto">${esc(t('ap.ownerNote', { note: inLang(a.note) }))}</p>` : ''}
         ${a.error ? `<p class="small ap-error" dir="auto">${esc(t('ap.error', { error: inLang(a.error) }))}</p>` : ''}
+        ${a.detail ? `<p class="small ap-detail" dir="auto">${esc(inLang(a.detail))}</p>` : ''}
       </div>`;
   }
   function decideHtml(a) {

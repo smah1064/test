@@ -230,19 +230,37 @@ const dayFormat = new Intl.DateTimeFormat('en-CA', { timeZone: process.env.SHOP_
 const shopDay = (iso) => {
   try { return dayFormat.format(new Date(iso)); } catch (e) { return String(iso).slice(0, 10); }
 };
+// A line is at most this long: a big body is cut to its field names (nobody can push the history out with a few big requests).
+const MAX_LINE = 2048;
 class ActivityLog {
-  constructor(file, { maxBytes = 4 * 1024 * 1024 } = {}) {
+  constructor(file, { maxBytes = 4 * 1024 * 1024, keep = 6 } = {}) {
     this.file = file;
     this.maxBytes = maxBytes;
+    this.keep = keep; // files kept: the current one and keep - 1 before it (activity.jsonl.1, .2 …)
   }
   add(entry) {
-    const line = JSON.stringify({ id: crypto.randomBytes(6).toString('hex'), at: new Date().toISOString(), ...entry });
+    let e = { id: crypto.randomBytes(6).toString('hex'), at: new Date().toISOString(), ...entry };
+    let line = JSON.stringify(e);
+    if (line.length > MAX_LINE && e.body !== undefined) {
+      e = { ...e, body: { fields: e.body && typeof e.body === 'object' ? Object.keys(e.body).slice(0, 20) : [], cut: true } };
+      line = JSON.stringify(e);
+    }
+    if (line.length > MAX_LINE) {
+      const cut = (v) => (v && typeof v === 'object' ? { en: String(v.en || '').slice(0, 200), ar: String(v.ar || '').slice(0, 200) } : v);
+      e = { ...e, body: undefined, summary: cut(e.summary), label: cut(e.label), path: String(e.path || '').slice(0, 200) };
+      line = JSON.stringify(e).slice(0, MAX_LINE * 2);
+    }
     try {
       fs.mkdirSync(path.dirname(this.file), { recursive: true });
       let size = 0;
       try { size = fs.statSync(this.file).size; } catch (e) { /* new */ }
-      // Two files at most: the current one and the one before (renamed when it grows past maxBytes).
-      if (size > this.maxBytes) fs.renameSync(this.file, `${this.file}.1`);
+      // Older files move along (.1 → .2 …), the oldest beyond `keep` goes.
+      if (size > this.maxBytes) {
+        for (let i = this.keep - 1; i >= 1; i--) {
+          const from = i === 1 ? this.file : `${this.file}.${i - 1}`;
+          try { fs.renameSync(from, `${this.file}.${i}`); } catch (err) { /* not there yet */ }
+        }
+      }
       fs.appendFileSync(this.file, `${line}\n`);
     } catch (e) {
       console.warn('[activity] could not write:', e.message);
@@ -251,7 +269,7 @@ class ActivityLog {
   /** Newest first. `who`: a person's id; from/to: YYYY-MM-DD days in the shop's time zone (Cairo), as the screen shows times. */
   list({ who = null, from = null, to = null, limit = 200 } = {}) {
     const out = [];
-    for (const f of [this.file, `${this.file}.1`]) {
+    for (const f of [this.file, ...Array.from({ length: this.keep - 1 }, (x, i) => `${this.file}.${i + 1}`)]) {
       let text = '';
       try { text = fs.readFileSync(f, 'utf8'); } catch (e) { continue; }
       const lines = text.split('\n');

@@ -379,3 +379,18 @@ test('QA admin round: other people\'s wrong passwords don\'t lock a person out o
   assert.strictEqual((await login({ username: 'lock1', password: 'lock1-long-password' }, { 'X-Forwarded-For': '10.9.8.1' })).status, 429, 'a new browser waits');
   assert.strictEqual((await login({ username: 'lock1', password: 'lock1-long-password' }, { Cookie: mark, 'X-Forwarded-For': '10.9.8.2' })).status, 200, 'their own browser gets in');
 });
+
+test('QA admin round: the activity log can\'t be flushed by the people it watches', async () => {
+  const ops = await addMember('ops11', ['operations']);
+  assert.strictEqual((await call('/api/admin/houses', 'POST', { name: 'Secret house', whatsapp: '01012345678' }, ops.token)).status, 201);
+  const big = Object.fromEntries(Array.from({ length: 10 }, (x, i) => [`k${i}`, Array.from({ length: 30 }, () => 'x'.repeat(300))]));
+  for (let i = 0; i < 95; i++) assert.strictEqual((await call('/api/admin/houses', 'POST', big, ops.token)).status, 400);
+  const lines = fs.readFileSync(path.join(dataDir, 'activity.jsonl'), 'utf8').trim().split('\n');
+  assert.ok(lines.every((l) => l.length <= 4096), 'every line is short');
+  const log = (await call('/api/admin/activity?limit=500', 'GET', undefined, owner)).json.entries;
+  assert.ok(log.some((e) => e.whoId === ops.id && e.status === 201 && /houses/.test(e.action)), 'the real change is still there');
+  assert.ok(log.some((e) => e.action === 'manyRefused' && e.whoId === ops.id), 'and a line says many were refused');
+  assert.ok(log.filter((e) => e.whoId === ops.id && e.status === 400).length <= 30);
+  const refused = log.find((e) => e.whoId === ops.id && e.status === 400);
+  assert.deepStrictEqual(refused.body.fields.slice(0, 2), ['k0', 'k1'], 'a refused request: its field names only');
+});

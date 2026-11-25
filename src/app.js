@@ -3909,7 +3909,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       res.json = (body) => send(roles.withoutAmounts(body));
     }
     if (req.method !== 'GET' && req.method !== 'HEAD' && !route.quiet) {
-      res.on('finish', () => activity.add({
+      res.on('finish', () => !refusedTooMany(who, res.statusCode) && activity.add({
         whoId: who.id, who: who.shown || who.name, roles: who.roles, ...(who.emergency ? { emergency: true } : {}),
         action: key, label: route.label || null, method: req.method, path: req.originalUrl.split('?')[0].slice(0, 300),
         // (outcome 'failed': an approval whose change couldn't be applied, and that change's own line.)
@@ -3920,8 +3920,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
           const sum = res.locals.summary || (who.approvalId && (findApproval(who.approvalId) || {}).summary) || workAbout(route, req) || route.label;
           return sum ? { summary: sum } : {};
         })(),
-        // (Never a password: those routes log no body at all.)
-        body: route.noBody ? undefined : roles.shortBody(req.body && (Buffer.isBuffer(req.body) || Object.keys(req.body).length) ? req.body : undefined),
+        // (Never a password: those routes log no body at all. A refused request: its field names only.)
+        body: route.noBody ? undefined : res.statusCode >= 400 && res.statusCode !== 409 && req.body && !Buffer.isBuffer(req.body) && typeof req.body === 'object'
+          ? { fields: Object.keys(req.body).slice(0, 20) }
+          : roles.shortBody(req.body && (Buffer.isBuffer(req.body) || Object.keys(req.body).length) ? req.body : undefined),
       }));
     }
     if (route.approve && who.role !== 'owner' && !who.approvalId) return holdForApproval(req, res, key, route).catch(next);
@@ -3929,6 +3931,23 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   };
   const requireAdmin = adminGate;
   const requireCatalog = adminGate;
+  // Refused requests are logged, but at most 30 per person per 10 minutes (one more line says the rest were left out).
+  const refusedSeen = new Map();
+  function refusedTooMany(who, status) {
+    if (status < 400) return false;
+    const now = Date.now();
+    const r = refusedSeen.get(who.id) || { from: now, n: 0, told: false };
+    if (now - r.from > 10 * 60e3) Object.assign(r, { from: now, n: 0, told: false });
+    r.n += 1;
+    refusedSeen.set(who.id, r);
+    if (refusedSeen.size > 500) refusedSeen.clear();
+    if (r.n <= 30) return false;
+    if (!r.told) {
+      r.told = true;
+      activity.add({ whoId: who.id, who: who.shown || who.name, roles: who.roles, action: 'manyRefused', status: 429, summary: { en: 'Many refused requests: the next ones in these 10 minutes are not listed one by one', ar: 'طلبات كتير اترفضت: اللي بعدها في العشر دقايق دي مش متسجلة واحدة واحدة' } });
+    }
+    return true;
+  }
   // What daily work was about, for the activity log: the order and item, and what was set.
   const WORK_WORDS = {
     queued: ['queued', 'في الانتظار'], printing: ['printing', 'بيتطبع'], printed: ['printed', 'اتطبع'], shipped: ['shipped', 'اتشحن'], delivered: ['delivered', 'اتسلم'],
@@ -4455,7 +4474,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     ...(changedSince(a) ? { changedSince: true } : {}),
     method: a.method, path: a.path, status: a.status,
     ...(a.decidedBy ? { decidedBy: a.decidedBy, decidedAt: a.decidedAt } : {}),
-    ...(a.note ? { note: a.note } : {}), ...(a.error ? { error: a.error } : {}),
+    ...(a.note ? { note: a.note } : {}), ...(a.error ? { error: a.error } : {}), ...(a.detail ? { detail: a.detail } : {}),
   });
   const nameOfProduct = (id) => {
     const p = getProduct(id);
@@ -4554,7 +4573,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       return enAr(`${n} designs: ${what.en}`, `${n} تصميم: ${what.ar}`);
     }
     if (key.includes('/library/uploads')) {
-      const n = Array.isArray(b.items) ? b.items.length : 0;
+      const batch = readBatch(p.batch);
+      const n = batch ? publishPlan(batch, b.items).plan.length : Array.isArray(b.items) ? b.items.length : 0;
       return enAr(`${n} designs`, `${n} تصميم`);
     }
     if (key.includes('/library')) {
@@ -4806,7 +4826,19 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     }
     let result = null;
     try { result = JSON.parse(out.body.toString('utf8')); } catch (e) { result = null; }
-    const ok = out.status >= 200 && out.status < 300;
+    let ok = out.status >= 200 && out.status < 300;
+    // A zip publish that published nothing (already published, gone from the upload) didn't happen; part of it says so.
+    let detail = null;
+    if (ok && a.action === 'POST /api/admin/library/uploads/:batch/publish' && result && Array.isArray(result.published)) {
+      const done = result.published.length;
+      const left = Array.isArray(result.skipped) ? result.skipped.length : 0;
+      if (!done) {
+        ok = false;
+        result.errorText = { en: 'Nothing was published: these designs were already published or are no longer in the upload.', ar: 'متنشرش حاجة: التصميمات دي اتنشرت قبل كده أو مبقتش في الرفع.' };
+      } else if (left) {
+        detail = { en: `${done} published, ${left} not (check their names and products in the upload).`, ar: `اتنشر ${done}، و${left} لأ (راجع أساميهم ومنتجاتهم في الرفع).` };
+      }
+    }
     const done = store.mutate((db) => {
       const x = (db.approvals || []).find((y) => y.id === a.id);
       x.status = ok ? 'approved' : 'failed';
@@ -4815,6 +4847,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       delete x.applyingAt;
       if (note) x.note = note;
       if (ok) delete x.error;
+      if (detail) x.detail = detail;
       else x.error = result && result.errorText ? { en: String(result.errorText.en).slice(0, 300), ar: String(result.errorText.ar).slice(0, 300) } : String((result && result.error) || `HTTP ${out.status}`).slice(0, 300);
       return x;
     });
