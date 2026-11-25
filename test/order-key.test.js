@@ -86,10 +86,16 @@ async function teamLink(orderId, tok) {
   return { ...r.json, ticket: new URL(r.json.link, 'http://x').searchParams.get('team'), cookie, setCookie: (r.headers.getSetCookie() || []).find((c) => c.startsWith('pod_tv=')) };
 }
 const teamView = (orderId, t, headers = {}) => call(`/api/orders/${orderId}/team`, 'GET', undefined, null, { 'x-team-view': t.ticket, ...(t.cookie ? { Cookie: t.cookie } : {}), ...headers });
-/** Every number in an answer that is one of the order's amounts (total, subtotal, shipping, item prices). */
+/** Every number in an answer that is one of the order's amounts (total, subtotal, shipping, item prices): as a JSON
+ *  number anywhere in it (not inside a string: a random proof code or id may hold the same digits). */
 function amountsIn(text, order) {
   const amounts = [order.total, order.subtotal, order.shipping, ...order.items.map((i) => i.price), ...order.items.map((i) => i.unitPrice)].filter((n) => typeof n === 'number' && n > 0);
-  return amounts.filter((n) => new RegExp(`[^0-9.]${String(n).replace('.', '\\.')}[^0-9]`).test(text));
+  const numbers = [];
+  (function walk(v) {
+    if (typeof v === 'number') numbers.push(v);
+    else if (v && typeof v === 'object') for (const x of Object.values(v)) walk(x);
+  }(JSON.parse(text)));
+  return [...new Set(amounts.filter((n) => numbers.includes(n)))];
 }
 
 test('a new order has a secret key: its number alone no longer opens the page, the key does', async () => {
