@@ -20,6 +20,7 @@
   <link rel="stylesheet" href="/css/admin-preview.css">
   <link rel="stylesheet" href="/css/admin-rights.css">
   <link rel="stylesheet" href="/css/admin-roles.css">
+  <link rel="stylesheet" href="/css/admin-order-filters.css">
   <style>
     /* Orders: shipping, delivery and payment */
     .pill.delivered { background: #138a4a; color: #fff; }
@@ -351,6 +352,7 @@
           <div class="notify-list" id="notify-status"></div>
           <p class="muted small" id="notify-msg" style="margin:6px 0 0"></p>
         </div>
+        <div id="order-filters"></div>
         <div class="card orders-card" style="overflow-x:auto">
           <table class="orders">
             <thead><tr><th data-i18n="admin.col.order"></th><th data-i18n="admin.col.customer"></th><th data-i18n="admin.col.items"></th><th data-i18n="admin.col.total" id="orders-total-col"></th><th data-i18n="admin.col.status"></th><th data-i18n="notify.col"></th></tr></thead>
@@ -358,6 +360,7 @@
           </table>
           <datalist id="ship-couriers"></datalist>
         </div>
+        <div id="orders-more" hidden></div>
       </section>
     </div>
   </main>
@@ -383,6 +386,7 @@
   <script src="/js/admin-staff.js"></script>
   <script src="/js/admin-approvals.js"></script>
   <script src="/js/admin-activity.js"></script>
+  <script src="/js/admin-order-filters.js"></script>
   <script src="/js/admin.js"></script>
 </body>
 </html>

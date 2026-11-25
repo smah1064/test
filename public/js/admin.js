@@ -180,7 +180,7 @@
     if (window.AdminProducts) AdminProducts.reset();
     if (window.AdminUploads) AdminUploads.reset();
     if (window.AdminRights) AdminRights.reset();
-    for (const m of [window.AdminStaff, window.AdminApprovals, window.AdminActivity]) if (m) m.reset();
+    for (const m of [window.AdminStaff, window.AdminApprovals, window.AdminActivity, window.AdminOrderFilters]) if (m) m.reset();
     applyRole();
     $('weak-pw').hidden = true;
     $('dash').hidden = true;
@@ -1066,13 +1066,15 @@
     return `<div class="qty-orders">${mixed.map(({ it, k }) => `<div class="qty-oi"><strong>${o.items.length > 1 ? esc(POD.num(k + 1)) + '. ' : ''}${esc(tr(it.productName))}</strong>${piecesPill(it)}${qtySummary(it)}</div>`).join('')}</div>`;
   }
   function renderOrders(orders) {
+    // Search, status chips and filters (admin-order-filters.js): the orders to draw, 50 at a time.
+    const shown = AdminOrderFilters.view(orders);
     $('ship-couriers').innerHTML = COURIERS().map((c) => `<option value="${esc(c)}"></option>`).join('');
     const col = (k) => esc(t('admin.col.' + k));
     // The Total column only when the answer has totals (people without orders.amounts get none: no empty column).
     const totals = orders.length ? AdminRoles.anyAmount(orders, 'total') : can('orders.amounts');
     const cols = totals ? 6 : 5;
     $('orders-total-col').hidden = !totals;
-    $('orders').innerHTML = orders.length ? orders.map((o) => `
+    $('orders').innerHTML = shown.length ? shown.map((o) => `
       <tr class="order-row ${shipOpen.has(o.id) ? 'open' : ''}">
         <td data-label="${col('order')}"><strong>${esc(o.number)}</strong>${o.delivery && o.delivery.speed === 'express' ? ` <span class="pill dlv-express-pill">${esc(t('delivery.express'))}</span>` : ''}<div class="muted small">${esc(POD.date(o.createdAt))}</div>${o.delivery ? `<div class="muted small">${esc(t('delivery.by', { date: POD.day(o.delivery.by) }))}</div>` : ''}</td>
         <td data-label="${col('customer')}">${line(o.customer.name)}<div class="muted small"><bdi dir="ltr">${esc(o.customer.phone || o.customer.email || '')}</bdi></div><div class="muted small">${esc(tr(o.customer.governorateName) || '')}</div></td>
@@ -1083,10 +1085,11 @@
         <td data-label="${col('status')}"><div class="order-state">${statusPill(orderState(o))} ${payPill(o)}${shipNote(o)}</div>
           <button class="btn btn-sm ship-toggle" data-ship-toggle="${esc(o.id)}" aria-expanded="${shipOpen.has(o.id)}">${esc(t('ship.manage'))} ${shipOpen.has(o.id) ? '▴' : '▾'}</button></td>
         <td data-label="${esc(t('notify.col'))}">${notifyCell(o.notifications, o.createdAt)}</td>
-      </tr>${shipOpen.has(o.id) ? `<tr class="ship-row"><td colspan="${cols}">${shipBox(o)}</td></tr>` : ''}`).join('') : `<tr><td colspan="${cols}" class="muted">${esc(t('admin.noOrders'))}</td></tr>`;
+      </tr>${shipOpen.has(o.id) ? `<tr class="ship-row"><td colspan="${cols}">${shipBox(o)}</td></tr>` : ''}`).join('') : `<tr><td colspan="${cols}" class="muted">${orders.length ? AdminOrderFilters.emptyHtml() : esc(t('admin.noOrders'))}</td></tr>`;
   }
   const orderById = (id) => lastOrders && lastOrders.find((o) => o.id === id);
   const rerenderOrders = () => lastOrders && renderOrders(lastOrders);
+  AdminOrderFilters.mount({ rerender: rerenderOrders, state: orderState, amounts: () => can('orders.amounts') });
   $('orders').addEventListener('input', (e) => {
     const f = e.target.closest('[data-ship-field]');
     if (!f) return;

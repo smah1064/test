@@ -1,0 +1,57 @@
+/* Admin → Orders: search, status chips, more filters, the count line and "Show more" (public/js/admin-order-filters.js). */
+#order-filters[hidden], #orders-more[hidden] { display: none; }
+.of-card { display: grid; gap: 12px; padding: 14px 16px; margin-bottom: 8px; min-width: 0; }
+.of-search label { margin-bottom: 6px; }
+.of-search input { width: 100%; }
+
+/* ---------- Status chips (buttons, aria-pressed) ---------- */
+.of-chips .chip { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; }
+.of-n { min-width: 22px; padding: 1px 7px; border-radius: 999px; background: #eef1f6; color: var(--ink-2); font-size: 11px; font-weight: 700; text-align: center; }
+.of-chips .chip.active .of-n { background: rgba(255, 255, 255, .2); color: #fff; }
+/* Work waiting: the number stands out (not when the chip is the one picked). */
+.of-chip-review.of-has:not(.active) .of-n, .of-chip-customer.of-has:not(.active) .of-n { background: #fff1d6; color: #8a5300; }
+.of-chip-ready.of-has:not(.active) .of-n { background: #e4efff; color: #1d4fa8; }
+.of-chip-late.of-has:not(.active) .of-n { background: #fdecec; color: var(--bad); }
+.of-chips .chip:focus-visible, .of-more-btn:focus-visible, .of-clear:focus-visible, .of-show-more:focus-visible { outline: 2px solid #ffc6b8; outline-offset: 2px; }
+
+/* ---------- More filters and the sort ---------- */
+.of-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.of-more-btn { gap: 6px; }
+.of-more-btn[aria-expanded="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.of-more-n { min-width: 20px; padding: 1px 6px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; text-align: center; }
+.of-caret::before { content: '▾'; }
+.of-more-btn[aria-expanded="true"] .of-caret::before { content: '▴'; }
+.of-sort { display: flex; align-items: center; gap: 8px; margin-inline-start: auto; min-width: 0; }
+.of-sort label { margin: 0; white-space: nowrap; }
+.of-sort select { width: auto; min-width: 0; max-width: 100%; }
+.of-more { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.of-more[hidden] { display: none; }
+.of-more .field { margin: 0; min-width: 0; }
+.of-more select, .of-more input { width: 100%; min-width: 0; }
+/* The two days placed: a group for screen readers ("Date placed, Cairo time"), two fields like the others on screen. */
+.of-dates { position: relative; grid-column: span 2; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px 12px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.of-vh { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* ---------- How many, Clear, nothing found, Show more ---------- */
+.of-shown { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 0 2px 8px; }
+.of-count { margin: 0; }
+.of-empty { padding: 18px 8px; text-align: center; color: var(--ink-2); }
+.of-empty p { margin: 0 0 10px; overflow-wrap: anywhere; }
+#orders-more { display: flex; justify-content: center; margin-top: 12px; }
+
+/* ---------- Phones: whole-width controls, fingers-sized targets ---------- */
+@media (max-width: 700px) {
+  .of-card { padding: 12px; gap: 10px; }
+  .of-dates { grid-column: 1 / -1; }
+  .of-more-btn { flex: 1 1 auto; }
+  .of-sort { flex: 1 1 auto; margin-inline-start: 0; }
+  .of-sort select { flex: 1 1 auto; }
+  .of-show-more { width: 100%; }
+}
+@media (max-width: 700px), (pointer: coarse) {
+  .of-chips .chip, .of-card .btn, .of-clear, .of-show-more, .of-empty .btn { min-height: 44px; }
+  .of-card input, .of-card select { min-height: 44px; }
+}
+@media (max-width: 380px) {
+  .of-dates { grid-template-columns: minmax(0, 1fr); }
+}
