@@ -847,6 +847,7 @@
     if (el) el.outerHTML = SEC_RENDER[name](S.P);
     if (name === 'print') drawAllSides(); // the boxes are placed after the section is drawn
     if (name === 'avail') syncVariant(); // the colours and totals of the stock grid
+    showNums(document.getElementById('pm-sec-' + name));
   }
   function setDirty(name, on = true) {
     if (on) S.dirty.add(name); else S.dirty.delete(name);
@@ -867,13 +868,116 @@
     e.hidden = !msg;
     if (msg) e.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
+  /** A box's value; a number box's as 0-9 text ("٢٧٠" → "270", '' when empty). */
   const val = (name) => {
     const el = root.querySelector(`[name="${CSS.escape(name)}"]`);
     if (!el) return undefined;
     if (el.type === 'checkbox') return el.checked;
     if (el.type === 'radio') return (root.querySelector(`[name="${CSS.escape(name)}"]:checked`) || {}).value;
+    if (el.hasAttribute('data-num')) return numText(el);
     return el.value;
   };
+
+  // ---------- Number boxes ----------
+  /*
+   * Every number here (prices, size add-ons, stock, the print area, embroidery) is a text box with a number keyboard
+   * ([data-num], as in admin.js): a type="number" box drops what an Arabic keyboard types (QA 25 Nov: "٢٧٠" left the
+   * price box empty, and saving it put the original price back without a word). What is typed is read with
+   * POD.latinDigits (Arabic-Indic and Persian digits, the Arabic decimal "٫"); grouping marks and spaces are left out.
+   * data-min, data-max and data-whole keep the checks the number boxes had; data-need: an empty box is a mistake too.
+   * A wrong box says why under it as it is typed, and its section isn't saved (nothing is sent) until it's right.
+   * (admin.js checks the same boxes as they're typed, by the same rules but data-max: aria-invalid marks them here.)
+   */
+  const numText = (el) => POD.latinDigits(el.value).replace(/[\s\u066C\u200E\u200F]/g, '').replace(/\u2212/g, '-');
+  /** What's wrong with a number box ('' when it's fine). */
+  function numProblem(el) {
+    const s = numText(el);
+    const min = el.dataset.min != null ? Number(el.dataset.min) : null;
+    if (!s) return el.hasAttribute('data-need') ? t(min > 0 ? 'pm.num.empty' : 'num.empty') : '';
+    if (!/^-?\d*\.?\d+$/.test(s)) return t('num.bad');
+    const v = Number(s);
+    if (el.hasAttribute('data-whole') && !Number.isInteger(v)) return t('num.whole');
+    if (min !== null && v < min) return t('num.min', { min: POD.num(min) });
+    if (el.dataset.max != null && v > Number(el.dataset.max)) return t('pm.num.max', { max: POD.num(Number(el.dataset.max)) });
+    return '';
+  }
+  /**
+   * A number box's attributes: { min, max, whole (no fraction), need (not empty), neg (may be under 0: the phone
+   * keyboard with a minus sign) }.
+   */
+  function numAttrs({ min = null, max = null, whole = false, need = false, neg = false } = {}) {
+    const mode = neg ? '' : ` inputmode="${whole ? 'numeric' : 'decimal'}"`;
+    return `type="text"${mode} autocomplete="off" spellcheck="false" dir="ltr" data-num${min !== null ? ` data-min="${min}"` : ''}${max !== null ? ` data-max="${max}"` : ''}${whole ? ' data-whole' : ''}${need ? ' data-need' : ''}`;
+  }
+  /**
+   * What an emptied price box saves (QA 25 Nov: an emptied price went back to the original one without a word): the
+   * original price, the original add-on, or a small pack following the base price again. '' for other boxes, and for
+   * a box that was drawn empty (the extra side's "Empty = the shop's usual price" says it).
+   */
+  function emptyHint(el) {
+    const P = S.P;
+    const o = P && P.original && P.original.prices;
+    if (!P || el.defaultValue === '' || !/^(basePrice|extraSidePrice|ps\.)/.test(el.name)) return '';
+    if (el.name === 'basePrice' || el.name === 'extraSidePrice') {
+      const v = o ? Number(o[el.name]) : NaN;
+      return Number.isFinite(v) ? t('pm.empty.price', { price: POD.money(v) }) : t('pm.empty.original');
+    }
+    const id = el.name.slice(3);
+    const z = P.sizes.find((x) => x.id === id);
+    if (z && z.smallPack) return t('pm.empty.follows');
+    const a = o && o.sizes ? Number(o.sizes[id]) : NaN;
+    if (!Number.isFinite(a)) return t('pm.empty.original');
+    return a ? t('pm.empty.addon', { amount: `${a > 0 ? '+' : ''}${POD.money(a)}` }) : t('pm.empty.noAddon');
+  }
+  /**
+   * Say under a number box what's wrong with it, or what an emptied price box will do; the stock grid's boxes and its
+   * "set all to" only turn red (with the reason as their tooltip: no room under them). Returns the problem ('' if none).
+   */
+  function showNum(el) {
+    const bad = numProblem(el);
+    el.setAttribute('aria-invalid', bad ? 'true' : 'false');
+    if (el.classList.contains('pm-vs-in') || el.name === 'vsAll') {
+      el.title = bad || el.getAttribute('aria-label') || '';
+      return bad;
+    }
+    const text = bad || (numText(el) === '' ? emptyHint(el) : '');
+    let note = el.nextElementSibling && el.nextElementSibling.classList.contains('pm-num-msg') ? el.nextElementSibling : null;
+    if (text && !note) {
+      note = document.createElement('span');
+      note.className = 'pm-num-msg';
+      note.id = `${el.id || fieldId(el.name)}-msg`;
+      note.setAttribute('aria-live', 'polite');
+      el.insertAdjacentElement('afterend', note);
+      el.setAttribute('aria-describedby', note.id);
+    }
+    if (note) {
+      note.textContent = text;
+      note.hidden = !text;
+      note.classList.toggle('is-bad', Boolean(bad));
+    }
+    return bad;
+  }
+  /** Bring every number box's message up to date (after a section is drawn, or the language changed). */
+  const showNums = (where = root) => where && where.querySelectorAll('input[data-num]').forEach(showNum);
+  /** A box's name as the admin reads it: its label, else its aria-label. */
+  function boxName(el) {
+    const l = el.id && root.querySelector(`label[for="${CSS.escape(el.id)}"]`);
+    return ((l && l.textContent) || el.getAttribute('aria-label') || '').trim();
+  }
+  /**
+   * The first number box of a section with a mistake in it, as { el, msg } (null when all are right). Boxes that are
+   * hidden, off or only helpers (data-no-dirty: "set all to", a new size's add-on) are not saved, so not checked.
+   */
+  function badNum(name) {
+    const sec = document.getElementById('pm-sec-' + name);
+    if (!sec) return null;
+    for (const el of sec.querySelectorAll('input[data-num]')) {
+      if (el.disabled || el.hasAttribute('data-no-dirty') || el.closest('[hidden], .is-hidden')) continue;
+      const msg = showNum(el);
+      if (msg) return { el, msg };
+    }
+    return null;
+  }
 
   // ---------- a) Basics ----------
   function basicsBody(P) {
@@ -958,8 +1062,8 @@
         </fieldset>
         <div class="pm-vs" ${mode === 'variant' ? '' : 'hidden'}>${variantGrid(P)}</div>
         <div class="pm-grid2 pm-stock-fields" ${mode === 'none' ? 'hidden' : ''}>
-          ${fld('stock', t('pm.stockNow'), inp('stock', P.stock !== null ? P.stock : '', 'type="number" min="0" step="1" inputmode="numeric" dir="ltr"'), '', 'pm-stock-whole' + (mode === 'whole' ? '' : ' is-hidden'))}
-          ${fld('lowStockAt', t('pm.lowAt'), inp('lowStockAt', P.lowStockAt, 'type="number" min="0" step="1" inputmode="numeric" dir="ltr"'), '', '')}
+          ${fld('stock', t('pm.stockNow'), inp('stock', P.stock !== null ? P.stock : '', numAttrs({ min: 0, whole: true, need: true })), '', 'pm-stock-whole' + (mode === 'whole' ? '' : ' is-hidden'))}
+          ${fld('lowStockAt', t('pm.lowAt'), inp('lowStockAt', P.lowStockAt, numAttrs({ min: 0, whole: true })), '', '')}
         </div>
       </div>`;
   }
@@ -974,12 +1078,12 @@
     const cell = (c, z) => {
       const v = vs[`${c.id}|${z.id}`];
       const label = t('pm.vs.cell', { colour: tr(c.name), size: tr(z.label) });
-      return `<input class="pm-vs-in" name="${esc(vsName(c.id, z.id))}" value="${typeof v === 'number' ? v : ''}" type="number" min="0" step="1" inputmode="numeric" dir="ltr" aria-label="${esc(label)}" title="${esc(label)}" data-c="${esc(c.id)}" data-z="${esc(z.id)}">`;
+      return `<input class="pm-vs-in" name="${esc(vsName(c.id, z.id))}" value="${typeof v === 'number' ? v : ''}" ${numAttrs({ min: 0, whole: true })} aria-label="${esc(label)}" title="${esc(label)}" data-c="${esc(c.id)}" data-z="${esc(z.id)}">`;
     };
     const sw = (c) => `<span class="pm-sw pm-sw-sm" style="background:${esc(c.hex)}" aria-hidden="true"></span>`;
     const tools = `
       <div class="pm-vs-tools">
-        <label class="pm-vs-all"><span>${esc(t('pm.vs.setAll'))}</span><input type="number" name="vsAll" min="0" step="1" inputmode="numeric" dir="ltr" data-no-dirty aria-label="${esc(t('pm.vs.setAll'))}"></label>
+        <label class="pm-vs-all"><span>${esc(t('pm.vs.setAll'))}</span><input ${numAttrs({ min: 0, whole: true })} name="vsAll" data-no-dirty aria-label="${esc(t('pm.vs.setAll'))}"></label>
         <button type="button" class="btn btn-sm" data-pm-act="vs-all">${esc(t('pm.vs.apply'))}</button>
         <button type="button" class="btn btn-sm" data-pm-act="vs-clear">${esc(t('pm.vs.clear'))}</button>
       </div>`;
@@ -1006,18 +1110,20 @@
     const box = root.querySelector('.pm-vs');
     if (!box) return;
     const lowRaw = val('lowStockAt');
-    const low = lowRaw !== '' && Number.isFinite(Number(lowRaw)) ? Number(lowRaw) : 5;
+    const low = /^\d+$/.test(lowRaw || '') ? Number(lowRaw) : 5;
     const rows = {};
     const cols = {};
     let grand = null;
     const add = (o, k, v) => { o[k] = (o[k] || 0) + v; };
     box.querySelectorAll('.pm-vs-in').forEach((el) => {
-      const raw = el.value.trim();
-      const v = raw === '' ? null : Number(raw);
-      const ok = v !== null && Number.isInteger(v) && v >= 0;
+      // Any digits ("١٢" is 12); a wrong box is red, with the reason as its tooltip, and isn't counted.
+      const raw = numText(el);
+      const bad = showNum(el);
+      const v = raw === '' || bad ? null : Number(raw);
+      const ok = v !== null;
       el.classList.toggle('is-out', ok && v === 0);
       el.classList.toggle('is-low', ok && v > 0 && v <= low);
-      el.classList.toggle('is-bad', v !== null && !ok);
+      el.classList.toggle('is-bad', Boolean(bad));
       if (!ok) return;
       add(rows, el.dataset.c, v);
       add(cols, el.dataset.z, v);
@@ -1052,7 +1158,7 @@
       root.querySelectorAll('.pm-vs .pm-vs-in').forEach((el) => {
         const k = `${el.dataset.c}|${el.dataset.z}`;
         shown.add(k);
-        const raw = el.value.trim();
+        const raw = numText(el);
         if (raw === '') return;
         const v = Number(raw);
         if (!Number.isInteger(v) || v < 0) { el.focus(); throw new Error(t('pm.badStock')); }
@@ -1132,8 +1238,8 @@
           ${fld('ns.id', t('pm.f.sizeId'), inp('ns.id', '', 'type="text" maxlength="20" dir="ltr" data-no-dirty placeholder="4XL" autocapitalize="characters" spellcheck="false"'))}
           ${fld('ns.ar', t('pm.f.labelAr'), inp('ns.ar', '', 'type="text" maxlength="40" dir="rtl" data-no-dirty placeholder="4XL"'))}
           ${fld('ns.en', t('pm.f.labelEn'), inp('ns.en', '', 'type="text" maxlength="40" dir="ltr" data-no-dirty placeholder="4XL"'))}
-          ${fld('ns.add', t('pm.f.addon'), inp('ns.add', '0', 'type="number" step="1" dir="ltr" data-no-dirty'))}
-          ${fld('ns.scale', t('pm.f.scale'), inp('ns.scale', '', 'type="number" step="0.05" min="0.1" max="10" dir="ltr" data-no-dirty placeholder="1"'))}
+          ${fld('ns.add', t('pm.f.addon'), inp('ns.add', '0', `${numAttrs({ neg: true })} data-no-dirty`))}
+          ${fld('ns.scale', t('pm.f.scale'), inp('ns.scale', '', `${numAttrs({ min: 0.1, max: 10 })} data-no-dirty placeholder="1"`))}
           <div class="field pm-add-btn"><button type="button" class="btn" data-pm-act="add-size">${esc(t('pm.add'))}</button></div>
         </div>
         <p class="muted small">${esc(t('pm.addSizeHelp'))}</p>
@@ -1174,15 +1280,15 @@
     const html = `
       ${P.pricesChanged ? `<p class="pm-chg-line">${mark(true, 'prices')}<span class="muted small"> ${esc(t('pm.pricesChanged'))}</span></p>` : ''}
       <div class="pm-grid3">
-        ${fld('basePrice', t('pm.basePrice'), inp('basePrice', P.basePrice, `type="number" min="1" step="0.01" dir="ltr" placeholder="${esc(t('pm.asBuilt'))}"`))}
-        ${multi ? fld('extraSidePrice', t('pm.extraSide'), inp('extraSidePrice', P.extraSidePrice == null ? '' : P.extraSidePrice, `type="number" min="0" step="0.01" dir="ltr" placeholder="${esc(t('pm.shopDefault'))}"`), `<span class="muted small">${esc(t('pm.extraSideHelp'))}</span>`) : ''}
+        ${fld('basePrice', t('pm.basePrice'), inp('basePrice', P.basePrice, `${numAttrs({ min: 1 })} placeholder="${esc(t('pm.asBuilt'))}"`))}
+        ${multi ? fld('extraSidePrice', t('pm.extraSide'), inp('extraSidePrice', P.extraSidePrice == null ? '' : P.extraSidePrice, `${numAttrs({ min: 0 })} placeholder="${esc(t('pm.shopDefault'))}"`), `<span class="muted small">${esc(t('pm.extraSideHelp'))}</span>`) : ''}
       </div>
       <div class="pm-price-table" role="table">
         <div class="pm-pt-row pm-pt-head" role="row"><span role="columnheader">${esc(t('pm.size'))}</span><span role="columnheader">${esc(t('pm.f.addon'))}</span><span role="columnheader">${esc(t('pm.finalPrice'))}</span></div>
         ${P.sizes.map((z) => `
         <div class="pm-pt-row ${z.off ? 'is-off' : ''}" role="row">
           <span role="cell"><b>${esc(tr(z.label))}</b> <bdi class="pm-id" dir="ltr">${esc(z.id)}</bdi></span>
-          <span role="cell"><input type="number" name="ps.${esc(z.id)}" step="0.01" dir="ltr" value="${esc(z.surcharge || 0)}" placeholder="${esc(t('pm.asBuilt'))}" aria-label="${esc(t('pm.f.addon'))} ${esc(tr(z.label))}"></span>
+          <span role="cell"><input ${numAttrs({ neg: true })} id="${fieldId('ps.' + z.id)}" name="ps.${esc(z.id)}" value="${esc(z.surcharge || 0)}" placeholder="${esc(t('pm.asBuilt'))}" aria-label="${esc(t('pm.f.addon'))} ${esc(tr(z.label))}"></span>
           <span role="cell" class="pm-final" data-final="${esc(z.id)}">${esc(POD.money((Number(P.basePrice) || 0) + (Number(z.surcharge) || 0)))}</span>
         </div>`).join('')}
       </div>
@@ -1196,10 +1302,16 @@
     // Each size's price once saved, worked out as the server will (public/js/pack-prices.js): a small pack
     // (1, 10, 25 copies) left as shown stays as it is (the owner's own price for it stays that price
     // whatever the product's price, and a pack that follows the product's price gets its share of the new
-    // price, never under 1 EGP), and an emptied box goes back to the original price.
-    const prices = POD_PACKS.savedPrices(P, P.original && P.original.prices, { basePrice: raw, sizes: Object.fromEntries(P.sizes.map((z) => [z.id, val('ps.' + z.id)])) });
+    // price, never under 1 EGP), and an emptied box goes back to the original price (shown: its box says so too).
+    // The boxes as read (val: any digits); a size whose box, or the base price's, isn't a number shows "—" and
+    // no warning (the box says what's wrong, and the section isn't saved until it's right).
+    const sizes = Object.fromEntries(P.sizes.map((z) => [z.id, val('ps.' + z.id)]));
+    const prices = POD_PACKS.savedPrices(P, P.original && P.original.prices, { basePrice: raw, sizes });
+    const isNum = (v) => !v || /^-?\d*\.?\d+$/.test(v);
+    for (const id of Object.keys(prices)) if (!isNum(raw) || !isNum(sizes[id])) prices[id] = null;
     root.querySelectorAll('[data-final]').forEach((el) => {
-      el.textContent = raw === '' ? t('pm.asBuilt') : POD.money(prices[el.dataset.final]);
+      const v = prices[el.dataset.final];
+      el.textContent = v == null ? '—' : POD.money(v);
     });
     showPackWarnings(P, prices);
   }
@@ -1279,14 +1391,14 @@
           </div>
           <div class="pm-side-fields">
             <div class="pm-grid4">
-              ${['x', 'y', 'w', 'h'].map((q) => fld(`pa.${k}.${q}`, t('pm.pa.' + q), inp(`pa.${k}.${q}`, fx(st[q]), `type="number" step="1" min="${q === 'w' || q === 'h' ? MIN : 0}" max="${q === 'x' || q === 'w' ? W : H}" dir="ltr" inputmode="decimal"`))).join('')}
+              ${['x', 'y', 'w', 'h'].map((q) => fld(`pa.${k}.${q}`, t('pm.pa.' + q), inp(`pa.${k}.${q}`, fx(st[q]), numAttrs({ min: q === 'w' || q === 'h' ? MIN : 0, max: q === 'x' || q === 'w' ? W : H })))).join('')}
             </div>
             <label class="check pm-lock"><input type="checkbox" data-lock="${esc(k)}" data-no-dirty ${lock ? 'checked' : ''}> <span>${esc(t('pm.keepShape'))}</span></label>
             <div class="pm-grid2">
-              ${fld(`pw.${k}`, t('pm.printWidth'), inp(`pw.${k}`, fx(st.widthCm), 'type="number" step="0.1" min="0.5" max="1000" dir="ltr" inputmode="decimal"'))}
+              ${fld(`pw.${k}`, t('pm.printWidth'), inp(`pw.${k}`, fx(st.widthCm), numAttrs({ min: 0.5, max: 1000, need: true })))}
               <div class="field"><div class="pm-lbl"><span class="pm-lbl-text">${esc(t('pm.printHeight'))}</span></div><output class="pm-out" dir="ltr" data-phgt="${esc(k)}">${esc(fx(st.widthCm * st.h / st.w))}</output></div>
-              ${fld(`safe.${k}`, t('pm.safe'), inp(`safe.${k}`, fx(st.safeMm), 'type="number" step="0.5" min="0" max="200" dir="ltr" inputmode="decimal"'))}
-              ${fld(`bleed.${k}`, t('pm.bleed'), inp(`bleed.${k}`, fx(st.bleedMm), 'type="number" step="0.5" min="0" max="50" dir="ltr" inputmode="decimal"'))}
+              ${fld(`safe.${k}`, t('pm.safe'), inp(`safe.${k}`, fx(st.safeMm), numAttrs({ min: 0, max: 200, need: true })))}
+              ${fld(`bleed.${k}`, t('pm.bleed'), inp(`bleed.${k}`, fx(st.bleedMm), numAttrs({ min: 0, max: 50, need: true })))}
             </div>
             <p class="muted small">${esc(t('pm.printSizeHelp'))}</p>
           </div>
@@ -1314,7 +1426,10 @@
     });
     for (const q of ['x', 'y', 'w', 'h']) {
       const el = root.querySelector(`[name="${CSS.escape(`pa.${sid}.${q}`)}"]`);
-      if (el && el !== skipInput) el.value = fx(st[q]);
+      if (el && el !== skipInput) {
+        el.value = fx(st[q]);
+        showNum(el);
+      }
     }
     const ph = root.querySelector(`[data-phgt="${CSS.escape(sid)}"]`);
     if (ph) ph.textContent = fx((st.widthCm * st.h) / st.w);
@@ -1420,8 +1535,10 @@
       st.off = !el.checked;
       el.closest('.pm-side').classList.toggle('is-off', st.off);
     } else {
-      const v = Number(el.value);
-      if (el.value === '' || !Number.isFinite(v)) { if (final) drawSide(sid); return true; }
+      // Any digits; a box that isn't a number moves nothing (it says why), and the area's boxes go back to it.
+      const raw = numText(el);
+      const v = Number(raw);
+      if (!/^-?\d*\.?\d+$/.test(raw)) { if (final) drawSide(sid); return true; }
       if (kind === 'pa') {
         const box = { x: st.x, y: st.y, w: st.w, h: st.h };
         box[q] = v;
@@ -1470,10 +1587,10 @@
         <label class="check"><input type="checkbox" name="embOn" ${sp ? 'checked' : ''}> <span>${esc(t('pm.embOn'))}</span></label>
         <div class="pm-grid3 pm-emb-fields" ${sp ? '' : 'hidden'}>
           ${fld('embAt', t('pm.embAt'), `<select id="${fieldId('embAt')}" name="embAt">${['chest', 'center', 'top', 'same'].map((a) => `<option value="${a}" ${(sp ? sp.at : 'chest') === a ? 'selected' : ''}>${esc(t('pm.embAt.' + a))}</option>`).join('')}</select>`)}
-          ${fld('embW', t('pm.embW'), inp('embW', sp && sp.at !== 'same' ? sp.cm[0] : 9, 'type="number" min="1" max="40" step="0.5" dir="ltr"'), '', 'pm-emb-size')}
-          ${fld('embH', t('pm.embH'), inp('embH', sp && sp.at !== 'same' ? sp.cm[1] : 9, 'type="number" min="1" max="40" step="0.5" dir="ltr"'), '', 'pm-emb-size')}
-          ${fld('embPrice', t('pm.embPrice'), inp('embPrice', sp ? sp.surcharge : 150, 'type="number" min="0" step="1" dir="ltr"'))}
-          ${fld('embColors', t('pm.embColors'), inp('embColors', sp ? sp.maxColors : 6, 'type="number" min="1" max="15" step="1" dir="ltr"'))}
+          ${fld('embW', t('pm.embW'), inp('embW', sp && sp.at !== 'same' ? sp.cm[0] : 9, numAttrs({ min: 1, max: 40, need: true })), '', 'pm-emb-size')}
+          ${fld('embH', t('pm.embH'), inp('embH', sp && sp.at !== 'same' ? sp.cm[1] : 9, numAttrs({ min: 1, max: 40, need: true })), '', 'pm-emb-size')}
+          ${fld('embPrice', t('pm.embPrice'), inp('embPrice', sp ? sp.surcharge : 150, numAttrs({ min: 0, need: true })))}
+          ${fld('embColors', t('pm.embColors'), inp('embColors', sp ? sp.maxColors : 6, numAttrs({ min: 1, max: 15, whole: true, need: true })))}
         </div>
       </div>` : ''}`;
   }
@@ -1614,6 +1731,14 @@
   async function save(name) {
     const P = S.P;
     secError(name, '');
+    // A number box with a mistake in it: nothing is sent; the box says why, and so does the section.
+    const bad = badNum(name);
+    if (bad) {
+      secError(name, `${boxName(bad.el)}: ${bad.msg}`);
+      bad.el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      bad.el.focus({ preventScroll: true });
+      return;
+    }
     let body;
     try {
       body = SAVERS[name](P);
@@ -1699,8 +1824,9 @@
       }
       secName = 'tech';
     } else if (kind === 'prices') {
-      root.querySelectorAll('#pm-sec-prices input[type=number]').forEach((el) => { el.value = ''; });
+      root.querySelectorAll('#pm-sec-prices input[data-num]').forEach((el) => { el.value = ''; });
       updateFinals();
+      showNums(document.getElementById('pm-sec-prices'));
       secName = 'prices';
     }
     if (secName) setDirty(secName);
@@ -1803,10 +1929,10 @@
         return rerender('sizes');
       case 'vs-all': {
         const el = root.querySelector('[name=vsAll]');
-        const n = el ? el.value.trim() : '';
+        const n = el ? numText(el) : '';
         secError('avail', '');
         if (n === '') { secError('avail', t('pm.vs.needN')); if (el) el.focus(); return undefined; }
-        if (!Number.isInteger(Number(n)) || Number(n) < 0) return secError('avail', t('pm.badStock'));
+        if (!/^\d+$/.test(n)) return secError('avail', t('pm.badStock'));
         root.querySelectorAll('.pm-vs .pm-vs-in').forEach((x) => { x.value = String(Number(n)); });
         setDirty('avail');
         return syncVariant();
@@ -1845,6 +1971,14 @@
     const scale = scaleRaw === '' ? null : Number(scaleRaw);
     secError('sizes', '');
     if (!/^[A-Za-z0-9][A-Za-z0-9x.-]{0,19}$/.test(id)) return secError('sizes', t('pm.badSizeId'));
+    // The add-on and the print scale: any digits, and a wrong one says why (it used to read as nothing).
+    for (const el of [root.querySelector('[name="ns.add"]'), root.querySelector('[name="ns.scale"]')]) {
+      const msg = el && showNum(el);
+      if (msg) {
+        el.focus();
+        return secError('sizes', `${boxName(el)}: ${msg}`);
+      }
+    }
     if (S.sizes.some((z) => z.id === id)) return secError('sizes', t('pm.sizeTaken'));
     if (!Number.isFinite(add)) return secError('sizes', t('pm.badPrice'));
     if (scale !== null && !(scale >= 0.1 && scale <= 10)) return secError('sizes', t('pm.badScale'));
@@ -1879,6 +2013,7 @@
     }
     if (el.dataset && el.dataset.lock) { S.lock[el.dataset.lock] = el.checked; return; }
     if (el.name === 'nc.hex') { const o = root.querySelector('[data-hex-out]'); if (o) o.textContent = el.value; }
+    if (el.matches('input[data-num]')) showNum(el);
     if (el.dataset && el.dataset.noDirty !== undefined) return;
     const secEl = el.closest('[data-sec]');
     if (!secEl) return;
@@ -2044,6 +2179,7 @@
     if (S.dirty.has('avail')) syncAvail();
     if (S.dirty.has('prices')) updateFinals();
     drawAllSides();
+    showNums();
   }
 
   function reset_() {

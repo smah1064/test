@@ -554,7 +554,9 @@ function inspect(px, sw, sh) {
  * see-through or for SVG, else PNG for PNG and JPG for JPG / WEBP). See-through
  * margins round a cut-out are trimmed (w, h, printPx are the trimmed size).
  * `background`: the plain colour round artwork on a plain background, else null.
- * Otherwise { ok: false, reason: 'notPicture' | 'badPicture' | 'tooSmall' | 'tooBig' }.
+ * Otherwise { ok: false, reason: 'notPicture' | 'badPicture' | 'tooSmall' | 'tooBig' }; 'tooSmall' says the size
+ * measured { w, h } and, when that's the drawing inside a bigger picture (empty margins left out), the picture's own
+ * { pictureW, pictureH } (skipSizes keeps them with the file's line in the upload).
  */
 async function analyze(data, path = '') {
   const named = isPictureName(path);
@@ -569,6 +571,17 @@ async function analyze(data, path = '') {
   } catch (e) {
     return { ok: false, reason: e instanceof UploadError ? e.code : 'badPicture' };
   }
+}
+
+/**
+ * The sizes to keep with a file of the zip that wasn't used ({} unless it was too small), for the admin's message:
+ * { w, h } what was measured and, when that was the drawing inside a bigger picture, { pictureW, pictureH }.
+ */
+function skipSizes(a) {
+  const px = (v) => (Number.isInteger(v) && v > 0 && v <= 1e6 ? v : null);
+  if (!a || a.reason !== 'tooSmall' || !px(a.w) || !px(a.h)) return {};
+  const inside = px(a.pictureW) && px(a.pictureH) ? { pictureW: a.pictureW, pictureH: a.pictureH } : {};
+  return { w: a.w, h: a.h, ...inside };
 }
 
 async function look(src, kind) {
@@ -590,7 +603,9 @@ async function look(src, kind) {
   }
   const w = box ? box.width : src.w;
   const h = box ? box.height : src.h;
-  if (Math.max(w, h) < MIN_SIDE) return { ok: false, reason: 'tooSmall', w, h };
+  // Measured on the drawing (its empty margins left out): the picture's own size goes with it, so the admin is told
+  // "the drawing inside is only 540 × 380 px (the picture is 2400 × 1800 px)", not that a 2400 px picture is small.
+  if (Math.max(w, h) < MIN_SIDE) return { ok: false, reason: 'tooSmall', w, h, ...(box ? { pictureW: src.w, pictureH: src.h } : {}) };
 
   const { seeThrough } = s;
   const printExt = seeThrough || kind === 'svg' || kind === 'png' ? 'png' : 'jpg';
@@ -1105,6 +1120,7 @@ module.exports = {
   readZip,
   openZip,
   analyze,
+  skipSizes,
   suggest,
   pickProducts,
   analysisColor,

@@ -233,6 +233,15 @@ Object.assign(window.POD_STRINGS, {
   'pm.finalPrice': ['Customer pays', 'الزبون بيدفع'],
   'pm.pricesEmpty': ['Empty a box to go back to the original price.', 'فضّي الخانة عشان يرجع السعر الأصلي.'],
   'pm.pricesChanged': ['The prices are not the original ones.', 'الأسعار مش الأصلية.'],
+  // Under a price box that was emptied: what saving it does (QA 25 Nov: it went back to the original without a word).
+  'pm.empty.price': ['Empty: back to the original price ({price}) when you save.', 'فاضية: لما تحفظ هيرجع السعر الأصلي ({price}).'],
+  'pm.empty.original': ['Empty: back to the original price when you save.', 'فاضية: لما تحفظ هيرجع السعر الأصلي.'],
+  'pm.empty.addon': ['Empty: back to the original add-on ({amount}) when you save.', 'فاضية: لما تحفظ هترجع الزيادة الأصلية ({amount}).'],
+  'pm.empty.noAddon': ['Empty: back to the original, no add-on, when you save.', 'فاضية: لما تحفظ هترجع زي الأصل من غير زيادة.'],
+  'pm.empty.follows': ['Empty: this pack follows the base price again when you save.', 'فاضية: لما تحفظ الكمية دي هترجع تمشي مع السعر الأساسي.'],
+  // Number boxes (any digits: ٢٧٠ is 270); the other messages are admin.js's num.* in i18n.js.
+  'pm.num.max': ['Type {max} or less', 'اكتب {max} أو أقل'],
+  'pm.num.empty': ['Type a number here', 'اكتب رقم هنا'],
   // A bigger pack cheaper than a smaller one (Products → Prices and Accounts → Prices); a warning only.
   'pm.packWarn.title': ['Check the pack prices', 'راجع أسعار الكميات'],
   'pm.packWarn.line': ['{big} ({bigPrice}) costs less than {small} ({smallPrice}). Customers would buy the bigger pack.', '{big} ({bigPrice}) أرخص من {small} ({smallPrice}). الزباين هيشتروا الكمية الأكبر.'],

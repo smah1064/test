@@ -371,3 +371,11 @@
   #pm-root .pm-vs-all input { flex: 1; width: auto; min-width: 0; }
   .pm-vs-tools .btn { flex: 1; }
 }
+
+/* ---------- Number boxes ([data-num]: any digits) ---------- */
+/* A box with a mistake in it, and the line under it: what's wrong, or what an emptied price box will do. */
+#pm-root input[data-num][aria-invalid="true"] { border-color: var(--bad); }
+#pm-root input[data-num][aria-invalid="true"]:focus { box-shadow: 0 0 0 3px var(--pm-bad-bg); }
+.pm-num-msg { display: block; margin-top: 4px; font-size: 12px; line-height: 1.45; font-weight: 600; color: var(--pm-warn); overflow-wrap: anywhere; }
+.pm-num-msg.is-bad { color: var(--bad); }
+.pm-num-msg[hidden] { display: none; }

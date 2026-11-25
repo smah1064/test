@@ -133,6 +133,68 @@
     return `<dl class="proof-spec">${rows.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${v}</dd></div>`).join('')}</dl>`;
   }
 
+  /*
+   * The print file's background (QA 25 Nov: white lettering hardly showed on the light checks, yet the customer
+   * checks the spelling there). Light checks, or dark ones: picked by itself once the file has loaded (mostly light
+   * ink round see-through parts: dark), and a "Dark background" button on the box to switch. Checks either way, so
+   * what isn't printed still shows. Kept per print file while the page is open (the cart draws its proofs again).
+   */
+  const artBg = new Map(); // artworkUrl -> 'dark' | 'light'
+  const bgChosen = new Set(); // artworkUrls whose background the customer picked (never changed for them)
+  const BG_ICON = '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.75a6.25 6.25 0 0 1 0 12.5z" fill="currentColor"/></svg>';
+  /** Mostly light ink (white, cream, yellow…) with see-through parts round it: it hardly shows on the light checks. */
+  function lightArtwork(img) {
+    const w = img.naturalWidth;
+    const h = img.naturalHeight;
+    if (!w || !h) return false;
+    const k = Math.min(1, 160 / Math.max(w, h));
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(w * k));
+    c.height = Math.max(1, Math.round(h * k));
+    const g = c.getContext('2d', { willReadFrequently: true });
+    g.drawImage(img, 0, 0, c.width, c.height);
+    const px = g.getImageData(0, 0, c.width, c.height).data;
+    let clear = 0;
+    let ink = 0;
+    let light = 0;
+    for (let i = 0; i < px.length; i += 4) {
+      if (px[i + 3] < 40) { clear++; continue; }
+      ink++;
+      // Lightness by the eye's weights (enough to tell light from dark ink).
+      if (0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2] > 205) light++;
+    }
+    return ink > 0 && clear / (px.length / 4) >= 0.05 && light / ink >= 0.5;
+  }
+  function setArtBg(box, dark) {
+    box.classList.toggle('is-dark', dark);
+    const pic = box.closest('.proof-pic');
+    const btn = pic && pic.querySelector('[data-proof-bg]');
+    if (btn) btn.setAttribute('aria-pressed', String(dark));
+  }
+  // The file loaded: dark checks behind light artwork (unless the customer chose).
+  document.addEventListener('load', (e) => {
+    const img = e.target;
+    const box = img && img.tagName === 'IMG' && img.closest('.proof-art-box[data-proof-art]');
+    if (!box) return;
+    const url = box.dataset.proofArt;
+    if (bgChosen.has(url)) return;
+    if (!artBg.has(url)) {
+      let dark = false;
+      try { dark = lightArtwork(img); } catch (err) { /* a file the page can't read: light checks */ }
+      artBg.set(url, dark ? 'dark' : 'light');
+    }
+    setArtBg(box, artBg.get(url) === 'dark');
+  }, true);
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest && e.target.closest('[data-proof-bg]');
+    const box = btn && btn.closest('.proof-pic') && btn.closest('.proof-pic').querySelector('.proof-art-box[data-proof-art]');
+    if (!box) return;
+    const dark = !box.classList.contains('is-dark');
+    artBg.set(box.dataset.proofArt, dark ? 'dark' : 'light');
+    bgChosen.add(box.dataset.proofArt);
+    setArtBg(box, dark);
+  });
+
   function sideHtml(proof, s) {
     const b = Number(s.bleedIn) || 0;
     const w = Number(s.widthIn) || 0;
@@ -150,12 +212,14 @@
       <span class="pf-trim" style="inset:${pct(b, fullH)} ${pct(b, fullW)}"></span>
       ${safe ? `<span class="pf-safe" style="inset:${pct(b + safe, fullH)} ${pct(b + safe, fullW)}"></span>` : ''}` : '';
     const sizeText = w && h ? t(emb ? 'proof.size.embroidery' : 'proof.size.cm', { w: cm(w), h: cm(h) }) : '';
+    const dark = artBg.get(s.artworkUrl) === 'dark';
     return `
       <figure class="proof-side">
         <div class="proof-pics">
           ${s.previewUrl ? `<div class="proof-pic"><span class="proof-cap">${esc(t('proof.onProduct'))}</span><div class="proof-mock"><img src="${esc(s.previewUrl)}" alt="${esc(t('proof.mockupAlt', { product, side: name }))}" loading="lazy"></div></div>` : ''}
-          ${s.artworkUrl ? `<div class="proof-pic"><span class="proof-cap">${esc(t('proof.printFile'))}</span>
-            <div class="proof-art-box"><a class="proof-art" href="${esc(s.artworkUrl)}" target="_blank" rel="noopener" title="${esc(t('proof.openFull'))}">
+          ${s.artworkUrl ? `<div class="proof-pic"><div class="proof-cap-row"><span class="proof-cap">${esc(t('proof.printFile'))}</span>
+              <button type="button" class="proof-bg-btn" data-proof-bg aria-pressed="${dark}" title="${esc(t('proof.bgDarkHelp'))}">${BG_ICON}<span>${esc(t('proof.bgDark'))}</span></button></div>
+            <div class="proof-art-box${dark ? ' is-dark' : ''}" data-proof-art="${esc(s.artworkUrl)}"><a class="proof-art" href="${esc(s.artworkUrl)}" target="_blank" rel="noopener" title="${esc(t('proof.openFull'))}">
               <img src="${esc(s.artworkUrl)}" alt="${esc(t('proof.artAlt', { side: name }))}" loading="lazy">${guides}
             </a></div></div>` : ''}
         </div>

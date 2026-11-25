@@ -121,7 +121,10 @@ Object.assign(window.POD_STRINGS, {
   // Files in the zip that weren't used
   'up.skippedFiles': ['Files in the zip that weren\'t used ({n})', 'ملفات في الـ zip ما اتاخدتش ({n})'],
   'up.reason.notPicture': ['not a picture (PNG, JPG, WEBP or SVG)', 'مش صورة (PNG أو JPG أو WEBP أو SVG)'],
-  'up.reason.tooSmall': ['too small to print (under 600 px on the long side)', 'صغيرة أوي على الطباعة (أقل من 600 بكسل في الضلع الطويل)'],
+  'up.reason.tooSmall': ['too small to print (under {min} px on the long side, not counting empty margins round the drawing)', 'صغيرة أوي على الطباعة (أقل من {min} بكسل في الضلع الطويل، من غير الفراغ اللي حوالين الرسمة)'],
+  // With the size measured (the drawing, its empty margins left out; and the whole picture when it's bigger).
+  'up.reason.tooSmallSize': ['too small to print: {w} × {h} px, and it needs {min} px on its long side', 'صغيرة أوي على الطباعة: {w} × {h} بكسل، ولازم {min} بكسل في الضلع الطويل'],
+  'up.reason.tooSmallInside': ['too small to print: the drawing inside is only {w} × {h} px (the picture is {pw} × {ph} px, with empty margins round the drawing), and it needs {min} px on its long side', 'صغيرة أوي على الطباعة: الرسمة اللي جوّه {w} × {h} بكسل بس (الصورة نفسها {pw} × {ph} بكسل وحوالين الرسمة فراغ)، ولازم {min} بكسل في الضلع الطويل'],
   'up.reason.badPicture': ['the picture couldn\'t be read', 'الصورة مش بتتقري'],
   'up.reason.blankPicture': ['empty: one plain colour, no design in it', 'فاضية: لون واحد ومفيهاش تصميم'],
   'up.reason.tooBig': ['the picture is too big to read (too many pixels)', 'الصورة كبيرة أوي ومش بتتقري (بكسلات كتير أوي)'],

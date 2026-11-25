@@ -1035,6 +1035,9 @@ window.POD_STRINGS = {
   'proof.checkedShort': ['I’ve checked this proof', 'راجعت البروفة دي'],
   'proof.show': ['Show proof', 'اعرض البروفة'],
   'proof.hide': ['Hide proof', 'اخفي البروفة'],
+  // The print file's box: dark checks behind white or light artwork (public/js/proof-ui.js).
+  'proof.bgDark': ['Dark background', 'خلفية غامقة'],
+  'proof.bgDarkHelp': ['White or light artwork is easier to read on dark checks', 'الرسمة البيضا أو الفاتحة بتتقري أسهل على مربعات غامقة'],
   'cart.barGo': ['Continue to order', 'كمّل الطلب'],
   // Photo prints in the cart: prints per size, photo-specific proof text
   'cart.photoSizes': ['Sizes', 'المقاسات'],
@@ -1388,7 +1391,6 @@ window.POD_STRINGS = {
   'admin.redraw.kept.many': ['{n} pages kept as preview', '{n} صفحة فضلت زي المعاينة'],
   'admin.redraw.again': ['Redraw pages', 'ارسم الصفحات تاني'],
   'admin.redraw.started': ['Redrawing the pages…', 'جاري رسم الصفحات…'],
-  'book.englishNote': ['The book is printed in English. Please write the names in English letters.', 'الكتاب بيتطبع باللغة الإنجليزية. من فضلك اكتب الأسماء بحروف إنجليزي.'],
   'book.cover': ['Cover', 'الغلاف'],
   'book.make': ['Show my book', 'اعرض كتابي'],
   'book.update': ['Update my book', 'حدّث الكتاب'],

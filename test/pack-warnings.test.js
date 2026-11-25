@@ -282,6 +282,105 @@ test('Accounts → Prices: the same warning before and after saving, and saving 
   }
 });
 
+/**
+ * The Products screen's prices section with its own box reading (val, numText, numProblem, updateFinals and
+ * savePrices in public/js/admin-products.js; POD.latinDigits from public/js/common.js): the boxes as typed, in any
+ * digits. Returns the final-price column and the warnings shown, the first box with a mistake (the section is not
+ * saved then) and the body Save sends.
+ */
+function productsScreenTyped(P, typed) {
+  const read = (f) => fs.readFileSync(path.join(__dirname, '../public/js', f), 'utf8');
+  const grab = (src, re, what) => {
+    const m = src.match(re);
+    assert.ok(m, `${what} in the screen's code`);
+    return m[0];
+  };
+  const src = read('admin-products.js');
+  const code = [
+    grab(read('common.js'), / {2}const latinDigits = [\s\S]*?;\n/, 'latinDigits'),
+    grab(src, / {2}const val = \(name\) => \{[\s\S]*?\n {2}\};\n/, 'val'),
+    grab(src, / {2}const numText = [^\n]*\n/, 'numText'),
+    grab(src, / {2}function numProblem\(el\) \{[\s\S]*?\n {2}\}\n/, 'numProblem'),
+    grab(src, / {2}function updateFinals\(\) \{[\s\S]*?\n {2}\}\n/, 'updateFinals'),
+    grab(src, / {2}function savePrices\(P\) \{[\s\S]*?\n {2}\}\n/, 'savePrices'),
+  ].join('');
+  // The boxes as pricesBody draws them (text boxes with data-num: the base price 1 or more, the extra side 0 or more).
+  const mins = { basePrice: '1', extraSidePrice: '0' };
+  const boxes = Object.entries(typed).map(([name, value]) => ({ name, value, type: 'text', hasAttribute: (a) => a === 'data-num', dataset: mins[name] ? { min: mins[name] } : {} }));
+  const cells = P.sizes.map((z) => ({ dataset: { final: z.id }, textContent: '' }));
+  const ctx = {
+    S: { P },
+    POD_PACKS: PACKS,
+    CSS: { escape: (s) => s },
+    t: (k) => k,
+    root: { querySelectorAll: () => cells, querySelector: (sel) => boxes.find((b) => sel === `[name="${b.name}"]`) || null },
+    out: {},
+  };
+  vm.runInNewContext(`${code}
+    const POD = { money: (v) => v, num: String, latinDigits };
+    let warnings = [];
+    function showPackWarnings(p, prices) { warnings = POD_PACKS.cheaperBiggerPacks(p.sizes, prices); }
+    updateFinals();
+    const bad = ${JSON.stringify(Object.keys(typed))}.map((n) => root.querySelector('[name="' + n + '"]')).find((el) => numProblem(el));
+    out.finals = Object.fromEntries(root.querySelectorAll().map((c) => [c.dataset.final, c.textContent]));
+    out.warnings = warnings;
+    out.bad = bad ? { name: bad.name, msg: numProblem(bad) } : null;
+    out.body = savePrices(S.P);`, ctx);
+  // (Plain objects of this realm, for deepStrictEqual.)
+  const out = JSON.parse(JSON.stringify(ctx.out));
+  return { ...out, warnings: short(out.warnings) };
+}
+
+test('Products → Prices typed in Arabic digits: the same prices, warnings and saved prices as in 0-9; a wrong box is not sent', async () => {
+  try {
+    const P0 = await (await admin('/api/admin/catalog/brochures')).json();
+    const shown = (over = {}) => ({ basePrice: String(P0.basePrice), extraSidePrice: '', ...Object.fromEntries(P0.sizes.map((z) => [`ps.${z.id}`, String(z.surcharge || 0)])), ...over });
+    // 1 brochure at 40 of its own (typed as -210 against 250) first, as in the test above.
+    let s = productsScreenTyped(P0, shown({ basePrice: '٢٥٠', 'ps.1': '-٢١٠' }));
+    assert.strictEqual(s.bad, null);
+    assert.deepStrictEqual(s.body.prices.basePrice, '250', 'sent as 0-9 (the number box used to send it empty)');
+    assert.strictEqual(s.body.prices.sizes['1'], '-210');
+    let r = await admin('/api/admin/catalog/brochures', 'PUT', s.body);
+    assert.strictEqual(r.status, 200, await r.clone().text());
+    const P1 = await r.json();
+    assert.strictEqual(P1.basePrice, 250);
+    assert.strictEqual(P1.basePrice + P1.sizes.find((z) => z.id === '1').surcharge, 40);
+    // Lowered to ١٧٥ (Persian digits work too: ۱۷۵): 10 brochures at 35 under 1 at 40, before and after saving.
+    for (const typedPrice of ['١٧٥', '۱۷۵', ' 175 ']) {
+      s = productsScreenTyped(P1, shown({ basePrice: typedPrice, ...Object.fromEntries(P1.sizes.map((z) => [`ps.${z.id}`, String(z.surcharge || 0)])) }));
+      assert.deepStrictEqual(s.warnings, [['10', 35, '1', 40]], `${typedPrice}: the warning`);
+      assert.deepStrictEqual([s.finals[1], s.finals[10]], [40, 35], `${typedPrice}: the final-price column`);
+      assert.strictEqual(s.body.prices.basePrice, '175');
+    }
+    r = await admin('/api/admin/catalog/brochures', 'PUT', s.body);
+    assert.strictEqual(r.status, 200, await r.clone().text());
+    assert.deepStrictEqual(short(accounting.cheaperBiggerPacks(byId('brochures'))), [['10', 35, '1', 40]], 'the server agrees');
+    // The Arabic decimal mark: ١٧٥٫٥ is 175.5.
+    s = productsScreenTyped(P1, shown({ basePrice: '١٧٥٫٥' }));
+    assert.strictEqual(s.bad, null);
+    assert.strictEqual(s.body.prices.basePrice, '175.5');
+    // A box that isn't a number: it says so, nothing would be sent (save() stops at it), the column shows "—"
+    // for the prices it changes and no warning is made up from it.
+    s = productsScreenTyped(P1, shown({ basePrice: '١٧o' }));
+    assert.deepStrictEqual(s.bad, { name: 'basePrice', msg: 'num.bad' });
+    assert.ok(Object.values(s.finals).every((v) => v === '—'), JSON.stringify(s.finals));
+    assert.deepStrictEqual(s.warnings, []);
+    s = productsScreenTyped(P1, shown({ basePrice: '0' }));
+    assert.deepStrictEqual(s.bad, { name: 'basePrice', msg: 'num.min' }, 'a price of 0 is refused before it is sent');
+    s = productsScreenTyped(P1, shown({ 'ps.250': '٣٥o' }));
+    assert.deepStrictEqual(s.bad, { name: 'ps.250', msg: 'num.bad' });
+    assert.strictEqual(s.finals[250], '—');
+    assert.notStrictEqual(s.finals[1], '—', 'the other sizes still show their prices');
+    // An emptied base price: the column shows the original prices it goes back to (it used to say just "original").
+    s = productsScreenTyped(P1, shown({ basePrice: '' }));
+    assert.strictEqual(s.bad, null, 'an empty price box is allowed: it says what saving it does');
+    assert.strictEqual(s.finals[250], P0.original.prices.basePrice + P0.original.prices.sizes['250']);
+    assert.ok(Object.values(s.finals).every((v) => typeof v === 'number'), JSON.stringify(s.finals));
+  } finally {
+    await reset('brochures');
+  }
+});
+
 test('no warning on either screen for products without prices of their own for their packs', async () => {
   try {
     for (const [id, price] of [['postcards', 60], ['bookmarks', 20], ['brochures', 100], ['folders', 2000], ['booklets', 300]]) {

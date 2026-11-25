@@ -581,12 +581,26 @@ window.AdminUploads = (() => {
     const bar = $('up-bar');
     if (bar && S.batch) bar.innerHTML = barHtml();
   }
+  /** The long side a picture needs (MIN_SIDE in src/design-upload.js). */
+  const MIN_SIDE = 600;
+  /**
+   * Why a file of the zip wasn't used. Too small: its size, and when that was the drawing inside a bigger picture (the
+   * empty margins round it left out), the picture's too (QA 25 Nov: a 2400 px picture was called "under 600 px").
+   */
+  function skipWhy(s) {
+    const px = (v) => Number.isInteger(v) && v > 0;
+    if (s.reason === 'tooSmall' && px(s.w) && px(s.h)) {
+      const size = { w: s.w, h: s.h, min: MIN_SIDE };
+      return px(s.pictureW) && px(s.pictureH) ? t('up.reason.tooSmallInside', { ...size, pw: s.pictureW, ph: s.pictureH }) : t('up.reason.tooSmallSize', size);
+    }
+    return t(has('up.reason.' + s.reason) ? 'up.reason.' + s.reason : 'up.reason.other', { min: MIN_SIDE });
+  }
   function skippedHtml() {
     const list = (S.batch && S.batch.skipped) || [];
     if (!list.length) return '';
     return `<details class="card up-skipped">
         <summary>${esc(t('up.skippedFiles', { n: list.length }))}</summary>
-        <ul>${list.map((s) => `<li><bdi dir="ltr">${esc(s.path || '')}</bdi>: ${esc(t(has('up.reason.' + s.reason) ? 'up.reason.' + s.reason : 'up.reason.other'))}</li>`).join('')}</ul>
+        <ul>${list.map((s) => `<li><bdi dir="ltr">${esc(s.path || '')}</bdi>: ${esc(skipWhy(s))}</li>`).join('')}</ul>
       </details>`;
   }
   function say(text, bad, list) {

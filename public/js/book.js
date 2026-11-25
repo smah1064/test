@@ -75,8 +75,9 @@
 
   // ---------- Form ----------
   const today = new Date().toISOString().slice(0, 10);
-  // The books are printed in English: right-to-left letters (Arabic…) can't go in. Shown on every such
-  // field as it is typed, and all of them at once when making the book.
+  // The books are printed in English: right-to-left letters (Arabic…) can't go in. Said once, as a hint above the
+  // questions (QA 25 Nov: a red box said it too, before anything was typed); an error only on a field that has
+  // such letters, as it is typed, and all of them at once when making the book.
   const RTL_RE = /[\u0590-\u08ff\ufb1d-\ufdff\ufe70-\ufeff]/;
   function markLatin(el) {
     if (!el || !el.dataset || !el.dataset.q || !/^(INPUT|TEXTAREA)$/.test(el.tagName) || el.type === 'date') return false;
@@ -114,9 +115,9 @@
         return `<div class="field">${label}<textarea id="q-${q.id}" data-q="${q.id}" maxlength="${q.max}" rows="3" dir="auto" placeholder="${esc(t('book.dedicationHint'))}">${esc(v)}</textarea></div>`;
       }
       const type = q.type === 'date' ? 'date' : 'text';
-      return `<div class="field">${label}<input id="q-${q.id}" data-q="${q.id}" type="${type}" ${type === 'date' ? `max="${today}" min="${esc(q.min || '1900-01-01')}"` : `maxlength="${q.max || 40}" dir="auto"`} value="${esc(v)}" placeholder="${q.placeholder ? esc(tr(q.placeholder)) : ''}"></div>`;
+      return `<div class="field">${label}<input id="q-${q.id}" data-q="${q.id}" type="${type}" ${type === 'date' ? `max="${today}" min="${esc(q.min || '1900-01-01')}"` : `maxlength="${q.max || 40}" dir="auto" aria-describedby="bk-en-hint"`} value="${esc(v)}" placeholder="${q.placeholder ? esc(tr(q.placeholder)) : ''}"></div>`;
     }).join('');
-    $('bk-questions').insertAdjacentHTML('afterbegin', `<p class="muted small bk-en-hint" style="margin:0 0 10px">${esc(t('book.englishHint'))}</p>`);
+    $('bk-questions').insertAdjacentHTML('afterbegin', `<p class="muted small bk-en-hint" id="bk-en-hint" style="margin:0 0 10px">${esc(t('book.englishHint'))}</p>`);
     $('bk-questions').querySelectorAll('input[data-q], textarea[data-q]').forEach(markLatin);
     $('bk-sizes').innerHTML = product.sizes.map((s) => `<button type="button" class="chip ${s.id === state.size.id ? 'active' : ''}" data-size="${s.id}">${esc(tr(s.label))}${POD.sizeNote(product, s) ? ` <span style="opacity:.7">${esc(POD.sizeNote(product, s))}</span>` : ''}</button>`).join('');
     $('bk-price').textContent = money(product.basePrice + state.size.surcharge);
