@@ -34,7 +34,7 @@ const MESSAGES = {
   bgFailed: { en: 'Could not remove the background of this photo. Please try another photo.', ar: 'ماقدرناش نشيل خلفية الصورة دي. جرّب صورة تانية.' },
   imageTooLarge: { en: 'This picture is too large to print. Please use a smaller one.', ar: 'الصورة كبيرة جدًا للطباعة. استخدم صورة أصغر.' },
   bookLatin: { en: '{field}: please type it in English letters (the book is printed in English)', ar: '{field}: اكتبه بحروف إنجليزي من فضلك (الكتاب مطبوع بالإنجليزي)' },
-  bookBadDate: { en: '{field}: please choose a real date in the past', ar: '{field}: اختار تاريخ صحيح في الماضي' },
+  bookBadDate: { en: '{field}: please choose a real date from 1900 up to today', ar: '{field}: اختار تاريخ صحيح من سنة 1900 لحد النهارده' },
   acctName: { en: 'Please enter your name', ar: 'اكتب اسمك من فضلك' },
   acctPasswordShort: { en: 'The password needs at least 8 characters', ar: 'كلمة المرور لازم تكون 8 حروف أو أكتر' },
   acctPasswordLong: { en: 'That password is too long', ar: 'كلمة المرور طويلة جدًا' },
