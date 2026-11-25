@@ -308,6 +308,39 @@ async function revisionSent(order, item, { origin } = {}) {
   return result;
 }
 
+/**
+ * A rights / takedown request (someone says a design uses their work): to the owner on every admin channel,
+ * like a new order, so it is seen the same day. `t` = { name, contact, owner, link, details }.
+ */
+async function rightsRequest(t, { origin } = {}) {
+  const cfg = config();
+  const st = status();
+  const lang = cfg.adminLang;
+  const base = cfg.siteUrl || origin || '';
+  const head = lang === 'en' ? '⚠️ Rights / takedown request' : '⚠️ طلب حقوق ملكية / إزالة تصميم';
+  const lines = [
+    head,
+    `${lang === 'en' ? 'From' : 'من'}: ${t.name} (${t.contact})`,
+    t.owner ? `${lang === 'en' ? 'Rights holder' : 'صاحب الحق'}: ${t.owner}` : '',
+    t.link ? `${lang === 'en' ? 'Link' : 'الرابط'}: ${t.link}` : '',
+    '',
+    String(t.details || '').slice(0, 700),
+    base ? `\n${lang === 'en' ? 'Admin → Rights requests' : 'لوحة التحكم ← طلبات الحقوق'}: ${base}/admin#rights` : '',
+  ].filter((l, i) => l || i === 4);
+  const text = lines.join('\n');
+  const subject = lang === 'en' ? 'ebda3 · Rights request' : 'إبداع · طلب حقوق ملكية';
+  const result = {};
+  const run = async (key, enabled, fn) => {
+    if (!enabled) { result[key] = 'off'; return; }
+    try { await fn(); result[key] = 'sent'; } catch (e) { result[key] = 'failed'; console.warn(`[notify] ${key} (rights request) failed: ${e.message}`); }
+  };
+  await Promise.all([
+    run('adminWhatsApp', st.adminWhatsApp, () => sendWhatsApp(cfg, text)),
+    run('adminEmail', st.adminEmail, () => sendEmail(cfg, cfg.adminEmail, subject, `<pre dir="auto" style="font:14px/1.5 Arial,sans-serif;white-space:pre-wrap">${esc(text)}</pre>`, text)),
+  ]);
+  return result;
+}
+
 /** A test message to the admin on every configured admin channel. */
 async function adminTest() {
   const cfg = config();
@@ -469,4 +502,4 @@ async function proofMessage(order, item, { kind = 'proof', note = '', link = '' 
   }
 }
 
-module.exports = { status, orderPlaced, orderShipped, proofMessage, adminTest, revisionSent, revisionText, emailReady, emailTo, shopWhatsApp: () => config().shopWhatsApp, siteUrl: () => config().siteUrl };
+module.exports = { status, orderPlaced, orderShipped, proofMessage, adminTest, revisionSent, rightsRequest, revisionText, emailReady, emailTo, shopWhatsApp: () => config().shopWhatsApp, siteUrl: () => config().siteUrl };

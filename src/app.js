@@ -1818,8 +1818,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       db.takedowns.push(t);
       return t;
     });
-    const text = `Rights / takedown request\nFrom: ${saved.name} (${saved.contact})\nRights holder: ${saved.owner}\nLink: ${saved.link}\n\n${saved.details}`;
-    if (notify.emailReady() && process.env.ADMIN_EMAIL) notify.emailTo(process.env.ADMIN_EMAIL, 'ebda3 · Rights request', `<pre style="font:14px/1.5 sans-serif;white-space:pre-wrap">${text.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</pre>`, text).catch((e) => console.warn('[takedown] email failed:', e.message));
+    // To the owner like a new order (WhatsApp and email, within the shop's alert limit), and listed in
+    // Admin → Rights requests (QA 25 Nov: they were kept but nobody was told).
+    if (!limiter.hit('notify:*', LIMITS.notify)) notify.rightsRequest(saved, { origin: linkBase(req) }).catch((e) => console.warn('[takedown] alert failed:', e.message));
+    else console.warn('[takedown] alert skipped: too many alerts this hour (the request is in the admin)');
     res.status(201).json({ ok: true });
   });
 
@@ -4249,6 +4251,30 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   app.delete('/api/admin/library/:id', requireCatalog, (req, res) => {
     if (!library.setFlags([req.params.id], { deleted: true })) throw new HttpError(404, 'notFound');
     res.json({ ok: true });
+  });
+
+  // ---------- Rights requests (Admin → Rights requests): someone says a design uses their work ----------
+  // Newest first; the owner marks each one handled (and can open it again). Owner only.
+  app.get('/api/admin/takedowns', requireAdmin, (req, res) => {
+    const list = (store.db.takedowns || []).slice().sort((a, b) => String(b.at).localeCompare(String(a.at)));
+    res.json({ takedowns: list, open: list.filter((t) => t.status !== 'done').length });
+  });
+  app.patch('/api/admin/takedowns/:id', requireAdmin, express.json({ limit: '4kb' }), (req, res) => {
+    const b = req.body || {};
+    if (b.status !== undefined && b.status !== 'new' && b.status !== 'done') throw new HttpError(400, 'badRequest');
+    const out = store.mutate((db) => {
+      const t = (db.takedowns || []).find((x) => x.id === req.params.id);
+      if (!t) return null;
+      if (b.status) {
+        t.status = b.status;
+        if (b.status === 'done') t.doneAt = new Date().toISOString();
+        else delete t.doneAt;
+      }
+      if (typeof b.note === 'string') t.note = b.note.trim().slice(0, 1000);
+      return t;
+    });
+    if (!out) throw new HttpError(404, 'notFound');
+    res.json({ takedown: out });
   });
 
   // ---------- Upload designs (zip): Admin → Ready designs (src/design-upload.js) ----------

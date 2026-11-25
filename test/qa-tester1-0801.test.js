@@ -61,3 +61,31 @@ test('packs count copies: sizes carry their copies, and quantity lines are marke
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
 });
+
+test('rights requests: kept, listed newest first for the owner only, and marked handled', async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pod-qa0801t-'));
+  const app = createApp({ dataDir, adminPassword: 'secret-owner-pass', cleanupEvery: 0, requireApproval: false });
+  const server = await new Promise((resolve) => { const s = app.listen(0, () => resolve(s)); });
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const call = (url, method, body, token) => fetch(base + url, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
+  try {
+    for (const name of ['Mona', 'Karim']) {
+      assert.strictEqual((await call('/api/takedown', 'POST', { name, contact: 'mona@example.com', owner: 'Mona Studio', link: 'https://ebda3.me/design?id=x', details: 'This design copies my drawing.' })).status, 201);
+    }
+    assert.strictEqual((await call('/api/admin/takedowns', 'GET')).status, 401, 'not without signing in');
+    const owner = (await (await call('/api/admin/login', 'POST', { password: 'secret-owner-pass' })).json()).token;
+    const list = await (await call('/api/admin/takedowns', 'GET', undefined, owner)).json();
+    assert.strictEqual(list.takedowns.length, 2);
+    assert.strictEqual(list.open, 2);
+    const one = list.takedowns[1];
+    const done = await (await call(`/api/admin/takedowns/${one.id}`, 'PATCH', { status: 'done', note: 'Design deleted' }, owner)).json();
+    assert.strictEqual(done.takedown.status, 'done');
+    assert.strictEqual(done.takedown.note, 'Design deleted');
+    assert.strictEqual((await (await call('/api/admin/takedowns', 'GET', undefined, owner)).json()).open, 1);
+    assert.strictEqual((await call(`/api/admin/takedowns/${one.id}`, 'PATCH', { status: 'gone' }, owner)).status, 400);
+    assert.strictEqual((await call('/api/admin/takedowns/nope', 'PATCH', { status: 'done' }, owner)).status, 404);
+  } finally {
+    server.close();
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});
