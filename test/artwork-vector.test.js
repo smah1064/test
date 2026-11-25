@@ -132,6 +132,49 @@ test('a logo on a white page (or a white Illustrator artboard) comes back alone,
   assert.strictEqual(art.at(0.5, 0.5)[3], 255);
 });
 
+// POD-1014: a club crest uploaded as EPS printed with its white stripe as the black of the hoodie. Ghostscript
+// keeps the empty page around a logo as white with no opacity, and that was taken for a white artboard: the
+// clearing ran from it into the crest's own white rim (open at the top of the shield) and on into the stripe.
+test('an EPS logo on a transparent page keeps its white, also where the white touches the outline', async () => {
+  // A crest (no white page behind it): gold stars above and below (the lower row wider than the shield, so the
+  // drawing's edges are nearly all empty page), a shield with black bands, a white rim between the bands and the
+  // red panel (open at the top, like the crest's), a white stripe across the panel from rim to rim, a black shape
+  // on the panel and a white dot the red encloses.
+  const crest = Buffer.from([
+    '%!PS-Adobe-3.0 EPSF-3.0', '%%BoundingBox: 0 0 200 260', '%%HiResBoundingBox: 0 0 200 260', '%%EndComments',
+    '0.85 0.65 0.15 setrgbcolor',
+    ...[[60, 245], [100, 245], [140, 245], [10, 20], [55, 12], [100, 10], [145, 12], [190, 20]].map(([x, y]) => `newpath ${x} ${y} 10 0 360 arc fill`),
+    '0 0 0 setrgbcolor 20 50 10 180 rectfill 170 50 10 180 rectfill 20 40 160 10 rectfill',
+    '1 1 1 setrgbcolor 30 50 10 180 rectfill 160 50 10 180 rectfill',
+    '0.9 0.1 0.15 setrgbcolor 40 50 120 180 rectfill',
+    '1 1 1 setrgbcolor newpath 30 100 moveto 170 140 lineto 170 180 lineto 30 140 lineto closepath fill',
+    '0 0 0 setrgbcolor 100 70 20 20 rectfill',
+    '1 1 1 setrgbcolor newpath 100 210 8 0 360 arc fill',
+    'showpage', '%%EOF', '',
+  ].join('\n'));
+  const out = await convert(crest);
+  // The drawing is the box around what is painted: x 0 to 200, y 0 to 255 (the upper stars' tops).
+  assert.ok(out.height >= 2990 && out.height <= 3000 && Math.abs(out.width / out.height - 200 / 255) < 0.01, `${out.width}x${out.height}`);
+  const px = (x, y) => out.at(x / 200, (255 - y) / 255);
+  const WHITE = [255, 255, 255, 255];
+  assert.deepStrictEqual(px(70, 130), WHITE, 'the white stripe (left) stays white');
+  assert.deepStrictEqual(px(130, 150), WHITE, 'the white stripe (right) stays white');
+  assert.deepStrictEqual(px(35, 190), WHITE, 'the white rim, open at the top, stays white');
+  assert.deepStrictEqual(px(165, 80), WHITE, 'the other white rim stays white');
+  assert.deepStrictEqual(px(100, 210), WHITE, 'the white dot inside the red stays white');
+  assert.ok(px(70, 80)[3] === 255 && px(70, 80)[0] > 200 && px(70, 80)[1] < 60, `the red panel: ${px(70, 80)}`);
+  assert.deepStrictEqual(px(110, 80), [0, 0, 0, 255], 'the black shape');
+  assert.strictEqual(px(25, 245)[3], 0, 'transparent beside the stars');
+  assert.strictEqual(px(80, 245)[3], 0, 'transparent between the stars');
+  assert.strictEqual(px(80, 236)[3], 0, 'transparent above the shield');
+  assert.strictEqual(px(10, 150)[3], 0, 'transparent beside the shield');
+  // A white round badge with a blue middle, alone on its page: the white is the logo's, not a page.
+  const badge = await convert(Buffer.from('%!PS-Adobe-3.0 EPSF-3.0\n%%BoundingBox: 0 0 100 100\n%%EndComments\n1 1 1 setrgbcolor 50 50 50 0 360 arc fill 0 0 1 setrgbcolor 50 50 30 0 360 arc fill\nshowpage\n%%EOF\n'));
+  assert.deepStrictEqual(badge.at(0.5, 0.1), WHITE, 'the white ring stays');
+  assert.deepStrictEqual(badge.at(0.5, 0.5), [0, 0, 255, 255], 'the blue middle');
+  assert.strictEqual(badge.at(0.02, 0.02)[3], 0, 'transparent outside the ring');
+});
+
 test('a photo saved as a PDF is not blown up: it keeps the size it always had', async () => {
   // A 600 x 340 JPEG placed 7 cm wide on A4 (as Word or a phone's "print to PDF" makes it), with and without a white page.
   const jpg = await sharp({ create: { width: 600, height: 340, channels: 3, background: '#1d4ed8' } }).jpeg().toBuffer();

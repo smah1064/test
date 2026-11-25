@@ -120,17 +120,25 @@ function cropPixels(pic, b) {
 /**
  * EPS has no transparency, so Illustrator often saves the artboard as a white
  * rectangle behind the design. When the picture's edges are (almost) all
- * opaque white, the white connected to the edges becomes transparent; white
+ * painted white, the white connected to the edges becomes transparent; white
  * shapes inside the design (white letters on a dark badge) stay. Soft edges
  * keep a little transparency so the outline stays smooth. Changes the RGBA
  * pixels in place; returns false when there is no white background. `force`:
  * the white background was already found on another drawing of the same
  * artwork (a closer one, whose edges may be the design's own): clear it
  * without looking at the edges again.
+ *
+ * Only painted pixels count as white. Ghostscript keeps the pixels where nothing
+ * was drawn as white with no opacity (255, 255, 255, 0): counted as white, every
+ * logo on a transparent page looked like one on a white page, and the clearing
+ * ran from that empty margin into the logo's own white wherever it touches the
+ * outline (POD-1014: the white stripe of a club crest, reached through the white
+ * rim that is open at the top of the shield, came out transparent and printed as
+ * the black of the hoodie).
  */
 function clearWhiteBackground({ data, width: W, height: H }, { force = false } = {}) {
-  // White, at any opacity (the page's edge rows are drawn half-transparent).
-  const isWhite = (i) => data[i * 4] > 245 && data[i * 4 + 1] > 245 && data[i * 4 + 2] > 245;
+  // Painted white, at any opacity above none (the page's edge rows are drawn half-transparent).
+  const isWhite = (i) => data[i * 4 + 3] > 0 && data[i * 4] > 245 && data[i * 4 + 1] > 245 && data[i * 4 + 2] > 245;
   // Only when the frame of the picture is white (not when the design itself touches the edge).
   let edge = 0;
   let white = 0;
