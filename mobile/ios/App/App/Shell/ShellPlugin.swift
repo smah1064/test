@@ -143,11 +143,12 @@ public class ShellPlugin: CAPPlugin, CAPBridgedPlugin, ASWebAuthenticationPresen
     func openFromOutside(_ url: URL) {
         switch deepLinks.parse(url) {
         case .open(let page):
+            shellLog("link opens \(page.absoluteString)")
             webView?.load(URLRequest(url: page))
         case .auth:
             break // answered inside the sign-in session (signIn)
         case .none:
-            break
+            shellLog("link ignored (\(url.scheme ?? "?"): \(url.host ?? ""))")
         }
     }
 
@@ -170,6 +171,7 @@ public class ShellPlugin: CAPPlugin, CAPBridgedPlugin, ASWebAuthenticationPresen
               policy.isSite(failed) || policy.isInAppHost(failed),
               var c = URLComponents(url: offline, resolvingAgainstBaseURL: false) else { return }
         c.queryItems = [URLQueryItem(name: "from", value: failed.absoluteString)]
+        shellLog("no connection for \(failed.absoluteString)")
         if let page = c.url { webView?.load(URLRequest(url: page)) }
     }
 
@@ -341,4 +343,9 @@ public class ShellPlugin: CAPPlugin, CAPBridgedPlugin, ASWebAuthenticationPresen
     public func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
         return webView?.window ?? ASPresentationAnchor()
     }
+}
+
+/// A line in the phone's log (Console, or "log show" on a simulator), for finding problems. Never with secrets.
+func shellLog(_ message: String) {
+    NSLog("Ebda3Shell: %@", message)
 }

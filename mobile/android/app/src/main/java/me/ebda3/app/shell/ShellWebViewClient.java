@@ -31,6 +31,7 @@ public class ShellWebViewClient extends BridgeWebViewClient {
     @Override
     public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
         Uri url = request.getUrl();
+        if (shell.isOnlineCheck(url)) return shell.onlineCheck();
         if (shell.isLocalFile(url)) return shell.localFile(url);
         return super.shouldInterceptRequest(view, request);
     }

@@ -10,7 +10,7 @@ supported). This folder is separate from the website: nothing here is deployed w
 
 | Feature | Android | iPhone |
 | --- | --- | --- |
-| Its own "no connection" page (both languages), retries by itself and returns to the page | ✓ | ✓ |
+| Its own "no connection" page (both languages), retries by itself and returns to the page (the app checks the shop for the page: the shop's security headers don't let the page read the shop itself) | ✓ | ✓ |
 | Shop links stay in the app; other sites open in an in-app browser tab; WhatsApp, Instagram, the stores… open their own app | ✓ | ✓ |
 | Shop links from WhatsApp/email open the app (App Links / universal links)¹ | ✓ | ✓ |
 | The phone's share sheet for "Share…" in the editor | ✓ (added) | ✓ (built in) |

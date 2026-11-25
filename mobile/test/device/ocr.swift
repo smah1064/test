@@ -23,7 +23,12 @@ func recognize(_ languages: [String]) throws -> [String] {
 
 do {
     // Arabic needs a recent Vision; fall back to English only if it isn't supported here.
-    let lines = (try? recognize(["ar-SA", "en-US"])) ?? (try recognize(["en-US"]))
+    let lines: [String]
+    if let both = try? recognize(["ar-SA", "en-US"]) {
+        lines = both
+    } else {
+        lines = try recognize(["en-US"])
+    }
     for line in lines { print(line) }
 } catch {
     FileHandle.standardError.write("ocr failed: \(error)\n".data(using: .utf8)!)

@@ -112,6 +112,14 @@ final class AppBridgeViewController: CAPBridgeViewController {
             webView.navigationDelegate = proxy
         }
 
+        // The "no connection" page asks the app whether the shop can be reached again (it can't see the shop's
+        // answers itself: another site).
+        if let config = bridge?.config {
+            webView.configuration.userContentController.addScriptMessageHandler(
+                OnlineCheck(site: config.serverURL, local: config.localURL), contentWorld: .page, name: OnlineCheck.name
+            )
+        }
+
         // Capacitor's message channel ("bridge") is open to every frame of a page on iOS; let only the page itself
         // (the main frame) talk to the app, like Capacitor does on Android. Capacitor's own clean-up removes it by name.
         if let handler = (bridge as? CapacitorBridge)?.webViewDelegationHandler {
@@ -133,6 +141,52 @@ final class MainFrameOnlyMessages: NSObject, WKScriptMessageHandler {
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard message.frameInfo.isMainFrame else { return }
         target?.userContentController(userContentController, didReceive: message)
+    }
+}
+
+/// Answers the "no connection" page (www/offline.html) when it asks "can the shop be reached again?": true once the
+/// shop answers at all (any answer, even an error page, means the connection is back). The page can't find out
+/// itself: the shop is another site and doesn't let other sites read its answers. Only the app's own page, as the
+/// page itself (not a frame inside it), gets an answer.
+final class OnlineCheck: NSObject, WKScriptMessageHandlerWithReply {
+    static let name = "ebda3Online"
+    private let site: URL
+    private let local: URL
+    private let session: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 6
+        config.timeoutIntervalForResource = 8
+        config.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        config.waitsForConnectivity = false
+        return URLSession(configuration: config)
+    }()
+
+    init(site: URL, local: URL) {
+        self.site = site
+        self.local = local
+    }
+
+    func userContentController(
+        _ userContentController: WKUserContentController,
+        didReceive message: WKScriptMessage,
+        replyHandler: @escaping (Any?, String?) -> Void
+    ) {
+        let origin = message.frameInfo.securityOrigin
+        guard message.frameInfo.isMainFrame, origin.protocol == local.scheme, origin.host == local.host else {
+            return replyHandler(nil, "Not allowed here")
+        }
+        var probe = URLComponents(url: site, resolvingAgainstBaseURL: false)
+        probe?.path = "/favicon.svg"
+        probe?.fragment = nil
+        probe?.queryItems = [URLQueryItem(name: "online", value: String(Int(Date().timeIntervalSince1970 * 1000)))]
+        guard let url = probe?.url else { return replyHandler(false, nil) }
+        var request = URLRequest(url: url)
+        request.httpMethod = "HEAD"
+        session.dataTask(with: request) { _, response, error in
+            let online = response is HTTPURLResponse
+            if !online { shellLog("shop not reachable yet (\((error as NSError?)?.code ?? 0))") }
+            DispatchQueue.main.async { replyHandler(online, nil) }
+        }.resume()
     }
 }
 

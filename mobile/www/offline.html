@@ -65,15 +65,33 @@
         setTimeout(function () { going = false; btn.disabled = false; status.textContent = ''; }, 8000);
       }
 
-      // Is the shop reachable? (A no-cors request: any answer means the connection is back.)
+      // Can the shop be reached again? The app finds out for this page: the page can't see the shop's answer itself
+      // (the shop is another site, and it doesn't let other sites read its answers). On iPhone the app answers a
+      // message ("ebda3Online"), on Android a request to this page's own address ("online-check").
       function reachable() {
-        if (!target || !window.fetch) return Promise.resolve(navigator.onLine !== false);
-        var ctrl = window.AbortController ? new AbortController() : null;
-        var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 6000);
-        return fetch(target.origin + '/favicon.svg?online=' + Date.now(), {
-          mode: 'no-cors', cache: 'no-store', credentials: 'omit', signal: ctrl ? ctrl.signal : undefined
-        }).then(function () { return true; }, function () { return false; })
-          .then(function (ok) { clearTimeout(timer); return ok; });
+        var ask = null;
+        try {
+          var handler = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.ebda3Online;
+          if (handler) {
+            ask = handler.postMessage('check');
+          } else if (window.fetch) {
+            ask = fetch('online-check?t=' + Date.now(), { cache: 'no-store' })
+              .then(function (r) { return r.ok ? r.json() : null; })
+              .then(function (answer) { return !!(answer && answer.online === true); });
+          }
+        } catch (e) { ask = null; }
+        if (!ask || typeof ask.then !== 'function') return Promise.resolve(navigator.onLine !== false);
+        return new Promise(function (resolve) {
+          var settled = false;
+          var limit = setTimeout(function () { finish(false); }, 12000);
+          function finish(ok) {
+            if (settled) return;
+            settled = true;
+            clearTimeout(limit);
+            resolve(ok === true);
+          }
+          ask.then(finish, function () { finish(false); });
+        });
       }
 
       var delays = [3000, 5000, 8000, 10000];

@@ -44,12 +44,15 @@ import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -79,6 +82,8 @@ public class ShellPlugin extends Plugin {
     static final String TAG = "Ebda3Shell";
     static final String APP_SCHEME = "me.ebda3.app";
     static final String OFFLINE_FILE = "offline.html";
+    /** Where the "no connection" page asks whether the shop can be reached again (answered by the app). */
+    static final String ONLINE_CHECK = "/online-check";
     /** Files of the app's own pages that may be shown at https://localhost/… (from assets/public). */
     static final String[] LOCAL_FILES = { "offline.html", "brand-mark.svg" };
     static final long MAX_SAVE_BYTES = 60L * 1024 * 1024;
@@ -96,6 +101,7 @@ public class ShellPlugin extends Plugin {
     private DeepLinks deepLinks;
     private SharedPreferences prefs;
     private String localOrigin;
+    private volatile String userAgent;
     private PluginCall pendingSignIn;
     private boolean signInTabOpen;
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -110,6 +116,7 @@ public class ShellPlugin extends Plugin {
         policy.setInAppHosts(loadInAppHosts());
         deepLinks = new DeepLinks(policy, APP_SCHEME);
         localOrigin = getBridge().getScheme() + "://" + getBridge().getHost();
+        userAgent = getBridge().getWebView().getSettings().getUserAgentString();
 
         // Bridge.loadWebView() installs the bridge's client after the plugins load; setWebViewClient() replaces
         // the one it will install. (The page glue is added later, by MainActivity: see injectGlue.)
@@ -385,6 +392,49 @@ public class ShellPlugin extends Plugin {
             return res;
         } catch (IOException e) {
             return new WebResourceResponse("text/plain", "utf-8", 404, "Not Found", null, null);
+        }
+    }
+
+    /** The "no connection" page asking whether the shop can be reached again (https://localhost/online-check). */
+    boolean isOnlineCheck(Uri url) {
+        return url != null && policy.isLocal(url.getScheme(), url.getHost(), url.getPort()) && ONLINE_CHECK.equals(url.getPath());
+    }
+
+    /**
+     * Answers the "no connection" page: {"online":true} once the shop answers again. The page can't see the shop's
+     * answer itself (the shop is another site and doesn't let other sites read its answers). Called on the web
+     * view's network thread, so it may wait for the shop (a few seconds at most).
+     */
+    WebResourceResponse onlineCheck() {
+        byte[] body = ("{\"online\":" + shopAnswers() + "}").getBytes(StandardCharsets.UTF_8);
+        java.util.Map<String, String> headers = new java.util.HashMap<>();
+        headers.put("Cache-Control", "no-store");
+        return new WebResourceResponse("application/json", "utf-8", 200, "OK", headers, new ByteArrayInputStream(body));
+    }
+
+    /** True when the shop answers at all: any answer, even an error page, means the connection is back. */
+    private boolean shopAnswers() {
+        HttpURLConnection c = null;
+        try {
+            Uri probe = Uri.parse(siteUrl()).buildUpon()
+                .path("/favicon.svg")
+                .clearQuery()
+                .fragment(null)
+                .appendQueryParameter("online", String.valueOf(System.currentTimeMillis()))
+                .build();
+            c = (HttpURLConnection) new URL(probe.toString()).openConnection();
+            c.setRequestMethod("HEAD");
+            c.setConnectTimeout(5000);
+            c.setReadTimeout(5000);
+            c.setUseCaches(false);
+            c.setInstanceFollowRedirects(false);
+            String ua = userAgent;
+            if (ua != null) c.setRequestProperty("User-Agent", ua);
+            return c.getResponseCode() > 0;
+        } catch (IOException | RuntimeException e) {
+            return false;
+        } finally {
+            if (c != null) c.disconnect();
         }
     }
 

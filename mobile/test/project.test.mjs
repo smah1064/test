@@ -176,6 +176,19 @@ describe('iOS project', () => {
   });
 });
 
+describe('the "no connection" page and the apps', () => {
+  it('agree on how the page asks whether the shop can be reached again', () => {
+    const page = read('www/offline.html');
+    assert.match(page, /window\.webkit\.messageHandlers\.ebda3Online/);
+    assert.match(page, /fetch\('online-check\?/);
+    assert.match(read('android/app/src/main/java/me/ebda3/app/shell/ShellPlugin.java'), /ONLINE_CHECK = "\/online-check";/);
+    assert.match(read('android/app/src/main/java/me/ebda3/app/shell/ShellWebViewClient.java'), /shell\.isOnlineCheck\(url\)\) return shell\.onlineCheck\(\)/);
+    const ios = read('ios/App/App/Shell/ShellViewController.swift');
+    assert.match(ios, /static let name = "ebda3Online"/);
+    assert.match(ios, /addScriptMessageHandler\(\s*OnlineCheck\(/);
+  });
+});
+
 describe('generated native files match the installed plugins (run "npx cap sync" after changing plugins)', () => {
   const deps = Object.keys(JSON.parse(read('package.json')).dependencies);
   const plugins = deps.filter((d) => !['@capacitor/core', '@capacitor/android', '@capacitor/ios'].includes(d)).sort();
@@ -191,16 +204,22 @@ describe('generated native files match the installed plugins (run "npx cap sync"
   });
 });
 
-describe('the page glue', () => {
-  it('uses only JavaScript that Android web views from Chrome 60 understand', () => {
-    const code = read('www/app-glue.js')
-      .replace(/\/\*[\s\S]*?\*\//g, '')
-      .replace(/\/\/.*$/gm, '')
-      .replace(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/g, '""');
-    assert.doesNotMatch(code, /\?\.|\?\?/, 'no ?. or ?? (Chrome 80+)');
-    assert.doesNotMatch(code, /\bclass\s+\w+\s+extends\b.*#/, 'no private fields');
-    assert.doesNotMatch(code, /`/, 'no template literals needed');
-    assert.doesNotMatch(code, /\.(at|replaceAll|flatMap)\(/, 'no newer array/string methods');
-    new Function(read('www/app-glue.js')); // parses
-  });
+describe('scripts that run in old web views', () => {
+  const scripts = {
+    'the page glue (www/app-glue.js)': read('www/app-glue.js'),
+    'the "no connection" page (www/offline.html)': read('www/offline.html').match(/<script>([\s\S]*?)<\/script>/)[1],
+  };
+  for (const [name, source] of Object.entries(scripts)) {
+    it(`${name} uses only JavaScript that Android web views from Chrome 60 understand`, () => {
+      const code = source
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/\/\/.*$/gm, '')
+        .replace(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/g, '""');
+      assert.doesNotMatch(code, /\?\.|\?\?/, 'no ?. or ?? (Chrome 80+)');
+      assert.doesNotMatch(code, /\bclass\s+\w+\s+extends\b.*#/, 'no private fields');
+      assert.doesNotMatch(code, /`/, 'no template literals needed');
+      assert.doesNotMatch(code, /\.(at|replaceAll|flatMap)\(/, 'no newer array/string methods');
+      new Function(source); // parses
+    });
+  }
 });

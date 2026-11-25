@@ -36,6 +36,17 @@ async function waitUrl(page, test, timeout = 30000, what = 'the page') {
   throw new Error(`Timed out waiting for ${what} (last address: ${url})`);
 }
 
+/** The app's lines from the phone's log (the app's own messages, the web view's and crashes). */
+function appLog(max = 120) {
+  try {
+    const lines = adb('logcat', '-d', '-v', 'time', '-t', '5000').split('\n')
+      .filter((l) => /Capacitor|Ebda3|chromium|AndroidRuntime|me\.ebda3\.app/.test(l));
+    return `--- the app's log (last ${Math.min(lines.length, max)} of ${lines.length} lines) ---\n${lines.slice(-max).join('\n')}`;
+  } catch (e) {
+    return `(no log: ${e.message.split('\n')[0]})`;
+  }
+}
+
 function check(ok, message) {
   if (!ok) throw new Error(`Check failed: ${message}`);
   console.log(`  ✓ ${message}`);
@@ -48,9 +59,15 @@ try {
   adb('install', '-r', apk);
   adb('shell', 'pm', 'grant', PKG, 'android.permission.POST_NOTIFICATIONS');
   const started = Date.now();
+  adb('logcat', '-c');
   adb('shell', 'am', 'start', '-W', '-n', `${PKG}/.MainActivity`);
-  await shop.waitFor(/^\/(\?|$)/, 'android', { since: started, what: 'the home page' });
+  // Up to 90 s: right after the emulator starts, its network may not be ready for the first try (the app then shows
+  // its "no connection" page and comes back by itself).
+  const home = await shop.waitFor(/^\/(\?|$)/, 'android', { since: started, timeout: 90000, what: 'the home page' });
   check(true, 'the app opened the shop with its own user agent');
+  if (shop.requests.some((r) => r.at < home.at && /^\/favicon\.svg\?online=/.test(r.path))) {
+    console.log('  (the first try had no connection yet: the app showed its "no connection" page and came back by itself)');
+  }
   await shop.waitFor(/^\/app\/config\.json/, 'android', { since: started, what: '/app/config.json (the page glue)' });
   check(true, 'the page glue runs (it asked for /app/config.json)');
 
@@ -148,6 +165,7 @@ try {
   } catch { /* no screen */ }
   process.exitCode = 1;
 } finally {
+  console.log(`\n${appLog(process.exitCode ? 150 : 40)}`);
   await device?.close().catch(() => {});
   await shop.stop();
 }

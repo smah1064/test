@@ -2,8 +2,8 @@
 //   node test/device/ios.mjs <simulator-udid> <App.app> [screenshots-dir]
 // The app must be built with EBDA3_SITE_URL=http://localhost:3600. The checks read what the app asked the shop for
 // (path and user agent), read the screen's text (macOS text recognition, test/device/ocr.swift) and keep
-// screenshots; the app's own log is printed at the end.
-import { execFileSync } from 'node:child_process';
+// screenshots; the app's own output and its lines in the simulator's log are printed at the end.
+import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -18,7 +18,6 @@ if (!udid || !app) {
 const BUNDLE = 'me.ebda3.app';
 const SITE = 'http://localhost:3600';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const appLog = path.join(os.tmpdir(), 'ebda3-ios-app.log');
 fs.mkdirSync(shotsDir, { recursive: true });
 
 const simctl = (...args) => execFileSync('xcrun', ['simctl', ...args], { encoding: 'utf8' });
@@ -62,14 +61,38 @@ function openLink(url) {
   simctl('openurl', udid, url);
 }
 
+// The app's own output (its console), kept while it runs.
+let appOutput = '';
+let appProcess = null;
+function launchApp() {
+  appProcess?.kill();
+  appOutput = '';
+  appProcess = spawn('xcrun', ['simctl', 'launch', '--console-pty', '--terminate-running-process', udid, BUNDLE], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  appProcess.stdout.on('data', (d) => { appOutput += d; });
+  appProcess.stderr.on('data', (d) => { appOutput += d; });
+}
+
+/** The app's lines in the simulator's log (its messages, and the system's about its links). */
+function systemLog() {
+  try {
+    const out = execFileSync('xcrun', ['simctl', 'spawn', udid, 'log', 'show', '--last', '15m', '--style', 'compact',
+      '--predicate', 'process == "App" OR eventMessage CONTAINS[c] "me.ebda3.app"'], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
+    const lines = out.split('\n').filter((l) => /Ebda3Shell|me\.ebda3\.app|⚡️|[Ee]rror|[Ff]ault/.test(l));
+    return `--- the simulator's log (last ${Math.min(lines.length, 100)} of ${lines.length} lines) ---\n${lines.slice(-100).join('\n')}`;
+  } catch (e) {
+    return `(no simulator log: ${e.message.split('\n')[0]})`;
+  }
+}
+
 const shop = await startShop();
 try {
   step('Install and start the app');
   simctl('install', udid, app);
-  fs.rmSync(appLog, { force: true });
   let since = Date.now();
-  simctl('launch', '--terminate-running-process', `--stdout=${appLog}`, `--stderr=${appLog}`, udid, BUNDLE);
-  const home = await shop.waitFor(/^\/(\?|$)/, 'ios', { since, what: 'the home page' });
+  launchApp();
+  const home = await shop.waitFor(/^\/(\?|$)/, 'ios', { since, timeout: 90000, what: 'the home page' });
   check(/Ebda3App\/\d+\.\d+\.\d+ \(ios\)/.test(home.ua), `the app opened the shop with its user agent (${home.ua.slice(-28)})`);
   await shop.waitFor(/^\/app\/config\.json/, 'ios', { since, what: '/app/config.json (the page glue)' });
   check(true, 'the page glue runs (it asked for /app/config.json)');
@@ -117,9 +140,9 @@ try {
   process.exitCode = 1;
 } finally {
   await shop.stop();
-  if (fs.existsSync(appLog)) {
-    const lines = fs.readFileSync(appLog, 'utf8').split('\n').filter(Boolean);
-    console.log(`\n--- the app's log (last ${Math.min(lines.length, 80)} of ${lines.length} lines) ---`);
-    console.log(lines.slice(-80).join('\n'));
-  }
+  const lines = appOutput.split(/\r?\n/).filter(Boolean);
+  console.log(`\n--- the app's output (last ${Math.min(lines.length, 80)} of ${lines.length} lines) ---`);
+  console.log(lines.slice(-80).join('\n'));
+  console.log(`\n${systemLog()}`);
+  appProcess?.kill();
 }
