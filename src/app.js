@@ -542,6 +542,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     next();
   });
 
+  // The dashboard's address however it is typed (/admin/, /Admin, /admin.html): the dashboard itself.
+  app.get(/^\/admin(?:\.html)?\/?$/i, (req, res, next) => (req.path === '/admin' ? next() : res.redirect(301, '/admin')));
+
   // ---------- Private preview (src/preview.js) ----------
   // Until the shop opens to everyone, only invited people, the owner and staff get in.
   // The real shop starts private the first time it runs with this (server.js: previewStart).

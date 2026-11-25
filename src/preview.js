@@ -65,7 +65,7 @@ function isOpen(p) {
   return /^\/(?:js|css|vendor|fonts)\/[^]*$/.test(p)
     || /^\/(?:favicon\.(?:ico|svg)|apple-touch-icon\.png|icon-(?:192|512|maskable-512)\.png|site\.webmanifest|robots\.txt)$/.test(p)
     || /^\/img\/logo-[a-z-]+\.svg$/.test(p) || p === '/img/og-ebda3.png' // (the link preview on WhatsApp)
-    || p === '/admin' || p === '/admin.html'
+    || /^\/admin(?:\.html)?\/?$/i.test(p) // the dashboard: its own password, however the address is written
     || p.startsWith('/api/admin/')
     || p === '/api/preview/enter'
     || p.startsWith('/dl/');

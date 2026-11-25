@@ -77,6 +77,13 @@ test('private: Opening soon for everyone else, invited people, owner and staff g
     for (const p of ['/js/common.js', '/css/styles.css', '/fonts/fonts.css', '/img/logo-ar.svg', '/favicon.svg', '/admin', '/img/og-ebda3.png']) {
       assert.strictEqual((await fetch(base + p)).status, 200, p);
     }
+    // The dashboard opens with its own password, however its address is written.
+    for (const p of ['/admin', '/admin/', '/admin.html', '/Admin', '/ADMIN/']) {
+      const r = await fetch(base + p, { headers: { accept: 'text/html' } });
+      const html = await r.text();
+      assert.strictEqual(r.status, 200, p);
+      assert.ok(!html.includes('/api/preview/enter') && html.includes('id="login"'), p);
+    }
     // Paths dressed up as open ones don't get through.
     for (const p of ['/js/../img/lifestyle/tshirt.webp', '/js/%2e%2e/img/lifestyle/tshirt.webp', '/js/..%2fimg/lifestyle/tshirt.webp', '/css/..\\img/lifestyle/tshirt.webp']) {
       assert.notStrictEqual(await raw(base, p), 200, p);
