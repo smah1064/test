@@ -368,3 +368,28 @@ test('small inputs: shipping details are text, rights-request names lose directi
   const row = (list.takedowns || list.items || list).find ? (list.takedowns || list.items || list).find((x) => /Ali/.test(x.name)) : null;
   assert.ok(row && !/[‪-‮]/.test(row.name), JSON.stringify(row));
 });
+
+test('search: هدية finds what هدايا and gift find; قهوة and شاي find the mug', () => {
+  const vm = require('vm');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'public/js/designs.js'), 'utf8');
+  const kit = src.slice(src.indexOf('// search-kit:start'), src.indexOf('// search-kit:end') + 18);
+  const S = vm.runInNewContext(`${kit}\nSEARCH`);
+  const mug = S.index('mug Ceramic Mug مج سيراميك Home & living المنزل cup coffee tea كوب كوباية مق');
+  const gifts = S.index('couplemugs Couple Mugs (pair) مجين للكابلز Gifts & occasions cup كوب مق');
+  for (const q of ['هدية', 'هدايا', 'gift', 'gifts']) assert.ok(S.match(gifts, S.query(q)), q);
+  for (const q of ['قهوة', 'كوب قهوة', 'شاي', 'coffee', 'tea']) assert.ok(S.match(mug, S.query(q)), q);
+});
+
+test('checkout and sign-up names need a letter; account passwords are text', async () => {
+  const d = (await call('/api/designs', 'POST', { productId: 'mug', color: 'white', size: '11oz', sides: { front: { editor: { objects: [{ type: 'i-text', text: 'x' }] } } } })).json;
+  const bad = await call('/api/orders', 'POST', { customer: { ...CUSTOMER, name: 'ـــ ً' }, designIds: [d.id] });
+  assert.strictEqual(bad.status, 400, bad.text);
+  assert.strictEqual(bad.json.code, 'fieldRequired');
+  const su = await call('/api/account/signup', 'POST', { name: '..', phone: '01077778888', password: 'a-good-password-1' });
+  assert.strictEqual(su.status, 400, su.text);
+  const ok = await fetch(`${base}/api/account/signup`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Sara', phone: '01077778889', password: 'a-good-password-1' }) });
+  assert.ok([200, 201].includes(ok.status), await ok.text());
+  const cookie = (ok.headers.getSetCookie ? ok.headers.getSetCookie() : [ok.headers.get('set-cookie')]).map((c) => c.split(';')[0]).join('; ');
+  const pw = await call('/api/account/password', 'POST', { current: 'a-good-password-1', password: { a: 1 } }, null, { Cookie: cookie });
+  assert.strictEqual(pw.status, 400, pw.text);
+});

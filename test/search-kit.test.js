@@ -115,7 +115,9 @@ test('word forms: plurals become singular, short words stay as they are', () => 
   assert.ok(SEARCH.match(SEARCH.index('عيد ميلاد سعيد'), SEARCH.query('birthday')));
   assert.ok(SEARCH.match(SEARCH.index('Happy birthday'), SEARCH.query('عيد ميلاد')));
   assert.ok(!SEARCH.match(SEARCH.index('Happy birthday'), SEARCH.query('dogs')));
-  assert.ok(!SEARCH.match(SEARCH.index('ورق مراسلات (ليترهيد) هدايا'), SEARCH.query('هدية')), 'هدية: not هدي without its ي');
+  // (هدية is not هدي without its ي: it doesn't find هدير. It finds هدايا since 25 Nov, the same gift words.)
+  assert.ok(!SEARCH.match(SEARCH.index('ورق مراسلات (ليترهيد) هدير'), SEARCH.query('هدية')), 'هدية: not هدي without its ي');
+  assert.ok(SEARCH.match(SEARCH.index('ورق مراسلات (ليترهيد) هدايا'), SEARCH.query('هدية')), 'هدية finds هدايا');
   assert.ok(SEARCH.match(SEARCH.index('شنط ورق بلوجو'), SEARCH.query('شنطة')));
   // Ranking names: with start, words count only at the start of a word.
   assert.ok(SEARCH.match(SEARCH.index('Crewneck Sweatshirt سويتشيرت'), SEARCH.query('tshirt')));

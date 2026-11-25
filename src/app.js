@@ -192,6 +192,8 @@ function cleanString(value, field, { max = 200, required = true, lines = ' ' } =
       .replace(/\s*(?:\r\n|[\r\n\u0085\u2028\u2029])+\s*/g, lines).replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/[ \t]{2,}/g, ' ').trim()
     : '';
   if (required && !s) throw new HttpError(400, 'fieldRequired', { field: FIELDS[field] });
+  // (A name says something: "ـــ", vowel marks or dots alone aren't one. QA 25 Nov.)
+  if (field === 'name' && s && !/[\p{L}\p{N}]/u.test(s.replace(/\u0640/g, ''))) throw new HttpError(400, 'fieldRequired', { field: FIELDS[field] });
   if (s.length > max) throw new HttpError(400, 'fieldTooLong', { field: FIELDS[field] });
   return s;
 }
@@ -3225,7 +3227,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       limitHit('accountLoginId', me.id);
       throw new HttpError(401, 'acctWrongCurrent');
     }
-    const weak = customers.passwordProblem(String(password || ''));
+    // (Text only: {"a":1} was saved as "[object Object]". QA 25 Nov.)
+    const weak = typeof password !== 'string' ? 'acctPasswordShort' : customers.passwordProblem(password);
     if (weak) throw new HttpError(400, weak);
     const { salt, hash } = customers.hashPassword(password);
     const updated = store.mutate((db) => {
@@ -3271,7 +3274,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const link = customers.readReset(auth.customerKey, token, findCustomer);
     if (!link) throw new HttpError(400, 'acctResetExpired');
     const cust = link.customer;
-    const weak = customers.passwordProblem(String(password || ''));
+    const weak = typeof password !== 'string' ? 'acctPasswordShort' : customers.passwordProblem(password);
     if (weak) throw new HttpError(400, weak);
     const { salt, hash } = customers.hashPassword(password);
     // An emailed link was opened: the account's email is proven to be theirs.

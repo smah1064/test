@@ -910,7 +910,9 @@ window.POD_STRINGS = {
 
   // Live preview
   'pv.open': ['Live preview', 'معاينة حية'],
-  'msg.firstArtboard': ['This file has {n} artboards: the first one is on your design. To use another one, save it as a file of its own.', 'الملف ده فيه {n} لوحات رسم: الأولى بس اللي اتحطت على التصميم. عشان تستخدم لوحة تانية، احفظها في ملف لوحدها.'],
+  'msg.firstArtboard': ['This file has {n} artboards: the first one is on your design. To use another one, save it as a file of its own.', 'الملف ده فيه {n} لوحة رسم: الأولى بس اللي اتحطت على التصميم. عشان تستخدم لوحة تانية، احفظها في ملف لوحدها.'],
+  'msg.firstArtboard.two': ['This file has 2 artboards: the first one is on your design. To use the other one, save it as a file of its own.', 'الملف ده فيه لوحتين رسم: الأولى بس اللي اتحطت على التصميم. عشان تستخدم التانية، احفظها في ملف لوحدها.'],
+  'msg.firstArtboard.few': ['This file has {n} artboards: the first one is on your design. To use another one, save it as a file of its own.', 'الملف ده فيه {n} لوحات رسم: الأولى بس اللي اتحطت على التصميم. عشان تستخدم لوحة تانية، احفظها في ملف لوحدها.'],
   'pv.title': ['Live preview', 'معاينة حية'],
   'pv.realistic': ['Realistic', 'واقعية'],
   'pv.3d': ['3D', 'ثلاثي الأبعاد'],

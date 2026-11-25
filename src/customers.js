@@ -116,7 +116,7 @@ function cleanSignup(body) {
   const phone = typeof b.phone === 'string' ? normalizeEgyptMobile(b.phone) : null;
   const email = cleanEmail(str(b.email));
   const password = str(b.password);
-  if (name.length < 2) return { error: 'acctName' };
+  if (name.length < 2 || !/[\p{L}\p{N}]/u.test(name.replace(/\u0640/g, ''))) return { error: 'acctName' };
   if (!phone) return { error: 'badPhone' };
   if (email && (email.length > 200 || !EMAIL_RE.test(email))) return { error: 'badEmail' };
   const weak = passwordProblem(password);

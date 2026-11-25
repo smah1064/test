@@ -560,7 +560,8 @@
     el.className = 'toast' + (type === 'error' ? ' error' : '');
     el.textContent = message;
     root.appendChild(el);
-    setTimeout(() => el.remove(), type === 'error' ? 5000 : 2800);
+    // (A longer message stays long enough to read, up to 10 seconds: four lines on a phone went in 2.8. QA 25 Nov.)
+    setTimeout(() => el.remove(), Math.min(10000, Math.max(type === 'error' ? 5000 : 2800, String(message || '').length * 60)));
   }
 
   function esc(s) {

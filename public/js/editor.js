@@ -1674,7 +1674,7 @@
       const blob = await res.blob();
       // A file with several artboards: the first is used (said, so the customer isn't surprised).
       const boards = Number(res.headers.get('x-artwork-pages')) || 1;
-      if (boards > 1) toast(t('msg.firstArtboard', { n: POD.num(boards) }));
+      if (boards > 1) toast(plural('msg.firstArtboard', boards));
       return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.png', { type: 'image/png' });
     } finally {
       busy(false);
