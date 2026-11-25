@@ -429,6 +429,7 @@ const MAX_PIECES = 1000;
 const DEFAULT_LIMITS = {
   designs: [{ max: 30, ms: 10 * 60e3 }, { max: 200, ms: 24 * 3600e3 }],
   designsAll: [{ max: 3000, ms: 24 * 3600e3 }],
+  bookSaves: [{ max: 40, ms: 10 * 60e3 }, { max: 300, ms: 24 * 3600e3 }], // kids-book changes (each redraws pages)
   orders: [{ max: 5, ms: 10 * 60e3 }, { max: 20, ms: 24 * 3600e3 }],
   shares: [{ max: 10, ms: 60e3 }, { max: 60, ms: 24 * 3600e3 }],
   // AI cartoon faces for book previews (one image each): per visitor and for the whole shop.
@@ -2284,8 +2285,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     // All or nothing: if anything fails (a page that can't be drawn, a bad photo),
     // the book stays exactly as it was, so a half-saved book can't be ordered.
     const before = JSON.parse(JSON.stringify(design));
-    const faceFile = store.designFile(design.id, 'face.jpg');
-    const oldFace = fs.existsSync(faceFile) ? fs.readFileSync(faceFile) : null;
+    // The photo, its line drawing (colouring books), the AI-redrawn pages and the preview as they are:
+    // a save that fails half way puts all of them back, so the book never prints a face the customer
+    // didn't approve (QA 25 Nov: only the photo came back, the line drawing stayed the new one).
+    const KEPT = (f) => f === 'face.jpg' || f === 'face-line.png' || f === 'book-preview.png' || /^redraw-\d+\.jpg$/.test(f);
+    let names = [];
+    try { names = fs.readdirSync(store.designDir(design.id)).filter(KEPT); } catch (e) { names = []; }
+    const saved = new Map(names.map((f) => [f, fs.readFileSync(store.designFile(design.id, f))]));
     try {
       await saveBookNow(design, body, ip);
     } catch (e) {
@@ -2295,7 +2301,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       for (const k of Object.keys(design)) delete design[k];
       Object.assign(design, before);
       if (orderId) design.orderId = orderId;
-      if (oldFace) store.writeDesignFile(design.id, 'face.jpg', oldFace);
+      try {
+        for (const f of fs.readdirSync(store.designDir(design.id))) if (KEPT(f) && !saved.has(f)) fs.rmSync(store.designFile(design.id, f), { force: true });
+      } catch (err) { /* no folder */ }
+      for (const [f, buf] of saved) store.writeDesignFile(design.id, f, buf);
       store.save();
       throw e;
     }
@@ -2406,7 +2415,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (design.orderId || design.uploadTokenHash !== sha(req.get('x-edit-token') || '')) throw new HttpError(403, 'notFound');
     return design;
   };
-  app.put('/api/books/designs/:id', express.json({ limit: '10mb' }), async (req, res, next) => {
+  app.put('/api/books/designs/:id', (req, res, next) => {
+    // (Each save redraws pages: limited like making a book.)
+    rateLimit(req, 'bookSaves');
+    next();
+  }, express.json({ limit: '10mb' }), async (req, res, next) => {
     try {
       const design = editableBook(req);
       await saveBook(design, req.body || {}, req.ip);

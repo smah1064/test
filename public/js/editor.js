@@ -2333,6 +2333,15 @@
     </div>
     <p class="muted small" style="margin:4px 0 0">${esc(t(multi ? 'align.toSelection' : 'align.toArea'))}</p>`;
   }
+  /** The size and place boxes after one of them changed (the one being typed in is left alone). */
+  function refreshCmBoxes(o, changed) {
+    const z = sizeCm(o);
+    const f = (v) => (Math.round(v * 10) / 10).toString();
+    for (const [id, v] of [['p-wcm', z.w], ['p-hcm', z.h], ['p-xcm', z.x], ['p-ycm', z.y]]) {
+      const el = $(id);
+      if (el && v != null && !(el === document.activeElement && el !== changed)) el.value = f(v);
+    }
+  }
   function sizeGroup(o) {
     const z = sizeCm(o);
     const f = (v) => (Math.round(v * 10) / 10).toString();
@@ -3081,7 +3090,9 @@
     }
     if (id === 'p-wordcolor') renderProps();
     if (['p-text', 'p-size', 'p-curve', 'p-spacing', 'p-lh', 'p-opacity', 'p-border', 'p-stroke-w', 'p-wcm', 'p-hcm', 'p-xcm', 'p-ycm'].includes(id) || e.target.dataset.adjust) commit();
-    if (['p-wcm', 'p-hcm', 'p-xcm', 'p-ycm'].includes(id)) renderProps();
+    // (The four boxes show the new size and place; the panel isn't drawn again, so moving on to
+    // the next box keeps its focus, QA 25 Nov.)
+    if (['p-wcm', 'p-hcm', 'p-xcm', 'p-ycm'].includes(id)) refreshCmBoxes(o, e.target);
   });
   props.addEventListener('click', serial(async (e) => {
     if (crop) {
@@ -4080,9 +4091,18 @@
   /** Arabic: 3–10 (and 103–110…) take the plural form. */
   const few = (n) => n % 100 >= 3 && n % 100 <= 10;
   const qtyTotalText = (n) => (n === 1 ? t('qty.totalOne') : n === 2 ? t('qty.total.two') : t(n % 100 >= 3 && n % 100 <= 10 ? 'qty.totalFew' : 'qty.total', { n: POD.num(n) }));
+  let qtyRedraw = false;
   function renderQty() {
     const box = $('qty-field');
     if (!box) return;
+    // (While a quantity box is being typed in, drawing the boxes again would lose it and the next box
+    // just tapped: they're drawn once the focus leaves them, QA 25 Nov. The price is kept up to date.)
+    const typing = document.activeElement;
+    if (typing && typing.classList && typing.classList.contains('qty-in') && box.contains(typing)) {
+      qtyRedraw = true;
+      return;
+    }
+    qtyRedraw = false;
     const p = st.product;
     if (p.kind === 'book') {
       box.hidden = true;
@@ -4123,6 +4143,12 @@
       <p class="small qty-sum">${esc(qtyTotalText(total))}</p>
       ${total > 1 ? `<p class="muted small" style="margin:2px 0 0;line-height:1.5">${esc(t(mix().sizes || mix().colors ? 'qty.help' : 'qty.helpSame'))}</p>` : ''}`;
   }
+  function redrawQtyIfLeft() {
+    const box = $('qty-field');
+    if (!qtyRedraw || !box || box.contains(document.activeElement)) return;
+    qtyRedraw = false;
+    renderQty();
+  }
   if ($('qty-field')) {
     const setCell = (c, z, v) => {
       const g = qtyGrid();
@@ -4139,8 +4165,12 @@
       const i = e.target.closest('.qty-in');
       if (i) {
         setCell(i.dataset.qc, i.dataset.qz, i.value);
-        refreshChrome();
-        renderQty();
+        // (After the tap that moved the focus has landed: a box being typed in is then never drawn
+        // again under the finger; the boxes are drawn once the focus leaves them.)
+        setTimeout(() => {
+          refreshChrome();
+          redrawQtyIfLeft();
+        }, 0);
       }
       if (e.target.id === 'qty-add' && e.target.value) {
         const g = qtyGrid();
@@ -4150,6 +4180,7 @@
         renderQty();
       }
     });
+    $('qty-field').addEventListener('focusout', () => setTimeout(redrawQtyIfLeft, 0));
     $('qty-field').addEventListener('input', (e) => {
       const i = e.target.closest('.qty-in');
       if (!i) return;
