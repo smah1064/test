@@ -154,9 +154,7 @@ jobs:
           sleep 20
           mkdir -p screenshots
           xcrun simctl io "$udid" screenshot screenshots/iphone-launch.png
-          xcrun simctl openurl "$udid" "me.ebda3.app://open?url=https%3A%2F%2Febda3.me%2Fprivacy"
-          sleep 8
-          xcrun simctl io "$udid" screenshot screenshots/iphone-deep-link.png
+          xcrun simctl terminate "$udid" me.ebda3.app || true
       - name: Website packages (for a copy of the shop)
         run: npm ci --no-audit --no-fund
       - name: Test app that uses the copy of the shop
