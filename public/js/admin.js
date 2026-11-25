@@ -71,15 +71,21 @@
   try { sessionStorage.removeItem('pod-admin-password'); } catch (e) { /* old versions kept the password */ }
   let token = sessionStorage.getItem(KEY) || '';
   const authHeader = () => ({ Authorization: 'Bearer ' + token });
-  // Who is signed in: the owner, or a product manager ('products', staff: the Products and Ready designs tabs).
+  /*
+   * Who is signed in and what they may do (public/js/admin-roles.js): the session's roles and permissions.
+   * An answer from before roles (no perms): the owner can do everything, a product manager ('products') has
+   * the catalogue (Products and Ready designs), as before. role: 'owner', or 'staff' for everyone else.
+   */
   const ROLE_KEY = 'pod-admin-role';
-  const STAFF_MODE_KEY = 'pod-admin-staff-login';
   let role = '';
   let who = '';
-  /** The only admin routes a product manager's token may use (the owner's answer 401 and would sign them out). */
+  let access = null; // AdminRoles.access(session)
+  let sessionAt = 0;
+  const can = (perm) => AdminRoles.can(access, perm);
+  /** The only admin routes an old product manager's token may use (the owner's answer 401 and would sign them out). */
   const staffRoute = (url) => /^\/api\/admin\/(session|logout|catalog|library)(\/|\?|$)/.test(url) && !/^\/api\/admin\/library\/settings/.test(url);
-  /** The tabs a product manager sees. */
-  const STAFF_TABS = new Set(['products', 'library']);
+  /** Until the page knows who is signed in, and for an old product manager's sign-in, only those routes are called. */
+  const mayCall = (url) => staffRoute(url) || Boolean(access && (access.system || access.owner));
   let tab = 'queue';
   let lastQueue = null;
   let lastOrders = null;
@@ -103,6 +109,7 @@
   }
   /** Job lists don't carry the order's delivery: read the orders once (again when a new order shows up). */
   async function ensureOrders(items) {
+    if (!can('orders.view')) return false; // (Catalogue's Review: no orders list)
     const known = new Set((lastOrders || []).map((o) => o.id));
     if (lastOrders && items.every((i) => !i || !i.orderId || known.has(i.orderId))) return false;
     if (Date.now() - ordersFetchedAt < 30000) return false;
@@ -137,20 +144,27 @@
   }
 
   async function adminApi(url, options = {}) {
-    // Until we know who is signed in, and for product managers, owner-only routes are never called.
-    if (role !== 'owner' && !staffRoute(url)) {
+    // Until we know who is signed in, and for an old product manager's sign-in, owner-only routes are never called.
+    if (!mayCall(url)) {
       const err = new Error(t('pm.ownerOnly'));
       err.status = 403;
       err.ownerOnly = true;
       throw err;
     }
+    let body;
     try {
-      return await POD.api(url, { ...options, headers: { ...(options.headers || {}), ...authHeader() } });
+      body = await POD.api(url, { ...options, headers: { ...(options.headers || {}), ...authHeader() } });
     } catch (e) {
       if (e.status === 401) signOut(e.message);
       throw e;
     }
+    // A staff member's change to products or money waits for an owner (HTTP 202 { pending, approval }): said once
+    // ("Sent to an owner for approval"), and thrown as an error marked `pending`, so no caller takes the answer for
+    // the saved thing and the form stays as typed (the change isn't live).
+    return AdminRoles.settle(body);
   }
+  /** A change sent for an owner's approval (see adminApi): not a failure, nothing more to say. */
+  const sentForApproval = (e) => AdminRoles.isPendingError(e);
 
   function signOut(message) {
     const wasIn = Boolean(token);
@@ -158,11 +172,14 @@
     token = '';
     role = '';
     who = '';
+    access = null;
+    sessionAt = 0;
     sessionStorage.removeItem(KEY);
     sessionStorage.removeItem(ROLE_KEY);
     if (window.AdminProducts) AdminProducts.reset();
     if (window.AdminUploads) AdminUploads.reset();
     if (window.AdminRights) AdminRights.reset();
+    for (const m of [window.AdminStaff, window.AdminApprovals, window.AdminActivity]) if (m) m.reset();
     applyRole();
     $('weak-pw').hidden = true;
     $('dash').hidden = true;
@@ -176,16 +193,17 @@
     const btn = $('login').querySelector('button[type=submit]');
     btn.disabled = true;
     try {
-      const username = staffMode ? $('username').value.trim().toLowerCase() : '';
-      if (staffMode && !username) throw new Error(t('pm.login.needUser'));
+      // A username: the person's own login. None: the shared owner password (the emergency owner login).
+      const username = $('username').value.trim().toLowerCase();
       const res = await POD.api('/api/admin/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(staffMode ? { username, password: $('password').value } : { password: $('password').value }),
+        body: JSON.stringify(username ? { username, password: $('password').value } : { password: $('password').value }),
       });
       token = res.token;
       sessionStorage.setItem(KEY, token);
-      setRole(res.role || 'owner', res.name || username);
+      setAccess(res, res.shown || res.name || username);
+      sessionAt = Date.now();
       $('password').value = '';
       $('weak-pw').hidden = !(role === 'owner' && res.weakPassword);
       await refresh();
@@ -200,47 +218,67 @@
     signOut();
   });
 
-  // ---------- Staff sign-in (product managers: username + password) ----------
-  let staffMode = false;
-  function setStaffMode(on, focus) {
-    staffMode = on;
-    try { localStorage.setItem(STAFF_MODE_KEY, on ? '1' : ''); } catch (e) { /* not remembered */ }
-    $('username-field').hidden = !on;
-    $('username').required = on;
-    $('login-title').dataset.i18n = on ? 'pm.login.staffTitle' : 'admin.loginTitle';
-    $('login-text').dataset.i18n = on ? 'pm.login.staffText' : 'admin.loginText';
-    $('staff-toggle').dataset.i18n = on ? 'pm.login.ownerLink' : 'pm.login.staffLink';
-    $('staff-toggle').setAttribute('aria-expanded', String(on));
-    POD.applyI18n($('login'));
-    if (focus) (on ? $('username') : $('password')).focus();
-  }
-  $('staff-toggle').addEventListener('click', () => setStaffMode(!staffMode, true));
-  try { if (localStorage.getItem(STAFF_MODE_KEY)) setStaffMode(true); } catch (e) { /* owner form */ }
-
-  function setRole(next, name) {
-    role = next === 'products' ? 'products' : next === 'owner' ? 'owner' : '';
-    who = name || '';
-    if (role) sessionStorage.setItem(ROLE_KEY, role);
+  /** Who is signed in, from the sign-in answer or the session: the tabs and the screens follow. */
+  function setAccess(session, fallbackName) {
+    access = AdminRoles.access(session, fallbackName);
+    role = access.owner ? 'owner' : 'staff';
+    who = access.shown;
+    sessionStorage.setItem(ROLE_KEY, role);
     applyRole();
   }
-  /** A product manager sees the Products and Ready designs tabs (without the owner's text-only switch). */
+  const roleNames = (roles) => roles.map((r) => t('role.' + r)).join(POD.lang === 'ar' ? '، ' : ', ');
+  /** Parts of the page (admin.html) that change things, and the permission each needs. */
+  const STATIC_PERMS = [['lib-add', 'library.edit'], ['house-form', 'houses.edit'], ['cp-form', 'coupons.edit'], ['acc-exp-form', 'expenses.edit'], ['acc-ship-save', 'costs.edit'], ['notify-card', 'settings']];
+  /**
+   * The tabs this person may use (the others are hidden), who is signed in ("Mostafa · Catalogue"), the emergency
+   * owner login's warning, and the parts of the screens that need a permission to change things.
+   */
   function applyRole() {
-    const staff = role === 'products';
-    document.querySelectorAll('[data-tab]').forEach((b) => { b.hidden = staff && !STAFF_TABS.has(b.dataset.tab); });
-    $('admin-who').hidden = !staff;
-    $('admin-who').textContent = staff ? t('pm.signedInAs', { name: who }) : '';
-    $('lib-add').hidden = staff;
+    document.querySelectorAll('[data-tab]').forEach((b) => { b.hidden = !AdminRoles.tabAllowed(access, b.dataset.tab); });
+    // (An old owner sign-in, the shared password before roles: no name to show, as before.)
+    const named = Boolean(access && (access.system || !access.owner));
+    // (The emergency login is the shared owner password, not a person.)
+    const name = !access ? '' : access.emergency ? t('me.emergencyName') : access.shown || t('role.owner');
+    // (The name in its own direction: "Mostafa مصطفى" stays in one piece next to the roles.)
+    const whoText = !named ? '' : access.emergency ? name : t('me.who', { name: `\u2068${name}\u2069`, roles: roleNames(access.roles) });
+    $('me-menu').hidden = !named;
+    if (!named) $('me-menu').open = false;
+    $('admin-who').textContent = whoText;
+    $('me-who').textContent = whoText;
+    $('me-btn').title = whoText || t('me.menu');
+    // Personal logins change their own password; the shared emergency password is changed on the server.
+    $('me-pw').hidden = !(access && access.system && !access.emergency);
+    $('emergency-bar').hidden = !(access && access.emergency);
+    // Approvals for owners, "My requests" for the others.
+    const apLabel = $('ap-tab-label');
+    apLabel.dataset.i18n = access && !access.owner ? 'ap.mine' : 'ap.tab';
+    apLabel.textContent = t(apLabel.dataset.i18n);
+    if (tab === 'approvals') showTab(tab);
+    renderApprovalsBadge();
+    // Forms that change things: only for those who may (the shop's shipping cost: seen by all of Accounts).
+    for (const [id, perm] of STATIC_PERMS) $(id).hidden = !can(perm);
+    $('acc-ship-cost').disabled = !can('costs.edit');
     if (lastLibrary) renderLibRule();
-    if (staff) {
-      $('weak-pw').hidden = true;
-      if (!STAFF_TABS.has(tab)) showTab('products');
+    if (access && !access.owner) $('weak-pw').hidden = true;
+    if (access && !AdminRoles.tabAllowed(access, tab)) {
+      const next = AdminRoles.pickTab(access, tab);
+      if (next) showTab(next);
     }
   }
-  /** Who is signed in (the role is kept on the server with the token). */
+  /** The Approvals tab's badge: changes waiting for an owner (owners), or the person's own waiting requests. */
+  function renderApprovalsBadge() {
+    const el = $('ap-count');
+    const n = AdminRoles.badgeCount(access);
+    el.hidden = !n;
+    el.textContent = n ? POD.num(n) : '';
+    el.title = n ? POD.plural('ap.count', n) : '';
+  }
+  /** Who is signed in (the roles are kept on the server with the token); read again now and then (badge, roles). */
   async function loadSession() {
     const r = await adminApi('/api/admin/session');
     // The person's own name, as after signing in ("Mostafa مصطفى", not the username "mostafa").
-    setRole(r.role || 'owner', r.shown || r.name);
+    setAccess(r, r.shown || r.name);
+    sessionAt = Date.now();
     $('weak-pw').hidden = !(role === 'owner' && r.weakPassword);
   }
 
@@ -269,6 +307,9 @@
     $('tab-customers').hidden = tab !== 'customers';
     $('tab-preview').hidden = tab !== 'preview';
     $('tab-rights').hidden = tab !== 'rights';
+    $('tab-staff').hidden = tab !== 'staff';
+    $('tab-approvals').hidden = tab !== 'approvals';
+    $('tab-activity').hidden = tab !== 'activity';
     // /admin#rights (the link in the owner's alert for a rights request) opens Rights requests; the address
     // follows that tab, so a reload stays on it and leaving it doesn't come back to it.
     if (tab === 'rights' && location.hash !== '#rights') history.replaceState(null, '', '#rights');
@@ -418,10 +459,21 @@
         <dt>${esc(t('admin.spec.shipTo'))}</dt><dd>${address(c)}</dd>
         ${c.phone ? `<dt>${esc(t('admin.spec.phone'))}</dt><dd><a href="tel:${esc(c.phone)}" dir="ltr">${esc(c.phone)}</a></dd>` : ''}
         ${c.email ? `<dt>${esc(t('admin.spec.email'))}</dt><dd><bdi dir="ltr">${esc(c.email)}</bdi></dd>` : ''}
-        ${item.payment && item.payment.status === 'paid' ? `<dt>${esc(t('admin.spec.payment'))}</dt><dd><span class="pill pay-paid">${esc(t('admin.paidPill'))}</span> ${esc(t('admin.paidNothing', { amount: money(item.orderTotal) }))}</dd>`
-    : item.payment && item.payment.method === 'cod' ? `<dt>${esc(t('admin.spec.payment'))}</dt><dd>${esc(t('admin.collect', { amount: money(item.orderTotal) }))}</dd>` : ''}
-        ${item.coupon ? `<dt>${esc(t('coupon.discount'))}</dt><dd><bdi dir="ltr">${esc(item.coupon.code)}</bdi>${SEP()}-${esc(money(item.coupon.discount))}</dd>` : ''}
+        ${payLines(item)}
       </dl>`;
+  }
+  /**
+   * How the order is paid, and the coupon. The amounts only when the answer has them: people without
+   * orders.amounts (Operations) get no totals or discounts, and never see "EGP NaN".
+   */
+  function payLines(item) {
+    const total = AdminRoles.isAmount(item.orderTotal) ? money(item.orderTotal) : '';
+    const p = item.payment;
+    let html = '';
+    if (p && p.status === 'paid') html = `<dt>${esc(t('admin.spec.payment'))}</dt><dd><span class="pill pay-paid">${esc(t('admin.paidPill'))}</span>${total ? ` ${esc(t('admin.paidNothing', { amount: total }))}` : ''}</dd>`;
+    else if (p && p.method === 'cod') html = `<dt>${esc(t('admin.spec.payment'))}</dt><dd>${esc(total ? t('admin.collect', { amount: total }) : t('ship.cod'))}</dd>`;
+    if (item.coupon) html += `<dt>${esc(t('coupon.discount'))}</dt><dd><bdi dir="ltr">${esc(item.coupon.code)}</bdi>${AdminRoles.isAmount(item.coupon.discount) ? `${SEP()}-${esc(money(item.coupon.discount))}` : ''}</dd>`;
+    return html;
   }
 
   const RECOMMENDED = { dtg: 'png', dtf: 'dtf-film', sublimation: 'png-mirror', uv: 'pdf', paper: 'pdf-marks', canvas: 'pdf', textile: 'png', embroidery: 'dst', engrave: 'laser-svg', lasercut: 'laser-svg' };
@@ -442,6 +494,7 @@
     return (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255 < 0.5;
   };
   function printFiles(item, s) {
+    if (!can('files')) return '';
     if (item.kind === 'book') {
       return `
         <div class="print-files-block"><div class="small muted" style="font-weight:700;margin-bottom:6px">${esc(t('admin.bookFiles'))}</div><div class="print-files">
@@ -647,6 +700,7 @@
   }
   /** A number saved before the check (e.g. 1001234567, 0225551234): wa.me can't open it. */
   const waSavedBad = (digits) => Boolean(digits) && (!/^[1-9]\d{7,14}$/.test(digits) || /^1[0125]\d{8}$/.test(digits) || (/^20/.test(digits) && !/^201[0125]\d{8}$/.test(digits)));
+  const houseMapTyped = {}; // product id -> house picked, waiting for an owner's approval
   function renderHouses(d) {
     $('houses-email-off').hidden = d.email;
     const uses = (id) => Object.values(d.productHouses).filter((h) => h === id).length;
@@ -658,19 +712,21 @@
             <div class="muted small">${[h.email ? `✉️ <bdi dir="ltr">${esc(h.email)}</bdi>` : '', h.whatsapp ? `💬 <bdi dir="ltr">+${esc(h.whatsapp)}</bdi>${waSavedBad(h.whatsapp) ? ` <span class="pill wa-bad-pill">${esc(t('houses.waCheck'))}</span>` : ''}` : '', esc(t(uses(h.id) === 1 ? 'houses.product1' : 'houses.products', { n: POD.num(uses(h.id)) }))].filter(Boolean).join(SEP())}</div>
             ${h.notes ? `<div class="muted small">${line(h.notes)}</div>` : ''}
           </div>
-          <div class="row" style="gap:8px;flex:0 0 auto">
+          ${can('houses.edit') ? `<div class="row" style="gap:8px;flex:0 0 auto">
             <button class="btn btn-sm" type="button" data-house-edit="${esc(h.id)}">${esc(t('houses.edit'))}</button>
             <button class="btn btn-sm" type="button" data-house-del="${esc(h.id)}">${esc(t('houses.delete'))}</button>
-          </div>
+          </div>` : ''}
         </div>`).join('')
       : `<p class="muted">${esc(t('houses.empty'))}</p>`;
-    const opts = (pid) => `<option value="">${esc(t('houses.unset'))}</option>${d.houses.map((h) => `<option value="${esc(h.id)}" ${d.productHouses[pid] === h.id ? 'selected' : ''}>${esc(isolate(h.name))}</option>`).join('')}`;
+    // (A choice sent for an owner's approval stays picked until it is decided.)
+    const picked = (pid) => (pid in houseMapTyped ? houseMapTyped[pid] : d.productHouses[pid] || '');
+    const opts = (pid) => `<option value="">${esc(t('houses.unset'))}</option>${d.houses.map((h) => `<option value="${esc(h.id)}" ${picked(pid) === h.id ? 'selected' : ''}>${esc(isolate(h.name))}</option>`).join('')}`;
     $('house-map').innerHTML = d.categories.map((c) => {
       const prods = d.products.filter((p) => p.category === c.id);
       if (!prods.length) return '';
       // An archived product ("stop selling") is only listed while a house is still set for it.
       return `<h3 class="house-map-cat">${esc(tr(c.name))}</h3><div class="house-map-grid">${prods.map((p) => `
-        <label class="house-map-row"><span>${esc(tr(p.name))}${p.archived ? ` <span class="pill queued" title="${esc(t('pm.arch.houseHelp'))}">${esc(t('pm.arch.tag'))}</span>` : ''}</span><select data-map-product="${esc(p.id)}" ${d.houses.length ? '' : 'disabled'}>${opts(p.id)}</select></label>`).join('')}</div>`;
+        <label class="house-map-row"><span>${esc(tr(p.name))}${p.archived ? ` <span class="pill queued" title="${esc(t('pm.arch.houseHelp'))}">${esc(t('pm.arch.tag'))}</span>` : ''}</span><select data-map-product="${esc(p.id)}" ${d.houses.length && can('houses.edit') ? '' : 'disabled'}>${opts(p.id)}</select></label>`).join('')}</div>`;
     }).join('');
   }
   function resetHouseForm() {
@@ -734,18 +790,20 @@
     if (!pid) return;
     try {
       const r = await adminApi('/api/admin/product-houses', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang }, body: JSON.stringify({ productId: pid, houseId: e.target.value || null }) });
+      delete houseMapTyped[pid];
       housesData.productHouses = r.productHouses;
       renderHouses(housesData);
       toast(t('houses.saved'));
     } catch (err) {
-      toast(err.message, 'error');
+      if (sentForApproval(err)) houseMapTyped[pid] = e.target.value;
+      else toast(err.message, 'error');
     }
   });
 
   /** The customer's design (all sides / book pages) as one PDF, to check or send them. */
   function previewFile(item) {
     const s = item.sides[0];
-    if (!s || !s.printUrl) return '';
+    if (!s || !s.printUrl || !can('files')) return '';
     return `
       <div class="print-files-block">
         <div class="small muted" style="font-weight:700;margin-bottom:6px">${esc(t('admin.customerPreview'))}</div>
@@ -877,7 +935,10 @@
   }
   function shipBox(o) {
     const id = esc(o.id);
-    const field = (k, type, extra = '') => `<div class="field"><label for="ship-${k}-${id}">${esc(t('ship.' + k))}</label><input type="${type}" id="ship-${k}-${id}" data-ship-field="${k}" data-order="${id}" value="${esc(shipValue(o, k))}" ${extra}></div>`;
+    // Shipping work for orders.work (Finance sees orders read-only); the invoice and the customer's order page
+    // show the amounts (only for orders.amounts).
+    const work = can('orders.work');
+    const field = (k, type, extra = '') => `<div class="field"><label for="ship-${k}-${id}">${esc(t('ship.' + k))}</label><input type="${type}" id="ship-${k}-${id}" data-ship-field="${k}" data-order="${id}" value="${esc(shipValue(o, k))}" ${extra}${work ? '' : ' disabled'}></div>`;
     const steps = timelineOf(o).map((s) => `<li class="${s.at ? 'done' : ''}"><b>${esc(t('ship.step.' + s.step))}</b><span>${esc(s.at ? POD.date(s.at) : t('ship.notYet'))}</span></li>`).join('');
     const m = shipMsg[o.id];
     const email = o.customer && o.customer.email;
@@ -887,8 +948,8 @@
         <h3>${esc(t('ship.title', { number: o.number }))}</h3>
         ${statusPill(orderState(o))}
         <div class="ship-links">
-          <a class="btn btn-sm" href="/invoice?id=${encodeURIComponent(o.id)}" target="_blank" rel="noopener">${esc(t('ship.invoice'))}</a>
-          <a class="btn btn-sm" href="/order?id=${encodeURIComponent(o.id)}" target="_blank" rel="noopener">${esc(t('ship.orderPage'))}</a>
+          ${can('orders.amounts') ? `<a class="btn btn-sm" href="/invoice?id=${encodeURIComponent(o.id)}" target="_blank" rel="noopener">${esc(t('ship.invoice'))}</a>
+          <a class="btn btn-sm" href="/order?id=${encodeURIComponent(o.id)}" target="_blank" rel="noopener">${esc(t('ship.orderPage'))}</a>` : ''}
         </div>
       </div>
       <div><div class="muted small" style="margin-bottom:6px">${esc(t('ship.timeline'))}</div><ol class="ship-steps">${steps}</ol></div>
@@ -898,18 +959,18 @@
         ${field('trackingUrl', 'url', 'maxlength="500" dir="ltr" placeholder="https://…"')}
         ${field('eta', 'date', 'dir="ltr"')}
       </div>
-      ${hint}
+      ${work ? hint : ''}
       <div class="ship-actions">
-        <button class="btn btn-sm" data-ship-save="${id}">${esc(t('ship.save'))}</button>
+        ${work ? `<button class="btn btn-sm" data-ship-save="${id}">${esc(t('ship.save'))}</button>
         ${isShipped(o) ? '' : `<button class="btn btn-sm btn-primary" data-ship-shipped="${id}">${esc(t('ship.markShipped'))}</button>`}
         ${isDelivered(o)
           ? `<button class="btn btn-sm" data-ship-delivered="${id}" data-value="">${esc(t('ship.undoDelivered'))}</button>`
-          : `<button class="btn btn-sm ${isShipped(o) ? 'btn-primary' : ''}" data-ship-delivered="${id}" data-value="1">${esc(t('ship.markDelivered'))}</button>`}
-        <span class="ship-msg ${m ? (m.ok ? 'ok' : 'bad') : ''}" aria-live="polite">${m ? esc(m.text) : ''}</span>
+          : `<button class="btn btn-sm ${isShipped(o) ? 'btn-primary' : ''}" data-ship-delivered="${id}" data-value="1">${esc(t('ship.markDelivered'))}</button>`}` : ''}
+        <span class="ship-msg ${m ? (m.wait ? 'wait' : m.ok ? 'ok' : 'bad') : ''}" aria-live="polite">${m ? esc(m.text) : ''}</span>
       </div>
       <div class="ship-pay">
         <strong>${esc(t('ship.payment'))}:</strong> <span>${esc(t('ship.cod'))}</span> ${payPill(o)}
-        <button class="btn btn-sm" data-pay="${id}" data-value="${isPaid(o) ? 'pending' : 'paid'}">${esc(t(isPaid(o) ? 'ship.markUnpaid' : 'ship.markPaid'))}</button>
+        ${can('payments') ? `<button class="btn btn-sm" data-pay="${id}" data-value="${isPaid(o) ? 'pending' : 'paid'}">${esc(t(isPaid(o) ? 'ship.markUnpaid' : 'ship.markPaid'))}</button>` : ''}
       </div>
     </div>`;
   }
@@ -922,6 +983,10 @@
   function renderOrders(orders) {
     $('ship-couriers').innerHTML = COURIERS().map((c) => `<option value="${esc(c)}"></option>`).join('');
     const col = (k) => esc(t('admin.col.' + k));
+    // The Total column only when the answer has totals (people without orders.amounts get none: no empty column).
+    const totals = orders.length ? AdminRoles.anyAmount(orders, 'total') : can('orders.amounts');
+    const cols = totals ? 6 : 5;
+    $('orders-total-col').hidden = !totals;
     $('orders').innerHTML = orders.length ? orders.map((o) => `
       <tr class="order-row ${shipOpen.has(o.id) ? 'open' : ''}">
         <td data-label="${col('order')}"><strong>${esc(o.number)}</strong>${o.delivery && o.delivery.speed === 'express' ? ` <span class="pill dlv-express-pill">${esc(t('delivery.express'))}</span>` : ''}<div class="muted small">${esc(POD.date(o.createdAt))}</div>${o.delivery ? `<div class="muted small">${esc(t('delivery.by', { date: POD.day(o.delivery.by) }))}</div>` : ''}</td>
@@ -929,11 +994,11 @@
         <td data-label="${col('items')}"><div class="mini-items">${o.items.map((i) => IN_REVIEW.has(i.status)
           ? `<span class="rv-mini" title="${esc(tr(i.productName))}: ${esc(t('admin.status.' + i.status))}"><img src="${esc(i.sides[0].previewUrl)}" alt="" ${zoomAttr(i)}><span class="rv-mini-flag" aria-hidden="true">!</span></span>`
           : `<img src="${esc(i.sides[0].previewUrl)}" title="${esc(tr(i.productName))}: ${esc(t('admin.status.' + i.status))}" alt="" ${zoomAttr(i)}>`).join('')}</div>${orderReview(o)}${orderQty(o)}</td>
-        <td data-label="${col('total')}">${esc(money(o.total))}</td>
+        ${totals ? `<td data-label="${col('total')}">${AdminRoles.isAmount(o.total) ? esc(money(o.total)) : '—'}</td>` : ''}
         <td data-label="${col('status')}"><div class="order-state">${statusPill(orderState(o))} ${payPill(o)}${shipNote(o)}</div>
           <button class="btn btn-sm ship-toggle" data-ship-toggle="${esc(o.id)}" aria-expanded="${shipOpen.has(o.id)}">${esc(t('ship.manage'))} ${shipOpen.has(o.id) ? '▴' : '▾'}</button></td>
         <td data-label="${esc(t('notify.col'))}">${notifyCell(o.notifications, o.createdAt)}</td>
-      </tr>${shipOpen.has(o.id) ? `<tr class="ship-row"><td colspan="6">${shipBox(o)}</td></tr>` : ''}`).join('') : `<tr><td colspan="6" class="muted">${esc(t('admin.noOrders'))}</td></tr>`;
+      </tr>${shipOpen.has(o.id) ? `<tr class="ship-row"><td colspan="${cols}">${shipBox(o)}</td></tr>` : ''}`).join('') : `<tr><td colspan="${cols}" class="muted">${esc(t('admin.noOrders'))}</td></tr>`;
   }
   const orderById = (id) => lastOrders && lastOrders.find((o) => o.id === id);
   const rerenderOrders = () => lastOrders && renderOrders(lastOrders);
@@ -1002,7 +1067,7 @@
       delete shipDraft[id];
       shipMsg[id] = { text: t(doneKey), ok: true };
     } catch (err) {
-      shipMsg[id] = { text: err.message, ok: false };
+      shipMsg[id] = { text: err.message, ok: false, wait: sentForApproval(err) };
     }
     rerenderOrders();
   }
@@ -1043,7 +1108,7 @@
         if (o) o.payment = r.payment || { ...(o.payment || {}), status: pay.dataset.value };
         shipMsg[id] = { text: t(pay.dataset.value === 'paid' ? 'ship.paidSaved' : 'ship.unpaidSaved'), ok: true };
       } catch (err) {
-        shipMsg[id] = { text: err.message, ok: false };
+        shipMsg[id] = { text: err.message, ok: false, wait: sentForApproval(err) };
       }
       rerenderOrders();
     }
@@ -1149,7 +1214,7 @@
     }
   }
   function renderLibRule() {
-    const s = role === 'owner' ? lastLibrary.settings : null; // the switch is the owner's
+    const s = can('settings') ? lastLibrary.settings : null; // the switch is the owner's (settings)
     $('lib-rule').hidden = !s;
     if (!s) return;
     if (!LIB.ruleBusy) $('lib-limit').checked = Boolean(s.textOnlyLimited);
@@ -1257,15 +1322,17 @@
     const note = libNote(d, st);
     const id = esc(d.id);
     const need = !d.preview && !libPicDone.has(libPicKey(d));
-    const acts = st === 'deleted'
+    const edit = can('library.edit');
+    const openLink = st === 'live' ? `<a class="btn btn-sm" href="/design?id=${encodeURIComponent(d.id)}" target="_blank" rel="noopener">${esc(t('rd.open'))} ↗</a>` : '';
+    const acts = !edit ? openLink : st === 'deleted'
       ? `<button class="btn btn-sm btn-dark" type="button" data-rd-act="back" data-id="${id}">${esc(t('rd.back'))}</button>`
-      : `${st === 'live' ? `<a class="btn btn-sm" href="/design?id=${encodeURIComponent(d.id)}" target="_blank" rel="noopener">${esc(t('rd.open'))} ↗</a>` : ''}
+      : `${openLink}
         ${st === 'paused'
     ? `<button class="btn btn-sm rd-btn-show" type="button" data-rd-act="show" data-id="${id}">${esc(t('rd.show'))}</button>`
     : `<button class="btn btn-sm" type="button" data-rd-act="pause" data-id="${id}">${esc(t('rd.pause'))}</button>`}
         <button class="btn btn-sm btn-danger" type="button" data-rd-act="delete" data-id="${id}">${esc(t('rd.delete'))}</button>`;
     return `<article class="card rd-row rd-is-${st}${LIB.picked.has(d.id) ? ' is-picked' : ''}" data-rd-row="${id}"${need ? ' data-rd-need' : ''}>
-        <input type="checkbox" class="rd-pick" data-rd-pick="${id}" ${LIB.picked.has(d.id) ? 'checked' : ''} aria-label="${esc(t('rd.pick', { name }))}">
+        ${edit ? `<input type="checkbox" class="rd-pick" data-rd-pick="${id}" ${LIB.picked.has(d.id) ? 'checked' : ''} aria-label="${esc(t('rd.pick', { name }))}">` : '<span class="rd-pick" aria-hidden="true"></span>'}
         <button type="button" class="rd-thumb" data-rd-view="${id}" aria-label="${esc(t('rd.bigger', { name }))}">${libPicHtml(d)}</button>
         <div class="rd-main">
           <div class="rd-title"><strong dir="auto">${esc(name)}</strong> <bdi class="rd-id" dir="ltr">${id}</bdi></div>
@@ -1444,6 +1511,11 @@
    * kept at the bottom of the screen while the list scrolls.
    */
   function renderLibBar() {
+    if (!can('library.edit')) {
+      $('lib-all').innerHTML = '';
+      $('lib-bar').hidden = true;
+      return;
+    }
     const shown = LIB.ids.map((id) => libById.get(id)).filter(Boolean);
     const picked = shown.filter((d) => LIB.picked.has(d.id));
     const btn = (act, key, n, cls = '') => (n ? `<button type="button" class="btn btn-sm ${cls}" data-rd-bulk="${act}" ${LIB.bulkBusy ? 'disabled' : ''}>${esc(t(key, { n: POD.num(n) }))}</button>` : '');
@@ -1634,7 +1706,8 @@
         $('lib-name-en').value = '';
         renderLibrary(await adminApi('/api/admin/library'));
       } catch (err) {
-        msg.style.color = '#c92a2a';
+        // (Sent for an owner's approval: said in plain words, the boxes keep what was typed.)
+        msg.style.color = sentForApproval(err) ? '' : '#c92a2a';
         msg.textContent = err.message;
       }
     });
@@ -1680,8 +1753,12 @@
       $('login').hidden = false;
       return;
     }
-    if (!role) await loadSession();
-    if (role === 'products' && !STAFF_TABS.has(tab)) showTab('products');
+    if (!access) await loadSession();
+    // Now and then the session again: the badge on Approvals, and roles an owner changed meanwhile.
+    else if (auto && Date.now() - sessionAt > 30000) await loadSession();
+    // Only the tabs this person has (the first of them when the one asked for isn't theirs).
+    const allowed = AdminRoles.pickTab(access, tab);
+    if (allowed && allowed !== tab) showTab(allowed);
     if (tab === 'products') {
       $('login').hidden = true;
       $('dash').hidden = false;
@@ -1710,20 +1787,25 @@
     }
     else if (tab === 'library') {
       renderLibrary(await adminApi('/api/admin/library'), { auto });
-      await AdminUploads.show({ auto }).catch((e) => { if (e.status === 401) throw e; });
+      // Upload designs (zip): for those who may upload.
+      if (can('uploads')) await AdminUploads.show({ auto }).catch((e) => { if (e.status === 401) throw e; });
+      else $('lib-up').innerHTML = '';
     }
+    else if (tab === 'staff') await AdminStaff.show({ auto });
+    else if (tab === 'approvals') await AdminApprovals.show({ auto });
+    else if (tab === 'activity') await AdminActivity.show({ auto });
     else {
       // Don't redraw while the admin is typing in a shipping box.
       if (document.activeElement && document.activeElement.closest && document.activeElement.closest('.ship-box') && lastOrders) return;
       renderOrders((lastOrders = (await adminApi('/api/admin/orders')).orders));
-      renderNotifyStatus();
+      if (can('settings')) renderNotifyStatus();
     }
     $('login').hidden = true;
     $('dash').hidden = false;
     $('logout').hidden = false;
-    if (tab !== 'review' && role === 'owner') loadReviewCount();
-    // The Rights requests tab's badge: how many are still open (owner only).
-    if (tab !== 'rights' && role === 'owner') AdminRights.count().catch(() => {});
+    if (tab !== 'review' && can('review.view')) loadReviewCount();
+    // The Rights requests tab's badge: how many are still open (for those who handle them).
+    if (tab !== 'rights' && can('rights')) AdminRights.count().catch(() => {});
   }
 
   document.addEventListener('pod:langchange', () => {
@@ -1733,7 +1815,7 @@
     if (tab === 'rights') AdminRights.onLang();
     else AdminRights.badge();
     if (tab === 'queue' && lastQueue) renderQueue(lastQueue);
-    if (tab === 'orders' && lastOrders) { renderOrders(lastOrders); renderNotifyStatus(); }
+    if (tab === 'orders' && lastOrders) { renderOrders(lastOrders); if (can('settings')) renderNotifyStatus(); }
     if (tab === 'review' && reviewData) renderReview();
     renderReviewCount();
     if (tab === 'film' && lastFilm) renderFilm(lastFilm);
@@ -1743,6 +1825,9 @@
     if (tab === 'accounts') renderAccounts();
     if (tab === 'coupons' && couponData) renderCoupons(couponData);
     if (tab === 'customers' && customerData) renderCustomers(customerData);
+    if (tab === 'staff') AdminStaff.onLang();
+    if (tab === 'approvals') AdminApprovals.onLang();
+    if (tab === 'activity') AdminActivity.onLang();
   });
 
   // ---------- Customers: find one, help with a forgotten password ----------
@@ -1763,7 +1848,7 @@
           <strong>${line(c.name)}</strong>
           ${c.linked.google ? '<span class="pill">Google</span>' : ''}${c.linked.facebook ? '<span class="pill">Facebook</span>' : ''}${c.hasPassword ? '' : `<span class="pill queued">${esc(t('cu.noPassword'))}</span>`}
           <div class="muted small"><bdi dir="ltr">${esc(c.phone || '—')}</bdi>${SEP()}<bdi dir="ltr">${esc(c.email || '—')}</bdi>${SEP()}${esc(t('cu.since', { date: POD.date(c.createdAt) }))}</div>
-          <div class="small">${esc(listed(t('cu.orders', { n: POD.num(c.orders), total: money(c.spent) })))}${c.lastOrder ? `${SEP()}${esc(t('cu.last', { date: POD.date(c.lastOrder) }))}` : ''}</div>
+          <div class="small">${esc(listed(AdminRoles.isAmount(c.spent) ? t('cu.orders', { n: POD.num(c.orders), total: money(c.spent) }) : t('role.cuOrders', { n: POD.num(c.orders) })))}${c.lastOrder ? `${SEP()}${esc(t('cu.last', { date: POD.date(c.lastOrder) }))}` : ''}</div>
           ${link ? `<div class="cu-link small"><div class="muted">${esc(t('cu.linkReady'))}</div><input type="text" readonly dir="ltr" value="${esc(link.url)}" data-cu-copy="${esc(c.id)}">
             <div class="row" style="gap:6px;margin-top:6px;flex-wrap:wrap">
               <button class="btn btn-sm" type="button" data-cu-copybtn="${esc(c.id)}">${esc(t('cu.copy'))}</button>
@@ -1771,7 +1856,7 @@
               ${c.email ? `<a class="btn btn-sm" href="${esc('mailto:' + c.email + '?subject=' + encodeURIComponent(t('cu.mailSubject')) + '&body=' + encodeURIComponent(msg))}">${esc(t('cu.sendMail'))}</a>` : ''}
             </div></div>` : ''}
         </div>
-        <div class="queue-actions"><button class="btn btn-sm" type="button" data-cu-reset="${esc(c.id)}">${esc(t('cu.resetBtn'))}</button></div>
+        ${can('customers.contact') ? `<div class="queue-actions"><button class="btn btn-sm" type="button" data-cu-reset="${esc(c.id)}">${esc(t('cu.resetBtn'))}</button></div>` : ''}
       </div>`;
     }).join('') : `<div class="card empty"><p>${esc(t('cu.none'))}</p></div>`;
   }
@@ -1846,7 +1931,7 @@
   });
 
   // ---------- Accounts: profit, prices & costs, expenses ----------
-  const acc = { view: 'overview', period: 'month', from: '', to: '', report: null, pricing: null, openOrders: new Set(), openSizes: new Set(), edits: {} };
+  const acc = { view: 'overview', period: 'month', from: '', to: '', report: null, pricing: null, openOrders: new Set(), openSizes: new Set(), edits: {}, typed: {}, shipTyped: false };
   // The shop's day is Cairo's, whatever the admin's computer clock says (periods, the CSV name, today's date).
   const CAIRO_DAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Cairo', year: 'numeric', month: '2-digit', day: '2-digit' });
   const ymd = (d) => CAIRO_DAY.format(d);
@@ -1941,7 +2026,7 @@
       tile(t('acc.netProfit'), money(tt.netProfit), '', cls(tt.netProfit)),
       tile(t('acc.collected'), money(tt.collected), t('acc.pending', { v: money(tt.pending) })),
     ].join('');
-    if (acc.pricing && document.activeElement !== $('acc-ship-cost')) $('acc-ship-cost').value = acc.pricing.settings.shippingCost || 0;
+    if (acc.pricing && document.activeElement !== $('acc-ship-cost') && !acc.shipTyped) $('acc-ship-cost').value = acc.pricing.settings.shippingCost || 0;
     $('acc-products').innerHTML = r.products.length
       ? `<thead><tr><th>${esc(t('acc.col.product'))}</th><th>${esc(t('acc.col.units'))}</th><th>${esc(t('acc.col.sales'))}</th><th>${esc(t('acc.col.cost'))}</th><th>${esc(t('acc.col.profit'))}</th></tr></thead><tbody>${r.products.map((p) => `
         <tr><td>${esc(tr(p.productName))}</td><td>${POD.num(p.units)}</td><td>${money(p.sales)}</td><td>${money(p.cost)}</td><td class="${cls(p.profit)}">${money(p.profit)}</td></tr>`).join('')}</tbody>`
@@ -1958,7 +2043,10 @@
       : `<tbody><tr><td class="muted">${esc(t('acc.noOrders'))}</td></tr></tbody>`;
   }
   const SRC = { actual: 'acc.src.actual', order: 'acc.src.order', current: 'acc.src.current' };
+  /** A real cost as typed and sent for an owner's approval (kept in its box until decided), else the saved one. */
+  const typedCost = (key, saved) => (key in acc.typed ? acc.typed[key] : saved);
   function orderRow(o) {
+    const costsRo = can('costs.edit') ? '' : ' disabled';
     const open = acc.openOrders.has(o.id);
     const main = `<tr class="${open ? 'is-open' : ''}">
       <td><strong>${esc(o.number)}</strong><div class="muted small">${esc(POD.date(o.createdAt))}${SEP()}${esc(t(o.status === 'shipped' ? 'acc.shipped' : 'acc.open'))}</div></td>
@@ -1972,12 +2060,12 @@
       <div class="acc-cost-line">
         <span>${esc(tr(i.productName))}${SEP()}${esc(tr(i.size && i.size.label))}${i.sides > 1 ? `${SEP()}${esc(t('acc.sides', { n: POD.num(i.sides) }))}` : ''}${SEP()}${money(i.price)}</span>
         <span class="muted small">${i.costParts ? esc(t('acc.parts', { blank: money(i.costParts.blank), print: money(i.costParts.print), other: money(i.costParts.other) }) + (Number(i.costParts.embroidery) ? t('acc.partsEmb', { emb: money(i.costParts.embroidery) }) : '')) : ''} (${esc(t(SRC[i.costSource]))})</span>
-        <label class="small">${esc(t('acc.realCost'))} <input type="text" inputmode="decimal" autocomplete="off" data-num data-min="0" dir="ltr" value="${i.costSource === 'actual' ? i.cost : ''}" placeholder="${i.cost}" data-acc-item-cost="${i.id}"></label>
+        <label class="small">${esc(t('acc.realCost'))} <input type="text" inputmode="decimal" autocomplete="off" data-num data-min="0" dir="ltr" value="${esc(typedCost('item:' + i.id, i.costSource === 'actual' ? i.cost : ''))}" placeholder="${i.cost}" data-acc-item-cost="${i.id}"${costsRo}></label>
       </div>`).join('');
     return main + `<tr class="acc-detail"><td colspan="7">
       ${items}
       <div class="acc-cost-line"><span>${esc(t('acc.col.ship'))}</span><span class="muted small">${esc(t(o.shippingCostSet ? 'acc.src.actual' : 'acc.src.default'))}</span>
-        <label class="small">${esc(t('acc.realShip'))} <input type="text" inputmode="decimal" autocomplete="off" data-num data-min="0" dir="ltr" value="${o.shippingCostSet ? o.shippingCost : ''}" placeholder="${o.shippingCost}" data-acc-ship="${o.id}"></label></div>
+        <label class="small">${esc(t('acc.realShip'))} <input type="text" inputmode="decimal" autocomplete="off" data-num data-min="0" dir="ltr" value="${esc(typedCost('ship:' + o.id, o.shippingCostSet ? o.shippingCost : ''))}" placeholder="${o.shippingCost}" data-acc-ship="${o.id}"${costsRo}></label></div>
       <p class="muted small" style="margin:6px 0 0">${esc(t('acc.realHelp'))}</p>
     </td></tr>`;
   }
@@ -1992,7 +2080,7 @@
     if (!$('exp-date').value) $('exp-date').value = ymd(new Date());
     $('acc-exp-list').innerHTML = r.expenses.length
       ? `<thead><tr><th>${esc(t('acc.date'))}</th><th>${esc(t('acc.category'))}</th><th>${esc(t('acc.description'))}</th><th>${esc(t('acc.amount'))}</th><th></th></tr></thead><tbody>${r.expenses.map((e) => `
-        <tr><td>${esc(day(e.date, true))}</td><td>${esc(t('acc.cat.' + e.category))}</td><td class="acc-exp-desc">${line(e.description)}</td><td>${money(e.amount)}</td><td><button class="btn btn-sm" type="button" data-exp-del="${e.id}">${esc(t('houses.delete'))}</button></td></tr>`).join('')}</tbody>`
+        <tr><td>${esc(day(e.date, true))}</td><td>${esc(t('acc.cat.' + e.category))}</td><td class="acc-exp-desc">${line(e.description)}</td><td>${money(e.amount)}</td><td>${can('expenses.edit') ? `<button class="btn btn-sm" type="button" data-exp-del="${e.id}">${esc(t('houses.delete'))}</button>` : ''}</td></tr>`).join('')}</tbody>`
       : `<tbody><tr><td class="muted">${esc(t('acc.noExpenses'))}</td></tr></tbody>`;
   }
   /*
@@ -2012,7 +2100,9 @@
   function renderPrices() {
     const d = acc.pricing;
     if (!d) return;
-    const field = (pid, key, value, extra = '') => `<input type="text" inputmode="decimal" autocomplete="off" data-num data-need data-min="${priceMin(key)}" dir="ltr" value="${esc(String(value))}" data-price-field="${esc(pid)}" data-key="${esc(key)}" ${extra}>`;
+    // Selling prices for prices.edit, costs for costs.edit (the others see them only).
+    const may = (key) => can(/^(basePrice|extraSidePrice|size:)/.test(key) ? 'prices.edit' : 'costs.edit');
+    const field = (pid, key, value, extra = '') => `<input type="text" inputmode="decimal" autocomplete="off" data-num data-need data-min="${priceMin(key)}" dir="ltr" value="${esc(String(value))}" data-price-field="${esc(pid)}" data-key="${esc(key)}" ${extra}${may(key) ? '' : ' disabled'}>`;
     $('acc-price-list').innerHTML = d.categories.map((c) => {
       const prods = d.products.filter((p) => p.category === c.id);
       if (!prods.length) return '';
@@ -2049,7 +2139,7 @@
       <td>${p.embroidered ? field(p.id, 'embroidery', v('embroidery', p.costs.embroidery || 0)) : '<span class="muted">—</span>'}</td>
       <td>${field(p.id, 'other', v('other', p.costs.other))}</td>
       <td class="${(p.costsSet || changed) && known ? cls(profit) : ''}">${(p.costsSet || changed) && known ? `<strong>${money(profit)}</strong><div class="muted small">${esc(t('acc.marginShort', { v: POD.num(margin) }))}</div>` : '<span class="muted">—</span>'}</td>
-      <td><button class="btn btn-sm ${changed ? 'btn-primary' : ''}" type="button" data-price-save="${p.id}" ${changed ? '' : 'disabled'}>${esc(t('houses.save'))}</button></td></tr>`;
+      <td>${can('prices.edit') || can('costs.edit') ? `<button class="btn btn-sm ${changed ? 'btn-primary' : ''}" type="button" data-price-save="${p.id}" ${changed ? '' : 'disabled'}>${esc(t('houses.save'))}</button>` : ''}</td></tr>`;
     if (sizesOpen) {
       html += `<tr class="acc-detail"><td colspan="10"><div class="acc-sizes">${p.sizes.map((sz) => `
         <div class="acc-size"><strong>${esc(tr(sz.label))}</strong>
@@ -2179,8 +2269,10 @@
     tr0.cells[PROFIT].innerHTML = tmp.rows[0].cells[PROFIT].innerHTML;
     tr0.cells[PROFIT].className = tmp.rows[0].cells[PROFIT].className;
     const btn = tr0.querySelector('[data-price-save]');
-    btn.disabled = false;
-    btn.classList.add('btn-primary');
+    if (btn) {
+      btn.disabled = false;
+      btn.classList.add('btn-primary');
+    }
     tr0.classList.add('is-edited');
     // The pack-price warning follows the prices as typed.
     const warnRow = $('tab-accounts').querySelector(`[data-pack-warn="${CSS.escape(pid)}"]`);
@@ -2209,18 +2301,22 @@
     // estimate again, as the help under the boxes says.
     const typed = numValue(el);
     const value = typed === '' ? null : Number(typed);
+    const typedKey = itemId ? 'item:' + itemId : 'ship:' + orderId;
     costSaving++;
     let saved = false;
     try {
       if (itemId) await adminApi(`/api/admin/items/${encodeURIComponent(itemId)}/cost`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang }, body: JSON.stringify({ actualCost: value }) });
       else await adminApi(`/api/admin/orders/${encodeURIComponent(orderId)}/shipping-cost`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang }, body: JSON.stringify({ actualShipping: value }) });
       saved = true;
+      delete acc.typed[typedKey];
       // (Enter in the box: done with it. Another box clicked meanwhile keeps its focus.)
       if (document.activeElement === el) el.blur();
       toast(t('houses.saved'));
       acc.report = await adminApi(`/api/admin/accounts?${rangeQuery()}`);
     } catch (err) {
-      toast(err.message, 'error');
+      // Sent for an owner's approval: the box keeps what was typed (the saved cost hasn't changed yet).
+      if (sentForApproval(err)) acc.typed[typedKey] = el.value;
+      else toast(err.message, 'error');
     } finally {
       costSaving--;
     }
@@ -2238,11 +2334,13 @@
     if (!checkNum($('acc-ship-cost'))) return void $('acc-ship-cost').reportValidity();
     try {
       const st = await adminApi('/api/admin/accounts/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang }, body: JSON.stringify({ shippingCost: Number(numValue($('acc-ship-cost'))) }) });
+      acc.shipTyped = false;
       if (acc.pricing) acc.pricing.settings = st;
       toast(t('houses.saved'));
       await refreshAccounts();
     } catch (err) {
-      toast(err.message, 'error');
+      if (sentForApproval(err)) acc.shipTyped = true;
+      else toast(err.message, 'error');
     }
   });
   $('acc-csv').addEventListener('click', () => {
@@ -2323,11 +2421,11 @@
           <div class="small">${esc(listed(t('cp.usage', { n: POD.num(c.uses), max: c.maxUses ? POD.num(c.maxUses) : '∞', v: money(c.discountGiven) })))}</div>
           ${c.note ? `<div class="muted small">${line(c.note)}</div>` : ''}
         </div>
-        <div class="row" style="gap:8px;flex:0 0 auto">
+        ${can('coupons.edit') ? `<div class="row" style="gap:8px;flex:0 0 auto">
           <button class="btn btn-sm" type="button" data-cp-toggle="${esc(c.id)}">${esc(t(c.active ? 'cp.pause' : 'cp.resume'))}</button>
           <button class="btn btn-sm" type="button" data-cp-edit="${esc(c.id)}">${esc(t('houses.edit'))}</button>
           <button class="btn btn-sm" type="button" data-cp-del="${esc(c.id)}">${esc(t('houses.delete'))}</button>
-        </div>
+        </div>` : ''}
       </div>`;
     }).join('') : `<p class="muted">${esc(t('cp.empty'))}</p>`;
     cpProductsNote();
@@ -2491,14 +2589,14 @@
           <strong>${esc(tr(item.productName))}</strong> ${pill(item.status)} <span class="pill rv-noprint">${esc(t('rv.notPrintable'))}</span>${expressPill(item)}${samplePill(item)}${piecesPill(item)}
           <div class="muted small">${esc([item.orderNumber, t('admin.spec.itemOf', { i: item.position, n: item.of }), ...colourSizeText(item)].join(SEP()))}</div>
         </div>
-        <div class="queue-actions"><button class="btn btn-sm" type="button" data-rv-goto="${esc(item.id)}">${esc(t('rv.goReview'))}</button></div>
+        <div class="queue-actions">${can('review.view') ? `<button class="btn btn-sm" type="button" data-rv-goto="${esc(item.id)}">${esc(t('rv.goReview'))}</button>` : ''}</div>
       </div>`;
   }
   /** Orders table: items waiting for review or the customer's approval. */
   function orderReview(o) {
     const waiting = o.items.filter((i) => IN_REVIEW.has(i.status));
     if (!waiting.length) return '';
-    return `<div class="rv-order-note">${waiting.map((i) => `<span class="rv-order-item"><span class="pill ${esc(i.status)}">${o.items.length > 1 ? esc(POD.num(i.position)) + '. ' : ''}${esc(t('admin.status.' + i.status))}</span><button class="btn btn-sm" type="button" data-rv-goto="${esc(i.id)}">${esc(t('rv.goReview'))}</button></span>`).join('')}</div>`;
+    return `<div class="rv-order-note">${waiting.map((i) => `<span class="rv-order-item"><span class="pill ${esc(i.status)}">${o.items.length > 1 ? esc(POD.num(i.position)) + '. ' : ''}${esc(t('admin.status.' + i.status))}</span>${can('review.view') ? `<button class="btn btn-sm" type="button" data-rv-goto="${esc(i.id)}">${esc(t('rv.goReview'))}</button>` : ''}</span>`).join('')}</div>`;
   }
 
   function reasonText(item, r) {
@@ -2704,6 +2802,7 @@
   }
   const msgHtml = (m) => (m ? `<p class="rv-msg ${m.ok ? 'ok' : 'bad'}" aria-live="polite">${esc(m.text)}</p>` : '<p class="rv-msg" aria-live="polite"></p>');
   function rvActions(item) {
+    if (!can('review.work')) return `<section class="rv-box rv-decide"><h3>${esc(t('rv.actions'))}</h3><p class="muted small rv-readonly">${esc(t('role.reviewReadOnly'))}</p></section>`;
     const id = esc(item.id);
     const busy = rvBusy.has(item.id);
     const v = proofOf(item).version;
@@ -2724,7 +2823,7 @@
   /** Did the customer approve exactly the files that are there now? (Else approving sends them the proof first.) */
   const customerApproved = (item) => Boolean(item.approval && item.filesMatchApproval !== false && (!proofOf(item).proofHash || item.approval.proofHash === proofOf(item).proofHash));
   function rvReplace(item) {
-    if (item.kind === 'gangsheet') return '';
+    if (item.kind === 'gangsheet' || !can('review.work')) return '';
     const sides = rvSides(item).filter((s) => s.widthPx && s.heightPx);
     if (!sides.length) return '';
     // Name lists: the item data doesn't say which sides carry the names (the server refuses those),
@@ -2758,7 +2857,7 @@
       <section class="rv-box">
         <h3>${esc(t('rv.link'))}</h3>
         ${link ? `<div class="rv-link"><input type="text" readonly dir="ltr" id="rv-link-${id}" value="${esc(absLink(link))}" aria-label="${esc(t('rv.link'))}"><button class="btn btn-sm" type="button" data-rv-copy="${id}">${esc(t('rv.copy'))}</button></div>` : `<p class="muted small">${esc(t('rv.linkNone'))}</p>`}
-        ${item.status === 'awaiting_approval'
+        ${!can('review.work') ? '' : item.status === 'awaiting_approval'
           ? `<button class="btn btn-sm" type="button" data-rv-act="resend" data-rv-id="${id}" ${rvBusy.has(item.id) ? 'disabled' : ''}>↻ ${esc(t('rv.resend'))}</button>`
           : `<p class="muted small" style="margin:0">${esc(t('rv.resendWhen'))}</p>`}
         ${rvMsg['link:' + item.id] ? msgHtml(rvMsg['link:' + item.id]) : ''}
@@ -3023,9 +3122,29 @@
     }
   });
 
-  AdminProducts.init({ api: adminApi, role: () => role });
+  AdminProducts.init({ api: adminApi, role: () => role, can, legacyOwner: () => Boolean(access && access.owner && !access.system) });
   AdminPreview.init({ api: adminApi });
-  AdminRights.init({ api: adminApi, goToDesign: goToLibraryDesign });
+  // ("Find it in Ready designs" only for those who see that tab.)
+  AdminRights.init({ api: adminApi, goToDesign: (id, o) => (can('library.view') ? goToLibraryDesign(id, o) : undefined) });
+  AdminStaff.init({ api: adminApi, access: () => access });
+  AdminApprovals.init({
+    api: adminApi,
+    access: () => access,
+    // The badge follows what the list says is waiting.
+    counted: (n) => {
+      if (!access) return;
+      if (access.owner) access.pendingApprovals = n;
+      else access.myPending = n;
+      renderApprovalsBadge();
+    },
+  });
+  AdminActivity.init({ api: adminApi, access: () => access });
+  // A change sent for an owner's approval: one more of "My requests" on the tab's badge.
+  AdminRoles.onPending(() => {
+    if (!access || access.owner) return;
+    access.myPending += 1;
+    renderApprovalsBadge();
+  });
   AdminUploads.init({
     api: adminApi,
     token: () => token,
@@ -3041,9 +3160,112 @@
   if (tabFromHash()) showTab(tabFromHash());
   window.addEventListener('hashchange', () => {
     const want = tabFromHash();
-    if (want && want !== tab && role !== 'products') document.querySelector(`[data-tab="${want}"]`).click();
+    if (want && want !== tab && AdminRoles.tabAllowed(access, want)) document.querySelector(`[data-tab="${want}"]`).click();
   });
-  // Who is signed in first (a product manager's page must never call the owner's routes), then the tab.
-  refresh().catch(() => {});
-  setInterval(() => !document.hidden && token && refresh({ auto: true }).catch(() => {}), 15000);
+
+  // ---------- My account: who is signed in, change my password ----------
+  document.addEventListener('click', (e) => {
+    if ($('me-menu').open && !e.target.closest('#me-menu')) $('me-menu').open = false;
+  });
+  $('me-pw').addEventListener('click', () => {
+    $('me-menu').open = false;
+    passwordDialog();
+  });
+  /** Change my own password (personal logins; not the shared emergency owner password). */
+  function passwordDialog() {
+    const d = document.createElement('dialog');
+    d.className = 'pm-dlg me-dlg';
+    d.innerHTML = `<form class="pm-dlg-form" novalidate>
+        <h3>${esc(t('me.changePw'))}</h3>
+        <p class="muted small">${esc(t('me.pwHelp'))}</p>
+        <input type="text" name="username" autocomplete="username" value="${esc((access && access.name) || '')}" hidden>
+        <div class="field"><label for="me-cur">${esc(t('me.current'))}</label><input type="password" id="me-cur" name="current" autocomplete="current-password" dir="ltr" maxlength="200" required></div>
+        <div class="field"><label for="me-new">${esc(t('me.new'))}</label><input type="password" id="me-new" name="password" autocomplete="new-password" dir="ltr" minlength="10" maxlength="200" required></div>
+        <div class="field"><label for="me-new2">${esc(t('me.again'))}</label><input type="password" id="me-new2" name="again" autocomplete="new-password" dir="ltr" maxlength="200" required></div>
+        <p class="ro-err" role="alert" hidden></p>
+        <div class="pm-dlg-btns"><button class="btn" type="button" data-me-cancel>${esc(t('me.cancel'))}</button><button class="btn btn-primary" type="submit">${esc(t('me.save'))}</button></div>
+      </form>`;
+    document.body.appendChild(d);
+    const form = d.querySelector('form');
+    const err = d.querySelector('.ro-err');
+    const say = (m) => { err.textContent = m; err.hidden = !m; };
+    form.addEventListener('input', () => say(''));
+    d.querySelector('[data-me-cancel]').addEventListener('click', () => d.close());
+    d.addEventListener('close', () => d.remove());
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const current = form.current.value;
+      const password = form.password.value;
+      if (!current) return void (say(t('me.needCurrent')), form.current.focus());
+      if (password.length < 10) return void (say(t('me.pwShort')), form.password.focus());
+      if (password !== form.again.value) return void (say(t('me.pwMismatch')), form.again.focus());
+      say('');
+      const ok = form.querySelector('[type=submit]');
+      ok.disabled = true;
+      try {
+        await adminApi('/api/admin/me/password', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ current, password }) });
+        d.close();
+        toast(t('me.pwDone'));
+      } catch (ex) {
+        if (ex.status !== 401) say(ex.message);
+      } finally {
+        ok.disabled = false;
+      }
+    });
+    d.showModal();
+    form.current.focus();
+  }
+
+  // ---------- Setting a password from the one-time link (/admin?setup=TOKEN) ----------
+  const setupToken = (() => { try { return new URLSearchParams(location.search).get('setup') || ''; } catch (e) { return ''; } })();
+  function showSetup() {
+    $('login').hidden = true;
+    $('dash').hidden = true;
+    $('setup').hidden = false;
+    $('setup-pw').focus();
+  }
+  $('setup').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const pw = $('setup-pw').value;
+    const say = (m) => { $('setup-err').textContent = m; $('setup-err').hidden = !m; };
+    if (pw.length < 10) return void (say(t('me.pwShort')), $('setup-pw').focus());
+    if (pw !== $('setup-pw2').value) return void (say(t('me.pwMismatch')), $('setup-pw2').focus());
+    say('');
+    const btn = $('setup').querySelector('[type=submit]');
+    btn.disabled = true;
+    try {
+      const r = await POD.api('/api/admin/setup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: setupToken, password: pw }) });
+      const username = (r && r.username) || '';
+      $('setup-pw').value = '';
+      $('setup-pw2').value = '';
+      $('setup').hidden = true;
+      $('setup-done').hidden = false;
+      // (The username in its own direction inside the Arabic sentence.)
+      $('setup-done-text').textContent = t('setup.done', { username: `\u2068${username}\u2069` });
+      $('setup-go').dataset.username = username;
+      // The link is used up: a reload shows the sign-in, not the form again.
+      try { history.replaceState(null, '', location.pathname); } catch (err) { /* the address keeps it */ }
+    } catch (ex) {
+      // An expired or used link (or one that never was): ask for a new one. A password the server refuses: its words.
+      say(ex.status >= 400 && ex.status < 500 && !/password/i.test(ex.code || '') ? t('setup.bad') : ex.message);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+  // "Go to sign in": the sign-in form here, with the username filled in.
+  $('setup-go').addEventListener('click', (e) => {
+    e.preventDefault();
+    $('setup-done').hidden = true;
+    $('username').value = $('setup-go').dataset.username || '';
+    $('login').hidden = false;
+    $('password').focus();
+  });
+
+  if (setupToken) {
+    showSetup();
+  } else {
+    // Who is signed in first (a product manager's page must never call the owner's routes), then the tab.
+    refresh().catch(() => {});
+  }
+  setInterval(() => !document.hidden && token && $('setup').hidden && $('setup-done').hidden && refresh({ auto: true }).catch(() => {}), 15000);
 })();

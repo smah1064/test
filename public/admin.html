@@ -19,6 +19,7 @@
   <link rel="stylesheet" href="/css/admin-uploads.css">
   <link rel="stylesheet" href="/css/admin-preview.css">
   <link rel="stylesheet" href="/css/admin-rights.css">
+  <link rel="stylesheet" href="/css/admin-roles.css">
   <style>
     /* Orders: shipping, delivery and payment */
     .pill.delivered { background: #138a4a; color: #fff; }
@@ -77,7 +78,13 @@
       <span class="muted small" data-i18n="admin.production"></span>
       <nav>
         <button class="btn btn-sm lang-toggle" data-lang-toggle data-i18n="lang.other"></button>
-        <span class="small muted pm-who" id="admin-who" hidden></span>
+        <details class="me-menu" id="me-menu" hidden>
+          <summary class="btn btn-sm" id="me-btn" data-i18n-title="me.menu"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg><span class="pm-who" id="admin-who"></span></summary>
+          <div class="card me-pop">
+            <p class="small me-who" id="me-who"></p>
+            <button class="btn btn-sm btn-block" type="button" id="me-pw" hidden data-i18n="me.changePw"></button>
+          </div>
+        </details>
         <button class="btn btn-sm" id="logout" hidden data-i18n="admin.signOut"></button>
       </nav>
     </div>
@@ -85,15 +92,29 @@
 
   <main class="container">
     <form class="card login" id="login" hidden>
-      <h2 id="login-title" data-i18n="admin.loginTitle"></h2>
-      <p class="muted small" id="login-text" data-i18n="admin.loginText"></p>
-      <div class="field" id="username-field" hidden><label for="username" data-i18n="pm.login.username"></label><input type="text" id="username" autocomplete="username" dir="ltr" autocapitalize="off" spellcheck="false" maxlength="30"></div>
+      <h2 id="login-title" data-i18n="login.title"></h2>
+      <p class="muted small" id="login-text" data-i18n="login.text"></p>
+      <div class="field" id="username-field"><label for="username" data-i18n="login.username"></label><input type="text" id="username" autocomplete="username" dir="ltr" autocapitalize="off" spellcheck="false" maxlength="30" aria-describedby="login-hint"><p class="muted small login-hint" id="login-hint" data-i18n="login.hint"></p></div>
       <div class="field"><label for="password" data-i18n="admin.password"></label><input type="password" id="password" autocomplete="current-password" dir="ltr" required></div>
       <button class="btn btn-dark btn-block" type="submit" data-i18n="admin.signIn"></button>
-      <p class="pm-login-switch"><button class="link-btn small" type="button" id="staff-toggle" aria-controls="username-field" aria-expanded="false" data-i18n="pm.login.staffLink"></button></p>
     </form>
 
+    <form class="card login" id="setup" hidden novalidate>
+      <h2 data-i18n="setup.title"></h2>
+      <p class="muted small" data-i18n="setup.text"></p>
+      <div class="field"><label for="setup-pw" data-i18n="setup.pw"></label><input type="password" id="setup-pw" autocomplete="new-password" dir="ltr" minlength="10" maxlength="200" required></div>
+      <div class="field"><label for="setup-pw2" data-i18n="setup.again"></label><input type="password" id="setup-pw2" autocomplete="new-password" dir="ltr" minlength="10" maxlength="200" required></div>
+      <p class="ro-err" id="setup-err" role="alert" hidden></p>
+      <button class="btn btn-dark btn-block" type="submit" data-i18n="setup.save"></button>
+    </form>
+    <div class="card login" id="setup-done" hidden>
+      <h2 data-i18n="setup.title"></h2>
+      <p class="ro-ok" id="setup-done-text" role="status"></p>
+      <a class="btn btn-dark btn-block" href="/admin" id="setup-go" data-i18n="setup.signIn"></a>
+    </div>
+
     <div id="dash" hidden>
+      <p class="notice me-emergency" id="emergency-bar" role="note" hidden data-i18n="me.emergency"></p>
       <p class="notice" id="weak-pw" hidden data-i18n="admin.weakPw" style="margin:0 0 12px"></p>
       <div class="page-head" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
         <h1 style="margin:0" id="dash-title" data-i18n="admin.queueTitle"></h1>
@@ -110,6 +131,9 @@
           <button class="btn btn-sm" data-tab="products" data-i18n="pm.tab"></button>
           <button class="btn btn-sm" data-tab="preview" data-i18n="pv.tab"></button>
           <button class="btn btn-sm rv-tab" data-tab="rights"><span data-i18n="tk.tab"></span><span class="rv-count" id="tk-count" hidden></span></button>
+          <button class="btn btn-sm" data-tab="staff" hidden data-i18n="staff.tab"></button>
+          <button class="btn btn-sm rv-tab" data-tab="approvals" hidden><span data-i18n="ap.tab" id="ap-tab-label"></span><span class="rv-count ap-count" id="ap-count" hidden></span></button>
+          <button class="btn btn-sm" data-tab="activity" hidden data-i18n="act.tab"></button>
         </div>
       </div>
 
@@ -270,6 +294,12 @@
 
       <section id="tab-rights" hidden></section>
 
+      <section id="tab-staff" hidden></section>
+
+      <section id="tab-approvals" hidden></section>
+
+      <section id="tab-activity" hidden></section>
+
       <section id="tab-coupons" hidden>
         <form class="card house-form" id="cp-form">
           <h2 style="font-size:16px;margin:0 0 4px" id="cp-form-title" data-i18n="cp.addTitle"></h2>
@@ -313,7 +343,7 @@
       </section>
 
       <section id="tab-orders" hidden>
-        <div class="card notify-card">
+        <div class="card notify-card" id="notify-card">
           <div class="notify-head">
             <h2 style="font-size:16px;margin:0" data-i18n="notify.title"></h2>
             <button class="btn btn-sm" id="notify-test" data-i18n="notify.test"></button>
@@ -323,7 +353,7 @@
         </div>
         <div class="card orders-card" style="overflow-x:auto">
           <table class="orders">
-            <thead><tr><th data-i18n="admin.col.order"></th><th data-i18n="admin.col.customer"></th><th data-i18n="admin.col.items"></th><th data-i18n="admin.col.total"></th><th data-i18n="admin.col.status"></th><th data-i18n="notify.col"></th></tr></thead>
+            <thead><tr><th data-i18n="admin.col.order"></th><th data-i18n="admin.col.customer"></th><th data-i18n="admin.col.items"></th><th data-i18n="admin.col.total" id="orders-total-col"></th><th data-i18n="admin.col.status"></th><th data-i18n="notify.col"></th></tr></thead>
             <tbody id="orders"></tbody>
           </table>
           <datalist id="ship-couriers"></datalist>
@@ -342,12 +372,17 @@
   <script src="/js/i18n-admin-rights.js"></script>
   <script src="/js/i18n-admin-threads.js"></script>
   <script src="/js/i18n-admin-more.js"></script>
+  <script src="/js/i18n-admin-roles.js"></script>
   <script src="/js/common.js"></script>
+  <script src="/js/admin-roles.js"></script>
   <script src="/js/pack-prices.js"></script>
   <script src="/js/admin-products.js"></script>
   <script src="/js/admin-preview.js"></script>
   <script src="/js/admin-uploads.js"></script>
   <script src="/js/admin-rights.js"></script>
+  <script src="/js/admin-staff.js"></script>
+  <script src="/js/admin-approvals.js"></script>
+  <script src="/js/admin-activity.js"></script>
   <script src="/js/admin.js"></script>
 </body>
 </html>

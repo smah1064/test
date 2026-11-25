@@ -1,0 +1,128 @@
+/* Admin → roles: who is signed in, the emergency login's warning, sign-in hint, password setup, Staff & roles,
+   Approvals / My requests and the Activity log. */
+
+/* ---------- Header: my account ---------- */
+.me-menu { position: relative; }
+.me-menu[hidden] { display: none; }
+.me-menu > summary { list-style: none; display: inline-flex; align-items: center; gap: 6px; max-width: 34vw; cursor: pointer; }
+.me-menu > summary::-webkit-details-marker { display: none; }
+.me-menu > summary svg { flex: none; }
+.me-menu .pm-who { max-width: 28vw; }
+.me-pop { position: absolute; top: calc(100% + 8px); inset-inline-end: 0; z-index: 60; width: min(300px, calc(100vw - 24px)); padding: 12px; display: grid; gap: 10px; }
+.me-who { margin: 0; font-weight: 600; overflow-wrap: anywhere; line-height: 1.5; }
+.me-emergency { margin: 0 0 12px; background: #fff4e0; color: #7a4800; border: 1px solid #f1c983; font-weight: 700; }
+.me-emergency::before { content: "⚠ "; }
+
+/* ---------- Sign-in and setting a password ---------- */
+.login-hint { margin: 6px 0 0; line-height: 1.5; }
+.ro-err { margin: 0 0 12px; padding: 8px 12px; border-radius: 8px; background: #fdecec; color: var(--bad); font-size: 13px; font-weight: 600; line-height: 1.5; }
+.ro-ok { color: var(--ok); font-weight: 700; line-height: 1.6; }
+.me-dlg .ro-err { margin: 0; }
+
+/* ---------- A change sent for an owner's approval: a neutral toast (not red) ---------- */
+.toast.toast-pending { background: #24406b; }
+.ship-msg.wait { color: var(--ink-2); }
+
+/* ---------- Shared ---------- */
+.ro-card { padding: 16px 18px; margin-bottom: 14px; }
+.ro-h { font-size: 16px; margin: 0 0 4px; }
+.ro-pill { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; line-height: 1.3; background: #eef1f6; color: var(--ink-2); }
+.ro-role-owner { background: var(--accent-soft); color: #8a2b12; }
+.ro-role-finance { background: #e3f5ea; color: #0f6b3a; }
+.ro-role-operations { background: #e8eefc; color: #1d4fa8; }
+.ro-role-catalogue { background: #f3e8fc; color: #6b2fa8; }
+.ro-pill-me { background: var(--ink); color: #fff; }
+.ro-msg { margin: 10px 0 0; font-size: 13px; font-weight: 600; }
+.ro-msg.ok { color: var(--ok); }
+.ro-msg.bad { color: var(--bad); }
+.pm-ro { border: 0; padding: 0; margin: 0; min-width: 0; }
+.rv-readonly { margin: 0; line-height: 1.6; }
+
+/* ---------- Staff & roles ---------- */
+.st-intro { background: #f7f8fb; }
+.st-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; margin-top: 10px; }
+.st-grid .field { min-width: 0; }
+.st-grid input { width: 100%; }
+.st-roles-pick { border: 0; padding: 0; margin: 0 0 12px; min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.st-roles-pick legend { font-size: 13px; font-weight: 600; color: var(--ink-2); margin-bottom: 6px; padding: 0; }
+.st-check { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 0; cursor: pointer; font-weight: 500; color: var(--ink); min-width: 0; }
+.st-check:has(input:checked) { border-color: var(--ink); background: #f7f8fb; }
+.st-check.is-locked { cursor: not-allowed; }
+.st-check input { width: 16px; height: 16px; margin-top: 3px; flex: none; accent-color: var(--accent); }
+.st-check > span { display: grid; gap: 2px; min-width: 0; }
+.st-check b { font-size: 14px; }
+.st-check .small { line-height: 1.5; font-weight: 400; }
+.st-list-h { margin: 22px 0 10px; font-size: 18px; }
+.st-list { display: grid; gap: 10px; }
+.st-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 14px; padding: 14px 16px; align-items: start; }
+.st-row.is-off { background: #fafbfc; }
+.st-row.is-off .st-title strong { color: var(--ink-3); }
+.st-title { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.st-pills { display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 6px 0 4px; }
+.st-acts { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; max-width: 380px; }
+.st-row > .st-edit, .st-row > .ro-msg { grid-column: 1 / -1; }
+.st-edit { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 4px; display: grid; gap: 4px; }
+.st-edit .field { max-width: 360px; }
+.st-edit-btns { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.st-link { border-color: #b7e2c8; background: #f1faf4; }
+.st-link input { width: 100%; margin: 8px 0 10px; font-size: 13px; }
+.st-link-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ---------- Approvals / My requests ---------- */
+.ap-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.ap-list { display: grid; gap: 10px; }
+.ap-item { padding: 14px 16px; }
+.ap-item.ap-st-pending { border-inline-start: 4px solid #e0a43a; }
+.ap-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.ap-when { margin-inline-start: auto; }
+.ap-summary { margin: 8px 0 4px; font-weight: 700; line-height: 1.5; overflow-wrap: anywhere; }
+.ap-details { margin: 6px 0; padding: 8px 10px; border-radius: 8px; background: #f7f8fb; }
+.ap-details-text { white-space: pre-wrap; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.ap-tech { margin: 4px 0 0; overflow-wrap: anywhere; }
+.ap-decide { display: grid; gap: 6px; margin-top: 10px; }
+.ap-decide textarea { width: 100%; }
+.ap-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.ap-result { margin-top: 8px; }
+.ap-result p { margin: 2px 0; }
+.ap-error { color: var(--bad); font-weight: 600; }
+.ap-pill-pending { background: #fff1d6; color: #8a5300; }
+.ap-pill-approved { background: #e3f5ea; color: var(--ok); }
+.ap-pill-rejected, .ap-pill-failed { background: #fdecec; color: var(--bad); }
+.ap-pill-cancelled { background: #eef1f6; color: var(--ink-3); }
+
+/* ---------- Activity log ---------- */
+.act-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0 12px; align-items: end; }
+.act-filters .field { min-width: 0; margin-bottom: 8px; }
+.act-filters select, .act-filters input { width: 100%; }
+.act-csv-f { display: flex; justify-content: flex-end; }
+.act-count { margin: 4px 0 0; }
+.act-card { overflow-x: auto; }
+.act-empty { margin: 14px 16px; }
+.act-when { white-space: nowrap; }
+.act-table td { overflow-wrap: anywhere; }
+.act-table td .ro-pill { margin: 1px 0; }
+.act-pill-ok { background: #e3f5ea; color: var(--ok); }
+.act-pill-pending { background: #fff1d6; color: #8a5300; }
+.act-pill-refused, .act-pill-failed { background: #fdecec; color: var(--bad); }
+.act-pill-approval { background: #e8eefc; color: #1d4fa8; }
+.act-pill-emergency { background: #fff4e0; color: #7a4800; }
+
+@media (max-width: 700px) {
+  .st-grid, .st-roles-pick { grid-template-columns: minmax(0, 1fr); }
+  .st-row { grid-template-columns: minmax(0, 1fr); padding: 12px; }
+  .st-acts { justify-content: flex-start; max-width: none; }
+  .st-acts .btn { flex: 1 1 auto; }
+  .ap-when { margin-inline-start: 0; flex-basis: 100%; }
+  .ap-btns .btn { flex: 1 1 auto; }
+  .act-csv-f { justify-content: stretch; }
+  .act-csv-f .btn { width: 100%; }
+  .act-card { overflow: visible; background: transparent; border: 0; box-shadow: none; }
+  .act-table, .act-table tbody, .act-table tr, .act-table td { display: block; width: 100%; }
+  .act-table thead { display: none; }
+  .act-table tr.act-row { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); margin-top: 10px; padding: 4px 0; }
+  .act-table tr.act-row > td { border: 0; padding: 5px 14px; }
+  .act-table tr.act-row > td[data-label]::before { content: attr(data-label); display: block; font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 2px; }
+  .me-menu > summary { max-width: none; }
+  /* (The menu under the header, inside the screen: the account button sits near the edge on phones.) */
+  .me-pop { position: fixed; top: 64px; inset-inline: 12px; width: auto; }
+}

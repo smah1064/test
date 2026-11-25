@@ -261,13 +261,14 @@ test('Rights requests: an owner-only tab with a badge, opened by /admin#rights, 
   const at = (f) => html.indexOf(`<script src="/js/${f}"></script>`);
   assert.ok(at('i18n-admin-rights.js') > 0 && at('i18n-admin-rights.js') < at('common.js'));
   assert.ok(at('admin-rights.js') > at('common.js') && at('admin-rights.js') < at('admin.js'));
-  // Product managers: the tab is hidden and its routes are never called from their page.
-  const staffTabs = grab(ADMIN, /const STAFF_TABS = new Set\([^\n]+\);/, 'STAFF_TABS');
-  assert.ok(!staffTabs.has('rights'));
+  // Product managers (an old sign-in, no perms): the tab is hidden and its routes are never called from their page.
+  // With roles, the tab is for those with the "rights" permission (public/js/admin-roles.js, test/admin-roles.test.js).
+  assert.match(read('js/admin-roles.js'), /rights: 'rights',/);
+  assert.match(read('js/admin-roles.js'), /const LEGACY_PRODUCTS = \['catalog\.view', 'catalog\.edit', 'library\.view', 'library\.edit', 'uploads'\];/);
   const staffRoute = grab(ADMIN, /const staffRoute = \(url\) => [^\n]+;/, 'staffRoute');
   assert.strictEqual(staffRoute('/api/admin/takedowns'), false);
   assert.strictEqual(staffRoute('/api/admin/takedowns/abc'), false);
-  assert.match(ADMIN, /if \(tab !== 'rights' && role === 'owner'\) AdminRights\.count\(\)/);
+  assert.match(ADMIN, /if \(tab !== 'rights' && can\('rights'\)\) AdminRights\.count\(\)/);
   // The alert's link.
   assert.match(ADMIN, /const tabFromHash = \(\) => \(location\.hash === '#rights' \? 'rights' : ''\);\s*if \(tabFromHash\(\)\) showTab\(tabFromHash\(\)\);/);
   assert.match(ADMIN, /addEventListener\('hashchange'/);

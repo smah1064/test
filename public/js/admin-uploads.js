@@ -789,6 +789,8 @@ window.AdminUploads = (() => {
       S.busy = false;
       paintBar();
       if (err.status === 401) return;
+      // A staff member's designs wait for an owner's approval: said in plain words, the review stays as it is.
+      if (err.pending) return say(() => AdminRoles.pendingText(err.approval), false);
       if (err.status === 404) return done(b.id, () => t('up.gone'));
       say(err.message, true);
     }
@@ -801,6 +803,14 @@ window.AdminUploads = (() => {
       S.up = null;
       render();
       cfg.signOut(body && body.error);
+      return;
+    }
+    // Sent for an owner's approval (HTTP 202 { pending, approval }): said once, the same as every admin change.
+    if (window.AdminRoles && AdminRoles.isPending(body)) {
+      S.up = null;
+      AdminRoles.announce(AdminRoles.pendingError(body.approval));
+      S.msg = { text: () => AdminRoles.pendingText(body.approval), bad: false };
+      render();
       return;
     }
     if (status === 202 && body && body.batch) {

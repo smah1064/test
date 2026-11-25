@@ -5,7 +5,10 @@
  * embroidery, photos), new products made from an existing one, the change log, and the
  * owner's staff accounts. Server contract: /api/admin/catalog* and /api/admin/staff*.
  *
- * admin.js calls AdminProducts.init({ api, role }) once, then show() when the tab opens.
+ * admin.js calls AdminProducts.init({ api, role, can, legacyOwner }) once, then show() when the tab opens.
+ * can(perm): catalog.edit changes products (without it the screen is for looking), prices.edit the selling prices.
+ * A staff member's change answers "sent for an owner's approval" (adminApi throws an error marked `pending`):
+ * the form stays as typed, nothing is taken for the saved product.
  */
 (function () {
   'use strict';
@@ -48,6 +51,14 @@
   const api = (url, o) => ctx.api(url, o);
   const send = (method, url, body) => api(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const owner = () => ctx && ctx.role() === 'owner';
+  /** A permission of the person signed in (public/js/admin-roles.js); without can(): the owner's prices, as before. */
+  const can = (perm) => Boolean(ctx && (ctx.can ? ctx.can(perm) : perm !== 'prices.edit' || owner()));
+  /** Products can be changed (catalog.edit); without it the screen is for looking only. */
+  const editing = () => can('catalog.edit');
+  /** The old staff accounts here: only for an owner signed in before roles (the Staff & roles tab does it now). */
+  const legacyStaff = () => Boolean(ctx && ctx.legacyOwner && ctx.legacyOwner());
+  /** A change sent for an owner's approval (not saved yet, not a failure: the toast said so). */
+  const sentForApproval = (e) => Boolean(window.AdminRoles && AdminRoles.isPendingError(e));
   const r1 = (v) => Math.round(v * 10) / 10;
   const r2 = (v) => Math.round(v * 100) / 100;
   const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -267,8 +278,8 @@
             <p class="muted small">${esc(t('pm.help'))}</p>
           </div>
           <div class="pm-top-btns">
-            ${owner() ? `<button class="btn" type="button" data-pm-act="staff" aria-expanded="${S.staffOpen}">${esc(t('pm.staff.btn'))}</button>` : ''}
-            <button class="btn btn-primary" type="button" data-pm-act="new">+ ${esc(t('pm.new'))}</button>
+            ${legacyStaff() ? `<button class="btn" type="button" data-pm-act="staff" aria-expanded="${S.staffOpen}">${esc(t('pm.staff.btn'))}</button>` : ''}
+            ${editing() ? `<button class="btn btn-primary" type="button" data-pm-act="new">+ ${esc(t('pm.new'))}</button>` : ''}
           </div>
         </div>
         <div class="pm-tools">
@@ -280,7 +291,7 @@
         </div>
         <div class="chips pm-chips" id="pm-chips" role="group" aria-label="${esc(t('pm.filter'))}"></div>
       </div>
-      <div id="pm-staff" ${S.staffOpen && owner() ? '' : 'hidden'}></div>
+      <div id="pm-staff" ${S.staffOpen && legacyStaff() ? '' : 'hidden'}></div>
       <p class="muted small pm-count" id="pm-count" aria-live="polite"></p>
       <div class="pm-list" id="pm-rows"></div>
       <details class="card pm-log" id="pm-log-box">
@@ -289,7 +300,7 @@
       </details>`;
     renderRows();
     renderLog();
-    if (S.staffOpen && owner()) renderStaff();
+    if (S.staffOpen && legacyStaff()) renderStaff();
   }
 
   function renderRows() {
@@ -323,7 +334,8 @@
           ${p.updatedAt ? `<div class="muted small">${esc(lastChange(p))}</div>` : ''}
         </div>
         <div class="pm-row-acts">
-          ${!edit ? `<span class="muted small">${esc(t('pm.bookNote'))}</span>` : `
+          ${!edit ? `<span class="muted small">${esc(t('pm.bookNote'))}</span>` : !editing() ? `
+          <button class="btn btn-sm btn-dark" type="button" data-pm-act="edit" data-id="${esc(p.id)}">${esc(t('role.view'))}</button>` : `
           ${statusActs(p)}
           <button class="btn btn-sm btn-dark" type="button" data-pm-act="edit" data-id="${esc(p.id)}">${esc(t('pm.edit'))}</button>
           ${p.kind ? '' : `<button class="btn btn-sm" type="button" data-pm-act="copy" data-id="${esc(p.id)}">${esc(t('pm.copy'))}</button>`}`}
@@ -386,6 +398,8 @@
       try {
         if ((await onSubmit(form, d)) !== false) d.close();
       } catch (ex) {
+        // Sent for an owner's approval: done here (the toast said so; nothing changes until it is approved).
+        if (sentForApproval(ex)) return void d.close();
         err.textContent = ex.message;
         err.hidden = false;
       } finally {
@@ -485,7 +499,7 @@
       toast(P.visible ? t(again ? 'pm.soldAgainOk' : 'pm.shownOk', { name: tr(P.name) }) : t('pm.shownButHidden', { why: whyHidden(P) }), P.visible ? undefined : 'error');
       if (then) then(P);
     } catch (e) {
-      toast(e.message, 'error');
+      if (!sentForApproval(e)) toast(e.message, 'error');
     }
   }
 
@@ -590,7 +604,7 @@
   function renderStaff() {
     const el = document.getElementById('pm-staff');
     if (!el) return;
-    el.hidden = !(S.staffOpen && owner());
+    el.hidden = !(S.staffOpen && legacyStaff());
     if (el.hidden) return;
     if (!S.staff) {
       el.innerHTML = `<div class="card pm-staff"><p class="muted">${esc(t('pm.loading'))}</p></div>`;
@@ -748,9 +762,13 @@
 
   function sec(name, title, help, body, { save = true } = {}) {
     const dirty = S.dirty.has(name);
+    // Without catalog.edit the page is for looking: no Save, every box and button in the section off (the
+    // prices have their own permission, prices.edit).
+    const looking = !editing() && name !== 'prices';
+    if (looking) save = false;
     return `<section class="card pm-sec" data-sec="${name}" id="pm-sec-${name}">
       <header class="pm-sec-head"><h3>${esc(title)}</h3>${help ? `<p class="muted small">${esc(help)}</p>` : ''}</header>
-      <div class="pm-sec-body">${body}</div>
+      <div class="pm-sec-body">${looking ? `<fieldset class="pm-ro" disabled>${body}</fieldset>` : body}</div>
       <p class="pm-err" role="alert" hidden></p>
       ${save ? `<div class="pm-sec-foot"><span class="pm-dirty small" ${dirty ? '' : 'hidden'}>${esc(t('pm.unsaved'))}</span><button class="btn" type="button" data-pm-undo="${name}" ${dirty ? '' : 'hidden'}>${esc(t('pm.discard'))}</button><button class="btn btn-primary" type="button" data-pm-save="${name}" ${dirty ? '' : 'disabled'}>${esc(t('pm.save'))}</button></div>` : ''}
     </section>`;
@@ -761,8 +779,8 @@
     avail: (P) => sec('avail', t('pm.s.avail'), t('pm.s.availHelp'), availBody(P)),
     colors: (P) => sec('colors', t('pm.s.colors'), t('pm.s.colorsHelp'), colorsBody(P)),
     sizes: (P) => sec('sizes', t('pm.s.sizes'), t('pm.s.sizesHelp'), sizesBody(P)),
-    // Selling prices: the owner changes them; product managers see them only.
-    prices: (P) => sec('prices', t('pm.s.prices'), t(owner() ? 'pm.s.pricesHelpOwner' : 'pm.s.pricesReadOnly'), pricesBody(P), { save: owner() }),
+    // Selling prices: changed by those with prices.edit (owners, Finance); the others see them only.
+    prices: (P) => sec('prices', t('pm.s.prices'), t(can('prices.edit') ? 'pm.s.pricesHelpOwner' : 'pm.s.pricesReadOnly'), pricesBody(P), { save: can('prices.edit') }),
     print: (P) => sec('print', t('pm.s.print'), t('pm.s.printHelp'), printBody(P)),
     tech: (P) => sec('tech', t('pm.s.tech'), '', techBody(P)),
     photos: (P) => sec('photos', t('pm.s.photos'), t('pm.s.photosHelp'), photosBody(P), { save: false }),
@@ -784,19 +802,21 @@
           </div>
           <div class="pm-ehead-btns">
             ${P.visible && !P.kind ? `<a class="btn btn-sm" href="/product?id=${enc(P.id)}" target="_blank" rel="noopener">${esc(t('pm.viewShop'))}</a>` : ''}
-            ${P.kind ? '' : `<button class="btn btn-sm" type="button" data-pm-act="copy" data-id="${esc(P.id)}">${esc(t('pm.copy'))}</button>`}
+            ${P.kind || !editing() ? '' : `<button class="btn btn-sm" type="button" data-pm-act="copy" data-id="${esc(P.id)}">${esc(t('pm.copy'))}</button>`}
           </div>
         </div>
       </div>`;
   }
-  const jumpHtml = () => `<nav class="card pm-jump" aria-label="${esc(t('pm.sections'))}">${SECTIONS.map((s) => `<a href="#pm-sec-${s}" data-pm-jump="${s}">${esc(t('pm.s.' + s))}</a>`).join('')}</nav>`;
+  /** The sections on the edit page (stop selling / undo all only for those who change products). */
+  const shownSections = () => SECTIONS.filter((s) => s !== 'danger' || editing());
+  const jumpHtml = () => `<nav class="card pm-jump" aria-label="${esc(t('pm.sections'))}">${shownSections().map((s) => `<a href="#pm-sec-${s}" data-pm-jump="${s}">${esc(t('pm.s.' + s))}</a>`).join('')}</nav>`;
   function bannerHtml(P) {
     if (P.visible) return '';
     const neu = isNew(P);
     const arch = isArchived(P);
     const text = neu ? t('pm.newBanner') : arch ? t('pm.retiredBanner') : isOn(P) ? t('pm.liveButHidden', { why: whyHidden(P) }) : t('pm.hiddenBanner', { why: whyHidden(P) });
     const note = !neu && noteOf(P) ? `<div class="small">${esc(noteOf(P))}</div>` : '';
-    const btn = arch ? `<button class="btn btn-primary btn-sm" type="button" data-pm-act="sell-again">${esc(t('pm.sellAgain'))}</button>`
+    const btn = !editing() ? '' : arch ? `<button class="btn btn-primary btn-sm" type="button" data-pm-act="sell-again">${esc(t('pm.sellAgain'))}</button>`
       : !isOn(P) ? `<button class="btn btn-primary btn-sm" type="button" data-pm-act="publish">${esc(t(neu ? 'pm.publishNew' : 'pm.show'))}</button>`
         : `<a class="btn btn-sm" href="#pm-sec-avail">${esc(t('pm.s.avail'))}</a>`;
     return `<div class="pm-banner ${neu ? 'is-new' : arch ? 'is-archived' : ''}" id="pm-banner" role="status"><div><b>${esc(text)}</b>${note}</div>${btn}</div>`;
@@ -809,7 +829,7 @@
         ${headHtml(P)}
         ${jumpHtml()}
         <div id="pm-banner-slot">${bannerHtml(P)}</div>
-        ${SECTIONS.map((s) => SEC_RENDER[s](P)).join('')}
+        ${shownSections().map((s) => SEC_RENDER[s](P)).join('')}
         <section class="card pm-sec" id="pm-sec-log"><header class="pm-sec-head"><h3>${esc(t('pm.log.forProduct'))}</h3></header><div id="pm-plog">${logHtml(P.id)}</div></section>
       </div>`;
     drawAllSides();
@@ -1294,7 +1314,7 @@
       </div>
       <p class="muted small">${esc(t('pm.pricesEmpty'))}</p>
       <div data-pack-warn aria-live="polite">${packWarnHtml(POD_PACKS.cheaperBiggerPacks(P.sizes, Object.fromEntries(P.sizes.map((z) => [z.id, r2(P.basePrice + (Number(z.surcharge) || 0))]))))}</div>`;
-    return owner() ? html : html.replace(/<input /g, '<input disabled ');
+    return can('prices.edit') ? html : html.replace(/<input /g, '<input disabled ');
   }
   function updateFinals() {
     const raw = val('basePrice');
@@ -1325,7 +1345,7 @@
    * each: "10 brochures (EGP 35) costs less than 1 brochure (EGP 40)". Also used by Accounts → Prices.
    */
   function packWarnHtml(list) {
-    if (!owner() || !list || !list.length) return '';
+    if (!can('prices.edit') || !list || !list.length) return '';
     const b = (s) => `<bdi>${esc(s)}</bdi>`;
     const line = (w) => t('pm.packWarn.line', { big: b(tr(w.bigger.label)), bigPrice: b(POD.money(w.bigger.price)), small: b(tr(w.smaller.label)), smallPrice: b(POD.money(w.smaller.price)) });
     return `<div class="pack-warn">
@@ -1475,7 +1495,7 @@
   }
   function onPointerDown(e) {
     const h = e.target.closest && e.target.closest('svg.pm-pa [data-drag]');
-    if (!h || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    if (!h || (e.pointerType === 'mouse' && e.button !== 0) || !editing()) return;
     const svg = h.closest('svg');
     const sid = svg.dataset.side;
     const st = S.sides && S.sides[sid];
@@ -1511,7 +1531,7 @@
   }
   function onBoxKey(e) {
     const box = e.target.closest && e.target.closest('svg.pm-pa [data-r=box]');
-    if (!box) return;
+    if (!box || !editing()) return;
     const step = e.shiftKey ? 10 : 1;
     const d = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
     if (!d) return;
@@ -1663,6 +1683,8 @@
         putProduct(S.P);
         room -= 1;
       } catch (e) {
+        // (Each photo sent for an owner's approval: the next one goes too.)
+        if (sentForApproval(e)) continue;
         secError('photos', `${go[i].name}: ${e.message}`);
         break;
       }
@@ -1693,7 +1715,7 @@
       refreshEdit('photos');
       reloadLater();
     } catch (e) {
-      secError('photos', e.message);
+      if (!sentForApproval(e)) secError('photos', e.message);
     }
   }
   async function photoMove(id, beforeId) {
@@ -1708,7 +1730,7 @@
       refreshEdit('photos');
       reloadLater();
     } catch (e) {
-      secError('photos', e.message);
+      if (!sentForApproval(e)) secError('photos', e.message);
     }
   }
 
@@ -1765,7 +1787,8 @@
       reloadLater();
     } catch (e) {
       if (btn) { btn.disabled = false; btn.textContent = t('pm.save'); }
-      secError(name, e.message);
+      // Sent for an owner's approval: the section keeps what was typed (it isn't live yet).
+      if (!sentForApproval(e)) secError(name, e.message);
     }
   }
   function undo(name) {
@@ -2000,7 +2023,7 @@
       toast(t('pm.undoAllDone'));
       reloadLater();
     } catch (e) {
-      secError('danger', e.message);
+      if (!sentForApproval(e)) secError('danger', e.message);
     }
   }
   function onInput(e) {
@@ -2061,6 +2084,7 @@
   // Photos: drop files on the drop zone; drag thumbnails to reorder.
   let dragPhoto = null;
   function onDragOver(e) {
+    if (!editing()) return;
     const zone = e.target.closest && e.target.closest('[data-pm-drop]');
     const li = e.target.closest && e.target.closest('.pm-ph');
     if (zone && e.dataTransfer && [...e.dataTransfer.types].includes('Files')) {
@@ -2077,6 +2101,8 @@
     if (zone && !zone.contains(e.relatedTarget)) zone.classList.remove('is-over');
   }
   function onDrop(e) {
+    // (Looking only: a file dropped here is neither sent nor opened in the tab.)
+    if (!editing()) return void e.preventDefault();
     const zone = e.target.closest && e.target.closest('[data-pm-drop]');
     const li = e.target.closest && e.target.closest('.pm-ph');
     if (zone && e.dataTransfer && e.dataTransfer.files.length) {

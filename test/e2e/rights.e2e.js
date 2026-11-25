@@ -83,7 +83,7 @@ test('rights requests: owner list, badge, escaping, handled / open again; hidden
     const calls = [];
     pm.on('request', (r) => { if (r.url().includes('/api/admin/takedowns')) calls.push(r.url()); });
     await pm.goto(`${srv.base}/admin#rights`);
-    await pm.click('#staff-toggle');
+    // (The sign-in form always has the username box now.)
     await pm.fill('#username', 'mostafa');
     await pm.fill('#password', 'staffpass123');
     await pm.click('#login button[type=submit]');

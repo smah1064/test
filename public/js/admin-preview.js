@@ -114,7 +114,8 @@ window.AdminPreview = (() => {
         if (await copy(p.link)) POD.toast(t('pv.copied'));
       } catch (err) {
         // (The shop's refusal comes in the language asked in: its code says it again after a switch.)
-        say(err.message, true, err.code && window.POD_STRINGS && window.POD_STRINGS['pv.err.' + err.code] ? 'pv.err.' + err.code : null);
+        // (Sent for an owner's approval: plain words, not an error.)
+        say(err.message, !err.pending, err.code && window.POD_STRINGS && window.POD_STRINGS['pv.err.' + err.code] ? 'pv.err.' + err.code : null);
       } finally {
         adding = false;
         if (button()) button().disabled = false;
