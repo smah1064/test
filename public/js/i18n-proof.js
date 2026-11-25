@@ -152,5 +152,6 @@ Object.assign(window.POD_STRINGS, {
   'item.shopNote': ['Note from our team: {note}', 'ملاحظة من فريقنا: {note}'],
   'item.yourNote': ['You asked: {note}', 'طلبك: {note}'],
   'item.approvedOn': ['Approved on {date} (version {v})', 'وافقت عليها يوم {date} (النسخة {v})'],
+  'item.approvedByShop': ['Adjusted and approved by the shop on {date} (version {v})', 'إبداع ظبطتها ووافقت عليها يوم {date} (النسخة {v})'],
   'item.sampleFirst': ['A sample is printed first', 'هتتطبع عينة الأول'],
 });

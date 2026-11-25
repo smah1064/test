@@ -1291,6 +1291,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   }
   function applyShopEdit(req, { order, item, d, delta, fields, note }, print) {
     const w = req.adminWho || {};
+    let told = false;
     const by = w.shown || w.name || null;
     store.mutate((db) => {
       const o = db.orders.find((x) => x.id === order.id);
@@ -1310,17 +1311,23 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         it.status = 'queued';
         it.review = { needed: true, reasons, status: 'done', shopNote: note };
       } else {
+        // A second edit before the customer answered: the same proof link (it shows the latest version), and within
+        // 10 minutes no second message; the notes go together (as for corrected files. QA 25 Nov).
+        const proofOpen = it.status === 'awaiting_approval' && Boolean(it.proofToken);
+        told = proofOpen && it.shopProofAt && Date.now() - Date.parse(it.shopProofAt) < 10 * 60 * 1000;
+        const before = proofOpen && it.review && it.review.note ? String(it.review.note) : '';
+        const together = told && before && !before.split('\n').includes(note) ? `${before}\n${note}`.slice(0, 2000) : note;
         it.status = 'awaiting_approval';
-        it.review = { needed: true, reasons, status: 'pending', note };
-        newProofLink(it);
-        it.shopProofAt = now;
+        it.review = { needed: true, reasons, status: 'pending', note: together };
+        if (!proofOpen) newProofLink(it);
+        if (!told) it.shopProofAt = now;
       }
       delete it.reviseToken;
       it.history.push({ status: it.status, at: now });
     });
     const saved = store.getOrder(order.id);
     const it = saved.items.find((x) => x.id === item.id);
-    if (!print) tellCustomer(saved, it, 'proof', note, req);
+    if (!print && !told) tellCustomer(saved, it, 'proof', (it.review && it.review.note) || note, req);
     return { saved, it };
   }
   app.post('/api/admin/items/:itemId/shop-edit', adminOnly, express.json({ limit: '4kb' }), async (req, res, next) => {
@@ -3480,7 +3487,16 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     // …at the prices agreed at checkout.
     it.price = agreed.price;
     if (agreed.unitPrice !== undefined) it.unitPrice = agreed.unitPrice;
-    if (Array.isArray(it.quantities)) for (const l of it.quantities) { const p = agreed.lines.get(`${l.color && l.color.id}|${l.size && l.size.id}`); if (p !== undefined) l.unitPrice = p; }
+    if (Array.isArray(it.quantities)) {
+      // A colour / size the old version didn't have has no agreed price: then every line follows the agreed total
+      // (today's prices scaled to it), so the invoice's lines add up to the item. QA 25 Nov.
+      const allAgreed = it.quantities.every((l) => agreed.lines.has(`${l.color && l.color.id}|${l.size && l.size.id}`));
+      if (allAgreed) for (const l of it.quantities) l.unitPrice = agreed.lines.get(`${l.color && l.color.id}|${l.size && l.size.id}`);
+      else if (fields.price > 0) {
+        const f = agreed.price / fields.price;
+        for (const l of it.quantities) if (typeof l.unitPrice === 'number') l.unitPrice = round2(l.unitPrice * f);
+      }
+    }
     if (sample) it.sampleWanted = true;
     // What it costs to make follows the new version (another size or extra sides cost differently).
     const costs = db.costs || {};

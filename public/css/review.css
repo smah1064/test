@@ -146,3 +146,6 @@
   .rv-btns .btn { flex-basis: 100%; }
   .rv-queue-notice .btn { width: 100%; }
 }
+
+/* A reason or note with a long link or unbroken text wraps inside the card on a phone (QA 25 Nov). */
+#rv-list .rv-box, #rv-list .rv-hint, #rv-list .rv-msg, #rv-list [dir="auto"] { overflow-wrap: anywhere; min-width: 0; }

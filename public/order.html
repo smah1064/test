@@ -236,7 +236,8 @@
         // A new version waits for its own approval (or for changes): the old version's approval would mislead.
         if (item.status === 'awaiting_approval' || item.status === 'changes_requested') return '';
         if (item.status === 'review' && (item.approvals || []).some((h) => h && h.action === 'revised' && h.at > a.at)) return '';
-        return `<div class="item-approved"><span>✓ ${esc(t('item.approvedOn', { date: POD.date(a.at), v: POD.num(a.version || 1) }))}</span>${a.sample ? `<span class="item-sample">${esc(t('item.sampleFirst'))}</span>` : ''}</div>`;
+        // (The shop's own edit printed without asking: approved by the shop, not "you approved it". QA 25 Nov.)
+        return `<div class="item-approved"><span>✓ ${esc(t(a.via === 'shop-edit' ? 'item.approvedByShop' : 'item.approvedOn', { date: POD.date(a.at), v: POD.num(a.version || 1) }))}</span>${a.sample ? `<span class="item-sample">${esc(t('item.sampleFirst'))}</span>` : ''}</div>`;
       }
 
       function render() {

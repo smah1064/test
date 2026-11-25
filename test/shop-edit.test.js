@@ -144,3 +144,18 @@ test('refused: no note, an old version, another product, a job not in Review, a 
   // Not in Review any more: refused.
   assert.strictEqual((await call(`/api/admin/items/${it.id}/shop-edit`, 'POST', { designId: nd.id, baseDesignId: d.id, note: 'x' }, owner)).json.code, 'notInReview');
 });
+
+test('a second edit before the customer answered: the same proof link, both notes, one message', async () => {
+  const { o, it, d } = await sentBack();
+  const n1 = await mugDesign('One', { r: 250, g: 200, b: 0 });
+  const r1 = await call(`/api/admin/items/${it.id}/shop-edit`, 'POST', { designId: n1.id, baseDesignId: d.id, note: 'Brighter colours' }, owner);
+  assert.strictEqual(r1.status, 200, r1.text);
+  const n2 = await mugDesign('Two', { r: 250, g: 230, b: 0 });
+  const r2 = await call(`/api/admin/items/${it.id}/shop-edit`, 'POST', { designId: n2.id, baseDesignId: n1.id, note: 'And a yellow logo' }, owner);
+  assert.strictEqual(r2.status, 200, r2.text);
+  assert.strictEqual(r2.json.proofLink, r1.json.proofLink, 'the link the customer got still works');
+  const view = (await call(`/api/proofs/${r1.json.proofLink.split('t=')[1]}`)).json;
+  assert.strictEqual(view.proof.version, 3);
+  assert.ok(/Brighter colours/.test(view.note) && /yellow logo/.test(view.note), view.note);
+  assert.strictEqual((await pub(o)).designId, n2.id);
+});
