@@ -34,6 +34,16 @@ test('a design with an unfilled {field} is refused (a ready business card can\'t
     // Real words are fine, and so are braces that aren't a field.
     assert.strictEqual((await card('Mona Ali')).status, 201);
     assert.strictEqual((await card('{ }')).status, 201);
+    // Only the shop's own places count: a customer's braces are just text (QA tester 1, 25 Nov 08:01).
+    for (const text of ['while(alive) { code(); }', '{ return love; }', 'I ❤ {JS}', '{أحلى أم}', '{name of my cat}']) {
+      assert.strictEqual((await card(text)).status, 201, text);
+    }
+    // Any spacing or capitals of a shop place still counts.
+    assert.strictEqual((await card('{ name }')).status, 400);
+    assert.strictEqual((await card('اتصل {الموبايل}')).status, 400);
+    // The editor gets the same list with the catalogue.
+    const cat = await (await s.call('/api/products', 'GET')).json();
+    assert.ok(cat.fields.includes('{Name}') && cat.fields.includes('{الاسم}'), JSON.stringify(cat.fields));
   } finally {
     s.close();
   }

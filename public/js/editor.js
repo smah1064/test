@@ -1223,6 +1223,8 @@
     fixArabic(e.target);
     renderLayers();
     syncTextField();
+    // Typed on the canvas: the "colour one word" buttons follow the words too (QA 25 Nov).
+    if (canvas.getActiveObject() === e.target) refreshWordChips(e.target);
     scheduleCommit();
   });
   // Curved text is edited straight, then bends back when editing ends.
@@ -2604,7 +2606,7 @@
           ${['left', 'center', 'right'].map((al) => `<button class="btn btn-sm ${o.textAlign === al ? 'active' : ''}" data-align="${al}" title="${esc(t('props.align' + al[0].toUpperCase() + al.slice(1)))}">${{ left: '⇤', center: '↔', right: '⇥' }[al]}</button>`).join('')}
         </div>`);
       if (!laser()) html += textFxGroup(o);
-      html += group('colours', t(laser() ? 'laser.toneTitle' : 'grp.colours'), laser() ? laserNote() : fillControls(o) + wordControls(o) + outlineControls(o, 12));
+      html += group('colours', t(laser() ? 'laser.toneTitle' : 'grp.colours'), laser() ? laserNote() : fillControls(o) + `<div class="word-ctl">${wordControls(o)}</div>` + outlineControls(o, 12));
       html += group('effects', t('grp.effects'), `
         <div class="field">
           <label for="p-curve">${esc(t('props.curve'))}</label>
@@ -2773,7 +2775,13 @@
   /** The words as typed so far (the text box keeps its focus; the rest of the panel stays). */
   function refreshWordChips(o) {
     const box = props.querySelector('.word-chips');
-    if (!box) return;
+    // One word becoming two (or a text typed again from empty): the whole "colour one word" part appears,
+    // and goes again when the text is down to one word (QA 25 Nov).
+    const holder = props.querySelector('.word-ctl');
+    if (!box || wordsOf(o).length < 2) {
+      if (holder) holder.innerHTML = wordControls(o);
+      return;
+    }
     const words = wordsOf(o);
     if (st.wordSel != null && !words[st.wordSel]) st.wordSel = null;
     box.innerHTML = wordChips(o, words);
@@ -3855,7 +3863,7 @@
     });
     // A name-list field ({Name}) on a product without name lists would print as it is.
     if (!st.product.merge) {
-      for (const o of objs) if (isText(o) && /\{\s*[\p{L}\p{N}_][^{}\n]{0,39}\}/u.test(o.text || '')) issues.push({ level: 'error', key: 'check.fieldText', obj: o, params: { name: layerName(o) } });
+      for (const o of objs) if (isText(o) && hasShopField(o.text)) issues.push({ level: 'error', key: 'check.fieldText', obj: o, params: { name: layerName(o) } });
     }
     // Several garment colours in one order (name list colours or the quantities): words that disappear on one of them.
     if (!st.product.surface && !embHere() && !laser()) {
@@ -4094,6 +4102,13 @@
     const form = n === 1 ? 'one' : n === 2 ? 'two' : k >= 3 && k <= 10 ? 'few' : null;
     const v = form ? t(`${key}.${form}`, { ...params, n: POD.num(n) }) : null;
     return v && v !== `${key}.${form}` ? v : t(key, { ...params, n: POD.num(n) });
+  }
+  /** A place for the customer's details the shop's designs use ({Name}, {الاسم}…) still in a text. Only the shop's
+   * own places count (the server's list): "{ return love; }" or "I ❤ {JS}" is just text (QA 25 Nov). */
+  function hasShopField(text) {
+    const key = (tok) => String(tok).slice(1, -1).trim().replace(/\s+/g, ' ').toLowerCase();
+    const shop = new Set((catalog.fields || []).map(key));
+    return [...String(text || '').matchAll(/\{\s*[\p{L}\p{N}_][^{}\n]{0,39}\}/gu)].some((m) => shop.has(key(m[0])));
   }
   /** Arabic: 3–10 (and 103–110…) take the plural form. */
   const few = (n) => n % 100 >= 3 && n % 100 <= 10;

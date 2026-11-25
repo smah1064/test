@@ -59,7 +59,7 @@ const catalog = require('./catalog');
 const productsMod = require('./products');
 catalog.init(PRODUCTS, { embroidery: productsMod.EMBROIDERY, embroideryFor: productsMod.embroideryFor, scalePrice: productsMod.scalePrice });
 accounting.initPricing(PRODUCTS, EXTRA_SIDE_PRICE);
-const { Library, CATEGORIES: DESIGN_CATEGORIES, catalogChanged: libraryCatalogChanged, hasArtwork } = require('./library');
+const { Library, CATEGORIES: DESIGN_CATEGORIES, catalogChanged: libraryCatalogChanged, hasArtwork, SEED: LIBRARY_SEED } = require('./library');
 const preview = require('./preview');
 // Zip uploads of designs (admin): loaded when first used.
 let designUploadMod = null;
@@ -230,6 +230,24 @@ function offsetCm(product, side, sizeId, o) {
   const perCm = printAreaFor(product, side.id, sizeId).w / (side.printWidthIn * 2.54);
   const r = (v) => Math.round((v / perCm) * 2) / 2;
   return { x: r(o.dx), y: r(o.dy) };
+}
+
+// ---------- Places for a customer's details ----------
+// "{Name}", "{الاسم}"… in the shop's ready designs (a team's business cards): a name list fills them, or the
+// customer types the real words. Only these count as unfilled places, never any text in braces.
+const FIELD_RE = /\{\s*[\p{L}\p{N}_][^{}\n]{0,39}\}/gu;
+const fieldKey = (tok) => String(tok).slice(1, -1).trim().replace(/\s+/g, ' ').toLowerCase();
+let fieldsCache = { from: null, list: [] };
+function fieldsOf(designs) {
+  const out = new Map();
+  const walk = (o) => {
+    if (!o || typeof o !== 'object') return;
+    if (Array.isArray(o)) return o.forEach(walk);
+    if (typeof o.text === 'string') for (const m of o.text.matchAll(FIELD_RE)) if (!out.has(fieldKey(m[0]))) out.set(fieldKey(m[0]), m[0]);
+    for (const k of ['items', 'objects']) if (Array.isArray(o[k])) walk(o[k]);
+  };
+  walk(designs);
+  return [...out.values()];
 }
 
 function publicProduct(p) {
@@ -714,6 +732,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       categories: CATEGORIES,
       governorates: GOVERNORATES,
       contact: { whatsapp: notify.shopWhatsApp() || null },
+      // The places for a customer's own details the shop's designs use ({Name}, {الاسم}…): the editor
+      // says one is left unfilled, as the server does.
+      fields: templateFields(),
       // Hidden, removed and sold-out products aren't in the shop (admin → Products).
       products: PRODUCTS.filter(catalog.visible).map((p) => publicProduct(catalog.forShop(p))),
     });
@@ -1457,10 +1478,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     }
     // A {field} left in the text (a business card's {Name}) can't be printed as it is: a name list fills it,
     // or the customer types the real words. The editor says so; a ready design added as it is must not slip by.
+    // Only the shop's own places count: a customer's "{ return love; }" or "I ❤ {JS}" is just text (QA 25 Nov).
     if (!mergeList) {
-      const FIELD = /\{\s*[\p{L}\p{N}_][^{}\n]{0,39}\}/u; // ("{Name}", "{الاسم}": a word inside)
+      const known = new Set(templateFields().map(fieldKey));
       const texts = (objs) => (Array.isArray(objs) ? objs : []).flatMap((o) => (o && Array.isArray(o.objects) ? texts(o.objects) : [o && typeof o.text === 'string' ? o.text : '']));
-      if (Object.values(editor).some((ed) => texts(ed && ed.objects).some((tx) => FIELD.test(tx)))) throw new HttpError(400, 'fieldsUnfilled');
+      const unfilled = (tx) => [...tx.matchAll(FIELD_RE)].some((m) => known.has(fieldKey(m[0])));
+      if (known.size && Object.values(editor).some((ed) => texts(ed && ed.objects).some(unfilled))) throw new HttpError(400, 'fieldsUnfilled');
     }
     const files = storedSides.flatMap((sd) => [`${sd.id}-print.png`, `${sd.id}-preview.png`, `${sd.id}-design.svg`, ...(sd.vector && sd.vector.overlay ? [`${sd.id}-overlay.png`] : [])]);
     if (mergeList) for (const sd of Object.keys(mergeList.sides)) files.push(`${sd}-merge-base.png`, `${sd}-merge.bin`);
@@ -1476,7 +1499,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     return design;
   };
 
-  app.put('/api/designs/:id/files/:name', express.raw({ type: () => true, limit: '150mb' }), (req, res) => {
+  app.put('/api/designs/:id/files/:name', (req, res, next) => {
+    // Checked before the body is read: a made-up design, a wrong token or a file that isn't expected
+    // costs the server nothing (QA 25 Nov: four 140 MB uploads to a made-up id held 750 MB).
+    const design = uploadingDesign(req);
+    if (!FILE_RE.test(req.params.name) || !(design.expectedFiles || []).includes(req.params.name)) throw new HttpError(400, 'notFound');
+    next();
+  }, express.raw({ type: () => true, limit: '150mb' }), (req, res) => {
     const design = uploadingDesign(req);
     const { name } = req.params;
     if (!FILE_RE.test(name) || !(design.expectedFiles || []).includes(name)) throw new HttpError(400, 'notFound');
@@ -1601,6 +1630,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   // ---------- Ready-made designs shop ----------
   const library = new Library(dataDir);
   library.runOnce(libraryOnce); // one-time changes to the shop's list (server.js: the real shop only)
+  /** The shop's places for a customer's details ({Name}, {الاسم}…) in every ready design, the owner's too. */
+  function templateFields() {
+    library.reload();
+    const idx = library.index;
+    const n = (idx.custom || []).length;
+    if (fieldsCache.from !== idx || fieldsCache.n !== n) fieldsCache = { from: idx, n, list: fieldsOf([...(idx.custom || []), ...LIBRARY_SEED]) };
+    return fieldsCache.list;
+  }
   const libraryCard = (d) => ({
     id: d.id, name: d.name, category: d.category, kind: d.kind, product: d.product, color: d.color,
     // Made for certain products only (laser designs: one tone, cut pieces joined up).
@@ -1771,11 +1808,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     res.status(201).json({ ok: true });
   });
 
-  app.post('/api/artwork', express.raw({ type: () => true, limit: '40mb' }), async (req, res, next) => {
+  app.post('/api/artwork', (req, res, next) => {
+    // Counted before the file is read, so repeated big uploads can't hold the server's memory (QA 25 Nov).
+    rateLimit(req, 'artwork');
+    next();
+  }, express.raw({ type: () => true, limit: '40mb' }), async (req, res, next) => {
     try {
       const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
       if (!artwork.sniff(buf)) throw new HttpError(400, 'artworkType');
-      rateLimit(req, 'artwork');
       const px = Math.min(4000, Math.max(500, Number(req.get('x-max-px')) || 3000));
       let out;
       try {
@@ -1796,12 +1836,15 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   // The PDF is kept for 45 days (designs copy it): the booklet print files are made from its pages.
   const pdfUploadsDir = path.join(dataDir, 'pdf-uploads');
   const PDF_ID_RE = /^[a-f0-9]{24}$/;
-  app.post('/api/artwork/pages', express.raw({ type: () => true, limit: '60mb' }), async (req, res, next) => {
+  app.post('/api/artwork/pages', (req, res, next) => {
+    // Counted before the file is read, so repeated big uploads can't hold the server's memory (QA 25 Nov).
+    rateLimit(req, 'artwork');
+    next();
+  }, express.raw({ type: () => true, limit: '60mb' }), async (req, res, next) => {
     try {
       const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
       const kind = artwork.sniff(buf);
       if (!kind || kind.kind !== 'pdf') throw new HttpError(400, 'pdfOnly');
-      rateLimit(req, 'artwork');
       const clamp = (v, lo, hi, d) => Math.min(hi, Math.max(lo, Math.round(Number(v)) || d));
       const max = clamp(req.get('x-max-pages'), 1, 40, 32);
       // The shop's daily room for kept PDFs, checked before the work and taken only for a PDF that is kept.
@@ -4433,8 +4476,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (!/^u-[0-9a-f]{12}$/.test(id) || !['web.png', 'print.png', 'print.jpg'].includes(file)) throw new HttpError(404, 'notFound');
     const d = library.get(id);
     const f = path.join(library.artDir(id), file);
-    if (!d || !fs.existsSync(f)) throw new HttpError(404, 'notFound');
-    res.set('Cache-Control', 'public, max-age=86400, no-transform');
+    // A deleted design (taken down, e.g. after a rights complaint) is no longer public, its full-size original
+    // least of all. (A paused one stays: customers' drafts made from it still print at full size.)
+    if (!d || d.deleted || !fs.existsSync(f)) throw new HttpError(404, 'notFound');
+    res.set('Cache-Control', d.hidden ? 'private, max-age=300, no-transform' : 'public, max-age=3600, no-transform'); // (an hour: a takedown is gone from caches soon)
     res.type(file.endsWith('.jpg') ? 'jpeg' : 'png').send(fs.readFileSync(f));
   });
   app.post('/api/admin/library/uploads/:batch/publish', requireCatalog, express.json({ limit: '256kb' }), (req, res) => {

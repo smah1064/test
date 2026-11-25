@@ -154,6 +154,19 @@ test('upload a zip, review, publish: the designs go on the picked products only,
     assert.strictEqual((await call(`/api/admin/library/uploads/${batch.id}`, 'GET', undefined, owner)).status, 404);
     assert.strictEqual((await fetch(base + sunset.web)).status, 404, 'its pictures go with it');
 
+    // Paused: its pictures still load (customers' drafts made from it print at full size), not cached publicly.
+    assert.strictEqual((await call(`/api/admin/library/${designId}`, 'PATCH', { hidden: true }, owner)).status, 200);
+    const paused = await fetch(base + item.printSrc);
+    assert.strictEqual(paused.status, 200);
+    assert.match(paused.headers.get('cache-control'), /private/);
+    // Deleted (taken down): neither the original nor the screen copy is public any more (QA 25 Nov).
+    assert.strictEqual((await call(`/api/admin/library/${designId}`, 'DELETE', undefined, owner)).status, 200);
+    assert.strictEqual((await fetch(base + item.printSrc)).status, 404);
+    assert.strictEqual((await fetch(base + item.src)).status, 404);
+    // Brought back: served again.
+    assert.strictEqual((await call(`/api/admin/library/${designId}`, 'PATCH', { deleted: false, hidden: false }, owner)).status, 200);
+    assert.strictEqual((await fetch(base + item.printSrc)).status, 200);
+
     // Not a zip at all.
     const bad = await call('/api/admin/library/uploads', 'POST', Buffer.from('not a zip'), owner);
     assert.strictEqual(bad.status, 400);
