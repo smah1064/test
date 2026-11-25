@@ -635,5 +635,19 @@
       "en": "Small tent place cards on plates at a wedding table",
       "ar": "كروت أماكن صغيرة على الأطباق في ترابيزة فرح"
     }
+  },
+  "engrpen": {
+    "file": "/img/lifestyle/engrpen.webp",
+    "alt": {
+      "en": "Black metal pen with engraved initials on a wooden desk",
+      "ar": "قلم معدن أسود محفور عليه حروف على مكتب خشب"
+    }
+  },
+  "engrwallet": {
+    "file": "/img/lifestyle/engrwallet.webp",
+    "alt": {
+      "en": "Brown leather wallet with an engraved monogram",
+      "ar": "محفظة جلد بني محفور عليها حروف في دايرة"
+    }
   }
 }

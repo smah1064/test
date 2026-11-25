@@ -8,3 +8,4 @@
 ## Owner decisions to keep in mind
 
 - **Payment at launch: prepayment only, no cash on delivery.** Cash on delivery is what the shop shows today (during the private preview), but when the site opens to visitors the only payment method will be paying in advance. When reviewing or building code, treat cash on delivery as temporary: don't build new features that depend on it (e.g. a gift sent to someone else can be sender-paid), don't treat failed cash-on-delivery as a lasting cost, and point out code, texts or emails that promise cash on delivery when the switch is made.
+- **Product photos: always made with Creative Claw (owner's standing OK, 25 Nov).** Every new product gets a realistic photo (public/img/lifestyle/<id>.webp, 960 × 1200, in the same style as the others: light oak desk, soft daylight, a few props), made with Creative Claw without asking each time. Credits for product photos are approved; anything else that spends credits still needs the owner's OK.

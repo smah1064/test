@@ -350,5 +350,13 @@
  "placecards": {
   "file": "/img/designed/placecards.webp",
   "design": "plain"
+ },
+ "engrpen": {
+  "file": "/img/designed/engrpen.webp",
+  "design": "lz-pen-name-ar"
+ },
+ "engrwallet": {
+  "file": "/img/designed/engrwallet.webp",
+  "design": "lz-wallet-monogram"
  }
 }
