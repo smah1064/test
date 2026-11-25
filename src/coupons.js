@@ -7,6 +7,7 @@
  *  - percent: a percentage off the items it applies to (optionally capped)
  *  - fixed:   an amount off those items (never more than they cost)
  *  - freeship: free shipping
+ * Discounts are whole pounds (see discountOf), so cash on delivery never needs piastres.
  * Conditions: active, start and end dates (Cairo days), minimum order (items
  * total), total number of uses, uses per customer (by mobile number), and
  * which products or categories it applies to (all when none chosen).
@@ -98,13 +99,26 @@ function apply(coupon, { lines, orders = [], phone = null }) {
   const eligible = round2(lines.filter((l, i) => fits[i]).reduce((n, l) => n + l.price, 0));
   // Limited to some products: the cart must have one of them (free shipping too).
   if (!eligible && (coupon.type !== 'freeship' || limited)) return { ok: false, reason: 'couponNoItems' };
-  let discount = 0;
-  if (coupon.type === 'percent') discount = round2((eligible * coupon.value) / 100);
-  if (coupon.type === 'fixed') discount = Math.min(eligible, coupon.value);
-  if (coupon.maxDiscount) discount = Math.min(discount, coupon.maxDiscount);
   // Which lines the discount came off (by index), so reports can charge it to those products only.
   const lineIdx = fits.map((f, i) => (f ? i : -1)).filter((i) => i >= 0);
-  return { ok: true, discount: round2(discount), freeShipping: coupon.type === 'freeship', eligible, lines: lineIdx };
+  return { ok: true, discount: discountOf(coupon, eligible), freeShipping: coupon.type === 'freeship', eligible, lines: lineIdx };
+}
+
+/**
+ * The discount in whole pounds, so the total the courier collects in cash has no piastres
+ * (10% off a 35 EGP bookmark is 4 EGP, not 3.50). Rounded to the nearest pound, never more than
+ * the items it comes off, the coupon's cap (12.5 caps at 12) or below 0. The cart's quote, the
+ * order and so the accounts (which keep the order's discount) all take it from here.
+ */
+function discountOf(coupon, eligible) {
+  let raw = 0;
+  if (coupon.type === 'percent') raw = (eligible * coupon.value) / 100;
+  if (coupon.type === 'fixed') raw = coupon.value;
+  if (coupon.maxDiscount) raw = Math.min(raw, coupon.maxDiscount);
+  // To piastres first, so float noise (x.4999…) never turns a half pound down.
+  let discount = Math.round(round2(raw));
+  if (coupon.maxDiscount && discount > coupon.maxDiscount) discount = Math.floor(coupon.maxDiscount);
+  return round2(Math.max(0, Math.min(discount, eligible)));
 }
 
 module.exports = { cleanCoupon, apply, normCode, usesOf, usedOn, TYPES };

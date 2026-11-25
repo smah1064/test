@@ -17,7 +17,23 @@ const { normalizeEgyptMobile } = require('./egypt');
 
 const COOKIE = 'pod_c';
 const SESSION_DAYS = 60;
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/**
+ * An address that can receive mail: no spaces, commas, semicolons or brackets, no "..", a domain
+ * of letters, digits and inner hyphens ending in a 2+ letter top-level name ("a@b.com", not
+ * "a@b.com," "a@b..com" or "a@b"). The same pattern as src/app.js and src/dispatch.js.
+ */
+const EMAIL_RE = /^(?!.*\.\.)[^\s@,;<>()"]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*\.[A-Za-z]{2,}$/;
+/**
+ * An email as typed, as it is kept: lower case, without spaces around it or the dots, commas and
+ * semicolons a phone or a copied list leaves at the end (a double space types ". ", so
+ * "dot.test@gmail.com." is "dot.test@gmail.com"). Not checked here: see EMAIL_RE.
+ */
+function cleanEmail(v) {
+  const s = String(v == null ? '' : v).trim();
+  let end = s.length;
+  while (end > 0 && /[\s.,;]/.test(s[end - 1])) end--;
+  return s.slice(0, end).toLowerCase();
+}
 const b64 = (buf) => Buffer.from(buf).toString('base64url');
 
 function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
@@ -98,11 +114,11 @@ function cleanSignup(body) {
   const str = (v) => (typeof v === 'string' ? v : '');
   const name = str(b.name).replace(/[\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/g, '').trim().replace(/\s+/g, ' ').slice(0, 120);
   const phone = typeof b.phone === 'string' ? normalizeEgyptMobile(b.phone) : null;
-  const email = str(b.email).trim().toLowerCase().slice(0, 200);
+  const email = cleanEmail(str(b.email));
   const password = str(b.password);
   if (name.length < 2) return { error: 'acctName' };
   if (!phone) return { error: 'badPhone' };
-  if (email && !EMAIL_RE.test(email)) return { error: 'badEmail' };
+  if (email && (email.length > 200 || !EMAIL_RE.test(email))) return { error: 'badEmail' };
   const weak = passwordProblem(password);
   if (weak) return { error: weak };
   return { fields: { name, phone, email, password } };
@@ -115,7 +131,7 @@ function passwordProblem(password) {
 /** Phone or email typed at sign-in, as stored. */
 function loginKey(login) {
   const s = String(login || '').trim();
-  if (s.includes('@')) return { email: s.toLowerCase() };
+  if (s.includes('@')) return { email: cleanEmail(s) };
   const phone = normalizeEgyptMobile(s);
   return phone ? { phone } : null;
 }
@@ -131,5 +147,5 @@ function publicCustomer(c) {
 
 module.exports = {
   COOKIE, hashPassword, checkPassword, sessionToken, readSession, resetToken, readReset, cookie, tokenFrom,
-  cleanSignup, passwordProblem, loginKey, publicCustomer,
+  cleanSignup, passwordProblem, loginKey, publicCustomer, cleanEmail, EMAIL_RE,
 };

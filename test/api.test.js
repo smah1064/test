@@ -1170,7 +1170,8 @@ test('coupons: admin creates them, checkout applies them, limits hold', async ()
   const d = await makeDesign({ size: 'M' });
   const quote = (couponCode) => post('/api/cart/quote', { designIds: [d.id], couponCode }).then((x) => x.json());
   let q = await quote('eid20');
-  assert.strictEqual(q.coupon.discount, Math.min(100, Math.round(d.price * 20) / 100));
+  // Whole pounds (QA 25 Nov): 20% rounded to the pound, capped at 100.
+  assert.strictEqual(q.coupon.discount, Math.min(100, Math.round(d.price * 0.2)));
   assert.strictEqual(q.total, Math.round((d.price - q.discount + q.shipping) * 100) / 100);
   q = await quote('SHIPFREE');
   assert.strictEqual(q.shipping, 0);

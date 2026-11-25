@@ -104,11 +104,16 @@ const tr = (v, lang) => {
   const s = v[lang] || v.en || '';
   return lang === 'ar' && v.ar ? arabicDigits(s) : s;
 };
+/**
+ * An amount as the site and the invoice show it (common.js money()): whole pounds without
+ * decimals ("٣٥٠ ج.م.", "EGP 350"), piastres with two ("EGP 106.50") only when there are some.
+ */
 function money(n, lang) {
+  const v = Math.round((Number(n) || 0) * 100) / 100;
   try {
-    return new Intl.NumberFormat(lang === 'ar' ? 'ar-EG' : 'en-EG', { style: 'currency', currency: 'EGP', maximumFractionDigits: 2 }).format(n);
+    return new Intl.NumberFormat(lang === 'ar' ? 'ar-EG' : 'en-EG', { style: 'currency', currency: 'EGP', minimumFractionDigits: v % 1 ? 2 : 0, maximumFractionDigits: 2 }).format(v);
   } catch (e) {
-    return `${n} EGP`;
+    return `${v} EGP`;
   }
 }
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
