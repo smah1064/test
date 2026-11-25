@@ -42,7 +42,7 @@ test('lines with numbers join their parts with the page\'s separator, not a fixe
     'js/product.js': /product\.sizes\.map\(sizeText\)\.join\(esc\(POD\.sep\(\)\)\)/,
     'js/photos.js': /counted\('photos\.n', n\)\}\$\{POD\.sep\(\)\}\$\{counted\('photos\.prints', prints\)\}/,
     'js/saved-designs.js': /\.map\(esc\)\.join\(POD\.sep\(\)\)/,
-    'js/share.js': /\[tr\(share\.productName\), tr\(share\.color\.name\), tr\(share\.size\.label\)\]\.join\(POD\.sep\(\)\)/,
+    'js/share.js': /\[tr\(share\.productName\), tr\(share\.color\.name\), share\.size \? tr\(share\.size\.label\) : ''\]\.filter\(Boolean\)\.join\(POD\.sep\(\)\)/,
     'js/account.js': /POD\.date\(o\.createdAt\)\)\}\$\{esc\(POD\.sep\(\)\)\}/,
     'js/admin-preview.js': /p\.visits \? `\$\{POD\.sep\(\)\}/,
     'js/preview.js': /flipLabel\(s\)\)\}<span class="muted">\$\{esc\(POD\.sep\(\)\)\}/,
