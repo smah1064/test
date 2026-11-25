@@ -1946,9 +1946,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const id = crypto.randomBytes(9).toString('base64url');
     fs.mkdirSync(path.join(sharesDir, id), { recursive: true });
     const editor = {};
+    // Fabrics: the repeat style and tile size, checked as for a design (the shared copy opens with them).
+    const asked = product.pattern && (Object.values(b.sides || {}).find((x) => x && x.pattern) || {}).pattern;
+    const pattern = asked ? { repeat: REPEATS.includes(asked.repeat) ? asked.repeat : 'straight', tileCm: product.pattern.tiles.includes(Number(asked.tileCm)) ? Number(asked.tileCm) : product.pattern.tile } : null;
     for (const sd of sides) {
       const offset = sd.emb ? cleanEmbOffset(host, product.embroidery, b.sides[sd.id].offset) : cleanOffset(product, sd, size.id, b.sides[sd.id].offset);
-      editor[sd.id] = { objects: b.sides[sd.id].objects, ...(offset ? { offset } : {}) };
+      editor[sd.id] = { objects: b.sides[sd.id].objects, ...(offset ? { offset } : {}), ...(pattern ? { pattern } : {}) };
       const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(String((b.previews || {})[sd.id] || ''));
       const png = m ? Buffer.from(m[1], 'base64') : null;
       if (!png || png.length > 4e6 || !png.subarray(0, 8).equals(PNG_SIGNATURE)) throw new HttpError(400, 'badImage');

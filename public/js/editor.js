@@ -224,7 +224,14 @@
   // The ready-made design this draft started from (kept in the draft), so opening that design
   // again brings back the customer's own version instead of the original.
   st.libraryId = null;
-  let draft = draftMode && !fromShare ? await POD.drafts.get(st.product.id) : null;
+  let draft = draftMode ? await POD.drafts.get(st.product.id) : null;
+  // The customer's own saved design for this product, kept while something else opens here (a shared design,
+  // another ready design): it is replaced only once that one is changed, never just by looking (QA 25 Nov).
+  let heldDraft = null;
+  if (fromShare && draft) {
+    heldDraft = draft;
+    draft = null;
+  }
   // A quick copy written while leaving the page (the browser may close before the real save finishes):
   // used when it is newer than the saved draft and belongs to the same customer.
   if (draftMode && !fromShare) {
@@ -240,7 +247,11 @@
   if (!(draft && draft.designs && Object.values(draft.designs).some((o) => o && o.length))) draft = null;
   if (draft && libraryDesign) {
     if (draft.library && draft.library === params.get('library')) libraryDesign = null;
-    else draft = null; // another design (or one from scratch): the ready-made design opens as asked
+    else {
+      // Another design (or one from scratch): the ready-made design opens as asked, the saved one is kept.
+      heldDraft = draft;
+      draft = null;
+    }
   }
   if (libraryDesign) st.libraryId = params.get('library');
   if (draft) {
@@ -1039,6 +1050,40 @@
       location.replace(u.toString());
     });
   }
+  /**
+   * A shared or ready design opened while the customer has their own saved design for this product: say it is
+   * kept (until this one is changed), with a way back to it.
+   */
+  let hideHeldBar = () => {};
+  function heldChoice() {
+    const bar = document.createElement('div');
+    bar.className = 'draft-bar';
+    bar.setAttribute('role', 'status');
+    const fill = () => {
+      bar.innerHTML = `<span>${esc(t('draft.heldNote'))}</span>
+      <button type="button" class="btn btn-sm" data-held="open">${esc(t('draft.heldOpen'))}</button>
+      <button type="button" class="fly-close" data-held="close" aria-label="${esc(t('draft.keep'))}">✕</button>`;
+    };
+    fill();
+    document.body.appendChild(bar);
+    document.addEventListener('pod:langchange', fill);
+    hideHeldBar = () => {
+      document.removeEventListener('pod:langchange', fill);
+      bar.remove();
+      hideHeldBar = () => {};
+    };
+    bar.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-held]');
+      if (!b) return;
+      if (b.dataset.held === 'close') return hideHeldBar();
+      // Their own design: the same product without the shared / ready design (nothing here was changed).
+      st.dirty = false;
+      const u = new URL(location.href);
+      for (const k of ['cart', 'library', 'share', 'design', 'revise', 'name', 'color', 'size']) u.searchParams.delete(k);
+      u.searchParams.set('product', st.product.id);
+      location.href = u.toString();
+    });
+  }
   /** Bring an element that is outside the print area back in (shrunk to fit if it is bigger). */
   function bringInside(o) {
     const R = rects();
@@ -1306,7 +1351,8 @@
     schedulePatternPreview();
   }
   function snapshot() {
-    return JSON.stringify({ o: serialize(), a: st.offsets[st.side] || null });
+    // `k`: the default ink at the time (white on a dark garment), so undo after a colour change keeps text readable.
+    return JSON.stringify({ o: serialize(), a: st.offsets[st.side] || null, k: inkFor(surfaceHex()) });
   }
   async function stepHistory(delta) {
     if (st.mergePreview) endMergePreview();
@@ -1320,6 +1366,13 @@
     const snap = JSON.parse(h.stack[h.i]);
     if (snap.a) st.offsets[st.side] = snap.a;
     else delete st.offsets[st.side];
+    // Undo doesn't change the garment's colour: text and shapes in the default ink of that moment take today's
+    // (no black text left on a black shirt, QA 25 Nov).
+    const ink = inkFor(surfaceHex());
+    if (snap.k && snap.k !== ink && !laser()) {
+      const same = (c) => typeof c === 'string' && c.toLowerCase() === snap.k;
+      snap.o = snap.o.map((o) => ({ ...o, ...(same(o.fill) ? { fill: ink } : {}), ...(same(o.stroke) ? { stroke: ink } : {}) }));
+    }
     await loadObjects(snap.o);
     st.designs[st.side] = snap.o;
     renderPlacement();
@@ -3558,6 +3611,7 @@
     seedBinding(next);
     cancelCrop();
     commit();
+    const oldInk = inkFor(surfaceHex()); // (the new product may not have this colour: dark text then follows it)
     const prev = st.product;
     const pending = prev.sides.filter((s) => (st.designs[s.id] || []).length).map((s) => s.id);
     const mapped = {};
@@ -3603,6 +3657,9 @@
     autoFocusPrint();
     schedulePatternPreview();
     seedHistory();
+    // Another colour (white → a black hoodie): text and shapes in the default ink follow it, as when the colour is picked.
+    const newInk = inkFor(surfaceHex());
+    if (oldInk !== newInk && !laser()) swapInk(oldInk, newInk);
     refreshChrome();
     renderProps();
   }
@@ -3771,6 +3828,12 @@
       else if (i.key === 'check.fieldText') out.push({ id: 'fieldText', level: 'fail', side: sideId, params: { name: short(i.params.name) } });
       else if (i.key === 'check.cutPieces') out.push({ id: 'cutPieces', level: 'warn', side: sideId, params: { n: Number(st.cutPieces) || 0 } });
       else if (i.key === 'check.cutPhoto') out.push({ id: 'cutPhoto', level: 'warn', side: sideId, params: { name: short(i.params.name) } });
+      // Past the edge, and the embroidery warnings: on the proof too, never "nothing to fix" (QA 25 Nov).
+      else if (i.key === 'check.cut') out.push({ id: 'cutEdge', level: 'warn', side: sideId, params: { name: short(i.params.name) } });
+      else if (i.key === 'check.embSmallText') out.push({ id: 'embSmallText', level: 'warn', side: sideId, params: { name: short(i.params.name) } });
+      else if (i.key === 'check.embPhoto') out.push({ id: 'embPhoto', level: 'warn', side: sideId, params: { name: short(i.params.name) } });
+      else if (i.key === 'check.embGradient') out.push({ id: 'embGradient', level: 'warn', side: sideId, params: { name: short(i.params.name) } });
+      else if (i.key === 'check.embColors') out.push({ id: 'embColors', level: 'warn', side: sideId, params: { n: Number(i.params.count) || 0, max: Number(i.params.limit) || 0 } });
     }
     const missing = new Set();
     for (const o of canvas.getObjects()) {
@@ -3937,7 +4000,7 @@
         }
         if (isText(o) && o.fontSize * Math.abs(o.scaleY || 1) * 0.7 < 5 * ppmm) issues.push({ level: 'warn', key: 'check.embSmallText', obj: o, params: { name } });
       }
-      if (colours.size > emb().maxColors) issues.push({ level: 'warn', key: 'check.embColors', obj: null, params: { n: POD.num(colours.size), max: POD.num(emb().maxColors) } });
+      if (colours.size > emb().maxColors) issues.push({ level: 'warn', key: 'check.embColors', obj: null, params: { n: POD.num(colours.size), max: POD.num(emb().maxColors), count: colours.size, limit: emb().maxColors } });
     }
     // Laser: photos can't be cut round, letters too small to engrave or cut cleanly, cut pieces that fall apart.
     if (laser()) {
@@ -5160,7 +5223,8 @@
       const previews = {};
       for (const sd of sides) {
         await showSide(sd.id);
-        sidesPayload[sd.id] = { objects: await inlineImages(st.designs[sd.id]), ...(st.offsets[sd.id] ? { offset: st.offsets[sd.id] } : {}) };
+        // (Fabrics: the repeat style and tile size go with it, as with a design for the cart: QA 25 Nov.)
+        sidesPayload[sd.id] = { objects: await inlineImages(st.designs[sd.id]), ...(st.offsets[sd.id] ? { offset: st.offsets[sd.id] } : {}), ...(st.pattern ? { pattern: { repeat: st.pattern.repeat, tileCm: st.pattern.tileCm } } : {}) };
         previews[sd.id] = await toDataUrl(URL.createObjectURL(await exportPreview()));
       }
       await showSide(original);
@@ -5207,10 +5271,16 @@
   let startingOver = false; // "Start a new design": nothing is saved while the page reloads
   /** Save the current design for this product in the browser (or forget it when empty). */
   let lastPreview = null; // the thumbnail of the last full save (reused by quick saves when leaving)
-  function saveDraft({ quick = false } = {}) {
+  function saveDraft({ quick = false, force = false } = {}) {
     clearTimeout(draftTimer);
     draftTimer = null;
     if (!draftMode || st.exporting || startingOver) return draftSaving;
+    // The customer's own saved design stays until this one is changed (then this one is saved instead).
+    if (heldDraft) {
+      if (!st.dirty && !force) return draftSaving;
+      heldDraft = null;
+      hideHeldBar();
+    }
     const designs = {};
     for (const s of keptSides()) designs[s.id] = s.id === st.side ? serialize() : (st.designs[s.id] || []);
     const empty = !Object.values(designs).some((o) => o.length);
@@ -5629,7 +5699,7 @@
     // Drafts are off here (the browser blocks site data, or a shared design): say so, keep the customer here.
     if (!draftMode) return toast(t('draft.saveOff'), 'error');
     busy(true, t('busy.saving'));
-    let ok = await saveDraft();
+    let ok = await saveDraft({ force: true }); // (asked for: saved even when nothing was changed)
     // Signed in: wait for the copy on the account too (a few seconds at most), so it opens on the other device.
     if (ok && POD.drafts.flush) ok = (await Promise.race([POD.drafts.flush(st.product.id).then(() => true), new Promise((r) => setTimeout(() => r(true), 8000))])) && ok;
     busy(false);
@@ -5747,6 +5817,11 @@
     canvas.requestRenderAll();
     toast(t('design.loaded'));
     scheduleDraft();
+  }
+  // Opening is not changing: the customer's own saved design is kept until this one is changed.
+  if (heldDraft) {
+    st.dirty = false;
+    heldChoice();
   }
   schedulePatternPreview(0);
   window.__editor = { canvas, st, rects, checkIssues, exportSvg, exportPrint, exportTile, exportPreview, rescueCopy }; // handy for debugging in the console

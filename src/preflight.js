@@ -312,7 +312,7 @@ async function preflight(design, { readFile, product } = {}) {
 }
 
 // ---------- Checks reported by the editor ----------
-const CLIENT_IDS = new Set(['fontFallback', 'lowResImage', 'tinyText', 'outsideSafe', 'fileType', 'hiddenText', 'inkOnColour', 'fieldText', 'cutPieces', 'cutPhoto']);
+const CLIENT_IDS = new Set(['fontFallback', 'lowResImage', 'tinyText', 'outsideSafe', 'fileType', 'hiddenText', 'inkOnColour', 'fieldText', 'cutPieces', 'cutPhoto', 'cutEdge', 'embSmallText', 'embColors', 'embPhoto', 'embGradient']);
 const LEVELS = new Set(['info', 'warn', 'fail']);
 const MAX_CLIENT_CHECKS = 50;
 const MAX_STR = 100;

@@ -89,3 +89,45 @@ test('rights requests: kept, listed newest first for the owner only, and marked 
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
 });
+
+test('a shared fabric design keeps its repeat style and tile size (QA tester 2, 25 Nov)', async () => {
+  const sharp = require('sharp');
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pod-qa0801s-'));
+  const app = createApp({ dataDir, adminPassword: 'secret-owner-pass', cleanupEvery: 0, requireApproval: false });
+  const server = await new Promise((resolve) => { const s = app.listen(0, () => resolve(s)); });
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const { PRODUCTS } = require('../src/products');
+    const fabric = PRODUCTS.find((p) => p.pattern);
+    const side = fabric.sides[0].id;
+    const img = 'data:image/png;base64,' + (await sharp({ create: { width: 40, height: 40, channels: 3, background: '#fff' } }).png().toBuffer()).toString('base64');
+    const post = (pattern) => fetch(`${base}/api/shares`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ productId: fabric.id, color: fabric.colors[0].id, size: fabric.sizes[0].id, sides: { [side]: { objects: [{ type: 'i-text', text: 'x' }], pattern } }, previews: { [side]: img } }) }).then((r) => r.json());
+    const sh = await post({ repeat: 'mirror', tileCm: 60 });
+    const d = await (await fetch(`${base}/api/shares/${sh.id}/design`)).json();
+    assert.deepStrictEqual(d.editor[side].pattern, { repeat: 'mirror', tileCm: 60 });
+    // Made-up values fall back to the product's own.
+    const odd = await post({ repeat: 'sideways', tileCm: 7 });
+    assert.deepStrictEqual((await (await fetch(`${base}/api/shares/${odd.id}/design`)).json()).editor[side].pattern, { repeat: 'straight', tileCm: fabric.pattern.tile });
+  } finally {
+    server.close();
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('what the editor warned about (past the edge, embroidery) reaches the proof, worded in both languages', () => {
+  const preflight = require('../src/preflight');
+  const checks = [
+    { id: 'cutEdge', level: 'warn', side: 'front', params: { name: 'Hello' } },
+    { id: 'embSmallText', level: 'warn', side: 'emb', params: { name: 'Mona' } },
+    { id: 'embColors', level: 'warn', side: 'emb', params: { n: 12, max: 6 } },
+    { id: 'embPhoto', level: 'warn', side: 'emb', params: { name: 'photo.jpg' } },
+    { id: 'embGradient', level: 'warn', side: 'emb', params: { name: 'Logo' } },
+  ];
+  const r = preflight.mergeClientChecks({ status: 'pass', checks: [] }, checks);
+  assert.deepStrictEqual(r.checks.map((c) => c.id), checks.map((c) => c.id));
+  assert.strictEqual(r.status, 'warn', 'not "ready to print, nothing to fix"');
+  const strings = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'i18n.js'), 'utf8');
+  for (const c of checks) assert.match(strings, new RegExp(`'pf\\.${c.id}': \\['[^']+', '[^']+'\\]`), c.id);
+  const editor = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'editor.js'), 'utf8');
+  for (const k of ['check.cut', 'check.embSmallText', 'check.embPhoto', 'check.embGradient', 'check.embColors']) assert.ok(editor.includes(`i.key === '${k}'`), k);
+});

@@ -50,7 +50,7 @@
       if (t(`pf.photoLowRes.${form}`) !== `pf.photoLowRes.${form}`) key = `pf.photoLowRes.${form}`;
     }
     if (typeof params.count === 'number') params.count = POD.num(params.count);
-    for (const k of ['dpi', 'mm', 'percent', 'pt', 'widthPx', 'heightPx', 'expectedW', 'expectedH', 'minDpi']) {
+    for (const k of ['dpi', 'mm', 'percent', 'pt', 'widthPx', 'heightPx', 'expectedW', 'expectedH', 'minDpi', 'n', 'max']) {
       if (typeof params[k] === 'number') params[k] = POD.num(params[k]);
     }
     let msg = t(key, params);
