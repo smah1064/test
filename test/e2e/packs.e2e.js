@@ -47,3 +47,30 @@ test('packs: 10 × "1 bookmark" becomes 1 × "10 bookmarks", booklets move to th
     await srv.close();
   }
 });
+
+test('editor number boxes take Arabic digits ("٨٠" is 80) and arrow keys still step', { timeout: 60000 }, async () => {
+  const { chromium } = loadPlaywright();
+  const srv = await startServer();
+  const browser = await chromium.launch();
+  try {
+    const ctx = await newContext(browser);
+    const page = await openEditor(ctx, srv.base, 'mug');
+    await page.evaluate(() => document.querySelector('#text-presets [data-i="0"]').click());
+    await page.waitForFunction(() => window.__editor.canvas.getActiveObject());
+    await page.waitForSelector('#p-size');
+    await page.fill('#p-size', '٨٠');
+    await page.waitForTimeout(200);
+    assert.strictEqual(await page.evaluate(() => window.__editor.canvas.getActiveObject().fontSize), 80);
+    await page.focus('#p-size');
+    await page.keyboard.press('ArrowUp');
+    assert.strictEqual(await page.evaluate(() => window.__editor.canvas.getActiveObject().fontSize), 81);
+    // (The rotation box sits in a folded group: typed into as a customer's keyboard would.)
+    await page.evaluate(() => { const b = document.getElementById('p-angle'); b.value = '-١٥'; b.dispatchEvent(new Event('input', { bubbles: true })); });
+    await page.waitForTimeout(200);
+    assert.strictEqual(await page.evaluate(() => Math.round(window.__editor.canvas.getActiveObject().angle)), -15);
+    assert.deepStrictEqual(page.errors, []);
+  } finally {
+    await browser.close();
+    await srv.close();
+  }
+});

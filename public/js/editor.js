@@ -2356,13 +2356,13 @@
     const f = (v) => (Math.round(v * 10) / 10).toString();
     return group('size', t('grp.size'), `
       <div class="field grid-2">
-        <div><label for="p-wcm">${esc(t('size.width'))}</label><input type="number" id="p-wcm" step="0.1" min="0.2" value="${f(z.w)}" inputmode="decimal"></div>
-        <div><label for="p-hcm">${esc(t('size.height'))}</label><input type="number" id="p-hcm" step="0.1" min="0.2" value="${f(z.h)}" inputmode="decimal"></div>
+        <div><label for="p-wcm">${esc(t('size.width'))}</label><input type="text" class="num-in" data-step="0.1" data-min="0.2" id="p-wcm" value="${f(z.w)}" inputmode="decimal" autocomplete="off"></div>
+        <div><label for="p-hcm">${esc(t('size.height'))}</label><input type="text" class="num-in" data-step="0.1" data-min="0.2" id="p-hcm" value="${f(z.h)}" inputmode="decimal" autocomplete="off"></div>
       </div>
       <div class="field"><label class="check"><input type="checkbox" id="p-ratio" ${ratioLocked(o) ? 'checked' : ''}> ${esc(t('size.lockRatio'))}</label></div>
       <div class="field grid-2">
-        <div><label for="p-xcm">${esc(t('size.x'))}</label><input type="number" id="p-xcm" step="0.1" value="${f(z.x)}" inputmode="decimal"></div>
-        <div><label for="p-ycm">${esc(t('size.y'))}</label><input type="number" id="p-ycm" step="0.1" value="${f(z.y)}" inputmode="decimal"></div>
+        <div><label for="p-xcm">${esc(t('size.x'))}</label><input type="text" class="num-in" data-step="0.1" id="p-xcm" value="${f(z.x)}" inputmode="decimal" autocomplete="off"></div>
+        <div><label for="p-ycm">${esc(t('size.y'))}</label><input type="text" class="num-in" data-step="0.1" id="p-ycm" value="${f(z.y)}" inputmode="decimal" autocomplete="off"></div>
       </div>
       <div class="field">${alignButtons(false)}</div>`);
   }
@@ -2512,7 +2512,7 @@
     return group('arrange', t('grp.arrange'), `
       <div class="field grid-2">
         <div><label for="p-opacity">${esc(t('props.opacity'))}</label><input type="range" id="p-opacity" min="0.05" max="1" step="0.05" value="${numv(o.opacity, 1)}"></div>
-        <div><label for="p-angle">${esc(t('props.rotation'))}</label><input type="number" id="p-angle" min="-360" max="360" value="${Math.round(o.angle)}"></div>
+        <div><label for="p-angle">${esc(t('props.rotation'))}</label><input type="text" class="num-in" data-step="1" data-min="-360" data-max="360" id="p-angle" value="${Math.round(o.angle)}" autocomplete="off"></div>
       </div>
       <div class="field"><label class="check"><input type="checkbox" id="p-shadow" ${o.shadow ? 'checked' : ''}> ${esc(t('props.shadow'))}</label></div>
       <div class="grid-4" dir="ltr">
@@ -2595,7 +2595,7 @@
         <div class="field"><textarea id="p-text" rows="2" dir="auto">${esc(o.text)}</textarea></div>
         <div class="field">${fontPicker(o)}</div>
         <div class="field row">
-          <input type="number" id="p-size" min="4" max="400" value="${Math.round(o.fontSize)}" aria-label="${esc(t('props.size'))}" title="${esc(t('props.size'))}" style="max-width:84px">
+          <input type="text" class="num-in" data-step="1" data-min="4" data-max="400" inputmode="numeric" autocomplete="off" id="p-size" value="${Math.round(o.fontSize)}" aria-label="${esc(t('props.size'))}" title="${esc(t('props.size'))}" style="max-width:84px">
           <div class="btn-group">
             <button class="btn btn-sm ${o.fontWeight === 'bold' || Number(o.fontWeight) >= 600 ? 'active' : ''}" data-toggle="bold" title="${esc(t('props.bold'))}"><b>B</b></button>
             <button class="btn btn-sm ${o.fontStyle === 'italic' ? 'active' : ''}" data-toggle="italic" title="${esc(t('props.italic'))}"><i>I</i></button>
@@ -3012,10 +3012,26 @@
     finishCrop();
   }
 
+  // Number boxes (size, width, position, angle) are text boxes, so Arabic and Persian digits typed on an
+  // Arabic keyboard count ("٨٠" is 80; a number box would drop them, QA 25 Nov). Arrow keys still step.
+  const latinNumber = (v) => String(v).replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d))
+    .replace(/[٫,]/g, '.').replace(/[−–]/g, '-').replace(/[^\d.-]/g, '');
+  props.addEventListener('keydown', (e) => {
+    const box = e.target;
+    if (!box.classList || !box.classList.contains('num-in') || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+    e.preventDefault();
+    const step = Number(box.dataset.step) || 1;
+    let n = (Number(latinNumber(box.value)) || 0) + (e.key === 'ArrowUp' ? step : -step) * (e.shiftKey ? 10 : 1);
+    if (box.dataset.min !== undefined) n = Math.max(Number(box.dataset.min), n);
+    if (box.dataset.max !== undefined) n = Math.min(Number(box.dataset.max), n);
+    box.value = String(Math.round(n / step) * step).replace(/(\.\d*?)0{6,}\d*$/, '$1');
+    box.dispatchEvent(new Event('input', { bubbles: true }));
+    box.dispatchEvent(new Event('change', { bubbles: true }));
+  });
   props.addEventListener('input', (e) => {
     const o = active();
     if (!o || crop) return;
-    const v = e.target.value;
+    const v = e.target.classList && e.target.classList.contains('num-in') ? latinNumber(e.target.value) : e.target.value;
     if (e.target.dataset.adjust) {
       const s = filterState(o);
       s[e.target.dataset.adjust] = Number(v) / 100;
