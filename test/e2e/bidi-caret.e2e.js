@@ -54,16 +54,20 @@ function installBidiHelpers() {
       const k = r.width / (c.upperCanvasEl.width / c.getRetinaScaling());
       return { x: r.left + p.x * k, y: r.top + p.y * k };
     },
-    /** A one-colour line is drawn by one fillText from its start edge: the browser's own layout of the same text. */
+    /**
+     * A one-colour line is drawn by one fillText from its start edge: the browser's own layout of the same text,
+     * in the line's own direction (its first letter's, as the side text box shows it: QA 25 Nov).
+     */
     line(li) {
       const o = this.obj();
       const g = o._textLines[li];
+      const lineRtl = window.POD_FX.lineRtl(o, li);
       const div = document.createElement('div');
-      div.style.cssText = `position:fixed;left:0;top:0;white-space:pre;visibility:hidden;font:${o._getFontDeclaration()};direction:${o.direction};unicode-bidi:isolate`;
+      div.style.cssText = `position:fixed;left:0;top:0;white-space:pre;visibility:hidden;font:${o._getFontDeclaration()};direction:${lineRtl ? 'rtl' : 'ltr'};unicode-bidi:isolate`;
       div.textContent = g.join('');
       document.body.appendChild(div);
       const box = div.getBoundingClientRect();
-      const rtl = o.direction === 'rtl';
+      const rtl = o.direction === 'rtl'; // Fabric gives the line's start in the box's direction
       const start = o._getLeftOffset() + o._getLineLeftOffset(li);
       const x0 = rtl ? start - box.width : start;
       const range = document.createRange();
@@ -76,7 +80,7 @@ function installBidiHelpers() {
         return { x0: x0 + Math.min(...rs.map((q) => q.left)) - box.left, x1: x0 + Math.max(...rs.map((q) => q.right)) - box.left };
       });
       div.remove();
-      const levels = window.POD_FX.bidiLevels(g, rtl);
+      const levels = window.POD_FX.bidiLevels(g, lineRtl);
       let top = -o.height / 2;
       for (let i = 0; i < li; i++) top += o.getHeightOfLine(i);
       let first = 0;

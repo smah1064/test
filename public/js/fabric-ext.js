@@ -19,7 +19,79 @@
   fabric.Text.prototype._renderChars = function (method, ctx, line, left, top, lineIndex) {
     if (ctx && ctx.canvas && ctx.canvas.removeAttribute) ctx.canvas.removeAttribute('dir');
     if (styledBidiLine(this, line, lineIndex)) return renderBidiLine.call(this, method, ctx, line, left, top, lineIndex);
+    if (otherWayLine(this, line, lineIndex)) return renderOtherWayLine.call(this, method, ctx, line, left, top, lineIndex);
     return origRenderChars.call(this, method, ctx, line, left, top, lineIndex);
+  };
+
+  // ---------- Each line in its own direction ----------
+  // The side text box shows every line in the direction of its own first letter
+  // (dir="auto": "Happy New Year 2026!" under an Arabic line still ends in "!"),
+  // so the canvas and the print files do the same. Fabric draws every line in
+  // the text box's direction; in a text with Arabic letters a line that starts
+  // with a letter of the other script is drawn here instead (a text with no
+  // right-to-left letters at all is left exactly as Fabric draws it).
+  const DRAWN_ONE_BY_ONE = (o) => o.path || o.charSpacing || (o.textAlign || '').includes('justify');
+  const textHasRtl = (o) => (o._textLines || []).some((l) => l.some((ch) => RTL_CH.test(ch)));
+  /** Whether line `lineIndex` reads right to left (its first strong letter; the box's direction when it has none). */
+  function lineRtl(o, lineIndex) {
+    const boxRtl = o.direction === 'rtl';
+    if (DRAWN_ONE_BY_ONE(o) || !textHasRtl(o)) return boxRtl;
+    for (const ch of (o._textLines && o._textLines[lineIndex]) || []) {
+      const t = bidiType(ch);
+      if (t === 'L') return false;
+      if (t === 'R' || t === 'AL') return true;
+    }
+    return boxRtl;
+  }
+  /** A line in one style that reads the other way than its text box: drawn by renderOtherWayLine. */
+  function otherWayLine(o, line, lineIndex) {
+    return Boolean(line && line.length) && !DRAWN_ONE_BY_ONE(o) && o.isEmptyStyles(lineIndex) && lineRtl(o, lineIndex) !== (o.direction === 'rtl');
+  }
+  /** Such a line, in one piece in its own direction, from its left edge (Fabric gives its start in the box's direction). */
+  function renderOtherWayLine(method, ctx, line, left, top, lineIndex) {
+    const lineHeight = this.getHeightOfLine(lineIndex);
+    top -= (lineHeight * this._fontSizeFraction) / this.lineHeight;
+    const x = this.direction === 'rtl' ? left - this.getLineWidth(lineIndex) : left;
+    ctx.save();
+    ctx.direction = lineRtl(this, lineIndex) ? 'rtl' : 'ltr';
+    ctx.textAlign = 'left';
+    this._renderChar(method, ctx, lineIndex, 0, line.join(''), x, top, lineHeight);
+    ctx.restore();
+  }
+
+  // ---------- The width a line is really drawn at ----------
+  // Fabric adds up the letters of a line measured one by one. Arabic letters
+  // join up when the browser draws the whole line, so the line is drawn wider
+  // (or narrower) than Fabric's sum: the box was too small for the text, a
+  // curved line lost its last letter, a centred one sat off centre and a
+  // background box did not cover it. Lines with right-to-left letters, and lines
+  // drawn here in the other direction, take the width the browser draws them at.
+  let measureCtx = null;
+  /** The drawn width of line `lineIndex`, or null when Fabric's own sum is the drawn width. */
+  function drawnLineWidth(o, lineIndex) {
+    const line = o._textLines && o._textLines[lineIndex];
+    if (!line || !line.length || DRAWN_ONE_BY_ONE(o) || !textHasRtl(o)) return null;
+    measureCtx = measureCtx || fabric.util.createCanvasElement().getContext('2d');
+    if (styledBidiLine(o, line, lineIndex)) {
+      // Laid out piece by piece (renderBidiLine): the pieces side by side.
+      return bidiLineLayout(o, measureCtx, line, 0, lineIndex).reduce((n, run) => n + run.w, 0);
+    }
+    if (!o.isEmptyStyles(lineIndex)) return null; // drawn by Fabric piece by piece
+    const rtl = lineRtl(o, lineIndex);
+    if (rtl === (o.direction === 'rtl') && !line.some((ch) => RTL_CH.test(ch))) return null; // English in an English box
+    measureCtx.save();
+    measureCtx.font = o._getFontDeclaration(o.getCompleteStyleDeclaration(lineIndex, 0));
+    measureCtx.direction = rtl ? 'rtl' : 'ltr';
+    const w = measureCtx.measureText(line.join('')).width;
+    measureCtx.restore();
+    return w;
+  }
+  const origMeasureLine = fabric.Text.prototype.measureLine;
+  fabric.Text.prototype.measureLine = function (lineIndex) {
+    const info = origMeasureLine.call(this, lineIndex);
+    const w = drawnLineWidth(this, lineIndex);
+    if (w != null && w > 0) info.width = w;
+    return info;
   };
 
   // ---------- A word in another colour, on a line that is not plain text in the box's direction ----------
@@ -47,8 +119,10 @@
     if (o.isEmptyStyles(lineIndex)) return false;
     // Right-to-left letters anywhere (Arabic joins its letters: Fabric's widths are off).
     if (line.some((ch) => RTL_CH.test(ch))) return true;
+    // A line that reads the other way than its box (English under an Arabic first line).
+    const rtl = lineRtl(o, lineIndex);
+    if (rtl !== (o.direction === 'rtl')) return true;
     // Anything that does not run the box's way (English or numbers in a right-to-left box).
-    const rtl = o.direction === 'rtl';
     return bidiLevels(line, rtl).some((lv) => lv !== (rtl ? 1 : 0));
   }
   /** The bidi type of one character (the types that matter for one line of text). */
@@ -216,12 +290,13 @@
   /**
    * Where such a line is drawn: its stretches in display order (left to right),
    * each with its pieces { text, first, last, w, x }. `left` is the line's start
-   * as Fabric gives it (left edge, or right edge for right-to-left text); `ctx`
-   * is only used to measure. The caret code (bidi-caret.js) uses the same layout.
+   * as Fabric gives it (left edge, or right edge in a right-to-left box); `ctx`
+   * is only used to measure. The line is read in its own direction (lineRtl).
+   * The caret code (bidi-caret.js) uses the same layout.
    */
   function bidiLineLayout(o, ctx, line, left, lineIndex) {
     const rtl = o.direction === 'rtl';
-    const runs = bidiRuns(line, rtl);
+    const runs = bidiRuns(line, lineRtl(o, lineIndex)); // the line read in its own direction
     let total = 0;
     ctx.save();
     for (const run of runs) {
@@ -243,11 +318,10 @@
       total += run.w;
     }
     ctx.restore();
-    // Fabric gives the line's start (its left edge, or its right edge for right-to-left text),
+    // Fabric gives the line's start (its left edge, or its right edge in a right-to-left box),
     // already placed for the alignment, and draws a line in one colour from there with the
-    // browser's widths: start there too, so no word moves when one is coloured. (Fabric's own
-    // line width adds up its letter-by-letter measures, which differ from the drawn width for
-    // joined Arabic letters, vowel marks and some signs.)
+    // browser's widths: start there too, so no word moves when one is coloured. (The line's
+    // width is this layout's own: see drawnLineWidth.)
     let x = rtl ? left - total : left;
     const order = bidiOrder(runs);
     for (const run of order) {
@@ -405,15 +479,19 @@
   // Background shapes: box (rounded), pill, banner (notched ribbon ends), ticket (round notches).
   TP.bgShape = 'box';
   TP.cacheProperties = TP.cacheProperties.concat('bgShape');
-  TP._renderBackground = function (ctx) {
-    if (!this.backgroundColor) return;
-    const dim = this._getNonTransformedDimensions();
-    const shape = this.bgShape || 'box';
-    const py = this.fontSize * 0.15;
+  /** How far the background box reaches past the text on each side (object units). */
+  function bgPadding(o) {
+    const dim = o._getNonTransformedDimensions();
+    const shape = o.bgShape || 'box';
+    const py = o.fontSize * 0.15;
     const h = dim.y + py * 2;
     // Ribbons and tickets are cut in at the ends: widen them by the cut so it never reaches the letters.
     const cut = shape === 'banner' ? h * 0.32 : shape === 'ticket' ? h * 0.22 : 0;
-    const px = this.fontSize * 0.3 + cut;
+    return { dim, shape, h, py, px: o.fontSize * 0.3 + cut };
+  }
+  TP._renderBackground = function (ctx) {
+    if (!this.backgroundColor) return;
+    const { dim, shape, h, py, px } = bgPadding(this);
     const x = -dim.x / 2 - px;
     const y = -dim.y / 2 - py;
     const w = dim.x + px * 2;
@@ -659,7 +737,6 @@
     if (!this.curve && !this.backgroundColor && !hasWordStyles(this)) return origTextSvg.call(this, reviver);
     const r = this.getBoundingRect(true, true);
     const mult = Math.min(24, Math.max(2, 300 / (TP.svgUnitsPerInch || 50))); // 300 DPI at the product's real size
-    const url = this.toDataURL({ multiplier: mult, format: 'png' });
     let ex = 0;
     let ey = 0;
     if (this.shadow) {
@@ -667,18 +744,47 @@
       ex = Math.round(Math.abs(this.shadow.offsetX) + this.shadow.blur) * Math.abs(sc.scaleX);
       ey = Math.round(Math.abs(this.shadow.offsetY) + this.shadow.blur) * Math.abs(sc.scaleY);
     }
+    // The picture is the text's box (and its shadow); a background box reaches past it by its
+    // padding, so the picture takes that in too (its ends and round corners were cut off).
+    // Arabic text and boxes get a picture of exactly the place it is put in (toDataURL rounds
+    // its canvas up, and the SVG then shrank the picture to fit: the print file's text sat smaller).
+    let crop = {};
+    let fit = '';
+    if (this.backgroundColor || textHasRtl(this)) {
+      let mx = 0;
+      let my = 0;
+      if (this.backgroundColor) {
+        const { px, py } = bgPadding(this);
+        const ax = Math.abs(px * (this.scaleX || 1));
+        const ay = Math.abs(py * (this.scaleY || 1));
+        const a = fabric.util.degreesToRadians(this.angle || 0);
+        mx = ax * Math.abs(Math.cos(a)) + ay * Math.abs(Math.sin(a));
+        my = ax * Math.abs(Math.sin(a)) + ay * Math.abs(Math.cos(a));
+      }
+      // toDataURL draws the object in the middle of a canvas of its box (and shadow), rounded up.
+      const cw = Math.ceil(r.width + 2 * ex);
+      const ch = Math.ceil(r.height + 2 * ey);
+      ex += mx;
+      ey += my;
+      crop = { left: cw / 2 - (r.width / 2 + ex), top: ch / 2 - (r.height / 2 + ey), width: r.width + 2 * ex, height: r.height + 2 * ey };
+      fit = ' preserveAspectRatio="none"';
+    }
+    const url = this.toDataURL({ multiplier: mult, format: 'png', ...crop });
     const f = (v) => +v.toFixed(3);
-    return `<image x="${f(r.left - ex)}" y="${f(r.top - ey)}" width="${f(r.width + 2 * ex)}" height="${f(r.height + 2 * ey)}" xlink:href="${url}" href="${url}"></image>\n`;
+    return `<image x="${f(r.left - ex)}" y="${f(r.top - ey)}" width="${f(r.width + 2 * ex)}" height="${f(r.height + 2 * ey)}"${fit} xlink:href="${url}" href="${url}"></image>\n`;
   };
 
   // Right-to-left (Arabic) text: lay each line out ourselves with direction="rtl"
   // so the SVG matches the canvas exactly. The text stays real, editable text.
+  // A line that reads the other way (English under an Arabic first line, or
+  // Arabic under an English one) goes in a <text> of its own direction.
   const origTextInnerSvg = TP._toSVG;
   TP._toSVG = function () {
-    if (this.direction !== 'rtl' || this.charSpacing) return origTextInnerSvg.call(this);
+    const rtls = (this._textLines || []).map((l, i) => lineRtl(this, i));
+    if (this.charSpacing || (this.direction !== 'rtl' && !rtls.some(Boolean))) return origTextInnerSvg.call(this);
     const n = (v) => +v.toFixed(3);
     const offsets = this._getSVGLeftTopOffsets();
-    const spans = [];
+    const spans = { rtl: [], ltr: [] };
     let top = offsets.textTop;
     for (let i = 0; i < this._textLines.length; i++) {
       const lh = this.getHeightOfLine(i);
@@ -687,11 +793,16 @@
       const left = -this.width / 2 + (align === 'center' ? (this.width - lw) / 2 : align === 'right' ? this.width - lw : 0);
       const baseline = top + (lh * (1 - this._fontSizeFraction)) / this.lineHeight;
       const text = fabric.util.string.escapeXml(this._textLines[i].join(''));
-      if (text) spans.push(`<tspan x="${n(left + lw)}" y="${n(baseline)}">${text}</tspan>`);
+      if (text) spans[rtls[i] ? 'rtl' : 'ltr'].push(`<tspan x="${n(rtls[i] ? left + lw : left)}" y="${n(baseline)}">${text}</tspan>`);
       top += lh;
     }
-    const out = this._wrapSVGTextAndBg({ textSpans: spans, textBgRects: [] });
-    return out.map((part) => (typeof part === 'string' ? part.replace('<text ', '<text direction="rtl" text-anchor="start" ') : part));
+    const out = [];
+    for (const dir of ['rtl', 'ltr']) {
+      if (!spans[dir].length && (dir !== this.direction || spans.rtl.length + spans.ltr.length)) continue;
+      const part = this._wrapSVGTextAndBg({ textSpans: spans[dir], textBgRects: [] });
+      out.push(...part.map((p) => (typeof p === 'string' ? p.replace('<text ', `<text direction="${dir}" text-anchor="start" `) : p)));
+    }
+    return out;
   };
 
   // Embed the fonts a design uses, so the SVG looks the same on any computer.
@@ -812,5 +923,5 @@
     o.dirty = true;
   }
 
-  window.POD_FX = { laserTone, maskPath, roundRectPath, removeBackground, fontFaceCss, bidiLevels, bidiRuns, bidiOrder, styledBidiLine, bidiLineLayout };
+  window.POD_FX = { laserTone, maskPath, roundRectPath, removeBackground, fontFaceCss, bidiLevels, bidiRuns, bidiOrder, styledBidiLine, bidiLineLayout, lineRtl, otherWayLine, drawnLineWidth };
 })();

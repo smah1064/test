@@ -198,7 +198,11 @@
    */
   function build(o, li, line, bounds) {
     const rtl = o.direction === 'rtl';
-    const base = rtl ? 1 : 0;
+    // A line in one colour that reads the other way than its box is drawn by fabric-ext.js
+    // in its own direction (from its left edge): its letters are read that way here too.
+    const other = FX.otherWayLine ? FX.otherWayLine(o, line, li) : false;
+    const lineRtl = other ? !rtl : rtl;
+    const base = lineRtl ? 1 : 0;
     const left = o._getLeftOffset() + o._getLineLeftOffset(li); // the line's start, as Fabric draws it
     const ctx = measureCtx();
     const L = { line, boxes: new Array(line.length), vis: [] };
@@ -211,11 +215,11 @@
       // Drawn by Fabric: each piece by the browser, which puts its words in display order.
       // Fabric's own model is kept for a line whose pieces all run the text's way and
       // whose letters do not join (English; any line drawn letter by letter).
-      let mine = false;
+      let mine = other;
       ctx.save();
       for (const piece of fabricPieces(o, li, line, bounds, left)) {
         const seg = line.slice(piece.start, piece.end);
-        const levels = FX.bidiLevels(seg, rtl);
+        const levels = FX.bidiLevels(seg, lineRtl);
         if (seg.length > 1 && (levels.some((lv) => lv % 2 !== base) || seg.some((g) => JOINED.test(g)))) mine = true;
         const runs = levelRuns(levels);
         const font = o._getFontDeclaration(o.getCompleteStyleDeclaration(li, piece.start));
@@ -501,7 +505,7 @@
     let naff = null;
     if (ns < 0 || ns > L.vis.length) {
       // Off the end of the line: to the next line (the way the text runs) or the previous one.
-      const forward = dir > 0 !== (o.direction === 'rtl');
+      const forward = dir > 0 !== (FX.lineRtl ? FX.lineRtl(o, li) : o.direction === 'rtl'); // the way this line reads
       if (forward) {
         if (li >= o._textLines.length - 1) return true;
         pos = first + o._textLines[li].length + o.missingNewlineOffset(li);
