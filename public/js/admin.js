@@ -1057,7 +1057,7 @@
     const list = unprintedList(o);
     if (!list) return true;
     const email = !isShipped(o) && o.customer && o.customer.email;
-    const mail = email && (!notifySt || notifySt.customerEmail) ? `\n\n${t('ship.mailToo', { email })}` : '';
+    const mail = email && (notifySt ? notifySt.customerEmail : emailReady !== false) ? `\n\n${t('ship.mailToo', { email })}` : '';
     return confirm(`${t('ship.notPrintedList', { list })}\n\n${t(deliver ? 'ship.notPrintedDeliver' : 'ship.notPrintedShip')}${mail}`);
   }
   async function saveShipment(id, extra, doneKey, btn) {

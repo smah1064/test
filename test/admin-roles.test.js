@@ -479,3 +479,24 @@ test('QA admin round, final wave: an owner can\'t take over another owner (demot
   assert.strictEqual((await call(`/api/admin/staff/${o.id}`, 'PATCH', { roles: ['finance'] }, owner)).status, 200);
   assert.strictEqual((await call(`/api/admin/staff/${o.id}/password`, 'PUT', { password: 'taken-over-12345' }, owner)).json.code, 'ownerPasswordLink');
 });
+
+test('QA admin round, last fixes: owners choose their own password; weak passwords and invisible names refused; bulk requests count real designs', async () => {
+  // An owner is never made with a typed password, nor promoted while on one someone else typed.
+  assert.strictEqual((await call('/api/admin/staff', 'POST', { name: 'Typed', username: 'typed1', roles: ['owner'], password: 'Long-Pass-2026x' }, owner)).json.code, 'ownerPasswordLink');
+  const t = await call('/api/admin/staff', 'POST', { name: 'Typed Two', username: 'typed2', roles: ['finance'], password: 'Long-Pass-2026x' }, owner);
+  assert.strictEqual(t.status, 201);
+  assert.strictEqual((await call(`/api/admin/staff/${t.json.id}`, 'PATCH', { roles: ['owner'] }, owner)).json.code, 'ownerOwnPassword');
+  // Weak passwords and names with nothing visible are refused.
+  const m = await call('/api/admin/staff', 'POST', { name: 'Weak', username: 'weak1', roles: ['finance'] }, owner);
+  const token = new URL(m.json.setupLink).searchParams.get('setup');
+  for (const pw of ['          ', '1234567890', 'aaaaaaaaaa', 'password12']) assert.strictEqual((await call('/api/admin/setup', 'POST', { token, password: pw })).json.code, 'passwordTooShort', JSON.stringify(pw));
+  assert.strictEqual((await call('/api/admin/staff', 'POST', { name: '‏‎⁨⁩', username: 'invisible1', roles: ['finance'] }, owner)).json.code, 'badStaff');
+  // A bulk ready-design request: only designs that exist, each once.
+  const cat = await addMember('cat31', ['catalogue']);
+  const lib = (await call('/api/admin/library', 'GET', undefined, owner)).json.designs;
+  const one = lib[0].id;
+  const r = await call('/api/admin/library', 'PATCH', { ids: [one, one, 'no-such-design', one], hidden: true }, cat.token);
+  assert.strictEqual(r.status, 202, r.text);
+  assert.match(r.json.approval.summary.en, /^Ready designs: 1 design: pause/);
+  assert.strictEqual((await call('/api/admin/library', 'PATCH', { ids: ['no-such-design'], hidden: true }, cat.token)).status, 404);
+});

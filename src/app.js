@@ -4375,8 +4375,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const token = crypto.randomBytes(24).toString('base64url');
     return { token, setup: { hash: crypto.createHash('sha256').update(token).digest('hex'), exp: Date.now() + SETUP_MS }, link: `${linkBase(req)}/admin?setup=${token}` };
   };
-  const cleanStaffName = (v) => (typeof v === 'string' ? v.replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 60) : '');
-  const staffPassword = (pw) => typeof pw === 'string' && pw.length >= 10 && pw.length <= 200;
+  const cleanStaffName = (v) => {
+    const s = typeof v === 'string' ? v.replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 60) : '';
+    return /[\p{L}\p{N}]/u.test(s) ? s : '';
+  };
+  const COMMON_PASSWORDS = new Set(['password12', 'password123', 'password1234', 'qwertyuiop', 'qwerty1234', '1234567890', '0123456789', 'abcdefghij', 'abc1234567', 'iloveyou12', 'admin12345', 'admin123456', 'welcome123', 'ebda3ebda3', 'ebda312345']);
+  const staffPassword = (pw) => typeof pw === 'string' && pw.length >= 10 && pw.length <= 200 && pw.trim().length >= 10
+    && new Set(pw).size >= 4 && !/^\d+$/.test(pw) && !COMMON_PASSWORDS.has(pw.toLowerCase());
   app.get('/api/admin/staff', requireAdmin, (req, res) => res.json({
     staff: staffAll().map(staffRow),
     roles: roles.ROLES.map((id) => ({ id, name: roles.ROLE_NAMES[id], perms: roles.ROLE_PERMS[id] })),
@@ -4389,11 +4394,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const rs = roles.cleanRoles(b.roles !== undefined ? b.roles : b.role !== undefined ? b.role : ['catalogue']);
     if (!name || !/^[a-z0-9][a-z0-9._-]{2,29}$/.test(username) || !rs) throw new HttpError(400, 'badStaff');
     if (b.password !== undefined && !staffPassword(b.password)) throw new HttpError(400, 'badStaff');
+    if (b.password !== undefined && rs.includes('owner')) throw new HttpError(403, 'ownerPasswordLink');
     const s = b.password === undefined ? newSetup(req) : null;
     const user = {
       id: crypto.randomBytes(8).toString('hex'), name, username, roles: rs, active: true, gen: 0, ...(rs.includes('owner') ? { everOwner: true } : {}),
       createdAt: new Date().toISOString(), createdBy: req.adminWho.shown || req.adminWho.name,
-      ...(s ? { setup: s.setup } : security.AdminAuth.hashStaffPassword(b.password)),
+      ...(s ? { setup: s.setup } : { ...security.AdminAuth.hashStaffPassword(b.password), passwordByOther: true }),
     };
     store.mutate((db) => {
       db.staff ||= [];
@@ -4416,6 +4422,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (!u) throw new HttpError(404, 'notFound');
       if (name) u.name = name;
       const before = JSON.stringify([roles.rolesOf(u), u.active !== false]);
+      // (Made an owner while on a password someone else typed: they choose their own first, with a set-up link.)
+      if (rs && rs.includes('owner') && !roles.rolesOf(u).includes('owner') && u.passwordByOther) throw new HttpError(409, 'ownerOwnPassword');
       if (roles.rolesOf(u).includes('owner') || (rs && rs.includes('owner'))) u.everOwner = true;
       if (rs) {
         u.roles = rs;
@@ -4458,6 +4466,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const u = (db.staff || []).find((x) => x.id === req.params.id);
       if (!u) throw new HttpError(404, 'notFound');
       Object.assign(u, security.AdminAuth.hashStaffPassword(pw));
+      u.passwordByOther = true;
       delete u.setup;
       u.gen = (u.gen || 0) + 1; // signs out everywhere
     });
@@ -4491,6 +4500,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (!u || !u.setup || u.setup.hash !== hash) throw new HttpError(400, 'setupLinkBad');
       Object.assign(u, security.AdminAuth.hashStaffPassword(b.password));
       delete u.setup;
+      delete u.passwordByOther; // (their own now)
       u.gen = (u.gen || 0) + 1;
       return u;
     });
@@ -4513,6 +4523,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const user = store.mutate((db) => {
       const x = (db.staff || []).find((y) => y.id === w.id);
       Object.assign(x, security.AdminAuth.hashStaffPassword(b.password));
+      delete x.passwordByOther; // (their own now)
       x.gen = (x.gen || 0) + 1; // other browsers are signed out
       return x;
     });
@@ -4814,6 +4825,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const b = req.body || {};
       if (!Array.isArray(b.ids) || !b.ids.length || b.ids.length > 2000) throw new HttpError(400, 'badProductField', { field: 'ids' });
       libraryFlags(b);
+      // (Only designs that exist, each once: "2000 designs" for one design, or nothing at all, never waits.)
+      const known = new Set(library.all().map((d) => d.id));
+      const ids = [...new Set(b.ids.map(String))].filter((id) => known.has(id));
+      if (!ids.length) throw new HttpError(404, 'notFound');
+      req.body = { ...b, ids };
     },
     'PATCH /api/admin/library/:id': (req) => {
       if (!library.all().some((d) => d.id === req.params.id)) throw new HttpError(404, 'notFound');

@@ -361,7 +361,7 @@ class AdminAuth {
    * sign-ins, or this username from anywhere) don't lock them out; this address's own wrong tries still do.
    */
   staffLockedFor(ip, username, { knownDevice = false } = {}) {
-    const keys = knownDevice ? [[`staff:${ip}`, ADMIN_IP_RULES]] : [['staff:*', ADMIN_ALL_RULES], [`staff:${ip}`, ADMIN_IP_RULES], [`staff-user:${username}`, ADMIN_IP_RULES]];
+    const keys = knownDevice ? [[`staff-ipuser:${ip}:${username}`, ADMIN_IP_RULES]] : [['staff:*', ADMIN_ALL_RULES], [`staff:${ip}`, ADMIN_IP_RULES], [`staff-user:${username}`, ADMIN_IP_RULES]];
     for (const [key, rules] of keys) {
       const v = this.fails.check(key, rules);
       if (typeof v === 'number') return v;
@@ -381,11 +381,13 @@ class AdminAuth {
       this.fails.hit('staff:*', ADMIN_ALL_RULES);
       this.fails.hit(`staff:${ip}`, ADMIN_IP_RULES);
       this.fails.hit(`staff-user:${name}`, ADMIN_IP_RULES);
+      this.fails.hit(`staff-ipuser:${ip}:${name}`, ADMIN_IP_RULES);
       console.warn(`[admin] wrong staff sign-in from ${ip}`);
       return null;
     }
     this.fails.clear(`staff:${ip}`);
     this.fails.clear(`staff-user:${name}`);
+    this.fails.clear(`staff-ipuser:${ip}:${name}`);
     const expiresAt = Date.now() + SESSION_MS;
     const body = `${expiresAt.toString(36)}.${crypto.randomBytes(18).toString('base64url')}.${user.id}`;
     console.log(`[admin] staff ${user.username} signed in from ${ip}`);
