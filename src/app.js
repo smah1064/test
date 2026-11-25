@@ -1103,6 +1103,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         // Waiting to print or on the press only; printed or shipped jobs are not sent back. The reason is the team's:
         // the customer hears nothing until the shop sends the new proof or the change request.
         if (!['queued', 'printing'].includes(item.status)) throw new HttpError(409, 'reopenNotNow');
+        if (filmMaking.has(item.id)) throw new HttpError(409, 'filmBeingMade');
         if (!note) throw new HttpError(400, 'noteRequired');
         const warnings = [];
         for (const sd of (item.sends || []).filter((x) => x.status === 'sent' || x.status === 'opened').slice(-3)) warnings.push({ kind: 'house', house: sd.houseName, at: sd.at });
@@ -1159,6 +1160,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   // The shop fixes the artwork: a corrected print file (same size), kept as a new version; the customer approves it.
   // While one is processed (a second or two), the job can't start printing or get another file (QA 25 Nov).
   const replacingItems = new Set();
+  // Jobs being put on a DTF film right now (the film route): not sent back to Review until it's made.
+  const filmMaking = new Set();
   app.put('/api/admin/items/:itemId/replacement/:side', adminOnly, express.raw({ type: () => true, limit: '60mb' }), async (req, res, next) => {
     let marked = null;
     // (Held until the new file is fully saved, not until the connection closes: a dropped connection let the job
@@ -3335,6 +3338,73 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (!item) throw new HttpError(404, 'itemNotFound');
     return { order, item, byLink: false };
   }
+  /**
+   * A new version of an ordered item's design (the customer's "send it again", or the shop's own edit in the
+   * editor), checked before the store's lock: a finished design of the same product, not ordered, with the same
+   * pieces at today's prices (the customer keeps the price agreed at checkout).
+   */
+  function checkNewVersion(req, item, id) {
+    const d = typeof id === 'string' && UUID_RE.test(id) && store.getDesign(id);
+    if (!d || d.kind || (d.status && d.status !== 'ready')) throw new HttpError(400, 'designGone');
+    if (d.orderId) throw new HttpError(409, 'designOrdered');
+    if (d.productId !== item.productId) throw new HttpError(409, 'reviseOtherProduct');
+    // A colour / size / side the shop stopped selling or that sold out since can't come in this way (the
+    // product itself paused after the order doesn't stop the change the shop asked for).
+    const why = designUnavailable(d);
+    if (why && !['productUnavailable', 'productRetired'].includes(why)) {
+      const p = getProduct(d.productId);
+      throw new HttpError(409, why, { name: p ? p.name[langOf(req)] || p.name.en : '' });
+    }
+    // Counted stock: the old version's pieces go back, the new one's are taken (what changed only).
+    const oldDesign = store.getDesign(item.designId);
+    const delta = new Map([...addNeeds([d]).entries()].map(([k, x]) => [k, { ...x }]));
+    for (const [k, x] of addNeeds(oldDesign ? [oldDesign] : [])) {
+      if (delta.has(k)) delta.get(k).n -= x.n;
+      else delta.set(k, { ...x, n: -x.n });
+    }
+    const fields = designItemFields(d);
+    // Same pieces and options as before: the old and new designs at today's prices (the shop may have
+    // changed its prices since the order); the customer keeps the price agreed at checkout.
+    const old = store.getDesign(item.designId);
+    const oldToday = old ? designPrice({ ...old, status: 'ready', orderId: null }) : item.price;
+    if (oldToday === null || Math.abs(fields.price - oldToday) > 0.009) throw new HttpError(409, 'revisePrice', { was: oldToday ?? item.price, now: fields.price });
+    return { d, delta, fields };
+  }
+  /** …put in under the store's lock: the stock, the item's line at the agreed prices, the next version. */
+  function putNewVersion(db, o, it, nd, { delta, fields, req }) {
+    const counted = [...delta.values()].filter((x) => x.n).map((x) => ({ ...x, e: db.catalog && db.catalog.products && db.catalog.products[x.pid] })).filter((x) => x.e && typeof leftOf(x.e, x.combo) === 'number');
+    for (const x of counted) if (x.n > 0 && leftOf(x.e, x.combo) < x.n) throw new HttpError(409, 'notEnoughStock', { name: stockName(x.pid, x.combo, langOf(req)), left: leftOf(x.e, x.combo) });
+    for (const x of counted) {
+      if (x.combo) x.e.variantStock[x.combo] -= x.n;
+      else x.e.stock -= x.n;
+      x.e.stockAt = new Date().toISOString(); // (a stock count waiting for approval is told: "changed since")
+    }
+    const prev = db.designs[it.designId];
+    const now = new Date().toISOString();
+    // The new design belongs to this order now (it can't be ordered again), as the next version.
+    nd.orderId = o.id;
+    nd.version = ((prev && prev.version) || 1) + 1;
+    nd.revisionOf = it.designId;
+    // A printed sample first, if the customer asked for one at checkout, stays asked for.
+    const sample = Boolean(it.sampleWanted || (it.approval && it.approval.sample));
+    const agreed = { price: it.price, unitPrice: it.unitPrice, lines: new Map((it.quantities || []).map((l) => [`${l.color && l.color.id}|${l.size && l.size.id}`, l.unitPrice])) };
+    // The line now describes the new design (what the old one had and this one hasn't goes).
+    for (const k of ['quantities', 'merge', 'method', 'emb', 'options', 'imports', 'rightsConfirmedAt', 'pattern', 'copies', 'unitPrice']) delete it[k];
+    Object.assign(it, fields);
+    // …at the prices agreed at checkout.
+    it.price = agreed.price;
+    if (agreed.unitPrice !== undefined) it.unitPrice = agreed.unitPrice;
+    if (Array.isArray(it.quantities)) for (const l of it.quantities) { const p = agreed.lines.get(`${l.color && l.color.id}|${l.size && l.size.id}`); if (p !== undefined) l.unitPrice = p; }
+    if (sample) it.sampleWanted = true;
+    // What it costs to make follows the new version (another size or extra sides cost differently).
+    const costs = db.costs || {};
+    if (costs[it.productId]) it.costAtOrder = accounting.itemCostFrom(costs, it);
+    // The approval was for the old version: the new one gets its own proof to approve.
+    delete it.approval;
+    delete it.replaced;
+    it.preflight = nd.preflight ? { status: nd.preflight.status, checks: nd.preflight.checks } : null;
+    return { now, sample };
+  }
   // The editor's "edit it and send it again": is the item still waiting for changes, and the shop's note.
   app.get('/api/orders/:id/items/:itemId/revise', (req, res) => {
     res.set({ 'Cache-Control': 'private, no-store' });
@@ -3590,31 +3660,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const { order, item, byLink } = reviseItemFor(req);
     if (item.status !== 'changes_requested') throw new HttpError(409, 'reviseNotNeeded');
     if (item.kind) throw new HttpError(409, 'reviseNotEditable'); // books, photo sets, film sheets
-    const id = (req.body || {}).designId;
-    const d = typeof id === 'string' && UUID_RE.test(id) && store.getDesign(id);
-    if (!d || d.kind || (d.status && d.status !== 'ready')) throw new HttpError(400, 'designGone');
-    if (d.orderId) throw new HttpError(409, 'designOrdered');
-    if (d.productId !== item.productId) throw new HttpError(409, 'reviseOtherProduct');
-    // A colour / size / side the shop stopped selling or that sold out since can't come in this way (the
-    // product itself paused after the order doesn't stop the change the shop asked for).
-    const why = designUnavailable(d);
-    if (why && !['productUnavailable', 'productRetired'].includes(why)) {
-      const p = getProduct(d.productId);
-      throw new HttpError(409, why, { name: p ? p.name[langOf(req)] || p.name.en : '' });
-    }
-    // Counted stock: the old version's pieces go back, the new one's are taken (what changed only).
-    const oldDesign = store.getDesign(item.designId);
-    const delta = new Map([...addNeeds([d]).entries()].map(([k, x]) => [k, { ...x }]));
-    for (const [k, x] of addNeeds(oldDesign ? [oldDesign] : [])) {
-      if (delta.has(k)) delta.get(k).n -= x.n;
-      else delta.set(k, { ...x, n: -x.n });
-    }
-    const fields = designItemFields(d);
-    // Same pieces and options as before: the old and new designs at today's prices (the shop may have
-    // changed its prices since the order); the customer keeps the price agreed at checkout.
-    const old = store.getDesign(item.designId);
-    const oldToday = old ? designPrice({ ...old, status: 'ready', orderId: null }) : item.price;
-    if (oldToday === null || Math.abs(fields.price - oldToday) > 0.009) throw new HttpError(409, 'revisePrice', { was: oldToday ?? item.price, now: fields.price });
+    const { d, delta, fields } = checkNewVersion(req, item, (req.body || {}).designId);
     // Checked again and changed under the store's lock, on the latest data (another copy of the app
     // may have answered the same item or ordered the same design a moment ago).
     store.mutate((db) => {
@@ -3623,37 +3669,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const nd = db.designs[d.id];
       if (!it || it.status !== 'changes_requested') throw new HttpError(409, 'reviseNotNeeded');
       if (!nd || nd.orderId) throw new HttpError(409, 'designOrdered');
-      const counted = [...delta.values()].filter((x) => x.n).map((x) => ({ ...x, e: db.catalog && db.catalog.products && db.catalog.products[x.pid] })).filter((x) => x.e && typeof leftOf(x.e, x.combo) === 'number');
-      for (const x of counted) if (x.n > 0 && leftOf(x.e, x.combo) < x.n) throw new HttpError(409, 'notEnoughStock', { name: stockName(x.pid, x.combo, langOf(req)), left: leftOf(x.e, x.combo) });
-      for (const x of counted) {
-        if (x.combo) x.e.variantStock[x.combo] -= x.n;
-        else x.e.stock -= x.n;
-        x.e.stockAt = new Date().toISOString(); // (a stock count waiting for approval is told: "changed since")
-      }
-      const prev = db.designs[it.designId];
-      const now = new Date().toISOString();
-      // The new design belongs to this order now (it can't be ordered again), as the next version.
-      nd.orderId = o.id;
-      nd.version = ((prev && prev.version) || 1) + 1;
-      nd.revisionOf = it.designId;
-      // A printed sample first, if the customer asked for one at checkout, stays asked for.
-      const sample = Boolean(it.sampleWanted || (it.approval && it.approval.sample));
-      const agreed = { price: it.price, unitPrice: it.unitPrice, lines: new Map((it.quantities || []).map((l) => [`${l.color && l.color.id}|${l.size && l.size.id}`, l.unitPrice])) };
-      // The line now describes the new design (what the old one had and this one hasn't goes).
-      for (const k of ['quantities', 'merge', 'method', 'emb', 'options', 'imports', 'rightsConfirmedAt', 'pattern', 'copies', 'unitPrice']) delete it[k];
-      Object.assign(it, fields);
-      // …at the prices agreed at checkout.
-      it.price = agreed.price;
-      if (agreed.unitPrice !== undefined) it.unitPrice = agreed.unitPrice;
-      if (Array.isArray(it.quantities)) for (const l of it.quantities) { const p = agreed.lines.get(`${l.color && l.color.id}|${l.size && l.size.id}`); if (p !== undefined) l.unitPrice = p; }
-      if (sample) it.sampleWanted = true;
-      // What it costs to make follows the new version (another size or extra sides cost differently).
-      const costs = db.costs || {};
-      if (costs[it.productId]) it.costAtOrder = accounting.itemCostFrom(costs, it);
-      // The approval was for the old version: the new one gets its own proof to approve.
-      delete it.approval;
-      delete it.replaced;
-      it.preflight = nd.preflight ? { status: nd.preflight.status, checks: nd.preflight.checks } : null;
+      const { now, sample } = putNewVersion(db, o, it, nd, { delta, fields, req });
       it.status = 'review';
       it.review = { needed: true, reasons: [...new Set(['revised', ...reviewReasons(nd, { sample })])], status: 'pending' };
       it.approvals = [...(it.approvals || []), { action: 'revised', by: 'customer', at: now, proofHash: proofHashOf(nd), version: nd.version }];
@@ -6639,6 +6655,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   };
   app.get('/api/admin/dtf-items', requireAdmin, (req, res) => res.json({ items: dtfOpen(), rollWidthIn: 22 }));
   app.post('/api/admin/dtf-film', requireAdmin, express.json(), async (req, res, next) => {
+    let filmHeld = [];
     try {
       const ids = Array.isArray(req.body && req.body.itemIds) ? req.body.itemIds : [];
       const chosen = dtfOpen().filter((i) => ids.includes(i.id));
@@ -6646,11 +6663,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       // Only what the customer approved goes on a film: not a job whose corrected file is being saved, nor one whose
       // files are no longer the approved ones. QA 25 Nov.
       for (const it of chosen) {
-        if (replacingItems.has(it.id)) throw new HttpError(409, 'fileBeingReplaced');
+        if (replacingItems.has(it.id) || filmMaking.has(it.id)) throw new HttpError(409, replacingItems.has(it.id) ? 'fileBeingReplaced' : 'filmBeingMade');
         const f = store.findItem(it.id);
         const dz = f && store.getDesign(f.item.designId);
         if (!f || !dz || !approvedFilesMatch(f.item, dz)) throw new HttpError(409, 'notApproved');
       }
+      // (While the film is made, its jobs can't be sent back to Review: one sent back meanwhile stayed on it. QA 25 Nov.)
+      for (const it of chosen) filmMaking.add(it.id);
+      filmHeld = chosen.map((it) => it.id);
       const pieces = [];
       for (const it of chosen) {
         // Name lists: one transfer per row, each with that row's name (background + the row's picture).
@@ -6701,6 +6721,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         }
       }
       const film = await printfiles.filmPdf(pieces, { title: 'DTF film' });
+      // A job that left the queue meanwhile (sent back, printed elsewhere): the film isn't given out.
+      for (const it of chosen) {
+        const f = store.findItem(it.id);
+        if (!f || !['queued', 'printing'].includes(f.item.status)) throw new HttpError(409, 'filmItemChanged');
+      }
       const at = new Date().toISOString();
       // Number the film under the lock, so two copies never hand out the same number.
       const batchId = store.mutate((db) => {
@@ -6718,6 +6743,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       res.type('pdf').attachment(`dtf-film-${batchId}.pdf`).send(film.pdf);
     } catch (e) {
       next(e);
+    } finally {
+      for (const id of filmHeld) filmMaking.delete(id);
     }
   });
 

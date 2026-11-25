@@ -8,6 +8,8 @@ const MESSAGES = {
   sidesRequired: { en: 'sides is required', ar: 'لازم تحدد أوجه التصميم' },
   designAtLeastOne: { en: 'Design at least one side before adding to cart', ar: 'صمّم وجه واحد على الأقل قبل ما تضيفه للسلة' },
   sideEmpty: { en: 'The {side} side has no design', ar: 'مفيش تصميم على وجه {side}' },
+  filmBeingMade: { en: 'This job is being put on a DTF film right now. Try again in a moment.', ar: 'الشغلانة دي بتتحط على فيلم DTF دلوقتي. جرّب تاني بعد لحظة.' },
+  filmItemChanged: { en: 'A job on this film was sent back to Review or changed while the film was being made. Make the film again.', ar: 'شغلانة على الفيلم ده رجعت للمراجعة أو اتغيرت وهو بيتعمل. اعمل الفيلم تاني.' },
   fileBeingReplaced: { en: 'A corrected file for this job is being saved. Try again in a moment.', ar: 'ملف متصلّح للشغلانة دي بيتحفظ دلوقتي. جرّب تاني بعد لحظة.' },
   reopenNotNow: { en: 'Only an item waiting to print or on the press can be sent back to Review.', ar: 'القطعة ترجع للمراجعة بس وهي مستنية الطباعة أو بتتطبع.' },
   bookSaving: { en: 'Your book is still being saved. Please try again in a moment.', ar: 'الكتاب لسه بيتحفظ. جرب تاني بعد لحظة.' },
