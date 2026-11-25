@@ -2618,9 +2618,29 @@
     </div>`;
   }
 
+  /**
+   * What is selected comes first in the side panel, above the product settings (a ready design's long product,
+   * size and print-place settings pushed the text's font and colour out of sight: owner, 25 Nov). A new selection
+   * scrolls the panel back to its top, so its settings are in view. (Phones show one sheet at a time anyway.)
+   */
+  let propsFor = null;
+  function placeProps(o) {
+    const sec = $('sec-props');
+    const prod = $('sec-product');
+    const check = $('sec-check');
+    if (!sec || !prod || !check) return;
+    if (o && sec.nextElementSibling !== prod) prod.before(sec);
+    if (!o && check.nextElementSibling !== sec) check.after(sec);
+    if (o && o !== propsFor) {
+      const scroller = sec.closest('.panel-scroll');
+      if (scroller) scroller.scrollTop = 0;
+    }
+    propsFor = o || null;
+  }
   function renderProps() {
     const o = active();
     const box = $('props');
+    placeProps(o || (crop ? crop : null));
     $('props-title').textContent = t('panel.selected');
     if (crop) {
       $('props-title').textContent = t('props.crop');
