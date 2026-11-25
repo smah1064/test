@@ -1397,10 +1397,16 @@ window.POD_STRINGS = {
   'book.updated': ['Book is up to date ✓', 'الكتاب محدّث ✓'],
   'book.making': ['Making your book…', 'بنجهّز الكتاب…'],
   'book.missing': ['Please fill in: {field}', 'من فضلك اكتب: {field}'],
+  // A choice (boy or girl, a date) is picked and the photo is added, not typed.
+  'book.missingChoice': ['Please choose: {field}', 'من فضلك اختار: {field}'],
+  'book.missingPhoto': ["Please add your child's photo", 'من فضلك ضيف صورة الطفل'],
+  // Back on the book page after adding the book to the cart: the page starts a new book.
+  'book.inCart': ['Your book is in the cart. To make another one, change the answers and add a photo.', 'كتابك في السلة. عشان تعمل كتاب تاني، غيّر الإجابات وضيف صورة.'],
   'book.dateTooOld': ['{field}: please choose a date from {year} on', '{field}: اختار تاريخ من سنة {year} أو بعدها من فضلك'],
   'book.dateFuture': ["{field}: that day hasn't come yet, please choose a date in the past", '{field}: اليوم ده لسه ماجاش، اختار تاريخ فات من فضلك'],
   'book.englishHint': ['The book is printed in English: type the names in English letters (e.g. Nour, not نور).', 'الكتاب مطبوع بالإنجليزي: اكتب الأسماء بحروف إنجليزي (مثلًا Nour مش نور).'],
   'book.latinNote': ['Please use English letters here (e.g. Nour)', 'اكتبه بحروف إنجليزي (مثلًا Nour)'],
+  'book.latinField': ['Please type this in English letters: {field}', 'من فضلك اكتب الخانة دي بحروف إنجليزي: {field}'],
   'book.latinFields': ['Please type these in English letters: {fields}', 'اكتب دول بحروف إنجليزي من فضلك: {fields}'],
   'book.yourChild': ['Your child', 'طفلك'],
   'book.dedicationHint': ['e.g. To our hero, with love from Baba and Mama', 'اكتبها بالإنجليزي (الكتاب بالإنجليزي)، مثال: To our hero, with love from Baba and Mama'],
@@ -1408,7 +1414,9 @@ window.POD_STRINGS = {
   'fmt.booklet-imposed': ['Booklet, imposed for saddle stitching (PDF)', 'الكتيب مترتب للطباعة والتدبيس (PDF)'],
   'fmt.booklet-pdf': ['Booklet, all pages in order (PDF)', 'الكتيب كل الصفحات بالترتيب (PDF)'],
   'fmt.source-pdf': ['Customer\'s original PDF', 'ملف الـ PDF الأصلي من العميل'],
-  'fmt.book-pdf': ['Book PDF (all pages, 300 DPI, 3 mm bleed)', 'ملف الكتاب PDF (كل الصفحات، 300 DPI، هامش قص 3 مم)'],
+  // (In Arabic "300 DPI" read "DPI 300" and sat next to "٣ مم": the number and its unit are kept left to right
+  // (\u2066…\u2069, invisible) and every number is in Arabic digits.)
+  'fmt.book-pdf': ['Book PDF (all pages, 300 DPI, 3 mm bleed)', 'ملف الكتاب PDF (كل الصفحات، \u2066٣٠٠ DPI\u2069، هامش قص ٣ مم)'],
   'admin.bookFiles': ['Book print file', 'ملف طباعة الكتاب'],
   'method.dtg': ['DTG', 'DTG'],
   'method.dtf': ['DTF', 'DTF'],
@@ -1477,6 +1485,8 @@ window.POD_STRINGS = {
   'avail.retiredSimilar': ['Here are similar products you can design instead:', 'دي منتجات شبهه تقدر تصمّم عليها بداله:'],
   'avail.retiredPopular': ['Have a look at our most popular products instead:', 'بص على أكتر منتجاتنا طلبًا بداله:'],
   'avail.retiredNone': ['Have a look at the other products in the shop.', 'شوف باقي المنتجات على الموقع.'],
+  // A link to a product the shop never had (a mistyped or old link), under "This product was not found".
+  'avail.notFoundText': ['The link may be mistyped. Have a look at the products in the shop.', 'ممكن يكون في غلطة في اللينك. شوف المنتجات اللي على الموقع.'],
   'dp.productPaused': ['{name} isn\'t available right now ({back}), so the design is shown on another product. Pick any product below.', 'المنتج «{name}» مش متاح دلوقتي ({back})، فالتصميم معروض على منتج تاني. اختار أي منتج من تحت.'],
   'dp.productRetired': ['{name} is no longer sold, so the design is shown on a similar product. Pick any product below.', 'المنتج «{name}» مبقاش بيتباع، فالتصميم معروض على منتج شبهه. اختار أي منتج من تحت.'],
   'dp.productRetiredOther': ['{name} is no longer sold, so the design is shown on another product. Pick any product below.', 'المنتج «{name}» مبقاش بيتباع، فالتصميم معروض على منتج تاني. اختار أي منتج من تحت.'],

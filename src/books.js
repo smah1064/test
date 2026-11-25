@@ -228,7 +228,21 @@ function formatDate(iso, lang, withYear = true) {
 }
 // Text answers must be text; invisible direction marks (pasted from chat apps) would turn names backwards.
 const INVISIBLE = /[\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/g;
-const clean = (v, max) => (typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '').replace(INVISIBLE, '').replace(/[\u0000-\u001f\u007f<>{}\[\]|]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
+/**
+ * At most `max` characters as the form's maxlength counts them (UTF-16), cut between whole letters: an emoji
+ * (two UTF-16 units, or several joined) at the limit goes whole, never half of it (QA 25 Nov: a "\ufffd" on the cover).
+ */
+const graphemes = new Intl.Segmenter('en', { granularity: 'grapheme' });
+function cut(s, max) {
+  if (s.length <= max) return s;
+  let out = '';
+  for (const { segment } of graphemes.segment(s)) {
+    if (out.length + segment.length > max) break;
+    out += segment;
+  }
+  return out;
+}
+const clean = (v, max) => cut((typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '').replace(INVISIBLE, '').replace(/[\u0000-\u001f\u007f<>{}\[\]|]/g, ' ').replace(/\s+/g, ' ').trim(), max).trim();
 
 /** Checks and tidies a customer's answers; throws a {field} error for anything missing. */
 function cleanAnswers(book, input) {
@@ -245,8 +259,10 @@ function cleanAnswers(book, input) {
         err.field = q.label;
         throw err;
       }
-    } else if (q.type === 'textarea') v = (typeof v === 'string' ? v : '').replace(INVISIBLE, '').replace(/[\u0000-\u0009\u000b-\u001f\u007f<>{}\[\]|]/g, ' ').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim().slice(0, q.max);
-    else v = clean(v, q.max || 40);
+    } else if (q.type === 'textarea') {
+      v = (typeof v === 'string' ? v : '').replace(INVISIBLE, '').replace(/[\u0000-\u0009\u000b-\u001f\u007f<>{}\[\]|]/g, ' ').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+      v = cut(v, q.max).trim();
+    } else v = clean(v, q.max || 40);
     // The books are printed in English: Arabic letters would scramble the sentences.
     // Any right-to-left script (Arabic, Hebrew, Syriac, Thaana…) would scramble the English sentences.
     if (typeof v === 'string' && /[\u0590-\u08ff\ufb1d-\ufdff\ufe70-\ufeff]/.test(v)) {
@@ -316,6 +332,28 @@ async function textImage(text, { font = 'Cairo Bold', pt = 14, px, width, maxH, 
     out = { img: await sharp(out.img).resize(w, h, { fit: 'fill' }).png().toBuffer(), w, h };
   }
   return out;
+}
+
+/**
+ * Hollow letters to colour in (the colouring book's captions): the text drawn as a dark outline, white
+ * inside. The outline is the letters stamped round a small circle in the dark colour, with the letters
+ * in white on top; `t` is a textImage() result, returned the same way (a little bigger, for the outline).
+ */
+async function hollowText(t, px, color = '#1b2740') {
+  const r = Math.max(1.5, px * 0.0028); // about 0.6 mm when printed
+  const pad = Math.ceil(r) + 1;
+  const tint = (hex) => sharp(t.img).composite([{ input: { create: { width: t.w, height: t.h, channels: 4, background: hex } }, blend: 'in' }]).png().toBuffer();
+  const [ink, white] = await Promise.all([tint(color), tint('#ffffff')]);
+  const layers = [];
+  for (let k = 0; k < 16; k++) {
+    const a = (k / 16) * 2 * Math.PI;
+    layers.push({ input: ink, left: Math.round(pad + r * Math.cos(a)), top: Math.round(pad + r * Math.sin(a)) });
+  }
+  layers.push({ input: white, left: pad, top: pad });
+  const w = t.w + 2 * pad;
+  const h = t.h + 2 * pad;
+  const img = await sharp({ create: { width: w, height: h, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } }).composite(layers).png().toBuffer();
+  return { img, w, h };
 }
 
 // ---------- Faces ----------
@@ -552,12 +590,13 @@ async function renderPage({ book, answers, face, faceLine, redrawn }, index, px,
       const fw = Math.round(fh * (FACE_W / FACE_H));
       layers.push({ input: await lineFaceImage(faceLine, fw, fh, 0.05), left: Math.round(px / 2 - fw / 2), top: P(18) });
     }
-    // The caption below the frame and the row of circles, on a clean white band.
-    const cap = await textImage(fill(page.caption[lang], answers, lang), { font: 'Lalezar', pt: 46, px, width: px * 0.84, maxH: px * 0.11, color: '#1b2740' });
+    // The caption below the frame and the row of circles, on a clean white band, in hollow letters to colour.
+    const cap = await hollowText(await textImage(fill(page.caption[lang], answers, lang), { font: 'Lalezar', pt: 46, px, width: px * 0.84, maxH: px * 0.11, color: '#1b2740' }), px);
     captionBand(cap, P(90.5));
   } else if (coloring) {
-    // Captions sit on a white band, so they never run into the drawing's lines.
-    const cap = await textImage(fill(page.caption[lang], answers, lang), { font: 'Lalezar', pt: 46, px, width: px * 0.86, maxH: px * 0.11, color: '#1b2740' });
+    // Captions sit on a white band, so they never run into the drawing's lines; the name is in hollow letters
+    // to colour in, as the book promises (QA 25 Nov: they printed solid navy).
+    const cap = await hollowText(await textImage(fill(page.caption[lang], answers, lang), { font: 'Lalezar', pt: 46, px, width: px * 0.86, maxH: px * 0.11, color: '#1b2740' }), px);
     captionBand(cap, px * 0.905);
   } else if (page.text) {
     // Story text on a soft panel at the bottom of the picture.
@@ -575,16 +614,32 @@ async function pageJpeg(data, index, px, quality = 82) {
   return (await renderPage(data, index, px)).jpeg({ quality, mozjpeg: true }).toBuffer();
 }
 
-/** Print-ready PDF: every page at 300 DPI with 1/8" bleed, 8 x 8" trim. */
+/**
+ * The pages of the printed book, in order: page indexes, null for a blank (white) page. A book is printed
+ * on sheets, two pages to a sheet, so it needs an even number of pages: with an odd count a blank page goes
+ * just before the back cover, which then prints on the back of the last sheet (QA 25 Nov: the colouring
+ * book had 17 pages, so its back cover printed on the front of the 9th sheet).
+ */
+function printPages(book) {
+  const list = book.pages.map((_, i) => i);
+  if (list.length % 2) {
+    const back = book.pages[book.pages.length - 1].type === 'back';
+    list.splice(back ? list.length - 1 : list.length, 0, null);
+  }
+  return list;
+}
+
+/** Print-ready PDF: every page at 300 DPI with 1/8" bleed, 8 x 8" trim, an even number of pages (printPages). */
 async function bookPdf(data, { title = 'Book' } = {}) {
   const ptSize = PAGE_IN * 72;
   const doc = new PDFDocument({ size: [ptSize, ptSize], margin: 0, autoFirstPage: false, info: { Title: title, Creator: 'ebda3' } });
   const chunks = [];
   doc.on('data', (c) => chunks.push(c));
   const done = new Promise((resolve) => doc.on('end', resolve));
-  for (let i = 0; i < data.book.pages.length; i++) {
-    const jpg = await (await renderPage(data, i, PRINT_PX)).withIccProfile('srgb').withDensity(300).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toBuffer();
+  for (const i of printPages(data.book)) {
     doc.addPage({ size: [ptSize, ptSize], margin: 0 });
+    if (i === null) continue; // a blank page: left white
+    const jpg = await (await renderPage(data, i, PRINT_PX)).withIccProfile('srgb').withDensity(300).jpeg({ quality: 92, chromaSubsampling: '4:4:4' }).toBuffer();
     doc.image(jpg, 0, 0, { width: ptSize, height: ptSize });
   }
   doc.end();
@@ -607,6 +662,6 @@ function publicBook(book) {
 
 module.exports = {
   BOOKS, TRIM_IN, BLEED_IN, PAGE_IN, PRINT_PX, FRUITS, ANIMALS, OLDEST_BIRTHDAY,
-  cleanAnswers, fill, formatDate, renderPage, pageJpeg, bookPdf, lineArt, publicBook, loadFonts,
+  cleanAnswers, fill, formatDate, renderPage, pageJpeg, bookPdf, printPages, lineArt, publicBook, loadFonts,
   companionPath: (id) => (Object.hasOwn(FRUITS, id) || Object.hasOwn(ANIMALS, id) ? path.join(ASSETS, 'companions', `${id}.png`) : null),
 };

@@ -355,21 +355,24 @@
    *   'soldOut'  nothing left in stock: back soon too;
    *   'retired'  the shop stopped selling it: similar products instead;
    *   'live'     in the shop (its day to come back came while the page was open);
-   *   'unknown'  the shop couldn't say (no such product, no connection): "not available right now",
-   *              without promising it comes back.
+   *   'notFound' the shop has no product with that id (a mistyped or made-up link): "not found";
+   *   'unknown'  the shop couldn't say (no connection): "not available right now", without promising it
+   *              comes back.
    */
   const productStates = new Map();
   function productState(id) {
     const key = String(id || '');
     if (!productStates.has(key)) {
       const unknown = { id: key, state: 'unknown', name: null, category: null, backOn: null };
-      productStates.set(key, !key ? Promise.resolve(unknown) : api(`/api/products/${encodeURIComponent(key)}/name`).then((r) => {
+      // (QA 25 Nov: a made-up id said "not available right now, until it's available".)
+      const notFound = { ...unknown, state: 'notFound' };
+      productStates.set(key, !key ? Promise.resolve(notFound) : api(`/api/products/${encodeURIComponent(key)}/name`).then((r) => {
         if (!r || typeof r !== 'object') return unknown;
         // (A shop from before "Stop selling" only says whether it is available.)
         const state = ['live', 'paused', 'retired', 'soldOut'].includes(r.state) ? r.state : r.available ? 'live' : 'paused';
         const backOn = state === 'paused' && /^\d{4}-\d{2}-\d{2}$/.test(r.backOn || '') ? r.backOn : null;
         return { id: key, state, name: r.name || null, category: r.category || null, backOn };
-      }, () => unknown));
+      }, (e) => (e && e.status === 404 ? notFound : unknown)));
     }
     return productStates.get(key);
   }
@@ -445,11 +448,14 @@
     const more = similarHref(catalog, info);
     const all = more === '/#products';
     const moreText = similarLabel(more);
-    if (!retired) {
+    // No such product: "not found", not "not available right now, until it's available".
+    const notFound = info.state === 'notFound';
+    if (notFound) text = t('avail.notFoundText');
+    else if (!retired) {
       const backLong = info.backOn ? t('avail.backOnLong', { date: backOnDay(info.backOn) }) : t('avail.backSoonLong');
       text = back ? t(all ? 'avail.pausedTextAll' : 'avail.pausedText', { back: backLong }) : t(all ? 'avail.lookAroundAll' : 'avail.lookAround');
     }
-    const title = retired ? t('avail.retiredTitle') : t('unavail.title');
+    const title = retired ? t('avail.retiredTitle') : notFound ? t('pp.notFound') : t('unavail.title');
     box.hidden = false;
     box.classList.add('unavail');
     box.classList.toggle('has-similar', Boolean(grid));

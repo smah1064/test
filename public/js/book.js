@@ -49,6 +49,7 @@
     aiConsent: !!saved.aiConsent,
     dirty: true,
     adding: false, // "Add to cart" is at work (the button waits)
+    added: false, // this book was put in the cart and the page left for the cart
     cartIndex: params.has('cart') ? Number(params.get('cart')) : null,
   };
   const remember = () => {
@@ -291,10 +292,21 @@
     $('bk-prev').disabled = state.page === 0;
     $('bk-next').disabled = state.page === book.pages - 1;
     // The thumbnails' labels follow the language too (a language switch calls showPage, not renderThumbs).
-    document.querySelectorAll('#bk-thumbs button').forEach((b, i) => {
+    const thumbs = document.querySelectorAll('#bk-thumbs button');
+    thumbs.forEach((b, i) => {
       b.classList.toggle('active', i === state.page);
       b.setAttribute('aria-label', pageLabel(i));
     });
+    // The page's thumbnail stays in sight in the strip (phones: it scrolled out of view after a few page
+    // flips, QA 25 Nov). Only the strip scrolls sideways, never the page itself.
+    const strip = $('bk-thumbs');
+    const thumb = thumbs[state.page];
+    if (thumb && strip.scrollWidth > strip.clientWidth) {
+      const s = strip.getBoundingClientRect();
+      const r = thumb.getBoundingClientRect();
+      const dx = r.left < s.left ? r.left - s.left - 8 : r.right > s.right ? r.right - s.right + 8 : 0;
+      if (dx) strip.scrollBy({ left: dx, behavior: 'smooth' });
+    }
     $('bk-sample').hidden = !!state.design;
   }
   /** "Page 3 of the book" / "صفحة ٣ من الكتاب": page i (from 0) in the language on screen. */
@@ -328,11 +340,12 @@
     $('busy').hidden = !on;
     if (text) $('busy-text').textContent = text;
   };
+  /** The first thing still missing: { q } (a question), { photo: true }, or null. */
   function missing() {
     for (const q of book.questions) {
-      if (q.required && !String(state.answers[q.id] || '').trim()) return tr(q.label);
+      if (q.required && !String(state.answers[q.id] || '').trim()) return { q };
     }
-    if (!state.face && !state.hasPhoto) return t('book.photo');
+    if (!state.face && !state.hasPhoto) return { photo: true };
     return null;
   }
   function dateProblem() {
@@ -345,11 +358,22 @@
     }
     return null;
   }
-  async function make() {
+  // One save at a time: Enter or Space on the focused button (or a phone's "Go" key) while the book was being
+  // made started it again, and three presses made three books (QA 25 Nov). A press while a save is running
+  // gets that same save (so "Add to cart" pressed meanwhile waits for it, then adds the book).
+  let making = null;
+  function make() {
+    if (!making) making = makeNow().finally(() => { making = null; });
+    return making;
+  }
+  async function makeNow() {
     const rtl = latinProblems();
     if (rtl.length) {
       rtl.forEach(([, el]) => markLatin(el));
-      POD.toast(t('book.latinFields', { fields: rtl.map(([q]) => tr(q.label)).join(POD.lang === 'ar' ? '، ' : ', ') }), 'error');
+      // One field: "this box", not "these" (QA 25 Nov).
+      POD.toast(rtl.length === 1
+        ? t('book.latinField', { field: tr(rtl[0][0].label) })
+        : t('book.latinFields', { fields: rtl.map(([q]) => tr(q.label)).join(POD.lang === 'ar' ? '، ' : ', ') }), 'error');
       const first = rtl[0][1];
       if (first) {
         first.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -370,9 +394,11 @@
     }
     const miss = missing();
     if (miss) {
-      POD.toast(t('book.missing', { field: miss }), 'error');
-      const q = book.questions.find((x) => tr(x.label) === miss);
-      const el = q && document.querySelector(`[data-q="${q.id}"]`);
+      // A choice (boy or girl, a date) is picked and the photo added, not typed (QA 25 Nov: "please type: Boy or
+      // girl", "please type: Child's photo"); the page goes to the photo box too when it's the photo.
+      const { q } = miss;
+      POD.toast(miss.photo ? t('book.missingPhoto') : t(q.type === 'choice' || q.type === 'date' ? 'book.missingChoice' : 'book.missing', { field: tr(q.label) }), 'error');
+      const el = miss.photo ? $('bk-photo-empty').closest('.field') : document.querySelector(`#bk-questions [data-q="${q.id}"]`);
       if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
       return false;
     }
@@ -434,11 +460,32 @@
   });
   // Back to this page from the cart (the browser kept it as it was): the button works again.
   window.addEventListener('pageshow', (e) => {
-    if (e.persisted && state.adding) {
+    if (!e.persisted) return;
+    if (state.added) startNewBook();
+    else if (state.adding) {
       state.adding = false;
       renderButtons();
     }
   });
+  /**
+   * The book went into the cart and the browser brought the page back as it was (phone Back): that book is
+   * in the cart now, so this page starts a new one, as a fresh visit does (the answers stay as a start; a new
+   * photo is needed). It kept editing the book in the cart before, so a brother's book replaced the first one
+   * and the cart ended with one book (QA 25 Nov).
+   */
+  function startNewBook() {
+    Object.assign(state, { design: null, face: null, hasPhoto: false, dirty: true, adding: false, added: false, cartIndex: null, page: 0 });
+    crop.img = null;
+    $('bk-crop').hidden = true;
+    // (Opened from the cart: a reload must not open that book again either.)
+    if (params.has('cart')) {
+      params.delete('cart');
+      try { history.replaceState(history.state, '', location.pathname + (params.toString() ? `?${params}` : '') + location.hash); } catch (err) { /* keep the address */ }
+    }
+    renderForm();
+    renderThumbs();
+    POD.toast(t('book.inCart'));
+  }
   function addToCart() {
     const d = state.design;
     const cart = POD.getCart();
@@ -461,6 +508,7 @@
     else cart.push(item);
     // The browser refused to keep the cart (storage blocked): stay here, the message says so.
     if (POD.setCart(cart) === false) return false;
+    state.added = true; // (the next visit to this page, even by Back, is a new book)
     location.href = '/cart?added=1';
     return true;
   }

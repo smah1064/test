@@ -71,7 +71,8 @@
     'track.reorderPartial.many': ['{n} items added to your cart. Some could not be added:', 'اتضاف للسلة {n} منتج. وفي حاجات معرفناش نضيفها:'],
     'track.reorderNone': ['None of these items can be ordered again:', 'مفيش ولا منتج من دول ينفع يتطلب تاني:'],
     'track.skip.productGone': ['{n}. {name}: no longer sold', '{n}. {name}: مبقاش متاح للبيع'],
-    'track.skip.photoGone': ['{n}. {name}: the photos were deleted (we keep them 7 days)', '{n}. {name}: الصور اتمسحت (بنحتفظ بيها 7 أيام بس)'],
+    // Only books lose their photo (the child's photo): 30 days after the book was shipped (src/app.js, cleanup).
+    'track.skip.photoGone': ["{n}. {name}: the child's photo was deleted (we keep it only until 30 days after shipping)", '{n}. {name}: صورة الطفل اتمسحت (بنحتفظ بيها لحد 30 يوم بعد الشحن بس)'],
     'track.skip.filesGone': ['{n}. {name}: the design files are no longer kept', '{n}. {name}: ملفات التصميم مبقتش محفوظة'],
     'track.skip.other': ['{n}. {name}: cannot be ordered again', '{n}. {name}: مينفعش يتطلب تاني'],
     // Account: orders and drafts

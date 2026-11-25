@@ -88,6 +88,10 @@ input[type=text], input[type=email], input[type=tel], input[type=number], input[
 input[type=tel] { direction: ltr; unicode-bidi: bidi-override; }
 input:focus, select:focus, textarea:focus { outline: 2px solid #ffc6b8; border-color: var(--accent); }
 textarea { resize: vertical; min-height: 64px; }
+/* A box that follows what is typed in it (dir="auto") is left to right while empty, so an Arabic hint sat
+   on the left (QA 25 Nov: the book's dedication, the checkout address). While the hint shows, the box
+   follows the page; once something is typed, the text's own direction again. */
+html[dir="rtl"] input[dir="auto"]:placeholder-shown, html[dir="rtl"] textarea[dir="auto"]:placeholder-shown { direction: rtl; }
 input:disabled, select:disabled, textarea:disabled { background: #f1f3f6; color: var(--ink-2); cursor: not-allowed; }
 input[type=color] { width: 40px; height: 36px; padding: 2px; border: 1px solid var(--line); border-radius: 8px; background: #fff; cursor: pointer; }
 input[type=range] { width: 100%; accent-color: var(--accent); }
