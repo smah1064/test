@@ -13,7 +13,9 @@
  *  - change the name, description and category;
  *  - hide the product (out of stock, season, other: with a note) or remove it
  *    from the shop (kept for old orders; can be put back);
- *  - count stock: the product hides itself at 0 and every order takes its pieces off;
+ *  - count stock, for the whole product or per colour and size ("black|XL": 4): a colour,
+ *    size or combination at 0 shows as sold out, the product hides itself when nothing is
+ *    left, and every order takes its pieces off;
  *  - turn colours and sizes off or mark them sold out, rename sizes, add colours and sizes;
  *  - per side: turn it off, the physical print size, the print area on the
  *    product drawing, the safe margin and the bleed;
@@ -89,6 +91,10 @@ function applyEdit(p, e) {
     p.hiddenNote = e.hiddenNote || '';
   }
   if (typeof e.stock === 'number') p.stock = e.stock;
+  if (isObj(e.variantStock) && Object.keys(e.variantStock).length) {
+    p.variantStock = { ...e.variantStock };
+    delete p.stock; // counted per colour and size instead
+  }
   if (typeof e.lowStockAt === 'number') p.lowStockAt = e.lowStockAt;
 
   // Colours and sizes: off (not offered), sold out (shown as sold out), renamed sizes, added ones.
@@ -154,6 +160,14 @@ function applyEdit(p, e) {
     const main = p.photos.find((ph) => ph.id === e.mainPhoto) || p.photos[0];
     p.mainPhoto = main.url;
   }
+  // Stock per colour and size: a colour (or size) with nothing left in any size (colour) shows as sold out.
+  if (p.variantStock) {
+    const left = (c, z) => comboLeft(p, c.id, z.id);
+    const onColors = p.colors.filter((c) => !c.off);
+    const onSizes = p.sizes.filter((z) => !z.off);
+    for (const c of p.colors) if (onSizes.length && onSizes.every((z) => left(c, z) === 0)) c.stockOut = true;
+    for (const z of p.sizes) if (onColors.length && onColors.every((c) => left(c, z) === 0)) z.stockOut = true;
+  }
   if (e.updatedAt) p.updatedAt = e.updatedAt;
   if (e.updatedBy) p.updatedBy = e.updatedBy;
   return p;
@@ -194,13 +208,22 @@ function apply(products, catalog) {
   return true;
 }
 
+/** Pieces left of a colour in a size (null when that combination isn't counted). */
+function comboLeft(p, colorId, sizeId) {
+  const v = p.variantStock && p.variantStock[`${colorId}|${sizeId}`];
+  return typeof v === 'number' ? v : null;
+}
+const out = (x) => x.off || x.soldOut || x.stockOut;
 /** Shown and orderable in the shop: live, and in stock when stock is counted. */
 function visible(p) {
   if (!p) return false;
   if (p.status && p.status !== 'live') return false;
   if (typeof p.stock === 'number' && p.stock <= 0) return false;
-  if (!p.colors.some((c) => !c.off && !c.soldOut)) return false;
-  if (!p.sizes.some((z) => !z.off && !z.soldOut)) return false;
+  const colors = p.colors.filter((c) => !out(c));
+  const sizes = p.sizes.filter((z) => !out(z));
+  if (!colors.length || !sizes.length) return false;
+  // Per colour and size: at least one combination left.
+  if (p.variantStock && !colors.some((c) => sizes.some((z) => comboLeft(p, c.id, z.id) !== 0))) return false;
   return true;
 }
 /** Why a product can't be ordered right now (null when it can). */
@@ -209,24 +232,36 @@ function unavailable(p, { colorId, sizeId, sideIds } = {}) {
   if (!visible(p)) return 'productUnavailable';
   if (colorId) {
     const c = p.colors.find((x) => x.id === colorId);
-    if (!c || c.off || c.soldOut) return 'colorUnavailable';
+    if (!c || out(c)) return 'colorUnavailable';
   }
   if (sizeId) {
     const z = p.sizes.find((x) => x.id === sizeId);
-    if (!z || z.off || z.soldOut) return 'sizeUnavailable';
+    if (!z || out(z)) return 'sizeUnavailable';
   }
+  if (colorId && sizeId && comboLeft(p, colorId, sizeId) === 0) return 'variantUnavailable';
   if (sideIds && sideIds.some((id) => (p.sides.find((s) => s.id === id) || {}).off)) return 'sideUnavailable';
   return null;
 }
 /** The product as the shop shows it: colours and sizes that are off are left out, sold-out ones are marked. */
 function forShop(p) {
-  const { status, hiddenReason, hiddenNote, stock, lowStockAt, updatedAt, updatedBy, ...rest } = p;
+  const { status, hiddenReason, hiddenNote, stock, lowStockAt, updatedAt, updatedBy, variantStock, ...rest } = p;
+  const low = typeof lowStockAt === 'number' ? lowStockAt : 5;
+  // Per colour and size: which combinations are sold out, and the few left of those nearly gone
+  // (the counts themselves stay in the admin).
+  const outCombos = [];
+  const fewLeftBy = {};
+  for (const [k, n] of Object.entries(variantStock || {})) {
+    if (n <= 0) outCombos.push(k);
+    else if (n <= low) fewLeftBy[k] = n;
+  }
   return {
     ...rest,
-    colors: p.colors.filter((c) => !c.off).map(({ added, ...c }) => c),
-    sizes: p.sizes.filter((z) => !z.off).map(({ added, ...z }) => z),
+    colors: p.colors.filter((c) => !c.off).map(({ added, stockOut, ...c }) => (stockOut ? { ...c, soldOut: true } : c)),
+    sizes: p.sizes.filter((z) => !z.off).map(({ added, stockOut, ...z }) => (stockOut ? { ...z, soldOut: true } : z)),
     sides: p.sides.filter((s) => !s.off),
-    ...(typeof stock === 'number' && stock > 0 && stock <= (typeof lowStockAt === 'number' ? lowStockAt : 5) ? { fewLeft: stock } : {}),
+    ...(typeof stock === 'number' && stock > 0 && stock <= low ? { fewLeft: stock } : {}),
+    ...(outCombos.length ? { outCombos } : {}),
+    ...(Object.keys(fewLeftBy).length ? { fewLeftBy } : {}),
   };
 }
 
@@ -291,6 +326,25 @@ function clean(p, body, { categories = [], prev = null } = {}) {
     const v = num(b.stock, 0, 1e6);
     if (v === null || !Number.isInteger(v)) return bad('stock');
     out.stock = v;
+  }
+  // Stock per colour and size: { "colorId|sizeId": pieces } (null or {} = not counted this way).
+  if (b.variantStock !== undefined && b.variantStock !== null) {
+    if (!isObj(b.variantStock)) return bad('variantStock');
+    const m = {};
+    const colorIds = new Set([...own.colors.map((c) => c.id), ...((b.addColors !== undefined ? b.addColors : prev && prev.addColors) || []).map((c) => c && c.id)]);
+    const sizeIds = new Set([...own.sizes.map((z) => z.id), ...((b.addSizes !== undefined ? b.addSizes : prev && prev.addSizes) || []).map((z) => z && z.id)]);
+    for (const [k, n] of Object.entries(b.variantStock)) {
+      const [c, z, extra] = k.split('|');
+      if (extra !== undefined || !colorIds.has(c) || !sizeIds.has(z)) return bad('variantStock');
+      if (n === '' || n === null) continue; // that combination not counted
+      const v = num(n, 0, 1e6);
+      if (v === null || v === undefined || !Number.isInteger(v)) return bad('variantStock');
+      m[k] = v;
+    }
+    if (Object.keys(m).length) {
+      if (Object.keys(m).length > 2000) return bad('variantStock');
+      out.variantStock = m;
+    }
   }
   if (b.lowStockAt !== undefined && b.lowStockAt !== null && b.lowStockAt !== '') {
     const v = num(b.lowStockAt, 0, 1e5);
@@ -472,6 +526,7 @@ function forAdmin(p, edit) {
     status: p.status || 'live',
     visible: visible(p),
     stock: typeof p.stock === 'number' ? p.stock : null,
+    variantStock: p.variantStock || null,
     lowStockAt: typeof p.lowStockAt === 'number' ? p.lowStockAt : 5,
     sides: p.sides.map((s) => ({ ...s, printWidthCm: r2(s.printWidthIn * 2.54), printHeightCm: r2((s.printWidthIn * s.printArea.h * 2.54) / s.printArea.w), safeMm: r2((s.safeIn || 0) * 25.4), bleedMm: r2((s.bleedIn || 0) * 25.4) })),
     processChoices: processChoices(p),
@@ -493,6 +548,7 @@ function forAdmin(p, edit) {
 }
 
 module.exports = {
+  comboLeft,
   init, apply, visible, unavailable, forShop, forAdmin, clean, cleanNew, keepFixed, processChoices, canEmbroider,
   STATUSES, HIDE_REASONS, MAX_PHOTOS,
   isBuiltIn: (id) => Boolean(base && base.has(id)),

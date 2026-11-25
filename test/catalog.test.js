@@ -379,3 +379,42 @@ test('selling prices are the owner\'s, and wrong staff passwords never lock the 
   const own = await post('/api/admin/login', { password: 'secret-owner-pass' });
   assert.strictEqual(own.status, 200, 'the owner is not locked out');
 });
+
+test('stock per colour and size: each combination counted, sold out on its own, taken off by orders', async () => {
+  const r = await put('/api/admin/catalog/sweatshirt', { stock: null, lowStockAt: 3, variantStock: { 'black|XL': 0, 'black|L': 2, 'navy|L': 5, 'navy|XL': 5 } });
+  assert.strictEqual(r.status, 200, await r.clone().text());
+  assert.deepStrictEqual((await r.json()).variantStock, { 'black|XL': 0, 'black|L': 2, 'navy|L': 5, 'navy|XL': 5 });
+  const p = (await shop()).find((x) => x.id === 'sweatshirt');
+  assert.deepStrictEqual(p.outCombos, ['black|XL']);
+  assert.deepStrictEqual(p.fewLeftBy, { 'black|L': 2 });
+  assert.strictEqual(p.variantStock, undefined, 'the counts stay in the admin');
+  assert.ok(!p.sizes.find((z) => z.id === 'XL').soldOut, 'XL is still there in navy');
+  // The sold-out combination can't be designed; another one can.
+  assert.strictEqual((await makeDesign('sweatshirt', { color: 'black', size: 'XL' })).body.code, 'variantUnavailable');
+  const a = await makeDesign('sweatshirt', { color: 'black', size: 'L' });
+  const b = await makeDesign('sweatshirt', { color: 'black', size: 'L' });
+  const c = await makeDesign('sweatshirt', { color: 'black', size: 'L' });
+  const q = await (await post('/api/cart/quote', { designIds: [a.body.id, b.body.id, c.body.id] })).json();
+  assert.ok(q.items.every((i) => i.unavailable === 'notEnoughStock'), JSON.stringify(q.items));
+  assert.match(q.items[0].unavailableText, /XL|L\)/);
+  assert.strictEqual((await order([a.body.id, b.body.id, c.body.id])).status, 409);
+  assert.strictEqual((await order([a.body.id, b.body.id])).status, 201);
+  const row = await (await req('GET', '/api/admin/catalog/sweatshirt', undefined, owner)).json();
+  assert.strictEqual(row.variantStock['black|L'], 0, 'two taken off black L');
+  assert.strictEqual(row.variantStock['navy|L'], 5, 'the others untouched');
+  // Black now sold out in every counted size: the colour shows as sold out when all its sizes are out.
+  const all = Object.fromEntries(byId('sweatshirt').sizes.map((z) => [`black|${z.id}`, 0]));
+  await put('/api/admin/catalog/sweatshirt', { variantStock: { ...all, 'navy|L': 5 } });
+  const p2 = (await shop()).find((x) => x.id === 'sweatshirt');
+  assert.ok(p2.colors.find((x) => x.id === 'black').soldOut);
+  assert.ok(!p2.colors.find((x) => x.id === 'navy').soldOut);
+  // Everything at 0: the product hides itself.
+  const none = {};
+  for (const col of byId('sweatshirt').colors) for (const z of byId('sweatshirt').sizes) none[`${col.id}|${z.id}`] = 0;
+  await put('/api/admin/catalog/sweatshirt', { variantStock: none });
+  assert.ok(!(await shop()).some((x) => x.id === 'sweatshirt'));
+  // Bad combinations are refused; null stops counting.
+  assert.strictEqual((await put('/api/admin/catalog/sweatshirt', { variantStock: { 'nope|XL': 1 } })).status, 400);
+  assert.strictEqual((await put('/api/admin/catalog/sweatshirt', { variantStock: null })).status, 200);
+  assert.ok((await shop()).some((x) => x.id === 'sweatshirt'));
+});

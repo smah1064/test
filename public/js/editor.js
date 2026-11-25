@@ -67,11 +67,15 @@
   const canPick = (x) => x && !x.soldOut;
   const ED_TEXT = {
     'ed.soldOut': ['Sold out', 'خلصان'],
+    'ed.sizeSwitched': ['That size is sold out in this colour, so we picked the next size.', 'المقاس ده خلصان في اللون ده، فاخترنالك المقاس اللي بعده.'],
     'ed.soldOutPick': ['This one is sold out right now. Please pick another.', 'ده خلصان دلوقتي. اختار غيره.'],
     'ed.productGone': ['This product isn\'t available right now, so we opened another one. You can pick a different product from the list.', 'المنتج ده مش متاح دلوقتي، ففتحنالك منتج تاني. تقدر تختار منتج غيره من القائمة.'],
   };
   const tEd = (k) => (ED_TEXT[k] ? ED_TEXT[k][POD.lang === 'ar' ? 1 : 0] : t(k));
   const firstPick = (list) => list.find(canPick) || list[0];
+  // Stock per colour and size: a size can be sold out in one colour only.
+  const comboOut = (p, colorId, sizeId) => Boolean(p && p.outCombos && p.outCombos.includes(`${colorId}|${sizeId}`));
+  const sizeOk = (p, colorId, z) => canPick(z) && !comboOut(p, colorId, z.id);
   // A product hidden in the admin (out of stock, season...) isn't in the list: say so, then show another one.
   const missing = (id) => {
     if (id && !products.some((p) => p.id === id)) setTimeout(() => toast(tEd('ed.productGone'), 'error'), 400);
@@ -233,7 +237,7 @@
     st.sizeId = params.get('size');
     st.sizePicked = true;
   }
-  st.sizeId = canPick(st.product.sizes.find((s) => s.id === st.sizeId)) ? st.sizeId : firstPick(st.product.sizes).id;
+  st.sizeId = sizeOk(st.product, st.colorId, st.product.sizes.find((s) => s.id === st.sizeId)) ? st.sizeId : (st.product.sizes.find((z) => sizeOk(st.product, st.colorId, z)) || firstPick(st.product.sizes)).id;
   st.side = st.product.sides.find((s) => (st.designs[s.id] || []).length)?.id || st.product.sides[0].id;
   /** Fabric products: a valid { repeat, tileCm } for this product (or null for other products). */
   const REPEATS = ['straight', 'halfdrop', 'halfbrick', 'mirror'];
@@ -3225,7 +3229,10 @@
         <div class="chips">${opt.choices.map((c) => { const pr = choicePrice(c, st.sizeId); return `<button class="chip ${c === cur ? 'active' : ''}" data-opt="${esc(opt.id)}" data-choice="${esc(c.id)}">${esc(tr(c.name))}${pr ? ` <span style="opacity:.7">+${esc(money(pr))}</span>` : ''}</button>`; }).join('')}</div>
         ${opt.help ? `<p class="muted small" style="margin:6px 0 0;line-height:1.5">${esc(tr(opt.help))}</p>` : ''}</div>`;
     }).join('');
-    $('sizes').innerHTML = p.sizes.map((s) => `<button class="chip ${s.id === st.sizeId ? 'active' : ''}${s.soldOut ? ' sold-out' : ''}" data-size="${s.id}"${s.soldOut ? ' aria-disabled="true"' : ''}>${esc(tr(s.label))}${s.soldOut ? ` <span class="sold-tag">${esc(tEd('ed.soldOut'))}</span>` : s.surcharge ? ` <span style="opacity:.7">+${esc(money(s.surcharge))}</span>` : ''}</button>`).join('');
+    $('sizes').innerHTML = p.sizes.map((s) => {
+      const out = !sizeOk(p, st.colorId, s);
+      return `<button class="chip ${s.id === st.sizeId ? 'active' : ''}${out ? ' sold-out' : ''}" data-size="${s.id}"${out ? ' aria-disabled="true"' : ''}>${esc(tr(s.label))}${out ? ` <span class="sold-tag">${esc(tEd('ed.soldOut'))}</span>` : s.surcharge ? ` <span style="opacity:.7">+${esc(money(s.surcharge))}</span>` : ''}</button>`;
+    }).join('');
     // Print or embroidery (garments, caps, totes, aprons).
     $('method-field').hidden = !p.embroidery;
     if (p.embroidery) {
@@ -3297,6 +3304,14 @@
     const oldInk = inkFor(surfaceHex());
     const fromColor = st.colorId;
     st.colorId = b.dataset.color;
+    // The chosen size sold out in this colour: the first size there is.
+    if (!sizeOk(st.product, st.colorId, st.product.sizes.find((z) => z.id === st.sizeId))) {
+      const next = st.product.sizes.find((z) => sizeOk(st.product, st.colorId, z));
+      if (next) {
+        await changeSize(next.id);
+        toast(tEd('ed.sizeSwitched'));
+      }
+    }
     qtyFollow(fromColor, st.sizeId);
     const newInk = inkFor(surfaceHex());
     renderOptions();
@@ -3966,7 +3981,9 @@
     const sizes = mix().sizes ? p.sizes.filter((z) => canPick(z) || z.id === st.sizeId) : p.sizes.filter((z) => z.id === st.sizeId);
     const colors = p.colors.filter((c) => g[c.id]);
     const total = qtyTotal();
-    const cell = (c, z) => `<input type="number" inputmode="numeric" min="0" max="1000" step="1" class="qty-in" data-qc="${c.id}" data-qz="${z.id}" value="${(g[c.id] && g[c.id][z.id]) || ''}" placeholder="0" aria-label="${esc(`${tr(c.name)} ${tr(z.label)}`)}">`;
+    const cell = (c, z) => (comboOut(p, c.id, z.id) && !(g[c.id] && g[c.id][z.id])
+      ? `<span class="qty-out" title="${esc(tEd('ed.soldOut'))}">—</span>`
+      : `<input type="number" inputmode="numeric" min="0" max="1000" step="1" class="qty-in" data-qc="${c.id}" data-qz="${z.id}" value="${(g[c.id] && g[c.id][z.id]) || ''}" placeholder="0" aria-label="${esc(`${tr(c.name)} ${tr(z.label)}`)}">`);
     const simple = !mix().sizes && !mix().colors;
     box.innerHTML = `
       <label>${esc(t('qty.title'))}</label>

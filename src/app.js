@@ -2421,7 +2421,45 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     return null;
   };
   /** Pieces of a design that come out of the product's counted stock. */
-  const stockPieces = (d) => (d.kind === 'photoset' ? 0 : d.quantities && d.quantities.length ? d.quantities.reduce((n, l) => n + l.qty, 0) : copiesOf(d));
+  /**
+   * What a design takes from counted stock: [{ pid, combo, n }] (combo "colorId|sizeId" when the
+   * product counts per colour and size, null for one count for the whole product).
+   */
+  const stockNeeds = (d) => {
+    if (!d || d.kind === 'photoset' || d.kind === 'gangsheet') return [];
+    const p = getProduct(d.productId);
+    if (!p) return [];
+    const lines = d.quantities && d.quantities.length
+      ? d.quantities.map((l) => ({ c: l.color && l.color.id, s: l.size && l.size.id, n: l.qty }))
+      : [{ c: d.color && d.color.id, s: d.size && d.size.id, n: copiesOf(d) }];
+    if (p.variantStock) return lines.filter((l) => catalog.comboLeft(p, l.c, l.s) != null).map((l) => ({ pid: p.id, combo: `${l.c}|${l.s}`, n: l.n }));
+    if (typeof p.stock === 'number') return [{ pid: p.id, combo: null, n: lines.reduce((a, l) => a + l.n, 0) }];
+    return [];
+  };
+  /** Several designs' needs added up per product (and colour / size): Map key -> { pid, combo, n }. */
+  const addNeeds = (designs) => {
+    const m = new Map();
+    for (const d of designs) {
+      for (const x of stockNeeds(d)) {
+        const k = `${x.pid}#${x.combo || ''}`;
+        if (m.has(k)) m.get(k).n += x.n;
+        else m.set(k, { ...x });
+      }
+    }
+    return m;
+  };
+  /** How many are left now (from the product as laid over, or a saved edit). */
+  const leftOf = (holder, combo) => (combo ? (holder.variantStock || {})[combo] : holder.stock);
+  /** "Classic T-Shirt (Black · XL)" for a stock message. */
+  const stockName = (pid, combo, lang) => {
+    const p = getProduct(pid);
+    const name = p ? p.name[lang] || p.name.en : pid;
+    if (!combo || !p) return name;
+    const [c, s] = combo.split('|');
+    const col = p.colors.find((x) => x.id === c);
+    const size = p.sizes.find((x) => x.id === s);
+    return `${name} (${[col && (col.name[lang] || col.name.en), size && (size.label[lang] || size.label.en)].filter(Boolean).join(' · ')})`;
+  };
   /** What a design costs right now (prices the owner changed apply), or null if it can't be ordered. */
   const designPrice = (d) => {
     if (!d || (d.status && d.status !== 'ready') || d.orderId) return null;
@@ -2769,17 +2807,19 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       return { designId: String(id).slice(0, 40), price, gone: price === null, ...(d && d.orderId ? { ordered: true } : {}), ...(why ? { unavailable: why, unavailableText: format(why, { name: p ? p.name[langOf(req)] || p.name.en : '' }, langOf(req)) } : {}) };
     });
     // Counted stock: the cart says so before checkout when it asks for more pieces than are left.
-    const need = new Map();
+    const open = items.filter((i) => !i.gone && !i.unavailable).map((i) => store.getDesign(i.designId)).filter(Boolean);
+    const need = addNeeds(open);
     for (const i of items) {
       const d = !i.gone && !i.unavailable && store.getDesign(i.designId);
-      if (d && stockPieces(d)) need.set(d.productId, (need.get(d.productId) || 0) + stockPieces(d));
-    }
-    for (const i of items) {
-      const d = !i.gone && !i.unavailable && store.getDesign(i.designId);
-      const p = d && getProduct(d.productId);
-      if (p && typeof p.stock === 'number' && need.get(p.id) > p.stock) {
-        i.unavailable = 'notEnoughStock';
-        i.unavailableText = format('notEnoughStock', { name: p.name[langOf(req)] || p.name.en, left: p.stock }, langOf(req));
+      if (!d) continue;
+      for (const x of stockNeeds(d)) {
+        const total = need.get(`${x.pid}#${x.combo || ''}`).n;
+        const left = leftOf(getProduct(x.pid), x.combo);
+        if (typeof left === 'number' && total > left) {
+          i.unavailable = 'notEnoughStock';
+          i.unavailableText = format('notEnoughStock', { name: stockName(x.pid, x.combo, langOf(req)), left }, langOf(req));
+          break;
+        }
       }
     }
     const subtotal = round2(items.reduce((n, i) => n + (i.price || 0), 0));
@@ -2855,11 +2895,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       return d;
     });
     // Counted stock (admin → Products): enough left for every piece.
-    const wanted = new Map();
-    for (const d of designs) if (stockPieces(d)) wanted.set(d.productId, (wanted.get(d.productId) || 0) + stockPieces(d));
-    for (const [pid, n] of wanted) {
-      const p = getProduct(pid);
-      if (typeof p.stock === 'number' && p.stock < n) throw new HttpError(409, 'notEnoughStock', { name: p.name[langOf(req)] || p.name.en, left: p.stock });
+    const wanted = addNeeds(designs);
+    for (const x of wanted.values()) {
+      const left = leftOf(getProduct(x.pid), x.combo);
+      if (typeof left === 'number' && left < x.n) throw new HttpError(409, 'notEnoughStock', { name: stockName(x.pid, x.combo, langOf(req)), left });
     }
 
     // Every item approved by the customer against its current proof (see /api/designs/:id/proof).
@@ -2977,9 +3016,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       }
       // Counted stock goes down by the pieces ordered (checked again with the latest count, every
       // product first, so a refused order takes nothing off).
-      const counted = [...wanted].map(([pid, n]) => [db.catalog && db.catalog.products && db.catalog.products[pid], pid, n]).filter(([e]) => e && typeof e.stock === 'number');
-      for (const [e, pid, n] of counted) if (e.stock < n) throw new HttpError(409, 'notEnoughStock', { name: getProduct(pid).name[langOf(req)] || pid, left: e.stock });
-      for (const [e, , n] of counted) e.stock -= n;
+      const counted = [...wanted.values()].map((x) => ({ ...x, e: db.catalog && db.catalog.products && db.catalog.products[x.pid] })).filter((x) => x.e && typeof leftOf(x.e, x.combo) === 'number');
+      for (const x of counted) if (leftOf(x.e, x.combo) < x.n) throw new HttpError(409, 'notEnoughStock', { name: stockName(x.pid, x.combo, langOf(req)), left: leftOf(x.e, x.combo) });
+      for (const x of counted) {
+        if (x.combo) x.e.variantStock[x.combo] -= x.n;
+        else x.e.stock -= x.n;
+      }
     });
     // A signed-in customer without a saved address keeps this one for next time.
     if (me && !me.address) {
@@ -3506,7 +3548,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   // Top-level fields of an edit and the keys each one holds (a field sent with its default value clears it).
   const EDIT_FIELDS = {
     name: ['name'], description: ['description'], category: ['category'], status: ['status', 'hiddenReason', 'hiddenNote'],
-    stock: ['stock'], lowStockAt: ['lowStockAt'], colors: ['colors'], addColors: ['addColors'], sizes: ['sizes'], addSizes: ['addSizes'],
+    stock: ['stock'], variantStock: ['variantStock'], lowStockAt: ['lowStockAt'], colors: ['colors'], addColors: ['addColors'], sizes: ['sizes'], addSizes: ['addSizes'],
     sides: ['sides'], process: ['process'], methods: ['methods'], embroidery: ['embroidery'],
   };
   const logCatalog = (db, req, productId, what) => {

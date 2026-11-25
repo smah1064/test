@@ -164,6 +164,7 @@ const MESSAGES = {
   colorUnavailable: { en: 'This colour of {name} is sold out right now. Please choose another colour.', ar: 'اللون ده من {name} خلصان دلوقتي. اختار لون تاني.' },
   sizeUnavailable: { en: 'This size of {name} is sold out right now. Please choose another size.', ar: 'المقاس ده من {name} خلصان دلوقتي. اختار مقاس تاني.' },
   sideUnavailable: { en: 'One side of {name} can\'t be printed right now. Remove the design from that side.', ar: 'وش من {name} مش متاح للطباعة دلوقتي. شيل التصميم من الوش ده.' },
+  variantUnavailable: { en: 'This colour in this size of {name} is sold out right now. Please choose another colour or size.', ar: 'اللون ده بالمقاس ده من {name} خلصان دلوقتي. اختار لون أو مقاس تاني.' },
   notEnoughStock: { en: 'Only {left} of {name} left. Please order fewer pieces.', ar: 'فاضل {left} بس من {name}. اطلب عدد أقل.' },
   badProductField: { en: 'Please check this field: {field}', ar: 'راجع الخانة دي: {field}' },
   needOneColor: { en: 'Keep at least one colour on.', ar: 'خلّي لون واحد على الأقل شغال.' },
