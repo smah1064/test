@@ -176,7 +176,7 @@
         if (!reo.skipped) return '';
         return `
           <div class="notice reo-notice${reo.added ? '' : ' reo-bad'}" role="status">
-            <p>${esc(reo.added ? t('track.reorderPartial', { n: POD.num(reo.added) }) : t('track.reorderNone'))}</p>
+            <p>${esc(reo.added ? POD.plural('track.reorderPartial', reo.added) : t('track.reorderNone'))}</p>
             <ul>${PODAftercare.skippedLines(reo.skipped).map((l) => `<li>${esc(l)}</li>`).join('')}</ul>
             ${reo.added ? `<a class="btn btn-sm btn-primary" href="/cart?added=1">${esc(t('track.goCart'))}</a>` : ''}
           </div>`;
@@ -262,7 +262,7 @@
               <p class="muted small">${esc(t('order.emailWhy'))}</p>
             </section>` : ''}
             <h1>${esc(t('order.title', { n: o.number }))}</h1>
-            <p class="muted">${esc(listed(t('order.meta', { status: t('order.' + shownStatus(o)), date: POD.date(o.createdAt), n: POD.num(o.items.length) })))}</p>
+            <p class="muted">${esc(listed(POD.plural('order.meta', o.items.length, { status: t('order.' + shownStatus(o)), date: POD.date(o.createdAt) })))}</p>
             ${isNew ? '' : arrives}
             <div class="order-actions">
               <a class="btn" href="/invoice?id=${encodeURIComponent(o.id)}">${esc(t('track.invoice'))}</a>

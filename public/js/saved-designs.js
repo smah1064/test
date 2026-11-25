@@ -94,7 +94,7 @@ window.PODSaved = (() => {
       box.innerHTML = opts.showEmpty ? `<div class="empty saved-empty"><h3>${esc(t('saved.empty'))}</h3><p class="muted">${esc(t('saved.emptyText'))}</p><a class="btn btn-primary" href="/#products">${esc(t('home.start'))}</a></div>` : '';
       return;
     }
-    const meta = opts.meta || ((it) => [tr(it.colorName), tr(it.sizeLabel)].filter(Boolean).map(esc).join(' · '));
+    const meta = opts.meta || ((it) => [tr(it.colorName), tr(it.sizeLabel)].filter(Boolean).map(esc).join(POD.sep()));
     const price = opts.price || ((it) => esc(money(it.price)));
     // A ready item whose product isn't sold now: the shop's reason (opts.unavailable, from the cart's prices) or
     // the note for it (back soon, or no longer sold).

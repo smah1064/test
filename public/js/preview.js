@@ -753,7 +753,7 @@
     </div>
     <div class="fb-bar" dir="${document.documentElement.dir || 'rtl'}">
       <button type="button" class="btn btn-sm" data-flip="-1" ${f.at === 0 ? 'disabled' : ''} aria-label="${esc(t('pv.flipPrev'))}">${esc(t('pv.flipPrev'))}</button>
-      <span class="fb-label">${esc(flipLabel(s))} <span class="muted">· ${esc(t('pv.flipOf', { n: POD.num(f.pages.length) }))}</span></span>
+      <span class="fb-label">${esc(flipLabel(s))}<span class="muted">${esc(POD.sep())}${esc(t('pv.flipOf', { n: POD.num(f.pages.length) }))}</span></span>
       <button type="button" class="btn btn-sm btn-primary" data-flip="1" ${f.at === spreads.length - 1 ? 'disabled' : ''} aria-label="${esc(t('pv.flipNext'))}">${esc(t('pv.flipNext'))}</button>
     </div>`);
   }

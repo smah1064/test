@@ -60,11 +60,41 @@ window.AdminUploads = (() => {
   const suggestions = (item) => (item.suggestions || []).filter((s) => !catalog || prod(s.productId));
   const sugFor = (item, pid) => (item.suggestions || []).find((s) => s.productId === pid) || null;
 
+  // ---------- The name in each language ----------
+  // Arabic letters (with the presentation forms): they never belong in the English name, which the English shop shows.
+  const ARABIC = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
+  /**
+   * The name the shop made from the file name, in the box of its own language: an Arabic file name ("فانوس")
+   * goes in the Arabic box only and a Latin one ("Happy cat") in the English box only. A name already made in
+   * both languages ("Design 12" / "تصميم 12") stays as it is.
+   */
+  function nameBoxes(name) {
+    const en = String((name && name.en) || '');
+    const ar = String((name && name.ar) || '');
+    if (en !== ar) return { en, ar };
+    if (ARABIC.test(en)) return { en: '', ar };
+    if (/[A-Za-z]/.test(en)) return { en, ar: '' };
+    return { en, ar };
+  }
+  /** The name sent when publishing (both boxes emptied: the one made from the file name). */
+  function sentName(item) {
+    const e = E(item);
+    const en = e.name.en.trim();
+    const ar = e.name.ar.trim();
+    return en || ar ? { en, ar } : nameBoxes(item.name);
+  }
+  /** Why a design's English name can't be published ('' when it can): Arabic letters in it, or none at all. */
+  function nameProblem(item) {
+    const { en } = sentName(item);
+    return ARABIC.test(en) ? 'nameEnArabic' : !en ? 'nameEnMissing' : '';
+  }
+  const NAME_CODES = ['nameEnArabic', 'nameEnMissing'];
+
   // ---------- Changes made here (kept in this browser until published or discarded) ----------
   function E(item) {
     if (!ed.has(item.id)) {
       ed.set(item.id, {
-        name: { en: (item.name && item.name.en) || '', ar: (item.name && item.name.ar) || '' },
+        name: nameBoxes(item.name),
         category: item.category || 'other',
         products: (item.picked || []).slice(),
         extra: [],
@@ -101,7 +131,8 @@ window.AdminUploads = (() => {
       const s = saved[it.id];
       if (!s || typeof s !== 'object') continue;
       const e = E(it);
-      if (s.name && typeof s.name === 'object') e.name = { en: String(s.name.en || ''), ar: String(s.name.ar || '') };
+      // (Kept before names went in their own language's box: the file name in both is split the same way.)
+      if (s.name && typeof s.name === 'object') e.name = nameBoxes({ en: String(s.name.en || ''), ar: String(s.name.ar || '') });
       if (typeof s.category === 'string') e.category = s.category;
       if (Array.isArray(s.products)) e.products = s.products.filter((x) => typeof x === 'string');
       if (Array.isArray(s.extra)) e.extra = s.extra.filter((x) => typeof x === 'string');
@@ -226,7 +257,7 @@ window.AdminUploads = (() => {
         <p class="muted small">${esc(t('up.openHelp'))}</p>
         <div class="up-open-list">${list.map((b) => `<div class="up-open-row">
             <div class="up-open-info"><strong dir="auto">${esc(b.file || b.id)}</strong>
-              <div class="muted small">${esc([b.status === 'reading' ? t('up.readingRow', { done: POD.num(b.done || 0), total: POD.num(b.total || 0) }) : b.status === 'failed' ? failText(b.code) : pics(Number(b.count) || 0), t('up.by', { who: who(b.by) }), when(b.createdAt)].filter(Boolean).join(' · '))}</div></div>
+              <div class="muted small">${esc([b.status === 'reading' ? t('up.readingRow', { done: POD.num(b.done || 0), total: POD.num(b.total || 0) }) : b.status === 'failed' ? failText(b.code) : pics(Number(b.count) || 0), t('up.by', { who: who(b.by) }), when(b.createdAt)].filter(Boolean).join(POD.sep()))}</div></div>
             <div class="up-open-acts">
               ${b.status === 'failed' ? '' : `<button type="button" class="btn btn-sm btn-dark" data-up-open="${esc(b.id)}" ${S.busy || S.up ? 'disabled' : ''}>${esc(t('up.continue'))}</button>`}
               <button type="button" class="btn btn-sm btn-danger" data-up-discard="${esc(b.id)}" ${S.busy || S.up ? 'disabled' : ''} aria-label="${esc(`${t('up.discard')}: ${b.file || b.id}`)}">${esc(t('up.discard'))}</button>
@@ -243,7 +274,7 @@ window.AdminUploads = (() => {
         <div class="up-rh-top">
           <button type="button" class="btn btn-sm" data-up-back><span aria-hidden="true">${back}</span> ${esc(t('up.back'))}</button>
           <h2 id="up-title">${esc(t('up.reviewTitle'))}</h2>
-          <div class="muted small up-rh-file"><strong dir="auto">${esc(b.file || b.id)}</strong> · ${esc([pics(b.items.length), t('up.by', { who: who(b.by) }), when(b.createdAt)].filter(Boolean).join(' · '))}</div>
+          <div class="muted small up-rh-file"><strong dir="auto">${esc(b.file || b.id)}</strong>${esc(POD.sep())}${esc([pics(b.items.length), t('up.by', { who: who(b.by) }), when(b.createdAt)].filter(Boolean).join(POD.sep()))}</div>
         </div>
         <p class="muted small up-help">${esc(t('up.reviewHelp'))}</p>
         <div class="up-rh-acts">
@@ -266,7 +297,7 @@ window.AdminUploads = (() => {
     const e = E(item);
     const id = esc(item.id);
     const name = tr(e.name) || e.name.en || e.name.ar || t('up.untitled');
-    const meta = [item.w && item.h ? t('up.px', { w: item.w, h: item.h }) : '', t(item.transparent ? 'up.cutout' : 'up.full')].filter(Boolean).join(' · ');
+    const meta = [item.w && item.h ? t('up.px', { w: item.w, h: item.h }) : '', t(item.transparent ? 'up.cutout' : 'up.full')].filter(Boolean).join(POD.sep());
     const err = errText(item.id);
     return `<article class="card up-item${e.skip ? ' is-skipped' : ''}${err ? ' is-bad' : ''}" data-up-item="${id}" aria-label="${esc(name)}">
         <div class="up-pic${item.transparent ? ' is-cut' : ''}${item.transparent && item.ink === 'light' ? ' is-light' : ''}"><img src="${esc(item.web)}" alt="" loading="lazy" decoding="async"></div>
@@ -280,7 +311,7 @@ window.AdminUploads = (() => {
         </div>
         <div class="up-fields">
           <div class="field"><label for="up-ar-${id}">${esc(t('up.nameAr'))}</label><input type="text" id="up-ar-${id}" data-up-name="ar" dir="rtl" maxlength="60" value="${esc(e.name.ar)}"></div>
-          <div class="field"><label for="up-en-${id}">${esc(t('up.nameEn'))}</label><input type="text" id="up-en-${id}" data-up-name="en" dir="ltr" maxlength="60" value="${esc(e.name.en)}"></div>
+          <div class="field"><label for="up-en-${id}">${esc(t('up.nameEn'))}</label><input type="text" id="up-en-${id}" data-up-name="en" dir="ltr" maxlength="60" lang="en" value="${esc(e.name.en)}"${NAME_CODES.includes(itemErr.get(item.id)) ? ' aria-invalid="true"' : ''}></div>
           <div class="field up-cat"><label for="up-cat-${id}">${esc(t('up.category'))}</label><select id="up-cat-${id}" data-up-cat>${categoryOptions(e)}</select></div>
         </div>
         <fieldset class="up-prods" data-up-prods>${prodsHtml(item)}</fieldset>
@@ -307,11 +338,11 @@ window.AdminUploads = (() => {
   function whyText(s, item, pid) {
     if (!s) {
       const dpi = dpiOn(item, pid);
-      return [t('up.notSuggested'), dpi && dpi < 100 ? t('up.why.lowRes', { dpi: Math.round(dpi) }) : ''].filter(Boolean).join(' · ');
+      return [t('up.notSuggested'), dpi && dpi < 100 ? t('up.why.lowRes', { dpi: Math.round(dpi) }) : ''].filter(Boolean).join(POD.sep());
     }
     const words = (s.reasons || []).filter((r) => has('up.why.' + r)).map((r) => t('up.why.' + r, r === 'lowRes' ? { dpi: Math.round(Number(s.dpi) || 0) } : undefined));
     if (!s.ok && !(s.reasons || []).includes('lowRes')) words.unshift(t('up.warn'));
-    return words.join(' · ');
+    return words.join(POD.sep());
   }
   function chipHtml(item, e, pid, s) {
     const on = e.products.includes(pid);
@@ -530,6 +561,11 @@ window.AdminUploads = (() => {
     card.classList.toggle('is-skipped', e.skip);
     card.classList.toggle('is-bad', Boolean(err));
     card.querySelector('.up-err').textContent = err;
+    const enBox = card.querySelector('[data-up-name="en"]');
+    if (enBox) {
+      if (NAME_CODES.includes(itemErr.get(id))) enBox.setAttribute('aria-invalid', 'true');
+      else enBox.removeAttribute('aria-invalid');
+    }
     const tag = card.querySelector('.up-skip-tag');
     if (e.skip && !tag) card.querySelector('.up-skip').insertAdjacentHTML('beforebegin', `<span class="up-skip-tag">${esc(t('up.skipTag'))}</span>`);
     if (!e.skip && tag) tag.remove();
@@ -681,6 +717,21 @@ window.AdminUploads = (() => {
       }
       return;
     }
+    // The English shop shows the English name: it is needed, in English letters (an Arabic file name only
+    // fills the Arabic box).
+    const noName = list.filter((i) => nameProblem(i));
+    if (noName.length) {
+      noName.forEach((i) => itemErr.set(i.id, nameProblem(i)));
+      b.items.forEach((i) => paintCardState(i.id));
+      say(() => t('up.needNameEn', { what: designs(noName.length) }), true);
+      const first = cardOf(noName[0].id);
+      if (first) {
+        first.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        const el = first.querySelector('[data-up-name="en"]');
+        if (el) el.focus({ preventScroll: true });
+      }
+      return;
+    }
     S.busy = true;
     paintBar();
     try {
@@ -693,9 +744,8 @@ window.AdminUploads = (() => {
             if (c) color[pid] = c.id;
             else if (e.color[pid]) color[pid] = e.color[pid];
           }
-          // (A name emptied in both languages keeps the one made from the file name.)
-          const name = e.name.en.trim() || e.name.ar.trim() ? { en: e.name.en.trim(), ar: e.name.ar.trim() } : { ...i.name };
-          return { id: i.id, name, category: e.category, products: e.products.slice(), color };
+          // (A name emptied in both languages keeps the one made from the file name, in its own language.)
+          return { id: i.id, name: sentName(i), category: e.category, products: e.products.slice(), color };
         }),
       };
       const r = await cfg.api(`${BASE}/${encodeURIComponent(b.id)}/publish`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body) });
@@ -1052,6 +1102,15 @@ window.AdminUploads = (() => {
       if (!item) return;
       E(item).name[el.dataset.upName] = el.value;
       save();
+      // Arabic letters typed in the English name: said at once on the card. (An empty English name only when
+      // publishing; a name message from then goes as soon as the name is right.)
+      const code = itemErr.get(item.id);
+      if (!code || NAME_CODES.includes(code)) {
+        const p = nameProblem(item);
+        if (p === 'nameEnArabic' || (p && code)) itemErr.set(item.id, p);
+        else itemErr.delete(item.id);
+        if (itemErr.get(item.id) !== code) paintCardState(item.id);
+      }
     });
     // Dropping a zip anywhere on the uploader.
     const dropZone = () => box.querySelector('[data-up-drop]');

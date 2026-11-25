@@ -120,7 +120,7 @@
     $('bk-questions').querySelectorAll('input[data-q], textarea[data-q]').forEach(markLatin);
     $('bk-sizes').innerHTML = product.sizes.map((s) => `<button type="button" class="chip ${s.id === state.size.id ? 'active' : ''}" data-size="${s.id}">${esc(tr(s.label))}${POD.sizeNote(product, s) ? ` <span style="opacity:.7">${esc(POD.sizeNote(product, s))}</span>` : ''}</button>`).join('');
     $('bk-price').textContent = money(product.basePrice + state.size.surcharge);
-    document.title = `${tr(product.name)} · ebda3`;
+    document.title = `${tr(product.name)} · ${t('brand')}`;
     renderButtons();
   }
   function renderButtons() {

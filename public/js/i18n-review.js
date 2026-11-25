@@ -50,7 +50,7 @@
     'rv.size': ['Physical size', 'المقاس الفعلي'],
     'rv.bleed': ['+ {mm} mm bleed each edge', '+ {mm} مم زيادة قص من كل ناحية'],
     'rv.safe': ['keep {mm} mm inside the edge', 'سيب {mm} مم من الحافة'],
-    'rv.resolution': ['{dpi} DPI · {w} × {h} px', '{dpi} DPI · {w} × {h} px'],
+    'rv.resolution': ['{dpi} DPI · {w} × {h} px', '{dpi} DPI، {w} × {h} px'],
     'rv.product': ['Product', 'المنتج'],
     'rv.colourSize': ['Colour · size', 'اللون · المقاس'],
     'rv.method': ['Method', 'طريقة الطباعة'],

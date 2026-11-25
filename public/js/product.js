@@ -214,7 +214,8 @@
         ? `<span class="pp-size is-few" title="${esc(t('fewLeftCombo', { colour: tr(color.name), size: tr(s.label), n: POD.num(few) }))}">${esc(tr(s.label))} <span class="few-tag">${esc(t('pp.fewLeft', { n: POD.num(few) }))}</span></span>`
         : `<span class="pp-size">${esc(tr(s.label))}</span>`;
     };
-    const sizeList = product.sizes.map(sizeText).join(' · ');
+    // (In Arabic with the Arabic comma: "·" next to ١٠٠ looks like the zero ٠.)
+    const sizeList = product.sizes.map(sizeText).join(esc(POD.sep()));
     const lone = product.sizes.length === 1 && (!POD.sizeOk(product, color.id, product.sizes[0]) || POD.comboFew(product, color.id, product.sizes[0].id));
     $('pp-sizes').innerHTML = product.sizes.length > 1 ? esc(t('pp.sizes', { list: '\u0000' })).replace('\u0000', sizeList)
       : lone ? sizeList : '';

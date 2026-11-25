@@ -28,7 +28,7 @@ Object.assign(window.POD_STRINGS, {
   'proof.size.cm': ['{w} × {h} cm', '{w} × {h} سم'],
   'proof.size.embroidery': ['About {w} × {h} cm of stitching', 'حوالي {w} × {h} سم تطريز'],
   'proof.bleed': ['+ {b} cm bleed on each edge (trimmed off)', '+ {b} سم زيادة من كل حافة (بتتقص)'],
-  'proof.pixels': ['{w} × {h} px · {dpi} DPI', '{w} × {h} بكسل · {dpi} نقطة/بوصة'],
+  'proof.pixels': ['{w} × {h} px · {dpi} DPI', '{w} × {h} بكسل، {dpi} نقطة/بوصة'],
   'proof.openFull': ['Open larger', 'افتح بحجم أكبر'],
   'proof.checker': ['The grey checks show where nothing is printed (the product shows through).', 'المربعات الرمادي معناها إن المكان ده مش هيتطبع عليه حاجة (هيبان لون المنتج).'],
   'proof.trimLegend': ['Solid red line: where it is cut. Dashed blue line: keep text and faces inside it.', 'الخط الأحمر: مكان القص. الخط الأزرق المتقطع: خلّي الكلام والوشوش جوّاه.'],
@@ -63,7 +63,8 @@ Object.assign(window.POD_STRINGS, {
   'pf.outsideSafe.edge': ['The design touches the edge of the print area, so it may look cut off.', 'التصميم لازق في حافة مساحة الطباعة، فممكن يبان مقصوص.'],
   'pf.semiTransparent': ['About {percent}% of the design is see-through (soft shadows, faded edges). Those parts can print patchy.', 'حوالي {percent}% من التصميم شفاف جزئيًا (ظلال ناعمة، أطراف باهتة). الأجزاء دي ممكن تطلع مبقّعة.'],
   'pf.fontFallback': ['A font did not load when the file was made ({fonts}), so the text may use a different font. Check the lettering.', 'خط ما اتحمّلش وقت تجهيز الملف ({fonts})، فممكن الكلام يطلع بخط تاني. راجع شكل الكتابة.'],
-  'pf.photoLowRes': ['{count} photo(s) are low resolution for their print size and may look blurry (photo no. {photos}).', '{count} من الصور دقتها قليلة على مقاس الطباعة وممكن تطلع مش واضحة (صورة رقم {photos}).'],
+  // (Counted forms pf.photoLowRes.one / .two / .few / .many are in i18n.js; this one reads right for any number.)
+  'pf.photoLowRes': ['Photos with low resolution for their print size, which may look blurry: {count} (photo no. {photos}).', 'صور دقتها قليلة على مقاس الطباعة وممكن تطلع مش واضحة: {count} (صورة رقم {photos}).'],
   'pf.lowResImage': ['The picture “{name}” is only {dpi} DPI at its printed size and may print blurry.', 'الصورة «{name}» دقتها {dpi} نقطة/بوصة بس بالمقاس المطبوع، وممكن تطلع مغبّشة.'],
   'pf.tinyText': ['The text “{name}” is {pt} pt, which is too small to read once printed.', 'الكلام «{name}» حجمه {pt} نقطة، وده أصغر من إنه يتقري بعد الطباعة.'],
   'pf.fileType': ['This artwork was converted from a {type} file. Check the details carefully.', 'التصميم ده اتحوّل من ملف {type}. راجع التفاصيل كويس.'],
@@ -86,20 +87,20 @@ Object.assign(window.POD_STRINGS, {
   'proof.ok': ['I’ve checked this proof: product, size, colours, spelling and layout.', 'راجعت البروفة دي: المنتج، المقاس، الألوان، الإملاء وترتيب التصميم.'],
   'proof.sample': ['Print one sample first (adds about 2 days)', 'اطبعوا عينة واحدة الأول (بتزوّد حوالي يومين)'],
   'proof.approved': ['Approved', 'تمت الموافقة'],
-  'proof.loading': ['Loading the proof…', 'جاري تحميل البروفة…'],
-  'proof.loadFailed': ['Could not load the proof.', 'تعذّر تحميل البروفة.'],
+  'proof.loading': ['Loading the proof…', 'بنحمّل البروفة…'],
+  'proof.loadFailed': ['Could not load the proof.', 'معرفناش نحمّل البروفة.'],
   'proof.retry': ['Try again', 'حاول تاني'],
   'proof.changed': ['This design changed since you checked it. Please check the new proof.', 'التصميم ده اتغيّر من ساعة ما راجعته. من فضلك راجع البروفة الجديدة.'],
 
   // ---------- Checkout ----------
-  'checkout.approveAll': ['Check and approve the proof of every item to place your order ({done} of {total} approved).', 'راجع ووافق على بروفة كل منتج علشان تأكد الطلب (تمت الموافقة على {done} من {total}).'],
+  'checkout.approveAll': ['Check and approve the proof of every item to place your order ({done} of {total} approved).', 'راجع ووافق على بروفة كل منتج علشان تأكد الطلب (وافقت على {done} من {total}).'],
   'checkout.approveGo': ['Go to the next proof', 'روح للبروفة اللي بعدها'],
   'checkout.approvalRequired': ['Please check and approve every proof first.', 'من فضلك راجع ووافق على كل البروفات الأول.'],
 
   // ---------- /proof page ----------
   'proofPage.pageTitle': ['Check your proof · ebda3', 'راجع البروفة · إبداع'],
   'proofPage.title': ['Check your proof', 'راجع البروفة'],
-  'proofPage.for': ['Order {n} · item {pos}: {product}', 'الطلب {n} · المنتج {pos}: {product}'],
+  'proofPage.for': ['Order {n} · item {pos}: {product}', 'الطلب {n}، المنتج {pos}: {product}'],
   'proofPage.intro': ['Please check everything below. We print exactly this file.', 'من فضلك راجع كل حاجة تحت. إحنا بنطبع الملف ده بالظبط.'],
   'proofPage.note': ['Message from our team', 'رسالة من فريقنا'],
   'proofPage.decide': ['Your decision', 'قرارك'],
@@ -111,8 +112,8 @@ Object.assign(window.POD_STRINGS, {
   'proofPage.send': ['Send my request', 'ابعت الطلب'],
   'proofPage.cancel': ['Cancel', 'إلغاء'],
   'proofPage.needOk': ['Tick the box to confirm you checked the proof.', 'علّم على المربع علشان تأكد إنك راجعت البروفة.'],
-  'proofPage.sending': ['Sending…', 'جاري الإرسال…'],
-  'proofPage.doneApprove': ['Thank you! This proof is approved and the item goes to printing.', 'شكرًا! تمت الموافقة على البروفة والمنتج رايح للطباعة.'],
+  'proofPage.sending': ['Sending…', 'بنبعت…'],
+  'proofPage.doneApprove': ['Thank you! This proof is approved and the item goes to printing.', 'شكرًا! البروفة اتوافق عليها والمنتج رايح للطباعة.'],
   'proofPage.doneReject': ['Thank you, we got your request. Our team will make the changes and send you a new proof.', 'شكرًا، وصلنا طلبك. فريقنا هيعمل التعديلات ويبعتلك بروفة جديدة.'],
   // After asking for changes to an editor-made item: the customer can also make them.
   'proofPage.doneRejectEdit': ['Thank you, we got your request. You can make the changes yourself: open your order page, edit the design and send it again. Or leave it to us and we’ll send you a new proof.', 'شكرًا، وصلنا طلبك. تقدر تعمل التعديلات بنفسك: افتح صفحة طلبك، عدّل التصميم وابعته تاني. أو سيبها علينا وهنبعتلك بروفة جديدة.'],
@@ -129,7 +130,7 @@ Object.assign(window.POD_STRINGS, {
   'proofPage.replacedTextNoOrder': ['While this page was open, our team sent a newer version of this proof, so this link stopped working and your answer was not sent. Open the link in our latest message to see the new proof and answer there.', 'وإنت فاتح الصفحة دي، فريقنا بعت نسخة أحدث من البروفة، علشان كده اللينك ده وقف وردّك ماتبعتش. افتح اللينك اللي في آخر رسالة مننا علشان تشوف البروفة الجديدة وترد عليها هناك.'],
   'proofPage.unsent': ['Your message (not sent). Copy it to send it with the new proof if it still applies:', 'رسالتك (ماتبعتتش). انسخها علشان تبعتها مع البروفة الجديدة لو لسه محتاجها:'],
   'proofPage.copy': ['Copy my message', 'انسخ رسالتي'],
-  'proofPage.copied': ['Message copied ✓', 'تم نسخ الرسالة ✓'],
+  'proofPage.copied': ['Message copied ✓', 'الرسالة اتنسخت ✓'],
   'proofPage.copyFailed': ["Couldn't copy. Select the text and copy it.", 'معرفناش ننسخ. حدّد الكلام وانسخه.'],
 
   // ---------- Order page ----------
@@ -150,6 +151,6 @@ Object.assign(window.POD_STRINGS, {
   'item.changesHint': ['We’ll send you a new proof once the changes are made.', 'هنبعتلك بروفة جديدة بعد التعديلات.'],
   'item.shopNote': ['Note from our team: {note}', 'ملاحظة من فريقنا: {note}'],
   'item.yourNote': ['You asked: {note}', 'طلبك: {note}'],
-  'item.approvedOn': ['Approved on {date} (version {v})', 'تمت الموافقة يوم {date} (النسخة {v})'],
+  'item.approvedOn': ['Approved on {date} (version {v})', 'وافقت عليها يوم {date} (النسخة {v})'],
   'item.sampleFirst': ['A sample is printed first', 'هتتطبع عينة الأول'],
 });

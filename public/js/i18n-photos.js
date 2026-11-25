@@ -14,7 +14,7 @@ Object.assign(window.POD_STRINGS, {
   'photos.pick': ['Choose photos', 'اختار الصور'],
   'photos.fromGallery': ['Don\'t see your Gallery? Pick from the Gallery (one photo at a time)', 'مش لاقي المعرض (Gallery)؟ اختار من المعرض (صورة صورة)'],
   'photos.pickMore': ['Add more photos', 'ضيف صور تانية'],
-  'photos.drop': ['or drop them here · up to {max} photos', 'أو اسحبها هنا · لحد {max} صورة'],
+  'photos.drop': ['or drop them here · up to {max} photos', 'أو اسحبها هنا، لحد {max} صورة'],
   'photos.preparing': ['Preparing photos {i} of {n}…', 'بنجهز الصور {i} من {n}…'],
   'photos.tooMany': ['You can print up to {max} photos at once, so only {n} were added.', 'تقدر تطبع لحد {max} صورة مرة واحدة، فاتضاف {n} بس.'],
   'photos.full': ['You already have {max} photos, the most for one order.', 'عندك {max} صورة، وده أقصى عدد للطلب الواحد.'],
@@ -57,7 +57,7 @@ Object.assign(window.POD_STRINGS, {
 
   // Delivery terms (marketing rule: express only; standard is chosen at checkout)
   'photos.dlvExpress': ['⚡ Express delivery within {days}: +{fee}', '⚡ توصيل سريع خلال {days}: +{fee}'],
-  'photos.dlvStandard': ['Standard delivery available at checkout · shipping {fee}', 'التوصيل العادي متاح عند الدفع · الشحن {fee}'],
+  'photos.dlvStandard': ['Standard delivery available at checkout · shipping {fee}', 'التوصيل العادي متاح عند الدفع، الشحن {fee}'],
   'photos.dlvFree': ['free from {price}', 'مجاني من {price}'],
   'photos.dlvCod': ['💵 Cash on delivery available', '💵 الدفع عند الاستلام متاح'],
   'photos.days.one': ['1 business day', 'يوم عمل واحد'],

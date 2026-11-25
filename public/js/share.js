@@ -22,7 +22,7 @@
     }
   }
   function render() {
-    $('share-sub').textContent = `${tr(share.productName)} · ${tr(share.color.name)} · ${tr(share.size.label)}`;
+    $('share-sub').textContent = [tr(share.productName), tr(share.color.name), tr(share.size.label)].join(POD.sep());
     $('share-tabs').innerHTML = share.sides.length > 1
       ? share.sides.map((s) => `<button class="side-tab ${s.id === side ? 'active' : ''}" data-side="${esc(s.id)}">${esc(tr(s.name))}</button>`).join('')
       : '';
@@ -34,7 +34,7 @@
       ? fb.slice().reverse().map((f) => `<li class="${f.vote === 'up' ? 'up' : 'change'}">
           <strong>${f.vote === 'up' ? '👍 ' + esc(t('share.approved')) : '✏️ ' + esc(t('share.wantsChange'))}</strong>
           ${f.comment ? `<p dir="auto">${esc(f.comment)}</p>` : ''}
-          <span class="muted small">${f.name ? `<bdi>${esc(f.name)}</bdi> · ` : ''}${esc(when(f.at))}</span>
+          <span class="muted small">${f.name ? `<bdi>${esc(f.name)}</bdi>${esc(POD.sep())}` : ''}${esc(when(f.at))}</span>
         </li>`).join('')
       : `<li class="muted small">${esc(t('share.noReplies'))}</li>`;
     $('share-open').href = '/editor?share=' + encodeURIComponent(share.id);

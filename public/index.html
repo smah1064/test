@@ -227,14 +227,17 @@
           mug: 'mug, cup, مج, مجات, مجين, ماج, كوب, كوباية',
           bag: 'bag, شنطة, شنط',
           card: 'card, كارت, كروت, كارد, بطاقة',
-          bizcard: 'business card, visit card, visiting card, بيزنس كارد, بيزنس كارت, بزنس كارد, بزنس كارت, كارت بيزنس, كارت بزنس, كارت شخصي, كروت شخصية, كارت فيزيت',
+          bizcard: 'business card, visit card, visiting card, بيزنس كارد, بيزنس كارت, بزنس كارد, بزنس كارت, كارت بيزنس, كارت بزنس, كروت بيزنس, كروت بزنس, كارت شخصي, كروت شخصية, كارت فيزيت',
+          // (One word alone, as the English "business": everything for a business.)
+          business: 'business, بيزنس, بزنس',
+          catalog: 'catalog, catalogue, كتالوج, كاتلوج, كاتالوج, كتلوج',
           invitation: 'invitation, invite, دعوة',
           wedding: 'wedding, فرح, أفراح, زفاف',
           poster: 'poster, بوستر',
           notebook: 'notebook, note book, نوت بوك, نوتبوك, كشكول, كشاكيل',
           calendar: 'calendar, نتيجة, تقويم, نتايج',
           sticker: 'sticker, ستيكر, استيكر',
-          pillow: 'pillow, cushion, كوشن, مخدة, خدادية, وسادة',
+          pillow: 'pillow, cushion, pillowcase, pillow case, cushion cover, كوشن, مخدة, خدادية, وسادة, كيس مخدة',
           // (Not كانفاس or canvas alone: the tote bag and the pencil case are canvas too.)
           canvasprint: 'canvas print, wall canvas, لوحة كانفاس, تابلوه, تابلو',
           photobook: 'photo book, photobook, photo album, فوتو بوك, فوتوبوك, البوم صور',
@@ -244,6 +247,7 @@
           birthday: 'birthday, عيد ميلاد',
           dog: 'dog, puppy, كلب, كلاب',
           cat: 'cat, kitten, قطة, قطط',
+          kids: 'kids, kid, children, child, اطفال, طفل, ولاد, اولاد',
         };
         const sameAs = new Map();
         for (const [k, list] of Object.entries(SAME)) for (const w of list.split(',')) sameAs.set(norm(w), k);

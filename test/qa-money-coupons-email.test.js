@@ -232,6 +232,7 @@ test('sign-up: the end dot / comma a phone leaves is dropped; addresses that can
 // ---------- Share page replies ----------
 test('share page: a reply\'s name is isolated from its date', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'share.js'), 'utf8');
-  assert.match(src, /<bdi>\$\{esc\(f\.name\)\}<\/bdi> · /);
+  // (Then the line separator: the Arabic comma in Arabic, " · " in English.)
+  assert.match(src, /<bdi>\$\{esc\(f\.name\)\}<\/bdi>\$\{esc\(POD\.sep\(\)\)\}/);
   assert.doesNotMatch(src, /esc\(f\.name\) \+ ' · '/);
 });

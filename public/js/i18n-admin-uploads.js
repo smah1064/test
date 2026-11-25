@@ -4,7 +4,7 @@ Object.assign(window.POD_STRINGS, {
   'up.title': ['Upload designs (zip)', 'رفع تصميمات (ملف zip)'],
   'up.help': ['Put your design pictures (PNG, JPG, WEBP or SVG) in one zip file. The site looks at each picture and suggests the products it suits; folders named after products ("mugs", "تيشيرتات") help. Nothing goes in the shop until you check it and publish.', 'حط صور التصميمات (PNG أو JPG أو WEBP أو SVG) في ملف zip واحد. الموقع بيبص على كل صورة ويقترح المنتجات اللي تناسبها، ولو الصور في فولدرات بأسامي المنتجات ("mugs"، "تيشيرتات") ده بيساعد. مفيش حاجة بتظهر على الموقع غير لما تراجعها وتنشرها.'],
   'up.choose': ['Choose a zip file', 'اختار ملف zip'],
-  'up.drop': ['or drop it here · up to 600 MB and 300 pictures', 'أو اسحبه وسيبه هنا · لحد 600 ميجا و300 صورة'],
+  'up.drop': ['or drop it here · up to 600 MB and 300 pictures', 'أو اسحبه وسيبه هنا، لحد 600 ميجا و300 صورة'],
   'up.dropNow': ['Drop the zip file here', 'سيب ملف الـ zip هنا'],
   'up.notZip': ['“{name}” isn\'t a zip file. Choose a .zip file with your design pictures.', '«{name}» مش ملف zip. اختار ملف zip فيه صور التصميمات.'],
   'up.tooBig': ['The file is too big ({size} MB): up to 600 MB. Split the pictures into smaller zip files.', 'الملف كبير أوي ({size} ميجا): الحد 600 ميجا. قسّم الصور على كذا ملف zip أصغر.'],
@@ -49,10 +49,11 @@ Object.assign(window.POD_STRINGS, {
   'up.discardBatch': ['Discard this upload', 'الغي الملف ده'],
   'up.publish': ['Publish selected ({n})', 'انشر المختار ({n})'],
   'up.publishing': ['Publishing…', 'بينشر…'],
-  'up.summary': ['To publish: {what} · “Don\'t publish”: {skipped}', 'هيتنشر: {what} · «ماتنشرش»: {skipped}'],
+  'up.summary': ['To publish: {what} · “Don\'t publish”: {skipped}', 'هيتنشر: {what}، «ماتنشرش»: {skipped}'],
   'up.summaryAll': ['To publish: {what}', 'هيتنشر: {what}'],
   'up.nothing': ['Nothing to publish: every design is set to “Don\'t publish”.', 'مفيش حاجة تتنشر: كل التصميمات متعلّم عليها «ماتنشرش».'],
   'up.needProducts': ['Every design going in the shop needs at least one product (or tick “Don\'t publish”). Without a product: {what}.', 'كل تصميم هيتنشر لازم يكون عليه منتج واحد على الأقل (أو علّم على «ماتنشرش»). من غير منتج: {what}.'],
+  'up.needNameEn': ['Every design going in the shop needs an English name in English letters: the English pages show it (or tick “Don\'t publish”). To fix: {what}.', 'كل تصميم هيتنشر لازم يكون ليه اسم إنجليزي بحروف إنجليزي، لأنه هو اللي بيظهر في صفحات الموقع الإنجليزي (أو علّم على «ماتنشرش»). محتاجين تعديل: {what}.'],
   'up.published.one': ['Published 1 design. It\'s in the shop now and in the list below.', 'اتنشر تصميم واحد. بقى على الموقع وفي القايمة اللي تحت.'],
   'up.published.two': ['Published 2 designs. They\'re in the shop now and in the list below.', 'اتنشر تصميمين. بقوا على الموقع وفي القايمة اللي تحت.'],
   'up.published.few': ['Published {n} designs. They\'re in the shop now and in the list below.', 'اتنشر {n} تصميمات. بقوا على الموقع وفي القايمة اللي تحت.'],
@@ -138,6 +139,9 @@ Object.assign(window.POD_STRINGS, {
 
   // Why one design wasn't published
   'up.code.pickProducts': ['Pick at least one product.', 'علّم على منتج واحد على الأقل.'],
+  // The English name (also the server's codes, when it checks the same).
+  'up.code.nameEnArabic': ['The English name has Arabic letters. Write it in English letters (e.g. Lantern): the English pages show it.', 'الاسم الإنجليزي فيه حروف عربي. اكتبه بحروف إنجليزي (مثلًا Lantern)، لأنه هو اللي بيظهر في صفحات الموقع الإنجليزي.'],
+  'up.code.nameEnMissing': ['Write the English name, in English letters (e.g. Lantern): the English pages show it.', 'اكتب الاسم الإنجليزي بحروف إنجليزي (مثلًا Lantern)، لأنه هو اللي بيظهر في صفحات الموقع الإنجليزي.'],
   'up.code.uploadGone': ['This upload isn\'t there any more.', 'الملف ده مبقاش موجود.'],
   'up.code.notFound': ['This picture isn\'t in the upload any more.', 'الصورة دي مبقتش موجودة في الملف.'],
   'up.code.other': ['Couldn\'t publish this one. Try again.', 'معرفناش ننشر ده. جرّب تاني.'],

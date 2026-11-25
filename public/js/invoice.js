@@ -19,6 +19,8 @@
   };
   /** Latin identifiers (order numbers, links, phone numbers) keep their direction inside Arabic text. */
   const ltr = (s) => `<bdi dir="ltr">${esc(s)}</bdi>`;
+  /** Between the parts of a line ("Black · XL · front"): the Arabic comma in Arabic, where "·" next to ١٢٣ looks like the zero ٠. */
+  const SEP = () => (POD.lang === 'ar' ? '، ' : ' · ');
 
   function shopOf(o) {
     const s = o.shop || {};
@@ -68,7 +70,7 @@
     const one = lines[0];
     const color = one && one.color ? one.color : item.color;
     const size = one && one.size ? one.size : item.size;
-    const desc = [color && tr(color.name), size && tr(size.label), sides].filter(Boolean).join(' · ');
+    const desc = [color && tr(color.name), size && tr(size.label), sides].filter(Boolean).join(SEP());
     return `
       <tr>
         <td class="n">${esc(POD.num(i + 1))}</td>
@@ -92,7 +94,7 @@
     const unit = same ? [...units][0] : null;
     const lineUnit = (l) => (l.unitPrice != null ? Number(l.unitPrice) : round2(Number(item.price) / copies));
     const names = item.merge && item.merge.count > 1 ? namesText(item.merge.count) : '';
-    const desc = [sides, names].filter(Boolean).join(' · ');
+    const desc = [sides, names].filter(Boolean).join(SEP());
     const head = `
       <tr class="qty-has-sub">
         <td class="n">${esc(POD.num(i + 1))}</td>
@@ -107,7 +109,7 @@
       </tr>`;
     return head + lines.map((l, k) => {
       const u = lineUnit(l);
-      const label = [l.color && tr(l.color.name), l.size && tr(l.size.label)].filter(Boolean).join(' · ');
+      const label = [l.color && tr(l.color.name), l.size && tr(l.size.label)].filter(Boolean).join(SEP());
       return `
       <tr class="inv-sub ${k === lines.length - 1 ? 'last' : ''}">
         <td class="n"></td>

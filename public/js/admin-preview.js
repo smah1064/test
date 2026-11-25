@@ -46,12 +46,12 @@ window.AdminPreview = (() => {
   }
   function row(p) {
     const seen = p.lastSeen ? t('pv.lastSeen', { when: when(p.lastSeen) }) : t('pv.never');
-    const visits = p.visits ? ` · ${POD.plural('pv.visits', p.visits)}` : '';
+    const visits = p.visits ? `${POD.sep()}${POD.plural('pv.visits', p.visits)}` : '';
     return `
       <div class="queue-row pv-row ${p.off ? 'is-off' : ''} ${p.id === fresh ? 'is-new' : ''}" data-id="${esc(p.id)}">
         <div class="pv-info">
           <strong dir="auto">${esc(p.name)}</strong>${p.off ? ` <span class="pv-off-tag">${esc(t('pv.offTag'))}</span>` : ''}
-          <div class="muted small">${esc(t('pv.code'))}: <code dir="ltr">${esc(p.code)}</code> · ${esc(seen)}${esc(visits)}</div>
+          <div class="muted small">${esc(t('pv.code'))}: <code dir="ltr">${esc(p.code)}</code>${esc(POD.sep())}${esc(seen)}${esc(visits)}</div>
           <div class="pv-link" dir="ltr">${esc(p.link)}</div>
         </div>
         <div class="pv-actions">

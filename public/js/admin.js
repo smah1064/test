@@ -11,6 +11,32 @@
   const SEP = () => (POD.lang === 'ar' ? '، ' : ' · ');
   /** A text from the strings with "·" between numbers: the same, Arabic comma in Arabic. */
   const listed = (s) => (POD.lang === 'ar' ? String(s).replace(/ · /g, '، ') : String(s));
+  /*
+   * Number boxes (admin.html [data-num]: coupons, expenses, shipping cost) are text boxes with a number keyboard:
+   * a number box drops what an Arabic keyboard types ("١٥", "٢٫٥") and stays empty. What is typed is read with
+   * POD.latinDigits (Arabic-Indic and Persian digits, the Arabic decimal "٫"); grouping marks and spaces are
+   * left out. data-min and data-whole keep the checks the number boxes had (shown when the form is sent).
+   */
+  const numText = (el) => POD.latinDigits(el.value).replace(/[\s\u066C\u200E\u200F]/g, '');
+  function numProblem(el) {
+    const s = numText(el);
+    if (!s) return '';
+    if (!/^\d*\.?\d+$/.test(s)) return t('num.bad');
+    const v = Number(s);
+    if (el.hasAttribute('data-whole') && !Number.isInteger(v)) return t('num.whole');
+    if (el.dataset.min != null && v < Number(el.dataset.min)) return t('num.min', { min: POD.num(Number(el.dataset.min)) });
+    return '';
+  }
+  /** Check a number box now (the browser shows the message when its form is sent); true when it is fine. */
+  const checkNum = (el) => {
+    el.setCustomValidity(numProblem(el));
+    return el.checkValidity();
+  };
+  /** A number box's value: '' when empty, else the number as 0-9 text ("١٥٫٥" → "15.5"). */
+  const numValue = (el) => numText(el);
+  document.addEventListener('input', (e) => {
+    if (e.target.matches && e.target.matches('input[data-num]')) checkNum(e.target);
+  });
   try { sessionStorage.removeItem('pod-admin-password'); } catch (e) { /* old versions kept the password */ }
   let token = sessionStorage.getItem(KEY) || '';
   const authHeader = () => ({ Authorization: 'Bearer ' + token });
@@ -293,7 +319,7 @@
     const r = item.redraw;
     if (!r) return esc(t('admin.redraw.off'));
     const line = esc(t('admin.redraw.' + r.status, { done: POD.num(r.done || 0), total: POD.num(r.total || 0) }));
-    const kept = r.failed && r.failed.length ? `${SEP()}${esc(t('admin.redraw.kept', { n: POD.num(r.failed.length) }))}` : '';
+    const kept = r.failed && r.failed.length ? `${SEP()}${esc(POD.plural('admin.redraw.kept', r.failed.length))}` : '';
     const again = ['done', 'failed'].includes(r.status) ? ` <button class="btn btn-sm" data-redraw="${esc(item.id)}">${esc(t('admin.redraw.again'))}</button>` : '';
     return line + kept + again;
   }
@@ -307,7 +333,7 @@
     const c = item.customer;
     return `
       <dl class="spec">
-        <dt>${esc(t('admin.spec.order'))}</dt><dd>${esc(item.orderNumber)} · ${esc(t('admin.spec.itemOf', { i: item.position, n: item.of }))}</dd>
+        <dt>${esc(t('admin.spec.order'))}</dt><dd>${esc(item.orderNumber)}${SEP()}${esc(t('admin.spec.itemOf', { i: item.position, n: item.of }))}</dd>
         <dt>${esc(t('admin.spec.product'))}</dt><dd>${esc(tr(item.productName))}</dd>
         ${hasQty(item) ? `<dt>${esc(t('adminQty.title'))}</dt><dd class="qty-dd">${qtyTable(item)}</dd>` : `<dt>${esc(t('admin.spec.colourSize'))}</dt><dd>${esc(tr(item.color.name))} <span class="dot" style="display:inline-block;vertical-align:middle;background:${esc(item.color.hex)}"></span>${SEP()}${esc(tr(item.size.label))}</dd>`}
         ${item.kind === 'photoset' ? `<dt>${esc(t('fmt.photos-zip'))}</dt><dd>${esc(listed(t('admin.photoFiles', { n: counted('admin.photos', (item.photos || []).length), prints: counted('admin.prints', (item.photos || []).reduce((n, p) => n + p.copies, 0)) })))}${SEP()}${esc(t('admin.photoSpec'))}${item.sides[0] && item.sides[0].dpi && item.sides[0].dpi < 150 ? `<div class="small" style="color:var(--warn);margin-top:4px">⚠ ${esc(t('admin.photoLowRes'))}</div>` : ''}</dd>` : item.sides.map((s) => `<dt>${esc(t('admin.spec.print', { side: tr(s.name) }))}</dt><dd><bdi dir="ltr">${cm(s.widthIn)} × ${cm(s.heightIn)} cm (${s.widthIn} × ${s.heightIn} in)</bdi>${s.bleedIn ? ` <bdi>${esc(t('admin.bleed', { mm: Math.round(s.bleedIn * 25.4) }))}</bdi>` : ''}${SEP()}<bdi dir="ltr">${s.widthPx} × ${s.heightPx} px · ${s.dpi} DPI · sRGB</bdi>${s.offsetCm ? `<div class="placement-note">📍 ${esc(t('admin.placement', { v: placementText(s.offsetCm) }))}</div>` : ''}</dd>`).join('')}
@@ -768,10 +794,10 @@
   function shipNote(o) {
     const sh = o.shipment || {};
     const bits = [];
-    if (sh.courier || sh.trackingNumber) bits.push([sh.courier, sh.trackingNumber].filter(Boolean).join(' · '));
+    if (sh.courier || sh.trackingNumber) bits.push([sh.courier, sh.trackingNumber].filter(Boolean).join(SEP()));
     if (isDelivered(o) && sh.deliveredAt) bits.push(t('ship.deliveredOn', { date: POD.date(sh.deliveredAt) }));
     else if (isShipped(o) && sh.eta) bits.push(t('ship.etaShort', { date: day(sh.eta) }));
-    return bits.length ? `<span class="ship-note"><bdi>${esc(bits.join(' · '))}</bdi></span>` : '';
+    return bits.length ? `<span class="ship-note"><bdi>${esc(bits.join(SEP()))}</bdi></span>` : '';
   }
   function shipBox(o) {
     const id = esc(o.id);
@@ -2025,8 +2051,9 @@
     }, 0);
   });
   $('acc-ship-save').addEventListener('click', async () => {
+    if (!checkNum($('acc-ship-cost'))) return void $('acc-ship-cost').reportValidity();
     try {
-      const st = await adminApi('/api/admin/accounts/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang }, body: JSON.stringify({ shippingCost: Number($('acc-ship-cost').value || 0) }) });
+      const st = await adminApi('/api/admin/accounts/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang }, body: JSON.stringify({ shippingCost: Number(numValue($('acc-ship-cost')) || 0) }) });
       if (acc.pricing) acc.pricing.settings = st;
       toast(t('houses.saved'));
       await refreshAccounts();
@@ -2045,7 +2072,7 @@
   $('acc-exp-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     try {
-      await adminApi('/api/admin/expenses', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang }, body: JSON.stringify({ date: $('exp-date').value, category: $('exp-cat').value, description: $('exp-desc').value, amount: Number($('exp-amount').value) }) });
+      await adminApi('/api/admin/expenses', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang }, body: JSON.stringify({ date: $('exp-date').value, category: $('exp-cat').value, description: $('exp-desc').value, amount: Number(numValue($('exp-amount'))) }) });
       $('exp-desc').value = '';
       $('exp-amount').value = '';
       $('exp-msg').textContent = t('houses.saved');
@@ -2123,6 +2150,8 @@
     $('cp-max-f').hidden = type !== 'percent';
     const lab = $('cp-value-f').querySelector('label');
     lab.textContent = t(type === 'percent' ? 'cp.valuePercent' : 'cp.valueFixed');
+    // The number boxes checked again after the form was filled in, emptied or a box hidden (not sent then).
+    $('cp-form').querySelectorAll('input[data-num]').forEach((el) => el.setCustomValidity(el.closest('[hidden]') ? '' : numProblem(el)));
   }
   $('cp-type').addEventListener('change', cpTypeChanged);
   function resetCouponForm() {
@@ -2143,8 +2172,8 @@
     e.preventDefault();
     const id = $('cp-id').value;
     const body = {
-      code: $('cp-code').value, type: $('cp-type').value, value: $('cp-value').value, maxDiscount: $('cp-max').value, minOrder: $('cp-min').value,
-      maxUses: $('cp-uses').value, perCustomer: $('cp-per').value, startsOn: $('cp-start').value, endsOn: $('cp-end').value,
+      code: $('cp-code').value, type: $('cp-type').value, value: numValue($('cp-value')), maxDiscount: numValue($('cp-max')), minOrder: numValue($('cp-min')),
+      maxUses: numValue($('cp-uses')), perCustomer: numValue($('cp-per')), startsOn: $('cp-start').value, endsOn: $('cp-end').value,
       categories: [...cpPicked], products: id ? cpProducts : [], active: $('cp-active').checked, note: $('cp-note').value,
     };
     try {

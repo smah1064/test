@@ -1,7 +1,7 @@
 /* Admin: shipping, delivery and payment for each order (English, Arabic). */
 Object.assign(window.POD_STRINGS, {
   'ship.manage': ['Shipping & payment', 'الشحن والدفع'],
-  'ship.title': ['Shipping & payment · {number}', 'الشحن والدفع · {number}'],
+  'ship.title': ['Shipping & payment · {number}', 'الشحن والدفع، {number}'],
   'ship.close': ['Close', 'إغلاق'],
   'ship.status.received': ['Received', 'تم الاستلام'],
   'ship.status.in_production': ['In production', 'قيد التنفيذ'],

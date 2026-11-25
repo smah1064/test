@@ -38,6 +38,19 @@
       return m.replace(/\d/g, (d) => AR_DIGITS[d]).replace(/\./g, '٫').replace(/,/g, '٬');
     });
   }
+  /**
+   * What goes between the parts of a line ("100 cards · 200 cards"): in Arabic the Arabic comma, because a
+   * "·" next to Arabic-Indic digits looks like the zero "٠" ("١٠٠ كارت · ٢٠٠ كارت").
+   */
+  const sep = () => (lang === 'ar' ? '، ' : ' · ');
+  /**
+   * A number typed in any digits, as 0-9 for reading it: Arabic-Indic (٠-٩) and Persian (۰-۹) digits and
+   * the Arabic decimal separator "٫" ("١٥٫٥" → "15.5"); the rest of the text stays as it is.
+   */
+  const latinDigits = (s) => String(s == null ? '' : s)
+    .replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[\u06F0-\u06F9]/g, (d) => String(d.charCodeAt(0) - 0x06F0))
+    .replace(/\u066B/g, '.');
   function fill(str, params) {
     return params ? str.replace(/\{(\w+)\}/g, (_, k) => {
       const v = params[k];
@@ -1135,7 +1148,7 @@
     get lang() {
       return lang;
     },
-    t, tr, arabicDigits, setLang, applyI18n,
+    t, tr, arabicDigits, latinDigits, sep, setLang, applyI18n,
     loadCatalog, assetId, canPick, firstPick, comboOut, comboFew, sizeOk, colorOk, productPicture, thumbFallback, fillMockup, mockupUrl, svgDataUrl, luminance,
     money, date, day, num, plural, pluralForm, packCopies, captcha, fromPrice, sizeNote,
     productState, backOnDay, backText, similarProducts, similarHref, similarLabel, productHref, showUnavailable,

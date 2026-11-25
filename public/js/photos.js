@@ -459,7 +459,7 @@ if (typeof window !== 'undefined' && window.POD) (async () => {
     const n = state.photos.length;
     const prints = state.photos.reduce((s, p) => s + p.copies, 0);
     const total = state.photos.reduce((s, p) => s + p.copies * unitPrice(p.size), 0);
-    $('ph-sum-count').textContent = n ? `${counted('photos.n', n)} · ${counted('photos.prints', prints)}` : t('photos.none');
+    $('ph-sum-count').textContent = n ? `${counted('photos.n', n)}${POD.sep()}${counted('photos.prints', prints)}` : t('photos.none');
     $('ph-sum-total').textContent = t('photos.total', { price: money(total) });
     $('ph-add').disabled = !n || state.decoding || state.uploading;
     $('ph-photos-count').textContent = n ? `(${POD.num(n)})` : '';
@@ -1315,7 +1315,8 @@ if (typeof window !== 'undefined' && window.POD) (async () => {
   function progress(text, frac, eta = '') {
     showBar('up');
     $('ph-up-text').textContent = text;
-    $('ph-up-eta').textContent = eta ? `· ${eta}` : '';
+    // ("بنرفع ٣ من ١٠، فاضل حوالي دقيقة": in Arabic a comma, a "·" next to ١٠ looks like the zero ٠.)
+    $('ph-up-eta').textContent = eta ? `${POD.sep()}${eta}` : '';
     const pct = Math.round(clamp(frac, 0, 1) * 100);
     $('ph-progress-fill').style.width = `${pct}%`;
     $('ph-progress').setAttribute('aria-valuenow', String(pct));
