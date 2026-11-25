@@ -217,7 +217,7 @@ test('admin: after a reload the header shows the staff member\'s name, not the u
   assert.strictEqual(own.shown, undefined);
 });
 
-test('admin: the session returns the staff member\'s name to show (shown)', { todo: 'needs the one-line change to GET /api/admin/session in src/app.js' }, async () => {
+test('admin: the session returns the staff member\'s name to show (shown)', async () => {
   const login = await (await post('/api/admin/login', { username: 'mostafa', password: 'a-long-password' })).json();
   const session = await (await req('GET', '/api/admin/session', undefined, login.token)).json();
   assert.strictEqual(session.shown, 'Mostafa مصطفى');
