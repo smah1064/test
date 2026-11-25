@@ -140,6 +140,27 @@ test('private: Opening soon for everyone else, invited people, owner and staff g
     assert.strictEqual((await fetch(base + '/api/products', { headers: { cookie: monaCookie } })).status, 200);
     // A forged or tampered cookie gets nothing.
     assert.strictEqual((await fetch(base + '/api/products', { headers: { cookie: monaCookie.replace(/p-[0-9a-f]+/, 'owner') } })).status, 403);
+    // Links never send anyone to another site; other parameters stay exactly as sent.
+    for (const evil of ['//evil.example/login', '/\\evil.example/x', '//evil.example']) {
+      const r = await fetch(`${base}${evil}?invite=${mona.code}`, { redirect: 'manual', headers: { cookie: monaCookie } }).catch(() => null);
+      if (r) assert.ok(/^\/(?![\/\\])/.test(r.headers.get('location') || '/'), `${evil} -> ${r.headers.get('location')}`);
+    }
+    const kept = await fetch(`${base}/designs?cat=eid&cat=ramadan&invite=${mona.code}`, { redirect: 'manual', headers: { cookie: monaCookie } });
+    assert.strictEqual(kept.headers.get('location'), '/designs?cat=eid&cat=ramadan');
+    // The code typed on a page opens that page; a wrong one stays on it.
+    const onPage = await fetch(base + '/api/preview/enter', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'x-forwarded-for': '10.8.8.8' }, body: `code=${mona.code}&next=${encodeURIComponent('/product?id=mug')}`, redirect: 'manual' });
+    assert.strictEqual(onPage.headers.get('location'), '/product?id=mug');
+    const offSite = await fetch(base + '/api/preview/enter', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'x-forwarded-for': '10.8.8.8' }, body: `code=${mona.code}&next=${encodeURIComponent('//evil.example/')}`, redirect: 'manual' });
+    assert.strictEqual(offSite.headers.get('location'), '/');
+    // Arabic digits typed for a code with digits; own codes: English letters and digits only, up to 24.
+    const num = await (await admin('/api/admin/preview/people', 'POST', { name: 'Num', code: 'ab123456' })).json();
+    const arabicTyped = await fetch(base + '/api/preview/enter', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'x-forwarded-for': '10.9.9.9' }, body: `code=${encodeURIComponent('ab١٢٣٤٥٦')}`, redirect: 'manual' });
+    assert.ok(cookieOf(arabicTyped), 'Arabic digits');
+    await admin(`/api/admin/preview/people/${num.id}`, 'DELETE');
+    assert.strictEqual((await admin('/api/admin/preview/people', 'POST', { name: 'Long', code: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ1234' })).status, 400);
+    assert.strictEqual((await admin('/api/admin/preview/people', 'POST', { name: 'Ar', code: 'منىinvite' })).status, 400);
+    // A missing file under an open folder: Opening soon, not the site's own 404 page.
+    assert.match(await (await fetch(base + '/js/no-such-page', { headers: { accept: 'text/html' } })).text(), /\/api\/preview\/enter/);
     // Removed: shut out.
     await admin(`/api/admin/preview/people/${mona.id}`, 'DELETE');
     assert.strictEqual((await fetch(base + '/api/products', { headers: { cookie: monaCookie } })).status, 403);
@@ -163,6 +184,13 @@ test('staff sign in through the private shop and get in too', async () => {
     const c = cookieOf(login);
     assert.match(c, /=s-/);
     assert.strictEqual((await fetch(base + '/api/products', { headers: { cookie: c } })).status, 200);
+    // A password reset by the owner shuts the staff member's browser out too.
+    const staffId = (await (await fetch(base + '/api/admin/staff', { headers: { Authorization: `Bearer ${token}` } })).json()).staff.find((u) => u.username === 'nour').id;
+    assert.strictEqual((await fetch(`${base}/api/admin/staff/${staffId}/password`, { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ password: 'Another-Password-2026!' }) })).status, 204);
+    assert.strictEqual((await fetch(base + '/api/products', { headers: { cookie: c } })).status, 403);
+    // The owner signs out: that browser's way in goes too.
+    const out = await fetch(base + '/api/admin/logout', { method: 'POST', headers: { Authorization: `Bearer ${token}`, cookie: c } });
+    assert.match((out.headers.getSetCookie ? out.headers.getSetCookie() : [out.headers.get('set-cookie')]).join(';'), /ebda3_preview=;/);
     // Staff can't manage the invitations.
     const staffToken = (await login.json()).token;
     assert.strictEqual((await fetch(base + '/api/admin/preview', { headers: { Authorization: `Bearer ${staffToken}` } })).status, 401);

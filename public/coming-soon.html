@@ -41,7 +41,7 @@
     .msg { margin: 12px 0 0; font-size: 14px; line-height: 1.7; color: var(--bad); }
     .msg span { display: block; direction: ltr; font-size: 13px; }
     .msg[hidden] { display: none; }
-    @media (max-width: 400px) { .logos img { height: 72px; } .logos { gap: 16px; } .soon { font-size: 46px; } }
+    @media (max-width: 400px) { .logos img { height: 72px; } .logos { gap: 16px; } .soon { font-size: 46px; } input::placeholder { font-size: 13px; } button { padding: 0 16px; } }
   </style>
 </head>
 <body>
@@ -53,13 +53,18 @@
     <h1 class="soon">قريبًا</h1>
     <p class="soon-en" lang="en">Coming soon</p>
     <form method="post" action="/api/preview/enter">
-      <input id="code" name="code" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" maxlength="24" required placeholder="كود الدعوة · Invitation code" aria-label="كود الدعوة · Invitation code" aria-describedby="msg">
+      <input type="hidden" name="next" id="next" value="/">
+      <input id="code" name="code" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" maxlength="24" required placeholder="كود الدعوة · Invite code" aria-label="كود الدعوة · Invitation code" aria-describedby="msg">
       <button type="submit">ادخل · Enter</button>
     </form>
     <p class="msg" id="msg" role="alert" hidden></p>
   </main>
   <script>
     (function () {
+      // Back to this page once they're in (the address without ?code=).
+      var here = new URLSearchParams(location.search);
+      here.delete('code');
+      document.getElementById('next').value = location.pathname + (here.toString() ? '?' + here : '');
       // ?code=wrong (no such code, or turned off) / ?code=wait (too many tries): say so under the box.
       var why = new URLSearchParams(location.search).get('code');
       var text = why === 'wrong'
@@ -75,7 +80,7 @@
       en.textContent = text[1];
       box.appendChild(en);
       box.hidden = false;
-      history.replaceState(null, '', location.pathname);
+      history.replaceState(null, '', document.getElementById('next').value);
     })();
   </script>
 </body>
