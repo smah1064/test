@@ -6,8 +6,12 @@
  *  - Prices: the shop owner can change a product's price, its extra-side
  *    price and each size's surcharge. Changes are kept in the data file
  *    (db.pricing) and laid over the defaults in src/products.js, so every
- *    page and the order total use them right away.
- *  - Costs (db.costs), per product: blank item cost (plus extra per size),
+ *    page and the order total use them right away. Small packs (sizes
+ *    marked `smallPack`: 1, 10, 25 copies…) keep their share of the
+ *    product's price when the owner changes it, unless the owner set the
+ *    pack's own price.
+ *  - Costs (db.costs), per product: blank item cost (plus extra per size,
+ *    which can be negative: a single copy needs less than a whole pack),
  *    printing cost for the first side and for each extra side, packaging /
  *    other cost per item.
  *  - Each new order item keeps a copy of its cost at the time of the order,
@@ -68,6 +72,20 @@ function catalogChanged(products, extraSideDefault) {
     for (const s of p.sizes) if (d.sizes[s.id] === undefined || s.added) d.sizes[s.id] = s.surcharge || 0;
   }
 }
+/**
+ * A small pack's surcharge when the product costs `base` (sizes marked `smallPack` in src/products.js,
+ * e.g. 1, 10 or 25 copies under the usual smallest pack). The pack keeps its share of the product's
+ * price as written (a 1-copy brochure is 25 of 500, so 5%): at another price it costs that share of it,
+ * in whole pounds and never under 1 EGP. A fixed amount off would make it free or negative once the
+ * owner lowers the price. At the built-in price it is exactly as written.
+ */
+function packSurcharge(d, sizeId, base) {
+  const written = d.sizes[sizeId] || 0;
+  if (base === d.basePrice || !(d.basePrice > 0)) return written;
+  const price = Math.max(1, Math.round((base * (d.basePrice + written)) / d.basePrice));
+  return round2(price - base);
+}
+
 /** Lay the saved prices over the defaults (cheap when nothing changed). */
 function applyPricing(products, pricing) {
   const key = JSON.stringify(pricing || {});
@@ -81,7 +99,14 @@ function applyPricing(products, pricing) {
     if (o.extraSidePrice != null) p.extraSidePrice = o.extraSidePrice;
     else if (d.hadExtra) p.extraSidePrice = d.extraSidePrice;
     else delete p.extraSidePrice;
-    for (const s of p.sizes) s.surcharge = o.sizes && o.sizes[s.id] != null ? o.sizes[s.id] : d.sizes[s.id];
+    for (const s of p.sizes) {
+      const own = o.sizes && o.sizes[s.id] != null ? o.sizes[s.id] : null;
+      if (!s.smallPack) s.surcharge = own != null ? own : d.sizes[s.id];
+      // Small packs: the owner's own price for the pack wins, else its share of the product's price
+      // (so /api/products, the cart, orders and the admin all see the same amount); either way the
+      // pack never sells under 1 EGP.
+      else s.surcharge = Math.max(own != null ? own : packSurcharge(d, s.id, p.basePrice), round2(1 - p.basePrice));
+    }
   }
   return true;
 }
@@ -96,16 +121,26 @@ function cleanPricing(product, body) {
   const extra = money(body.extraSidePrice);
   if (extra === undefined) return { error: 'badPrice' };
   if (extra !== null && extra !== d.extraSidePrice) out.extraSidePrice = extra;
+  const finalBase = out.basePrice != null ? out.basePrice : d.basePrice;
   const sizes = {};
   for (const s of product.sizes) {
     const v = money(body.sizes && body.sizes[s.id], { min: -1e6 });
     if (v === undefined) return { error: 'badPrice' };
-    if (v !== null && v !== d.sizes[s.id]) sizes[s.id] = v;
+    if (v === null) continue;
+    if (s.smallPack) {
+      // The admin sends every size as it shows it (`product` carries the prices as they stand now).
+      // A small pack left at its share of the product's price keeps following it: the amount it shows
+      // for today's price, or the one it would have at the price being saved, is no price of its own.
+      const following = s.surcharge === packSurcharge(d, s.id, product.basePrice);
+      if (v === packSurcharge(d, s.id, finalBase) || (following && v === s.surcharge)) continue;
+      sizes[s.id] = v;
+    } else if (v !== d.sizes[s.id]) sizes[s.id] = v;
   }
   if (Object.keys(sizes).length) out.sizes = sizes;
-  // A size must never cost less than nothing.
-  const finalBase = out.basePrice != null ? out.basePrice : d.basePrice;
+  // A size must never cost less than nothing. Small packs that follow the product's price are
+  // always 1 EGP or more, so a lower product price is never refused because of them.
   for (const s of product.sizes) {
+    if (s.smallPack && sizes[s.id] == null) continue;
     const sur = sizes[s.id] != null ? sizes[s.id] : d.sizes[s.id];
     if (finalBase + sur < 1) return { error: 'badPrice' };
   }
@@ -121,9 +156,10 @@ function cleanCosts(product, body) {
     if (v === undefined) return { error: 'badCost' };
     if (v) out[k] = v;
   }
+  // Per size: added to the blank cost, or taken off it (a single bookmark doesn't use up a pack of 25).
   const sizes = {};
   for (const s of product.sizes) {
-    const v = money(body && body.sizes && body.sizes[s.id]);
+    const v = money(body && body.sizes && body.sizes[s.id], { min: -1e6 });
     if (v === undefined) return { error: 'badCost' };
     if (v) sizes[s.id] = v;
   }
@@ -151,11 +187,13 @@ function itemCostFrom(costs, item) {
   const legacyEmb = item.process === 'embroidery' && !all.some((sd) => sd && sd.process);
   const stitched = legacyEmb || all.some((sd) => sd && sd.process === 'embroidery');
   const printed = item.kind === 'book' ? 1 : legacyEmb ? all.length - 1 : all.filter((sd) => sd && sd.process !== 'embroidery').length;
-  const blank = round2((c.blank || 0) + ((c.sizes && item.size && c.sizes[item.size.id]) || 0));
   const print = printed > 0 ? round2((c.printFirst || 0) + (printed - 1) * (c.printExtra || 0)) : 0;
   const embroidery = stitched ? round2(c.embroidery || 0) : 0;
   const other = round2(c.other || 0);
-  const each = round2(blank + print + embroidery + other);
+  // A size's cost can take something off the blank (small packs); an item never costs less than nothing
+  // (whatever is taken off beyond that comes off the blank, so the parts still add up to the total).
+  const blank = round2(Math.max((c.blank || 0) + ((c.sizes && item.size && c.sizes[item.size.id]) || 0), -(print + embroidery + other))) || 0;
+  const each = Math.max(0, round2(blank + print + embroidery + other));
   // Name lists: one printed copy per row.
   const n = Math.max(1, item.copies || 1);
   if (n > 1) return { blank: round2(blank * n), print: round2(print * n), embroidery: round2(embroidery * n), other: round2(other * n), total: round2(each * n), set: Boolean(costs && costs[item.productId]), copies: n };
