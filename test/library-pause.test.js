@@ -153,6 +153,45 @@ test('frozen: new picture designs never hide text designs; the owner decides (25
   }
 });
 
+test('automatic steps never undo a pause or show the owner made by hand', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pod-libhand-'));
+  try {
+    // As the live shop was before the freeze: the first two steps done, the owner then pausing some
+    // text designs by hand, and showing one that had been paused automatically.
+    const lib = new Library(dataDir);
+    lib.runOnce(['pause-no-artwork', 'unpause-artwork-enough']);
+    delete lib.index.textHiddenOn;
+    lib.save();
+    const text = lib.all().filter((d) => !usesArtwork(d) && d.kind !== 'objects' && !d.uploaded && !d.hidden);
+    const mine = text.slice(0, 40).map((d) => d.id);
+    lib.setFlags(mine, { hidden: true });
+    const autoPaused = lib.all().find((d) => d.hidden && !mine.includes(d.id));
+    lib.setFlags([autoPaused.id], { hidden: false });
+    lib.runOnce(['pause-no-artwork', 'unpause-artwork-enough', 'freeze-text-rule']);
+    const hidden = new Set(lib.all().filter((d) => d.hidden).map((d) => d.id));
+    assert.deepStrictEqual(mine.filter((id) => !hidden.has(id)), [], 'the owner\'s pauses stay');
+    assert.ok(!hidden.has(autoPaused.id), 'the one shown by hand stays shown');
+    // Also in a fresh shop where the first step runs after a hand choice.
+    const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'pod-libhand2-'));
+    try {
+      const fresh = new Library(dir2);
+      const target = SEED_TEXT_ON_TSHIRT(fresh);
+      fresh.setFlags([target], { hidden: false });
+      fresh.runOnce(['pause-no-artwork']);
+      assert.ok(!fresh.all().find((d) => d.id === target).hidden, 'shown by hand before the first step: stays shown');
+    } finally {
+      fs.rmSync(dir2, { recursive: true, force: true });
+    }
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+/** A text-only starter design that goes only on picture-design products (the first step would pause it). */
+function SEED_TEXT_ON_TSHIRT(lib) {
+  const d = lib.all().find((x) => !usesArtwork(x) && x.kind !== 'objects' && !x.uploaded && x.products && x.products.length && x.products.every((p) => ['tshirt', 'hoodie', 'mug', 'sweatshirt', 'oversized', 'tote'].includes(p)));
+  return d ? d.id : lib.all().find((x) => !usesArtwork(x)).id;
+}
+
 test('every design in the admin list says the day it was added', async () => {
   await withServer({}, async ({ admin }) => {
     const list = (await (await admin('/api/admin/library')).json()).designs;

@@ -4091,7 +4091,7 @@
     const total = qtyTotal();
     const cell = (c, z) => (comboOut(p, c.id, z.id) && !(g[c.id] && g[c.id][z.id])
       ? `<span class="qty-out" title="${esc(tEd('ed.soldOut'))}">—</span>`
-      : `<input type="number" inputmode="numeric" min="0" max="1000" step="1" class="qty-in" data-qc="${c.id}" data-qz="${z.id}" value="${(g[c.id] && g[c.id][z.id]) || ''}" placeholder="0" aria-label="${esc(`${tr(c.name)} ${tr(z.label)}`)}">`);
+      : `<input type="text" inputmode="numeric" maxlength="4" autocomplete="off" class="qty-in" data-qc="${c.id}" data-qz="${z.id}" value="${(g[c.id] && g[c.id][z.id]) || ''}" placeholder="0" aria-label="${esc(`${tr(c.name)} ${tr(z.label)}`)}">`);
     const simple = !mix().sizes && !mix().colors;
     box.innerHTML = `
       <label>${esc(t('qty.title'))}</label>
@@ -4117,7 +4117,9 @@
     const setCell = (c, z, v) => {
       const g = qtyGrid();
       g[c] ||= {};
-      g[c][z] = Math.max(0, Math.min(1000, Math.floor(Number(v) || 0)));
+      // (Typed in Arabic or Persian digits too: a number box would drop those.)
+      const n = String(v || '').replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).replace(/\D/g, '');
+      g[c][z] = Math.max(0, Math.min(1000, Math.floor(Number(n) || 0)));
       // At least one piece: clearing the last box puts 1 back.
       if (!Object.values(g).some((row) => Object.values(row).some((n) => n > 0))) g[c][z] = 1;
       st.qty = g;

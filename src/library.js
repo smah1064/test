@@ -625,7 +625,11 @@ class Library {
       const rest = (this.index[key] || []).filter((x) => !list.includes(x));
       this.index[key] = on ? [...rest, ...list] : rest;
     };
-    if (typeof hidden === 'boolean') set('hidden', hidden);
+    if (typeof hidden === 'boolean') {
+      set('hidden', hidden);
+      // (Paused or shown by hand in the dashboard: no automatic step changes these again.)
+      this.index.byHand = [...new Set([...(this.index.byHand || []), ...list])];
+    }
     if (typeof deleted === 'boolean') set('deleted', deleted);
     this.save();
     return list.length;
@@ -716,7 +720,8 @@ const ONCE = {
     const now = artworkProducts(index, ARTWORK_ENOUGH);
     const back = new Set(SEED.filter((d) => !usesArtwork(d)).map((d) => [d, productsFor(d)])
       .filter(([, ps]) => ps.every((id) => before.has(id)) && ps.some((id) => !now.has(id))).map(([d]) => d.id));
-    index.hidden = (index.hidden || []).filter((id) => !back.has(id));
+    const hand = new Set(index.byHand || []);
+    index.hidden = (index.hidden || []).filter((id) => !back.has(id) || hand.has(id));
   },
   // Only the designs with real artwork where there are some: the rule above on, and the text-only
   // starter designs that would be left with no product paused (the owner can show them again).
@@ -730,7 +735,8 @@ const ONCE = {
     // The products that show only picture designs, fixed (the owner decides from here on).
     index.textHiddenOn = [...covered];
     const paused = new Set(index.hidden || []);
-    for (const d of SEED) if (!usesArtwork(d) && productsFor(d).every((id) => covered.has(id))) paused.add(d.id);
+    const hand = new Set(index.byHand || []);
+    for (const d of SEED) if (!usesArtwork(d) && !hand.has(d.id) && productsFor(d).every((id) => covered.has(id))) paused.add(d.id);
     index.hidden = [...paused];
   },
   // The owner chose (25 Nov): no automatic hiding any more. The products that show only picture designs
@@ -749,7 +755,9 @@ const ONCE = {
     index.textHiddenOn = [...enough];
     const back = new Set(SEED.filter((d) => !usesArtwork(d)).map((d) => [d, productsFor(d)])
       .filter(([, ps]) => ps.every((id) => any.has(id)) && ps.some((id) => !enough.has(id))).map(([d]) => d.id));
-    index.hidden = (index.hidden || []).filter((id) => !back.has(id));
+    // (Never one the owner paused by hand: QA 25 Nov.)
+    const hand = new Set(index.byHand || []);
+    index.hidden = (index.hidden || []).filter((id) => !back.has(id) || hand.has(id));
   },
 };
 

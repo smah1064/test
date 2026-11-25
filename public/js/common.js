@@ -293,7 +293,8 @@
    * packs that start below the base (1 copy, 10 copies…), each pack's own price.
    */
   function sizeNote(p, z) {
-    if ((p.sizes || []).some((x) => (x.surcharge || 0) < 0)) return money(p.basePrice + (z.surcharge || 0));
+    // (After a "·": in Arabic "A4 × ٥٠ ٨٠٠ ج.م." would read as one number.)
+    if ((p.sizes || []).some((x) => (x.surcharge || 0) < 0)) return `· ${money(p.basePrice + (z.surcharge || 0))}`;
     return z.surcharge ? `+${money(z.surcharge)}` : '';
   }
 
