@@ -4907,7 +4907,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     return {
       id: p.id, name: p.name, category: p.category, kind: p.kind || 'product', sideCount: p.sides.length,
       basePrice: p.basePrice, extraSidePrice: extra,
-      sizes: p.sizes.map((sz) => ({ id: sz.id, label: sz.label, surcharge: sz.surcharge || 0, costExtra: (c.sizes && c.sizes[sz.id]) || 0, ...(sz.smallPack ? { smallPack: true } : {}) })),
+      sizes: p.sizes.map((sz) => ({ id: sz.id, label: sz.label, surcharge: sz.surcharge || 0, costExtra: (c.sizes && c.sizes[sz.id]) || 0, ...(sz.smallPack ? { smallPack: true, ownPrice: Boolean(sz.ownPrice) } : {}), ...(sz.off ? { off: true } : {}) })),
       refSize: ref.id,
       defaults: d, costs: { blank: c.blank || 0, printFirst: c.printFirst || 0, printExtra: c.printExtra || 0, embroidery: c.embroidery || 0, other: c.other || 0 },
       // Embroidered products: a stitching cost per piece.
