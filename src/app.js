@@ -37,6 +37,7 @@ const {
 } = require('./products');
 const { GOVERNORATES, normalizeEgyptMobile } = require('./egypt');
 const { FIELDS, langOf, format } = require('./i18n');
+const roles = require('./roles');
 // Loaded on first use: the shop keeps working even if the image library cannot load on a server.
 const thumbs = require('./thumbs');
 const ai = require('./ai');
@@ -474,6 +475,7 @@ const DEFAULT_LIMITS = {
   notify: [{ max: 30, ms: 3600e3 }, { max: 200, ms: 24 * 3600e3 }],
   couponTry: [{ max: 15, ms: 10 * 60e3 }, { max: 60, ms: 24 * 3600e3 }], // coupon codes that didn't work, per visitor
   previewCode: [{ max: 10, ms: 15 * 60e3 }, { max: 40, ms: 24 * 3600e3 }], // private-preview codes that didn't work, per visitor
+  staffSetup: [{ max: 10, ms: 15 * 60e3 }, { max: 40, ms: 24 * 3600e3 }], // team set-up links that didn't work, per visitor
   designZip: [{ max: 20, ms: 3600e3 }, { max: 100, ms: 24 * 3600e3 }], // design zips uploaded in the admin
   notifyCustomer: [{ max: 5, ms: 3600e3 }, { max: 20, ms: 24 * 3600e3 }], // order confirmations to one email address
   notifyCustomerAll: [{ max: 500, ms: 24 * 3600e3 }],
@@ -3823,8 +3825,20 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (!result.user) res.append('Set-Cookie', `pod-admin-device=${auth.deviceMark()}; Path=/api/admin/login; Max-Age=${180 * 24 * 3600}; HttpOnly; SameSite=Strict${isHttps(req) ? '; Secure' : ''}`);
     // The private preview lets this browser in too (the owner and staff see the shop as customers will).
     previewCookie(req, res, result.user ? staffWho(result.user) : ownerWho());
-    if (result.user) return res.json({ token: result.token, expiresAt: new Date(result.expiresAt).toISOString(), role: result.user.role, name: result.user.name });
-    res.json({ token: result.token, expiresAt: new Date(result.expiresAt).toISOString(), weakPassword: auth.weak, role: 'owner' });
+    const expiresAt = new Date(result.expiresAt).toISOString();
+    if (result.user) {
+      const w = whoOf(result.user);
+      store.mutate((db) => {
+        const u = (db.staff || []).find((x) => x.id === result.user.id);
+        if (u) u.lastSignIn = new Date().toISOString();
+      });
+      activity.add({ whoId: w.id, who: w.shown, roles: w.roles, action: 'signIn', label: { en: 'Signed in', ar: 'دخل' }, method: 'POST', path: '/api/admin/login', status: 200, ip: req.ip });
+      return res.json({ token: result.token, expiresAt, role: w.role, roles: w.roles, perms: [...w.perms], name: result.user.name, shown: w.shown });
+    }
+    // The shared password: the emergency way in, always written to the log.
+    activity.add({ whoId: 'owner', who: 'owner', roles: ['owner'], emergency: true, action: 'signIn', label: { en: 'Signed in with the shared password', ar: 'دخل بكلمة السر المشتركة' }, method: 'POST', path: '/api/admin/login', status: 200, ip: req.ip });
+    const w = emergencyWho();
+    res.json({ token: result.token, expiresAt, weakPassword: auth.weak, role: 'owner', roles: w.roles, perms: [...w.perms], name: 'owner', emergency: true });
   });
   app.post('/api/admin/logout', (req, res) => {
     auth.logout(security.bearer(req), staffList());
@@ -3833,24 +3847,72 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (v && !v.who.startsWith('p-')) res.append('Set-Cookie', preview.cookie('', { secure: isHttps(req) }));
     res.status(204).end();
   });
-  const staffList = () => store.db.staff || [];
-  const requireAdmin = (req, res, next) => {
-    if (!auth.verify(security.bearer(req))) throw new HttpError(401, 'signInAgain');
-    res.set('Cache-Control', 'no-store');
-    next();
+  // ---------- Who is signed in, and what they may do (src/roles.js) ----------
+  // Team members sign in with their own username and password; the shared password is the owner's
+  // emergency way in (it always works, and every use is in the activity log).
+  const staffAll = () => store.db.staff || [];
+  /** The people who can sign in: not switched off, and with a password set (a set-up link not used yet can't). */
+  const staffList = () => staffAll().filter((u) => u.active !== false && u.hash);
+  const whoOf = (u) => {
+    const rs = roles.rolesOf(u);
+    return { id: u.id, name: u.username, shown: u.name || u.username, roles: rs, role: roles.mainRole(rs), perms: roles.permsOf(rs) };
   };
-  /** The owner, or a product manager: the Products screen only. */
-  const requireCatalog = (req, res, next) => {
-    const token = security.bearer(req);
-    if (auth.verify(token)) req.adminWho = { role: 'owner', name: 'owner' };
-    else {
-      const u = auth.verifyStaff(token, staffList());
-      if (!u || u.role !== 'products') throw new HttpError(401, 'signInAgain');
-      req.adminWho = { role: u.role, name: u.username, shown: u.name || u.username }; // (shown: the person's name, for "uploaded by")
+  const emergencyWho = () => ({ id: 'owner', name: 'owner', roles: ['owner'], role: 'owner', perms: roles.permsOf(['owner']), emergency: true });
+  const activity = new roles.ActivityLog(path.join(dataDir, 'activity.jsonl'));
+  // Changes an owner approved, while they run again (see the approvals below): id -> who made them.
+  const approvalRuns = new Map();
+  const replayKey = crypto.randomBytes(24).toString('hex');
+  const sameText = (a, b) => typeof a === 'string' && a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+  // Routes where people without orders.amounts get the answer with the amounts taken out.
+  const NO_AMOUNTS = new Set(['orders.view', 'orders.work', 'review.view', 'review.work', 'production', 'customers.view', 'customers.contact', 'houses.view', 'houses.edit', 'rights', 'payments']);
+  /**
+   * Every admin route: who is asking (401 if no one), may they (403), and for catalogue and money
+   * changes by anyone but an owner: kept for an owner's approval (202) instead of done.
+   */
+  const adminGate = (req, res, next) => {
+    res.set('Cache-Control', 'no-store');
+    const key = `${req.method === 'HEAD' ? 'GET' : req.method} ${req.route.path}`;
+    const route = roles.routeOf(req.method, req.route.path);
+    let who = null;
+    const run = req.get('x-approval-replay');
+    if (run) {
+      const [k, id] = String(run).split('.');
+      const r = sameText(k, replayKey) && approvalRuns.get(id);
+      if (!r) throw new HttpError(401, 'signInAgain');
+      who = { ...r.who, perms: roles.permsOf(r.who.roles), approvalId: id, approvedBy: r.by };
+    } else {
+      const token = security.bearer(req);
+      if (auth.verify(token)) who = emergencyWho();
+      else {
+        const u = auth.verifyStaff(token, staffList());
+        if (u) who = whoOf(u);
+      }
     }
-    res.set('Cache-Control', 'no-store');
+    if (!who) throw new HttpError(401, 'signInAgain');
+    req.adminWho = who;
+    if (!who.approvalId) {
+      const allowed = route.perm === 'owner-only' ? who.role === 'owner' : !route.perm || who.perms.has(route.perm);
+      if (!allowed) throw new HttpError(403, 'noPermission');
+    }
+    if (!who.perms.has('orders.amounts') && NO_AMOUNTS.has(route.perm)) {
+      const send = res.json.bind(res);
+      res.json = (body) => send(roles.withoutAmounts(body));
+    }
+    if (req.method !== 'GET' && req.method !== 'HEAD' && !route.quiet) {
+      res.on('finish', () => activity.add({
+        whoId: who.id, who: who.shown || who.name, roles: who.roles, ...(who.emergency ? { emergency: true } : {}),
+        action: key, label: route.label || null, method: req.method, path: req.originalUrl.split('?')[0].slice(0, 300),
+        status: res.statusCode, ...(res.locals.approvalId || who.approvalId ? { approvalId: res.locals.approvalId || who.approvalId } : {}),
+        ...(who.approvedBy ? { approvedBy: who.approvedBy } : {}),
+        ...(res.locals.summary ? { summary: res.locals.summary } : {}),
+        body: roles.shortBody(req.body && (Buffer.isBuffer(req.body) || Object.keys(req.body).length) ? req.body : undefined),
+      }));
+    }
+    if (route.approve && who.role !== 'owner' && !who.approvalId) return holdForApproval(req, res, key, route).catch(next);
     next();
   };
+  const requireAdmin = adminGate;
+  const requireCatalog = adminGate;
   // ---------- Private preview: on/off and the people invited (owner only) ----------
   const previewView = (req) => ({ on: previewOn(), people: previewPeople().map((x) => preview.personRow(x, linkBase(req))) });
   app.get('/api/admin/preview', requireAdmin, (req, res) => res.json(previewView(req)));
@@ -3905,7 +3967,16 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     });
     res.json(previewView(req));
   });
-  app.get('/api/admin/session', requireCatalog, (req, res) => res.json({ ok: true, role: req.adminWho.role, ...(req.adminWho.role === 'owner' ? { weakPassword: auth.weak } : { name: req.adminWho.name, shown: req.adminWho.shown || req.adminWho.name }) }));
+  app.get('/api/admin/session', adminGate, (req, res) => {
+    const w = req.adminWho;
+    const list = store.db.approvals || [];
+    res.json({
+      ok: true, role: w.role, roles: w.roles, perms: [...w.perms],
+      ...(w.emergency ? { emergency: true, weakPassword: auth.weak } : { name: w.name, shown: w.shown || w.name }),
+      pendingApprovals: w.perms.has('approvals') ? list.filter((a) => a.status === 'pending').length : 0,
+      myPending: list.filter((a) => a.status === 'pending' && a.by && a.by.id === w.id).length,
+    });
+  });
 
   // ---------- Products (product manager) ----------
   // Changes are laid over the products as written (src/catalog.js); see the notes there.
@@ -4160,40 +4231,438 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     res.type('image/webp').send(fs.readFileSync(file));
   });
 
-  // ---------- Staff accounts (owner only): product managers sign in with their own password ----------
-  const staffRow = (u) => ({ id: u.id, name: u.name, username: u.username, role: u.role, createdAt: u.createdAt });
-  app.get('/api/admin/staff', requireAdmin, (req, res) => res.json({ staff: staffList().map(staffRow) }));
+  // ---------- The team (owners only): personal sign-ins, roles, set-up links ----------
+  const staffRow = (u) => {
+    const rs = roles.rolesOf(u);
+    return {
+      id: u.id, name: u.name, username: u.username, roles: rs, role: roles.mainRole(rs), active: u.active !== false,
+      createdAt: u.createdAt, lastSignIn: u.lastSignIn || null, setupPending: !u.hash,
+    };
+  };
+  const SETUP_MS = 48 * 3600e3;
+  /** A new set-up link for a team member (48 hours; they choose their own password with it). */
+  const newSetup = (req) => {
+    const token = crypto.randomBytes(24).toString('base64url');
+    return { token, setup: { hash: crypto.createHash('sha256').update(token).digest('hex'), exp: Date.now() + SETUP_MS }, link: `${linkBase(req)}/admin?setup=${token}` };
+  };
+  const cleanStaffName = (v) => (typeof v === 'string' ? v.replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 60) : '');
+  const staffPassword = (pw) => typeof pw === 'string' && pw.length >= 10 && pw.length <= 200;
+  app.get('/api/admin/staff', requireAdmin, (req, res) => res.json({
+    staff: staffAll().map(staffRow),
+    roles: roles.ROLES.map((id) => ({ id, name: roles.ROLE_NAMES[id], perms: roles.ROLE_PERMS[id] })),
+  }));
+  // { name, username, roles } -> a set-up link to send them; ({ password } sets it straight away instead).
   app.post('/api/admin/staff', requireAdmin, express.json({ limit: '4kb' }), (req, res) => {
     const b = req.body || {};
-    const name = typeof b.name === 'string' ? b.name.replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 60) : '';
+    const name = cleanStaffName(b.name);
     const username = typeof b.username === 'string' ? b.username.trim().toLowerCase() : '';
-    if (!name || !/^[a-z0-9][a-z0-9._-]{2,29}$/.test(username) || typeof b.password !== 'string' || b.password.length < 10 || b.password.length > 200) throw new HttpError(400, 'badStaff');
-    const user = { id: crypto.randomBytes(8).toString('hex'), name, username, role: 'products', gen: 0, createdAt: new Date().toISOString(), ...security.AdminAuth.hashStaffPassword(b.password) };
+    const rs = roles.cleanRoles(b.roles !== undefined ? b.roles : b.role !== undefined ? b.role : ['catalogue']);
+    if (!name || !/^[a-z0-9][a-z0-9._-]{2,29}$/.test(username) || !rs) throw new HttpError(400, 'badStaff');
+    if (b.password !== undefined && !staffPassword(b.password)) throw new HttpError(400, 'badStaff');
+    const s = b.password === undefined ? newSetup(req) : null;
+    const user = {
+      id: crypto.randomBytes(8).toString('hex'), name, username, roles: rs, active: true, gen: 0,
+      createdAt: new Date().toISOString(), createdBy: req.adminWho.shown || req.adminWho.name,
+      ...(s ? { setup: s.setup } : security.AdminAuth.hashStaffPassword(b.password)),
+    };
     store.mutate((db) => {
       db.staff ||= [];
       if (db.staff.some((u) => u.username === username)) throw new HttpError(400, 'staffTaken');
+      if (db.staff.length >= 100) throw new HttpError(400, 'badStaff');
       db.staff.push(user);
     });
-    res.status(201).json(staffRow(user));
+    res.status(201).json({ ...staffRow(user), user: staffRow(user), ...(s ? { setupLink: s.link, setupExpiresAt: new Date(user.setup.exp).toISOString() } : {}) });
+  });
+  // { name?, roles?, active? }: new roles or switching someone off signs them out everywhere.
+  app.patch('/api/admin/staff/:id', requireAdmin, express.json({ limit: '4kb' }), (req, res) => {
+    const b = req.body || {};
+    const name = b.name === undefined ? null : cleanStaffName(b.name);
+    const rs = b.roles === undefined ? null : roles.cleanRoles(b.roles);
+    if ((b.name !== undefined && !name) || (b.roles !== undefined && !rs) || (b.active !== undefined && typeof b.active !== 'boolean')) throw new HttpError(400, 'badStaff');
+    // (No one takes away their own owner role or switches themselves off: another owner does.)
+    if (req.params.id === req.adminWho.id && ((rs && !rs.includes('owner')) || b.active === false)) throw new HttpError(400, 'staffSelf');
+    const user = store.mutate((db) => {
+      const u = (db.staff || []).find((x) => x.id === req.params.id);
+      if (!u) throw new HttpError(404, 'notFound');
+      if (name) u.name = name;
+      const before = JSON.stringify([roles.rolesOf(u), u.active !== false]);
+      if (rs) {
+        u.roles = rs;
+        delete u.role;
+      }
+      if (typeof b.active === 'boolean') u.active = b.active;
+      if (JSON.stringify([roles.rolesOf(u), u.active !== false]) !== before) u.gen = (u.gen || 0) + 1;
+      return u;
+    });
+    res.json(staffRow(user));
+  });
+  // A new set-up link (a forgotten password, or the first link ran out). Their old password works until they use it.
+  app.post('/api/admin/staff/:id/setup-link', requireAdmin, (req, res) => {
+    const s = newSetup(req);
+    const user = store.mutate((db) => {
+      const u = (db.staff || []).find((x) => x.id === req.params.id);
+      if (!u) throw new HttpError(404, 'notFound');
+      u.setup = s.setup;
+      return u;
+    });
+    res.json({ user: staffRow(user), setupLink: s.link, setupExpiresAt: new Date(s.setup.exp).toISOString() });
   });
   app.put('/api/admin/staff/:id/password', requireAdmin, express.json({ limit: '4kb' }), (req, res) => {
     const pw = (req.body || {}).password;
-    if (typeof pw !== 'string' || pw.length < 10 || pw.length > 200) throw new HttpError(400, 'badStaff');
+    if (!staffPassword(pw)) throw new HttpError(400, 'badStaff');
     store.mutate((db) => {
       const u = (db.staff || []).find((x) => x.id === req.params.id);
       if (!u) throw new HttpError(404, 'notFound');
       Object.assign(u, security.AdminAuth.hashStaffPassword(pw));
+      delete u.setup;
       u.gen = (u.gen || 0) + 1; // signs out everywhere
     });
     res.status(204).end();
   });
   app.delete('/api/admin/staff/:id', requireAdmin, (req, res) => {
+    if (req.params.id === req.adminWho.id) throw new HttpError(400, 'staffSelf');
     store.mutate((db) => {
       const before = (db.staff || []).length;
       db.staff = (db.staff || []).filter((x) => x.id !== req.params.id);
       if (db.staff.length === before) throw new HttpError(404, 'notFound');
     });
     res.status(204).end();
+  });
+  // The set-up link (/admin?setup=…): the team member chooses their password. No sign-in needed.
+  app.post('/api/admin/setup', express.json({ limit: '2kb' }), (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    limitCheck(req, 'staffSetup');
+    const b = req.body || {};
+    const token = typeof b.token === 'string' ? b.token.trim() : '';
+    const hash = crypto.createHash('sha256').update(token).digest('hex');
+    const found = token && staffAll().find((u) => u.setup && u.active !== false && sameText(u.setup.hash, hash) && u.setup.exp > Date.now());
+    if (!found) {
+      limitHit('staffSetup', req.ip);
+      throw new HttpError(400, 'setupLinkBad');
+    }
+    if (!staffPassword(b.password)) throw new HttpError(400, 'badStaff');
+    const user = store.mutate((db) => {
+      const u = (db.staff || []).find((x) => x.id === found.id);
+      if (!u || !u.setup || u.setup.hash !== hash) throw new HttpError(400, 'setupLinkBad');
+      Object.assign(u, security.AdminAuth.hashStaffPassword(b.password));
+      delete u.setup;
+      u.gen = (u.gen || 0) + 1;
+      return u;
+    });
+    activity.add({ whoId: user.id, who: user.name || user.username, roles: roles.rolesOf(user), action: 'setup', label: { en: 'Chose their password (set-up link)', ar: 'اختار كلمة السر (لينك التجهيز)' }, method: 'POST', path: '/api/admin/setup', status: 200, ip: req.ip });
+    res.json({ ok: true, username: user.username });
+  });
+  // A team member changes their own password ({ current, password }); they get a new sign-in back.
+  app.put('/api/admin/me/password', adminGate, express.json({ limit: '2kb' }), (req, res) => {
+    const w = req.adminWho;
+    if (w.emergency) throw new HttpError(400, 'emergencyPassword');
+    const b = req.body || {};
+    const u = staffAll().find((x) => x.id === w.id);
+    const given = crypto.scryptSync(typeof b.current === 'string' ? b.current : '', u.salt, 32);
+    if (!crypto.timingSafeEqual(given, Buffer.from(u.hash, 'hex'))) throw new HttpError(400, 'wrongCurrentPassword');
+    if (!staffPassword(b.password)) throw new HttpError(400, 'badStaff');
+    const user = store.mutate((db) => {
+      const x = (db.staff || []).find((y) => y.id === w.id);
+      Object.assign(x, security.AdminAuth.hashStaffPassword(b.password));
+      x.gen = (x.gen || 0) + 1; // other browsers are signed out
+      return x;
+    });
+    const t = auth.staffToken(user);
+    res.json({ ok: true, token: t.token, expiresAt: new Date(t.expiresAt).toISOString() });
+  });
+
+  // ---------- Owner approvals: catalogue and money changes by the team wait here ----------
+  const approvalDir = path.join(dataDir, 'approvals');
+  const approvalsAll = () => store.db.approvals || [];
+  const approvalRow = (a) => ({
+    id: a.id, at: a.at, by: a.by, roles: a.roles, action: a.action, label: a.label || null, summary: a.summary,
+    details: a.file ? { bytes: a.bytes, type: a.contentType || null } : roles.shortBody(a.body),
+    method: a.method, path: a.path, status: a.status,
+    ...(a.decidedBy ? { decidedBy: a.decidedBy, decidedAt: a.decidedAt } : {}),
+    ...(a.note ? { note: a.note } : {}), ...(a.error ? { error: a.error } : {}),
+  });
+  const nameOfProduct = (id) => {
+    const p = getProduct(id);
+    return p ? p.name : { en: String(id || ''), ar: String(id || '') };
+  };
+  const enAr = (en, ar) => ({ en, ar });
+  /** What the change is about, in a few words (the product, coupon, order…), for the owner's list. */
+  function approvalAbout(key, req) {
+    const b = req.body && !Buffer.isBuffer(req.body) ? req.body : {};
+    const p = req.params;
+    const money = (v) => `${v} ${CURRENCY}`;
+    const orderNo = (id) => {
+      const o = store.getOrder(id) || (store.findItem(id) || {}).order;
+      return o ? `#${o.number}` : '';
+    };
+    if (key.includes('/catalog')) {
+      const n = key === 'POST /api/admin/catalog' ? { en: String(b.id || ''), ar: String(b.id || '') } : nameOfProduct(p.id);
+      const fields = Object.keys(b).filter((k) => !['id', 'template'].includes(k));
+      return enAr([n.en, fields.length && !Buffer.isBuffer(req.body) ? `(${fields.join(', ')})` : ''].filter(Boolean).join(' '), [n.ar, fields.length && !Buffer.isBuffer(req.body) ? `(${fields.join('، ')})` : ''].filter(Boolean).join(' '));
+    }
+    if (key === 'PATCH /api/admin/library') {
+      const n = Array.isArray(b.ids) ? b.ids.length : 0;
+      const what = b.deleted === true ? enAr('delete', 'مسح') : b.deleted === false ? enAr('bring back', 'رجوع') : b.hidden === true ? enAr('pause', 'إيقاف') : enAr('show', 'إظهار');
+      return enAr(`${n} designs: ${what.en}`, `${n} تصميم: ${what.ar}`);
+    }
+    if (key.includes('/library/uploads')) {
+      const n = Array.isArray(b.items) ? b.items.length : 0;
+      return enAr(`${n} designs`, `${n} تصميم`);
+    }
+    if (key.includes('/library')) {
+      const d = p.id && library.all().find((x) => x.id === p.id);
+      const nm = d ? d.name : { en: String(b.nameEn || p.id || ''), ar: String(b.nameAr || b.nameEn || p.id || '') };
+      const what = key.startsWith('DELETE') || b.deleted === true ? enAr('delete', 'مسح') : b.deleted === false ? enAr('bring back', 'رجوع') : b.hidden === true ? enAr('pause', 'إيقاف') : b.hidden === false ? enAr('show', 'إظهار') : enAr('', '');
+      return enAr([nm.en, what.en].filter(Boolean).join(': '), [nm.ar, what.ar].filter(Boolean).join(': '));
+    }
+    if (key.includes('/coupons')) {
+      const c = p.id && (store.db.coupons || []).find((x) => x.id === p.id);
+      const code = String(b.code || (c && c.code) || '');
+      return enAr(code, code);
+    }
+    if (key === 'POST /api/admin/expenses') return enAr(`${money(b.amount)} · ${b.category || ''} ${b.note || ''}`.trim(), `${money(b.amount)} · ${b.category || ''} ${b.note || ''}`.trim());
+    if (key === 'DELETE /api/admin/expenses/:id') {
+      const e = (store.db.expenses || []).find((x) => x.id === p.id);
+      return e ? enAr(`${money(e.amount)} · ${e.category || ''}`, `${money(e.amount)} · ${e.category || ''}`) : enAr('', '');
+    }
+    if (key === 'PATCH /api/admin/items/:itemId/cost') return enAr(`${orderNo(p.itemId)} → ${b.actualCost === null || b.actualCost === '' ? 'cleared' : money(b.actualCost)}`, `${orderNo(p.itemId)} ← ${b.actualCost === null || b.actualCost === '' ? 'اتمسحت' : money(b.actualCost)}`);
+    if (key === 'PATCH /api/admin/orders/:orderId/shipping-cost') return enAr(`${orderNo(p.orderId)} → ${b.actualShipping === null || b.actualShipping === '' ? 'cleared' : money(b.actualShipping)}`, `${orderNo(p.orderId)} ← ${b.actualShipping === null || b.actualShipping === '' ? 'اتمسحت' : money(b.actualShipping)}`);
+    if (key === 'PUT /api/admin/accounts/settings') return enAr(`shipping cost ${money(b.shippingCost)}`, `تكلفة الشحن ${money(b.shippingCost)}`);
+    if (key === 'PUT /api/admin/pricing/:productId') {
+      const n = nameOfProduct(p.productId);
+      return enAr(`${n.en} (costs)`, `${n.ar} (التكاليف)`);
+    }
+    return enAr('', '');
+  }
+  /** The checks a change can fail before it reaches the owner (so the team member hears now, not later). */
+  const APPROVAL_CHECKS = {
+    'PUT /api/admin/catalog/:id': (req) => {
+      const p = getProduct(req.params.id);
+      if (!p) throw new HttpError(404, 'unknownProduct');
+      const body = req.body && typeof req.body === 'object' ? req.body : {};
+      if (body.prices !== undefined) throw new HttpError(403, 'ownerOnly');
+      const c = catalog.clean(p, staffPrices(p, body), { categories: CATEGORIES.map((x) => x.id), prev: catalogEdits()[p.id] || null });
+      if (c.error) throw new HttpError(400, c.error, { field: c.field || '' });
+    },
+    'POST /api/admin/catalog': (req) => {
+      const n = catalog.cleanNew(req.body && typeof req.body === 'object' ? req.body : {}, PRODUCTS);
+      if (n.error) throw new HttpError(400, n.error, { field: n.field || '' });
+      if (catalogEdits()[n.id]) throw new HttpError(400, 'productIdTaken');
+    },
+    'DELETE /api/admin/catalog/:id': (req) => {
+      const p = getProduct(req.params.id);
+      if (!p) throw new HttpError(404, 'unknownProduct');
+      if (!catalog.isBuiltIn(p.id)) throw new HttpError(409, 'productsKept');
+    },
+    'POST /api/admin/catalog/:id/photos': (req) => {
+      const p = getProduct(req.params.id);
+      if (!p) throw new HttpError(404, 'unknownProduct');
+      if (((catalogEdits()[p.id] || {}).photos || []).length >= catalog.MAX_PHOTOS) throw new HttpError(400, 'tooManyPhotos', { max: catalog.MAX_PHOTOS });
+    },
+    'PUT /api/admin/catalog/:id/photos': (req) => { if (!getProduct(req.params.id)) throw new HttpError(404, 'unknownProduct'); },
+    'DELETE /api/admin/catalog/:id/photos/:photoId': (req) => { if (!getProduct(req.params.id)) throw new HttpError(404, 'unknownProduct'); },
+    'POST /api/admin/library': (req) => {
+      const b = req.body || {};
+      const id = (String(b.share || '').match(/([A-Za-z0-9_-]{12})\/?(?:[?#].*)?$/) || [])[1];
+      if (!readShare(id)) throw new HttpError(400, 'shareNotFound');
+      const nameEn = String(b.nameEn || '').trim();
+      if (!String(b.nameAr || '').trim() && !nameEn) throw new HttpError(400, 'fieldRequired', { field: { en: 'Name', ar: 'الاسم' } });
+      if (!nameEn) throw new HttpError(400, 'libNameEnMissing');
+      if (ARABIC_LETTERS.test(nameEn)) throw new HttpError(400, 'libNameEnArabic');
+    },
+    'PATCH /api/admin/library': (req) => {
+      const b = req.body || {};
+      if (!Array.isArray(b.ids) || !b.ids.length || b.ids.length > 2000) throw new HttpError(400, 'badProductField', { field: 'ids' });
+      libraryFlags(b);
+    },
+    'PATCH /api/admin/library/:id': (req) => {
+      if (!library.all().some((d) => d.id === req.params.id)) throw new HttpError(404, 'notFound');
+      const b = req.body || {};
+      if (!(b.deleted === undefined && b.hidden !== undefined && typeof b.hidden !== 'boolean')) libraryFlags(b);
+    },
+    'DELETE /api/admin/library/:id': (req) => { if (!library.all().some((d) => d.id === req.params.id)) throw new HttpError(404, 'notFound'); },
+    'POST /api/admin/library/uploads/:batch/publish': (req) => {
+      const b = readBatch(req.params.batch);
+      if (!b) throw new HttpError(404, 'uploadGone');
+      if (b.status && b.status !== 'ready') throw new HttpError(409, 'uploadNotReady');
+      // The items that can't be published are named now; with none left, there's nothing to approve.
+      const { plan, skipped } = publishPlan(b, (req.body || {}).items);
+      if (!plan.length) return { answer: { published: [], skipped } };
+      return { extra: { skipped } };
+    },
+    'POST /api/admin/coupons': (req) => {
+      const { coupon, error } = coupons.cleanCoupon(req.body, { products: PRODUCTS, categories: CATEGORIES });
+      if (error) throw new HttpError(400, error);
+      if ((store.db.coupons || []).some((c) => c.code === coupon.code)) throw new HttpError(409, 'couponExists');
+    },
+    'PUT /api/admin/coupons/:id': (req) => {
+      if (!(store.db.coupons || []).some((c) => c.id === req.params.id)) throw new HttpError(404, 'couponNotFound');
+      const { coupon, error } = coupons.cleanCoupon(req.body, { products: PRODUCTS, categories: CATEGORIES });
+      if (error) throw new HttpError(400, error);
+      if ((store.db.coupons || []).some((c) => c.code === coupon.code && c.id !== req.params.id)) throw new HttpError(409, 'couponExists');
+    },
+    'DELETE /api/admin/coupons/:id': (req) => { if (!(store.db.coupons || []).some((c) => c.id === req.params.id)) throw new HttpError(404, 'couponNotFound'); },
+    'PUT /api/admin/pricing/:productId': (req) => {
+      const product = getProduct(req.params.productId);
+      if (!product) throw new HttpError(404, 'unknownProduct');
+      const co = accounting.cleanCosts(product, (req.body || {}).costs || {});
+      if (co.error) throw new HttpError(400, co.error);
+    },
+    'PUT /api/admin/accounts/settings': (req) => {
+      const ship = accounting.money((req.body || {}).shippingCost);
+      if (ship === undefined || ship === null) throw new HttpError(400, 'badCost');
+    },
+    'PATCH /api/admin/items/:itemId/cost': (req) => {
+      if (accounting.money((req.body || {}).actualCost) === undefined) throw new HttpError(400, 'badCost');
+      if (!store.findItem(req.params.itemId)) throw new HttpError(404, 'itemNotFound');
+    },
+    'PATCH /api/admin/orders/:orderId/shipping-cost': (req) => {
+      if (accounting.money((req.body || {}).actualShipping) === undefined) throw new HttpError(400, 'badCost');
+      if (!store.getOrder(req.params.orderId)) throw new HttpError(404, 'notFound');
+    },
+    'POST /api/admin/expenses': (req) => {
+      const { error } = accounting.cleanExpense(req.body || {});
+      if (error) throw new HttpError(400, error);
+    },
+    'DELETE /api/admin/expenses/:id': (req) => { if (!(store.db.expenses || []).some((e) => e.id === req.params.id)) throw new HttpError(404, 'notFound'); },
+  };
+  const readBody = (req, res, route) => new Promise((resolve, reject) => {
+    const parse = route.raw ? express.raw({ type: () => true, limit: route.raw }) : express.json({ limit: '256kb' });
+    parse(req, res, (err) => (err ? reject(err) : resolve()));
+  });
+  /** A change kept for an owner: 202 { pending: true, approval } (nothing changes until it's approved). */
+  async function holdForApproval(req, res, key, route) {
+    await readBody(req, res, route);
+    const checked = (APPROVAL_CHECKS[key] && APPROVAL_CHECKS[key](req)) || {};
+    if (checked.answer) return res.json(checked.answer);
+    const w = req.adminWho;
+    const raw = Buffer.isBuffer(req.body);
+    const id = crypto.randomBytes(8).toString('hex');
+    const about = approvalAbout(key, req);
+    const label = route.label || enAr(key, key);
+    const a = {
+      id, at: new Date().toISOString(), status: 'pending',
+      by: { id: w.id, name: w.shown || w.name, username: w.name }, roles: w.roles,
+      action: key, label, summary: { en: [label.en, about.en].filter(Boolean).join(': '), ar: [label.ar, about.ar].filter(Boolean).join(': ') },
+      method: req.method, path: req.originalUrl.slice(0, 500), contentType: String(req.get('content-type') || '').slice(0, 100),
+      lang: langOf(req),
+      ...(raw ? { file: `${id}.bin`, bytes: req.body.length } : { body: req.body === undefined ? null : req.body }),
+    };
+    if (raw) {
+      fs.mkdirSync(approvalDir, { recursive: true });
+      fs.writeFileSync(path.join(approvalDir, a.file), req.body);
+    }
+    store.mutate((db) => {
+      db.approvals ||= [];
+      if (db.approvals.filter((x) => x.status === 'pending').length >= 500) throw new HttpError(429, 'tooManyApprovals');
+      db.approvals.push(a);
+      // Decided ones: the latest 300 are kept.
+      const done = db.approvals.filter((x) => x.status !== 'pending' && x.status !== 'applying');
+      if (done.length > 300) {
+        const drop = new Set(done.slice(0, done.length - 300).map((x) => x.id));
+        db.approvals = db.approvals.filter((x) => !drop.has(x.id));
+      }
+    });
+    res.locals.approvalId = id;
+    res.locals.summary = a.summary;
+    res.status(202).json({ pending: true, approval: approvalRow(a), ...(checked.extra || {}) });
+  }
+  let replayServer = null;
+  const findApproval = (id) => approvalsAll().find((x) => x.id === id);
+  // A change that was being applied when the app stopped (5 minutes on) can be approved again.
+  const openForDecision = (a) => a.status === 'pending' || a.status === 'failed' || (a.status === 'applying' && Date.now() - Date.parse(a.applyingAt || 0) > 5 * 60e3);
+  app.get('/api/admin/approvals', adminGate, (req, res) => {
+    const w = req.adminWho;
+    const status = typeof req.query.status === 'string' ? req.query.status : 'pending';
+    const list = approvalsAll()
+      .filter((a) => w.perms.has('approvals') || (a.by && a.by.id === w.id))
+      .filter((a) => status === 'all' || a.status === status)
+      .slice(-300).reverse();
+    res.json({ approvals: list.map(approvalRow) });
+  });
+  app.post('/api/admin/approvals/:id/approve', adminGate, express.json({ limit: '4kb' }), asyncRoute(async (req, res) => {
+    const w = req.adminWho;
+    const note = typeof (req.body || {}).note === 'string' ? req.body.note.replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 300) : '';
+    const a = store.mutate((db) => {
+      const x = (db.approvals || []).find((y) => y.id === req.params.id);
+      if (!x) throw new HttpError(404, 'notFound');
+      if (!openForDecision(x)) throw new HttpError(409, 'approvalDecided');
+      x.status = 'applying';
+      x.applyingAt = new Date().toISOString();
+      return { ...x };
+    });
+    res.locals.approvalId = a.id;
+    res.locals.summary = a.summary;
+    let out;
+    approvalRuns.set(a.id, { who: { id: a.by.id, name: a.by.username, shown: a.by.name, roles: a.roles, role: roles.mainRole(a.roles) }, by: w.shown || w.name });
+    try {
+      let body = null;
+      if (a.file) body = fs.readFileSync(path.join(approvalDir, a.file));
+      else if (a.body !== null && a.body !== undefined) body = Buffer.from(JSON.stringify(a.body));
+      replayServer ||= require('http').createServer(app);
+      out = await roles.replay(replayServer, {
+        method: a.method, url: a.path,
+        headers: {
+          ...(body ? { 'content-type': a.contentType || 'application/json' } : {}),
+          'accept-language': a.lang === 'ar' ? 'ar' : 'en',
+          'x-approval-replay': `${replayKey}.${a.id}`,
+        },
+        body,
+      });
+    } catch (e) {
+      out = { status: 500, body: Buffer.from(JSON.stringify({ error: e.message })) };
+    } finally {
+      approvalRuns.delete(a.id);
+    }
+    let result = null;
+    try { result = JSON.parse(out.body.toString('utf8')); } catch (e) { result = null; }
+    const ok = out.status >= 200 && out.status < 300;
+    const done = store.mutate((db) => {
+      const x = (db.approvals || []).find((y) => y.id === a.id);
+      x.status = ok ? 'approved' : 'failed';
+      x.decidedBy = { id: w.id, name: w.shown || w.name };
+      x.decidedAt = new Date().toISOString();
+      delete x.applyingAt;
+      if (note) x.note = note;
+      if (ok) delete x.error;
+      else x.error = String((result && result.error) || `HTTP ${out.status}`).slice(0, 300);
+      return x;
+    });
+    if (ok && a.file) fs.rmSync(path.join(approvalDir, a.file), { force: true });
+    res.json({ approval: approvalRow(done), result });
+  }));
+  const closeApproval = (req, status) => {
+    const w = req.adminWho;
+    const note = typeof (req.body || {}).note === 'string' ? req.body.note.replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 300) : '';
+    const a = store.mutate((db) => {
+      const x = (db.approvals || []).find((y) => y.id === req.params.id);
+      if (!x) throw new HttpError(404, 'notFound');
+      // (A team member withdraws only their own; an owner any.)
+      if (status === 'withdrawn' && !(x.by && x.by.id === w.id) && !w.perms.has('approvals')) throw new HttpError(403, 'noPermission');
+      if (!openForDecision(x)) throw new HttpError(409, 'approvalDecided');
+      x.status = status;
+      x.decidedBy = { id: w.id, name: w.shown || w.name };
+      x.decidedAt = new Date().toISOString();
+      delete x.applyingAt;
+      if (note) x.note = note;
+      return x;
+    });
+    if (a.file) fs.rmSync(path.join(approvalDir, a.file), { force: true });
+    return a;
+  };
+  app.post('/api/admin/approvals/:id/reject', adminGate, express.json({ limit: '4kb' }), (req, res) => {
+    res.json({ approval: approvalRow(closeApproval(req, 'rejected')) });
+  });
+  app.delete('/api/admin/approvals/:id', adminGate, (req, res) => {
+    res.json({ approval: approvalRow(closeApproval(req, 'withdrawn')) });
+  });
+  // ---------- Activity log: who changed what (owners see everyone; the team their own) ----------
+  app.get('/api/admin/activity', adminGate, (req, res) => {
+    const w = req.adminWho;
+    const day = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : null);
+    const who = w.perms.has('activity.all') ? (typeof req.query.who === 'string' && req.query.who ? req.query.who.slice(0, 40) : null) : w.id;
+    const limit = Math.min(500, Math.max(1, parseInt(req.query.limit, 10) || 200));
+    res.json({ entries: activity.list({ who, from: day(req.query.from), to: day(req.query.to), limit }) });
   });
 
   app.get('/api/admin/notifications', requireAdmin, (req, res) => {
@@ -4556,18 +5025,16 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     res.set('Cache-Control', d.hidden ? 'private, max-age=300, no-transform' : 'public, max-age=3600, no-transform'); // (an hour: a takedown is gone from caches soon)
     res.type(file.endsWith('.jpg') ? 'jpeg' : 'png').send(fs.readFileSync(f));
   });
-  app.post('/api/admin/library/uploads/:batch/publish', requireCatalog, express.json({ limit: '256kb' }), (req, res) => {
-    const b = readBatch(req.params.batch);
-    if (!b) throw new HttpError(404, 'uploadGone');
-    if (b.status && b.status !== 'ready') throw new HttpError(409, 'uploadNotReady');
-    const asked = Array.isArray((req.body || {}).items) ? req.body.items.slice(0, 300) : [];
+  /** Which items of a batch can be published as asked (names, products), and why the others can't. */
+  function publishPlan(b, items) {
+    const asked = Array.isArray(items) ? items.slice(0, 300) : [];
     const live = new Map(liveProducts().map((p) => [p.id, p]));
-    const published = [];
+    const plan = [];
     const skipped = [];
-    const done = new Set();
+    const seen = new Set();
     for (const a of asked) {
       const it = a && b.items.find((x) => x.id === a.id);
-      if (!it || done.has(it.id)) continue;
+      if (!it || seen.has(it.id)) continue;
       const products = [...new Set((Array.isArray(a.products) ? a.products : []).map(String))].filter((id) => live.has(id)).slice(0, 60);
       if (!products.length) { skipped.push({ itemId: it.id, code: 'pickProducts' }); continue; }
       const clean = (v) => (typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f<>]/g, '').trim().replace(/\s+/g, ' ').slice(0, 60) : '');
@@ -4583,6 +5050,19 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const first = live.get(products[0]);
       const wantColor = a.color && typeof a.color === 'object' ? a.color[first.id] : typeof a.color === 'string' ? a.color : it.color[first.id];
       const color = (first.colors.find((c) => c.id === wantColor) || first.colors.find((c) => c.id === it.color[first.id]) || first.colors[0]).id;
+      seen.add(it.id);
+      plan.push({ it, products, first, en, ar, category, color });
+    }
+    return { plan, skipped };
+  }
+  app.post('/api/admin/library/uploads/:batch/publish', requireCatalog, express.json({ limit: '256kb' }), (req, res) => {
+    const b = readBatch(req.params.batch);
+    if (!b) throw new HttpError(404, 'uploadGone');
+    if (b.status && b.status !== 'ready') throw new HttpError(409, 'uploadNotReady');
+    const { plan, skipped } = publishPlan(b, (req.body || {}).items);
+    const published = [];
+    const done = new Set();
+    for (const { it, products, first, en, ar, category, color } of plan) {
       const designId = `u-${crypto.randomBytes(6).toString('hex')}`;
       const dir = library.artDir(designId);
       fs.mkdirSync(dir, { recursive: true });
@@ -4997,14 +5477,16 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   app.put('/api/admin/pricing/:productId', requireAdmin, express.json(), (req, res) => {
     const product = getProduct(req.params.productId);
     if (!product) throw new HttpError(404, 'unknownProduct');
-    const pr = accounting.cleanPricing(product, req.body || {});
+    // Selling prices are the owners': a cost change by finance keeps the prices as they are.
+    const ownPrices = req.adminWho.perms.has('prices.edit');
+    const pr = ownPrices ? accounting.cleanPricing(product, req.body || {}) : { pricing: null };
     if (pr.error) throw new HttpError(400, pr.error);
     const co = accounting.cleanCosts(product, (req.body || {}).costs || {});
     if (co.error) throw new HttpError(400, co.error);
     store.mutate((db) => {
       db.pricing ||= {};
       db.costs ||= {};
-      if (Object.keys(pr.pricing).length) db.pricing[product.id] = pr.pricing;
+      if (!pr.pricing) { /* prices unchanged */ } else if (Object.keys(pr.pricing).length) db.pricing[product.id] = pr.pricing;
       else delete db.pricing[product.id];
       if (Object.keys(co.costs).length) db.costs[product.id] = co.costs;
       else delete db.costs[product.id];

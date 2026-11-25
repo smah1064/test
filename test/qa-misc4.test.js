@@ -209,7 +209,7 @@ test('admin: after a reload the header shows the staff member\'s name, not the u
   const login = await (await post('/api/admin/login', { username: 'mostafa', password: 'a-long-password' })).json();
   assert.strictEqual(login.name, 'Mostafa مصطفى', 'right after signing in');
   const session = await (await req('GET', '/api/admin/session', undefined, login.token)).json();
-  assert.strictEqual(session.role, 'products');
+  assert.strictEqual(session.role, 'catalogue', 'a product manager is the catalogue role now');
   assert.strictEqual(session.name, 'mostafa');
   // The owner's session names no one.
   const own = await (await req('GET', '/api/admin/session', undefined, owner)).json();

@@ -383,6 +383,12 @@ class AdminAuth {
     console.log(`[admin] staff ${user.username} signed in from ${ip}`);
     return { token: `${body}.${this.sign(`staff.${body}.${user.gen || 0}`)}`, expiresAt, user };
   }
+  /** A new sign-in for a team member (after they changed their own password). */
+  staffToken(user) {
+    const expiresAt = Date.now() + SESSION_MS;
+    const body = `${expiresAt.toString(36)}.${crypto.randomBytes(18).toString('base64url')}.${user.id}`;
+    return { token: `${body}.${this.sign(`staff.${body}.${user.gen || 0}`)}`, expiresAt };
+  }
   /** The staff member a token belongs to (null if it isn't a valid staff token). */
   verifyStaff(token, staffList) {
     const m = /^([0-9a-z]+)\.([A-Za-z0-9_-]+)\.([a-f0-9]{8,32})\.([A-Za-z0-9_-]+)$/.exec(token || '');

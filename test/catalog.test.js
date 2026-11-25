@@ -250,20 +250,22 @@ test('product managers sign in with their own password and only reach the Produc
   assert.strictEqual((await post('/api/admin/staff', { name: 'X', username: 'mona', password: 'another-long-one' }, owner)).status, 400, 'username taken');
   assert.strictEqual((await post('/api/admin/login', { username: 'mona', password: 'wrong-password' })).status, 401);
   const login = await (await post('/api/admin/login', { username: 'mona', password: 'a-long-password' })).json();
-  assert.strictEqual(login.role, 'products');
+  // (Product managers are the catalogue role now; their changes wait for the owner's approval.)
+  assert.strictEqual(login.role, 'catalogue');
   const tok = login.token;
-  assert.strictEqual((await (await req('GET', '/api/admin/session', undefined, tok)).json()).role, 'products');
+  assert.strictEqual((await (await req('GET', '/api/admin/session', undefined, tok)).json()).role, 'catalogue');
   assert.strictEqual((await req('GET', '/api/admin/catalog', undefined, tok)).status, 200);
   const edit = await put('/api/admin/catalog/apron', { status: 'hidden', hiddenReason: 'season' }, tok);
-  assert.strictEqual(edit.status, 200);
-  assert.strictEqual((await edit.json()).updatedBy, 'mona');
+  assert.strictEqual(edit.status, 202);
+  const approved = await (await post(`/api/admin/approvals/${(await edit.json()).approval.id}/approve`, {}, owner)).json();
+  assert.strictEqual(approved.result.updatedBy, 'mona');
   for (const url of ['/api/admin/orders', '/api/admin/staff', '/api/admin/pricing', '/api/admin/accounts', '/api/admin/preview']) {
-    assert.strictEqual((await req('GET', url, undefined, tok)).status, 401, url);
+    assert.strictEqual((await req('GET', url, undefined, tok)).status, 403, url);
   }
   // Ready designs too (they upload, pause and publish designs), but not the owner's switch for text designs.
   assert.strictEqual((await req('GET', '/api/admin/library', undefined, tok)).status, 200);
-  assert.strictEqual((await req('PUT', '/api/admin/library/settings', { textOnlyLimited: false }, tok)).status, 401);
-  assert.strictEqual((await post('/api/admin/staff', { name: 'Y', username: 'yasser', password: 'a-long-password' }, tok)).status, 401);
+  assert.strictEqual((await req('PUT', '/api/admin/library/settings', { textOnlyLimited: false }, tok)).status, 403);
+  assert.strictEqual((await post('/api/admin/staff', { name: 'Y', username: 'yasser', password: 'a-long-password' }, tok)).status, 403);
   // The log says who changed what.
   const cat = await (await req('GET', '/api/admin/catalog', undefined, owner)).json();
   assert.ok(cat.log.some((l) => l.who === 'mona' && l.productId === 'apron'));
@@ -377,9 +379,11 @@ test('selling prices are the owner\'s, and wrong staff passwords never lock the 
   const r = await put('/api/admin/catalog/apron', { prices: { basePrice: 1 } }, tok);
   assert.strictEqual(r.status, 403);
   assert.strictEqual((await r.json()).code, 'ownerOnly');
-  // Other changes still work for them, and a new product they make starts at the template's prices.
-  assert.strictEqual((await put('/api/admin/catalog/apron', { lowStockAt: 4 }, tok)).status, 200);
-  const made = await (await post('/api/admin/catalog', { id: 'hana-mug', template: 'mug', name: { en: 'Hana mug', ar: 'مج هنا' }, prices: { basePrice: 2 } }, tok)).json();
+  // Other changes still work for them (once the owner approves), and a new product they make starts at the template's prices.
+  assert.strictEqual((await put('/api/admin/catalog/apron', { lowStockAt: 4 }, tok)).status, 202);
+  const asked = await post('/api/admin/catalog', { id: 'hana-mug', template: 'mug', name: { en: 'Hana mug', ar: 'مج هنا' }, prices: { basePrice: 2 } }, tok);
+  assert.strictEqual(asked.status, 202);
+  const made = (await (await post(`/api/admin/approvals/${(await asked.json()).approval.id}/approve`, {}, owner)).json()).result;
   assert.strictEqual(made.basePrice, byId('mug').basePrice);
   // Five wrong staff passwords: staff sign-in waits, the owner signs in as usual.
   for (let i = 0; i < 6; i++) await post('/api/admin/login', { username: 'hana', password: 'wrong-password-x' });

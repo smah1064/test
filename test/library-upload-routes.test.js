@@ -121,10 +121,14 @@ test('upload a zip, review, publish: the designs go on the picked products only,
     assert.deepStrictEqual(noEn.skipped, [{ itemId: sunset.id, code: 'nameEnMissing' }]);
 
     // An item with no product is refused; the other publishes on exactly the products picked.
-    const pub = await (await call(`/api/admin/library/uploads/${batch.id}/publish`, 'POST', { items: [
+    // (A product manager's publish waits for the owner's approval; what can't be published is said at once.)
+    const asked = await (await call(`/api/admin/library/uploads/${batch.id}/publish`, 'POST', { items: [
       { id: cat.id, name: { en: 'Happy cat', ar: 'قطة سعيدة' }, category: 'pets', products: ['tshirt', 'mug', 'not-a-product'] },
       { id: sunset.id, name: { en: 'Sunset', ar: 'غروب' }, category: 'artsy', products: [] },
     ] }, staff)).json();
+    assert.strictEqual(asked.pending, true);
+    assert.deepStrictEqual(asked.skipped, [{ itemId: sunset.id, code: 'pickProducts' }]);
+    const pub = (await (await call(`/api/admin/approvals/${asked.approval.id}/approve`, 'POST', {}, owner)).json()).result;
     assert.deepStrictEqual(pub.skipped, [{ itemId: sunset.id, code: 'pickProducts' }]);
     assert.strictEqual(pub.published.length, 1);
     const designId = pub.published[0].designId;
