@@ -110,6 +110,16 @@ test('upload a zip, review, publish: the designs go on the picked products only,
     assert.strictEqual(pic.status, 200);
     assert.strictEqual(pic.headers.get('content-type'), 'image/png');
 
+    // An English name in Arabic letters (an Arabic file name), or none at all, is refused (QA 25 Nov).
+    const arabicEn = await (await call(`/api/admin/library/uploads/${batch.id}/publish`, 'POST', { items: [
+      { id: sunset.id, name: { en: 'فانوس', ar: 'فانوس' }, category: 'artsy', products: ['mug'] },
+    ] }, staff)).json();
+    assert.deepStrictEqual(arabicEn.skipped, [{ itemId: sunset.id, code: 'nameEnArabic' }]);
+    const noEn = await (await call(`/api/admin/library/uploads/${batch.id}/publish`, 'POST', { items: [
+      { id: sunset.id, name: { en: '', ar: 'غروب' }, category: 'artsy', products: ['mug'] },
+    ] }, staff)).json();
+    assert.deepStrictEqual(noEn.skipped, [{ itemId: sunset.id, code: 'nameEnMissing' }]);
+
     // An item with no product is refused; the other publishes on exactly the products picked.
     const pub = await (await call(`/api/admin/library/uploads/${batch.id}/publish`, 'POST', { items: [
       { id: cat.id, name: { en: 'Happy cat', ar: 'قطة سعيدة' }, category: 'pets', products: ['tshirt', 'mug', 'not-a-product'] },

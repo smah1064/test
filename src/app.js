@@ -235,6 +235,8 @@ function offsetCm(product, side, sizeId, o) {
 // ---------- Places for a customer's details ----------
 // "{Name}", "{الاسم}"… in the shop's ready designs (a team's business cards): a name list fills them, or the
 // customer types the real words. Only these count as unfilled places, never any text in braces.
+/** Arabic letters (any of the Arabic blocks and presentation forms). */
+const ARABIC_LETTERS = /[\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff\ufb50-\ufdff\ufe70-\ufeff]/;
 const FIELD_RE = /\{\s*[\p{L}\p{N}_][^{}\n]{0,39}\}/gu;
 const fieldKey = (tok) => String(tok).slice(1, -1).trim().replace(/\s+/g, ' ').toLowerCase();
 let fieldsCache = { from: null, list: [] };
@@ -4510,8 +4512,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const products = [...new Set((Array.isArray(a.products) ? a.products : []).map(String))].filter((id) => live.has(id)).slice(0, 60);
       if (!products.length) { skipped.push({ itemId: it.id, code: 'pickProducts' }); continue; }
       const clean = (v) => (typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f<>]/g, '').trim().replace(/\s+/g, ' ').slice(0, 60) : '');
-      const en = clean(a.name && a.name.en) || clean(a.name && a.name.ar) || it.name.en;
-      const ar = clean(a.name && a.name.ar) || en;
+      // The English name in English letters (an Arabic file name goes in the Arabic name only: the English shop
+      // would show Arabic, QA 25 Nov); the Arabic name falls back to the English one.
+      const askedEn = clean(a.name && a.name.en);
+      const askedAr = clean(a.name && a.name.ar);
+      const en = askedEn || (askedAr || ARABIC_LETTERS.test(it.name.en) ? '' : it.name.en);
+      if (!en) { skipped.push({ itemId: it.id, code: 'nameEnMissing' }); continue; }
+      if (ARABIC_LETTERS.test(en)) { skipped.push({ itemId: it.id, code: 'nameEnArabic' }); continue; }
+      const ar = askedAr || (ARABIC_LETTERS.test(it.name.ar) ? it.name.ar : '') || en;
       const category = DESIGN_CATEGORIES.some((c) => c.id === a.category) ? a.category : it.category;
       const first = live.get(products[0]);
       const wantColor = a.color && typeof a.color === 'object' ? a.color[first.id] : typeof a.color === 'string' ? a.color : it.color[first.id];

@@ -112,11 +112,13 @@
       return d;
     }
   }
+  // Arabic: "·" next to Arabic digits reads as the zero "٠": the Arabic comma there (POD.sep).
+  const SEP = () => (POD.sep ? POD.sep() : ' · ');
   const pausedText = (p) => [t('pm.st.paused'), p.hiddenReason ? t('pm.reason.' + p.hiddenReason) : ''].filter(Boolean).join(' · ');
   function whyHidden(p) {
     if (isArchived(p)) return t('pm.st.retired');
     if (isNew(p)) return t('pm.st.new');
-    if (isPaused(p)) return pausedText(p) + (p.showAgainOn ? ` · ${t('pm.st.backOn', { date: dayText(p.showAgainOn) })}` : '');
+    if (isPaused(p)) return pausedText(p) + (p.showAgainOn ? `${SEP()}${t('pm.st.backOn', { date: dayText(p.showAgainOn) })}` : '');
     if (p.stock !== null && p.stock <= 0) return t('pm.st.noStock');
     const vs = stockInfo(p);
     if (vs && vs.kind === 'variant' && vs.counted && vs.left === 0) return t('pm.st.noStock');
@@ -155,7 +157,7 @@
           if (typeof v !== 'number') continue;
           r.counted += 1;
           r.total += Math.max(0, v);
-          const name = `${tr(c.name)} · ${tr(z.label)}`;
+          const name = `${tr(c.name)}${SEP()}${tr(z.label)}`;
           if (v <= 0) r.out.push(name);
           else {
             r.left += 1;
@@ -315,7 +317,7 @@
         </button>
         <div class="pm-row-main">
           <div class="pm-row-title"><strong>${esc(tr(p.name))}</strong> <bdi class="pm-id" dir="ltr">${esc(p.id)}</bdi></div>
-          <div class="muted small">${esc(catName(p.category))} · ${esc(t('pm.priceFrom', { price: priceFrom(p) }))}${p.builtIn ? '' : ` · ${esc(t('pm.addedFrom', { name: tr((products().find((x) => x.id === p.base) || {}).name) || p.base }))}`}</div>
+          <div class="muted small">${esc(catName(p.category))}${esc(SEP())}${esc(t('pm.priceFrom', { price: priceFrom(p) }))}${p.builtIn ? '' : `${esc(SEP())}${esc(t('pm.addedFrom', { name: tr((products().find((x) => x.id === p.base) || {}).name) || p.base }))}`}</div>
           <div class="pm-pills">${statusPill(p)}${stockPill(p)}${p.builtIn ? '' : pill('pm-pill-added', t('pm.added'))}${p.edit && p.builtIn ? pill('pm-pill-muted', t('pm.edited')) : ''}</div>
           ${note ? `<div class="small pm-note">${esc(note)}</div>` : ''}
           ${p.updatedAt ? `<div class="muted small">${esc(lastChange(p))}</div>` : ''}
@@ -604,7 +606,7 @@
           <div class="pm-cred"><span>${esc(t('pm.staff.username'))}: <code dir="ltr">${esc(nw.username)}</code></span><span>${esc(t('pm.staff.password'))}: <code dir="ltr">${esc(nw.password)}</code></span></div>
           <div class="row" style="gap:6px;flex-wrap:wrap"><button class="btn btn-sm shrink" type="button" data-pm-act="copy-cred">${esc(t('pm.staff.copy'))}</button><button class="btn btn-sm shrink" type="button" data-pm-act="hide-cred">${esc(t('pm.staff.done'))}</button></div></div>` : ''}
         ${S.staff.length ? `<ul class="pm-staff-list">${S.staff.map((u) => `
-          <li><div><b>${esc(u.name)}</b> <bdi class="pm-id" dir="ltr">${esc(u.username)}</bdi><div class="muted small">${esc(t('pm.staff.role'))} · ${esc(t('pm.staff.since', { date: new Date(u.createdAt).toLocaleDateString(POD.lang === 'ar' ? 'ar-EG' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) }))}</div></div>
+          <li><div><b>${esc(u.name)}</b> <bdi class="pm-id" dir="ltr">${esc(u.username)}</bdi><div class="muted small">${esc(t('pm.staff.role'))}${esc(SEP())}${esc(t('pm.staff.since', { date: new Date(u.createdAt).toLocaleDateString(POD.lang === 'ar' ? 'ar-EG' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) }))}</div></div>
             <div class="pm-staff-acts"><button class="btn btn-sm" type="button" data-pm-act="staff-pw" data-id="${esc(u.id)}">${esc(t('pm.staff.changePw'))}</button><button class="btn btn-sm btn-danger" type="button" data-pm-act="staff-del" data-id="${esc(u.id)}">${esc(t('pm.staff.remove'))}</button></div></li>`).join('')}</ul>`
           : `<p class="muted small">${esc(t('pm.staff.none'))}</p>`}
         <form class="pm-staff-form" id="pm-staff-form" novalidate>
@@ -1532,7 +1534,7 @@
     const msgEl = () => root.querySelector('.pm-upload-msg');
     const bad = list.filter((f) => !PHOTO_TYPES.includes(f.type) || f.size > 15 * 1024 * 1024);
     const ok = list.filter((f) => !bad.includes(f));
-    if (bad.length) toast(t('pm.photoBadType', { n: POD.num(bad.length) }), 'error');
+    if (bad.length) toast(POD.plural('pm.photoBadType', bad.length), 'error');
     if (!ok.length) return;
     if (ok.length > room) toast(t('pm.photoTooMany', { max: POD.num(max) }), 'error');
     const go = ok.slice(0, Math.max(0, room));

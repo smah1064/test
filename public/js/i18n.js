@@ -601,7 +601,7 @@ window.POD_STRINGS = {
   'design.preview3d': ['3D and more views', 'معاينة ثلاثية الأبعاد'],
   'design.note': ['Each piece is printed one at a time after you order. Cash on delivery.', 'كل قطعة بتتطبع لوحدها بعد ما تطلب. والدفع عند الاستلام.'],
   'design.imgAlt': ['{design} on {product}', '{design} على {product}'],
-  'design.loaded': ['Design opened. Change anything you like.', 'تم فتح التصميم. غيّر اللي يعجبك.'],
+  'design.loaded': ['Design opened. Change anything you like.', 'اتفتح التصميم. غيّر اللي يعجبك.'],
   'order.waText': ['Confirm your order with us on WhatsApp, and ask us anything about it.', 'أكّد طلبك معانا على واتساب، واسألنا عن أي حاجة تخصه.'],
   'order.waButton': ['Confirm on WhatsApp', 'تأكيد على واتساب'],
   'order.waMessage': ['Hello! I\'d like to confirm my order {n}:\n{items}\nTotal: {total} (cash on delivery)\nName: {name}', 'أهلًا! عايز أأكد طلبي رقم {n}:\n{items}\nالإجمالي: {total} (الدفع عند الاستلام)\nالاسم: {name}'],

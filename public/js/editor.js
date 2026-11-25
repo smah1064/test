@@ -1006,7 +1006,7 @@
     bar.className = 'draft-bar';
     bar.setAttribute('role', 'status');
     const fill = () => {
-      bar.innerHTML = `<span>${esc(t('draft.restored'))}${fixed ? ' ' + esc(t('draft.fixedOutside', { n: POD.num(fixed) })) : ''}</span>
+      bar.innerHTML = `<span>${esc(t('draft.restored'))}${fixed ? ' ' + esc(POD.plural('draft.fixedOutside', fixed)) : ''}</span>
       <button type="button" class="btn btn-sm" data-draft="new">${esc(t('draft.startNew'))}</button>
       <button type="button" class="fly-close" data-draft="keep" aria-label="${esc(t('draft.keep'))}">✕</button>`;
     };
@@ -1785,7 +1785,7 @@
         const r = rects(page.id).bleed;
         // A page from an earlier PDF here is replaced (a corrected PDF takes its place, not hides under it).
         for (const old of canvas.getObjects().filter((o) => o.pdfSrc)) canvas.remove(old);
-        fimg.set({ name: `${(file.name || 'PDF').replace(/\.[^.]+$/, '').slice(0, 30)} · ${POD.num(srcIdx[i] + 1)}`, ...(got.pdfId ? { pdfSrc: { id: got.pdfId, page: srcIdx[i] } } : {}) });
+        fimg.set({ name: `${(file.name || 'PDF').replace(/\.[^.]+$/, '').slice(0, 30)}${POD.sep ? POD.sep() : ' · '}${POD.num(srcIdx[i] + 1)}`, ...(got.pdfId ? { pdfSrc: { id: got.pdfId, page: srcIdx[i] } } : {}) });
         // Same shape as the booklet page: it fills the page with its bleed. Another shape (landscape,
         // square...) fits inside the page whole, rather than losing what doesn't fit.
         const t = rects(page.id).trim;
@@ -4060,7 +4060,7 @@
     if (activeSides().length > 1 && perSide > 0) notes.push(n > 1 ? t('price.bothSides') : t('price.addSide', { price: money(perSide) }));
     // (Products sold in packs show each pack's own price on its chip: no add-on note.)
     if (size.surcharge && !p.sizes.some((z) => z.surcharge < 0)) notes.push(`${tr(size.label)} ${addOn(size.surcharge)}`);
-    $('price-note').textContent = notes.join(' · ');
+    $('price-note').textContent = notes.join(POD.sep ? POD.sep() : ' · ');
     const h = hist();
     $('undo').disabled = h.i <= 0;
     $('redo').disabled = h.i >= h.stack.length - 1;
@@ -4542,7 +4542,7 @@
     const label = (i) => String(L.rows[i][0] || '').slice(0, 40) || t('merge.emptyValue');
     body.innerHTML = `
       <div class="merge-sum">
-        <span><strong>${esc(t(few(L.rows.length) ? 'merge.countFew' : 'merge.count', { n: POD.num(L.rows.length) }))}</strong> · ${esc(L.fileName || '')}</span>
+        <span><strong>${esc(t(few(L.rows.length) ? 'merge.countFew' : 'merge.count', { n: POD.num(L.rows.length) }))}</strong>${esc(POD.sep ? POD.sep() : ' · ')}${esc(L.fileName || '')}</span>
         <button class="btn btn-sm" data-merge="remove">${esc(t('merge.remove'))}</button>
       </div>
       ${L.truncated ? `<p class="small merge-warn">${esc(t('merge.truncated', { n: POD.num(L.total), max: POD.num(L.rows.length) }))}</p>` : ''}
