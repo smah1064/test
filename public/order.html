@@ -200,7 +200,7 @@
           // Editor-made items: the customer can make the change and send the new version themselves.
           const editable = item.kind === 'product' && /^[0-9a-f-]{36}$/i.test(item.designId || '');
           const edit = editable ? `<p>${esc(t('item.editHint'))}</p><a class="btn btn-sm btn-primary" href="/editor?design=${encodeURIComponent(item.designId)}&revise=${encodeURIComponent(order.id + '.' + item.id)}">${esc(t('item.editResend'))}</a>` : '';
-          body = `${n ? `<p><strong>${esc(t(n.mine ? 'item.yourNote' : 'item.shopNote', { note: '\u2063' })).replace('\u2063', `<bdi>${esc(n.note)}</bdi>`)}</strong></p>` : ''}${edit}<p class="${editable ? 'muted small' : ''}">${esc(t(editable ? 'item.changesOrWait' : 'item.changesHint'))}</p>`;
+          body = `${n ? `<p><strong>${esc(t(n.mine ? 'item.yourNote' : 'item.shopNote', { note: '\u2063' })).replace('\u2063', () => `<bdi>${esc(n.note)}</bdi>`)}</strong></p>` : ''}${edit}<p class="${editable ? 'muted small' : ''}">${esc(t(editable ? 'item.changesOrWait' : 'item.changesHint'))}</p>`;
         }
         return `<div class="item-proof-state ${item.status}">${body}</div>`;
       }
@@ -226,7 +226,11 @@
           return;
         }
         const o = order;
-        const place = [o.customer.city, tr(o.customer.governorate)].filter(Boolean).join(POD.lang === 'ar' ? '، ' : ', ');
+        // The name and city as the customer typed them (Arabic, English or both): each in its own direction, so they are never scrambled.
+        const place = [o.customer.city ? `<bdi>${esc(o.customer.city)}</bdi>` : '', esc(tr(o.customer.governorate))].filter(Boolean).join(POD.lang === 'ar' ? '، ' : ', ');
+        const deliverTo = esc(t('order.deliverTo', { name: '\u2063', place: '\u2064' }))
+          .replace('\u2063', () => `<bdi>${esc(o.customer.name)}</bdi>`)
+          .replace('\u2064', () => place);
         const delivered = o.status === 'delivered' || Boolean(o.shipment && o.shipment.deliveredAt);
         // The promised day (express or standard), shown at the top until the order is delivered.
         const arrives = o.delivery && o.delivery.by && !delivered
@@ -288,7 +292,7 @@
             <div class="line total"><span>${esc(t('checkout.total'))}</span><span>${esc(money(o.total))}</span></div>
             ${o.delivery && !delivered ? `<p class="dlv-expected">🚚 ${esc(t('delivery.line', { speed: t(o.delivery.speed === 'express' ? 'delivery.express' : 'delivery.standard'), date: POD.day(o.delivery.by) }))}</p>` : ''}
             ${o.payment && o.payment.method === 'cod' && o.payment.status !== 'paid' && !delivered ? `<div class="pay-box"><strong>${esc(t('order.payCod', { amount: money(o.total) }))}</strong><span>${esc(t('checkout.codText'))}</span></div>` : ''}
-            <p class="muted small" style="margin-bottom:0;overflow-wrap:anywhere">${esc(t('order.deliverTo', { name: o.customer.name, place }))}</p>
+            <p class="muted small" style="margin-bottom:0;overflow-wrap:anywhere">${deliverTo}</p>
           </div>
           ${shopWa ? `<div class="order-wa"><p>${esc(t('order.waText'))}</p><a class="btn btn-whatsapp" id="order-wa" target="_blank" rel="noopener" href="${esc(whatsappLink(o))}">${esc(t('order.waButton'))}</a></div>` : ''}`;
       }

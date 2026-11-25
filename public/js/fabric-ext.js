@@ -26,14 +26,15 @@
   // Fabric draws a line that has several colours piece by piece, in the order
   // the letters were typed. With English and Arabic on one line that puts
   // words in the wrong places (Arabic reads the other way). Such lines are
-  // laid out here in reading order instead: the line is split into
-  // right-to-left and left-to-right stretches (a simple form of the Unicode
-  // bidi rules: digits go with the letters before them, spaces and marks with
-  // their neighbours, or the text's own direction between the two), the
-  // stretches are placed in the text's direction, and each coloured piece is
-  // drawn in its stretch's direction. A line in one colour keeps the
-  // browser's own layout.
-  const RTL_CH = /[֐-ࣿיִ-﷿ﹰ-ﻼ]/;
+  // laid out here in reading order instead, by the Unicode bidi rules (UAX #9)
+  // for one line of plain text: each letter gets a level (even: left to
+  // right, odd: right to left), the line is split into stretches of one
+  // level, the stretches are put in display order, and each coloured piece is
+  // drawn in its stretch's direction. So a number and the English letters
+  // around it ("3D", "2x1") stay together, and the line reads exactly as the
+  // browser shows it in one colour. A line in one colour keeps the browser's
+  // own layout.
+  const RTL_CH = /[֐-ࣿיִ-﷿ﹰ-ﻼ]/;
   const LETTER = /\p{L}/u;
   const DIGIT = /[0-9٠-٩۰-۹]/;
   function mixedStyledLine(o, line, lineIndex) {
@@ -48,33 +49,103 @@
     }
     return false;
   }
-  /** Stretches of one direction, in typing order: [{ rtl, start, end }]. */
-  function bidiRuns(line, baseRtl) {
-    let last = baseRtl ? 'R' : 'L';
-    const cls = line.map((ch) => {
-      if (RTL_CH.test(ch)) return (last = 'R');
-      if (LETTER.test(ch)) return (last = 'L');
-      if (DIGIT.test(ch)) return last; // numbers read with the words before them
-      return 'N';
-    });
-    // Spaces and marks: the direction around them when both sides agree, else the text's own.
-    for (let i = 0; i < cls.length; i++) {
-      if (cls[i] !== 'N') continue;
+  /** The bidi type of one character (the types that matter for one line of text). */
+  function bidiType(ch) {
+    if (/[\p{Mn}\p{Me}]/u.test(ch)) return 'NSM'; // marks (Arabic vowel signs) go with the letter before them
+    if (/[\u0660-\u0669\u066B\u066C\u0600-\u0605]/.test(ch)) return 'AN'; // Arabic-Indic digits
+    if (/[0-9\u06F0-\u06F9\u00B2\u00B3\u00B9\u2070-\u2079\u2080-\u2089]/.test(ch)) return 'EN';
+    if (/[+\-\u2212\uFE62\uFE63\uFF0B\uFF0D]/.test(ch)) return 'ES';
+    if (/[,.:/\u00A0\u060C\u202F\u2044\uFE50\uFE52\uFE55\uFF0C\uFF0E\uFF0F\uFF1A]/.test(ch)) return 'CS';
+    if (/[#$%\u00A2-\u00A5\u00B0\u00B1\u0609\u060A\u066A\u2030-\u2034\u20A0-\u20CF]/.test(ch)) return 'ET';
+    if (/[\u0590-\u05FF\u07C0-\u085F\uFB1D-\uFB4F\u200F]/.test(ch)) return 'R';
+    if (RTL_CH.test(ch)) return 'AL';
+    if (/\s/.test(ch)) return 'WS';
+    if (/[\p{L}\p{Nd}\p{Mc}\u200E]/u.test(ch)) return 'L';
+    return 'ON';
+  }
+  /** The bidi level of every character of a line (UAX #9 rules W1-W7, N1-N2, I1-I2 and L1). */
+  function bidiLevels(line, baseRtl) {
+    const n = line.length;
+    const sos = baseRtl ? 'R' : 'L';
+    const orig = line.map(bidiType);
+    const t = orig.slice();
+    // W1: a mark takes the type of the character before it.
+    for (let i = 0; i < n; i++) if (t[i] === 'NSM') t[i] = i ? t[i - 1] : sos;
+    // W2: a European number after Arabic letters is an Arabic number. W3: Arabic letters are R.
+    let strong = sos;
+    for (let i = 0; i < n; i++) {
+      if (t[i] === 'L' || t[i] === 'R' || t[i] === 'AL') strong = t[i];
+      else if (t[i] === 'EN' && strong === 'AL') t[i] = 'AN';
+    }
+    for (let i = 0; i < n; i++) if (t[i] === 'AL') t[i] = 'R';
+    // W4: one separator between two numbers of a kind joins them (1.5, 10:30, 1+2).
+    for (let i = 1; i < n - 1; i++) {
+      if (t[i] === 'ES' && t[i - 1] === 'EN' && t[i + 1] === 'EN') t[i] = 'EN';
+      else if (t[i] === 'CS' && (t[i - 1] === 'EN' || t[i - 1] === 'AN') && t[i + 1] === t[i - 1]) t[i] = t[i - 1];
+    }
+    // W5: currency and percent signs next to a European number join it.
+    for (let i = 0; i < n; i++) {
+      if (t[i] !== 'ET') continue;
       let j = i;
-      while (j < cls.length && cls[j] === 'N') j++;
-      const before = i > 0 ? cls[i - 1] : (baseRtl ? 'R' : 'L');
-      const after = j < cls.length ? cls[j] : (baseRtl ? 'R' : 'L');
-      const d = before === after ? before : (baseRtl ? 'R' : 'L');
-      for (let k = i; k < j; k++) cls[k] = d;
+      while (j < n && t[j] === 'ET') j++;
+      if ((i > 0 && t[i - 1] === 'EN') || (j < n && t[j] === 'EN')) for (let k = i; k < j; k++) t[k] = 'EN';
       i = j - 1;
     }
+    // W6: other separators are neutral.
+    for (let i = 0; i < n; i++) if (t[i] === 'ES' || t[i] === 'ET' || t[i] === 'CS') t[i] = 'ON';
+    // W7: a European number after English letters reads with them.
+    strong = sos;
+    for (let i = 0; i < n; i++) {
+      if (t[i] === 'L' || t[i] === 'R') strong = t[i];
+      else if (t[i] === 'EN' && strong === 'L') t[i] = 'L';
+    }
+    // N1/N2: spaces and marks take the direction around them when both sides agree
+    // (numbers count as right-to-left here), else the text's own.
+    const side = (x) => (x === 'L' ? 'L' : 'R');
+    for (let i = 0; i < n; i++) {
+      if (t[i] !== 'WS' && t[i] !== 'ON') continue;
+      let j = i;
+      while (j < n && (t[j] === 'WS' || t[j] === 'ON')) j++;
+      const before = i > 0 ? side(t[i - 1]) : sos;
+      const after = j < n ? side(t[j]) : sos;
+      const d = before === after ? before : sos;
+      for (let k = i; k < j; k++) t[k] = d;
+      i = j - 1;
+    }
+    // I1/I2: the levels.
+    const base = baseRtl ? 1 : 0;
+    const levels = t.map((x) => (base ? (x === 'R' ? 1 : 2) : x === 'L' ? 0 : x === 'R' ? 1 : 2));
+    // L1: spaces at the end of the line are at the text's own level.
+    for (let i = n - 1; i >= 0 && orig[i] === 'WS'; i--) levels[i] = base;
+    return levels;
+  }
+  /** Stretches of one level, in typing order: [{ rtl, level, start, end }]. */
+  function bidiRuns(line, baseRtl) {
+    const levels = bidiLevels(line, baseRtl);
     const runs = [];
-    for (let i = 0; i < cls.length; i++) {
+    for (let i = 0; i < levels.length; i++) {
       const top = runs[runs.length - 1];
-      if (top && top.rtl === (cls[i] === 'R')) top.end = i + 1;
-      else runs.push({ rtl: cls[i] === 'R', start: i, end: i + 1 });
+      if (top && top.level === levels[i]) top.end = i + 1;
+      else runs.push({ rtl: levels[i] % 2 === 1, level: levels[i], start: i, end: i + 1 });
     }
     return runs;
+  }
+  /** The same stretches in display order, left to right (rule L2). */
+  function bidiOrder(runs) {
+    const out = runs.slice();
+    if (!out.length) return out;
+    const max = Math.max(...out.map((r) => r.level));
+    const min = Math.min(...out.map((r) => r.level));
+    for (let lev = max; lev >= (min % 2 ? min : min + 1); lev--) {
+      for (let i = 0; i < out.length; i++) {
+        if (out[i].level < lev) continue;
+        let j = i;
+        while (j < out.length && out[j].level >= lev) j++;
+        out.splice(i, j - i, ...out.slice(i, j).reverse());
+        i = j - 1;
+      }
+    }
+    return out;
   }
   function renderBidiLine(method, ctx, line, left, top, lineIndex) {
     const rtl = this.direction === 'rtl';
@@ -109,7 +180,7 @@
     let x = boxLeft + (align.includes('center') ? (lineW - total) / 2 : align.includes('right') ? lineW - total : 0);
     ctx.save();
     ctx.textAlign = 'left';
-    for (const run of rtl ? runs.slice().reverse() : runs) {
+    for (const run of bidiOrder(runs)) {
       ctx.direction = run.rtl ? 'rtl' : 'ltr';
       for (const p of run.pieces) {
         this._renderChar(method, ctx, lineIndex, p.last, p.text, x, top, lineHeight);
@@ -626,5 +697,5 @@
     o.dirty = true;
   }
 
-  window.POD_FX = { laserTone, maskPath, roundRectPath, removeBackground, fontFaceCss };
+  window.POD_FX = { laserTone, maskPath, roundRectPath, removeBackground, fontFaceCss, bidiRuns, bidiOrder };
 })();

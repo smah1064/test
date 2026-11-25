@@ -1015,6 +1015,12 @@
     });
     body.appendChild(btn);
     apply();
+    // The button's words follow the language switch (until the picture is replaced).
+    const relabel = () => {
+      if (!btn.isConnected) document.removeEventListener('pod:langchange', relabel);
+      else btn.textContent = t(scale > 1 ? 'pv.zoomOut' : 'pv.zoomDesign');
+    };
+    document.addEventListener('pod:langchange', relabel);
   }
   function sizedPicture(cv, k, opts) {
     const out = sizedPictureOf(cv, k, opts);

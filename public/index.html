@@ -149,7 +149,8 @@
         const words = norm([p.id, p.name.en, p.name.ar, p.description && p.description.en, p.description && p.description.ar, catName(p.category).en, catName(p.category).ar, ALIASES[p.id] || ALIASES[POD.assetId(p)] || ''].join(' '));
         return [p.id, { full: ` ${words} `, loose: ` ${loose(words)} `, name: ` ${norm(`${p.name.en} ${p.name.ar}`)} ` }];
       }));
-      const terms = () => norm(q).split(' ').filter(Boolean);
+      // Words of the search, on product text only: markup typed into the box ("<b>") is not a word.
+      const terms = () => norm(q.replace(/<[^<>]*>/g, ' ')).split(' ').filter(Boolean);
       const found = (p, ts) => ts.every((w) => hay.get(p.id).full.includes(w) || hay.get(p.id).loose.includes(loose(w)));
 
       // Real product photos, recoloured on the server (small cached WebP);
@@ -309,12 +310,14 @@
           .map((c) => `<button class="chip ${c.id === cat ? 'active' : ''}" data-cat="${c.id}">${esc(c.name ? tr(c.name) : t('cat.all'))}</button>`)
           .join('');
         const ts = terms();
-        let list = products.filter((p) => (cat === 'all' || p.category === cat) && (!ts.length || found(p, ts)));
+        // A search with nothing to look for (only symbols, like "$&") matches nothing, not everything.
+        const searching = Boolean(q.trim());
+        let list = products.filter((p) => (cat === 'all' || p.category === cat) && (!searching || (ts.length && found(p, ts))));
         // Products whose name matches come first.
         // Names that match as typed first, then names spelt another way, then the rest (description, category).
         const rank = (p) => { const h = hay.get(p.id); return ts.every((w) => h.name.includes(w)) ? 0 : ts.every((w) => loose(h.name).includes(` ${loose(w)}`)) ? 1 : 2; };
         if (ts.length) list = list.map((p, i) => [rank(p), i, p]).sort((x, y) => x[0] - y[0] || x[1] - y[1]).map((x) => x[2]);
-        document.getElementById('home-count').textContent = ts.length && list.length ? t('home.found', { n: POD.num(list.length), q: q.trim() }) : '';
+        document.getElementById('home-count').textContent = searching && list.length ? t('home.found', { n: POD.num(list.length), q: q.trim() }) : '';
         if (!list.length) {
           const qq = q.trim();
           grid.innerHTML = `<div class="card empty home-empty">

@@ -807,7 +807,7 @@
     $('orders').innerHTML = orders.length ? orders.map((o) => `
       <tr class="order-row ${shipOpen.has(o.id) ? 'open' : ''}">
         <td data-label="${col('order')}"><strong>${esc(o.number)}</strong>${o.delivery && o.delivery.speed === 'express' ? ` <span class="pill dlv-express-pill">${esc(t('delivery.express'))}</span>` : ''}<div class="muted small">${esc(POD.date(o.createdAt))}</div>${o.delivery ? `<div class="muted small">${esc(t('delivery.by', { date: POD.day(o.delivery.by) }))}</div>` : ''}</td>
-        <td data-label="${col('customer')}">${esc(o.customer.name)}<div class="muted small"><bdi dir="ltr">${esc(o.customer.phone || o.customer.email || '')}</bdi></div><div class="muted small">${esc(tr(o.customer.governorateName) || '')}</div></td>
+        <td data-label="${col('customer')}">${line(o.customer.name)}<div class="muted small"><bdi dir="ltr">${esc(o.customer.phone || o.customer.email || '')}</bdi></div><div class="muted small">${esc(tr(o.customer.governorateName) || '')}</div></td>
         <td data-label="${col('items')}"><div class="mini-items">${o.items.map((i) => IN_REVIEW.has(i.status)
           ? `<span class="rv-mini" title="${esc(tr(i.productName))}: ${esc(t('admin.status.' + i.status))}"><img src="${esc(i.sides[0].previewUrl)}" alt="" ${zoomAttr(i)}><span class="rv-mini-flag" aria-hidden="true">!</span></span>`
           : `<img src="${esc(i.sides[0].previewUrl)}" title="${esc(tr(i.productName))}: ${esc(t('admin.status.' + i.status))}" alt="" ${zoomAttr(i)}>`).join('')}</div>${orderReview(o)}${orderQty(o)}</td>
@@ -1073,7 +1073,7 @@
       return `
       <div class="card queue-row cu-row">
         <div>
-          <strong>${esc(c.name)}</strong>
+          <strong>${line(c.name)}</strong>
           ${c.linked.google ? '<span class="pill">Google</span>' : ''}${c.linked.facebook ? '<span class="pill">Facebook</span>' : ''}${c.hasPassword ? '' : `<span class="pill queued">${esc(t('cu.noPassword'))}</span>`}
           <div class="muted small"><bdi dir="ltr">${esc(c.phone || '—')}</bdi> · <bdi dir="ltr">${esc(c.email || '—')}</bdi> · ${esc(t('cu.since', { date: POD.date(c.createdAt) }))}</div>
           <div class="small">${esc(t('cu.orders', { n: POD.num(c.orders), total: money(c.spent) }))}${c.lastOrder ? ` · ${esc(t('cu.last', { date: POD.date(c.lastOrder) }))}` : ''}</div>
@@ -1685,7 +1685,7 @@
           <div class="rv-sum">
             <div class="rv-line"><strong>${esc(item.orderNumber || '')}</strong> <span class="muted small">${esc(t('admin.spec.itemOf', { i: item.position, n: item.of }))}</span> ${pill(item.status)}${expressPill(item)}${samplePill(item)}</div>
             <div class="rv-line"><b>${esc(tr(item.productName))}</b> · ${esc(m && m.count ? t('rv.copies', { n: POD.num(m.count) }) : piecesText(piecesOf(item)))}</div>
-            <div class="rv-line small">${esc(c.name || '')} ${c.phone || c.email ? `<bdi dir="ltr" class="muted">${esc(c.phone || c.email)}</bdi>` : ''}</div>
+            <div class="rv-line small">${c.name ? line(c.name) : ''} ${c.phone || c.email ? `<bdi dir="ltr" class="muted">${esc(c.phone || c.email)}</bdi>` : ''}</div>
             <ul class="rv-reasons">${rvReasons(item).map((r) => `<li class="rv-reason rv-r-${esc(r)}">${esc(reasonText(item, r))}</li>`).join('')}</ul>
             <div class="muted small">${esc(t('rv.ordered', { date: when(item.orderedAt) }))}</div>
           </div>

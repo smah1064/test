@@ -14,6 +14,23 @@
     return;
   }
   const product = catalog.products.find((p) => p.kind === 'book' && p.book === book.id);
+  /** Not in the shop (hidden or removed): say so and offer the catalogue, as the product page does. */
+  function unavailable() {
+    const box = $('bk-missing');
+    box.hidden = false;
+    box.classList.add('unavail');
+    box.style.cssText = 'margin:40px auto;max-width:560px';
+    box.innerHTML = `<div class="unavail-ico" aria-hidden="true">🛍️</div>
+      <h2>${esc(t('unavail.title'))}</h2>
+      <p class="muted">${esc(t('unavail.text'))}</p>
+      <div class="unavail-actions"><a class="btn btn-primary" href="/#products">${esc(t('unavail.browse'))}</a><a class="btn" href="/designs">${esc(t('unavail.designs'))}</a></div>`;
+    document.title = `${t('unavail.title')} · ${t('brand')}`;
+  }
+  if (!product) {
+    unavailable();
+    document.addEventListener('pod:langchange', unavailable);
+    return;
+  }
   $('bk').hidden = false;
   // Every kids' book (story, colouring): one tap to the other.
   const allBooks = catalog.products.filter((p) => p.kind === 'book');
