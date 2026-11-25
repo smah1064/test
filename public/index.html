@@ -136,10 +136,13 @@
         magnets: 'magnet fridge مغناطيس مغنطيس تلاجة ثلاجة', wrappingpaper: 'gift wrap ورق هدايا تغليف', windowstickers: 'window decal vinyl ستيكر فاترينة زجاج',
         photobook: 'album photo book البوم صور', tablenumbers: 'wedding table number ارقام ترابيزات فرح', placecards: 'wedding place name card كروت اسامي فرح معازيم', bookmarks: 'bookmark فاصل كتاب',
       };
+      // As /designs: short vowels and tatweel go (U+064B-U+065F stops before the Arabic-Indic digits
+      // U+0660-U+0669), and Arabic-Indic / Persian digits become 0-9, so 100 typed in Arabic digits finds 100.
       const norm = (s) => String(s || '').toLowerCase()
-        .replace(/[ً-ٰٟـ]/g, '')
+        .replace(/[\u064B-\u065F\u0670\u0640]/g, '')
         .replace(/[أإآٱ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/ؤ/g, 'و').replace(/ئ/g, 'ي')
         .replace(/[٠-٩]/g, (c) => String(c.charCodeAt(0) - 0x0660))
+        .replace(/[۰-۹]/g, (c) => String(c.charCodeAt(0) - 0x06F0))
         .replace(/[^\p{L}\p{N}]+/gu, ' ')
         .trim();
       // Spelt with or without the long ي (تيشرت / تيشيرت).

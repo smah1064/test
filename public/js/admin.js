@@ -745,9 +745,11 @@
   const statusPill = (s) => `<span class="pill ${s === 'delivered' ? 'delivered' : s === 'shipped' ? 'shipped' : s === 'received' ? 'queued' : s === 'in_review' ? 'review' : 'printing'}">${esc(t('ship.status.' + s))}</span>`;
   const isPaid = (o) => Boolean(o.payment && o.payment.status === 'paid');
   const payPill = (o) => `<span class="pill ${isPaid(o) ? 'pay-paid' : 'pay-pending'}">${esc(t(isPaid(o) ? 'ship.paid' : 'ship.unpaid'))}</span>`;
-  const day = (ymd) => {
+  /** A calendar day (YYYY-MM-DD) as the dashboard shows days: "Thu 26 Nov"; withYear adds the year when it isn't this year. */
+  const day = (ymd, withYear = false) => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd || '')) return ymd || '';
-    return new Date(ymd + 'T12:00:00Z').toLocaleDateString(POD.lang === 'ar' ? 'ar-EG' : 'en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+    const year = withYear && Number(ymd.slice(0, 4)) !== new Date().getFullYear();
+    return new Date(ymd + 'T12:00:00Z').toLocaleDateString(POD.lang === 'ar' ? 'ar-EG' : 'en-GB', { weekday: 'short', day: 'numeric', month: 'short', ...(year ? { year: 'numeric' } : {}), timeZone: 'UTC' });
   };
   const shipValue = (o, k) => (shipDraft[o.id] && shipDraft[o.id][k] !== undefined ? shipDraft[o.id][k] : (o.shipment && o.shipment[k]) || '');
   const TIMELINE_STEPS = ['placed', 'production', 'printed', 'shipped', 'delivered'];
@@ -957,8 +959,9 @@
     return list.slice().sort((a, b) => (!a.addedOn || !b.addedOn ? Boolean(b.addedOn) - Boolean(a.addedOn) : a.addedOn === b.addedOn ? 0 : (a.addedOn < b.addedOn ? -1 : 1) * dir));
   }
   // Search ignores case, Arabic short vowels and tatweel, the alef / yaa / taa marbuta spellings and digit styles (as /designs).
+  // (The vowels' range stops at U+065F: the Arabic-Indic digits U+0660-U+0669 right after it are turned into 0-9, not dropped.)
   const libNorm = (s) => String(s || '').toLowerCase()
-    .replace(/[ً-ٰٟـ]/g, '')
+    .replace(/[\u064B-\u065F\u0670\u0640]/g, '')
     .replace(/[أإآٱ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/ؤ/g, 'و').replace(/ئ/g, 'ي')
     .replace(/[٠-٩]/g, (c) => String(c.charCodeAt(0) - 0x0660))
     .replace(/[۰-۹]/g, (c) => String(c.charCodeAt(0) - 0x06F0))
@@ -1368,7 +1371,8 @@
       toast(err.message, 'error');
       btn.disabled = false;
     }
-    // Pausing or deleting a design with artwork can change where text-only designs go: read the list again.
+    // Read the list again (the counts, and anything another admin changed). The products that show only
+    // picture designs are a fixed list, so pausing or deleting one design never moves the others.
     adminApi('/api/admin/library').then((lib) => tab === 'library' && renderLibrary(lib, { auto: true })).catch(() => {});
   }
   $('lib-list').addEventListener('click', (e) => {
@@ -1773,13 +1777,15 @@
   function renderExpenses() {
     const r = acc.report;
     const [f, to] = periodRange(acc.period);
-    $('acc-exp-period').textContent = t('acc.expPeriod', { period: t('acc.period.' + acc.period) + (f || to ? ` (${f || '…'} → ${to || '…'})` : ''), total: money(r.totals.expenses) });
+    // Days as the rest of the dashboard shows them ("Sun 1 Nov to Wed 25 Nov"), not raw YYYY-MM-DD.
+    const range = f || to ? ` (${t('acc.periodDays', { from: f ? day(f, true) : '…', to: to ? day(to, true) : '…' })})` : '';
+    $('acc-exp-period').textContent = t('acc.expPeriod', { period: t('acc.period.' + acc.period) + range, total: money(r.totals.expenses) });
     if (!$('exp-cat').options.length) $('exp-cat').innerHTML = (r.categories || []).map((c) => `<option value="${c}">${esc(t('acc.cat.' + c))}</option>`).join('');
     else [...$('exp-cat').options].forEach((o) => { o.textContent = t('acc.cat.' + o.value); });
     if (!$('exp-date').value) $('exp-date').value = ymd(new Date());
     $('acc-exp-list').innerHTML = r.expenses.length
       ? `<thead><tr><th>${esc(t('acc.date'))}</th><th>${esc(t('acc.category'))}</th><th>${esc(t('acc.description'))}</th><th>${esc(t('acc.amount'))}</th><th></th></tr></thead><tbody>${r.expenses.map((e) => `
-        <tr><td>${esc(e.date)}</td><td>${esc(t('acc.cat.' + e.category))}</td><td>${esc(e.description)}</td><td>${money(e.amount)}</td><td><button class="btn btn-sm" type="button" data-exp-del="${e.id}">${esc(t('houses.delete'))}</button></td></tr>`).join('')}</tbody>`
+        <tr><td>${esc(day(e.date, true))}</td><td>${esc(t('acc.cat.' + e.category))}</td><td>${esc(e.description)}</td><td>${money(e.amount)}</td><td><button class="btn btn-sm" type="button" data-exp-del="${e.id}">${esc(t('houses.delete'))}</button></td></tr>`).join('')}</tbody>`
       : `<tbody><tr><td class="muted">${esc(t('acc.noExpenses'))}</td></tr></tbody>`;
   }
   function renderPrices() {
@@ -2151,14 +2157,14 @@
     if (!el) return;
     el.hidden = !reviewCount;
     el.textContent = reviewCount ? POD.num(reviewCount) : '';
-    el.title = reviewCount ? t('rv.count', { n: POD.num(reviewCount) }) : '';
+    el.title = reviewCount ? POD.plural('rv.count', reviewCount) : '';
   }
   /** On the print queue: how many jobs wait for review (they are not in the queue until approved). */
   function renderReviewNotice() {
     const el = $('rv-queue-note');
     if (!el) return;
     el.innerHTML = reviewCount
-      ? `<div class="notice rv-queue-notice"><span>${esc(t('rv.queueNotice', { n: POD.num(reviewCount) }))}</span><button class="btn btn-sm" type="button" data-go-tab="review">${esc(t('rv.goReview'))}</button></div>`
+      ? `<div class="notice rv-queue-notice"><span>${esc(POD.plural('rv.queueNotice', reviewCount))}</span><button class="btn btn-sm" type="button" data-go-tab="review">${esc(t('rv.goReview'))}</button></div>`
       : '';
   }
   /** An item in the print queue that still needs approval: a badge and a link, no print buttons. */
