@@ -524,6 +524,7 @@ window.POD_STRINGS = {
   'acct.facebook': ['Continue with Facebook', 'المتابعة باستخدام فيسبوك'],
   'acct.or': ['or', 'أو'],
   'acct.oauthFailed': ["We couldn't sign you in. Please try again.", 'معرفناش نسجّل دخولك. جرّب تاني.'],
+  'acct.oauthWait': ['Too many sign-in tries from this connection. Please wait a few minutes and try again, or sign in with your mobile number.', 'محاولات دخول كتير من الشبكة دي. استنى كام دقيقة وجرّب تاني، أو ادخل برقم موبايلك.'],
   'acct.oauthCancelled': ['Sign-in was cancelled.', 'تم إلغاء تسجيل الدخول.'],
   'acct.oauthUnavailable': ["This sign-in option isn't available right now.", 'الطريقة دي مش متاحة دلوقتي.'],
   'acct.addPhone': ['Add your mobile number so we can reach you about your orders. You can also sign in with it.', 'ضيف رقم موبايلك عشان نقدر نكلمك بخصوص طلباتك، وتقدر تسجّل دخول بيه كمان.'],

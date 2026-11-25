@@ -36,7 +36,7 @@
   }
 
   // Back from Google / Facebook with a problem.
-  const OAUTH_MSG = { failed: 'acct.oauthFailed', cancelled: 'acct.oauthCancelled', unavailable: 'acct.oauthUnavailable' };
+  const OAUTH_MSG = { failed: 'acct.oauthFailed', cancelled: 'acct.oauthCancelled', unavailable: 'acct.oauthUnavailable', wait: 'acct.oauthWait' };
   if (OAUTH_MSG[params.get('oauth')]) {
     POD.toast(t(OAUTH_MSG[params.get('oauth')]), params.get('oauth') === 'cancelled' ? undefined : 'error');
     const u = new URL(location.href);

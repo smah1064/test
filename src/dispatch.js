@@ -14,9 +14,11 @@
 const crypto = require('crypto');
 const { normalizeEgyptMobile, normalizeDigits } = require('./egypt');
 const { arabicDigits } = require('./i18n');
+const { PRODUCTS } = require('./products');
 
 const LINK_DAYS = 30;
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// (The same pattern as src/app.js: an address that can receive mail.)
+const EMAIL_RE = /^(?!.*\.\.)[^\s@,;<>()"]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*\.[A-Za-z]{2,}$/;
 /**
  * The shop's own bilingual words (product, colour, size, print area) in the message language. In
  * Arabic their numbers become ١٢٣ like the rest of the message ("٣٠ × ٤٠ سم ×٢", not "30 × 40 سم ×٢");
@@ -77,7 +79,7 @@ function whatsappDigits(input) {
 /** Checks and cleans a printing house from the admin form; returns { house } or { error }. */
 function cleanHouse(input) {
   const name = String((input && input.name) || '').trim().slice(0, 80);
-  const email = String((input && input.email) || '').trim().slice(0, 120);
+  const email = String((input && input.email) || '').trim().replace(/[.,;\s]+$/, '').slice(0, 120);
   const whatsapp = whatsappDigits(input && input.whatsapp);
   const notes = String((input && input.notes) || '').trim().slice(0, 300);
   if (!name) return { error: 'houseName' };
@@ -155,6 +157,21 @@ function placement(o, lang) {
   return parts.join(ar ? ' و' : ', ');
 }
 
+/**
+ * How many to print. Pieces add up (S ×2 + XL ×1 = 3), but packs don't: 2 × "1 voucher" and 1 × "10 vouchers"
+ * are 12 vouchers, not 3, so a mix of pack sizes is written out pack by pack (QA 25 Nov).
+ */
+function quantityText(item, lang) {
+  const lines = Array.isArray(item.quantities) && item.quantities.length ? item.quantities : null;
+  if (!lines) return digits(item.copies || 1, lang);
+  const product = PRODUCTS.find((p) => p.id === item.productId);
+  const isPack = (l) => Boolean(product && l.size && (product.sizes.find((z) => z.id === l.size.id) || {}).pack);
+  if (new Set(lines.map((l) => l.size && l.size.id)).size > 1 && lines.some(isPack)) {
+    return lines.map((l) => `${pick(l.size && l.size.label, lang)} ×${digits(l.qty, lang)}`).join(' + ');
+  }
+  return digits(lines.reduce((n, l) => n + (l.qty || 0), 0), lang);
+}
+
 /** The job's facts, in the admin's language. */
 function jobLines(order, item, design, lang) {
   const t = T[lang];
@@ -171,7 +188,7 @@ function jobLines(order, item, design, lang) {
       : [pick(item.color && item.color.name, lang), pick(item.size && item.size.label, lang)].filter(Boolean).join(' · ')],
     [t.method, methodName(item, lang)],
     ...(sides ? [[t.sides, sides]] : []),
-    [t.qty, digits(Array.isArray(item.quantities) && item.quantities.length ? item.quantities.reduce((n, l) => n + (l.qty || 0), 0) : item.copies || 1, lang)],
+    [t.qty, quantityText(item, lang)],
   ].filter(([, v]) => v);
 }
 

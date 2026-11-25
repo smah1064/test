@@ -974,7 +974,8 @@ PRODUCTS.push(
  * a lower price never makes it free or negative.
  */
 const SMALL = true;
-const qty = (rows) => rows.map(([id, en, ar, surcharge, small]) => ({ id, label: t(en, ar), surcharge, ...(small ? { smallPack: true } : {}) }));
+// Sizes that are amounts (100 cards, A4 × 10, 1 pad…): `pack`, so a mix of them is never added up as pieces.
+const qty = (rows) => rows.map(([id, en, ar, surcharge, small]) => ({ id, label: t(en, ar), surcharge, pack: true, ...(small ? { smallPack: true } : {}) }));
 const PAPER_FINISH = [
   { id: 'matte', name: t('Matte white', 'أبيض مطفي'), hex: '#ffffff' },
   { id: 'gloss', name: t('Glossy white', 'أبيض لامع'), hex: '#ffffff' },

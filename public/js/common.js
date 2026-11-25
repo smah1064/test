@@ -294,7 +294,8 @@
    */
   function sizeNote(p, z) {
     // (After a "·": in Arabic "A4 × ٥٠ ٨٠٠ ج.م." would read as one number.)
-    if ((p.sizes || []).some((x) => (x.surcharge || 0) < 0)) return `· ${money(p.basePrice + (z.surcharge || 0))}`;
+    // (In Arabic a "|": a "·" next to ١٢٣ looks like the Arabic zero ٠.)
+    if ((p.sizes || []).some((x) => (x.surcharge || 0) < 0)) return `${lang === 'ar' ? '|' : '·'} ${money(p.basePrice + (z.surcharge || 0))}`;
     return z.surcharge ? `+${money(z.surcharge)}` : '';
   }
 

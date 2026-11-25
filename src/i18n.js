@@ -129,7 +129,7 @@ const MESSAGES = {
   tooManyLoginsFew: { en: 'Too many wrong passwords. Try again in {min} min.', ar: 'محاولات خاطئة كثيرة. حاول مرة أخرى بعد {min} دقائق.' },
   wrongStaffLogin: { en: 'Wrong username or password', ar: 'اسم المستخدم أو كلمة السر غلط' },
   signInAgain: { en: 'Please sign in again', ar: 'من فضلك سجّل الدخول مرة أخرى' },
-  tooManyWait: { en: 'Too many tries. Please try again in {min} min.', ar: 'محاولات كثيرة. حاول مرة أخرى بعد {min} دقيقة.' },
+  tooManyWait: { en: 'Too many tries. Please try again in {min} min.', ar: 'محاولات كتير. جرّب تاني بعد {min}.' },
   badStatus: { en: 'status must be one of {list}', ar: 'الحالة يجب أن تكون واحدة من {list}' },
   importBadUrl: { en: 'Paste a full link that starts with https://', ar: 'الصق رابط كامل بيبدأ بـ https://' },
   importBlocked: { en: "This link can't be opened", ar: 'الرابط ده مش ممكن نفتحه' },
@@ -245,6 +245,11 @@ function format(key, params, lang) {
       try {
         return new Date(`${v}T12:00:00Z`).toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
       } catch (e) { /* as it is */ }
+    }
+    // Minutes in Arabic with their word ("دقيقة واحدة", "دقيقتين", "٥ دقايق", "١١ دقيقة").
+    if (key === 'tooManyWait' && k === 'min' && typeof v === 'number' && lang === 'ar') {
+      const n = new Intl.NumberFormat('ar-EG', { useGrouping: false }).format(v);
+      return v === 1 ? 'دقيقة واحدة' : v === 2 ? 'دقيقتين' : v >= 3 && v <= 10 ? `${n} دقايق` : `${n} دقيقة`;
     }
     if (typeof v === 'number' && lang === 'ar') return new Intl.NumberFormat('ar-EG', { useGrouping: false }).format(v);
     // The shop's own bilingual words (a product's name, a size) in the page's digits.

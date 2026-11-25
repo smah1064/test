@@ -2753,6 +2753,15 @@
     const st0 = o.getSelectionStyles ? o.getSelectionStyles(w.start, w.start + 1)[0] : null;
     return toHex((st0 && st0.fill) || (isGradient(o.fill) || o.fill === 'transparent' ? baseColour(o) : o.fill));
   }
+  const wordChips = (o, words) => words.map((w, i) => `<button type="button" class="word-chip ${st.wordSel === i ? 'active' : ''}" data-word="${i}" style="color:${wordColour(o, w)}">${esc(w.text)}</button>`).join('');
+  /** The words as typed so far (the text box keeps its focus; the rest of the panel stays). */
+  function refreshWordChips(o) {
+    const box = props.querySelector('.word-chips');
+    if (!box) return;
+    const words = wordsOf(o);
+    if (st.wordSel != null && !words[st.wordSel]) st.wordSel = null;
+    box.innerHTML = wordChips(o, words);
+  }
   function wordControls(o) {
     if (o.type !== 'i-text' || !o.setSelectionStyles) return '';
     const words = wordsOf(o);
@@ -2761,7 +2770,7 @@
     const styled = o.styles && Object.values(o.styles).some((l) => l && Object.keys(l).length);
     return `<div class="field">
       <label>${esc(t('words.title'))}</label>
-      <div class="word-chips" dir="auto">${words.map((w, i) => `<button type="button" class="word-chip ${st.wordSel === i ? 'active' : ''}" data-word="${i}" style="color:${wordColour(o, w)}">${esc(w.text)}</button>`).join('')}</div>
+      <div class="word-chips" dir="auto">${wordChips(o, words)}</div>
       ${st.wordSel != null
         ? `<div class="color-row" style="margin-top:6px"><input type="color" id="p-wordcolor" value="${wordColour(o, words[st.wordSel])}" aria-label="${esc(t('words.colour'))}">${palette('word')}</div>`
         : `<p class="muted small" style="margin:4px 0 0">${esc(t('words.hint'))}</p>`}
@@ -2995,6 +3004,7 @@
         setProp({ text: v });
         renderLayers();
         if (wasArabic !== D.ARABIC_RE.test(v)) renderPropsKeepFocus();
+        else refreshWordChips(o); // (the "colour one word" buttons follow the new words)
         break;
       }
       case 'p-size': if (Number(v) >= 4) setProp({ fontSize: Number(v) }); break;

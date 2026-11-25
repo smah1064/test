@@ -112,7 +112,10 @@ const SIGNATURES = {
 const MAX_ITEMS_PER_ORDER = 50;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// An address that can receive mail (no "a@b..com", "a@b.com," or a final dot); the same pattern in
+// src/customers.js and src/dispatch.js. cleanEmail drops what a phone adds at the end (".", ",").
+const EMAIL_RE = /^(?!.*\.\.)[^\s@,;<>()"]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*\.[A-Za-z]{2,}$/;
+const cleanEmail = (v) => String(v == null ? '' : v).trim().replace(/[.,;\s]+$/, '');
 
 /** An error whose message is a translatable key from src/i18n.js. */
 class HttpError extends Error {
@@ -458,6 +461,7 @@ const DEFAULT_LIMITS = {
   removeBgAll: [{ max: 1500, ms: 24 * 3600e3 }],
   // Customer accounts: sign-in attempts, new accounts, password-reset emails.
   accountLogin: [{ max: 10, ms: 15 * 60e3 }, { max: 60, ms: 24 * 3600e3 }],
+  oauthStart: [{ max: 40, ms: 15 * 60e3 }, { max: 400, ms: 24 * 3600e3 }], // Google/Facebook sign-in started (per IP)
   accountLoginId: [{ max: 10, ms: 3600e3 }],
   accountSignup: [{ max: 5, ms: 3600e3 }, { max: 20, ms: 24 * 3600e3 }],
   accountForgot: [{ max: 5, ms: 3600e3 }],
@@ -1921,8 +1925,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (!sh) throw new HttpError(404, 'shareNotFound');
     const b = req.body || {};
     const vote = b.vote === 'up' ? 'up' : 'change';
-    const comment = String(b.comment || '').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').trim().slice(0, 500);
-    const name = String(b.name || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 40);
+    // (Direction controls go too: "\u202Eabc" would show reversed or spoof another reply.)
+    const BIDI = /[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g;
+    const comment = String(b.comment || '').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').replace(BIDI, '').trim().slice(0, 500);
+    const name = String(b.name || '').replace(/[\u0000-\u001f\u007f]/g, '').replace(BIDI, '').trim().slice(0, 40);
     if (vote === 'change' && !comment) throw new HttpError(400, 'feedbackEmpty');
     sh.feedback = (sh.feedback || []).slice(-99);
     sh.feedback.push({ vote, comment, name, at: new Date().toISOString() });
@@ -2700,7 +2706,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const cfg = oauth.config(oauthConfig)[name];
     const next = req.query.next === 'cart' ? 'cart' : '';
     if (!cfg) return res.redirect(302, backTo(next, 'unavailable'));
-    rateLimit(req, 'accountLogin');
+    try {
+      rateLimit(req, 'oauthStart');
+    } catch (e) {
+      if (e instanceof HttpError && e.status === 429) return res.redirect(302, backTo(next, 'wait'));
+      throw e;
+    }
     const state = oauth.newState();
     res.set('Cache-Control', 'no-store');
     res.set('Set-Cookie', oauth.stateCookie(`${state}.${next}`, { secure: isHttps(req) }));
@@ -2844,7 +2855,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const text = (v) => (v == null ? '' : typeof v === 'string' ? v : (() => { throw new HttpError(400, 'badRequest'); })());
     // (Invisible characters don't count, as at sign-up.)
     const name = text(b.name).replace(/[\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/g, '').trim().replace(/\s+/g, ' ').slice(0, 120);
-    const email = text(b.email).trim().toLowerCase().slice(0, 200);
+    const email = cleanEmail(text(b.email)).toLowerCase().slice(0, 200);
     if (name.length < 2) throw new HttpError(400, 'acctName');
     if (email && !EMAIL_RE.test(email)) throw new HttpError(400, 'badEmail');
     // Mobile number: accounts made with Google/Facebook add it here.
@@ -3034,7 +3045,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const c = {
       name: cleanString(customer.name, 'name', { max: 120 }),
       phone: cleanString(customer.phone, 'phone', { max: 30 }),
-      email: cleanString(customer.email, 'email', { max: 200, required: false }),
+      email: cleanEmail(cleanString(customer.email, 'email', { max: 200, required: false })),
       governorate: typeof customer.governorate === 'string' ? customer.governorate : '',
       city: cleanString(customer.city, 'city', { max: 100 }),
       address: cleanString(customer.address, 'address', { max: 300 }),
