@@ -65,6 +65,35 @@ test('English text with an Arabic word (left-to-right text)', () => {
   assert.strictEqual(shown('Size 2x1 cm', false), 'Size 2x1 cm');
 });
 
+// Every expected line below was checked against Chromium's own layout of the same text.
+test('percent and currency signs and separators stay with their numbers (rules W4, W5, W6)', () => {
+  // W5: a % right after a European number joins it, and W7 puts "Sale 50%" in one left-to-right stretch.
+  const sale = 'عرض خاص Sale 50% على كل المنتجات';
+  assert.strictEqual(shown(sale), 'المنتجات كل على | Sale 50% | خاص عرض');
+  const runs = bidiRuns(Array.from(sale), true);
+  const pct = Array.from(sale).indexOf('%');
+  const run = runs.find((r) => r.start <= pct && pct < r.end);
+  assert.deepStrictEqual([run.rtl, run.start, run.end], [false, 8, 16], 'the % is in the stretch of "Sale 50"');
+  assert.strictEqual(shown('Sale 50% على كل حاجة'), 'حاجة كل على | Sale 50%');
+  assert.strictEqual(shown('Sale 50% off', false), 'Sale 50% off');
+  // $ before a number, and thousands / decimal separators between digits (W4).
+  assert.strictEqual(shown('Price $20 عرض', false), 'Price $20 | عرض');
+  assert.strictEqual(shown('Price $1,250.50 now عرض', false), 'Price $1,250.50 now | عرض');
+  assert.strictEqual(shown('السعر 1,250 جنيه'), 'جنيه | 1,250 | السعر');
+  assert.strictEqual(shown('السعر 1,250.50 جنيه'), 'جنيه | 1,250.50 | السعر');
+  // Right after Arabic words a number is an Arabic number (W2), so W5 does not join the sign:
+  // it sits on the number's Arabic side, as the browser shows it ("20$", "%50" read from the right).
+  assert.strictEqual(shown('السعر $20 بس'), 'بس | 20 | $ السعر');
+  assert.strictEqual(shown('السعر $1,250 بس'), 'بس | 1,250 | $ السعر');
+  assert.strictEqual(shown('خصم 50% النهارده'), 'النهارده % | 50 | خصم');
+  // The Arabic percent sign, with European and with Arabic digits.
+  assert.strictEqual(shown('خصم ٪50 النهارده'), 'النهارده | 50 | ٪ خصم');
+  assert.strictEqual(shown('خصم ٪٥٠ النهارده'), 'النهارده | ٥٠ | ٪ خصم');
+  // Egyptian pounds written "ج.م.": the dots are separators between letters, not numbers (W6), so they stay with the letters.
+  assert.strictEqual(shown('السعر 20 ج.م. بس'), 'بس ج.م. | 20 | السعر');
+  assert.strictEqual(shown('السعر ٢٠ ج.م. بس'), 'بس ج.م. | ٢٠ | السعر');
+});
+
 test('levels follow the bidi rules: digits after Arabic sit inside the Arabic, at a higher level', () => {
   const runs = bidiRuns(Array.from('Order عرض 3 جديد now'), false);
   assert.deepStrictEqual(Array.from(runs, (r) => r.level), [0, 1, 2, 1, 0]);

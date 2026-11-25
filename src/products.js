@@ -2555,6 +2555,9 @@ for (const p of PRODUCTS) {
   };
   // Laser: the design is drawn in each material's own tone, so one design is one material.
   if (p.laser) p.mix.colors = false;
+  // Booklets: the size is the page count ("8-50" = 8 pages × 50 copies) and the design has
+  // exactly those pages, so one design is one size (an 8-page design can't print as 32 pages).
+  if (p.paged) p.mix.sizes = false;
 }
 
 /** Text compared loosely: case, spaces, dashes and Arabic letter forms don't matter. */

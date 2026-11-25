@@ -37,16 +37,25 @@ const divider = (y, half = 0.22, gap = 0.05, x = 0.5) => [
   S('diamond', 0.028, x, y),
   S('line', half, x + gap + half / 2, y),
 ];
-// A cake-topper stake: two touching vertical bars (one bar alone is too thin to push in).
-// A cake-topper stake: two touching standing lines (one alone is too thin to push in).
-// A turned shape is sized by the editor's bounding box, so a standing line comes out
-// about 9.47 x `w` long and 1/20 of that thick (both as fractions of the area's width).
+// A cake-topper stake: three overlapping standing lines (one alone is too thin to push in), hanging
+// from the bar at yTop down to yBottom (fractions of the area's height): about 4.5-6 mm wide on a
+// 15 cm topper.
+// The editor turns a shape first and then sizes it by its bounding box (public/js/templates.js:
+// angle, then scaleToWidth(U * w)), so for a standing line `w` sets its THICKNESS. The line is a
+// 140 x 6 rectangle (141 x 7 in Fabric's bounds, which count a stroke width of 1), so it comes
+// out 141 / 7 = 20.1 x `w` long and 6 x 141 / 980 = 0.86 x `w` thick (fractions of the area's width).
+// The library takes shapes from w = 0.02 up (test/library-packs.test.js), so a stake is at least
+// 0.02 x 20.1 = 0.4 of the width long: a shorter one keeps its top in the bar and runs a little
+// lower (the shop's edge fit then brings the whole piece inside the print area).
+const STANDING_LINE_LONG = 141 / 7;
+const STANDING_LINE_THICK = (6 * 141) / 980;
+const STANDING_LINE_MIN_W = 0.0201;
 const stake = (x, yTop, yBottom, aspect = 360 / 288) => {
-  const len = (yBottom - yTop) / aspect;
-  const w = len / 9.47;
-  const t = len / 20;
-  const y = (yTop + yBottom) / 2;
-  return [S('line', w, x - t / 2.6, y, { angle: 90 }), S('line', w, x + t / 2.6, y, { angle: 90 })];
+  const w = Math.max(STANDING_LINE_MIN_W, (yBottom - yTop) / aspect / STANDING_LINE_LONG);
+  const len = w * STANDING_LINE_LONG; // as a fraction of the area's width
+  const t = w * STANDING_LINE_THICK; // one line's thickness: about 2.5 mm on a 15 cm topper
+  const y = yTop + (len * aspect) / 2;
+  return [-0.6, 0, 0.6].map((k) => S('line', w, x + k * t, y, { angle: 90 }));
 };
 // A bar from x0 to x1 at y. A line is 1/21 as thick as it is long, so a long bar is made
 // of two halves to stay slim (about 3-5 mm on the cut pieces).
