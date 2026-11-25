@@ -63,6 +63,10 @@
       body.has-cart-bar { padding-bottom: 64px; }
       body.has-cart-bar #toast-root { bottom: calc(76px + env(safe-area-inset-bottom)); }
     }
+    /* "Removed from your cart. Undo" */
+    .toast-undo { display: flex; align-items: center; gap: 14px; white-space: nowrap; }
+    .toast-undo button { background: none; border: 0; padding: 6px 4px; margin: -6px -4px; color: #fff; font: inherit; font-weight: 800; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+    .toast-undo button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; border-radius: 4px; }
   </style>
 </head>
 <body data-title-key="cart.pageTitle">
@@ -82,6 +86,8 @@
 
   <main class="container">
     <div class="page-head"><h1 data-i18n="cart.title"></h1></div>
+    <!-- No connection (or the site busy): "Try again", not an empty-looking cart -->
+    <div id="net-box" class="card empty" hidden></div>
 
     <div id="empty" class="card empty" hidden>
       <h2 data-i18n="cart.emptyTitle"></h2>
@@ -162,7 +168,68 @@
   <script>
     (async () => {
       const { money, esc, t, tr } = POD;
-      const { pricing, governorates, delivery: deliveryInfo, products = [] } = await POD.loadCatalog();
+      // ---------- No connection ----------
+      // What the page needs didn't come (no signal, or the site busy): "No connection" and "Try again" in `box`, in the
+      // page's language, until it does. A "not found" from the site is not a connection problem: thrown as it is.
+      const noConnection = (e) => !(e && e.status) || e.status >= 500;
+      async function loadOrRetry(box, load) {
+        let last = null;
+        for (;;) {
+          try {
+            const out = await load();
+            box.hidden = true;
+            box.innerHTML = '';
+            return out;
+          } catch (e) {
+            if (!noConnection(e)) throw e;
+            // The same failure again although the site answers now (a product list kept from before): the page again.
+            if (e === last) {
+              location.reload();
+              return new Promise(() => {});
+            }
+            await tryAgain(box, Boolean(last));
+            last = e;
+          }
+        }
+      }
+      /** "No connection" with "Try again" in `box`; resolves once it is tapped and the site answers. */
+      function tryAgain(box, focus) {
+        return new Promise((resolve) => {
+          const paint = () => {
+            box.innerHTML = `<h2>${esc(t('net.title'))}</h2><p class="muted">${esc(t('net.text'))}</p><button type="button" class="btn btn-primary" data-net-retry>${esc(t('net.retry'))}</button>`;
+          };
+          let busy = false;
+          const click = async (e) => {
+            if (busy || !e.target.closest('[data-net-retry]')) return;
+            busy = true;
+            const back = await fetch('/api/products', { method: 'HEAD', cache: 'no-store' }).then((r) => r.ok, () => false);
+            busy = false;
+            if (!back) {
+              POD.toast(t('net.still'), 'error');
+              return;
+            }
+            box.removeEventListener('click', click);
+            document.removeEventListener('pod:langchange', paint);
+            box.innerHTML = '<div class="spinner"></div>';
+            resolve();
+          };
+          paint();
+          box.setAttribute('role', 'alert');
+          box.hidden = false;
+          box.addEventListener('click', click);
+          document.addEventListener('pod:langchange', paint);
+          if (focus) box.querySelector('[data-net-retry]').focus();
+        });
+      }
+
+      let shop;
+      try {
+        shop = await loadOrRetry(document.getElementById('net-box'), () => POD.loadCatalog());
+      } catch (e) {
+        POD.toast(e.message, 'error');
+        return;
+      }
+      const { pricing, governorates, delivery: deliveryInfo, products = [] } = shop;
       // Delivery speed (standard 5 business days, express 2 for a fee), kept for this visit.
       let delivery = 'standard';
       try { delivery = sessionStorage.getItem('pod-delivery') === 'express' ? 'express' : 'standard'; } catch (e) { /* private mode */ }
@@ -200,6 +267,9 @@
             ${g.lines.map((l) => `<span class="qty-chip">${l.size && tr(l.size.label) ? `${esc(tr(l.size.label))}×` : '×'}<b>${esc(POD.num(Number(l.qty)))}</b></span>`).join('')}
           </div>`).join('')}</div>`;
       }
+      // Arabic: "·" next to Arabic-Indic digits reads as the zero "٠" («أبيض · ٣٢٥ مل»), so the parts of a line
+      // are separated with the Arabic comma there, as on the order page. English keeps the dot.
+      const SEP = () => (POD.lang === 'ar' ? '، ' : ' · ');
       // ---------- Photo prints: what is printed in each size ----------
       const countKey = (n) => (n === 1 ? 'one' : n === 2 ? 'two' : n % 100 >= 3 && n % 100 <= 10 ? 'few' : 'many');
       const counted = (base, n) => t(`${base}.${countKey(n)}`, { n: POD.num(n) });
@@ -241,7 +311,7 @@
         return list;
       }
       /** "10 × 15 cm: 25 photos · 29 prints · EGP 435", one line per size. */
-      const photoSizesHtml = (list) => `<span class="photo-sizes">${list.map((g) => `<span class="photo-size"><b><bdi>${esc(tr(g.size.label))}</bdi></b>: ${esc(counted('cart.photos', g.photos))} · ${esc(counted('cart.prints', g.prints))}${g.sum != null ? ` · ${esc(money(g.sum))}` : ''}</span>`).join('')}</span>`;
+      const photoSizesHtml = (list) => `<span class="photo-sizes">${list.map((g) => `<span class="photo-size"><b><bdi>${esc(tr(g.size.label))}</bdi></b>: ${esc(counted('cart.photos', g.photos))}${SEP()}${esc(counted('cart.prints', g.prints))}${g.sum != null ? `${SEP()}${esc(money(g.sum))}` : ''}</span>`).join('')}</span>`;
       /** The photo set's proof: sizes instead of one "size", plural warnings, the flagged photos shown by number. */
       function photoProofHtml(proof, item) {
         const checks = ((proof.preflight && proof.preflight.checks) || []).map((c) => (c && c.id === 'photoLowRes' ? { ...c, id: 'photoLowRes.' + countKey(Number(c.params && c.params.count) || 0) } : c));
@@ -255,7 +325,7 @@
           const border = photoBorder(proof);
           const rows = [
             border ? row(t('cart.photoBorder'), esc(border)) : null,
-            row(t('cart.photoSizes'), `${photoSizesHtml(photoSizes(proof, item))}<span class="muted small">${esc(counted('cart.photos', (proof.photos || []).length))} · ${esc(counted('cart.prints', prints))}</span>`, 'photo-sizes-row'),
+            row(t('cart.photoSizes'), `${photoSizesHtml(photoSizes(proof, item))}<span class="muted small">${esc(counted('cart.photos', (proof.photos || []).length))}${SEP()}${esc(counted('cart.prints', prints))}</span>`, 'photo-sizes-row'),
           ].filter(Boolean);
           for (const r of rows.reverse()) dl.insertBefore(r, after ? after.nextSibling : null);
         }
@@ -277,9 +347,9 @@
         // Photo prints: the paper and border, then the prints per size once the proof (with every photo) is here.
         if (item.productId === 'photoprints') {
           const proof = proofOf(item.designId);
-          if (!proof || !Array.isArray(proof.photos)) return `${esc(tr(item.colorName))} · ${esc(tr(item.sizeLabel))}`;
+          if (!proof || !Array.isArray(proof.photos)) return `${esc(tr(item.colorName))}${SEP()}${esc(tr(item.sizeLabel))}`;
           const border = photoBorder(proof);
-          return `${esc(tr(item.colorName))}${border ? ` · ${esc(border)}` : ''}${photoSizesHtml(photoSizes(proof, item))}`;
+          return `${esc(tr(item.colorName))}${border ? `${SEP()}${esc(border)}` : ''}${photoSizesHtml(photoSizes(proof, item))}`;
         }
         const lines = qtyLines(item);
         const isNames = Boolean(item.merge) || (!lines.length && item.copies > 1);
@@ -292,7 +362,7 @@
         if (lines.length > 1) return `${badge}${qtyBreakdown(lines)}${printed}`;
         const color = one && one.color ? one.color.name : item.colorName;
         const size = one && one.size ? one.size.label : item.sizeLabel;
-        return `${esc(tr(color))} · ${esc(tr(size))}${badge ? ' · ' + badge : ''}<br>${printed}`;
+        return `${esc(tr(color))}${SEP()}${esc(tr(size))}${badge ? SEP() + badge : ''}<br>${printed}`;
       }
       /** The price for all pieces; with one price per piece, that price under it. */
       function itemPrice(item) {
@@ -520,7 +590,7 @@
                 ${item.productId === 'dtfsheet' || item.productId === 'photoprints' ? '' : item.bookId ? `<a class="btn btn-sm" href="/book?b=${encodeURIComponent(item.bookId)}&cart=${i}">${esc(t('cart.edit'))}</a>` : `<a class="btn btn-sm" href="/editor?design=${encodeURIComponent(item.designId)}&cart=${i}">${esc(t('cart.edit'))}</a>
                 ${item.bookId ? '' : `<a class="btn btn-sm" href="/editor?design=${encodeURIComponent(item.designId)}">${esc(t('cart.duplicate'))}</a>`}`}
                 <button class="btn btn-sm" data-later="${esc(item.designId)}">${esc(t('cart.saveLater'))}</button>
-                <button class="btn btn-sm btn-danger" data-remove="${i}">${esc(t('cart.remove'))}</button>
+                <button class="btn btn-sm btn-danger" id="rm-${i}" data-remove="${i}">${esc(t('cart.remove'))}</button>
               </div>
             </div>
             <div class="price">${itemPrice(item)}</div>
@@ -764,12 +834,71 @@
         const btn = e.target.closest('[data-remove]');
         if (!btn) return;
         const cart = POD.getCart();
-        cart.splice(Number(btn.dataset.remove), 1);
+        const at = Number(btn.dataset.remove);
+        const [gone] = cart.splice(at, 1);
+        if (!gone) return;
+        const approval = approvals.get(gone.designId);
         POD.setCart(cart);
         render();
         // The coupon and shipping depend on what is left: ask the shop again.
         refreshPrices().then(render);
+        // (A key press on Remove: the keyboard goes on at "Undo".)
+        undoRemove(gone, at, approval, e.detail === 0);
       });
+
+      // ---------- Removed by mistake: "Undo" puts it back where it was, for a few seconds ----------
+      const UNDO_MS = 7000;
+      function toastRoot() {
+        // (The same box as POD.toast's messages: read out by screen readers.)
+        let root = document.getElementById('toast-root');
+        if (!root) {
+          root = document.createElement('div');
+          root.id = 'toast-root';
+          root.setAttribute('role', 'status');
+          root.setAttribute('aria-live', 'polite');
+          document.body.appendChild(root);
+        }
+        return root;
+      }
+      function undoRemove(item, at, approval, focus) {
+        const el = document.createElement('div');
+        el.className = 'toast toast-undo';
+        const paint = () => { el.innerHTML = `<span>${esc(t('cart.removed'))}</span><button type="button">${esc(t('cart.undo'))}</button>`; };
+        paint();
+        document.addEventListener('pod:langchange', paint);
+        toastRoot().appendChild(el);
+        /** The toast goes; the keyboard (when it was on "Undo") goes on in the cart at that place. */
+        const close = (to) => {
+          clearTimeout(timer);
+          document.removeEventListener('pod:langchange', paint);
+          const had = el.contains(document.activeElement);
+          el.remove();
+          if (!had) return;
+          const entries = [...document.querySelectorAll('[data-entry-for]')];
+          const near = to || entries[Math.min(at, entries.length - 1)];
+          const target = (near && near.querySelector('[data-remove]')) || document.querySelector('#empty a');
+          if (target) target.focus();
+        };
+        const timer = setTimeout(() => close(), UNDO_MS);
+        el.addEventListener('click', (e) => {
+          if (!e.target.closest('button')) return;
+          // Back in the cart (signed in: synced to the account like any change), at the place it had,
+          // with its proof's tick. (Already back from another tab or device: left as it is.)
+          if (![...POD.getCart(), ...POD.getSaved()].some((it) => it.designId === item.designId)) {
+            const cart = POD.getCart();
+            cart.splice(Math.min(at, cart.length), 0, item);
+            POD.setCart(cart);
+            if (approval) {
+              approvals.set(item.designId, approval);
+              saveApprovals();
+            }
+            render();
+            refreshPrices().then(render);
+          }
+          close([...document.querySelectorAll('[data-entry-for]')].find((x) => x.dataset.entryFor === item.designId));
+        });
+        if (focus) el.querySelector('button').focus();
+      }
 
       const form = document.getElementById('checkout');
       // ---------- Field errors: shown under the field, which is scrolled to and focused ----------
@@ -932,6 +1061,39 @@
         }
       });
 
+      // ---------- What the customer typed in the order form, kept for this visit ----------
+      // (Like the coupon, delivery and ticks: "Edit design" and Back, or a reload, keep it. Only in this tab, and only
+      // for the same signed-in customer, or guest; it goes once the order is placed.)
+      const DETAILS_KEY = 'pod-checkout';
+      const DETAIL_FIELDS = ['name', 'phone', 'email', 'governorate', 'city', 'address', 'notes'];
+      const whoIsIn = () => { try { const v = localStorage.getItem('pod-acct'); return v && v !== '1' ? v : ''; } catch (e) { return ''; } };
+      function saveDetails() {
+        const fields = Object.fromEntries(DETAIL_FIELDS.map((id) => [id, document.getElementById(id).value]));
+        try {
+          if (Object.values(fields).some((v) => v.trim())) sessionStorage.setItem(DETAILS_KEY, JSON.stringify({ acct: whoIsIn(), fields }));
+          else sessionStorage.removeItem(DETAILS_KEY);
+        } catch (e) { /* private mode */ }
+      }
+      function restoreDetails() {
+        let kept = null;
+        try { kept = JSON.parse(sessionStorage.getItem(DETAILS_KEY) || 'null'); } catch (e) { kept = null; }
+        if (!kept || typeof kept.fields !== 'object' || !kept.fields) return;
+        // Someone else signed in (or out) since: not theirs to see.
+        if (kept.acct !== whoIsIn()) {
+          try { sessionStorage.removeItem(DETAILS_KEY); } catch (e) { /* private mode */ }
+          return;
+        }
+        for (const id of DETAIL_FIELDS) {
+          const el = document.getElementById(id);
+          const v = kept.fields[id];
+          if (typeof v !== 'string' || !v || el.value) continue;
+          if (el.tagName === 'SELECT' && ![...el.options].some((o) => o.value === v)) continue;
+          el.value = v;
+        }
+      }
+      form.addEventListener('input', (e) => { if (DETAIL_FIELDS.includes(e.target.id)) saveDetails(); });
+      form.addEventListener('change', (e) => { if (DETAIL_FIELDS.includes(e.target.id)) saveDetails(); });
+
       // ---------- The order's one-time key (see /api/orders/by-key) ----------
       const KEY = 'pod-order-key';
       function orderKey() {
@@ -948,7 +1110,7 @@
         PODAftercare.rememberOrder(order);
         const ordered = new Set((order.items || []).map((i) => i.designId));
         POD.setCart(POD.getCart().filter((it) => !ordered.has(it.designId)));
-        try { sessionStorage.removeItem(KEY); } catch (e) { /* private mode */ }
+        try { sessionStorage.removeItem(KEY); sessionStorage.removeItem(DETAILS_KEY); } catch (e) { /* private mode */ }
         approvals.clear();
         saveApprovals();
         location.href = '/order?id=' + encodeURIComponent(order.id) + '&new=1';
@@ -1074,6 +1236,7 @@
       });
 
       renderGovernorates();
+      restoreDetails();
       showCode();
       render();
       prefillAccount();

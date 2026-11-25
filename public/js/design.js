@@ -4,11 +4,66 @@
   const { t, tr, esc, money } = POD;
   const $ = (id) => document.getElementById(id);
   const params = new URLSearchParams(location.search);
-  const catalog = await POD.loadCatalog();
+
+  // ---------- No connection ----------
+  // What the page needs didn't come (no signal, or the site busy): "No connection" and "Try again" in `box`, in the
+  // page's language, until it does. A "not found" from the site is not a connection problem: thrown as it is.
+  const noConnection = (e) => !(e && e.status) || e.status >= 500;
+  async function loadOrRetry(box, load) {
+    let last = null;
+    for (;;) {
+      try {
+        const out = await load();
+        box.hidden = true;
+        box.innerHTML = '';
+        return out;
+      } catch (e) {
+        if (!noConnection(e)) throw e;
+        // The same failure again although the site answers now (a product list kept from before): the page again.
+        if (e === last) {
+          location.reload();
+          return new Promise(() => {});
+        }
+        await tryAgain(box, Boolean(last));
+        last = e;
+      }
+    }
+  }
+  /** "No connection" with "Try again" in `box`; resolves once it is tapped and the site answers. */
+  function tryAgain(box, focus) {
+    return new Promise((resolve) => {
+      const paint = () => {
+        box.innerHTML = `<h2>${esc(t('net.title'))}</h2><p class="muted">${esc(t('net.text'))}</p><button type="button" class="btn btn-primary" data-net-retry>${esc(t('net.retry'))}</button>`;
+      };
+      let busy = false;
+      const click = async (e) => {
+        if (busy || !e.target.closest('[data-net-retry]')) return;
+        busy = true;
+        const back = await fetch('/api/products', { method: 'HEAD', cache: 'no-store' }).then((r) => r.ok, () => false);
+        busy = false;
+        if (!back) {
+          POD.toast(t('net.still'), 'error');
+          return;
+        }
+        box.removeEventListener('click', click);
+        document.removeEventListener('pod:langchange', paint);
+        box.innerHTML = '<div class="spinner"></div>';
+        resolve();
+      };
+      paint();
+      box.setAttribute('role', 'alert');
+      box.hidden = false;
+      box.addEventListener('click', click);
+      document.addEventListener('pod:langchange', paint);
+      if (focus) box.querySelector('[data-net-retry]').focus();
+    });
+  }
+
+  let catalog;
   let design;
   let categories = [];
   try {
-    [design, { categories }] = await Promise.all([POD.api('/api/library/' + encodeURIComponent(params.get('id') || '')), POD.api('/api/library')]);
+    [catalog, design, { categories }] = await loadOrRetry($('dp-net'), () => Promise.all([POD.loadCatalog(), POD.api('/api/library/' + encodeURIComponent(params.get('id') || '')), POD.api('/api/library')]));
   } catch (e) {
     $('dp-missing').hidden = false;
     return;
@@ -71,6 +126,24 @@
     return null;
   }
   choose(instead ? instead.id : params.get('product'), params.get('color'));
+  // Clothes: the size the customer picked (a link with &size= counts). Until then the first size is shown,
+  // and "Add to cart" asks which one (never ordered silently in the first size), as the editor does.
+  let pickedSize = null;
+  {
+    const asked = state.product.sizes.find((s) => s.id === params.get('size') && POD.sizeOk(state.product, state.color.id, s));
+    if (asked) {
+      state.size = asked;
+      pickedSize = asked.id;
+    }
+  }
+  const needsSize = () => state.product.category === 'apparel' && state.product.sizes.length > 1 && pickedSize !== state.size.id;
+  const sizeParam = () => (pickedSize && pickedSize === state.size.id ? `&size=${encodeURIComponent(state.size.id)}` : '');
+  // A design with places for the customer's own details ({Name}, {Phone}…) would print those words as they are:
+  // they are filled in in the editor (which refuses them too), so it is never added to the cart from here.
+  const textsOf = (list) => (list || []).flatMap((o) => (!o || typeof o !== 'object' ? []
+    : Array.isArray(o.objects) ? textsOf(o.objects)
+      : o.kind === 'text' || /text/i.test(o.type || '') ? [String(o.text || '')] : []));
+  const hasFields = textsOf([...(design.items || []), ...(design.objects || [])]).some((s) => /\{[^{}\n]{1,40}\}/.test(s));
 
   // ---------- Picture ----------
   let token = 0;
@@ -155,10 +228,15 @@
     $('dp-few').hidden = !few;
     $('dp-few').textContent = few ? t('pp.fewLeft', { n: POD.num(few) }) : '';
     $('dp-price').textContent = money(product.basePrice + size.surcharge);
-    $('dp-edit').href = `/editor?library=${encodeURIComponent(design.id)}&product=${product.id}&color=${color.id}`;
+    $('dp-edit').href = `/editor?library=${encodeURIComponent(design.id)}&product=${product.id}&color=${color.id}${sizeParam()}`;
     // A design that is one picture (no words to change): "Make it yours in the editor".
     const hasWords = (design.items || []).some((i) => i.kind === 'text') || (design.objects || []).some((o) => /text/i.test(o.type || ''));
-    $('dp-edit').dataset.i18n = hasWords ? 'design.customize' : 'design.customizePic';
+    // Places for the customer's details: no "Add to cart"; the way to the editor is the main button.
+    $('dp-add').hidden = hasFields;
+    $('dp-fill').hidden = !hasFields;
+    $('dp-edit').classList.toggle('btn-primary', hasFields);
+    $('dp-edit').classList.toggle('btn-lg', hasFields);
+    $('dp-edit').dataset.i18n = hasFields ? 'design.fillIn' : hasWords ? 'design.customize' : 'design.customizePic';
     $('dp-edit').textContent = t($('dp-edit').dataset.i18n);
     document.title = `${tr(design.name)} · ${t('brand')}`;
     const active = $('dp-products').querySelector('.active');
@@ -173,7 +251,7 @@
     return back ? t('dp.productPaused', { name, back }) : t('dp.productGone');
   }
   function syncUrl() {
-    history.replaceState(null, '', `/design?id=${encodeURIComponent(design.id)}&product=${state.product.id}&color=${state.color.id}`);
+    history.replaceState(null, '', `/design?id=${encodeURIComponent(design.id)}&product=${state.product.id}&color=${state.color.id}${sizeParam()}`);
   }
 
   $('dp-products').addEventListener('click', (e) => {
@@ -214,9 +292,16 @@
     }
     const b = e.target.closest('[data-size]');
     if (!b) return;
-    if (b.dataset.size === state.size.id) return;
+    // (Tapping the size already shown picks it too.)
+    pickedSize = b.dataset.size;
+    if (b.dataset.size === state.size.id) {
+      renderOptions();
+      syncUrl();
+      return;
+    }
     state.size = state.product.sizes.find((s) => s.id === b.dataset.size);
     renderOptions();
+    syncUrl();
     draw();
   });
   $('dp-preview').addEventListener('click', () => {
@@ -230,8 +315,51 @@
     $('busy').hidden = !on;
     if (text) $('busy-text').textContent = text;
   };
-  $('dp-add').addEventListener('click', async () => {
+  // ---------- Clothes: "Which size?" before adding (the editor's question, in its words) ----------
+  function askSize() {
+    const box = $('size-ask');
+    $('size-ask-chips').innerHTML = state.product.sizes.filter((s) => POD.sizeOk(state.product, state.color.id, s))
+      .map((s) => `<button type="button" class="chip" data-ask-size="${esc(s.id)}">${esc(tr(s.label))}${POD.sizeNote(state.product, s) ? ` <span style="opacity:.7">${esc(POD.sizeNote(state.product, s))}</span>` : ''}</button>`).join('');
+    box.hidden = false;
+    const first = box.querySelector('[data-ask-size]');
+    if (first) first.focus();
+  }
+  function closeAsk() {
+    $('size-ask').hidden = true;
+    $('dp-add').focus();
+  }
+  $('size-ask').addEventListener('click', (e) => {
+    if (e.target.id === 'size-ask' || e.target.closest('#size-ask-cancel')) {
+      closeAsk();
+      return;
+    }
+    const b = e.target.closest('[data-ask-size]');
+    const size = b && state.product.sizes.find((s) => s.id === b.dataset.askSize);
+    if (!size) return;
+    $('size-ask').hidden = true;
+    const changed = size.id !== state.size.id;
+    state.size = size;
+    pickedSize = size.id;
+    renderOptions();
+    syncUrl();
+    if (changed) draw();
+    addToCart();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !$('size-ask').hidden) closeAsk();
+  });
+
+  $('dp-add').addEventListener('click', () => {
+    if (hasFields) return;
+    if (needsSize()) {
+      askSize();
+      return;
+    }
+    addToCart();
+  });
+  async function addToCart() {
     const btn = $('dp-add');
+    if (btn.disabled || hasFields) return;
     btn.disabled = true;
     busy(true, t('busy.preparing'));
     try {
@@ -247,7 +375,7 @@
       // Sold out or hidden since the page opened (POST /api/designs answers 409): the shop's list again.
       if (/Unavailable$/.test(e.code || '')) refreshCatalog();
     }
-  });
+  }
 
   /** The shop's catalogue changed under the page: open it again on what can be ordered now. */
   function refreshCatalog() {

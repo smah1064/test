@@ -39,6 +39,8 @@
   </header>
 
   <main class="container">
+    <!-- No connection (or the site busy): "Try again" (public/js/design.js) -->
+    <div id="dp-net" class="card empty" style="margin:40px auto;max-width:560px" hidden></div>
     <div id="dp-missing" class="card empty" style="margin:40px auto;max-width:560px" hidden>
       <h2 data-i18n="design.notFound"></h2>
       <a class="btn btn-primary" href="/designs" data-i18n="design.browse"></a>
@@ -59,6 +61,7 @@
         <div class="field"><label data-i18n="design.size"></label><div class="chips" id="dp-sizes"></div></div>
         <p class="pp-few" id="dp-few" role="status" hidden></p>
         <div class="dp-price"><span class="amount" id="dp-price"></span><span class="muted small" data-i18n="design.priceNote"></span></div>
+        <p class="notice" id="dp-fill" style="margin:0 0 12px" data-i18n="design.fillNote" hidden></p>
         <button class="btn btn-primary btn-lg btn-block" id="dp-add" data-i18n="design.add"></button>
         <a class="btn btn-block" id="dp-edit" data-i18n="design.customize"></a>
         <p class="muted small" style="margin:10px 0 0;line-height:1.5" data-i18n="design.note"></p>
@@ -86,6 +89,16 @@
         <label class="check" id="pv-spin-wrap"><input type="checkbox" id="pv-spin" checked> <span data-i18n="pv.spin"></span></label>
         <button class="btn btn-sm" id="pv-download" data-i18n="pv.download"></button>
       </div>
+    </div>
+  </div>
+
+  <!-- Clothes: "Which size?" before adding to the cart (as in the editor) -->
+  <div class="pv-modal" id="size-ask" hidden>
+    <div class="card rights-box" role="dialog" aria-modal="true" aria-labelledby="size-ask-title" aria-describedby="size-ask-note">
+      <h3 id="size-ask-title" data-i18n="sizeAsk.title"></h3>
+      <p class="small muted" id="size-ask-note" style="line-height:1.6" data-i18n="sizeAsk.one"></p>
+      <div class="chips" id="size-ask-chips" style="margin:10px 0 14px"></div>
+      <div class="row" style="justify-content:flex-end"><button class="btn" type="button" id="size-ask-cancel" data-i18n="houses.cancel"></button></div>
     </div>
   </div>
 

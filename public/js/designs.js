@@ -2,7 +2,77 @@
 (async () => {
   const { t, tr, esc, money } = POD;
   const $ = (id) => document.getElementById(id);
-  const [catalog, lib] = await Promise.all([POD.loadCatalog(), POD.api('/api/library')]);
+
+  // ---------- No connection ----------
+  // What the page needs didn't come (no signal, or the site busy): "No connection" and "Try again" in `box`, in the
+  // page's language, until it does. A "not found" from the site is not a connection problem: thrown as it is.
+  const noConnection = (e) => !(e && e.status) || e.status >= 500;
+  async function loadOrRetry(box, load) {
+    let last = null;
+    for (;;) {
+      try {
+        const out = await load();
+        box.hidden = true;
+        box.innerHTML = '';
+        return out;
+      } catch (e) {
+        if (!noConnection(e)) throw e;
+        // The same failure again although the site answers now (a product list kept from before): the page again.
+        if (e === last) {
+          location.reload();
+          return new Promise(() => {});
+        }
+        await tryAgain(box, Boolean(last));
+        last = e;
+      }
+    }
+  }
+  /** "No connection" with "Try again" in `box`; resolves once it is tapped and the site answers. */
+  function tryAgain(box, focus) {
+    return new Promise((resolve) => {
+      const paint = () => {
+        box.innerHTML = `<h2>${esc(t('net.title'))}</h2><p class="muted">${esc(t('net.text'))}</p><button type="button" class="btn btn-primary" data-net-retry>${esc(t('net.retry'))}</button>`;
+      };
+      let busy = false;
+      const click = async (e) => {
+        if (busy || !e.target.closest('[data-net-retry]')) return;
+        busy = true;
+        const back = await fetch('/api/products', { method: 'HEAD', cache: 'no-store' }).then((r) => r.ok, () => false);
+        busy = false;
+        if (!back) {
+          POD.toast(t('net.still'), 'error');
+          return;
+        }
+        box.removeEventListener('click', click);
+        document.removeEventListener('pod:langchange', paint);
+        box.innerHTML = '<div class="spinner"></div>';
+        resolve();
+      };
+      paint();
+      box.setAttribute('role', 'alert');
+      box.hidden = false;
+      box.addEventListener('click', click);
+      document.addEventListener('pod:langchange', paint);
+      if (focus) box.querySelector('[data-net-retry]').focus();
+    });
+  }
+
+  // (Without the designs there is nothing to search or filter: the tools come back with them.)
+  const tools = [$('design-tools'), $('design-cats')];
+  let catalog;
+  let lib;
+  try {
+    [catalog, lib] = await loadOrRetry($('design-net'), () => Promise.all([POD.loadCatalog(), POD.api('/api/library')]).catch((e) => {
+      tools.forEach((el) => { el.hidden = true; });
+      throw e;
+    }));
+  } catch (e) {
+    // Any other refusal (too many tries…): the site's own words.
+    $('design-net').hidden = false;
+    $('design-net').innerHTML = `<h2>${esc(e.message)}</h2>`;
+    return;
+  }
+  tools.forEach((el) => { el.hidden = false; });
   const products = catalog.products.filter((p) => !p.kind);
   const productById = (id) => products.find((p) => p.id === id);
 
@@ -45,14 +115,18 @@
       mug: 'mug, cup, مج, مجات, مجين, ماج, كوب, كوباية',
       bag: 'bag, شنطة, شنط',
       card: 'card, كارت, كروت, كارد, بطاقة',
-      bizcard: 'business card, visit card, visiting card, بيزنس كارد, كارت بيزنس, كارت شخصي, كروت شخصية, كارت فيزيت',
+      bizcard: 'business card, visit card, visiting card, بيزنس كارد, بيزنس كارت, بزنس كارد, بزنس كارت, كارت بيزنس, كارت بزنس, كارت شخصي, كروت شخصية, كارت فيزيت',
       invitation: 'invitation, invite, دعوة',
       wedding: 'wedding, فرح, أفراح, زفاف',
       poster: 'poster, بوستر',
-      notebook: 'notebook, note book, كشكول, كشاكيل',
+      notebook: 'notebook, note book, نوت بوك, نوتبوك, كشكول, كشاكيل',
       calendar: 'calendar, نتيجة, تقويم, نتايج',
       sticker: 'sticker, ستيكر, استيكر',
-      pillow: 'pillow, cushion, مخدة, خدادية, وسادة',
+      pillow: 'pillow, cushion, كوشن, مخدة, خدادية, وسادة',
+      // (Not كانفاس or canvas alone: the tote bag and the pencil case are canvas too.)
+      canvasprint: 'canvas print, wall canvas, لوحة كانفاس, تابلوه, تابلو',
+      photobook: 'photo book, photobook, photo album, فوتو بوك, فوتوبوك, البوم صور',
+      idcard: 'id card, id badge, name badge, badge, بادج, كارنيه',
       phonecase: 'phone case, phone cover, mobile case, mobile cover, جراب, جراب موبايل, كفر موبايل',
       christmas: 'christmas, xmas, كريسماس',
       birthday: 'birthday, عيد ميلاد',

@@ -5,10 +5,65 @@
   const { t, tr, esc, money } = POD;
   const $ = (id) => document.getElementById(id);
   const params = new URLSearchParams(location.search);
+
+  // ---------- No connection ----------
+  // What the page needs didn't come (no signal, or the site busy): "No connection" and "Try again" in `box`, in the
+  // page's language, until it does. A "not found" from the site is not a connection problem: thrown as it is.
+  const noConnection = (e) => !(e && e.status) || e.status >= 500;
+  async function loadOrRetry(box, load) {
+    let last = null;
+    for (;;) {
+      try {
+        const out = await load();
+        box.hidden = true;
+        box.innerHTML = '';
+        return out;
+      } catch (e) {
+        if (!noConnection(e)) throw e;
+        // The same failure again although the site answers now (a product list kept from before): the page again.
+        if (e === last) {
+          location.reload();
+          return new Promise(() => {});
+        }
+        await tryAgain(box, Boolean(last));
+        last = e;
+      }
+    }
+  }
+  /** "No connection" with "Try again" in `box`; resolves once it is tapped and the site answers. */
+  function tryAgain(box, focus) {
+    return new Promise((resolve) => {
+      const paint = () => {
+        box.innerHTML = `<h2>${esc(t('net.title'))}</h2><p class="muted">${esc(t('net.text'))}</p><button type="button" class="btn btn-primary" data-net-retry>${esc(t('net.retry'))}</button>`;
+      };
+      let busy = false;
+      const click = async (e) => {
+        if (busy || !e.target.closest('[data-net-retry]')) return;
+        busy = true;
+        const back = await fetch('/api/products', { method: 'HEAD', cache: 'no-store' }).then((r) => r.ok, () => false);
+        busy = false;
+        if (!back) {
+          POD.toast(t('net.still'), 'error');
+          return;
+        }
+        box.removeEventListener('click', click);
+        document.removeEventListener('pod:langchange', paint);
+        box.innerHTML = '<div class="spinner"></div>';
+        resolve();
+      };
+      paint();
+      box.setAttribute('role', 'alert');
+      box.hidden = false;
+      box.addEventListener('click', click);
+      document.addEventListener('pod:langchange', paint);
+      if (focus) box.querySelector('[data-net-retry]').focus();
+    });
+  }
+
   let catalog;
   let lib;
   try {
-    [catalog, lib] = await Promise.all([POD.loadCatalog(), POD.api('/api/library')]);
+    [catalog, lib] = await loadOrRetry($('pp-net'), () => Promise.all([POD.loadCatalog(), POD.api('/api/library')]));
     const forThis = catalog.products.find((p) => p.id === params.get('id'));
     if (forThis) lib.designs = lib.designs.filter((d) => POD.designFor(d, forThis));
   } catch (e) {
@@ -188,6 +243,12 @@
     }
   }
 
+  // Places for the customer's own details ({Name}, {Phone}…), as the editor finds them in a text.
+  const textsOf = (list) => (list || []).flatMap((o) => (!o || typeof o !== 'object' ? []
+    : Array.isArray(o.objects) ? textsOf(o.objects)
+      : o.kind === 'text' || /text/i.test(o.type || '') ? [String(o.text || '')] : []));
+  const hasFields = (d) => textsOf([...(d.items || []), ...(d.objects || [])]).some((s) => /\{[^{}\n]{1,40}\}/.test(s));
+
   function renderDesigns() {
     // No ready designs for this product (bookmarks, banners...): no "pick a ready design" choice or section.
     const none = !lib.designs.length;
@@ -201,14 +262,17 @@
     // A first screenful, then "Show more" (a T-shirt has about a hundred).
     if (shownCat !== cat) { shownCat = cat; limit = PAGE; }
     const list = all.slice(0, limit);
+    // Designs with places for the customer's details ({Name}, {Phone}…) are never ordered as they are:
+    // "Fill in your details" opens them in the editor instead of "Order as is".
     $('pp-grid').innerHTML = list.map((d) => `
       <div class="card product-card design-card pp-design">
         <a class="thumb" href="/design?id=${encodeURIComponent(d.id)}&${q(colorFor(d))}"><img alt="${esc(tr(d.name))}" data-design="${esc(d.id)}"></a>
         <div class="body">
           <h3 dir="auto">${esc(tr(d.name))}</h3>
-          <div class="pp-actions">
-            <a class="btn btn-sm btn-primary" href="/design?id=${encodeURIComponent(d.id)}&${q(colorFor(d))}">${esc(t('pp.order'))}</a>
-            <a class="btn btn-sm" href="/editor?library=${encodeURIComponent(d.id)}&${q(colorFor(d))}">✏️ ${esc(t('pp.edit'))}</a>
+          <div class="pp-actions">${hasFields(d)
+    ? `<a class="btn btn-sm btn-primary" href="/editor?library=${encodeURIComponent(d.id)}&${q(colorFor(d))}">${esc(t('pp.fillIn'))}</a>`
+    : `<a class="btn btn-sm btn-primary" href="/design?id=${encodeURIComponent(d.id)}&${q(colorFor(d))}">${esc(t('pp.order'))}</a>
+            <a class="btn btn-sm" href="/editor?library=${encodeURIComponent(d.id)}&${q(colorFor(d))}">✏️ ${esc(t('pp.edit'))}</a>`}
           </div>
         </div>
       </div>`).join('') || `<p class="muted">${esc(t('designs.empty'))}</p>`;
@@ -220,8 +284,13 @@
       $('pp-grid').after(more);
       more.addEventListener('click', (e) => {
         if (!e.target.closest('button')) return;
+        const before = $('pp-grid').querySelectorAll('.pp-design').length;
         limit += PAGE;
         renderDesigns();
+        // The button was replaced: the keyboard goes on at the first design just shown.
+        const next = $('pp-grid').querySelectorAll('.pp-design')[before];
+        const link = next && next.querySelector('a.thumb');
+        if (link) link.focus();
       });
     }
     more.innerHTML = all.length > list.length ? `<button type="button" class="btn">${esc(t('pp.moreDesigns', { n: POD.num(all.length - list.length) }))}</button>` : '';

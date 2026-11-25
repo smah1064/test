@@ -78,8 +78,9 @@
       let error = null;
       // "Order again" state, kept across the auto-refresh re-renders.
       const reo = { busy: false, added: 0, skipped: null, error: null };
-      const catalog = await POD.loadCatalog().catch(() => null);
-      const shopWa = catalog && catalog.contact && catalog.contact.whatsapp;
+      // The shop's details (its WhatsApp number): asked again with the order while they couldn't load.
+      let shop = null;
+      const shopWa = () => (shop && shop.contact && shop.contact.whatsapp) || '';
       // Arabic: "·" next to Arabic-Indic digits reads as the zero "٠" ("٥:٠٧ ص · …"), so items with numbers are
       // separated with the Arabic comma there. English keeps the dot.
       const SEP = () => (POD.lang === 'ar' ? '، ' : ' · ');
@@ -98,7 +99,7 @@
           return `${POD.num(i + 1)}. ${parts.join(SEP())}`;
         }).join('\n');
         const text = t('order.waMessage', { n: o.number, items, total: money(o.total), name: o.customer.name });
-        return `https://wa.me/${shopWa}?text=${encodeURIComponent(text)}`;
+        return `https://wa.me/${shopWa()}?text=${encodeURIComponent(text)}`;
       }
       /** 'YYYY-MM-DD' as a calendar day (no time-zone shift). */
       function day(ymd) {
@@ -106,6 +107,8 @@
         if (!m) return '';
         return new Date(+m[1], m[2] - 1, +m[3]).toLocaleDateString(POD.lang === 'ar' ? 'ar-EG' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
       }
+      /** The day the order is expected: the courier's (set when it ships) once there is one, else the day promised at checkout. */
+      const dueDay = (o) => (o.shipment && /^\d{4}-\d{2}-\d{2}$/.test(o.shipment.eta || '') ? o.shipment.eta : (o.delivery && o.delivery.by) || null);
       /** The five tracking steps with their times; worked out from the status when the server sends none. */
       function steps(o) {
         let list = Array.isArray(o.timeline) && o.timeline.length ? TRACK.map((step) => ({ step, at: (o.timeline.find((s) => s.step === step) || {}).at || null })) : null;
@@ -132,7 +135,7 @@
                 <span class="track-dot"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[s.step]}</svg></span>
                 <span class="track-text">
                   <span class="track-lbl">${esc(t('track.' + s.step))}</span>
-                  <span class="track-when">${s.at ? esc(POD.date(s.at)) : s.done ? '' : s.step === 'delivered' && o.delivery && o.delivery.by ? esc(t('track.expected', { date: POD.day(o.delivery.by) })) : esc(t('track.pending'))}</span>
+                  <span class="track-when">${s.at ? esc(POD.date(s.at)) : s.done ? '' : s.step === 'delivered' && dueDay(o) ? esc(t('track.expected', { date: POD.day(dueDay(o)) })) : esc(t('track.pending'))}</span>
                 </span>
               </li>`).join('')}
             </ol>
@@ -224,8 +227,13 @@
       }
 
       function render() {
+        if (error && error.offline) {
+          // No signal, or the site busy: not "order not found". "Try again" (it is also tried again every 30 seconds).
+          content.innerHTML = `<div class="card empty" role="alert" style="margin:40px auto;max-width:560px"><h2>${esc(t('net.title'))}</h2><p class="muted">${esc(t('net.text'))}</p><button class="btn btn-primary" type="button" data-act="retry">${esc(t('net.retry'))}</button></div>`;
+          return;
+        }
         if (error) {
-          // A missing order: the heading already says so; other errors (no connection…) show their message.
+          // A missing order: the heading already says so; other refusals show their message.
           content.innerHTML = `<div class="card empty" style="margin:40px auto;max-width:560px"><h2>${esc(t('order.notFound'))}</h2>${error.status === 404 ? '' : `<p class="muted">${esc(error.message)}</p>`}<a class="btn" href="/">${esc(t('order.back'))}</a></div>`;
           return;
         }
@@ -237,8 +245,8 @@
           .replace('\u2064', () => place);
         const delivered = o.status === 'delivered' || Boolean(o.shipment && o.shipment.deliveredAt);
         // The promised day (express or standard), shown at the top until the order is delivered.
-        const arrives = o.delivery && o.delivery.by && !delivered
-          ? `<p class="dlv-top">🚚 ${esc(t('delivery.line', { speed: t(o.delivery.speed === 'express' ? 'delivery.express' : 'delivery.standard'), date: POD.day(o.delivery.by) }))}</p>` : '';
+        const arrives = o.delivery && dueDay(o) && !delivered
+          ? `<p class="dlv-top">🚚 ${esc(t('delivery.line', { speed: t(o.delivery.speed === 'express' ? 'delivery.express' : 'delivery.standard'), date: POD.day(dueDay(o)) }))}</p>` : '';
         const isNew = Boolean(params.get('new'));
         content.innerHTML = `
           <div class="page-head">
@@ -294,11 +302,11 @@
             ${o.discount || o.coupon ? `<div class="line discount-line"><span>${esc(t('coupon.discount'))} <bdi dir="ltr">${esc(o.coupon || '')}</bdi></span><span>${o.discount ? '-' + esc(money(o.discount)) : esc(t('coupon.freeShipping'))}</span></div>` : ''}
             ${shippingLines(o)}
             <div class="line total"><span>${esc(t('checkout.total'))}</span><span>${esc(money(o.total))}</span></div>
-            ${o.delivery && !delivered ? `<p class="dlv-expected">🚚 ${esc(t('delivery.line', { speed: t(o.delivery.speed === 'express' ? 'delivery.express' : 'delivery.standard'), date: POD.day(o.delivery.by) }))}</p>` : ''}
+            ${o.delivery && dueDay(o) && !delivered ? `<p class="dlv-expected">🚚 ${esc(t('delivery.line', { speed: t(o.delivery.speed === 'express' ? 'delivery.express' : 'delivery.standard'), date: POD.day(dueDay(o)) }))}</p>` : ''}
             ${o.payment && o.payment.method === 'cod' && o.payment.status !== 'paid' && !delivered ? `<div class="pay-box"><strong>${esc(t('order.payCod', { amount: money(o.total) }))}</strong><span>${esc(t('checkout.codText'))}</span></div>` : ''}
             <p class="muted small" style="margin-bottom:0;overflow-wrap:anywhere">${deliverTo}</p>
           </div>
-          ${shopWa ? `<div class="order-wa"><p>${esc(t('order.waText'))}</p><a class="btn btn-whatsapp" id="order-wa" target="_blank" rel="noopener" href="${esc(whatsappLink(o))}">${esc(t('order.waButton'))}</a></div>` : ''}`;
+          ${shopWa() ? `<div class="order-wa"><p>${esc(t('order.waText'))}</p><a class="btn btn-whatsapp" id="order-wa" target="_blank" rel="noopener" href="${esc(whatsappLink(o))}">${esc(t('order.waButton'))}</a></div>` : ''}`;
       }
 
       /** Shipping, then the express fee on its own line. */
@@ -359,9 +367,24 @@
         if (b.dataset.act === 'reorder') reorder();
         if (b.dataset.act === 'copy') copyNumber(b);
         if (b.dataset.act === 'copy-link') copyLink();
+        if (b.dataset.act === 'retry') retry();
       });
+      let retrying = false;
+      async function retry() {
+        if (retrying) return;
+        retrying = true;
+        await load();
+        retrying = false;
+        // Still no connection: said, and the keyboard stays on "Try again".
+        if (error && error.offline) {
+          POD.toast(t('net.still'), 'error');
+          const b = content.querySelector('[data-act="retry"]');
+          if (b) b.focus();
+        }
+      }
 
       async function load() {
+        if (!shop) shop = await POD.loadCatalog().catch(() => null);
         try {
           order = await POD.api('/api/orders/' + encodeURIComponent(params.get('id') || ''));
           error = null;
@@ -377,7 +400,10 @@
         } catch (e) {
           // A failed refresh (weak signal) keeps showing the order already loaded.
           if (order && e.status !== 404) return;
-          error = { status: e.status, message: e.message };
+          const stillOffline = Boolean(error && error.offline);
+          error = { status: e.status, message: e.message, offline: !e.status || e.status >= 500 };
+          // (Still no connection: the message on screen stays as it is, not read out again every 30 seconds.)
+          if (stillOffline && error.offline) return;
         }
         render();
       }
