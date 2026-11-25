@@ -59,10 +59,14 @@ const ANIMAL_LABELS = {
 };
 const options = (map) => Object.keys(map).map((id) => ({ id, label: map[id] }));
 
+// A birthday is any real day from 1900 up to today. It is only written in the story ("born on 12 March
+// 1985", "every year on 12 March"), so a book for a grown-up (a gift for Mama) is fine too; the old
+// 1990 limit turned such birthdays away as "not a real date".
+const OLDEST_BIRTHDAY = '1900-01-01';
 const Q = {
   name: { id: 'name', type: 'text', label: t("Child's name", 'اسم الطفل'), max: 20, required: true },
   gender: { id: 'gender', type: 'choice', label: t('Boy or girl', 'ولد ولا بنت'), options: [{ id: 'boy', label: t('Boy', 'ولد') }, { id: 'girl', label: t('Girl', 'بنت') }], required: true },
-  birthday: { id: 'birthday', type: 'date', label: t('Birthday', 'تاريخ الميلاد'), required: true },
+  birthday: { id: 'birthday', type: 'date', label: t('Birthday', 'تاريخ الميلاد'), required: true, min: OLDEST_BIRTHDAY },
   city: { id: 'city', type: 'text', label: t('City', 'المدينة'), max: 24, placeholder: t('Cairo', 'Cairo'), required: true },
   father: { id: 'father', type: 'text', label: t("Father's name", 'اسم الأب'), max: 20, required: true },
   mother: { id: 'mother', type: 'text', label: t("Mother's name", 'اسم الأم'), max: 20, required: true },
@@ -236,7 +240,7 @@ function cleanAnswers(book, input) {
     else if (q.type === 'date') {
       v = typeof v === 'string' ? v : '';
       const real = /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v)) && new Date(`${v}T00:00:00Z`).toISOString().slice(0, 10) === v;
-      if (v && (!real || v < '1990-01-01' || v > new Date().toISOString().slice(0, 10))) {
+      if (v && (!real || v < (q.min || OLDEST_BIRTHDAY) || v > new Date().toISOString().slice(0, 10))) {
         const err = new Error('bookBadDate');
         err.field = q.label;
         throw err;
@@ -602,7 +606,7 @@ function publicBook(book) {
 }
 
 module.exports = {
-  BOOKS, TRIM_IN, BLEED_IN, PAGE_IN, PRINT_PX, FRUITS, ANIMALS,
+  BOOKS, TRIM_IN, BLEED_IN, PAGE_IN, PRINT_PX, FRUITS, ANIMALS, OLDEST_BIRTHDAY,
   cleanAnswers, fill, formatDate, renderPage, pageJpeg, bookPdf, lineArt, publicBook, loadFonts,
   companionPath: (id) => (Object.hasOwn(FRUITS, id) || Object.hasOwn(ANIMALS, id) ? path.join(ASSETS, 'companions', `${id}.png`) : null),
 };

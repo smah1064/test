@@ -1175,7 +1175,7 @@ html[dir="ltr"] .hm-tile-link span { display: inline-block; transform: scaleX(-1
 .hm-more { font-weight: 700; font-size: 14px; color: var(--ink); margin-inline-end: 6px; }
 .hm-arrow { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); background: #fff; font-size: 20px; line-height: 1; cursor: pointer; color: var(--ink); display: grid; place-items: center; }
 .hm-arrow:hover { border-color: var(--ink); }
-html[dir="rtl"] .hm-arrow { transform: scaleX(-1); }
+/* (No flip in Arabic: ‹ and › are mirrored by the browser in right-to-left text, as on the book pages.) */
 .hm-row { display: grid; grid-auto-flow: column; grid-auto-columns: calc((100% - 3 * 16px) / 4.15); gap: 16px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; padding: 4px 2px 8px; }
 .hm-row::-webkit-scrollbar { display: none; }
 .hm-card { scroll-snap-align: start; text-decoration: none; color: inherit; display: flex; flex-direction: column; gap: 8px; min-width: 0; }

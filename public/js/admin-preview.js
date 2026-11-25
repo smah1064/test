@@ -11,6 +11,7 @@ window.AdminPreview = (() => {
   let data = null; // { on, people: [...] }
   let fresh = ''; // the person just invited: their row is highlighted
   let said = null; // the last message under the form: { text, bad, err } (kept through a language switch)
+  let drawnIn = ''; // the language the tab was last drawn in
 
   const box = () => $('tab-preview');
   const when = (iso) => new Date(iso).toLocaleString(POD.lang === 'ar' ? 'ar-EG' : 'en-GB', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
@@ -20,6 +21,7 @@ window.AdminPreview = (() => {
     const root = box();
     if (!root || !data) return;
     const people = data.people || [];
+    drawnIn = POD.lang;
     root.innerHTML = `
       <div class="card pv-head">
         <div class="pv-head-text">
@@ -137,26 +139,44 @@ window.AdminPreview = (() => {
     });
   }
 
+  /** Draws the tab again keeping the invite form as it was: both boxes, the one being typed in (with
+   * its cursor) and the last message. */
+  function redrawKeepingForm() {
+    const kept = ['pv-name', 'pv-own'].map((id) => {
+      const el = $(id);
+      if (!el) return null;
+      const focused = document.activeElement === el;
+      return { id, value: el.value, focused, start: focused ? el.selectionStart : null, end: focused ? el.selectionEnd : null, dir: focused ? el.selectionDirection : null };
+    });
+    render();
+    for (const k of kept) {
+      const el = k && $(k.id);
+      if (!el) continue;
+      el.value = k.value;
+      if (k.focused) {
+        el.focus({ preventScroll: true });
+        try { el.setSelectionRange(k.start, k.end, k.dir || 'none'); } catch (e) { /* (no cursor to put back) */ }
+      }
+    }
+    if (said) say(said.text, said.bad, said.key);
+  }
+
   return {
     init(c) {
       api = c.api;
     },
     async show() {
       bind();
+      const before = data && JSON.stringify(data);
       data = await api('/api/admin/preview');
-      // (Typing a name while the dashboard refreshes: keep it.)
-      const typing = $('pv-name') && document.activeElement === $('pv-name') ? $('pv-name').value : null;
-      render();
-      if (typing != null) { $('pv-name').value = typing; $('pv-name').focus(); }
+      // The 15-second refresh with nothing new: the tab stays exactly as it is.
+      if (before === JSON.stringify(data) && drawnIn === POD.lang && $('pv-add')) return;
+      // (Something changed while the admin was typing an invite: the form keeps what was typed.)
+      redrawKeepingForm();
     },
     onLang() {
       // (What was typed and the last message stay.)
-      const name = $('pv-name') ? $('pv-name').value : '';
-      const own = $('pv-own') ? $('pv-own').value : '';
-      render();
-      if ($('pv-name')) $('pv-name').value = name;
-      if ($('pv-own')) $('pv-own').value = own;
-      if (said) say(said.text, said.bad, said.key);
+      redrawKeepingForm();
     },
   };
 })();

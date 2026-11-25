@@ -309,7 +309,7 @@
         <dt>${esc(t('admin.spec.order'))}</dt><dd>${esc(item.orderNumber)} · ${esc(t('admin.spec.itemOf', { i: item.position, n: item.of }))}</dd>
         <dt>${esc(t('admin.spec.product'))}</dt><dd>${esc(tr(item.productName))}</dd>
         ${hasQty(item) ? `<dt>${esc(t('adminQty.title'))}</dt><dd class="qty-dd">${qtyTable(item)}</dd>` : `<dt>${esc(t('admin.spec.colourSize'))}</dt><dd>${esc(tr(item.color.name))} <span class="dot" style="display:inline-block;vertical-align:middle;background:${esc(item.color.hex)}"></span>${SEP()}${esc(tr(item.size.label))}</dd>`}
-        ${item.kind === 'photoset' ? `<dt>${esc(t('fmt.photos-zip'))}</dt><dd>${esc(listed(t('admin.photoFiles', { n: counted('admin.photos', (item.photos || []).length), prints: counted('admin.prints', (item.photos || []).reduce((n, p) => n + p.copies, 0)) })))}${SEP()}${esc(t('admin.photoSpec'))}${item.sides[0] && item.sides[0].dpi && item.sides[0].dpi < 150 ? `<div class="small" style="color:var(--warn);margin-top:4px">⚠ ${esc(t('admin.photoLowRes'))}</div>` : ''}</dd>` : item.sides.map((s) => `<dt>${esc(t('admin.spec.print', { side: tr(s.name) }))}</dt><dd><bdi dir="ltr">${cm(s.widthIn)} × ${cm(s.heightIn)} cm (${s.widthIn} × ${s.heightIn} in)${s.bleedIn ? ' ' + esc(t('admin.bleed', { mm: Math.round(s.bleedIn * 25.4) })) : ''} · ${s.widthPx} × ${s.heightPx} px · ${s.dpi} DPI · sRGB</bdi>${s.offsetCm ? `<div class="placement-note">📍 ${esc(t('admin.placement', { v: placementText(s.offsetCm) }))}</div>` : ''}</dd>`).join('')}
+        ${item.kind === 'photoset' ? `<dt>${esc(t('fmt.photos-zip'))}</dt><dd>${esc(listed(t('admin.photoFiles', { n: counted('admin.photos', (item.photos || []).length), prints: counted('admin.prints', (item.photos || []).reduce((n, p) => n + p.copies, 0)) })))}${SEP()}${esc(t('admin.photoSpec'))}${item.sides[0] && item.sides[0].dpi && item.sides[0].dpi < 150 ? `<div class="small" style="color:var(--warn);margin-top:4px">⚠ ${esc(t('admin.photoLowRes'))}</div>` : ''}</dd>` : item.sides.map((s) => `<dt>${esc(t('admin.spec.print', { side: tr(s.name) }))}</dt><dd><bdi dir="ltr">${cm(s.widthIn)} × ${cm(s.heightIn)} cm (${s.widthIn} × ${s.heightIn} in)</bdi>${s.bleedIn ? ` <bdi>${esc(t('admin.bleed', { mm: Math.round(s.bleedIn * 25.4) }))}</bdi>` : ''}${SEP()}<bdi dir="ltr">${s.widthPx} × ${s.heightPx} px · ${s.dpi} DPI · sRGB</bdi>${s.offsetCm ? `<div class="placement-note">📍 ${esc(t('admin.placement', { v: placementText(s.offsetCm) }))}</div>` : ''}</dd>`).join('')}
         ${item.emb ? `<dt>${esc(t('admin.emb'))}</dt><dd>
           <div><strong>${esc(listed(t('admin.embSummary', { n: POD.num(item.emb.stitches), c: item.emb.colors.length, w: item.emb.widthMm, h: item.emb.heightMm })))}</strong></div>
           <ol class="emb-threads">${item.emb.colors.map((c) => `<li><span class="dot" style="display:inline-block;vertical-align:middle;background:${esc(c.hex)}"></span> ${esc(c.name)} <span class="muted">(${esc(c.hex)}${SEP()}${esc(POD.num(c.stitches))})</span></li>`).join('')}</ol>
@@ -1720,22 +1720,57 @@
     }
     renderAccounts();
   }
-  function renderAccounts() {
+  function renderAccounts(opts) {
     $('acc-overview').hidden = acc.view !== 'overview';
     $('acc-prices').hidden = acc.view !== 'prices';
     $('acc-expenses').hidden = acc.view !== 'expenses';
     document.querySelectorAll('[data-acc-view]').forEach((b) => b.classList.toggle('active', b.dataset.accView === acc.view));
     if (acc.view === 'prices') renderPrices();
-    else if (acc.report) { renderOverview(); renderExpenses(); }
+    else if (acc.report) { renderOverview(opts); renderExpenses(); }
   }
-  function renderOverview() {
+  // The real-cost boxes of the orders: saving one never redraws a box the admin is typing in (QA: the
+  // second order got the "1" of "130"). Until the admin leaves the boxes, the totals, the order rows and
+  // the other boxes follow in place; the full table once nothing is typed or still saving.
+  const COST_BOX = '[data-acc-item-cost], [data-acc-ship]';
+  let costSaving = 0;
+  const typingCost = () => {
+    const a = document.activeElement;
+    return !!(a && a.matches && a.matches(COST_BOX) && $('acc-orders').contains(a));
+  };
+  function updateOrdersInPlace() {
+    const box = $('acc-orders');
+    const shown = [...box.querySelectorAll('[data-acc-order]')].map((b) => b.dataset.accOrder);
+    // Orders came or went: that waits for the full table.
+    if (shown.join() !== acc.report.orders.map((o) => o.id).join()) return;
+    const a = document.activeElement;
+    for (const o of acc.report.orders) {
+      const main = box.querySelector(`[data-acc-order="${CSS.escape(o.id)}"]`).closest('tr');
+      const tmp = document.createElement('tbody');
+      tmp.innerHTML = orderRow(o);
+      const [newMain, newDetail] = tmp.rows;
+      const oldDetail = main.nextElementSibling && main.nextElementSibling.classList.contains('acc-detail') ? main.nextElementSibling : null;
+      if (!!oldDetail !== !!newDetail) return;
+      main.replaceWith(newMain);
+      if (!oldDetail) continue;
+      if (!oldDetail.contains(a)) { oldDetail.replaceWith(newDetail); continue; }
+      // The line being typed in keeps its box; its words (estimate or real) follow.
+      const olds = [...oldDetail.querySelectorAll('.acc-cost-line')];
+      const news = [...newDetail.querySelectorAll('.acc-cost-line')];
+      if (olds.length !== news.length) return;
+      olds.forEach((ol, n) => {
+        if (!ol.contains(a)) return ol.replaceWith(news[n]);
+        [...ol.children].forEach((c, k) => { if (!c.contains(a) && news[n].children[k]) c.replaceWith(news[n].children[k].cloneNode(true)); });
+      });
+    }
+  }
+  function renderOverview({ keepBoxes = false } = {}) {
     const r = acc.report;
     const tt = r.totals;
     $('acc-periods').innerHTML = ['month', 'lastMonth', 'year', 'all', 'custom']
       .map((p) => `<button class="chip ${acc.period === p ? 'active' : ''}" data-acc-period="${p}" type="button">${esc(t('acc.period.' + p))}</button>`).join('');
     $('acc-custom').hidden = acc.period !== 'custom';
     $('acc-missing').hidden = !tt.missingCosts;
-    $('acc-missing').textContent = t('acc.missing', { n: POD.num(tt.missingCosts) });
+    $('acc-missing').textContent = POD.plural('acc.missing', tt.missingCosts);
     const tile = (label, value, extra, c = '') => `<div class="card stat acc-stat ${c}"><b>${esc(value)}</b><span>${esc(label)}</span>${extra ? `<small class="muted">${esc(extra)}</small>` : ''}</div>`;
     $('acc-stats').innerHTML = [
       tile(t('acc.revenue'), money(tt.revenue), listed(t('acc.revenueSub', { orders: POD.num(tt.orders), items: POD.num(tt.items) }))),
@@ -1751,6 +1786,13 @@
       ? `<thead><tr><th>${esc(t('acc.col.product'))}</th><th>${esc(t('acc.col.units'))}</th><th>${esc(t('acc.col.sales'))}</th><th>${esc(t('acc.col.cost'))}</th><th>${esc(t('acc.col.profit'))}</th></tr></thead><tbody>${r.products.map((p) => `
         <tr><td>${esc(tr(p.productName))}</td><td>${POD.num(p.units)}</td><td>${money(p.sales)}</td><td>${money(p.cost)}</td><td class="${cls(p.profit)}">${money(p.profit)}</td></tr>`).join('')}</tbody>`
       : `<tbody><tr><td class="muted">${esc(t('acc.noOrders'))}</td></tr></tbody>`;
+    // While a cost box is typed in (or one is still saving), the table follows in place.
+    if (keepBoxes && (typingCost() || costSaving)) {
+      updateOrdersInPlace();
+      acc.redrawOrders = true;
+      return;
+    }
+    acc.redrawOrders = false;
     $('acc-orders').innerHTML = r.orders.length
       ? `<thead><tr><th>${esc(t('admin.col.order'))}</th><th>${esc(t('acc.col.items'))}</th><th>${esc(t('acc.col.total'))}</th><th>${esc(t('acc.col.cost'))}</th><th>${esc(t('acc.col.ship'))}</th><th>${esc(t('acc.col.profit'))}</th><th></th></tr></thead><tbody>${r.orders.map(orderRow).join('')}</tbody>`
       : `<tbody><tr><td class="muted">${esc(t('acc.noOrders'))}</td></tr></tbody>`;
@@ -1925,15 +1967,32 @@
     const itemId = el.dataset.accItemCost;
     const orderId = el.dataset.accShip;
     if (!itemId && !orderId) return;
+    // The value as typed now: the admin may already be typing in the next box.
+    const value = el.value === '' ? null : Number(el.value);
+    costSaving++;
+    let saved = false;
     try {
-      if (itemId) await adminApi(`/api/admin/items/${encodeURIComponent(itemId)}/cost`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang }, body: JSON.stringify({ actualCost: el.value === '' ? null : Number(el.value) }) });
-      else await adminApi(`/api/admin/orders/${encodeURIComponent(orderId)}/shipping-cost`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang }, body: JSON.stringify({ actualShipping: el.value === '' ? null : Number(el.value) }) });
-      el.blur();
+      if (itemId) await adminApi(`/api/admin/items/${encodeURIComponent(itemId)}/cost`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang }, body: JSON.stringify({ actualCost: value }) });
+      else await adminApi(`/api/admin/orders/${encodeURIComponent(orderId)}/shipping-cost`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang }, body: JSON.stringify({ actualShipping: value }) });
+      saved = true;
+      // (Enter in the box: done with it. Another box clicked meanwhile keeps its focus.)
+      if (document.activeElement === el) el.blur();
       toast(t('houses.saved'));
-      await refreshAccounts();
+      acc.report = await adminApi(`/api/admin/accounts?${rangeQuery()}`);
     } catch (err) {
       toast(err.message, 'error');
+    } finally {
+      costSaving--;
     }
+    if (saved) renderAccounts({ keepBoxes: true });
+    else if (acc.redrawOrders && !typingCost() && !costSaving) renderOverview();
+  });
+  // Left the cost boxes (not for another one): the table catches up.
+  $('tab-accounts').addEventListener('focusout', (e) => {
+    if (!e.target.matches || !e.target.matches(COST_BOX) || (e.relatedTarget && e.relatedTarget.matches && e.relatedTarget.matches(COST_BOX))) return;
+    setTimeout(() => {
+      if (acc.redrawOrders && acc.report && !typingCost() && !costSaving && acc.view === 'overview') renderOverview();
+    }, 0);
   });
   $('acc-ship-save').addEventListener('click', async () => {
     try {

@@ -48,6 +48,7 @@
     page: 0,
     aiConsent: !!saved.aiConsent,
     dirty: true,
+    adding: false, // "Add to cart" is at work (the button waits)
     cartIndex: params.has('cart') ? Number(params.get('cart')) : null,
   };
   const remember = () => {
@@ -113,7 +114,7 @@
         return `<div class="field">${label}<textarea id="q-${q.id}" data-q="${q.id}" maxlength="${q.max}" rows="3" dir="auto" placeholder="${esc(t('book.dedicationHint'))}">${esc(v)}</textarea></div>`;
       }
       const type = q.type === 'date' ? 'date' : 'text';
-      return `<div class="field">${label}<input id="q-${q.id}" data-q="${q.id}" type="${type}" ${type === 'date' ? `max="${today}" min="1990-01-01"` : `maxlength="${q.max || 40}" dir="auto"`} value="${esc(v)}" placeholder="${q.placeholder ? esc(tr(q.placeholder)) : ''}"></div>`;
+      return `<div class="field">${label}<input id="q-${q.id}" data-q="${q.id}" type="${type}" ${type === 'date' ? `max="${today}" min="${esc(q.min || '1900-01-01')}"` : `maxlength="${q.max || 40}" dir="auto"`} value="${esc(v)}" placeholder="${q.placeholder ? esc(tr(q.placeholder)) : ''}"></div>`;
     }).join('');
     $('bk-questions').insertAdjacentHTML('afterbegin', `<p class="muted small bk-en-hint" style="margin:0 0 10px">${esc(t('book.englishHint'))}</p>`);
     $('bk-questions').querySelectorAll('input[data-q], textarea[data-q]').forEach(markLatin);
@@ -125,7 +126,7 @@
   function renderButtons() {
     $('bk-make').textContent = t(state.design ? (state.dirty ? 'book.update' : 'book.updated') : 'book.make');
     $('bk-make').disabled = !!state.design && !state.dirty;
-    $('bk-add').disabled = !state.design;
+    $('bk-add').disabled = !state.design || !!state.adding;
     $('bk-add').textContent = t(state.cartIndex !== null ? 'cart.update' : 'design.add');
     $('bk-photo-empty').hidden = !!(state.face || state.hasPhoto);
     $('bk-photo-saved').hidden = !state.hasPhoto || !!state.face;
@@ -325,6 +326,16 @@
     if (!state.face && !state.hasPhoto) return t('book.photo');
     return null;
   }
+  function dateProblem() {
+    for (const q of book.questions) {
+      const v = q.type === 'date' ? String(state.answers[q.id] || '') : '';
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) continue;
+      const min = q.min || '1900-01-01';
+      if (v < min) return { q, message: t('book.dateTooOld', { field: tr(q.label), year: Number(min.slice(0, 4)) }) };
+      if (v > new Date().toISOString().slice(0, 10)) return { q, message: t('book.dateFuture', { field: tr(q.label) }) };
+    }
+    return null;
+  }
   async function make() {
     const rtl = latinProblems();
     if (rtl.length) {
@@ -334,6 +345,17 @@
       if (first) {
         first.scrollIntoView({ block: 'center', behavior: 'smooth' });
         first.focus({ preventScroll: true });
+      }
+      return false;
+    }
+    // The date box lets any year be typed: too early or not come yet, said as such.
+    const bad = dateProblem();
+    if (bad) {
+      POD.toast(bad.message, 'error');
+      const el = document.querySelector(`#bk-questions [data-q="${bad.q.id}"]`);
+      if (el) {
+        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        el.focus({ preventScroll: true });
       }
       return false;
     }
@@ -383,8 +405,32 @@
     }
   }
   $('bk-make').addEventListener('click', make);
+  // One book per tap: a second tap (double click, slow phone) while the first is still adding does
+  // nothing, and a book already in the cart is updated where it is, never put in twice (checkout refuses
+  // the same design twice).
   $('bk-add').addEventListener('click', async () => {
-    if (state.dirty && !(await make())) return;
+    if (state.adding) return;
+    state.adding = true;
+    renderButtons();
+    let leaving = false;
+    try {
+      if (state.dirty && !(await make())) return;
+      leaving = addToCart();
+    } finally {
+      if (!leaving) {
+        state.adding = false;
+        renderButtons();
+      }
+    }
+  });
+  // Back to this page from the cart (the browser kept it as it was): the button works again.
+  window.addEventListener('pageshow', (e) => {
+    if (e.persisted && state.adding) {
+      state.adding = false;
+      renderButtons();
+    }
+  });
+  function addToCart() {
     const d = state.design;
     const cart = POD.getCart();
     const item = {
@@ -400,11 +446,15 @@
       previewUrl: d.previewUrl,
       addedAt: new Date().toISOString(),
     };
-    if (state.cartIndex !== null && cart[state.cartIndex]) cart[state.cartIndex] = item;
+    // The line of this very book wherever it is now (opened from the cart, or added a moment ago).
+    const at = cart.findIndex((c) => c.designId === d.id);
+    if (at >= 0) cart[at] = item;
     else cart.push(item);
-    POD.setCart(cart);
+    // The browser refused to keep the cart (storage blocked): stay here, the message says so.
+    if (POD.setCart(cart) === false) return false;
     location.href = '/cart?added=1';
-  });
+    return true;
+  }
 
   renderForm();
   renderThumbs();
