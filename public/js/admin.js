@@ -181,7 +181,8 @@
   /** Who is signed in (the role is kept on the server with the token). */
   async function loadSession() {
     const r = await adminApi('/api/admin/session');
-    setRole(r.role || 'owner', r.name);
+    // The person's own name, as after signing in ("Mostafa مصطفى", not the username "mostafa").
+    setRole(r.role || 'owner', r.shown || r.name);
     $('weak-pw').hidden = !(role === 'owner' && r.weakPassword);
   }
 

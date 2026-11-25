@@ -2093,11 +2093,12 @@ PRODUCTS.push(
     colors: [{ id: 'matte', name: t('Matte cover', 'غلاف مطفي'), hex: '#ffffff' }, { id: 'gloss', name: t('Glossy cover', 'غلاف لامع'), hex: '#ffffff' }],
     sizes: qty([
       // From one copy (price per copy falls with the pack: 1 copy = 5×, 10 = 2×, 25 = 1.25× the 50-copy rate).
+      // In every row 24 pages cost halfway between 16 and 32 (24 × 100: 3200, between 2400 and 4000).
       ['8-1', '8 pages × 1 copy', '8 صفحات × نسخة واحدة', -810, SMALL], ['16-1', '16 pages × 1 copy', '16 صفحة × نسخة واحدة', -760, SMALL], ['24-1', '24 pages × 1 copy', '24 صفحة × نسخة واحدة', -710, SMALL], ['32-1', '32 pages × 1 copy', '32 صفحة × نسخة واحدة', -660, SMALL],
       ['8-10', '8 pages × 10 copies', '8 صفحات × 10 نسخ', -540, SMALL], ['16-10', '16 pages × 10 copies', '16 صفحة × 10 نسخ', -340, SMALL], ['24-10', '24 pages × 10 copies', '24 صفحة × 10 نسخ', -140, SMALL], ['32-10', '32 pages × 10 copies', '32 صفحة × 10 نسخ', 60, SMALL],
       ['8-25', '8 pages × 25 copies', '8 صفحات × 25 نسخة', -340, SMALL], ['16-25', '16 pages × 25 copies', '16 صفحة × 25 نسخة', -20, SMALL], ['24-25', '24 pages × 25 copies', '24 صفحة × 25 نسخة', 290, SMALL], ['32-25', '32 pages × 25 copies', '32 صفحة × 25 نسخة', 600, SMALL],
       ['8-50', '8 pages × 50 copies', '8 صفحات × 50 نسخة', 0], ['16-50', '16 pages × 50 copies', '16 صفحة × 50 نسخة', 500], ['24-50', '24 pages × 50 copies', '24 صفحة × 50 نسخة', 1000], ['32-50', '32 pages × 50 copies', '32 صفحة × 50 نسخة', 1500],
-      ['8-100', '8 pages × 100 copies', '8 صفحات × 100 نسخة', 600], ['16-100', '16 pages × 100 copies', '16 صفحة × 100 نسخة', 1500], ['32-100', '32 pages × 100 copies', '32 صفحة × 100 نسخة', 3100],
+      ['8-100', '8 pages × 100 copies', '8 صفحات × 100 نسخة', 600], ['16-100', '16 pages × 100 copies', '16 صفحة × 100 نسخة', 1500], ['24-100', '24 pages × 100 copies', '24 صفحة × 100 نسخة', 2300], ['32-100', '32 pages × 100 copies', '32 صفحة × 100 نسخة', 3100],
     ]),
     // Many pages: the front cover, the inside pages (p2...p31) and the back cover; the size
     // says how many are printed (sizes[].pages), the binding which way the pages turn.

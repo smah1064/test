@@ -285,15 +285,23 @@
       img.onload = img.onerror = () => { $('bk-spin').hidden = true; img.style.opacity = ''; };
       img.src = url;
     }
-    img.alt = t('book.pageAlt', { n: state.page + 1 });
+    img.alt = pageLabel(state.page);
     $('bk-count').textContent = t('book.pageOf', { n: POD.num(state.page + 1), total: POD.num(book.pages) });
     $('bk-prev').disabled = state.page === 0;
     $('bk-next').disabled = state.page === book.pages - 1;
-    document.querySelectorAll('#bk-thumbs button').forEach((b, i) => b.classList.toggle('active', i === state.page));
+    // The thumbnails' labels follow the language too (a language switch calls showPage, not renderThumbs).
+    document.querySelectorAll('#bk-thumbs button').forEach((b, i) => {
+      b.classList.toggle('active', i === state.page);
+      b.setAttribute('aria-label', pageLabel(i));
+    });
     $('bk-sample').hidden = !!state.design;
   }
+  /** "Page 3 of the book" / "صفحة ٣ من الكتاب": page i (from 0) in the language on screen. */
+  function pageLabel(i) {
+    return t('book.pageAlt', { n: POD.num(i + 1) });
+  }
   function renderThumbs() {
-    $('bk-thumbs').innerHTML = Array.from({ length: book.pages }, (_, i) => `<button type="button" data-page="${i}" aria-label="${esc(t('book.pageAlt', { n: i + 1 }))}"><img loading="lazy" alt="" src="${pageUrl(i)}"></button>`).join('');
+    $('bk-thumbs').innerHTML = Array.from({ length: book.pages }, (_, i) => `<button type="button" data-page="${i}" aria-label="${esc(pageLabel(i))}"><img loading="lazy" alt="" src="${pageUrl(i)}"></button>`).join('');
     showPage(state.page);
   }
   $('bk-prev').addEventListener('click', () => showPage(state.page - 1));

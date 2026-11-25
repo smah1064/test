@@ -131,7 +131,10 @@ function methodName(item, lang) {
   if (!id) return '';
   return METHOD_NAMES[id] ? METHOD_NAMES[id][lang] || METHOD_NAMES[id].en : id.toUpperCase();
 }
-/** A calendar day (YYYY-MM-DD) in the message language: "Thursday 26 November" / "الخميس ٢٦ نوفمبر". */
+/**
+ * A calendar day (YYYY-MM-DD) in the message language: "Thursday 26 November" / "الخميس ٢٦ نوفمبر". The
+ * express date and the download links' last day are both written this way.
+ */
 function dayText(ymd, lang) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(ymd || ''))) return digits(ymd || '', lang);
   try {
@@ -172,6 +175,12 @@ function quantityText(item, lang) {
   return digits(lines.reduce((n, l) => n + (l.qty || 0), 0), lang);
 }
 
+/**
+ * Colour and size together: "White · 325 ml" / "أبيض، ٣٢٥ مل". In Arabic a "·" next to ١٢٣ reads badly
+ * (QA 25 Nov), so the Arabic comma joins them there.
+ */
+const colourSize = (color, size, lang) => [pick(color && color.name, lang), pick(size && size.label, lang)].filter(Boolean).join(lang === 'ar' ? '، ' : ' · ');
+
 /** The job's facts, in the admin's language. */
 function jobLines(order, item, design, lang) {
   const t = T[lang];
@@ -182,10 +191,11 @@ function jobLines(order, item, design, lang) {
   return [
     [t.order, `${order.number} (${digits(item.position, lang)}/${digits(order.items.length, lang)})`],
     [t.product, pick(item.productName, lang)],
-    // Several colours / sizes: every line with its count (S×2, 2XL×1), not the design's first size.
+    // Several colours / sizes: every line with its count (S×2, 2XL×1), not the design's first size. In
+    // Arabic the comma is already inside each line (أبيض، M ×٣٠), so the lines are kept apart with "؛".
     [t.colour, Array.isArray(item.quantities) && item.quantities.length
-      ? item.quantities.map((l) => `${[pick(l.color && l.color.name, lang), pick(l.size && l.size.label, lang)].filter(Boolean).join(' · ')} ×${digits(l.qty, lang)}`).join(lang === 'ar' ? '، ' : ', ')
-      : [pick(item.color && item.color.name, lang), pick(item.size && item.size.label, lang)].filter(Boolean).join(' · ')],
+      ? item.quantities.map((l) => `${colourSize(l.color, l.size, lang)} ×${digits(l.qty, lang)}`).join(lang === 'ar' ? '؛ ' : ', ')
+      : colourSize(item.color, item.size, lang)],
     [t.method, methodName(item, lang)],
     ...(sides ? [[t.sides, sides]] : []),
     [t.qty, quantityText(item, lang)],
@@ -206,7 +216,7 @@ function whatsappText({ house, order, item, design, files, note, lang, expires }
     `*${t.files}:*`,
     ...files.map((f) => `• ${f.label}: ${f.url}`),
     '',
-    t.expires(digits(expires.slice(0, 10), lang)),
+    t.expires(dayText(expires.slice(0, 10), lang)),
     t.thanks,
   ].join('\n');
 }
@@ -222,7 +232,7 @@ ${wantsSample(item) ? `<p style="background:#e7f5ff;color:#0b4f71;padding:6px 10
 <table style="border-collapse:collapse;margin:8px 0 14px">${rows}</table>
 ${note ? `<p><strong>${esc(t.note)}:</strong> ${esc(note)}</p>` : ''}
 <p style="margin-bottom:4px"><strong>${esc(t.files)}</strong>${attached ? ` (${esc(t.attached)})` : ''}:</p><ul style="margin-top:0">${list}</ul>
-<p style="color:#666;font-size:13px">${esc(t.expires(digits(expires.slice(0, 10), lang)))}</p><p>${esc(t.thanks)}</p></div>`;
+<p style="color:#666;font-size:13px">${esc(t.expires(dayText(expires.slice(0, 10), lang)))}</p><p>${esc(t.thanks)}</p></div>`;
   const text = [
     t.hello(house.name), t.intro, '',
     ...(isExpress(order) ? [t.express(dayText(order.delivery.by, lang)), ''] : []),
@@ -231,7 +241,7 @@ ${note ? `<p><strong>${esc(t.note)}:</strong> ${esc(note)}</p>` : ''}
     ...(note ? ['', `${t.note}: ${note}`] : []),
     '', `${t.files}${attached ? ` (${t.attached})` : ''}:`,
     ...files.map((f) => `- ${f.label}: ${f.url}`),
-    '', t.expires(digits(expires.slice(0, 10), lang)), t.thanks,
+    '', t.expires(dayText(expires.slice(0, 10), lang)), t.thanks,
   ].join('\n');
   return { subject: t.subject(order.number, pick(item.productName, lang)), html, text };
 }

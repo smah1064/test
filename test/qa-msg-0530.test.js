@@ -48,10 +48,10 @@ test('printing-house message: the size label uses the message\'s digits', () => 
     for (const text of [wa, mail.text, mail.html.replace(/<[^>]+>/g, ' '), mail.subject]) assert.strictEqual(latinDigits(text), null, text);
   }
   const wa = dispatch.whatsappText({ ...args, item: { ...POSTER, process: 'paper', position: 1 }, lang: 'ar' });
-  assert.match(wa, /\*اللون \/ المقاس:\* أبيض · ٣٠ × ٤٠ سم ×٢، أبيض · A2 \(٤٢ × ٥٩٫٤ سم\) ×١/);
-  assert.match(dispatch.whatsappText({ ...args, item: { ...SHIRT, process: 'dtf', position: 2 }, lang: 'ar' }), /أسود · 2XL/);
+  assert.match(wa, /\*اللون \/ المقاس:\* أبيض، ٣٠ × ٤٠ سم ×٢؛ أبيض، A2 \(٤٢ × ٥٩٫٤ سم\) ×١/);
+  assert.match(dispatch.whatsappText({ ...args, item: { ...SHIRT, process: 'dtf', position: 2 }, lang: 'ar' }), /أسود، 2XL/);
   const one = dispatch.whatsappText({ ...args, item: { ...POSTER, quantities: null, process: 'paper', position: 1 }, lang: 'ar' });
-  assert.match(one, /\*اللون \/ المقاس:\* أبيض · ٣٠ × ٤٠ سم\n/);
+  assert.match(one, /\*اللون \/ المقاس:\* أبيض، ٣٠ × ٤٠ سم\n/);
   // English keeps Latin digits.
   const en = dispatch.whatsappText({ ...args, item: { ...POSTER, process: 'paper', position: 1 }, lang: 'en' });
   assert.match(en, /\*Colour \/ size:\* White · 30 × 40 cm ×2, White · A2 \(42 × 59\.4 cm\) ×1/);

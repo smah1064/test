@@ -163,10 +163,10 @@ test('printing-house messages: Arabic name, digits and سم', () => {
   const ar = dispatch.whatsappText({ ...args, lang: 'ar' });
   assert.match(ar, /لـ إبداع:/);
   assert.match(ar, /POD-2001 \(١\/٤\)/);
-  assert.match(ar, /أبيض · M ×٣٠، أسود · L ×٢٥/);
+  assert.match(ar, /أبيض، M ×٣٠؛ أسود، L ×٢٥/);
   assert.match(ar, /\*الكمية:\* ٥٥/);
   assert.match(ar, /الأمام ٢٥٫٤ × ٣٠٫٥ سم \(متحرك ٣ سم لتحت و١٫٥ سم شمال/);
-  assert.match(ar, /٢٠٢٦-١٢-٢٤/);
+  assert.match(ar, /روابط التحميل شغالة لحد الخميس، ٢٤ ديسمبر\./);
   assert.doesNotMatch(ar.replace('POD-2001', ''), /ebda3|\bcm\b|\d/); // the order number is an id
   const mail = dispatch.emailBody({ ...args, lang: 'ar', attached: false });
   assert.match(mail.text, /لـ إبداع:/);
