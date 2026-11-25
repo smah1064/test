@@ -22,6 +22,7 @@
  * Anything malformed ends as an UploadError code (zip) or { ok: false, reason }
  * (one picture), never a crash.
  */
+const fs = require('fs');
 const zlib = require('zlib');
 
 let sharpModule = null;
@@ -106,11 +107,11 @@ function entryName(raw, flags, extra) {
   }
 }
 
-/** The "end of central directory" record: the last one whose comment fits in the file. */
-function findEnd(buf) {
-  const stop = Math.max(0, buf.length - 22 - 0xffff);
-  for (let i = buf.length - 22; i >= stop; i--) {
-    if (buf[i] === 0x50 && buf.readUInt32LE(i) === SIG_END && i + 22 + buf.readUInt16LE(i + 20) <= buf.length) return i;
+/** The "end of central directory" record in `tail` (the file's last bytes): the last one whose comment fits. */
+function findEnd(tail) {
+  const stop = Math.max(0, tail.length - 22 - 0xffff);
+  for (let i = tail.length - 22; i >= stop; i--) {
+    if (tail[i] === 0x50 && tail.readUInt32LE(i) === SIG_END && i + 22 + tail.readUInt16LE(i + 20) <= tail.length) return i;
   }
   return -1;
 }
@@ -118,26 +119,66 @@ function findEnd(buf) {
 const byName = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
 
 /**
- * The files in a zip (folders and junk left out), sorted by name:
- * [{ path: 'mugs/cat.png', data: Buffer }]. The array also has `skipped`:
- * [{ path, reason }] for files that were not read ('tooBig' over maxFile,
- * 'badPicture' / 'notPicture' in a compression we don't read).
- * Throws UploadError: zipBad (not a zip, damaged, encrypted, split, ZIP64),
- * zipTooMany (more than maxEntries files), zipTooBig (more than maxTotal bytes
- * once unpacked, or a zip bomb).
+ * Where a zip's bytes come from: an upload held in memory (a Buffer) or a file on disk (a path), read a
+ * piece at a time, so a big zip never has to fit in memory.
  */
-function readZip(buf, { maxEntries = 300, maxTotal = 600 * MB, maxFile = 60 * MB } = {}) {
-  if (!Buffer.isBuffer(buf) || buf.length < 22) throw new UploadError('zipBad');
-  const end = findEnd(buf);
-  if (end < 0) throw new UploadError('zipBad');
-  const disk = buf.readUInt16LE(end + 4);
-  const cdDisk = buf.readUInt16LE(end + 6);
-  const onDisk = buf.readUInt16LE(end + 8);
-  const count = buf.readUInt16LE(end + 10);
-  const cdSize = buf.readUInt32LE(end + 12);
-  const cdStart = buf.readUInt32LE(end + 16);
+function zipSource(src) {
+  if (Buffer.isBuffer(src)) {
+    return {
+      size: src.length,
+      read: (at, len) => {
+        if (at < 0 || at + len > src.length) throw new UploadError('zipBad');
+        return src.subarray(at, at + len);
+      },
+      close() {},
+    };
+  }
+  let fd;
+  try {
+    fd = fs.openSync(String(src), 'r');
+  } catch {
+    throw new UploadError('zipBad');
+  }
+  const size = fs.fstatSync(fd).size;
+  return {
+    size,
+    read: (at, len) => {
+      if (at < 0 || at + len > size) throw new UploadError('zipBad');
+      const out = Buffer.alloc(len);
+      let got = 0;
+      while (got < len) {
+        const n = fs.readSync(fd, out, got, len - got, at + got);
+        if (!n) throw new UploadError('zipBad');
+        got += n;
+      }
+      return out;
+    },
+    close() {
+      try { fs.closeSync(fd); } catch { /* already closed */ }
+    },
+  };
+}
+
+/**
+ * The files listed in a zip, checked but not unpacked: { entries: [{ path, method, crc, csize, usize,
+ * start }] sorted by name, skipped: [{ path, reason }] }. Throws UploadError like readZip.
+ */
+function scanZip(z, { maxEntries = 300, maxTotal = 600 * MB, maxFile = 60 * MB } = {}) {
+  if (z.size < 22) throw new UploadError('zipBad');
+  const tailAt = Math.max(0, z.size - 22 - 0xffff);
+  const tail = z.read(tailAt, z.size - tailAt);
+  const endRel = findEnd(tail);
+  if (endRel < 0) throw new UploadError('zipBad');
+  const end = tailAt + endRel;
+  const disk = tail.readUInt16LE(endRel + 4);
+  const cdDisk = tail.readUInt16LE(endRel + 6);
+  const onDisk = tail.readUInt16LE(endRel + 8);
+  const count = tail.readUInt16LE(endRel + 10);
+  const cdSize = tail.readUInt32LE(endRel + 12);
+  const cdStart = tail.readUInt32LE(endRel + 16);
   // ZIP64 is for archives over 4 GB or 65,535 entries: far more than an upload may hold.
-  if (count === 0xffff || cdSize === 0xffffffff || cdStart === 0xffffffff || (end >= 20 && buf.readUInt32LE(end - 20) === SIG_ZIP64_LOCATOR)) {
+  const locator = end >= 20 ? (endRel >= 20 ? tail.readUInt32LE(endRel - 20) : z.read(end - 20, 4).readUInt32LE(0)) : 0;
+  if (count === 0xffff || cdSize === 0xffffffff || cdStart === 0xffffffff || locator === SIG_ZIP64_LOCATOR) {
     throw new UploadError('zipBad', { reason: 'zip64' });
   }
   if (disk || cdDisk || onDisk !== count) throw new UploadError('zipBad', { reason: 'split' });
@@ -146,24 +187,24 @@ function readZip(buf, { maxEntries = 300, maxTotal = 600 * MB, maxFile = 60 * MB
   // leave room for those, but never walk an endless directory.
   if (count > maxEntries * 5 + 100) throw new UploadError('zipTooMany', { max: maxEntries });
 
+  const cd = z.read(cdStart, cdSize);
   const entries = [];
   const skipped = [];
-  const cdEnd = cdStart + cdSize;
   let declared = 0;
-  let p = cdStart;
+  let p = 0;
   for (let i = 0; i < count; i++) {
-    if (p + 46 > cdEnd || buf.readUInt32LE(p) !== SIG_CENTRAL) throw new UploadError('zipBad');
-    const flags = buf.readUInt16LE(p + 8);
-    const method = buf.readUInt16LE(p + 10);
-    const crc = buf.readUInt32LE(p + 16);
-    const csize = buf.readUInt32LE(p + 20);
-    const usize = buf.readUInt32LE(p + 24);
-    const nameLen = buf.readUInt16LE(p + 28);
-    const extraLen = buf.readUInt16LE(p + 30);
-    const next = p + 46 + nameLen + extraLen + buf.readUInt16LE(p + 32);
-    const offset = buf.readUInt32LE(p + 42);
-    if (next > cdEnd) throw new UploadError('zipBad');
-    const name = entryName(buf.subarray(p + 46, p + 46 + nameLen), flags, buf.subarray(p + 46 + nameLen, p + 46 + nameLen + extraLen));
+    if (p + 46 > cdSize || cd.readUInt32LE(p) !== SIG_CENTRAL) throw new UploadError('zipBad');
+    const flags = cd.readUInt16LE(p + 8);
+    const method = cd.readUInt16LE(p + 10);
+    const crc = cd.readUInt32LE(p + 16);
+    const csize = cd.readUInt32LE(p + 20);
+    const usize = cd.readUInt32LE(p + 24);
+    const nameLen = cd.readUInt16LE(p + 28);
+    const extraLen = cd.readUInt16LE(p + 30);
+    const next = p + 46 + nameLen + extraLen + cd.readUInt16LE(p + 32);
+    const offset = cd.readUInt32LE(p + 42);
+    if (next > cdSize) throw new UploadError('zipBad');
+    const name = entryName(cd.subarray(p + 46, p + 46 + nameLen), flags, cd.subarray(p + 46 + nameLen, p + 46 + nameLen + extraLen));
     p = next;
     if (/[\\/]$/.test(name)) continue; // a folder
     const { path, junk } = cleanPath(name);
@@ -191,38 +232,73 @@ function readZip(buf, { maxEntries = 300, maxTotal = 600 * MB, maxFile = 60 * MB
   // overlapping entries are how the worst zip bombs reuse one compressed block.
   let used = 0;
   for (const e of [...entries].sort((a, b) => a.offset - b.offset)) {
-    if (e.offset < used || e.offset + 30 > cdStart || buf.readUInt32LE(e.offset) !== SIG_LOCAL) throw new UploadError('zipBad');
-    if (buf.readUInt16LE(e.offset + 6) & FLAG_ENCRYPTED) throw new UploadError('zipBad', { reason: 'encrypted' });
-    e.start = e.offset + 30 + buf.readUInt16LE(e.offset + 26) + buf.readUInt16LE(e.offset + 28);
+    if (e.offset < used || e.offset + 30 > cdStart) throw new UploadError('zipBad');
+    const local = z.read(e.offset, 30);
+    if (local.readUInt32LE(0) !== SIG_LOCAL) throw new UploadError('zipBad');
+    if (local.readUInt16LE(6) & FLAG_ENCRYPTED) throw new UploadError('zipBad', { reason: 'encrypted' });
+    e.start = e.offset + 30 + local.readUInt16LE(26) + local.readUInt16LE(28);
     used = e.start + e.csize;
     if (used > cdStart) throw new UploadError('zipBad');
   }
+  entries.sort((a, b) => byName.compare(a.path, b.path));
+  return { entries, skipped };
+}
 
-  const files = [];
-  let total = 0;
-  for (const e of entries) {
-    const packed = buf.subarray(e.start, e.start + e.csize);
-    let data;
-    if (!e.usize) data = Buffer.alloc(0);
-    else if (e.method === STORED) data = Buffer.from(packed); // a copy: never tied to the upload's buffer
-    else {
-      try {
-        // Never more than the zip declared: a lying entry (a bomb) stops right there.
-        data = zlib.inflateRawSync(packed, { maxOutputLength: e.usize });
-      } catch (err) {
-        if (err && err.code === 'ERR_BUFFER_TOO_LARGE') throw new UploadError('zipTooBig', { reason: 'bomb', path: e.path });
-        throw new UploadError('zipBad', { path: e.path });
-      }
+/** One file's bytes, unpacked and checked (never more than the zip declared: a lying entry stops there). */
+function unpack(z, e) {
+  const packed = z.read(e.start, e.csize);
+  let data;
+  if (!e.usize) data = Buffer.alloc(0);
+  else if (e.method === STORED) data = Buffer.from(packed); // a copy: never tied to the upload's buffer
+  else {
+    try {
+      data = zlib.inflateRawSync(packed, { maxOutputLength: e.usize });
+    } catch (err) {
+      if (err && err.code === 'ERR_BUFFER_TOO_LARGE') throw new UploadError('zipTooBig', { reason: 'bomb', path: e.path });
+      throw new UploadError('zipBad', { path: e.path });
     }
-    if (data.length !== e.usize || zlib.crc32(data) !== e.crc) throw new UploadError('zipBad', { path: e.path });
-    total += data.length;
-    if (total > maxTotal) throw new UploadError('zipTooBig', { max: maxTotal });
-    files.push({ path: e.path, data });
   }
-  files.sort((a, b) => byName.compare(a.path, b.path));
+  if (data.length !== e.usize || zlib.crc32(data) !== e.crc) throw new UploadError('zipBad', { path: e.path });
+  return data;
+}
+
+/**
+ * The files in a zip held in memory (folders and junk left out), sorted by name:
+ * [{ path: 'mugs/cat.png', data: Buffer }]. The array also has `skipped`:
+ * [{ path, reason }] for files that were not read ('tooBig' over maxFile,
+ * 'badPicture' / 'notPicture' in a compression we don't read).
+ * Throws UploadError: zipBad (not a zip, damaged, encrypted, split, ZIP64),
+ * zipTooMany (more than maxEntries files), zipTooBig (more than maxTotal bytes
+ * once unpacked, or a zip bomb).
+ */
+function readZip(buf, opts = {}) {
+  if (!Buffer.isBuffer(buf) || buf.length < 22) throw new UploadError('zipBad');
+  const z = zipSource(buf);
+  const { entries, skipped } = scanZip(z, opts);
+  const files = entries.map((e) => ({ path: e.path, data: unpack(z, e) }));
   // (Not enumerable: the list still compares and serialises as a plain array of files.)
   Object.defineProperty(files, 'skipped', { value: skipped });
   return files;
+}
+
+/**
+ * A zip saved on disk (a big upload), checked but not unpacked: { entries: [{ path, size, load() }],
+ * skipped, close() }. load() unpacks one file when it's needed (and may throw UploadError zipBad for a
+ * damaged one), so memory holds one picture at a time whatever the zip's size. Throws like readZip.
+ */
+function openZip(file, opts = {}) {
+  const z = zipSource(file);
+  try {
+    const { entries, skipped } = scanZip(z, opts);
+    return {
+      entries: entries.map((e) => ({ path: e.path, size: e.usize, load: () => unpack(z, e) })),
+      skipped,
+      close: () => z.close(),
+    };
+  } catch (err) {
+    z.close();
+    throw err;
+  }
 }
 
 // ---------- Looking at a picture ----------
@@ -1027,6 +1103,7 @@ function guessCategory(path) {
 module.exports = {
   UploadError,
   readZip,
+  openZip,
   analyze,
   suggest,
   pickProducts,

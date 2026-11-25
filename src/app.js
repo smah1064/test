@@ -4,6 +4,8 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
+const { pipeline: streamPipeline } = require('stream/promises');
+const { Transform } = require('stream');
 const { Store } = require('./store');
 const {
   PRODUCTS,
@@ -4178,78 +4180,199 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   /** A batch as the admin sees it (the pictures' web addresses filled in). */
   const batchView = (b) => ({ ...b, items: b.items.map((it) => ({ ...it, web: `/library-upload/${b.id}/${it.id}.png` })) });
   const liveProducts = () => PRODUCTS.filter((p) => catalog.visible(p));
-  app.post('/api/admin/library/uploads', requireCatalog, (req, res, next) => {
-    rateLimit(req, 'designZip');
-    next();
-  }, express.raw({ type: () => true, limit: '150mb' }), async (req, res, next) => {
+  // Zips up to 600 MB (the owner's choice, 25 Nov). The zip goes straight to disk as it arrives and its
+  // pictures are read one at a time in the background, so memory stays low whatever the size. A small zip
+  // answers once read (201); a big one answers "reading" (202) and the admin's page follows its progress.
+  const ZIP_MAX_MB = LIMITS.zipMaxMB || 600;
+  const ZIP_MAX = ZIP_MAX_MB * 2 ** 20;
+  const WAIT_READING = LIMITS.zipWaitMs ?? 20000;
+  const SKIP_REASONS = new Set(['notPicture', 'tooSmall', 'tooBig', 'badPicture', 'blankPicture']);
+  // (From a folder or file name like "ramadan/…"; otherwise "Painted art": these are pictures, not phrases.)
+  const uploadCategory = (p) => {
+    const c = designUpload.guessCategory(p);
+    if (DESIGN_CATEGORIES.some((x) => x.id === c)) return c;
+    return DESIGN_CATEGORIES.some((x) => x.id === 'artsy') ? 'artsy' : DESIGN_CATEGORIES[0].id;
+  };
+  let zipQueue = Promise.resolve(); // one zip read at a time (pictures are big)
+  const zipJobs = new Map(); // batch id -> its reading, in this process
+  const readUploadedZip = (id) => {
+    if (!zipJobs.has(id)) {
+      const job = zipQueue.then(() => readZipPictures(id)).catch((e) => console.error('[uploads]', id, e && e.message)).finally(() => zipJobs.delete(id));
+      zipQueue = job;
+      zipJobs.set(id, job);
+    }
+    return zipJobs.get(id);
+  };
+  async function readZipPictures(id) {
+    const b = readBatch(id);
+    if (!b || b.status !== 'reading') return;
+    const here = () => fs.existsSync(batchDir(id)); // (discarded meanwhile: stop)
+    const save = () => { if (here()) writeBatch(b); };
+    const zipFile = path.join(batchDir(id), 'upload.zip');
+    let zip;
     try {
-      const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
-      let entries;
-      try {
-        entries = designUpload.readZip(buf);
-      } catch (e) {
-        if (e instanceof designUpload.UploadError) throw new HttpError(400, e.code, e.params || {});
-        throw e;
-      }
-      const id = crypto.randomBytes(10).toString('hex');
-      fs.mkdirSync(batchDir(id), { recursive: true });
-      const products = liveProducts();
-      const items = [];
-      // (Files the zip reader left out: too big, an unusual compression…)
-      const skipped = [...(entries.skipped || [])].map((x) => ({ path: String(x.path).slice(0, 200), reason: x.reason || 'badPicture' }));
-      try {
-        // One picture at a time (memory stays low for big zips).
-        for (const ent of entries) {
-          let a;
-          try {
-            a = await designUpload.analyze(ent.data, ent.path);
-          } catch (e) {
-            a = { ok: false, reason: e instanceof designUpload.UploadError ? e.code : 'badPicture' };
-          }
-          if (!a.ok) { skipped.push({ path: String(ent.path).slice(0, 200), reason: a.reason || 'badPicture' }); continue; }
+      zip = designUpload.openZip(zipFile, { maxTotal: 3 * ZIP_MAX });
+    } catch (e) {
+      Object.assign(b, { status: 'failed', code: e instanceof designUpload.UploadError ? e.code : 'zipBad' });
+      return save();
+    }
+    const products = liveProducts();
+    let saved = Date.now();
+    try {
+      for (let i = b.done || 0; i < zip.entries.length && b.items.length < 300; i++) {
+        if (!here()) return;
+        const ent = zip.entries[i];
+        let a;
+        try {
+          a = await designUpload.analyze(ent.load(), ent.path);
+        } catch (e) {
+          a = { ok: false, reason: e instanceof designUpload.UploadError && SKIP_REASONS.has(e.code) ? e.code : 'badPicture' };
+        }
+        if (!a.ok) b.skipped.push({ path: String(ent.path).slice(0, 200), reason: SKIP_REASONS.has(a.reason) ? a.reason : 'badPicture' });
+        else if (here()) {
           const itemId = crypto.randomBytes(6).toString('hex');
+          const printExt = a.printExt === 'jpg' ? 'jpg' : 'png';
           fs.writeFileSync(path.join(batchDir(id), `${itemId}.png`), a.web);
-          fs.writeFileSync(path.join(batchDir(id), `${itemId}.print.${a.printExt === 'jpg' ? 'jpg' : 'png'}`), a.print);
+          fs.writeFileSync(path.join(batchDir(id), `${itemId}.print.${printExt}`), a.print);
           const suggestions = designUpload.suggest(a, products, { path: ent.path });
-          const picked = designUpload.pickProducts(suggestions, 8);
           const color = {};
           for (const x of suggestions) {
             const p = products.find((q) => q.id === x.productId);
             if (p) color[p.id] = designUpload.analysisColor(a, p);
           }
-          items.push({
+          b.items.push({
             id: itemId, path: String(ent.path).slice(0, 200), name: designUpload.nameFrom(ent.path),
-            w: a.w, h: a.h, transparent: Boolean(a.transparent), ink: a.ink, colors: a.colors || [], printPx: a.printPx, printExt: a.printExt === 'jpg' ? 'jpg' : 'png',
-            textLike: Boolean(a.textLike), background: a.background || null, suggestions, picked, color,
+            w: a.w, h: a.h, transparent: Boolean(a.transparent), ink: a.ink, colors: a.colors || [], printPx: a.printPx, printExt,
+            textLike: Boolean(a.textLike), background: a.background || null, suggestions, picked: designUpload.pickProducts(suggestions, 8), color,
             dpiFor: Object.fromEntries(suggestions.map((x) => [x.productId, x.dpi])),
-            // (From a folder or file name like "ramadan/…"; otherwise "Painted art": these are pictures, not phrases.)
-            category: (() => { const c = designUpload.guessCategory(ent.path); return DESIGN_CATEGORIES.some((x) => x.id === c) ? c : DESIGN_CATEGORIES.some((x) => x.id === 'artsy') ? 'artsy' : DESIGN_CATEGORIES[0].id; })(),
+            category: uploadCategory(ent.path),
           });
-          if (items.length >= 300) break;
         }
-      } catch (e) {
-        fs.rmSync(batchDir(id), { recursive: true, force: true });
-        throw e;
+        b.done = i + 1;
+        if (Date.now() - saved > 1500) { save(); saved = Date.now(); }
       }
-      if (!items.length) {
-        fs.rmSync(batchDir(id), { recursive: true, force: true });
-        throw new HttpError(400, 'zipEmpty', { n: skipped.length });
-      }
-      // The zip's name (sent URL-encoded when it isn't plain ASCII, e.g. Arabic).
-      let fileName = String(req.get('x-file-name') || '');
-      try { fileName = decodeURIComponent(fileName); } catch (e) { /* as sent */ }
-      const batch = { id, createdAt: new Date().toISOString(), by: req.adminWho.shown || req.adminWho.name, file: fileName.replace(/[^\w .()؀-ۿ-]/g, '').slice(0, 120), items, skipped };
-      writeBatch(batch);
-      res.status(201).json({ batch: batchView(batch) });
+    } finally {
+      zip.close();
+    }
+    if (!here()) return;
+    Object.assign(b, { done: b.total, status: b.items.length ? 'ready' : 'failed', ...(b.items.length ? {} : { code: 'zipEmpty' }) });
+    save();
+    fs.rmSync(zipFile, { force: true });
+  }
+  // Zips still being read when the shop stopped (a restart, a deploy) carry on where they were.
+  setImmediate(() => {
+    let ids = [];
+    try { ids = fs.readdirSync(uploadsDir).filter((x) => BATCH_RE.test(x)); } catch (e) { ids = []; }
+    for (const id of ids) {
+      const b = readBatch(id);
+      if (b && b.status === 'reading') readUploadedZip(id);
+    }
+  });
+  /** The zip's name as the admin's list shows it (sent URL-encoded when it isn't plain ASCII, e.g. Arabic). */
+  const zipName = (raw) => {
+    let name = String(raw || '');
+    try { name = decodeURIComponent(name); } catch (e) { /* as sent */ }
+    return name.replace(/[^\w .()؀-ۿ-]/g, '').slice(0, 120);
+  };
+  /** The batch's zip is on disk: check it, then read its pictures (201 once read, or 202 while reading). */
+  async function beginReading(req, res, id, file) {
+    const zipFile = path.join(batchDir(id), 'upload.zip');
+    let zip;
+    try {
+      zip = designUpload.openZip(zipFile, { maxTotal: 3 * ZIP_MAX });
     } catch (e) {
+      if (e instanceof designUpload.UploadError) throw new HttpError(400, e.code, e.params || {});
+      throw e;
+    }
+    // (Files the zip reader left out: too big, an unusual compression…)
+    const skipped = zip.skipped.map((x) => ({ path: String(x.path).slice(0, 200), reason: SKIP_REASONS.has(x.reason) ? x.reason : 'badPicture' }));
+    const total = zip.entries.length;
+    zip.close();
+    if (!total) throw new HttpError(400, 'zipEmpty', { n: skipped.length });
+    const before = readBatch(id) || {};
+    writeBatch({
+      id, createdAt: before.createdAt || new Date().toISOString(), by: before.by || req.adminWho.shown || req.adminWho.name,
+      file, status: 'reading', total, done: 0, items: [], skipped,
+    });
+    await Promise.race([readUploadedZip(id), new Promise((resolve) => setTimeout(resolve, WAIT_READING).unref())]);
+    const b = readBatch(id);
+    if (!b) throw new HttpError(404, 'uploadGone');
+    if (b.status === 'failed') throw new HttpError(400, b.code || 'zipEmpty', { n: b.skipped.length });
+    res.status(b.status === 'reading' ? 202 : 201).json({ batch: batchView(b) });
+  }
+  // A small zip in one request.
+  app.post('/api/admin/library/uploads', requireCatalog, async (req, res, next) => {
+    let id = null;
+    try {
+      rateLimit(req, 'designZip');
+      if (Number(req.get('content-length')) > ZIP_MAX) throw new HttpError(413, 'zipOver', { max: ZIP_MAX_MB });
+      id = crypto.randomBytes(10).toString('hex');
+      fs.mkdirSync(batchDir(id), { recursive: true });
+      let got = 0;
+      await streamPipeline(req, new Transform({
+        transform(chunk, enc, cb) {
+          got += chunk.length;
+          cb(got > ZIP_MAX ? new HttpError(413, 'zipOver', { max: ZIP_MAX_MB }) : null, chunk);
+        },
+      }), fs.createWriteStream(path.join(batchDir(id), 'upload.zip')));
+      await beginReading(req, res, id, zipName(req.get('x-file-name')));
+    } catch (e) {
+      // (Not a usable zip, or nothing in it: nothing is kept.)
+      const st = id && (readBatch(id) || {}).status;
+      if (id && (!st || st === 'failed')) fs.rmSync(batchDir(id), { recursive: true, force: true });
+      next(e);
+    }
+  });
+  // A big zip in pieces: each piece is its own short request (the hosting stops any request after
+  // 2 minutes, and a dropped piece is just sent again). Start → pieces in order → finish.
+  const ZIP_PIECE = 8 * 2 ** 20;
+  app.post('/api/admin/library/uploads/start', requireCatalog, express.json({ limit: '4kb' }), (req, res) => {
+    rateLimit(req, 'designZip');
+    const size = Number((req.body || {}).size);
+    if (!Number.isInteger(size) || size < 22) throw new HttpError(400, 'zipBad');
+    if (size > ZIP_MAX) throw new HttpError(413, 'zipOver', { max: ZIP_MAX_MB });
+    const id = crypto.randomBytes(10).toString('hex');
+    fs.mkdirSync(batchDir(id), { recursive: true });
+    fs.writeFileSync(path.join(batchDir(id), 'upload.zip'), Buffer.alloc(0));
+    writeBatch({ id, createdAt: new Date().toISOString(), by: req.adminWho.shown || req.adminWho.name, file: zipName(req.body.name), status: 'uploading', size, total: 0, done: 0, items: [], skipped: [] });
+    res.status(201).json({ id, piece: ZIP_PIECE });
+  });
+  app.put('/api/admin/library/uploads/:batch/piece', requireCatalog, express.raw({ type: () => true, limit: ZIP_PIECE + 64 * 1024 }), (req, res) => {
+    const b = readBatch(req.params.batch);
+    if (!b) throw new HttpError(404, 'uploadGone');
+    if (b.status !== 'uploading') throw new HttpError(409, 'uploadNotReady');
+    const file = path.join(batchDir(b.id), 'upload.zip');
+    const received = fs.statSync(file).size;
+    const at = Number(req.query.at);
+    const body = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+    // (A piece sent again after a dropped connection, or out of order: where to go on from.)
+    if (!Number.isInteger(at) || at !== received) return res.status(409).json({ received });
+    if (received + body.length > b.size) throw new HttpError(400, 'zipBad');
+    fs.appendFileSync(file, body);
+    res.json({ received: received + body.length });
+  });
+  app.post('/api/admin/library/uploads/:batch/finish', requireCatalog, async (req, res, next) => {
+    const id = String(req.params.batch);
+    try {
+      const b = readBatch(id);
+      if (!b) throw new HttpError(404, 'uploadGone');
+      // (Asked again after a dropped answer: as it is now.)
+      if (b.status === 'reading' || b.status === 'ready') return res.status(b.status === 'reading' ? 202 : 201).json({ batch: batchView(b) });
+      if (b.status !== 'uploading') throw new HttpError(409, 'uploadNotReady');
+      const received = fs.statSync(path.join(batchDir(id), 'upload.zip')).size;
+      if (received !== b.size) return res.status(409).json({ received });
+      await beginReading(req, res, id, b.file);
+    } catch (e) {
+      // (A zip that can't be used goes: the admin uploads it again.)
+      if (e instanceof HttpError && e.status === 400) fs.rmSync(batchDir(id), { recursive: true, force: true });
       next(e);
     }
   });
   app.get('/api/admin/library/uploads', requireCatalog, (req, res) => {
     let ids = [];
     try { ids = fs.readdirSync(uploadsDir).filter((x) => BATCH_RE.test(x)); } catch (e) { ids = []; }
-    const batches = ids.map(readBatch).filter(Boolean).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .map((b) => ({ id: b.id, createdAt: b.createdAt, by: b.by, file: b.file, count: b.items.length }));
+    const batches = ids.map(readBatch).filter((b) => b && b.status !== 'uploading').sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map((b) => ({ id: b.id, createdAt: b.createdAt, by: b.by, file: b.file, count: b.items.length, status: b.status || 'ready', done: b.done || 0, total: b.total || b.items.length, ...(b.code ? { code: b.code } : {}) }));
     res.json({ batches });
   });
   app.get('/api/admin/library/uploads/:batch', requireCatalog, (req, res) => {
@@ -4284,6 +4407,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   app.post('/api/admin/library/uploads/:batch/publish', requireCatalog, express.json({ limit: '256kb' }), (req, res) => {
     const b = readBatch(req.params.batch);
     if (!b) throw new HttpError(404, 'uploadGone');
+    if (b.status && b.status !== 'ready') throw new HttpError(409, 'uploadNotReady');
     const asked = Array.isArray((req.body || {}).items) ? req.body.items.slice(0, 300) : [];
     const live = new Map(liveProducts().map((p) => [p.id, p]));
     const published = [];
@@ -5120,7 +5244,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         const oldBatch = Date.now() - 14 * 864e5;
         for (const f of fs.readdirSync(path.join(dataDir, 'library', 'uploads'))) {
           const dir = path.join(dataDir, 'library', 'uploads', f);
-          if (/^[0-9a-f]{20}$/.test(f) && fs.statSync(dir).mtimeMs < oldBatch) fs.rmSync(dir, { recursive: true, force: true });
+          if (!/^[0-9a-f]{20}$/.test(f)) continue;
+          if (fs.statSync(dir).mtimeMs < oldBatch) { fs.rmSync(dir, { recursive: true, force: true }); continue; }
+          // An upload stopped half way (nothing sent for a day) goes too.
+          let open = false;
+          try { open = JSON.parse(fs.readFileSync(path.join(dir, 'batch.json'), 'utf8')).status === 'uploading'; } catch (e) { open = false; }
+          if (open && fs.statSync(path.join(dir, 'upload.zip')).mtimeMs < Date.now() - 864e5) fs.rmSync(dir, { recursive: true, force: true });
         }
       } catch (e) { /* none yet */ }
       // Uploaded booklet PDFs not used within 45 days (designs keep their own copy).

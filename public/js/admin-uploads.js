@@ -12,7 +12,8 @@ window.AdminUploads = (() => {
   const { t, tr, esc } = POD;
   const $ = (id) => document.getElementById(id);
   const BASE = '/api/admin/library/uploads';
-  const MAX_BYTES = 150 * 2 ** 20;
+  const MAX_BYTES = 600 * 2 ** 20; // (the server's limit too)
+  const PIECES_FROM = 8 * 2 ** 20; // bigger zips go up in pieces
   const SHOWN = 10; // suggestions shown before "More suggestions"
   const STRIP = 3; // previews per design
   const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -139,26 +140,82 @@ window.AdminUploads = (() => {
         <div id="up-open-box">${openHtml()}</div>
       </section>`;
   }
-  function progressHtml() {
-    const u = S.up;
+  /** What the bar shows: the zip going up, then the server reading its pictures (counted for a big zip). */
+  function phase(u) {
+    if (u.batchId) {
+      const frac = u.count ? Math.min(1, u.done / u.count) : 0;
+      return { busy: false, frac, text: t('up.readingN', { done: POD.num(u.done), total: POD.num(u.count) }) };
+    }
+    if (u.reading) return { busy: true, frac: 0, text: t('up.reading') };
     const frac = u.total ? Math.min(1, u.loaded / u.total) : 0;
-    const text = u.reading ? t('up.reading') : t('up.sending', { name: iso(u.name), done: mb(u.loaded), total: mb(u.total), pct: pct(frac) });
+    return { busy: false, frac, text: t('up.sending', { name: iso(u.name), done: mb(u.loaded), total: mb(u.total), pct: pct(frac) }) };
+  }
+  function progressHtml() {
+    const p = phase(S.up);
     return `<div class="up-progress">
-        <div class="up-prog-text" id="up-prog-text" aria-live="polite">${esc(text)}</div>
-        <div class="up-track${u.reading ? ' is-busy' : ''}" id="up-track" role="progressbar" aria-label="${esc(t('up.progress'))}" aria-valuemin="0" aria-valuemax="100"${u.reading ? ` aria-valuetext="${esc(t('up.reading'))}"` : ` aria-valuenow="${Math.round(frac * 100)}"`}><span class="up-fill" style="width:${(frac * 100).toFixed(1)}%"></span></div>
+        <div class="up-prog-text" id="up-prog-text" aria-live="polite">${esc(p.text)}</div>
+        <div class="up-track${p.busy ? ' is-busy' : ''}" id="up-track" role="progressbar" aria-label="${esc(t('up.progress'))}" aria-valuemin="0" aria-valuemax="100"${p.busy ? ` aria-valuetext="${esc(p.text)}"` : ` aria-valuenow="${Math.round(p.frac * 100)}"`}><span class="up-fill" style="width:${(p.frac * 100).toFixed(1)}%"></span></div>
         <button type="button" class="btn btn-sm" data-up-cancel>${esc(t('up.cancel'))}</button>
       </div>`;
   }
-  /** Just the numbers while the zip goes up (no redraw: the Cancel button keeps its focus). */
+  /** Just the numbers while the zip goes up or is read (no redraw: the Cancel button keeps its focus). */
   function paintProgress() {
     const u = S.up;
     const txt = $('up-prog-text');
     const track = $('up-track');
-    if (!u || !txt || !track || track.classList.contains('is-busy') !== u.reading) return render();
-    const frac = u.total ? Math.min(1, u.loaded / u.total) : 0;
-    txt.textContent = u.reading ? t('up.reading') : t('up.sending', { name: iso(u.name), done: mb(u.loaded), total: mb(u.total), pct: pct(frac) });
-    track.setAttribute('aria-valuenow', String(Math.round(frac * 100)));
-    track.firstElementChild.style.width = `${(frac * 100).toFixed(1)}%`;
+    const p = u && phase(u);
+    if (!u || !txt || !track || track.classList.contains('is-busy') !== p.busy) return render();
+    txt.textContent = p.text;
+    track.setAttribute('aria-valuenow', String(Math.round(p.frac * 100)));
+    track.firstElementChild.style.width = `${(p.frac * 100).toFixed(1)}%`;
+  }
+  const failText = (code) => t(has('up.fail.' + code) ? 'up.fail.' + code : 'up.fail.zipBad');
+  /** A big zip being read on the server (it carries on if this page closes): follow it until it's ready. */
+  function followReading(id) {
+    const tick = async () => {
+      if (!S.up || S.up.batchId !== id) return;
+      try {
+        const { batch: b } = await cfg.api(`${BASE}/${encodeURIComponent(id)}`);
+        if (!S.up || S.up.batchId !== id) return;
+        if (b.status === 'reading') {
+          S.up.done = b.done || 0;
+          S.up.count = b.total || S.up.count;
+          paintProgress();
+          setTimeout(tick, 1500);
+          return;
+        }
+        S.up = null;
+        S.batches = null;
+        if (b.status === 'failed') {
+          await cfg.api(`${BASE}/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
+          S.msg = { text: () => failText(b.code), bad: true };
+          render();
+          return;
+        }
+        S.msg = { text: () => POD.plural('up.ready', (b.items || []).length, { file: iso(b.file || id) }), bad: false };
+        openBatch(b);
+      } catch (err) {
+        if (err.status === 401) return;
+        if (err.status === 404) {
+          S.up = null;
+          S.msg = { text: () => t('up.gone'), bad: true };
+          render();
+          return;
+        }
+        setTimeout(tick, 4000); // (a network blip: try again)
+      }
+    };
+    setTimeout(tick, 1200);
+  }
+  /** Cancel while the pictures are read: the upload is discarded. */
+  async function stopReading() {
+    const id = S.up && S.up.batchId;
+    S.up = null;
+    await cfg.api(`${BASE}/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
+    S.msg = { text: () => t('up.cancelled'), bad: false };
+    S.batches = null;
+    render();
+    loadList({ quiet: true }).catch(() => {});
   }
   function openHtml() {
     if (S.listErr) return `<div class="up-open"><p class="up-msg bad" role="alert">${esc(t('up.loadFail', { error: S.listErr }))} <button type="button" class="btn btn-sm" data-up-reload>${esc(t('up.retry'))}</button></p></div>`;
@@ -169,9 +226,9 @@ window.AdminUploads = (() => {
         <p class="muted small">${esc(t('up.openHelp'))}</p>
         <div class="up-open-list">${list.map((b) => `<div class="up-open-row">
             <div class="up-open-info"><strong dir="auto">${esc(b.file || b.id)}</strong>
-              <div class="muted small">${esc([pics(Number(b.count) || 0), t('up.by', { who: who(b.by) }), when(b.createdAt)].filter(Boolean).join(' · '))}</div></div>
+              <div class="muted small">${esc([b.status === 'reading' ? t('up.readingRow', { done: POD.num(b.done || 0), total: POD.num(b.total || 0) }) : b.status === 'failed' ? failText(b.code) : pics(Number(b.count) || 0), t('up.by', { who: who(b.by) }), when(b.createdAt)].filter(Boolean).join(' · '))}</div></div>
             <div class="up-open-acts">
-              <button type="button" class="btn btn-sm btn-dark" data-up-open="${esc(b.id)}" ${S.busy || S.up ? 'disabled' : ''}>${esc(t('up.continue'))}</button>
+              ${b.status === 'failed' ? '' : `<button type="button" class="btn btn-sm btn-dark" data-up-open="${esc(b.id)}" ${S.busy || S.up ? 'disabled' : ''}>${esc(t('up.continue'))}</button>`}
               <button type="button" class="btn btn-sm btn-danger" data-up-discard="${esc(b.id)}" ${S.busy || S.up ? 'disabled' : ''} aria-label="${esc(`${t('up.discard')}: ${b.file || b.id}`)}">${esc(t('up.discard'))}</button>
             </div>
           </div>`).join('')}</div>
@@ -549,6 +606,12 @@ window.AdminUploads = (() => {
     try {
       const r = await cfg.api(`${BASE}/${encodeURIComponent(id)}`);
       S.msg = null;
+      if (r.batch.status === 'reading') {
+        S.up = { batchId: id, name: r.batch.file || id, done: r.batch.done || 0, count: r.batch.total || 0, reading: true };
+        render();
+        followReading(id);
+        return;
+      }
       await openBatch(r.batch);
     } catch (err) {
       if (btn) btn.disabled = false;
@@ -668,10 +731,126 @@ window.AdminUploads = (() => {
   }
 
   // ---------- Uploading the zip ----------
+  /** The server's answer once the zip is up: being read (follow it), read (check it), or refused. */
+  function landed(status, body, name, finish) {
+    if (status === 401) {
+      S.up = null;
+      render();
+      cfg.signOut(body && body.error);
+      return;
+    }
+    if (status === 202 && body && body.batch) {
+      const b = body.batch;
+      S.up = { batchId: b.id, name, done: b.done || 0, count: b.total || 0, reading: true };
+      paintProgress();
+      followReading(b.id);
+      return;
+    }
+    if (status >= 200 && status < 300 && body && body.batch) {
+      S.up = null;
+      S.batches = null;
+      const b = body.batch;
+      S.msg = { text: () => POD.plural('up.ready', (b.items || []).length, { file: iso(b.file || name) }), bad: false };
+      openBatch(b);
+      return;
+    }
+    finish((body && body.error) || (() => t(status ? 'up.failed' : 'msg.network', { status })));
+  }
+  const upFinish = (text) => {
+    S.up = null;
+    if (text) S.msg = { text, bad: true };
+    render();
+    const choose = root() && root().querySelector('[data-up-choose]');
+    if (choose && text) choose.focus();
+  };
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  /** One request of a piece-by-piece upload: { status, body } (status 0: no connection, -1: cancelled). */
+  function send(method, url, body, onProgress) {
+    return new Promise((resolve) => {
+      const xhr = new XMLHttpRequest();
+      if (S.up) S.up.xhr = xhr;
+      xhr.open(method, url);
+      xhr.setRequestHeader('Authorization', 'Bearer ' + cfg.token());
+      xhr.setRequestHeader('x-lang', POD.lang);
+      if (body) xhr.setRequestHeader('Content-Type', body instanceof Blob ? 'application/octet-stream' : 'application/json');
+      if (onProgress) xhr.upload.addEventListener('progress', (e) => { if (e.lengthComputable) onProgress(e.loaded); });
+      xhr.addEventListener('load', () => {
+        let b = null;
+        try { b = JSON.parse(xhr.responseText); } catch (e) { b = null; }
+        resolve({ status: xhr.status, body: b });
+      });
+      xhr.addEventListener('error', () => resolve({ status: 0, body: null }));
+      xhr.addEventListener('abort', () => resolve({ status: -1, body: null }));
+      xhr.send(body instanceof Blob ? body : body ? JSON.stringify(body) : null);
+    });
+  }
+  /**
+   * A big zip goes up in pieces, each its own short request (the hosting stops any request after
+   * 2 minutes); a piece lost to a dropped connection is sent again, from where the server says.
+   */
+  async function sendInPieces(file) {
+    S.up = { name: file.name, loaded: 0, total: file.size, reading: false, xhr: null, pieces: true };
+    S.msg = null;
+    render();
+    const mine = S.up;
+    let r = await send('POST', `${BASE}/start`, { size: file.size, name: file.name });
+    if (S.up !== mine) return; // cancelled
+    if (r.status !== 201 || !r.body || !r.body.id) return landed(r.status, r.body, file.name, upFinish);
+    const id = r.body.id;
+    const piece = Number(r.body.piece) || 8 * 2 ** 20;
+    mine.uploadId = id;
+    let at = 0;
+    let tries = 0;
+    while (at < file.size) {
+      const from = at;
+      r = await send('PUT', `${BASE}/${encodeURIComponent(id)}/piece?at=${at}`, file.slice(at, Math.min(file.size, at + piece)), (n) => {
+        if (S.up !== mine) return;
+        mine.loaded = from + n;
+        paintProgress();
+      });
+      if (S.up !== mine) return; // cancelled
+      if ((r.status === 200 || r.status === 409) && r.body && Number.isInteger(r.body.received)) {
+        at = r.body.received;
+        tries = 0;
+        mine.loaded = at;
+        paintProgress();
+        continue;
+      }
+      if ((r.status === 0 || r.status >= 500) && tries < 6) {
+        tries++;
+        await wait(1500 * tries); // (the connection dropped: the same piece again)
+        if (S.up !== mine) return;
+        continue;
+      }
+      return landed(r.status, r.body, file.name, upFinish);
+    }
+    mine.loaded = file.size;
+    mine.reading = true;
+    paintProgress();
+    for (tries = 0; ; tries++) {
+      r = await send('POST', `${BASE}/${encodeURIComponent(id)}/finish`);
+      if (S.up !== mine) return;
+      if (r.status !== 0 || tries >= 4) break;
+      await wait(2000);
+    }
+    landed(r.status, r.body, file.name, upFinish);
+  }
+  /** Cancel while the pieces go up: the half-sent upload goes. */
+  function stopPieces() {
+    const u = S.up;
+    S.up = null;
+    if (u.xhr) u.xhr.abort();
+    if (u.uploadId) cfg.api(`${BASE}/${encodeURIComponent(u.uploadId)}`, { method: 'DELETE' }).catch(() => {});
+    S.msg = { text: () => t('up.cancelled'), bad: false };
+    render();
+    const choose = root() && root().querySelector('[data-up-choose]');
+    if (choose) choose.focus();
+  }
   function startUpload(file) {
     if (!file || S.up || S.batch) return;
     if (!/\.zip$/i.test(file.name) && !/zip/i.test(file.type || '')) return say(() => t('up.notZip', { name: iso(file.name) }), true);
     if (file.size > MAX_BYTES) return say(() => t('up.tooBig', { size: mb(file.size) }), true);
+    if (file.size > PIECES_FROM) return void sendInPieces(file);
     const xhr = new XMLHttpRequest();
     S.up = { xhr, name: file.name, loaded: 0, total: file.size, reading: false };
     S.msg = null;
@@ -695,33 +874,12 @@ window.AdminUploads = (() => {
       S.up.reading = true;
       paintProgress();
     });
-    const finish = (text) => {
-      S.up = null;
-      if (text) S.msg = { text, bad: true };
-      render();
-      const choose = root() && root().querySelector('[data-up-choose]');
-      if (choose && text) choose.focus();
-    };
     xhr.addEventListener('load', () => {
       let body = null;
       try { body = JSON.parse(xhr.responseText); } catch (e) { body = null; }
-      if (xhr.status === 401) {
-        S.up = null;
-        render();
-        cfg.signOut(body && body.error);
-        return;
-      }
-      if (xhr.status >= 200 && xhr.status < 300 && body && body.batch) {
-        S.up = null;
-        S.batches = null;
-        const b = body.batch;
-        S.msg = { text: () => POD.plural('up.ready', (b.items || []).length, { file: iso(b.file || file.name) }), bad: false };
-        openBatch(b);
-        return;
-      }
-      finish((body && body.error) || (() => t('up.failed', { status: xhr.status })));
+      landed(xhr.status, body, file.name, upFinish);
     });
-    xhr.addEventListener('error', () => finish(() => t('msg.network')));
+    xhr.addEventListener('error', () => upFinish(() => t('msg.network')));
     xhr.addEventListener('abort', () => {
       S.up = null;
       S.msg = { text: () => t('up.cancelled'), bad: false };
@@ -809,7 +967,7 @@ window.AdminUploads = (() => {
       const card = el.closest('[data-up-item]');
       const item = card && itemById(card.dataset.upItem);
       if (el.matches('[data-up-choose]')) return void ($('up-file') && $('up-file').click());
-      if (el.matches('[data-up-cancel]')) return void (S.up && S.up.xhr.abort());
+      if (el.matches('[data-up-cancel]')) return void (S.up && (S.up.batchId ? stopReading() : S.up.pieces ? stopPieces() : S.up.xhr.abort()));
       if (el.matches('[data-up-reload]')) return void loadList().catch(() => {});
       if (el.matches('[data-up-open]')) return void continueBatch(el.dataset.upOpen, el);
       if (el.matches('[data-up-discard]')) return void discard(el.dataset.upDiscard, el);
