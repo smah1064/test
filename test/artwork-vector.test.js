@@ -231,3 +231,110 @@ test('a 20-page PDF: the artwork is its first page; its booklet pages stay whole
   const meta = await sharp(Buffer.from(body.pages[19].split(',')[1], 'base64')).metadata();
   assert.ok(Math.abs(meta.width / meta.height - A4[0] / A4[1]) < 0.01 && meta.width > 1000, `the whole page: ${meta.width}x${meta.height}`);
 });
+
+// QA 25 Nov (.ai / .eps sweep): a white-only logo that fills its box (a white panel with see-through letters, for
+// dark garments) was taken for a white artboard: the panel was cleared and only the white insides of its letters
+// were left. With nothing but white painted, the white is the design.
+test('a white panel with see-through letters keeps its white (nothing else is painted, so it is no artboard)', async () => {
+  const eps = Buffer.from([
+    '%!PS-Adobe-3.0 EPSF-3.0', '%%BoundingBox: 0 0 300 100', '%%EndComments',
+    '1 1 1 setrgbcolor newpath 0 0 moveto 300 0 lineto 300 100 lineto 0 100 lineto closepath',
+    '50 50 moveto 50 80 lineto 120 80 lineto 120 50 lineto closepath', // a see-through window
+    '180 50 moveto 180 80 lineto 250 80 lineto 250 50 lineto closepath 210 58 moveto 210 72 lineto 220 72 lineto 220 58 lineto closepath', // a window with a white island
+    'eofill showpage', '%%EOF', '',
+  ].join('\n'));
+  const out = await convert(eps);
+  assert.ok(out.width >= 2990 && Math.abs(out.width / out.height - 3) < 0.01, `the whole panel: ${out.width}x${out.height}`);
+  const px = (x, y) => out.at(x / 300, (100 - y) / 100);
+  assert.deepStrictEqual(px(20, 20), [255, 255, 255, 255], 'the white panel stays');
+  assert.deepStrictEqual(px(280, 90), [255, 255, 255, 255], 'up to its edges');
+  assert.strictEqual(px(85, 65)[3], 0, 'the window is see-through');
+  assert.strictEqual(px(190, 65)[3], 0, 'the other window too');
+  assert.deepStrictEqual(px(215, 65), [255, 255, 255, 255], 'the white island inside it stays');
+  // A white page behind a coloured logo is still taken away.
+  const art = await convert(Buffer.from('%!PS-Adobe-3.0 EPSF-3.0\n%%BoundingBox: 0 0 300 100\n%%EndComments\n1 1 1 setrgbcolor 0 0 300 100 rectfill 0 0 1 setrgbcolor 100 30 100 40 rectfill\nshowpage\n%%EOF\n'));
+  assert.ok(Math.abs(art.width / art.height - 2.5) < 0.02, `only the blue box: ${art.width}x${art.height}`);
+});
+
+// QA 25 Nov: an Illustrator file saved with "Create PDF Compatible File" off holds only Illustrator's notice page;
+// the shop put that page of text on the product as the customer's design.
+test('an .ai saved without PDF content is refused with the "save it as PDF compatible" message', async () => {
+  const zlib = require('zlib');
+  const aiPdf = (content, { illustrator = true } = {}) => {
+    const stream = zlib.deflateSync(Buffer.from(content, 'latin1'));
+    const objs = [
+      '<< /Type /Catalog /Pages 2 0 R >>',
+      '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /T1_0 5 0 R >> >>${illustrator ? ' /PieceInfo << /Illustrator << /LastModified (D:20201012) /Private 6 0 R >> >>' : ''} >>`,
+      null, // the page's content, packed
+      '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+      '<< /ContainerVersion 12 /CreatorVersion 24 /RoundtripVersion 24 >>',
+    ];
+    const chunks = [Buffer.from('%PDF-1.6\n', 'latin1')];
+    const size = () => chunks.reduce((a, c) => a + c.length, 0);
+    const offs = objs.map((o, i) => {
+      const at = size();
+      if (o) chunks.push(Buffer.from(`${i + 1} 0 obj\n${o}\nendobj\n`, 'latin1'));
+      else chunks.push(Buffer.from(`${i + 1} 0 obj\n<< /Length ${stream.length} /Filter /FlateDecode >>\nstream\n`, 'latin1'), stream, Buffer.from('\nendstream\nendobj\n', 'latin1'));
+      return at;
+    });
+    const x = size();
+    chunks.push(Buffer.from(`xref\n0 ${objs.length + 1}\n0000000000 65535 f \n${offs.map((o) => `${String(o).padStart(10, '0')} 00000 n \n`).join('')}trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${x}\n%%EOF\n`, 'latin1'));
+    return Buffer.concat(chunks);
+  };
+  // As Illustrator writes it: kerned pieces (TJ), here part of a word as hex.
+  const notice = 'BT /T1_0 12 Tf 72 720 Td [(This is an Adobe\\256 Illustr)18(ator\\256 File that w)4(as)]TJ 0 -15 Td [(sa)8(v)8(ed without PDF Con)<74656e74>50(.)]TJ 0 -15 Td (To Place or open this file in other) Tj ET';
+  const r = await fetch(`${base}/api/artwork`, { method: 'POST', headers: { 'x-max-px': '3000', 'x-lang': 'en' }, body: aiPdf(notice) });
+  assert.strictEqual(r.status, 400);
+  const body = await r.json();
+  assert.strictEqual(body.code, 'artworkBad');
+  assert.match(body.error, /PDF compatible/);
+  // Illustrator artwork with words on it is drawn as usual, and so is the notice's text in a file that isn't Illustrator's.
+  const words = await convert(aiPdf('1 0 0 rg 100 600 200 100 re f BT /T1_0 24 Tf 110 640 Td (PDF Content) Tj ET'));
+  assert.ok(words.width >= 2990, `${words.width}x${words.height}`);
+  assert.ok((await convert(aiPdf(notice, { illustrator: false }))).width > 1000);
+});
+
+test('PostScript with a byte-order mark, a Ctrl-D, a PJL header or a comment line before %!PS is read (as viewers read it)', async () => {
+  const eps = '%!PS-Adobe-3.0 EPSF-3.0\n%%BoundingBox: 0 0 200 100\n%%EndComments\n0 0.5 0 setrgbcolor 0 0 200 100 rectfill\nshowpage\n%%EOF\n';
+  for (const [name, junk] of [['byte-order mark', '\xef\xbb\xbf'], ['Ctrl-D', '\x04'], ['comment line (ps2ai)', '%%Note: Load Postscript file to be converted now\n'], ['PJL header', '\x1b%-12345X@PJL JOB\r\n@PJL ENTER LANGUAGE = POSTSCRIPT\r\n']]) {
+    const out = await convert(Buffer.from(junk + eps, 'latin1'));
+    assert.ok(out.width >= 2990 && Math.abs(out.width / out.height - 2) < 0.01, `${name}: ${out.width}x${out.height}`);
+    const [r, g, b, a] = out.at(0.5, 0.5);
+    assert.ok(r === 0 && Math.abs(g - 128) <= 1 && b === 0 && a === 255, `${name}: the green box (${[r, g, b, a]})`);
+  }
+  // Anything else before it is still not a file the shop reads.
+  const r = await fetch(`${base}/api/artwork`, { method: 'POST', body: Buffer.from(`<html>\n${eps}`) });
+  assert.strictEqual(r.status, 400);
+  assert.strictEqual((await r.json()).code, 'artworkType');
+});
+
+test('several customers uploading at the same moment all get their artwork (the extra ones wait their turn)', async () => {
+  const eps = (c) => Buffer.from(`%!PS-Adobe-3.0 EPSF-3.0\n%%BoundingBox: 0 0 100 100\n%%EndComments\n${c} setrgbcolor newpath 50 50 40 0 360 arc fill\nshowpage\n%%EOF\n`);
+  const colours = ['1 0 0', '0 1 0', '0 0 1', '1 1 0', '0 1 1'];
+  const answers = await Promise.all(colours.map((c) => fetch(`${base}/api/artwork`, { method: 'POST', headers: { 'x-max-px': '800' }, body: eps(c) })));
+  assert.deepStrictEqual(answers.map((r) => r.status), colours.map(() => 200), 'five at once: none told "too many tries"');
+  for (let i = 0; i < colours.length; i++) {
+    const { data, info } = await sharp(Buffer.from(await answers[i].arrayBuffer())).raw().toBuffer({ resolveWithObject: true });
+    const mid = ((info.height >> 1) * info.width + (info.width >> 1)) * info.channels;
+    assert.deepStrictEqual([...data.subarray(mid, mid + 3)], colours[i].split(' ').map((v) => Number(v) * 255), `upload ${i + 1} got its own picture`);
+  }
+});
+
+test('the converter says how many artboards a PDF-based file has, and when a PDF needs its password', async () => {
+  const artwork = require('../src/artwork');
+  const three = await pdf([300, 300], (d) => { d.circle(150, 150, 100).fill('#d62828'); d.addPage({ size: [300, 300], margin: 0 }); d.rect(50, 50, 200, 200).fill('#1d4ed8'); d.addPage({ size: [300, 300], margin: 0 }); d.rect(50, 50, 20, 20).fill('#000'); });
+  assert.strictEqual((await artwork.convertArtwork(three, { px: 600 })).pages, 3);
+  assert.strictEqual((await artwork.convertArtwork(Buffer.from('%!PS-Adobe-3.0 EPSF-3.0\n%%BoundingBox: 0 0 10 10\n%%EndComments\n0 0 10 10 rectfill showpage\n'), { px: 600 })).pages, null);
+  const locked = await new Promise((resolve) => {
+    const d = new PDFDocument({ size: [200, 100], margin: 0, userPassword: 'open-me', ownerPassword: 'owner', pdfVersion: '1.7' });
+    const chunks = [];
+    d.on('data', (c) => chunks.push(c));
+    d.on('end', () => resolve(Buffer.concat(chunks)));
+    d.rect(10, 10, 100, 50).fill('#cc0000');
+    d.end();
+  });
+  await assert.rejects(artwork.convertArtwork(locked, { px: 600 }), (e) => e.reason === 'locked');
+  const r = await fetch(`${base}/api/artwork`, { method: 'POST', body: locked });
+  assert.strictEqual(r.status, 400, 'still refused by the shop (with its general message until the route says "locked")');
+});

@@ -15,26 +15,65 @@
  */
 const path = require('path');
 const fs = require('fs');
+const zlib = require('zlib');
 const { fork } = require('child_process');
 const sharp = require('sharp');
 
 const MAX_JOBS = 2; // two at once: one slow (or looping) PostScript file doesn't block everyone else
 // Ghostscript's WebAssembly memory isn't capped by worker limits: watch the process and stop a job that grows too big.
 const MAX_EXTRA_MB = Number(process.env.ARTWORK_MAX_MB) || 700;
+// More files than that at the same moment wait their turn (a few, for a while) instead of being told "too many
+// tries": three customers uploading in the same second are not one customer trying too often (QA 25 Nov).
+const MAX_WAITING = 4;
+const WAIT_MS = 25000;
 let running = 0;
+const waiting = [];
 
 class ArtworkError extends Error {
   constructor(reason) {
     super(reason);
-    this.reason = reason; // 'type' | 'busy' | 'timeout' | 'empty' | 'failed'
+    this.reason = reason; // 'type' | 'busy' | 'timeout' | 'empty' | 'failed' | 'locked' (a PDF that needs its password)
   }
 }
+
+/** A turn for one Ghostscript process (at most MAX_JOBS run at once; a few more wait for theirs), or 'busy'. */
+function takeTurn() {
+  if (running < MAX_JOBS) {
+    running++;
+    return Promise.resolve();
+  }
+  if (waiting.length >= MAX_WAITING) return Promise.reject(new ArtworkError('busy'));
+  return new Promise((resolve, reject) => {
+    const w = { resolve };
+    w.timer = setTimeout(() => {
+      waiting.splice(waiting.indexOf(w), 1);
+      reject(new ArtworkError('busy'));
+    }, WAIT_MS);
+    waiting.push(w);
+  });
+}
+/** The turn handed on to the next one waiting (first come, first served). */
+function endTurn() {
+  const next = waiting.shift();
+  if (!next) {
+    running--;
+    return;
+  }
+  clearTimeout(next.timer);
+  next.resolve();
+}
+
+// What may come before "%!PS" and is skipped, as viewers do: a UTF-8 byte-order mark, a Ctrl-D (Windows
+// printer drivers), a PJL header, comment lines (old .ai files made by ps2ai start "%%Note: ...").
+const JUNK_BEFORE_PS = /^(?:\xef\xbb\xbf|[\x04\s]|\x1b%-12345X|@PJL[^\r\n]*[\r\n]+|%(?!!)[^\r\n]*[\r\n]+)*$/;
 
 /** What kind of file this is, from its first bytes: 'pdf', 'ps' or null. */
 function sniff(buf) {
   const head = buf.subarray(0, 1024).toString('latin1');
   if (/^\s*%PDF-/.test(head) || head.includes('%PDF-')) return { kind: 'pdf', data: buf };
   if (/^\s*%!/.test(head)) return { kind: 'ps', data: buf };
+  const at = head.indexOf('%!PS');
+  if (at > 0 && JUNK_BEFORE_PS.test(head.slice(0, at))) return { kind: 'ps', data: buf.subarray(at) };
   // DOS EPS binary header: C5 D0 D3 C6, then offset and length of the PostScript.
   if (buf.length > 30 && buf.readUInt32BE(0) === 0xc5d0d3c6) {
     const start = buf.readUInt32LE(4);
@@ -145,6 +184,14 @@ function clearWhiteBackground({ data, width: W, height: H }, { force = false } =
   for (let x = 0; x < W; x++) for (const y of [0, H - 1]) { edge++; if (isWhite(y * W + x)) white++; }
   for (let y = 0; y < H; y++) for (const x of [0, W - 1]) { edge++; if (isWhite(y * W + x)) white++; }
   if (!force && white / edge < 0.9) return false;
+  // Only white painted (a white logo for dark garments that fills its box, such as a white panel with see-through
+  // letters): the white is the design, not a page behind one. Cleared, the panel went and only the white insides
+  // of its letters were left (QA 25 Nov).
+  if (!force) {
+    let ink = false;
+    for (let i = 0; i < W * H && !ink; i++) if (data[i * 4 + 3] > 127 && !isWhite(i)) ink = true;
+    if (!ink) return false;
+  }
   const seen = new Uint8Array(W * H);
   const stack = new Int32Array(W * H);
   let top = 0;
@@ -249,8 +296,67 @@ function pictureDensity(text, box) {
 }
 
 /**
+ * True for an Illustrator file saved with "Create PDF Compatible File" off: its only PDF page is Illustrator's
+ * notice ("This is an Adobe Illustrator File that was saved without PDF Content. ..."), not the artwork, which
+ * the shop otherwise put on the product as the customer's design (QA 25 Nov). The notice is found in the text of
+ * the file's small content streams (unpacked here): its strings joined, without spaces (kerning splits words).
+ * Only the English notice is known.
+ */
+function savedWithoutPdfContent(buf, text) {
+  if (!/\/Illustrator\b|Adobe Illustrator|<illustrator:|xmlns:illustrator/i.test(text)) return false;
+  const NOTICE = /withoutPDFContent|CreatePDFCompatibleFile/i;
+  const stringsOf = (s) => {
+    let out = '';
+    for (const m of s.matchAll(/\(((?:\\[\s\S]|[^\\)])*)\)|<([0-9A-Fa-f\s]+)>/g)) {
+      if (m[1] != null) out += m[1].replace(/\\([0-7]{1,3}|[\s\S])/g, (x, c) => (/^[0-7]+$/.test(c) ? String.fromCharCode(parseInt(c, 8)) : c));
+      else out += Buffer.from(m[2].replace(/\s+/g, ''), 'hex').toString('latin1');
+    }
+    return out.replace(/\s+/g, '');
+  };
+  let checked = 0;
+  for (let at = text.indexOf('stream'); at >= 0 && checked < 400; at = text.indexOf('stream', at + 6)) {
+    if (text.startsWith('endstream', at - 3)) continue;
+    let start = at + 6;
+    if (text[start] === '\r') start++;
+    if (text[start] === '\n') start++;
+    const end = text.indexOf('endstream', start);
+    if (end < 0) break;
+    // The notice is a page of text: a small stream, not a picture.
+    if (end - start > 64 * 1024) continue;
+    // The stream's own dictionary (from its "obj").
+    const before = text.slice(Math.max(0, at - 600), at);
+    const dict = before.slice(Math.max(0, before.lastIndexOf('obj')));
+    if (/\/Subtype\s*\/Image\b/.test(dict)) continue;
+    checked++;
+    let content = text.slice(start, end);
+    if (/\/FlateDecode/.test(dict)) {
+      try {
+        content = zlib.inflateSync(buf.subarray(start, end), { finishFlush: zlib.constants.Z_SYNC_FLUSH, maxOutputLength: 1 << 20 }).toString('latin1');
+      } catch (e) {
+        continue;
+      }
+    }
+    if (/\bT[Jj]\b/.test(content) && NOTICE.test(stringsOf(content))) return true;
+  }
+  return false;
+}
+
+/** How many pages (artboards) a PDF has, from its page tree (null when it can't be read without unpacking). */
+function pdfPageCount(text) {
+  let most = null;
+  for (const m of text.matchAll(/\/Type\s*\/Pages\b/g)) {
+    const from = text.lastIndexOf('<<', m.index);
+    const dict = text.slice(from, text.indexOf('>>', m.index) + 2);
+    const c = /\/Count\s+(\d+)/.exec(dict);
+    if (c) most = Math.max(most || 0, Number(c[1]));
+  }
+  return most;
+}
+
+/**
  * Converts an AI/EPS/PDF file to a trimmed, transparent PNG whose longest side is
- * at most `px` pixels. Returns { png, width, height }.
+ * at most `px` pixels. Returns { png, width, height, pages } (pages: how many pages or artboards
+ * a PDF-based file has, of which the first is drawn; null for PostScript or when not known).
  *
  * The artwork itself gets the `px` pixels, not its page: a 7 cm logo on an empty A4 page is drawn as
  * finely as a page-sized one. Steps (each a Ghostscript run in the separate process, stopped after `timeoutMs`
@@ -268,12 +374,19 @@ function pictureDensity(text, box) {
 async function convertArtwork(buf, { px = 4000, timeoutMs = 25000 } = {}) {
   const found = sniff(buf);
   if (!found) throw new ArtworkError('type');
-  if (running >= MAX_JOBS) throw new ArtworkError('busy');
-  running++;
+  const text = found.kind === 'pdf' ? found.data.toString('latin1') : null;
+  // An Illustrator file saved without PDF content: "could not open, save it as PDF compatible AI" is the answer.
+  if (text && savedWithoutPdfContent(found.data, text)) throw Object.assign(new ArtworkError('failed'), { detail: 'an Illustrator file saved without PDF content' });
+  await takeTurn();
   try {
-    return await drawArtwork(found, px, timeoutMs);
+    const out = await drawArtwork(found, px, timeoutMs);
+    return { ...out, pages: text ? pdfPageCount(text) : null };
+  } catch (e) {
+    // A PDF that can't be opened without its password says so.
+    if (text && e instanceof ArtworkError && e.reason === 'failed' && /\/Encrypt\b/.test(text)) e.reason = 'locked';
+    throw e;
   } finally {
-    running--;
+    endTurn();
   }
 }
 
@@ -374,12 +487,11 @@ async function drawArtwork({ data, kind }, px, timeoutMs) {
 
 /** A Ghostscript job in the separate process, one at a time with the others (see runJob in the worker). */
 async function gsJob(job, timeoutMs) {
-  if (running >= MAX_JOBS) throw new ArtworkError('busy');
-  running++;
+  await takeTurn();
   try {
     return await runWorker(null, null, 0, timeoutMs, null, job);
   } finally {
-    running--;
+    endTurn();
   }
 }
 
