@@ -35,8 +35,9 @@ test('/design and the product page find the {fields} of the team business cards,
     const src = read(file);
     const m = src.match(/const textsOf = \(list\) => [\s\S]*?: \[\]\)\);/);
     assert.ok(m, `${file}: textsOf`);
-    assert.match(src, /\/\\\{\[\^\{\}\\n\]\{1,40\}\\\}\/\.test\(s\)/, `${file}: the editor's {field} test`);
-    return vm.runInNewContext(`${m[0]}\n(d) => textsOf([...(d.items || []), ...(d.objects || [])]).some((s) => /\\{[^{}\\n]{1,40}\\}/.test(s))`);
+    // The server's rule (src/app.js, fieldsUnfilled): a letter or digit inside, so "{ }" is not a field.
+    assert.ok(src.includes(String.raw`/\{\s*[\p{L}\p{N}_][^{}\n]{0,39}\}/u.test(s)`), `${file}: the server's {field} test`);
+    return vm.runInNewContext(`${m[0]}\n(d) => textsOf([...(d.items || []), ...(d.objects || [])]).some((s) => /\\{\\s*[\\p{L}\\p{N}_][^{}\\n]{0,39}\\}/u.test(s))`);
   };
   for (const file of ['js/design.js', 'js/product.js']) {
     const hasFields = grab(file);
@@ -44,7 +45,7 @@ test('/design and the product page find the {fields} of the team business cards,
     assert.deepStrictEqual(found, ['cd-bilingual', 'cd-company-ar', 'cd-modern-en', 'cd-team-ar', 'cd-team-en'], file);
     // A design the owner added (editor objects, a group inside): found too; plain words are not fields.
     assert.ok(hasFields({ objects: [{ type: 'group', objects: [{ type: 'i-text', text: 'Hi {Name}' }] }] }), `${file}: in a group`);
-    assert.ok(!hasFields({ objects: [{ type: 'i-text', text: 'Hello' }, { type: 'image', src: 'data:image/svg+xml,<style>.a{fill:red}</style>' }] }), `${file}: a picture's {…} is not a field`);
+    assert.ok(!hasFields({ objects: [{ type: 'i-text', text: 'Hello { }' }, { type: 'image', src: 'data:image/svg+xml,<style>.a{fill:red}</style>' }] }), `${file}: a picture's {…} is not a field`);
   }
   // No "Add to cart" / "Order as is" for them.
   assert.match(read('js/design.js'), /\$\('dp-add'\)\.hidden = hasFields;/);

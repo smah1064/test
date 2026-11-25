@@ -3855,7 +3855,7 @@
     });
     // A name-list field ({Name}) on a product without name lists would print as it is.
     if (!st.product.merge) {
-      for (const o of objs) if (isText(o) && /\{[^{}\n]{1,40}\}/.test(o.text || '')) issues.push({ level: 'error', key: 'check.fieldText', obj: o, params: { name: layerName(o) } });
+      for (const o of objs) if (isText(o) && /\{\s*[\p{L}\p{N}_][^{}\n]{0,39}\}/u.test(o.text || '')) issues.push({ level: 'error', key: 'check.fieldText', obj: o, params: { name: layerName(o) } });
     }
     // Several garment colours in one order (name list colours or the quantities): words that disappear on one of them.
     if (!st.product.surface && !embHere() && !laser()) {

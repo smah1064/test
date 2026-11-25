@@ -143,7 +143,7 @@
   const textsOf = (list) => (list || []).flatMap((o) => (!o || typeof o !== 'object' ? []
     : Array.isArray(o.objects) ? textsOf(o.objects)
       : o.kind === 'text' || /text/i.test(o.type || '') ? [String(o.text || '')] : []));
-  const hasFields = textsOf([...(design.items || []), ...(design.objects || [])]).some((s) => /\{[^{}\n]{1,40}\}/.test(s));
+  const hasFields = textsOf([...(design.items || []), ...(design.objects || [])]).some((s) => /\{\s*[\p{L}\p{N}_][^{}\n]{0,39}\}/u.test(s));
 
   // ---------- Picture ----------
   let token = 0;

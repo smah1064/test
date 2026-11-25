@@ -847,7 +847,7 @@
       localStorage.removeItem('pod-cart-base');
       for (const k of Object.keys(localStorage)) if (k.startsWith('pod-book-')) localStorage.removeItem(k);
     } catch (e) { /* private mode */ }
-    try { for (const k of ['pod-proof-ok', 'pod-coupon', 'pod-order-key', 'pod-delivery']) sessionStorage.removeItem(k); } catch (e) { /* private mode */ }
+    try { for (const k of ['pod-proof-ok', 'pod-coupon', 'pod-order-key', 'pod-delivery', 'pod-checkout']) sessionStorage.removeItem(k); } catch (e) { /* private mode */ }
     try { indexedDB.deleteDatabase('pod-photos'); } catch (e) { /* blocked */ }
     updateCartBadge();
   }
@@ -878,9 +878,17 @@
   }
   let cartTimer = null;
   let cartMerging = false;
-  async function pushCart(acct) {
+  // One request at a time: a change made while one is out (an Undo right after Remove) is sent once it is back.
+  let cartSending = false;
+  let cartAgain = false;
+  async function pushCart(acct, { now: leaving = false } = {}) {
     cartTimer = null;
     if (!acct) return;
+    if (cartSending && !leaving) {
+      cartAgain = true;
+      return;
+    }
+    cartSending = true;
     const items = rawCart();
     // With what this device last agreed with the account: the server merges (another device may have
     // added or removed items since this page was opened) and answers with the merged cart.
@@ -891,15 +899,33 @@
       const merged = (await res.json()).items || [];
       const now = rawCart();
       const byId = new Map(now.map((i) => [i.designId, i]));
-      const out = merged.map((m) => withMove(byId.get(m.designId), m));
+      let out = merged.map((m) => withMove(byId.get(m.designId), m));
+      // Changed on this page while the request was out: those changes stay on top of the account's answer
+      // (removed here since: out; added here since: back at their place) and are sent next.
+      if (cartKey(now) !== cartKey(items)) {
+        const sent = new Set(items.map((i) => i.designId));
+        const here = new Set(now.map((i) => i.designId));
+        out = out.filter((i) => here.has(i.designId) || !sent.has(i.designId));
+        now.forEach((i, k) => {
+          if (!sent.has(i.designId) && !out.some((o) => o.designId === i.designId)) out.splice(Math.min(k, out.length), 0, i);
+        });
+        cartAgain = true;
+      }
       if (cartKey(out) !== cartKey(now)) {
         cartMerging = true;
         writeRaw(out);
         cartMerging = false;
         document.dispatchEvent(new CustomEvent('pod:cartsynced'));
       }
-      setCartBase(acct, out);
-    } catch (e) { /* offline (or the page closed first): sent with the next change or visit */ }
+      // What the account has now (the next request is merged against it).
+      setCartBase(acct, merged);
+    } catch (e) { /* offline (or the page closed first): sent with the next change or visit */ } finally {
+      cartSending = false;
+      if (cartAgain) {
+        cartAgain = false;
+        cartToAccount();
+      }
+    }
   }
   /** This browser's entry with the account's "saved for later" state when that move is newer. */
   function withMove(local, remote) {
@@ -917,9 +943,9 @@
   }
   // Leaving right after a change (add to cart, then off to the cart page): send it now.
   window.addEventListener('pagehide', () => {
-    if (cartTimer) {
+    if (cartTimer || cartAgain) {
       clearTimeout(cartTimer);
-      pushCart(cartAcct());
+      pushCart(cartAcct(), { now: true });
     }
   });
   /** Bring this browser's cart and the account's together (on every page, when signed in). */
