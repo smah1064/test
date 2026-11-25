@@ -77,3 +77,38 @@ test('opening a ready design keeps the customer\'s own saved design until this o
     await srv.close();
   }
 });
+
+test('typing before a coloured word (canvas or side box) keeps the colour and the choice on that word', { timeout: 60000 }, async () => {
+  const { chromium } = loadPlaywright();
+  const srv = await startServer();
+  const browser = await chromium.launch();
+  try {
+    const ctx = await newContext(browser);
+    const page = await openEditor(ctx, srv.base, 'mug');
+    await page.evaluate(() => document.querySelector('#text-presets [data-i="0"]').click());
+    await page.waitForFunction(() => window.__editor.canvas.getActiveObject());
+    // "Second line here" typed in the side box, then "line" chosen and coloured red.
+    await page.fill('#p-text', 'Second line here');
+    await page.waitForSelector('.word-chips [data-word]');
+    await page.evaluate(() => {
+      const chips = [...document.querySelectorAll('.word-chips [data-word]')];
+      chips.find((c) => c.textContent.trim() === 'line').click();
+    });
+    await page.waitForSelector('#p-wordcolor');
+    await page.evaluate(() => { const c = document.getElementById('p-wordcolor'); c.value = '#ff0000'; c.dispatchEvent(new Event('input', { bubbles: true })); });
+    const redWord = () => page.evaluate(() => {
+      const o = window.__editor.canvas.getActiveObject();
+      return [...o.text].map((ch, i) => ((o.getStyleAtPosition(i) || {}).fill === '#ff0000' ? ch : ' ')).join('').trim();
+    });
+    assert.strictEqual(await redWord(), 'line');
+    // Words typed before it in the side box: still "line" in red, still the chosen word.
+    await page.fill('#p-text', 'My Second line here');
+    await page.waitForTimeout(300);
+    assert.strictEqual(await redWord(), 'line');
+    assert.strictEqual(await page.evaluate(() => { const s = window.__editor.st; return s.wordSel; }), 2);
+    assert.deepStrictEqual(page.errors, []);
+  } finally {
+    await browser.close();
+    await srv.close();
+  }
+});

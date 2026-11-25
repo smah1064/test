@@ -2822,6 +2822,33 @@
     while ((m = re.exec(o.text))) out.push({ text: m[0], start: m.index, end: m.index + m[0].length });
     return out;
   }
+  /**
+   * The word chosen for colouring (st.wordSel, its place in the list) after the text changed:
+   * followed by where it starts (st.wordSelAt), so typing words before it does not hand the
+   * colour to another word; forgotten when its first letter was deleted or typed over.
+   */
+  function followWordSel(o, words) {
+    const at = st.wordSelAt;
+    if (st.wordSel == null || !at) {
+      if (st.wordSel != null && !words[st.wordSel]) st.wordSel = null;
+      return;
+    }
+    let pos = at.start;
+    if (at.text !== o.text) {
+      // The changed stretch: what the old and the new text do not share at their start and end.
+      const was = at.text;
+      const now = o.text;
+      let a = 0;
+      while (a < was.length && a < now.length && was[a] === now[a]) a++;
+      let z = 0;
+      while (z < was.length - a && z < now.length - a && was[was.length - 1 - z] === now[now.length - 1 - z]) z++;
+      if (pos >= was.length - z) pos += now.length - was.length; // changed before the word: it moved
+      else if (pos >= a) pos = -1; // its first letter changed: not the chosen word any more
+    }
+    const i = words.findIndex((w) => w.start <= pos && pos < w.end);
+    st.wordSel = i < 0 ? null : i;
+    st.wordSelAt = i < 0 ? null : { text: o.text, start: words[i].start };
+  }
   function wordColour(o, w) {
     const st0 = o.getSelectionStyles ? o.getSelectionStyles(w.start, w.start + 1)[0] : null;
     return toHex((st0 && st0.fill) || (isGradient(o.fill) || o.fill === 'transparent' ? baseColour(o) : o.fill));
@@ -2838,14 +2865,20 @@
       return;
     }
     const words = wordsOf(o);
-    if (st.wordSel != null && !words[st.wordSel]) st.wordSel = null;
+    const had = st.wordSel;
+    followWordSel(o, words);
+    // (The chosen word gone: the colour boxes go too.)
+    if (had != null && st.wordSel == null && holder) {
+      holder.innerHTML = wordControls(o);
+      return;
+    }
     box.innerHTML = wordChips(o, words);
   }
   function wordControls(o) {
     if (o.type !== 'i-text' || !o.setSelectionStyles) return '';
     const words = wordsOf(o);
     if (words.length < 2) return '';
-    if (st.wordSel != null && !words[st.wordSel]) st.wordSel = null;
+    followWordSel(o, words);
     const styled = o.styles && Object.values(o.styles).some((l) => l && Object.keys(l).length);
     return `<div class="field">
       <label>${esc(t('words.title'))}</label>
@@ -2857,7 +2890,9 @@
     </div>`;
   }
   function setWordColour(o, colour) {
-    const w = wordsOf(o)[st.wordSel];
+    const words = wordsOf(o);
+    followWordSel(o, words);
+    const w = words[st.wordSel];
     if (!w) return;
     o.setSelectionStyles({ fill: colour }, w.start, w.end);
     o.dirty = true;
@@ -3096,7 +3131,22 @@
     switch (e.target.id) {
       case 'p-text': {
         const wasArabic = D.ARABIC_RE.test(o.text);
-        setProp({ text: v });
+        // Words coloured one by one keep their colour when typing in this box: only the changed stretch is
+        // replaced (as typing on the canvas does), so the colours move with their letters (QA 25 Nov).
+        if (o.insertChars && o.styles && Object.keys(o.styles).length) {
+          const split = fabric.util.string.graphemeSplit;
+          const was = split(o.text || '');
+          const now = split(v);
+          let a = 0;
+          while (a < was.length && a < now.length && was[a] === now[a]) a++;
+          let z = 0;
+          while (z < was.length - a && z < now.length - a && was[was.length - 1 - z] === now[now.length - 1 - z]) z++;
+          const mid = now.slice(a, now.length - z).join('');
+          if (mid) o.insertChars(mid, null, a, was.length - z);
+          else if (was.length - z > a) o.removeChars(a, was.length - z);
+          if (o.text !== v) o.set({ text: v }); // (lines and anything else: as typed)
+          setProp({ text: o.text });
+        } else setProp({ text: v });
         renderLayers();
         if (wasArabic !== D.ARABIC_RE.test(v)) renderPropsKeepFocus();
         else refreshWordChips(o); // (the "colour one word" buttons follow the new words)
@@ -3224,6 +3274,7 @@
     if (wordBtn) {
       const i = Number(wordBtn.dataset.word);
       st.wordSel = st.wordSel === i ? null : i;
+      st.wordSelAt = st.wordSel == null ? null : { text: o.text, start: wordsOf(o)[i].start };
       renderProps();
       return;
     }
