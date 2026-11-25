@@ -13,9 +13,10 @@ on:
 permissions:
   contents: read
 
+# A new push waits for the running build to finish (the iPhone build is slow to start), keeping only the newest one waiting.
 concurrency:
   group: mobile-apps-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   NODE_VERSION: '22'
