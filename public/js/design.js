@@ -28,10 +28,19 @@
     document.addEventListener('pod:langchange', show);
     return;
   }
-  $('dp').hidden = false;
-  // A link to a product the shop doesn't sell now (an old link, a hidden product): say so, and show another one.
+  // A link to a product the shop doesn't sell now (an old link, a paused product, one it stopped selling):
+  // say so, and show another one (for one it stopped selling, a similar one: the same kind of product).
   const askedFor = params.get('product');
   const askedGone = Boolean(askedFor) && !products.some((p) => p.id === askedFor);
+  // (A product in the shop that this design just isn't offered on: no reason to ask the shop why.)
+  const gone = askedGone && !catalog.products.some((p) => p.id === askedFor) ? await POD.productState(askedFor) : null;
+  let instead = null; // the similar product shown instead of one the shop stopped selling
+  if (gone && gone.state === 'retired') {
+    // The design's own product when it is that kind of product, else the first similar one it goes on.
+    const like = POD.similarProducts({ products }, gone);
+    if (like.same) instead = products.find((p) => p.id === design.product && p.category === gone.category) || like.list[0];
+  }
+  $('dp').hidden = false;
   const state = { product: null, color: null, size: null };
   // The design's own colour (a design for a black T-shirt: white ink), for products without that colour id.
   const isDark = (hex) => POD.luminance(hex) < 0.45;
@@ -61,7 +70,7 @@
     }
     return null;
   }
-  choose(params.get('product'), params.get('color'));
+  choose(instead ? instead.id : params.get('product'), params.get('color'));
 
   // ---------- Picture ----------
   let token = 0;
@@ -125,7 +134,8 @@
     $('dp-name').textContent = tr(design.name);
     $('dp-img').alt = t('design.imgAlt', { design: tr(design.name), product: tr(product.name) });
     $('dp-gone').hidden = !askedGone;
-    $('dp-gone').innerHTML = askedGone ? `${esc(t('dp.productGone'))} <a href="/#products">${esc(t('unavail.browse'))}</a>` : '';
+    const more = gone ? POD.similarHref(catalog, gone) : '/#products';
+    $('dp-gone').innerHTML = askedGone ? `${esc(goneText())} <a href="${esc(more)}">${esc(gone ? POD.similarLabel(more) : t('unavail.browse'))}</a>` : '';
     $('dp-products').innerHTML = products.map((p) => `<button type="button" class="dp-product ${p.id === product.id ? 'active' : ''}" data-product="${esc(p.id)}" title="${esc(tr(p.name))}">
       <img alt="" loading="lazy" src="${esc(POD.productPicture(p))}" data-fallback="${esc(POD.thumbFallback(p))}"><span>${esc(tr(p.name))}</span></button>`).join('');
     $('dp-colors').innerHTML = product.colors.map((c) => (!POD.colorOk(product, c)
@@ -149,6 +159,14 @@
     document.title = `${tr(design.name)} · ${t('brand')}`;
     const active = $('dp-products').querySelector('.active');
     if (active) active.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }
+  /** Why the product in the link isn't shown: paused (back soon, or the day), stopped selling, or just not available. */
+  function goneText() {
+    const name = gone && gone.name ? tr(gone.name) : '';
+    if (!name) return t('dp.productGone');
+    if (gone.state === 'retired') return t(instead ? 'dp.productRetired' : 'dp.productRetiredOther', { name });
+    const back = POD.backText(gone);
+    return back ? t('dp.productPaused', { name, back }) : t('dp.productGone');
   }
   function syncUrl() {
     history.replaceState(null, '', `/design?id=${encodeURIComponent(design.id)}&product=${state.product.id}&color=${state.color.id}`);

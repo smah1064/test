@@ -325,6 +325,9 @@
       // from its last prices: designId -> the shop's message. They block the order until removed or saved for later.
       let blocked = new Map();
       let savedBlocked = new Map();
+      // Of those, ones whose product isn't in the shop: designId -> { similar } a link to similar products for one
+      // the shop stopped selling, or { backOn } the day a paused one comes back.
+      let outOfShop = new Map();
       const blockedIn = (cart) => cart.filter((it) => blocked.has(it.designId));
 
       const proofOf = (id) => { const p = proofs.get(id); return p && p.state === 'ok' ? p.proof : null; };
@@ -510,7 +513,9 @@
             <div>
               <h3>${esc(tr(item.productName))}${blocked.has(item.designId) ? ` <span class="saved-state blocked">${esc(t('cart.blocked'))}</span>` : ''}</h3>
               <div class="meta" data-meta-for="${esc(item.designId)}">${itemMeta(item)}</div>
-              ${blocked.has(item.designId) ? `<div class="cart-unavail" role="alert"><strong>${esc(blocked.get(item.designId))}</strong> <span>${esc(t('cart.blockedHint'))}</span></div>` : ''}
+              ${blocked.has(item.designId) ? `<div class="cart-unavail" role="alert"><strong>${esc(blocked.get(item.designId))}</strong> ${(outOfShop.get(item.designId) || {}).similar
+    ? `<a class="cart-similar" href="${esc(outOfShop.get(item.designId).similar)}">${esc(POD.similarLabel(outOfShop.get(item.designId).similar))}</a>`
+    : `<span>${(outOfShop.get(item.designId) || {}).backOn ? `${esc(t('avail.backOnLong', { date: POD.backOnDay(outOfShop.get(item.designId).backOn) }))} ` : ''}${esc(t('cart.blockedHint'))}</span>`}</div>` : ''}
               <div class="actions">
                 ${item.productId === 'dtfsheet' || item.productId === 'photoprints' ? '' : item.bookId ? `<a class="btn btn-sm" href="/book?b=${encodeURIComponent(item.bookId)}&cart=${i}">${esc(t('cart.edit'))}</a>` : `<a class="btn btn-sm" href="/editor?design=${encodeURIComponent(item.designId)}&cart=${i}">${esc(t('cart.edit'))}</a>
                 ${item.bookId ? '' : `<a class="btn btn-sm" href="/editor?design=${encodeURIComponent(item.designId)}">${esc(t('cart.duplicate'))}</a>`}`}
@@ -627,6 +632,19 @@
         // Hidden or sold out since it was added: the shop's message on the item (cleared when it is back).
         blocked = new Map(quote.items.filter((q) => q && q.unavailable && keep.some((it) => it.designId === q.designId))
           .map((q) => [q.designId, q.unavailableText || t('cart.blocked')]));
+        // The product isn't in the shop: no longer sold, "See similar products" (the shop on that kind of
+        // product); paused with a day to come back, that day.
+        const nowOut = new Map();
+        const out = keep.filter((it) => quote.items.some((q) => q && q.designId === it.designId && ['productRetired', 'productUnavailable'].includes(q.unavailable)));
+        if (out.length) {
+          const shop = await POD.loadCatalog().catch(() => null);
+          await Promise.all(out.map(async (it) => {
+            const info = await POD.productState(it.productId);
+            if (info.state === 'retired') nowOut.set(it.designId, { similar: POD.similarHref(shop, info) });
+            else if (info.backOn) nowOut.set(it.designId, { backOn: info.backOn });
+          }));
+        }
+        outOfShop = nowOut;
         if (gone.length || changed || synced || ordered) POD.setCart(keep);
         if (ordered) {
           // Ordered from this tab (its answer got lost): that order, found by this tab's one-time key.

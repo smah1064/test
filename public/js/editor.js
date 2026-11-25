@@ -70,20 +70,35 @@
     'ed.sizeSwitched': ['That size is sold out in this colour, so we picked the next size.', 'المقاس ده خلصان في اللون ده، فاخترنالك المقاس اللي بعده.'],
     'ed.soldOutPick': ['This one is sold out right now. Please pick another.', 'ده خلصان دلوقتي. اختار غيره.'],
     'ed.productGone': ['This product isn\'t available right now, so we opened another one. You can pick a different product from the list.', 'المنتج ده مش متاح دلوقتي، ففتحنالك منتج تاني. تقدر تختار منتج غيره من القائمة.'],
+    'ed.productPaused': ['{name} isn\'t available right now ({back}), so we opened another product. You can pick a different one from the list.', 'المنتج «{name}» مش متاح دلوقتي ({back})، ففتحنالك منتج تاني. تقدر تختار منتج غيره من القائمة.'],
+    'ed.productRetired': ['{name} is no longer sold, so we opened a similar product: {other}.', 'المنتج «{name}» مبقاش بيتباع، ففتحنالك منتج شبهه: {other}.'],
+    'ed.productRetiredOther': ['{name} is no longer sold, so we opened another product: {other}. You can pick a different one from the list.', 'المنتج «{name}» مبقاش بيتباع، ففتحنالك منتج تاني: {other}. تقدر تختار منتج غيره من القائمة.'],
   };
-  const tEd = (k) => (ED_TEXT[k] ? ED_TEXT[k][POD.lang === 'ar' ? 1 : 0] : t(k));
+  const tEd = (k, vals) => (ED_TEXT[k] ? ED_TEXT[k][POD.lang === 'ar' ? 1 : 0].replace(/\{(\w+)\}/g, (m, v) => (vals && vals[v] != null ? vals[v] : m)) : t(k, vals));
   const firstPick = (list) => list.find(canPick) || list[0];
   // Stock per colour and size: a size can be sold out in one colour only.
   const comboOut = (p, colorId, sizeId) => Boolean(p && p.outCombos && p.outCombos.includes(`${colorId}|${sizeId}`));
   const sizeOk = (p, colorId, z) => canPick(z) && !comboOut(p, colorId, z.id);
-  // A product hidden in the admin (out of stock, season...) isn't in the list: say so, then show another one.
-  const missing = (id) => {
-    if (id && !products.some((p) => p.id === id)) setTimeout(() => toast(tEd('ed.productGone'), 'error'), 400);
+  // A product the shop doesn't sell right now isn't in the list: say so, then show another one. Paused or
+  // sold out: "not available right now (back soon)". Stopped selling: a similar one (the same kind of
+  // product). Gives the product to open instead (null: the first one, as for an old link).
+  const missing = async (id) => {
+    if (!id || products.some((p) => p.id === id)) return null;
+    const info = await POD.productState(id);
+    const name = info.name ? tr(info.name) : '';
+    const like = info.state === 'retired' ? POD.similarProducts({ products }, info, 1) : null;
+    const instead = (like && like.list[0]) || null;
+    const back = POD.backText(info);
+    const msg = !name ? tEd('ed.productGone')
+      : instead ? tEd(like.same ? 'ed.productRetired' : 'ed.productRetiredOther', { name, other: tr(instead.name) })
+        : back ? tEd('ed.productPaused', { name, back }) : tEd('ed.productGone');
+    setTimeout(() => toast(msg, 'error'), 400);
+    return instead;
   };
-  missing(params.get('product'));
+  const insteadOf = await missing(params.get('product'));
 
   const st = {
-    product: products.find((p) => p.id === params.get('product')) || products[0],
+    product: products.find((p) => p.id === params.get('product')) || insteadOf || products[0],
     options: {}, // product options such as business-card lamination: { optionId: choiceId }
     colorId: null,
     sizeId: null,
@@ -111,8 +126,8 @@
   if (params.get('design')) {
     try {
       const saved = await POD.api('/api/designs/' + encodeURIComponent(params.get('design')));
-      missing(saved.productId);
-      st.product = products.find((p) => p.id === saved.productId) || st.product;
+      const instead = await missing(saved.productId);
+      st.product = products.find((p) => p.id === saved.productId) || instead || st.product;
       st.colorId = saved.color.id;
       st.sizeId = saved.size.id;
       st.sizePicked = true; // a saved design or cart item: its size was chosen

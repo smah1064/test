@@ -15,16 +15,6 @@
     $('pp-missing').hidden = false;
     return;
   }
-  /** Not in the shop (hidden, removed, out of stock, or an old link): say so and offer the catalogue. */
-  function unavailable() {
-    $('pp-missing').hidden = false;
-    $('pp-missing').classList.add('unavail');
-    $('pp-missing').innerHTML = `<div class="unavail-ico" aria-hidden="true">🛍️</div>
-      <h2>${esc(t('unavail.title'))}</h2>
-      <p class="muted">${esc(t('unavail.text'))}</p>
-      <div class="unavail-actions"><a class="btn btn-primary" href="/#products">${esc(t('unavail.browse'))}</a><a class="btn" href="/designs">${esc(t('unavail.designs'))}</a></div>`;
-    document.title = `${t('unavail.title')} · ${t('brand')}`;
-  }
   const product = catalog.products.find((p) => p.id === params.get('id'));
   if (product && product.kind === 'book') {
     location.replace(`/book?b=${encodeURIComponent(product.book)}`);
@@ -35,8 +25,12 @@
     return;
   }
   if (!product) {
-    unavailable();
-    document.addEventListener('pod:langchange', unavailable);
+    // Not in the shop: paused or sold out ("back soon", or the day it's back), stopped selling (similar
+    // products to pick instead), or an old link. The shop says which (common.js: productState).
+    const info = await POD.productState(params.get('id'));
+    const show = () => POD.showUnavailable($('pp-missing'), info, catalog);
+    show();
+    document.addEventListener('pod:langchange', show);
     return;
   }
   $('pp').hidden = false;

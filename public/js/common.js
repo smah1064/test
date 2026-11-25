@@ -270,6 +270,130 @@
     return new Intl.NumberFormat(lang === 'ar' ? 'ar-EG' : 'en-GB', { maximumFractionDigits: 1 }).format(n);
   }
 
+  // ---------- Products the shop doesn't sell right now ----------
+  /*
+   * GET /api/products only lists what can be ordered now. For any other product id (an old link, a saved
+   * design, a cart item) the shop says why (GET /api/products/:id/name), asked once per product per page:
+   * { id, state, name, category, backOn } with state
+   *   'paused'   taken out for a while (season, supplier...): back soon, on backOn (YYYY-MM-DD) when set;
+   *   'soldOut'  nothing left in stock: back soon too;
+   *   'retired'  the shop stopped selling it: similar products instead;
+   *   'live'     in the shop (its day to come back came while the page was open);
+   *   'unknown'  the shop couldn't say (no such product, no connection): "not available right now",
+   *              without promising it comes back.
+   */
+  const productStates = new Map();
+  function productState(id) {
+    const key = String(id || '');
+    if (!productStates.has(key)) {
+      const unknown = { id: key, state: 'unknown', name: null, category: null, backOn: null };
+      productStates.set(key, !key ? Promise.resolve(unknown) : api(`/api/products/${encodeURIComponent(key)}/name`).then((r) => {
+        if (!r || typeof r !== 'object') return unknown;
+        // (A shop from before "Stop selling" only says whether it is available.)
+        const state = ['live', 'paused', 'retired', 'soldOut'].includes(r.state) ? r.state : r.available ? 'live' : 'paused';
+        const backOn = state === 'paused' && /^\d{4}-\d{2}-\d{2}$/.test(r.backOn || '') ? r.backOn : null;
+        return { id: key, state, name: r.name || null, category: r.category || null, backOn };
+      }, () => unknown));
+    }
+    return productStates.get(key);
+  }
+  /** The day a paused product comes back, "Thursday 26 November" (with the year when it isn't this year). */
+  function backOnDay(ymd) {
+    const year = Number(String(ymd).slice(0, 4));
+    try {
+      return new Date(ymd + 'T12:00:00Z').toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-GB', {
+        weekday: 'long', day: 'numeric', month: 'long', ...(year !== new Date().getFullYear() ? { year: 'numeric' } : {}), timeZone: 'UTC',
+      });
+    } catch (e) {
+      return lang === 'ar' ? arabicDigits(ymd) : ymd;
+    }
+  }
+  /** "back soon" / "back on Thursday 26 November" for a paused or sold-out product ('' when the shop couldn't say). */
+  function backText(info) {
+    if (!info || (info.state !== 'paused' && info.state !== 'soldOut')) return '';
+    return info.backOn ? t('avail.backOnShort', { date: backOnDay(info.backOn) }) : t('avail.backSoonShort');
+  }
+  // The shop's best sellers (as on the home page), offered when nothing like a stopped product is left.
+  const POPULAR = ['tshirt', 'mug', 'bizcards', 'stickersheet', 'hoodie', 'cushion', 'invitations', 'tote'];
+  /**
+   * Products to pick instead of one the shop stopped selling (up to n), from a catalogue (or any list of
+   * products): the same category, ones made from it first; else the best sellers, then the rest.
+   * Gives { list, same } (same: the list is from its category).
+   */
+  function similarProducts(catalog, info, n = 6) {
+    const all = ((catalog && catalog.products) || []).filter((p) => p && p.id !== (info && info.id));
+    const cat = info && info.category;
+    const same = cat ? all.filter((p) => p.category === cat) : [];
+    if (same.length) {
+      const made = same.filter((p) => p.base && p.base === info.id);
+      return { list: [...made, ...same.filter((p) => !made.includes(p))].slice(0, n), same: true };
+    }
+    const top = POPULAR.map((id) => all.find((p) => p.id === id)).filter(Boolean);
+    return { list: [...top, ...all.filter((p) => !top.includes(p))].slice(0, n), same: false };
+  }
+  /** Where a product is shown in the shop (books and photo prints have their own pages). */
+  const productHref = (p) => (p.kind === 'book' ? `/book?b=${encodeURIComponent(p.book)}` : p.kind === 'photoset' ? '/photos' : `/product?id=${encodeURIComponent(p.id)}`);
+  /** "See similar products": the shop on the product's category when anything is left in it, else every product. */
+  function similarHref(catalog, info) {
+    const cat = info && info.category;
+    const left = cat && ((catalog && catalog.products) || []).some((p) => p.category === cat && p.id !== info.id);
+    return left ? `/?cat=${encodeURIComponent(cat)}#products` : '/#products';
+  }
+  /** The words on that link: "See similar products", or "See all products" when it goes to every product. */
+  const similarLabel = (href) => t(href === '/#products' ? 'book.browse' : 'unavail.browse');
+  /**
+   * Fill `box` (the product page's or kids' book page's "not found" card) for a product that isn't in the
+   * shop: paused or sold out, "not available right now, back soon" (or the day); stopped selling, "we no
+   * longer sell this product" and up to six similar products to pick.
+   */
+  function showUnavailable(box, info, catalog) {
+    const retired = info.state === 'retired';
+    const name = info.name ? tr(info.name) : '';
+    const back = backText(info);
+    let text;
+    let grid = '';
+    if (retired) {
+      const { list, same } = similarProducts(catalog, info);
+      text = list.length ? t(same ? 'avail.retiredSimilar' : 'avail.retiredPopular') : t('avail.retiredNone');
+      // (One or two: centred, not stretched.)
+      grid = list.length ? `<div class="similar-grid${list.length < 3 ? ` n${list.length}` : ''}">${list.map((p) => `<a class="similar-card" href="${esc(productHref(p))}">
+          <span class="similar-pic"><img alt="" loading="lazy" decoding="async" src="${esc(productPicture(p))}" data-fallback="${esc(thumbFallback(p))}"></span>
+          <span class="similar-name">${esc(tr(p.name))}</span>
+          <span class="similar-price">${esc(t('home.from', { price: money(p.basePrice) }))}</span>
+        </a>`).join('')}</div>` : '';
+    }
+    // More like it: the shop on its category, or every product when nothing of that kind is left.
+    const more = similarHref(catalog, info);
+    const all = more === '/#products';
+    const moreText = similarLabel(more);
+    if (!retired) {
+      const backLong = info.backOn ? t('avail.backOnLong', { date: backOnDay(info.backOn) }) : t('avail.backSoonLong');
+      text = back ? t(all ? 'avail.pausedTextAll' : 'avail.pausedText', { back: backLong }) : t(all ? 'avail.lookAroundAll' : 'avail.lookAround');
+    }
+    const title = retired ? t('avail.retiredTitle') : t('unavail.title');
+    box.hidden = false;
+    box.classList.add('unavail');
+    box.classList.toggle('has-similar', Boolean(grid));
+    box.innerHTML = `<div class="unavail-ico" aria-hidden="true">🛍️</div>
+      ${name ? `<p class="unavail-name">${esc(name)}</p>` : ''}
+      <h2>${esc(title)}</h2>
+      <p class="muted">${esc(text)}</p>
+      ${grid}
+      <div class="unavail-actions"><a class="btn${grid ? '' : ' btn-primary'}" href="${esc(more)}">${esc(moreText)}</a><a class="btn" href="/designs">${esc(t('unavail.designs'))}</a></div>`;
+    if (!box.__fallbacks) {
+      box.__fallbacks = true;
+      // A product picture that can't be made: the drawn product.
+      box.addEventListener('error', (e) => {
+        const img = e.target;
+        if (img.tagName !== 'IMG' || !img.dataset.fallback) return;
+        const fb = img.dataset.fallback;
+        img.dataset.fallback = '';
+        img.src = fb;
+      }, true);
+    }
+    document.title = `${title} · ${t('brand')}`;
+  }
+
   // ---------- Cart (designs live on the server; the cart keeps references) ----------
   // One list in the browser: the items being bought, and those "saved for later" (later: true, kept
   // out of the order). getCart / setCart only see and change the first; getSaved / setSaved the second.
@@ -933,6 +1057,7 @@
     t, tr, arabicDigits, setLang, applyI18n,
     loadCatalog, assetId, canPick, firstPick, comboOut, comboFew, sizeOk, colorOk, productPicture, thumbFallback, fillMockup, mockupUrl, svgDataUrl, luminance,
     money, date, day, num, captcha,
+    productState, backOnDay, backText, similarProducts, similarHref, similarLabel, productHref, showUnavailable,
     getCart, setCart, getSaved, setSaved, moveItem, designFor, putFile, updateCartBadge, toast, esc, api, drafts, forgetPersonal,
     sizedArea, sizeView, canvasEdges, drawPattern, wrapOffsets, fabricCm,
   };
