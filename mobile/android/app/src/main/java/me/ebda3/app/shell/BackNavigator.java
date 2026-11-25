@@ -24,10 +24,13 @@ public final class BackNavigator {
     public static int stepsBack(List<String> urls, int current, String offlinePage) {
         if (urls == null || current <= 0 || current >= urls.size()) return 0;
         String here = urls.get(current);
+        // On the "no connection" page, every copy of the page that failed is skipped (each "Try again" while
+        // offline leaves one).
+        String failed = isOffline(here, offlinePage) ? failedPage(here) : null;
         for (int i = current - 1; i >= 0; i--) {
             String u = urls.get(i);
             if (u == null || isOffline(u, offlinePage)) continue;
-            if (u.equals(here)) continue;
+            if (u.equals(here) || u.equals(failed)) continue;
             String next = urls.get(i + 1);
             if (next != null && isOffline(next, offlinePage) && u.equals(failedPage(next))) continue;
             return current - i;

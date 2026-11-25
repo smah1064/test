@@ -55,6 +55,15 @@ public class BackNavigatorTest {
     }
 
     @Test
+    public void severalTriesWhileOfflineAreAllSkipped() {
+        String a = "https://ebda3.me/";
+        String b = "https://ebda3.me/proof?t=1&k=2";
+        // Each "Try again" while offline replaced the offline page with a failed copy of b, then a new offline page.
+        assertEquals(4, back(4, a, b, b, b, offlineFor(b)));
+        assertEquals(0, back(3, b, b, b, offlineFor(b)));
+    }
+
+    @Test
     public void offlineAddresses() {
         assertEquals(true, BackNavigator.isOffline(OFFLINE, OFFLINE));
         assertEquals(true, BackNavigator.isOffline(offlineFor("https://ebda3.me/"), OFFLINE));

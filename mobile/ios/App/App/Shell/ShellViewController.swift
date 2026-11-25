@@ -111,6 +111,28 @@ final class AppBridgeViewController: CAPBridgeViewController {
             navigationProxy = proxy // the web view only keeps a weak reference
             webView.navigationDelegate = proxy
         }
+
+        // Capacitor's message channel ("bridge") is open to every frame of a page on iOS; let only the page itself
+        // (the main frame) talk to the app, like Capacitor does on Android. Capacitor's own clean-up removes it by name.
+        if let handler = (bridge as? CapacitorBridge)?.webViewDelegationHandler {
+            let contents = webView.configuration.userContentController
+            contents.removeScriptMessageHandler(forName: "bridge")
+            contents.add(MainFrameOnlyMessages(target: handler), name: "bridge")
+        }
+    }
+}
+
+/// Passes on the bridge's messages only when they come from the page itself, never from a frame inside it.
+final class MainFrameOnlyMessages: NSObject, WKScriptMessageHandler {
+    private weak var target: WKScriptMessageHandler?
+
+    init(target: WKScriptMessageHandler) {
+        self.target = target
+    }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.frameInfo.isMainFrame else { return }
+        target?.userContentController(userContentController, didReceive: message)
     }
 }
 

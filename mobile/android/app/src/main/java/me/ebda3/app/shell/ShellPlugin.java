@@ -88,6 +88,9 @@ public class ShellPlugin extends Plugin {
 
     /** Set once something is on screen (a page or the "no connection" page): the launch screen can go. */
     public static final AtomicBoolean contentShown = new AtomicBoolean(false);
+    /** When the web view's process last died, and whether the next screen may reopen the page it was on. */
+    static volatile long lastWebViewDeath = -120_000;
+    public static volatile boolean restoreAfterRecreate = true;
 
     private LinkPolicy policy;
     private DeepLinks deepLinks;
@@ -313,9 +316,11 @@ public class ShellPlugin extends Plugin {
             // No browser that supports tabs: any app that can show the link (and nothing more if there is none).
             try {
                 activity.startActivity(new Intent(Intent.ACTION_VIEW, url).addCategory(Intent.CATEGORY_BROWSABLE));
-            } catch (ActivityNotFoundException none) {
+            } catch (RuntimeException none) {
                 Logger.warn(TAG, "No app can open " + url);
             }
+        } catch (RuntimeException e) {
+            Logger.error(TAG, "Could not open a browser tab", e);
         }
     }
 
@@ -328,10 +333,17 @@ public class ShellPlugin extends Plugin {
             if (scheme.equals("intent")) {
                 intent = Intent.parseUri(url.toString(), Intent.URI_INTENT_SCHEME);
                 fallback = intent.getStringExtra("browser_fallback_url");
-                // Only what a browser would allow: a viewable link, never a named component.
+                // Only what a browser would allow: a viewable link, never a named component or a file.
                 intent.setComponent(null);
                 intent.setSelector(null);
+                intent.setFlags(0);
                 intent.addCategory(Intent.CATEGORY_BROWSABLE);
+                Uri data = intent.getData();
+                String inner = data == null || data.getScheme() == null ? "" : data.getScheme().toLowerCase(Locale.ROOT);
+                if (LinkPolicy.BLOCKED_SCHEMES.contains(inner)) {
+                    Logger.warn(TAG, "Blocked an intent link to " + inner + ":");
+                    return;
+                }
             } else {
                 intent = new Intent(Intent.ACTION_VIEW, url);
                 intent.addCategory(Intent.CATEGORY_BROWSABLE);
@@ -345,6 +357,9 @@ public class ShellPlugin extends Plugin {
             } else {
                 Logger.warn(TAG, "No app can open " + scheme + ": links");
             }
+        } catch (RuntimeException e) {
+            // e.g. SecurityException or FileUriExposedException from a link meant to trick another app.
+            Logger.error(TAG, "Could not open a link", e);
         }
     }
 
@@ -412,6 +427,10 @@ public class ShellPlugin extends Plugin {
 
     /** Reopens the page that was on screen when Android stopped the app (only the shop's own pages). */
     public void restorePage(String url) {
+        if (!restoreAfterRecreate) {
+            restoreAfterRecreate = true;
+            return;
+        }
         String page = BackNavigator.isOffline(url, offlinePage()) ? BackNavigator.failedPage(url) : url;
         DeepLinks.Link link = deepLinks.parse(page);
         if (link.kind == DeepLinks.Kind.OPEN) getBridge().getWebView().loadUrl(link.url);
@@ -451,6 +470,7 @@ public class ShellPlugin extends Plugin {
     /** Opens a link where it belongs (see LinkPolicy). */
     @PluginMethod
     public void open(PluginCall call) {
+        if (refuseIfNotShop(call)) return;
         String url = call.getString("url");
         if (url == null || url.isEmpty()) {
             call.reject("url is required");
@@ -483,6 +503,7 @@ public class ShellPlugin extends Plugin {
     /** Prints the page on screen (the phone's print screen also saves as PDF). */
     @PluginMethod
     public void print(PluginCall call) {
+        if (refuseIfNotShop(call)) return;
         String name = call.getString("name", "ebda3");
         main.post(() -> {
             try {
@@ -506,6 +527,7 @@ public class ShellPlugin extends Plugin {
      */
     @PluginMethod
     public void saveFile(PluginCall call) {
+        if (refuseIfNotShop(call)) return;
         String data = call.getString("data");
         String mime = cleanMime(call.getString("mimeType"));
         String name = cleanName(call.getString("name"), mime);
@@ -571,10 +593,11 @@ public class ShellPlugin extends Plugin {
 
     private void shareFile(byte[] bytes, String name, String mime) throws IOException {
         File dir = new File(getContext().getCacheDir(), "shared");
-        File[] old = dir.listFiles();
-        if (old != null) for (File f : old) f.delete();
+        deleteOlderThan(dir, 24 * 3600 * 1000L);
         if (!dir.exists() && !dir.mkdirs()) throw new IOException("No cache folder");
-        File file = new File(dir, name);
+        File folder = new File(dir, Long.toString(System.currentTimeMillis()));
+        if (!folder.mkdirs()) throw new IOException("No cache folder");
+        File file = new File(folder, name);
         try (FileOutputStream out = new FileOutputStream(file)) {
             out.write(bytes);
         }
@@ -599,6 +622,7 @@ public class ShellPlugin extends Plugin {
     /** The shop's remote config can allow a few more hosts inside the app (e.g. a payment page). */
     @PluginMethod
     public void setRemoteConfig(PluginCall call) {
+        if (refuseIfNotShop(call)) return;
         JSArray hosts = call.getArray("inAppHosts", new JSArray());
         Set<String> set = new HashSet<>();
         try {
@@ -632,6 +656,7 @@ public class ShellPlugin extends Plugin {
      */
     @PluginMethod
     public void signIn(PluginCall call) {
+        if (refuseIfNotShop(call)) return;
         String url = call.getString("url");
         String verifier = call.getString("verifier");
         String next = call.getString("next");
@@ -696,6 +721,41 @@ public class ShellPlugin extends Plugin {
     }
 
     // ---------- helpers ----------
+
+    /** Deletes files (and folders) in dir last changed more than maxAgeMs ago. */
+    public static void deleteOlderThan(File dir, long maxAgeMs) {
+        File[] files = dir.listFiles();
+        if (files == null) return;
+        long now = System.currentTimeMillis();
+        for (File f : files) {
+            if (now - f.lastModified() < maxAgeMs) continue;
+            if (f.isDirectory()) deleteOlderThan(f, -1);
+            //noinspection ResultOfMethodCallIgnored
+            f.delete();
+        }
+    }
+
+    private volatile String currentUrl = "";
+
+    /** Called on the main thread as pages change (methods run on Capacitor's own thread and can't ask the web view). */
+    void onPageChanging(String url) {
+        currentUrl = url == null ? "" : url;
+    }
+
+    /**
+     * True when the page on screen is the shop's (or the app's own). Capacitor already limits its bridge to those
+     * pages' main frame on current web views; this also covers very old ones.
+     */
+    boolean fromShop() {
+        Uri u = Uri.parse(currentUrl);
+        return policy.isSite(u.getScheme(), u.getHost(), u.getPort()) || policy.isLocal(u.getScheme(), u.getHost(), u.getPort());
+    }
+
+    private boolean refuseIfNotShop(PluginCall call) {
+        if (fromShop()) return false;
+        call.reject("Not allowed on this page", "NOT_ALLOWED");
+        return true;
+    }
 
     String readAsset(String path) {
         try (InputStream in = getContext().getAssets().open(path); ByteArrayOutputStream out = new ByteArrayOutputStream()) {

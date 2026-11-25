@@ -88,9 +88,9 @@ public class ShellChromeClient extends BridgeWebChromeClient {
         Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
         if (intent.resolveActivity(activity.getPackageManager()) == null) return null;
         try {
+            // Photos stay a day: the page may read a picked photo again later (e.g. the photo-prints editor).
             File dir = new File(activity.getCacheDir(), "camera");
-            File[] old = dir.listFiles();
-            if (old != null) for (File f : old) f.delete();
+            ShellPlugin.deleteOlderThan(dir, 24 * 3600 * 1000L);
             if (!dir.exists() && !dir.mkdirs()) return null;
             cameraFile = File.createTempFile("photo-", ".jpg", dir);
             cameraUri = FileProvider.getUriForFile(activity, activity.getPackageName() + ".fileprovider", cameraFile);

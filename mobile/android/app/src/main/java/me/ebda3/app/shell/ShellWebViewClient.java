@@ -62,7 +62,14 @@ public class ShellWebViewClient extends BridgeWebViewClient {
     }
 
     @Override
+    public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+        super.onPageStarted(view, url, favicon);
+        shell.onPageChanging(url);
+    }
+
+    @Override
     public void onPageCommitVisible(WebView view, String url) {
+        shell.onPageChanging(url);
         super.onPageCommitVisible(view, url);
         shell.onContentVisible(url);
     }
@@ -82,7 +89,11 @@ public class ShellWebViewClient extends BridgeWebViewClient {
     @RequiresApi(api = Build.VERSION_CODES.O) // only called on Android 8+
     public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
         if (super.onRenderProcessGone(view, detail)) return true;
-        // The web view can't be used any more: start the screen again (it reopens the page it was on).
+        // The web view can't be used any more: start the screen again. It reopens the page it was on, unless the web
+        // view died again within a minute (that page may be what kills it): then it starts on the home page.
+        long now = android.os.SystemClock.elapsedRealtime();
+        ShellPlugin.restoreAfterRecreate = now - ShellPlugin.lastWebViewDeath > 60_000;
+        ShellPlugin.lastWebViewDeath = now;
         Logger.error(ShellPlugin.TAG, "Web view process gone (crash: " + detail.didCrash() + ")", null);
         shell.getActivity().recreate();
         return true;

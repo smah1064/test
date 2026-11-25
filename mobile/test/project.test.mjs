@@ -176,6 +176,21 @@ describe('iOS project', () => {
   });
 });
 
+describe('generated native files match the installed plugins (run "npx cap sync" after changing plugins)', () => {
+  const deps = Object.keys(JSON.parse(read('package.json')).dependencies);
+  const plugins = deps.filter((d) => !['@capacitor/core', '@capacitor/android', '@capacitor/ios'].includes(d)).sort();
+
+  it('iOS (CapApp-SPM/Package.swift)', () => {
+    const listed = [...read('ios/App/CapApp-SPM/Package.swift').matchAll(/path: "\.\.\/\.\.\/\.\.\/node_modules\/([^"]+)"/g)].map((m) => m[1]).sort();
+    assert.deepEqual(listed, plugins);
+  });
+
+  it('Android (capacitor.settings.gradle)', () => {
+    const listed = [...read('android/capacitor.settings.gradle').matchAll(/node_modules\/(@[^/]+\/[^/']+)\/android/g)].map((m) => m[1]).sort();
+    assert.deepEqual(listed, plugins);
+  });
+});
+
 describe('the page glue', () => {
   it('uses only JavaScript that Android web views from Chrome 60 understand', () => {
     const code = read('www/app-glue.js')
