@@ -5282,7 +5282,7 @@
       const share = await POD.api('/api/shares', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productId: st.product.id, color: st.colorId, size: st.sizeId, options: st.options || {}, sides: sidesPayload, previews }),
+        body: JSON.stringify({ productId: st.product.id, color: st.colorId, size: st.sizeId, sizePicked: Boolean(st.sizePicked), options: st.options || {}, sides: sidesPayload, previews }),
       });
       try { localStorage.setItem(shareKey(), JSON.stringify({ id: share.id, sig })); } catch (e) { /* private mode */ }
       openShareDialog(share);

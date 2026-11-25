@@ -23,9 +23,10 @@ const PERMS = [
 const ROLES = ['owner', 'finance', 'operations', 'catalogue'];
 const ROLE_PERMS = {
   owner: PERMS,
-  finance: ['orders.view', 'orders.amounts', 'payments', 'accounts.view', 'costs.edit', 'expenses.edit', 'coupons.view', 'coupons.edit', 'review.view'],
+  finance: ['orders.view', 'orders.amounts', 'payments', 'accounts.view', 'costs.edit', 'expenses.edit', 'coupons.view', 'coupons.edit'],
   operations: ['orders.view', 'orders.work', 'review.view', 'review.work', 'production', 'files', 'houses.view', 'houses.edit', 'customers.view', 'customers.contact', 'rights'],
-  catalogue: ['catalog.view', 'catalog.edit', 'library.view', 'library.edit', 'uploads', 'review.view', 'files'],
+  // (Each role only what its work needs: customers' files and proofs are operations' work.)
+  catalogue: ['catalog.view', 'catalog.edit', 'library.view', 'library.edit', 'uploads'],
 };
 const ROLE_NAMES = {
   owner: { en: 'Owner', ar: 'المالك' },

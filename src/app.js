@@ -1918,7 +1918,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       productId: sh.productId,
       productName: product ? product.name : sh.productId,
       color: sh.color,
-      size: sh.size,
+      size: sh.size && sh.size.open ? null : sh.size,
       sides: sh.sides.map((sd) => ({ id: sd.id, name: sd.name, preview: `/api/shares/${sh.id}/preview/${sd.id}.png` })),
       feedback: sh.feedback || [],
     };
@@ -1965,7 +1965,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const picked = cleanOptions(product, b.options);
     const share = {
       id, createdAt: new Date().toISOString(), productId: product.id,
-      color: { id: color.id, name: color.name, hex: color.hex }, size: { id: size.id, label: size.label },
+      // (No size chosen yet: the shared copy opens on the first one, but the share page doesn't name it, QA 25 Nov.)
+      color: { id: color.id, name: color.name, hex: color.hex }, size: { id: size.id, label: size.label, ...(b.sizePicked === false && product.sizes.length > 1 ? { open: true } : {}) },
       ...(picked.options ? { options: picked.options } : {}),
       sides: sides.map((sd) => ({ id: sd.id, name: sd.name })), feedback: [],
     };

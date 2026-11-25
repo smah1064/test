@@ -23,7 +23,8 @@
     }
   }
   function render() {
-    $('share-sub').textContent = [tr(share.productName), tr(share.color.name), tr(share.size.label)].join(POD.sep());
+    // (No size when the friend hasn't chosen one yet.)
+    $('share-sub').textContent = [tr(share.productName), tr(share.color.name), share.size ? tr(share.size.label) : ''].filter(Boolean).join(POD.sep());
     $('share-tabs').innerHTML = share.sides.length > 1
       ? share.sides.map((s) => `<button class="side-tab ${s.id === side ? 'active' : ''}" data-side="${esc(s.id)}">${esc(tr(s.name))}</button>`).join('')
       : '';
