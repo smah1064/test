@@ -337,9 +337,12 @@ function publicItem(item) {
     // One price per piece when every piece costs the same; null when sizes are priced differently (see quantities).
     unitPrice: item.unitPrice != null ? item.unitPrice : item.quantities && new Set(item.quantities.map((l) => l.unitPrice)).size > 1 ? null : round2(item.price / (item.copies || 1)),
     quantities: withPacks(item.productId, item.quantities),
-    approval: item.approval || null,
+    approval: item.approval ? (({ decidedBy, ...x }) => x)(item.approval) : null,
     // (The team's reason for sending an approved item back stays with the team: see adminItem.)
-    approvals: (item.approvals || []).map((a) => (a && a.action === 'reopened' ? { action: a.action, by: a.by, at: a.at, version: a.version } : a)),
+    // (The team's own words stay the team's: why a job was sent back, why the shop's edit prints without asking, and
+    // who on the team did it.)
+    approvals: (item.approvals || []).map((a) => (a && a.action === 'reopened' ? { action: a.action, by: a.by, at: a.at, version: a.version }
+      : a && (a.action === 'edited' || a.via === 'shop-edit') ? { action: a.action, by: a.by, at: a.at, version: a.version, ...(a.via ? { via: a.via } : {}), ...(a.note && !a.print ? { note: a.note } : {}) } : a)),
     review: item.review ? { needed: item.review.needed, reasons: (item.review.reasons || []).filter((r) => r !== 'reopened'), status: item.review.status, note: item.review.note || null } : null,
     preflight: item.preflight ? { status: item.preflight.status, checks: item.preflight.checks } : null,
     // The order id is the customer's key: a waiting proof can be opened from the order page.
@@ -467,6 +470,8 @@ function adminItem(order, item, index) {
     // Sent back to Review after the customer approved it: why, by the team (not shown to the customer).
     ...(item.review && item.review.reopenReason ? { review: { ...publicItem(item).review, reasons: item.review.reasons || [], reopenReason: item.review.reopenReason, ...(item.review.reopenWarnings ? { reopenWarnings: item.review.reopenWarnings } : {}) } } : {}),
     approvals: item.approvals || [],
+    // (The team sees who decided a shop's edit prints without asking.)
+    approval: item.approval || null,
   };
 }
 
@@ -1018,6 +1023,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       ...adminItem(order, item, order.items.indexOf(item)),
       proof: d ? await proofFor(d) : null,
       proofLink: item.proofToken ? `/proof?t=${item.proofToken}` : null,
+      // The shop's edit waiting for an owner to say it prints without asking (so nobody edits it twice meanwhile).
+      ...(() => {
+        const a = (store.db.approvals || []).find((x) => x.status === 'pending' && x.action === 'POST /api/admin/items/:itemId/shop-edit/print' && String(x.path || '').includes(`/items/${item.id}/`));
+        return a ? { shopEditWaiting: { id: a.id, at: a.at, by: a.by && a.by.name } } : {};
+      })(),
       reviseLink: reviseLinkOf(order, item),
       filesMatchApproval: d ? approvedFilesMatch(item, d) : false,
     };
@@ -1252,6 +1262,82 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     store.save();
     tellCustomer(order, item, 'proof', (item.review && item.review.note) || '', req);
     res.json({ proofLink: `/proof?t=${item.proofToken}` });
+  });
+
+  // ---------- The shop edits the customer's design itself (owner's request, 25 Nov) ----------
+  // From Review, "Edit in the editor" opens the job's design in the shop's editor. The new version is saved as a design
+  // like the customer's own (same product, same pieces, at the price agreed at checkout), then either goes to the
+  // customer for approval with a note of what changed, or is printed without asking, with a note of why: that is an
+  // owner's decision (held in Approvals for anyone else; an owner's own goes at once, logged).
+  const INVISIBLE_MARKS = /[­؜ᅟᅠ᠎​-‏‪-‮⁠-⁩ㅤ﻿ﾠ]/g;
+  const noteText = (v, max) => {
+    const t = typeof v === 'string' ? v.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, ' ').trim().slice(0, max) : '';
+    return /[\p{L}\p{N}\p{S}\p{P}]/u.test(t.replace(INVISIBLE_MARKS, '')) ? t : '';
+  };
+  function shopEditCheck(req) {
+    const found = store.findItem(req.params.itemId);
+    if (!found) throw new HttpError(404, 'itemNotFound');
+    const { order, item } = found;
+    if (item.kind || !UUID_RE.test(item.designId || '')) throw new HttpError(409, 'reviseNotEditable');
+    if (!REVIEW_STATUSES.includes(item.status)) throw new HttpError(409, 'notInReview');
+    if (replacingItems.has(item.id)) throw new HttpError(409, 'fileBeingReplaced');
+    const b = req.body || {};
+    // (Made from the version the job has now: one sent meanwhile, by the customer or a colleague, isn't overwritten.)
+    if (b.baseDesignId !== item.designId) throw new HttpError(409, 'shopEditStale');
+    const note = noteText(b.note, 1000);
+    if (!note) throw new HttpError(400, 'shopEditNoteNeeded');
+    const { d, delta, fields } = checkNewVersion(req, item, b.designId);
+    return { order, item, d, delta, fields, note };
+  }
+  function applyShopEdit(req, { order, item, d, delta, fields, note }, print) {
+    const w = req.adminWho || {};
+    const by = w.shown || w.name || null;
+    store.mutate((db) => {
+      const o = db.orders.find((x) => x.id === order.id);
+      const it = o && o.items.find((x) => x.id === item.id);
+      const nd = db.designs[d.id];
+      if (!it || !REVIEW_STATUSES.includes(it.status) || it.designId !== item.designId) throw new HttpError(409, 'shopEditStale');
+      if (!nd || nd.orderId) throw new HttpError(409, 'designOrdered');
+      const { now, sample } = putNewVersion(db, o, it, nd, { delta, fields, req });
+      const proofHash = proofHashOf(nd);
+      const reasons = [...new Set(['edited', ...((it.review && it.review.reasons) || [])])];
+      it.approvals = [...(it.approvals || []), { action: 'edited', by: 'shop', at: now, note, proofHash, version: nd.version, ...(by ? { name: by } : {}), ...(print ? { print: true } : {}) }];
+      if (print) {
+        // Printed without asking: approved by the shop for the customer, with who decided it (the note is the team's).
+        const decidedBy = w.approvedBy || by;
+        it.approval = { proofHash, version: nd.version, at: now, by: 'shop', via: 'shop-edit', sample: Boolean(sample), ...(decidedBy ? { decidedBy } : {}) };
+        it.approvals.push({ action: 'approved', by: 'shop', via: 'shop-edit', at: now, proofHash, version: nd.version, ...(decidedBy ? { name: decidedBy } : {}) });
+        it.status = 'queued';
+        it.review = { needed: true, reasons, status: 'done', shopNote: note };
+      } else {
+        it.status = 'awaiting_approval';
+        it.review = { needed: true, reasons, status: 'pending', note };
+        newProofLink(it);
+        it.shopProofAt = now;
+      }
+      delete it.reviseToken;
+      it.history.push({ status: it.status, at: now });
+    });
+    const saved = store.getOrder(order.id);
+    const it = saved.items.find((x) => x.id === item.id);
+    if (!print) tellCustomer(saved, it, 'proof', note, req);
+    return { saved, it };
+  }
+  app.post('/api/admin/items/:itemId/shop-edit', adminOnly, express.json({ limit: '4kb' }), async (req, res, next) => {
+    try {
+      const { saved, it } = applyShopEdit(req, shopEditCheck(req), false);
+      res.json(await reviewItem(saved, it));
+    } catch (e) {
+      next(e);
+    }
+  });
+  app.post('/api/admin/items/:itemId/shop-edit/print', adminOnly, express.json({ limit: '4kb' }), async (req, res, next) => {
+    try {
+      const { saved, it } = applyShopEdit(req, shopEditCheck(req), true);
+      res.json(await reviewItem(saved, it));
+    } catch (e) {
+      next(e);
+    }
   });
 
   // ---------- Name lists (variable data) ----------
@@ -4961,6 +5047,17 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   const picsOf = (a) => {
     if (!(a.status === 'pending' || a.status === 'failed')) return [];
     const b = bodyOf(a) || {};
+    // The shop's edit to print without asking: the new version next to the one the customer approved.
+    if (a.action === 'POST /api/admin/items/:itemId/shop-edit/print') {
+      const nd = UUID_RE.test(String(b.designId || '')) && store.getDesign(b.designId);
+      const od = UUID_RE.test(String(b.baseDesignId || '')) && store.getDesign(b.baseDesignId);
+      const out = [];
+      for (const [d, en, ar] of [[od, 'Approved by the customer', 'اللي العميل وافق عليه'], [nd, 'The shop\'s edit (to print)', 'تعديل إبداع (للطباعة)']]) {
+        if (!d || !Array.isArray(d.sides)) continue;
+        for (const sd of d.sides.slice(0, 4)) out.push({ url: `/files/designs/${d.id}/${sd.id}-proof.png?v=${d.version || 1}`, name: enAr(`${en} · ${(sd.name || {}).en || sd.id}`, `${ar} · ${(sd.name || {}).ar || (sd.name || {}).en || sd.id}`) });
+      }
+      return out;
+    }
     // A product photo to delete, or a new photo order / main photo: the photos themselves, as the owner will see
     // them in the shop (they showed as hex ids. QA 25 Nov).
     const ph = /^\/api\/admin\/catalog\/([^/?]+)\/photos(?:\/([^/?]+))?$/.exec(a.path || '');
@@ -5085,6 +5182,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const n = accounting.money(v);
       return n === null || v === '' ? (lang === 'ar' ? 'اتمسحت' : 'cleared') : n === undefined ? String(v).slice(0, 20) : moneyIn(n, lang);
     };
+    if (key === 'POST /api/admin/items/:itemId/shop-edit/print') {
+      const f = store.findItem(p.itemId);
+      const name = (l) => (f ? `${l === 'ar' ? `\u2066#${f.order.number}\u2069` : `#${f.order.number}`} · ${(f.item.productName || {})[l] || (f.item.productName || {}).en || ''}` : '');
+      const why = typeof b.note === 'string' ? b.note.trim().slice(0, 300) : '';
+      return enAr([name('en'), why].filter(Boolean).join(': '), [name('ar'), why].filter(Boolean).join(': '));
+    }
     if (key === 'PATCH /api/admin/items/:itemId/cost') {
       // (Which item: an order can have several.)
       const f = store.findItem(p.itemId);
@@ -5102,6 +5205,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   }
   /** The checks a change can fail before it reaches the owner (so the team member hears now, not later). */
   const APPROVAL_CHECKS = {
+    // (The shop's edit: checked now, so a stale or empty one is refused at once; the design is kept as it is.)
+    'POST /api/admin/items/:itemId/shop-edit/print': (req) => {
+      shopEditCheck(req);
+      const b = req.body || {};
+      req.body = { designId: b.designId, baseDesignId: b.baseDesignId, note: noteText(b.note, 1000) };
+    },
     'PUT /api/admin/catalog/:id': (req) => {
       const p = getProduct(req.params.id);
       if (!p) throw new HttpError(404, 'unknownProduct');

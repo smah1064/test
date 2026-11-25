@@ -2969,8 +2969,22 @@
           <button class="btn btn-primary" type="button" data-rv-act="approve" data-rv-id="${id}" ${busy ? 'disabled' : ''}>✓ ${esc(t('rv.approve'))}</button>
           <button class="btn" type="button" data-rv-act="changes" data-rv-id="${id}" ${busy ? 'disabled' : ''}>✎ ${esc(t('rv.askChanges'))}</button>
         </div>
+        ${rvShopEdit(item)}
         ${msgHtml(rvMsg[item.id])}
       </section>`;
+  }
+  /**
+   * The shop edits the design itself (owner's request, 25 Nov): the editor opens with the job's design; saved, it goes
+   * to the customer to approve, or prints without asking (an owner's decision; anyone else asks an owner).
+   */
+  function rvShopEdit(item) {
+    if ((item.kind && item.kind !== 'product') || !/^[0-9a-f-]{36}$/i.test(item.designId || '') || !item.orderId) return '';
+    if (item.shopEditWaiting) return `<p class="rv-hint small">⏳ ${esc(t('rv.shopEditWaiting', { by: item.shopEditWaiting.by || '—' }))}</p>`;
+    return `
+        <div class="rv-shopedit" style="margin-top:10px">
+          <button class="btn" type="button" data-rv-shopedit="${esc(item.id)}" ${rvBusy.has(item.id) ? 'disabled' : ''}>🖌 ${esc(t('rv.shopEdit'))}</button>
+          <p class="muted small" style="margin:4px 0 0">${esc(t(access && access.owner ? 'rv.shopEditHelp' : 'rv.shopEditHelpTeam'))}</p>
+        </div>`;
   }
   /** Did the customer approve exactly the files that are there now? (Else approving sends them the proof first.) */
   const customerApproved = (item) => Boolean(item.approval && item.filesMatchApproval !== false && (!proofOf(item).proofHash || item.approval.proofHash === proofOf(item).proofHash));
@@ -3145,6 +3159,13 @@
     }
     const act = e.target.closest('[data-rv-act]');
     if (act) return rvAction(act.dataset.rvId, act.dataset.rvAct);
+    // (A new tab of this window: it keeps this tab's sign-in, which the editor uses to save.)
+    const se = e.target.closest('[data-rv-shopedit]');
+    if (se) {
+      const it = rvFind(se.dataset.rvShopedit);
+      if (it) window.open(`/editor?design=${encodeURIComponent(it.designId)}&shopEdit=${encodeURIComponent(it.orderId)}.${encodeURIComponent(it.id)}`, '_blank');
+      return;
+    }
     const copy = e.target.closest('[data-rv-copy]');
     if (copy) {
       const input = document.getElementById('rv-link-' + copy.dataset.rvCopy);

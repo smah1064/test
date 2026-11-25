@@ -8,6 +8,8 @@ const MESSAGES = {
   sidesRequired: { en: 'sides is required', ar: 'لازم تحدد أوجه التصميم' },
   designAtLeastOne: { en: 'Design at least one side before adding to cart', ar: 'صمّم وجه واحد على الأقل قبل ما تضيفه للسلة' },
   sideEmpty: { en: 'The {side} side has no design', ar: 'مفيش تصميم على وجه {side}' },
+  shopEditStale: { en: 'This job changed while you were editing it (a new version from the customer, or a colleague\'s decision). Open it again from Review.', ar: 'الشغلانة دي اتغيرت وانت بتعدّلها (نسخة جديدة من العميل أو قرار من زميل). افتحها تاني من المراجعة.' },
+  shopEditNoteNeeded: { en: 'Write what you changed (for the customer), or why it can print without asking them (for the owner).', ar: 'اكتب انت غيّرت إيه (للعميل)، أو ليه ينفع تتطبع من غير ما نسأله (لصاحب الموقع).' },
   filmBeingMade: { en: 'This job is being put on a DTF film right now. Try again in a moment.', ar: 'الشغلانة دي بتتحط على فيلم DTF دلوقتي. جرّب تاني بعد لحظة.' },
   filmItemChanged: { en: 'A job on this film was sent back to Review or changed while the film was being made. Make the film again.', ar: 'شغلانة على الفيلم ده رجعت للمراجعة أو اتغيرت وهو بيتعمل. اعمل الفيلم تاني.' },
   fileBeingReplaced: { en: 'A corrected file for this job is being saved. Try again in a moment.', ar: 'ملف متصلّح للشغلانة دي بيتحفظ دلوقتي. جرّب تاني بعد لحظة.' },

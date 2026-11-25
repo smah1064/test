@@ -387,6 +387,21 @@
       <div class="row" style="justify-content:flex-end"><button class="btn" type="button" id="size-ask-cancel" data-i18n="houses.cancel"></button></div>
     </div>
   </div>
+  <!-- The shop's own edit (from the dashboard's Review tab): what changed, then to the customer or to print. -->
+  <div class="pv-modal" id="shop-edit-ask" hidden>
+    <div class="card rights-box" role="dialog" aria-modal="true" aria-labelledby="shop-edit-title">
+      <h3 id="shop-edit-title" data-i18n="shopEdit.title"></h3>
+      <p class="small muted" id="shop-edit-help" style="line-height:1.6"></p>
+      <label class="small" for="shop-edit-note"><b data-i18n="shopEdit.noteLabel"></b></label>
+      <textarea id="shop-edit-note" rows="3" maxlength="1000" dir="auto" style="width:100%;margin-top:4px"></textarea>
+      <p class="small" id="shop-edit-msg" role="alert" style="color:var(--danger,#b42318);margin:6px 0 0" hidden></p>
+      <div class="row" style="flex-wrap:wrap;gap:8px;margin-top:12px;justify-content:flex-end">
+        <button class="btn" type="button" id="shop-edit-cancel" data-i18n="houses.cancel"></button>
+        <button class="btn" type="button" id="shop-edit-print"></button>
+        <button class="btn btn-primary" type="button" id="shop-edit-send" data-i18n="shopEdit.send"></button>
+      </div>
+    </div>
+  </div>
   <div class="overlay-busy" id="busy" hidden><div><div class="spinner"></div><span id="busy-text"></span></div></div>
 
   <script src="/vendor/fabric-5.3.0.min.js"></script>

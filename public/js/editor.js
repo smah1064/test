@@ -129,6 +129,7 @@
     method: 'print', // (older drafts) 'embroidery': the front was embroidered; now the embroidery is its own layer, st.designs.emb
     editingCartIndex: null,
     revise: null, // { orderId, itemId }: a new version of an ordered item the shop sent back for changes
+    shopEdit: null, // { orderId, itemId, baseDesignId, owner }: the shop's own edit of an ordered item (dashboard, Review)
     editingDesignId: null,
     preview: false,
     exporting: false,
@@ -174,8 +175,11 @@
       // (Or the item's own edit link from the shop or the proof page: ?rt=…, no order key needed.)
       const rt = /^[A-Za-z0-9_-]{20,40}$/.test(params.get('rt') || '') ? params.get('rt') : '';
       if (rv) st.revise = { orderId: rv[1], itemId: rv[2], key: POD.orderKey(rv[1], params.get('k')), rt };
+      // The shop's own edit, opened from the dashboard's Review tab: ?shopEdit=<order id>.<item id> (signed in there).
+      const se = /^([0-9a-f-]{36})\.([0-9a-f-]{36})$/i.exec(params.get('shopEdit') || '');
+      if (se && !rv) st.shopEdit = { orderId: se[1], itemId: se[2], baseDesignId: saved.id, owner: false };
       // (A product the shop doesn't sell now opens another one: that is a new design, not this cart item.)
-      if (!rv && st.product.id === saved.productId && params.get('cart') !== null && Number.isInteger(idx) && cart[idx] && cart[idx].designId === saved.id) {
+      if (!rv && !se && st.product.id === saved.productId && params.get('cart') !== null && Number.isInteger(idx) && cart[idx] && cart[idx].designId === saved.id) {
         st.editingCartIndex = idx;
         st.editingDesignId = saved.id;
       }
@@ -4256,7 +4260,7 @@
     const h = hist();
     $('undo').disabled = h.i <= 0;
     $('redo').disabled = h.i >= h.stack.length - 1;
-    $('add-to-cart').textContent = t(st.revise ? 'revise.send' : st.editingCartIndex !== null ? 'cart.update' : 'cart.add');
+    $('add-to-cart').textContent = t(st.shopEdit ? 'shopEdit.button' : st.revise ? 'revise.send' : st.editingCartIndex !== null ? 'cart.update' : 'cart.add');
     renderSideTabs();
     renderLayers();
     renderCheck();
@@ -5505,6 +5509,48 @@
     if (p.merge && st.mergeList) return false;
     return new Set(qtyLines().map((l) => l.size)).size < 2;
   }
+  /** The dashboard's sign-in in this tab (the Review tab opens the editor with it). */
+  function adminToken() {
+    try { return sessionStorage.getItem('pod-admin-token') || ''; } catch (e) { return ''; }
+  }
+  /** The shop's edit: the note, then "to the customer" or "print without asking". Resolves { print, note } or null. */
+  function askShopEdit() {
+    const box = $('shop-edit-ask');
+    if (!box) return Promise.resolve(null);
+    const owner = Boolean(st.shopEdit && st.shopEdit.owner);
+    $('shop-edit-help').textContent = t(owner ? 'shopEdit.help' : 'shopEdit.helpTeam');
+    $('shop-edit-print').textContent = t(owner ? 'shopEdit.print' : 'shopEdit.printTeam');
+    $('shop-edit-msg').hidden = true;
+    box.hidden = false;
+    $('shop-edit-note').focus();
+    return new Promise((resolve) => {
+      const done = (v) => {
+        box.hidden = true;
+        box.removeEventListener('click', onClick);
+        document.removeEventListener('keydown', onKey);
+        resolve(v);
+      };
+      const onKey = (e) => { if (e.key === 'Escape') done(null); };
+      const onClick = (e) => {
+        if (e.target === box || e.target.closest('#shop-edit-cancel')) return done(null);
+        const send = e.target.closest('#shop-edit-send');
+        const print = e.target.closest('#shop-edit-print');
+        if (!send && !print) return;
+        const note = $('shop-edit-note').value.trim();
+        // (Invisible marks only are no note: the server says so too.)
+        if (!/[\p{L}\p{N}\p{S}\p{P}]/u.test(note.replace(/[\u00ad\u061c\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2069\u3164\ufeff\uffa0]/g, ''))) {
+          $('shop-edit-msg').textContent = t('shopEdit.noteNeeded');
+          $('shop-edit-msg').hidden = false;
+          $('shop-edit-note').focus();
+          return;
+        }
+        if (print && owner && !confirm(t('shopEdit.printConfirm'))) return;
+        done({ print: Boolean(print), note });
+      };
+      box.addEventListener('click', onClick);
+      document.addEventListener('keydown', onKey);
+    });
+  }
   function askSize() {
     const box = $('size-ask');
     const lines = qtyLines();
@@ -5587,6 +5633,13 @@
     // Pictures imported from other sites: the customer confirms the rights first.
     const imported = hasImports();
     if (imported && !(await confirmRights())) return;
+    // The shop's own edit: what changed, and where it goes (asked before anything is saved).
+    let shopChoice = null;
+    if (st.shopEdit) {
+      if (!adminToken()) return toast(t('shopEdit.signIn'), 'error');
+      shopChoice = await askShopEdit();
+      if (!shopChoice) return;
+    }
 
     const prevZoom = st.zoom;
     if (st.zoom !== 1) setZoom(1);
@@ -5675,6 +5728,23 @@
       busy(true, t('busy.finishing'));
       const design = await POD.api(`/api/designs/${created.id}/complete`, { method: 'POST', headers: { 'x-upload-token': created.uploadToken } });
 
+      // The shop's own edit: to the customer to approve, or to print without asking (an owner's decision).
+      if (st.shopEdit) {
+        const se = st.shopEdit;
+        const res = await fetch(`/api/admin/items/${encodeURIComponent(se.itemId)}/shop-edit${shopChoice.print ? '/print' : ''}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken()}`, 'x-lang': POD.lang },
+          body: JSON.stringify({ designId: design.id, baseDesignId: se.baseDesignId, note: shopChoice.note }),
+        });
+        const out = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(out.error || t('msg.requestFailed', { status: res.status }));
+        st.dirty = false;
+        alert(t(res.status === 202 ? 'shopEdit.held' : shopChoice.print ? 'shopEdit.printed' : 'shopEdit.sent'));
+        // Back to the dashboard (the tab it was opened from, if it's still there).
+        if (window.opener && !window.opener.closed) window.close();
+        location.href = '/admin';
+        return;
+      }
       // A new version of an ordered item the shop sent back for changes: it replaces the item's design.
       if (st.revise) {
         await POD.api(`/api/orders/${encodeURIComponent(st.revise.orderId)}/items/${encodeURIComponent(st.revise.itemId)}/revise`, {
@@ -5936,6 +6006,20 @@
   /** What opens "send a new version": the order's key and/or the item's own edit link. */
   function reviseHeaders() {
     return { ...POD.orderHeaders(st.revise.key), ...(st.revise.rt ? { 'x-revise-token': st.revise.rt } : {}) };
+  }
+  if (st.shopEdit) {
+    if ($('save-draft')) $('save-draft').hidden = true; // one way out: save the shop's edit
+    const bar = document.createElement('div');
+    bar.className = 'draft-bar revise-bar';
+    bar.setAttribute('role', 'status');
+    bar.innerHTML = `<span>${esc(t(adminToken() ? 'shopEdit.bar' : 'shopEdit.signIn'))}</span>`;
+    document.body.appendChild(bar);
+    // (An owner prints without asking at once; anyone else asks an owner: the dialog says which.)
+    if (adminToken()) {
+      fetch('/api/admin/session', { headers: { Authorization: `Bearer ${adminToken()}` } }).then((r) => (r.ok ? r.json() : null)).then((me) => {
+        if (me && st.shopEdit) st.shopEdit.owner = Boolean(me.emergency || (Array.isArray(me.roles) && me.roles.includes('owner')));
+      }).catch(() => {});
+    }
   }
   if (st.revise) {
     if ($('save-draft')) $('save-draft').hidden = true; // one way out: send the new version

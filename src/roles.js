@@ -70,6 +70,10 @@ const ROUTES = {
   'GET /api/admin/review': { perm: 'review.view' },
   'POST /api/admin/items/:itemId/review': { perm: 'review.work', label: L('Review decision', 'قرار مراجعة') },
   'PUT /api/admin/items/:itemId/replacement/:side': { perm: 'review.work', label: L('Replaced a print file', 'استبدل ملف طباعة') },
+  // The shop edits the customer's design in the editor: to the customer for approval (daily work), or printed without
+  // asking (an owner's decision: held for an owner's approval when anyone else asks).
+  'POST /api/admin/items/:itemId/shop-edit': { perm: 'review.work', label: L('Edited the design and sent it to the customer', 'عدّل التصميم وبعته للعميل يوافق عليه') },
+  'POST /api/admin/items/:itemId/shop-edit/print': { perm: 'review.work', approve: true, label: L('Edited the design to print without asking the customer', 'عدّل التصميم للطباعة من غير ما يسأل العميل') },
   'POST /api/admin/items/:itemId/resend-proof': { perm: 'review.work', label: L('Sent the proof again', 'بعت البروفة تاني') },
   'GET /api/admin/queue': { perm: 'orders.view' },
   'GET /api/admin/orders': { perm: 'orders.view' },
