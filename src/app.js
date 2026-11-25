@@ -1941,8 +1941,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         if (!(e instanceof artwork.ArtworkError)) throw e;
         if (e.reason === 'busy') throw new HttpError(429, 'tooFast');
         console.warn('[artwork] could not convert a', artwork.sniff(buf).kind, 'file of', buf.length, 'bytes:', e.reason, String(e.detail || '').slice(0, 400));
-        throw new HttpError(400, e.reason === 'empty' ? 'artworkEmpty' : 'artworkBad');
+        throw new HttpError(400, e.reason === 'empty' ? 'artworkEmpty' : e.reason === 'locked' ? 'artworkLocked' : 'artworkBad');
       }
+      // Several artboards (a logo "master" .ai): the first is drawn, and the editor says so.
+      if (out.pages > 1) res.set('X-Artwork-Pages', String(Math.min(out.pages, 999)));
       res.type('image/png').send(out.png);
     } catch (e) {
       next(e);

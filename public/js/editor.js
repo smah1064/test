@@ -1664,18 +1664,36 @@
         throw new Error((body && body.error) || t('msg.badImage'));
       }
       const blob = await res.blob();
+      // A file with several artboards: the first is used (said, so the customer isn't surprised).
+      const boards = Number(res.headers.get('x-artwork-pages')) || 1;
+      if (boards > 1) toast(t('msg.firstArtboard', { n: POD.num(boards) }));
       return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.png', { type: 'image/png' });
     } finally {
       busy(false);
     }
   }
+  /** A picture saved with an .ai / .eps / .pdf name (a PNG, JPEG, GIF, WebP or SVG inside): used as the picture it is. */
+  async function pictureInside(file) {
+    const b = new Uint8Array(await file.slice(0, 512).arrayBuffer());
+    const at = (i, ...v) => v.every((x, k) => b[i + k] === x);
+    if (at(0, 0x89, 0x50, 0x4e, 0x47)) return { type: 'image/png', ext: '.png' };
+    if (at(0, 0xff, 0xd8, 0xff)) return { type: 'image/jpeg', ext: '.jpg' };
+    if (at(0, 0x47, 0x49, 0x46, 0x38)) return { type: 'image/gif', ext: '.gif' };
+    if (at(0, 0x52, 0x49, 0x46, 0x46) && at(8, 0x57, 0x45, 0x42, 0x50)) return { type: 'image/webp', ext: '.webp' };
+    if (/^\s*(<\?xml[^>]*\?>\s*)?(<!--[\s\S]*?-->\s*)*(<!DOCTYPE svg[^>]*>\s*)?<svg[\s>]/i.test(new TextDecoder().decode(b))) return { type: 'image/svg+xml', ext: '.svg' };
+    return null;
+  }
   async function addImageFile(file, { source } = {}) {
     if (!file) return;
     if (isVectorFile(file)) {
-      try {
-        file = await convertVectorFile(file);
-      } catch (e) {
-        return toast(e.message, 'error');
+      const real = await pictureInside(file);
+      if (real) file = new File([file], file.name.replace(/\.[^.]+$/, '') + real.ext, { type: real.type });
+      else {
+        try {
+          file = await convertVectorFile(file);
+        } catch (e) {
+          return toast(e.message, 'error');
+        }
       }
     }
     const svg = isSvgFile(file);

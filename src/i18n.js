@@ -113,6 +113,7 @@ const MESSAGES = {
   linkExpired: { en: 'This download link has expired or is not valid. Ask the shop for a new one.', ar: 'رابط التحميل ده انتهى أو مش شغال. اطلب رابط جديد من المتجر.' },
   artworkType: { en: 'Please choose an AI, EPS, PDF, JPG or PNG file (this one can\'t be read)', ar: 'من فضلك اختار ملف AI أو EPS أو PDF أو JPG أو PNG (الملف ده مش بيتقري)' },
   fieldsUnfilled: { en: 'Your design has a field in { } braces. Upload your name list, or type the real words instead.', ar: 'التصميم فيه حقل بين { }. ارفع قائمة الأسماء أو اكتب الكلام الحقيقي مكانه.' },
+  artworkLocked: { en: 'This file is locked with a password. Save it again without a password, then upload it.', ar: 'الملف ده مقفول بكلمة سر. احفظه تاني من غير كلمة سر وارفعه.' },
   artworkBad: { en: 'We could not open this file. Save it from Illustrator as "PDF compatible" AI or as EPS, then try again.', ar: 'معرفناش نفتح الملف ده. احفظه من Illustrator كملف AI متوافق مع PDF أو كملف EPS، وبعدين جرّب تاني.' },
   pdfOnly: { en: 'Please choose a PDF file.', ar: 'من فضلك اختار ملف PDF.' },
   pdfBad: { en: 'We could not read the pages of this PDF. Save it again as a standard PDF (for example "Save as PDF" or "Export to PDF") and try again.', ar: 'معرفناش نقرا صفحات ملف الـ PDF ده. احفظه تاني كـ PDF عادي (مثلًا "حفظ كـ PDF" أو "تصدير PDF") وجرّب تاني.' },

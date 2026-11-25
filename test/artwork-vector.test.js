@@ -335,6 +335,15 @@ test('the converter says how many artboards a PDF-based file has, and when a PDF
     d.end();
   });
   await assert.rejects(artwork.convertArtwork(locked, { px: 600 }), (e) => e.reason === 'locked');
-  const r = await fetch(`${base}/api/artwork`, { method: 'POST', body: locked });
-  assert.strictEqual(r.status, 400, 'still refused by the shop (with its general message until the route says "locked")');
+  const r = await fetch(`${base}/api/artwork`, { method: 'POST', headers: { 'x-lang': 'en' }, body: locked });
+  assert.strictEqual(r.status, 400);
+  const body = await r.json();
+  assert.strictEqual(body.code, 'artworkLocked');
+  assert.match(body.error, /locked with a password/);
+  // Several artboards: the first is drawn, and the answer says how many (the editor tells the customer).
+  const multi = await fetch(`${base}/api/artwork`, { method: 'POST', body: three });
+  assert.strictEqual(multi.status, 200);
+  assert.strictEqual(multi.headers.get('x-artwork-pages'), '3');
+  const single = await fetch(`${base}/api/artwork`, { method: 'POST', body: Buffer.from('%!PS-Adobe-3.0 EPSF-3.0\n%%BoundingBox: 0 0 10 10\n%%EndComments\n0 0 10 10 rectfill showpage\n') });
+  assert.strictEqual(single.headers.get('x-artwork-pages'), null);
 });
