@@ -5314,7 +5314,52 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     res.set('Content-Security-Policy', pageCsp.get(name));
     res.type('html').send(html);
   };
-  // Short share links: the share page with a link preview (WhatsApp, Facebook).
+  // ---------- Link previews (WhatsApp, Facebook) ----------
+  // A shared design, a product, a ready design or a kids book previews as itself (its name and picture), not as
+  // the shop's general card: the page's own og:/twitter: tags are replaced (QA 25 Nov).
+  const escAttr = (v) => String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  function withPreview(html, { title, description, image, url }) {
+    const tags = [
+      `<meta property="og:title" content="${escAttr(title)}">`,
+      `<meta property="og:description" content="${escAttr(description)}">`,
+      `<meta property="og:image" content="${escAttr(image)}">`,
+      `<meta property="og:url" content="${escAttr(url)}">`,
+      '<meta property="og:type" content="website">',
+      '<meta name="twitter:card" content="summary_large_image">',
+    ].join('\n  ');
+    return html
+      .replace(/[ \t]*<meta (?:property="og:[^"]*"|name="twitter:[^"]*")[^>]*>\n?/g, '')
+      .replace(/<title>[\s\S]*?<\/title>/, `<title>${escAttr(title)}</title>`)
+      .replace('</head>', `  ${tags}\n</head>`);
+  }
+  const both = (t) => (t && typeof t === 'object' ? [t.ar, t.en].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).join(' · ') : String(t || ''));
+  /** The preview of /product, /design or /book for its id, or null (the general card). */
+  function previewFor(name, req) {
+    const origin = linkBase(req);
+    const thumb = (productId, colorId) => {
+      const p = getProduct(productId);
+      const c = p && (p.colors.find((x) => x.id === colorId) || p.colors[0]);
+      return c ? `${origin}/api/thumbs/${p.id}/${c.id}.webp` : `${origin}/img/og-ebda3.png`;
+    };
+    if (name === 'product') {
+      const p = getProduct(String(req.query.id || ''));
+      if (!p || !catalog.visible(p)) return null;
+      return { title: `${both(p.name)} · إبداع`, description: both(p.description), image: thumb(p.id), url: `${origin}/product?id=${encodeURIComponent(p.id)}` };
+    }
+    if (name === 'design') {
+      const d = library.shown(String(req.query.id || ''));
+      if (!d) return null;
+      const image = d.uploaded ? `${origin}/library-art/${d.id}/web.png` : d.kind === 'objects' && fs.existsSync(library.previewPath(d.id)) ? `${origin}/api/library/${d.id}/preview.png` : thumb(String(req.query.product || d.product || ''), String(req.query.color || d.color || ''));
+      return { title: `${both(d.name)} · إبداع`, description: 'تصميم جاهز تطبعه على منتجك، أو تعدّله على ذوقك · A ready design to print as it is, or make it yours', image, url: `${origin}/design?id=${encodeURIComponent(d.id)}` };
+    }
+    if (name === 'book') {
+      const b = bookFor(String(req.query.b || ''));
+      if (!b) return null;
+      return { title: `${both(b.title)} · إبداع`, description: both(b.blurb), image: `${origin}/api/books/${b.id}/sample/0.jpg`, url: `${origin}/book?b=${encodeURIComponent(b.id)}` };
+    }
+    return null;
+  }
+  // Short share links: the share page with the shared design as its preview.
   app.get('/s/:id', (req, res, next) => {
     const sh = readShare(req.params.id);
     const html = pageFor('share');
@@ -5324,23 +5369,19 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const product = getProduct(sh.productId);
     // The shop's own address (never whatever Host header the request came with).
     const origin = linkBase(req);
-    const escAttr = (v) => String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-    const title = `${product ? product.name.ar : 'تصميم'} · ${product ? product.name.en : 'Design'} · ebda3`;
-    const tags = [
-      `<meta property="og:title" content="${escAttr(title)}">`,
-      `<meta property="og:description" content="${escAttr('شوف تصميمي وقولي رأيك · What do you think of my design?')}">`,
-      `<meta property="og:image" content="${escAttr(`${origin}/api/shares/${sh.id}/preview/${sh.sides[0].id}.png`)}">`,
-      `<meta property="og:url" content="${escAttr(`${origin}/s/${sh.id}`)}">`,
-      '<meta property="og:type" content="website">',
-      '<meta name="twitter:card" content="summary_large_image">',
-    ].join('\n  ');
-    sendPage(res, 'share', html.replace('</head>', `  ${tags}\n</head>`));
+    sendPage(res, 'share', withPreview(html, {
+      title: `${product ? both(product.name) : 'تصميم · Design'} · إبداع`,
+      description: 'شوف تصميمي وقولي رأيك · What do you think of my design?',
+      image: `${origin}/api/shares/${sh.id}/preview/${sh.sides[0].id}.png`,
+      url: `${origin}/s/${sh.id}`,
+    }));
   });
   app.get(/^\/(?:([a-z0-9-]+)(?:\.html)?)?$/, (req, res, next) => {
     const name = req.params[0] || 'index';
     const html = pageFor(name);
     if (!html) return next();
-    sendPage(res, name, html);
+    const preview = (name === 'product' || name === 'design' || name === 'book') && previewFor(name, req);
+    sendPage(res, name, preview ? withPreview(html, preview) : html);
   });
   app.use(express.static(publicDir, {
     extensions: ['html'],

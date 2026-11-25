@@ -131,3 +131,33 @@ test('what the editor warned about (past the edge, embroidery) reaches the proof
   const editor = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'editor.js'), 'utf8');
   for (const k of ['check.cut', 'check.embSmallText', 'check.embPhoto', 'check.embGradient', 'check.embColors']) assert.ok(editor.includes(`i.key === '${k}'`), k);
 });
+
+test('links to a product, a ready design, a kids book and a shared design preview as themselves (WhatsApp)', async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pod-qa0801o-'));
+  const app = createApp({ dataDir, adminPassword: 'secret-owner-pass', cleanupEvery: 0, requireApproval: false });
+  const server = await new Promise((resolve) => { const s = app.listen(0, () => resolve(s)); });
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const meta = (html, prop) => [...html.matchAll(new RegExp(`<meta property="${prop}" content="([^"]*)">`, 'g'))].map((m) => m[1]);
+  try {
+    const product = await (await fetch(`${base}/product?id=mug`)).text();
+    assert.strictEqual(meta(product, 'og:image').length, 1, 'one picture only (the general card is gone)');
+    assert.match(meta(product, 'og:image')[0], /\/api\/thumbs\/mug\//);
+    assert.match(meta(product, 'og:title')[0], /مج|Mug/);
+    assert.match(product, /<title>[^<]*(مج|Mug)[^<]*<\/title>/);
+    const lib = await (await fetch(`${base}/api/library`)).json();
+    const d = lib.designs[0];
+    const design = await (await fetch(`${base}/design?id=${encodeURIComponent(d.id)}`)).text();
+    assert.ok(meta(design, 'og:title')[0].includes(d.name.en), meta(design, 'og:title')[0]);
+    const book = await (await fetch(`${base}/book?b=space-hero`)).text();
+    assert.match(meta(book, 'og:image')[0], /\/api\/books\/space-hero\/sample\/0\.jpg$/);
+    // Unknown ids and other pages keep the general card; nothing typed in the address is echoed.
+    const odd = await (await fetch(`${base}/product?id=%22%3E%3Cscript%3E`)).text();
+    assert.match(meta(odd, 'og:image')[0], /og-ebda3\.png$/);
+    assert.ok(!odd.includes('<script>"'), 'no echo');
+    const home = await (await fetch(`${base}/`)).text();
+    assert.match(meta(home, 'og:image')[0], /og-ebda3\.png$/);
+  } finally {
+    server.close();
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});
