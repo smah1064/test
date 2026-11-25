@@ -727,9 +727,11 @@
       };
       /** The question for the shop's prices of these items, with this coupon code. */
       const quoteRequest = (cart, code) => ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ designIds: cart.map((i) => i.designId), couponCode: code, delivery, sample: wantsSample(cart), phone: (document.getElementById('phone') || {}).value || undefined }) });
+      let quoteFailed = null; // why the last price check got no answer (no connection, too many tries…)
       async function refreshPrices({ announce = false } = {}) {
         const cart = POD.getCart();
         forgetRemoved(cart);
+        quoteFailed = null;
         if (!cart.length) { quote = null; return; }
         // The shop answers in the page's language: kept with its answer (see couponRefusal).
         const lang = POD.lang;
@@ -738,6 +740,7 @@
           quote.lang = lang;
         } catch (e) {
           quote = null;
+          quoteFailed = e || new Error('');
           return;
         }
         const gone = [];
@@ -1158,6 +1161,7 @@
       // as "عيد20", is told so here in the page's words, without asking the shop (it isn't counted as a wrong try).
       const notLatin = (code) => /\p{L}/u.test(code.replace(/[A-Z]/g, ''));
       const applyCoupon = async () => {
+        if (document.getElementById('coupon-apply').disabled) return; // (Enter pressed while the shop answers)
         const code = couponOf(document.getElementById('coupon').value);
         couponNote = null;
         if (notLatin(code)) {
@@ -1172,7 +1176,20 @@
         }
         setCoupon(code);
         document.getElementById('coupon').blur();
-        await refreshPrices();
+        // (Busy while the shop answers; no answer at all is said, as when placing the order. QA 25 Nov.)
+        const btn = document.getElementById('coupon-apply');
+        btn.disabled = true;
+        btn.setAttribute('aria-busy', 'true');
+        try {
+          await refreshPrices();
+        } finally {
+          btn.disabled = false;
+          btn.removeAttribute('aria-busy');
+        }
+        if (code && !quote && quoteFailed) {
+          const e = quoteFailed;
+          POD.toast(e.status && e.status < 500 && e.message ? e.message : t('msg.network'), 'error');
+        }
         if (code && quote && quote.couponError) {
           couponNote = { code, msg: quote.couponError, lang: quote.lang };
           setCoupon('');

@@ -117,6 +117,16 @@
   const PAGE = 24;
   let limit = PAGE;
   let shownCat = null;
+  // Back from a design: the same category, as many designs as were shown and the same place on the page
+  // (kept in this history entry; QA 25 Nov).
+  const back = (history.state && typeof history.state === 'object' && history.state.pp) || null;
+  if (back) {
+    if (typeof back.cat === 'string') cat = back.cat;
+    if (Number.isInteger(back.limit) && back.limit > PAGE && back.limit <= 2000) { limit = back.limit; shownCat = cat; }
+  }
+  const remember = (extra) => {
+    try { history.replaceState({ ...(history.state && typeof history.state === 'object' ? history.state : {}), pp: { cat, limit, ...extra } }, ''); } catch (e) { /* not kept */ }
+  };
   let hasDraft = false;
   try {
     // (Reading window.indexedDB throws when site data is blocked: caught below.)
@@ -261,6 +271,7 @@
       .map((c) => `<button class="chip ${c.id === cat ? 'active' : ''}" data-cat="${c.id}">${esc(c.name ? tr(c.name) : t('cat.all'))}</button>`).join('');
     const all = lib.designs.filter((d) => cat === 'all' || d.category === cat);
     // A first screenful, then "Show more" (a T-shirt has about a hundred).
+    if (!all.length && cat !== 'all') { cat = 'all'; return renderDesigns(); } // (a category gone since)
     if (shownCat !== cat) { shownCat = cat; limit = PAGE; }
     const list = all.slice(0, limit);
     // Designs with places for the customer's details ({Name}, {Phone}…) are never ordered as they are:
@@ -288,6 +299,7 @@
         const before = $('pp-grid').querySelectorAll('.pp-design').length;
         limit += PAGE;
         renderDesigns();
+        remember();
         // The button was replaced: the keyboard goes on at the first design just shown.
         const next = $('pp-grid').querySelectorAll('.pp-design')[before];
         const link = next && next.querySelector('a.thumb');
@@ -330,7 +342,7 @@
     picked = true;
     shown++;
     view = 'plain'; // a colour picked: show the product in that colour
-    history.replaceState(null, '', `/product?id=${encodeURIComponent(product.id)}&color=${encodeURIComponent(color.id)}`);
+    history.replaceState(history.state, '', `/product?id=${encodeURIComponent(product.id)}&color=${encodeURIComponent(color.id)}`);
     renderInfo();
     renderDesigns();
   });
@@ -339,8 +351,16 @@
     if (!b) return;
     cat = b.dataset.cat;
     renderDesigns();
+    remember();
   });
+  // Leaving for a design (or the editor): where the page was is kept for Back.
+  $('pp-grid').addEventListener('click', (e) => { if (e.target.closest('a')) remember({ y: Math.round(window.scrollY) }); });
   renderInfo();
   renderDesigns();
+  if (back && Number.isFinite(back.y) && back.y > 0) {
+    if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+    // (The cards keep their size before their pictures come, so the place is the same.)
+    requestAnimationFrame(() => window.scrollTo(0, Math.min(back.y, document.documentElement.scrollHeight)));
+  }
   document.addEventListener('pod:langchange', () => { renderInfo(); renderDesigns(); });
 })();

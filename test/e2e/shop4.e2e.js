@@ -154,3 +154,50 @@ test('cart: a coupon code in Arabic letters is told so in the page\'s language, 
     await page.context().close();
   }
 });
+
+test('cart: "Apply" with no answer from the shop says there is no connection, and is busy while it waits', { timeout: 90000 }, async () => {
+  const page = await openDesign('id=xm-noel&product=cap&color=black');
+  try {
+    await page.click('#dp-add');
+    await page.waitForURL(/\/cart\?added=1/, { timeout: 60000 });
+    await page.waitForSelector('#coupon');
+    let release;
+    const held = new Promise((r) => { release = r; });
+    await page.route('**/api/cart/quote', async (route) => { await held; route.abort('internetdisconnected'); });
+    await page.fill('#coupon', 'EID20');
+    await page.click('#coupon-apply');
+    await page.waitForFunction(() => document.getElementById('coupon-apply').disabled);
+    release();
+    await page.waitForFunction(() => [...document.querySelectorAll('.toast')].some((el) => /No internet connection/.test(el.textContent)));
+    assert.strictEqual(await page.isDisabled('#coupon-apply'), false);
+    assert.deepStrictEqual(page.errors, []);
+  } finally {
+    await page.context().close();
+  }
+});
+
+test('product page: Back from a ready design keeps "Show more" and the place on the page', { timeout: 90000 }, async () => {
+  const ctx = await newContext(browser);
+  const page = await ctx.newPage();
+  try {
+    await page.goto(`${srv.base}/product?id=tshirt`, { waitUntil: 'load' });
+    await page.waitForSelector('#pp-grid .pp-design');
+    const count = () => page.$$eval('#pp-grid .pp-design', (els) => els.length);
+    const first = await count();
+    await page.click('#pp-more button');
+    await page.waitForFunction((n) => document.querySelectorAll('#pp-grid .pp-design').length > n, first);
+    const shown = await count();
+    assert.ok(shown > first);
+    const late = page.locator('#pp-grid .pp-design a.thumb').nth(shown - 2);
+    await late.scrollIntoViewIfNeeded();
+    const y = await page.evaluate(() => window.scrollY);
+    assert.ok(y > 500, `scrolled ${y}`);
+    await late.click();
+    await page.waitForURL(/\/design\?/);
+    await page.goBack();
+    await page.waitForFunction((n) => document.querySelectorAll('#pp-grid .pp-design').length === n, shown, { timeout: 15000 });
+    await page.waitForFunction((want) => Math.abs(window.scrollY - want) < 60, y, { timeout: 5000 });
+  } finally {
+    await ctx.close();
+  }
+});
