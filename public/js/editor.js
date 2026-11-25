@@ -165,6 +165,7 @@
         st.designs[sideId] = await blobifyImages(data.objects || []);
         if (data.offset) st.offsets[sideId] = data.offset;
         if (data.pattern) st.pattern = data.pattern;
+        carryPlaced(sideId, data.area);
       }
       const idx = Number(params.get('cart'));
       const cart = POD.getCart();
@@ -211,6 +212,7 @@
           st.designs[sideId] = await blobifyImages(data.objects || []);
           if (data.offset) st.offsets[sideId] = data.offset;
           if (data.pattern) st.pattern = data.pattern;
+          carryPlaced(sideId, data.area);
         }
       }
       fromShare = true;
@@ -275,6 +277,7 @@
       if (known(sideId)) st.designs[sideId] = await blobifyImages(objs || []);
     }
     for (const [sideId, o] of Object.entries(dOffsets)) if (known(sideId)) st.offsets[sideId] = o;
+    for (const sideId of Object.keys(dDesigns)) if (known(sideId)) carryPlaced(sideId, draft.areas && draft.areas[sideId]);
     if (draft.pattern) st.pattern = draft.pattern;
     if (draft.options && typeof draft.options === 'object') st.options = { ...draft.options };
     if (st.product.merge && draft.mergeList && draft.mergeList.columns && draft.mergeList.rows) st.mergeList = draft.mergeList; // (clothing no longer takes name lists)
@@ -366,6 +369,23 @@
     const x = f === 1 ? a.x : Math.round((a.x + a.w / 2 - w / 2) * 10) / 10;
     return { ...a, x: x + ((offset && offset.dx) || 0), y: a.y + ((offset && offset.dy) || 0), w, h, ...(a.rx && f !== 1 ? { rx: a.rx * f } : {}) };
   }
+  /**
+   * A side saved against another print area (POD.placedArea: hoodie fronts before 25 Nov 2026, whose area started
+   * at the collar) is carried into today's, at its standard spot: the customer sees it there before saving again.
+   */
+  function carryPlaced(sideId, area) {
+    const side = st.product.sides.find((s) => s.id === sideId);
+    if (!side || !(st.designs[sideId] || []).length) return; // (the embroidery layer's spot never moved)
+    const o = st.offsets[sideId] || null;
+    const from = POD.placedArea(st.product, side, st.sizeId, { area, offset: o });
+    const now = areaFor(st.product, sideId, st.sizeId, o);
+    if (['x', 'y', 'w', 'h'].every((k) => Math.abs(from[k] - now[k]) < 0.05)) return;
+    st.designs[sideId] = remap(st.designs[sideId], from, areaFor(st.product, sideId, st.sizeId, null));
+    delete st.offsets[sideId];
+  }
+  /** The standard print area a side's objects were placed in, kept with every save (see carryPlaced). */
+  const xywh = (a) => ({ x: a.x, y: a.y, w: a.w, h: a.h });
+  const placedAreas = () => Object.fromEntries(st.product.sides.map((s) => [s.id, xywh(areaFor(st.product, s.id, st.sizeId, null))]));
   const sizedSides = new Map();
   const sideDef = (id = st.side) => {
     const s = baseSide(id);
@@ -5293,7 +5313,7 @@
       for (const sd of sides) {
         await showSide(sd.id);
         // (Fabrics: the repeat style and tile size go with it, as with a design for the cart: QA 25 Nov.)
-        sidesPayload[sd.id] = { objects: await inlineImages(st.designs[sd.id]), ...(st.offsets[sd.id] ? { offset: st.offsets[sd.id] } : {}), ...(st.pattern ? { pattern: { repeat: st.pattern.repeat, tileCm: st.pattern.tileCm } } : {}) };
+        sidesPayload[sd.id] = { objects: await inlineImages(st.designs[sd.id]), ...(st.offsets[sd.id] ? { offset: st.offsets[sd.id] } : {}), ...(st.pattern ? { pattern: { repeat: st.pattern.repeat, tileCm: st.pattern.tileCm } } : {}), area: xywh(baseArea(sd.id)) };
         previews[sd.id] = await toDataUrl(URL.createObjectURL(await exportPreview()));
       }
       await showSide(original);
@@ -5354,7 +5374,7 @@
     for (const s of keptSides()) designs[s.id] = s.id === st.side ? serialize() : (st.designs[s.id] || []);
     const empty = !Object.values(designs).some((o) => o.length);
     const productId = st.product.id;
-    const meta = { productId, colorId: st.colorId, sizeId: st.sizeId, side: st.side, offsets: { ...st.offsets }, ...(st.pattern ? { pattern: { ...st.pattern } } : {}), method: st.method, options: st.options || {}, mergeList: st.mergeList || null, qty: st.qty || null, library: st.libraryId || null, sizePicked: Boolean(st.sizePicked) };
+    const meta = { productId, colorId: st.colorId, sizeId: st.sizeId, side: st.side, offsets: { ...st.offsets }, areas: placedAreas(), ...(st.pattern ? { pattern: { ...st.pattern } } : {}), method: st.method, options: st.options || {}, mergeList: st.mergeList || null, qty: st.qty || null, library: st.libraryId || null, sizePicked: Boolean(st.sizePicked) };
     let preview = null;
     if (!empty && !quick) {
       try {
@@ -5395,7 +5415,7 @@
       if (!Object.values(designs).some((o) => o.length)) return;
       let acct = '';
       try { const v = localStorage.getItem('pod-acct'); acct = v && v !== '1' ? v : ''; } catch (e) { /* private mode */ }
-      const json = JSON.stringify({ at: Date.now(), acct, productId: st.product.id, colorId: st.colorId, sizeId: st.sizeId, side: st.side, offsets: st.offsets, pattern: st.pattern || null, method: st.method, options: st.options || {}, qty: st.qty || null, library: st.libraryId || null, sizePicked: Boolean(st.sizePicked), designs });
+      const json = JSON.stringify({ at: Date.now(), acct, productId: st.product.id, colorId: st.colorId, sizeId: st.sizeId, side: st.side, offsets: st.offsets, areas: placedAreas(), pattern: st.pattern || null, method: st.method, options: st.options || {}, qty: st.qty || null, library: st.libraryId || null, sizePicked: Boolean(st.sizePicked), designs });
       // Pictures live in the browser's memory only while the page is open: those designs rely on the real save.
       if (json.includes('"blob:') || json.length > 1500000) return;
       localStorage.setItem('pod-rescue:' + st.product.id, json);
@@ -5535,7 +5555,7 @@
         if (!overlapAt && issues.some((i) => i.overlap)) overlapAt = s.id;
         issues.forEach((i) => problems.push(`• ${tr(s.name)}: ${t(i.key === 'check.outside' ? 'check.outsideList' : i.key, { ...i.params, dpi: i.params.dpi, pt: i.params.pt })}`));
         clientChecks.push(...(await reportChecks(s.id, issues)));
-        sidesPayload[s.id] = { editor: { version: fabric.version, objects: await inlineImages(st.designs[s.id]), ...(st.offsets[s.id] ? { offset: st.offsets[s.id] } : {}), ...(st.pattern ? { pattern: { ...st.pattern } } : {}) } };
+        sidesPayload[s.id] = { editor: { version: fabric.version, objects: await inlineImages(st.designs[s.id]), ...(st.offsets[s.id] ? { offset: st.offsets[s.id] } : {}), ...(st.pattern ? { pattern: { ...st.pattern } } : {}), area: xywh(baseArea(s.id)) } };
         const withFields = useMerge && mergeSides.some((x) => x.id === s.id);
         if (withFields) {
           // The background and one picture of the names per row...

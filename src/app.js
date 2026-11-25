@@ -27,6 +27,7 @@ const {
   businessDaysAfter,
   round2,
   printAreaFor,
+  placedAreaFor,
   printWidthFor,
   printHeightFor,
   REPEATS,
@@ -1992,7 +1993,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const pattern = asked ? { repeat: REPEATS.includes(asked.repeat) ? asked.repeat : 'straight', tileCm: product.pattern.tiles.includes(Number(asked.tileCm)) ? Number(asked.tileCm) : product.pattern.tile } : null;
     for (const sd of sides) {
       const offset = sd.emb ? cleanEmbOffset(host, product.embroidery, b.sides[sd.id].offset) : cleanOffset(product, sd, size.id, b.sides[sd.id].offset);
-      editor[sd.id] = { objects: b.sides[sd.id].objects, ...(offset ? { offset } : {}), ...(pattern ? { pattern } : {}) };
+      // The print area the objects were placed in (see placedAreaFor: hoodie fronts moved on 25 Nov 2026).
+      const pa = b.sides[sd.id].area;
+      const area = pa && typeof pa === 'object' && ['x', 'y', 'w', 'h'].every((k) => typeof pa[k] === 'number' && Number.isFinite(pa[k])) && pa.w > 0 && pa.h > 0 ? { x: pa.x, y: pa.y, w: pa.w, h: pa.h } : null;
+      editor[sd.id] = { objects: b.sides[sd.id].objects, ...(offset ? { offset } : {}), ...(pattern ? { pattern } : {}), ...(area ? { area } : {}) };
       const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(String((b.previews || {})[sd.id] || ''));
       const png = m ? Buffer.from(m[1], 'base64') : null;
       if (!png || png.length > 4e6 || !png.subarray(0, 8).equals(PNG_SIGNATURE)) throw new HttpError(400, 'badImage');
@@ -5288,7 +5292,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       objects: editor[side.id].objects,
       // A moved print area: the ready design is re-centred on the standard spot.
       area: (() => {
-        const a = side.id === EMB && product.embroidery ? product.embroidery.area : printAreaFor(product, side.id, sh.size.id);
+        // (Print sides: the area the share's objects were placed in, which may be an earlier one.)
+        if (!(side.id === EMB && product.embroidery)) return placedAreaFor(product, side.id, sh.size.id, editor[side.id]);
+        const a = product.embroidery.area;
         const o = editor[side.id].offset;
         return o ? { ...a, x: a.x + o.dx, y: a.y + o.dy } : a;
       })(),
