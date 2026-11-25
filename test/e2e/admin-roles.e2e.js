@@ -229,7 +229,8 @@ test('Operations: its own tabs, no amounts anywhere, shipping work without "Mark
     text = await page.textContent('#cu-list');
     assert.doesNotMatch(text, /EGP|ج\.م|NaN|undefined/, 'no amounts for customers');
     assert.match(text, lang === 'en' ? /2 orders · last/ : /٢ طلب، آخر/, 'the orders counted, no total');
-    assert.ok(await page.locator('[data-cu-reset]').count() > 0, 'customers.contact');
+    // (A customer's password-reset link is the owners' alone: whoever holds it can sign in as the customer.)
+    assert.strictEqual(await page.locator('[data-cu-reset]').count(), 0, 'no reset links for Operations');
     // Printing houses: Operations changes them (houses.edit).
     await openTab(page, 'houses');
     assert.strictEqual(await page.isVisible('#house-form'), true);
@@ -265,15 +266,16 @@ test('Finance: orders with amounts, read-only, Mark paid; coupons, expenses and 
   assert.strictEqual(await page.textContent('#ap-count'), '2', 'My requests: one more');
   await shot(page, 'fin-coupon-pending-en-1366', false);
   assert.deepStrictEqual(log.filter((r) => r.m === 'POST' && r.p === '/api/admin/coupons').map((r) => r.body.code), ['EID25']);
-  // Accounts → Prices: a price typed and saved waits too; the row keeps it.
+  // Accounts → Prices: selling prices are the owners' (read-only); a cost typed and saved waits; the row keeps it.
   await openTab(page, 'accounts');
   await page.click('[data-acc-view="prices"]');
-  const box = page.locator('[data-price-field="mug"][data-key="basePrice"]');
-  await box.waitFor();
-  await box.fill('275');
+  await page.locator('[data-price-field="mug"][data-key="basePrice"]').waitFor();
+  assert.strictEqual(await page.isDisabled('[data-price-field="mug"][data-key="basePrice"]'), true, 'prices read-only for Finance');
+  const box = page.locator('[data-price-field="mug"][data-key="blank"]');
+  await box.fill('45');
   await page.click('[data-price-save="mug"]');
   await page.waitForFunction(() => document.querySelectorAll('.toast.toast-pending').length >= 2);
-  assert.strictEqual(await page.inputValue('[data-price-field="mug"][data-key="basePrice"]'), '275');
+  assert.strictEqual(await page.inputValue('[data-price-field="mug"][data-key="blank"]'), '45');
   assert.strictEqual(await page.locator('.toast.error').count(), 0);
   // Expenses: the same.
   await page.click('[data-acc-view="expenses"]');
@@ -302,7 +304,8 @@ test('Finance: orders with amounts, read-only, Mark paid; coupons, expenses and 
 
 test('Catalogue: Review read-only, prices read-only, a product change waits for an owner with the section as typed', { timeout: 90000 }, async () => {
   const { ctx, page, log } = await signIn(browser, srv, 'catalogue', { lang: 'ar', width: 360 });
-  assert.deepStrictEqual(await visibleTabs(page), ['review', 'library', 'products', 'approvals', 'activity']);
+  // (No Review: customers' proofs are Operations' work.)
+  assert.deepStrictEqual(await visibleTabs(page), ['library', 'products', 'approvals', 'activity']);
   await page.waitForSelector('#pm-root .pm-row');
   assert.strictEqual(await page.locator('[data-pm-act="staff"]').count(), 0, 'staff are on their own tab now');
   await page.click('[data-pm-act="edit"][data-id="tshirt"]');
@@ -315,23 +318,14 @@ test('Catalogue: Review read-only, prices read-only, a product change waits for 
   await page.waitForSelector('.toast.toast-pending');
   assert.match(await page.textContent('.toast.toast-pending'), /^اتبعت لصاحب الموقع للموافقة: تعديل ١ على catalog$/);
   assert.strictEqual(await page.inputValue('[name="name.en"]'), 'Classic Tee', 'the section as typed');
-  assert.strictEqual(await page.isVisible('#pm-sec-basics .pm-dirty'), true, 'not saved (not live yet)');
+  // Sent: no longer "unsaved" (Save again would send the same request twice) until something new is typed.
+  assert.strictEqual(await page.isHidden('#pm-sec-basics .pm-dirty'), true, 'not offered again');
+  assert.strictEqual(await page.isDisabled('[data-pm-save="basics"]'), true);
   assert.strictEqual(await page.isHidden('#pm-sec-basics > .pm-err'), true, 'nothing red');
   assert.strictEqual(await page.textContent('#ap-count'), '٢');
   assert.ok(log.some((r) => r.m === 'PUT' && r.p === '/api/admin/catalog/tshirt' && r.body.name));
   assert.strictEqual(await overflow(page), 0, 'products at 360');
   await shot(page, 'cat-product-ar-360', false);
-  // Review: looking only.
-  await openTab(page, 'review');
-  const open = page.locator('[data-rv-toggle]').first();
-  if (await open.count()) {
-    await open.click();
-    await page.waitForSelector('.rv-readonly');
-    assert.strictEqual(await page.locator('[data-rv-act]').count(), 0);
-    await page.locator('.rv-readonly').scrollIntoViewIfNeeded();
-    await shot(page, 'cat-review-ar-360', false);
-    assert.strictEqual(await overflow(page), 0, 'review at 360');
-  }
   assert.deepStrictEqual(page.errors, []);
   await ctx.close();
 });
@@ -359,15 +353,17 @@ test('Owner: Approvals (approve → live, approve → failed with the reason, re
       await page.fill('#ap-note-ap5', 'Keep it for next Eid');
       await page.click('#ap-ap5 [data-ap-act="reject"]');
       await page.waitForSelector('#ap-ap5.ap-st-rejected');
-      assert.match(await page.textContent('#ap-ap5'), /Rejected by \u2068Nour نور\u2069, .*Note: Keep it for next Eid/s);
-      assert.strictEqual(await page.isHidden('#ap-count'), true);
+      assert.match(await page.textContent('#ap-ap5'), /Rejected by \u2068Nour نور\u2069, .*Note: \u2068?Keep it for next Eid/s);
+      // (The one that failed when approved is still to decide: approve again or refuse.)
+      assert.strictEqual(await page.textContent('#ap-count'), '1');
+      assert.strictEqual(await page.locator('#ap-ap2 [data-ap-act="approve"]').count(), 1);
       assert.deepStrictEqual(log.filter((r) => /approve|reject/.test(r.p)).map((r) => [r.p, r.body]), [['/api/admin/approvals/ap1/approve', {}], ['/api/admin/approvals/ap2/approve', {}], ['/api/admin/approvals/ap5/reject', { note: 'Keep it for next Eid' }]]);
       await shot(page, 'owner-approvals-decided-en-1366');
       // All: the decided ones with who decided, the note and the reason.
       await page.click('[data-ap-view="all"]');
       await page.waitForSelector('#ap-ap4');
-      assert.match(await page.textContent('#ap-ap4'), /Why: The product changed meanwhile/);
-      assert.match(await page.textContent('#ap-ap3'), /Approved by \u2068Nour نور\u2069, .*Note: OK for Eid/s);
+      assert.match(await page.textContent('#ap-ap4'), /Why: \u2068?The product changed meanwhile/);
+      assert.match(await page.textContent('#ap-ap3'), /Approved by \u2068Nour نور\u2069, .*Note: \u2068?OK for Eid/s);
     }
     assert.deepStrictEqual(page.errors, []);
     await ctx.close();
