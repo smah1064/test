@@ -294,7 +294,8 @@ test("Review's print checks, sizes and approval versions are in ١٢٣ on the Ar
   // left to right reads 1600 × 1200).
   assert.match(ADMIN, /\$\{a\.version != null \? esc\(\/\^\\d\+\$\/\.test\(String\(a\.version\)\) \? POD\.num\(Number\(a\.version\)\) : String\(a\.version\)\) : '—'\}/);
   assert.match(ADMIN, /<dt>\$\{esc\(t\('rv\.size'\)\)\}<\/dt><dd>\$\{esc\(t\('rv\.sizeLine', /);
-  assert.match(ADMIN, /<dd>\$\{esc\(t\('rv\.resolution', \{ dpi: s\.dpi \|\| '\?', w: s\.widthPx \|\| '\?', h: s\.heightPx \|\| '\?' \}\)\)\}<\/dd>/);
+  // (The line only when the size in pixels is known: "? × ? px" showed on photo prints. QA 25 Nov.)
+  assert.match(ADMIN, /\$\{s\.widthPx && s\.heightPx \? `<dt>DPI · px<\/dt><dd>\$\{esc\(t\('rv\.resolution', \{ dpi: s\.dpi \|\| '\?', w: s\.widthPx, h: s\.heightPx \}\)\)\}<\/dd>` : ''\}/);
   // The print floor's job card keeps its production sizes in 0-9 on purpose.
   assert.match(ADMIN, /<bdi dir="ltr">\$\{cm\(s\.widthIn\)\} × \$\{cm\(s\.heightIn\)\} cm \(\$\{s\.widthIn\} × \$\{s\.heightIn\} in\)<\/bdi>/);
 });
