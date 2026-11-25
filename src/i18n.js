@@ -220,6 +220,7 @@ const MESSAGES = {
   wrongCurrentPassword: { en: 'Your current password is wrong.', ar: 'كلمة السر الحالية غلط.' },
   passwordTooShort: { en: 'Choose a password of at least 10 characters.', ar: 'اختار كلمة سر 10 حروف على الأقل.' },
   nothingToApprove: { en: 'There is nothing to change in this request.', ar: 'الطلب ده مفيهوش حاجة تتغير.' },
+  productIdWaiting: { en: 'A new product with this code is already waiting for an owner\'s approval.', ar: 'فيه منتج جديد بالكود ده مستني موافقة صاحب الموقع خلاص.' },
   couponWaiting: { en: 'A coupon with this code is already waiting for an owner\'s approval.', ar: 'فيه كوبون بالكود ده مستني موافقة صاحب الموقع خلاص.' },
   expenseGone: { en: 'This expense was already deleted.', ar: 'المصروف ده اتمسح قبل كده.' },
   couponGone: { en: 'This coupon was deleted.', ar: 'الكوبون ده اتمسح.' },

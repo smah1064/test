@@ -1063,7 +1063,11 @@
   async function saveShipment(id, extra, doneKey, btn) {
     const o = orderById(id);
     if (!o) return;
-    const body = { ...shipFieldsOf(id), ...extra };
+    // (Only the fields changed here, against what this page last read: a colleague's correction to another field stays.)
+    const typed = shipFieldsOf(id);
+    const was = o.shipment || {};
+    const changed = Object.fromEntries(Object.entries(typed).filter(([k, v]) => String(v == null ? '' : v) !== String(was[k] == null ? '' : was[k])));
+    const body = { ...changed, ...extra };
     if (body.trackingUrl && !/^https?:\/\//i.test(body.trackingUrl)) {
       shipMsg[id] = { text: t('ship.badUrl'), ok: false };
       rerenderOrders();

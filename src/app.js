@@ -3873,7 +3873,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const name = typed && staffAll().some((u) => u.username === typed) ? typed : typed ? '?' : '';
     const many = r.n > 20;
     activity.add({
-      whoId: name ? `try:${name}` : 'try:owner', who: name || 'owner', roles: [], action: locked ? 'signInLocked' : 'signInFailed', status: locked ? 429 : 401, ip: req.ip,
+      ...(() => {
+        const u = name && name !== '?' ? staffAll().find((x) => x.username === name) : null;
+        return u ? { whoId: u.id, who: u.name || u.username, roles: roles.rolesOf(u) } : name === '?' ? { whoId: 'unknown', who: '—', roles: [] } : { whoId: 'owner', who: 'owner', roles: ['owner'] };
+      })(),
+      action: locked ? 'signInLocked' : 'signInFailed', status: locked ? 429 : 401, ip: req.ip,
       ...(name ? {} : { emergency: true }),
       summary: many ? { en: 'Many wrong sign-ins from one address: the next ones in these 10 minutes are not listed', ar: 'محاولات دخول غلط كتير من نفس العنوان: اللي بعدها في العشر دقايق دي مش متسجلة' }
         : name === '?' ? { en: 'Wrong sign-in: a username that doesn\'t exist', ar: 'دخول غلط: اسم مستخدم مش موجود' }
@@ -3961,6 +3965,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
           : roles.shortBody(req.body && (Buffer.isBuffer(req.body) || Object.keys(req.body).length) ? req.body : undefined),
       }));
     }
+    // (A printing house about to go: its name kept for the activity line.)
+    if (key === 'DELETE /api/admin/houses/:id') req.locals_houseName = ((store.db.printHouses || []).find((x) => x.id === req.params.id) || {}).name;
     if (route.approve && who.role !== 'owner' && !who.approvalId) return holdForApproval(req, res, key, route).catch(next);
     next();
   };
@@ -4007,6 +4013,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (h) bits.push({ en: h.name, ar: h.name });
     }
     for (const k of ['courier', 'trackingNumber']) if (typeof b[k] === 'string' && b[k].trim()) bits.push({ en: b[k].trim().slice(0, 40), ar: b[k].trim().slice(0, 40) });
+    // (A printing house: its name, as sent or as it was before it went.)
+    if (/\/houses\b/.test(req.originalUrl)) {
+      const h = typeof b.name === 'string' && b.name.trim() ? b.name.trim() : (req.locals_houseName || ((store.db.printHouses || []).find((x) => x.id === p.id) || {}).name);
+      if (h) bits.unshift({ en: String(h).slice(0, 60), ar: String(h).slice(0, 60) });
+    }
     // (A rights request: whose, about which link.)
     const td = /\/takedowns\//.test(req.originalUrl) && (store.db.takedowns || []).find((x) => x.id === p.id);
     if (td) { const w = [td.name, td.link].filter(Boolean).join(' · ').slice(0, 80); if (w) bits.unshift({ en: w, ar: w }); }
@@ -4764,6 +4775,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const n = catalog.cleanNew(req.body && typeof req.body === 'object' ? req.body : {}, PRODUCTS);
       if (n.error) throw new HttpError(400, n.error, { field: n.field || '' });
       if (catalogEdits()[n.id]) throw new HttpError(400, 'productIdTaken');
+      if (approvalsAll().some((a) => (a.status === 'pending' || a.status === 'failed') && a.action === 'POST /api/admin/catalog' && a.body && a.body.id === n.id)) throw new HttpError(409, 'productIdWaiting');
     },
     'DELETE /api/admin/catalog/:id': (req) => {
       const p = getProduct(req.params.id);
@@ -4975,7 +4987,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const a = store.mutate((db) => {
       const x = (db.approvals || []).find((y) => y.id === req.params.id);
       if (!x) throw new HttpError(404, 'notFound');
-      if (!openForDecision(x)) throw new HttpError(409, 'approvalDecidedBy', { name: (x.decidedBy && x.decidedBy.id === 'owner' ? null : x.decidedBy && x.decidedBy.name) || '—' });
+      if (!openForDecision(x)) throw new HttpError(409, 'approvalDecidedBy', { name: x.decidedBy && x.decidedBy.id === 'owner' ? (langOf(req) === 'ar' ? 'صاحب الموقع (دخول الطوارئ)' : 'the owner (emergency login)') : (x.decidedBy && x.decidedBy.name) || '—' });
       x.status = 'applying';
       x.applyingAt = new Date().toISOString();
       return { ...x };
@@ -5029,7 +5041,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const left = Array.isArray(result.skipped) ? result.skipped.length : 0;
       if (!done) {
         ok = false;
-        result.errorText = { en: 'Nothing was published: these designs were already published or are no longer in the upload.', ar: 'متنشرش حاجة: التصميمات دي اتنشرت قبل كده أو مبقتش في الرفع.' };
+        const why = Array.isArray(result.skipped) && result.skipped.length ? result.skipped[0].code : '';
+        result.errorText = why === 'pickProducts'
+          ? { en: 'Nothing was published: the products picked for these designs are no longer in the shop.', ar: 'متنشرش حاجة: المنتجات اللي اتختارت للتصميمات دي مبقتش في الموقع.' }
+          : why ? { en: 'Nothing was published: check the designs\' names and products in the upload.', ar: 'متنشرش حاجة: راجع أسامي التصميمات ومنتجاتها في الرفع.' }
+            : { en: 'Nothing was published: these designs were already published or are no longer in the upload.', ar: 'متنشرش حاجة: التصميمات دي اتنشرت قبل كده أو مبقتش في الرفع.' };
       } else if (left) {
         detail = { en: `${done} published, ${left} not (check their names and products in the upload).`, ar: `اتنشر ${done}، و${left} لأ (راجع أساميهم ومنتجاتهم في الرفع).` };
       }
@@ -5058,7 +5074,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (!x) throw new HttpError(404, 'notFound');
       // (A team member withdraws only their own; an owner any.)
       if (status === 'cancelled' && !(x.by && x.by.id === w.id) && !w.perms.has('approvals')) throw new HttpError(403, 'noPermission');
-      if (!openForDecision(x)) throw new HttpError(409, 'approvalDecidedBy', { name: (x.decidedBy && x.decidedBy.id === 'owner' ? null : x.decidedBy && x.decidedBy.name) || '—' });
+      if (!openForDecision(x)) throw new HttpError(409, 'approvalDecidedBy', { name: x.decidedBy && x.decidedBy.id === 'owner' ? (langOf(req) === 'ar' ? 'صاحب الموقع (دخول الطوارئ)' : 'the owner (emergency login)') : (x.decidedBy && x.decidedBy.name) || '—' });
       x.status = status;
       x.decidedBy = { id: w.id, name: w.shown || w.name };
       x.decidedAt = new Date().toISOString();
