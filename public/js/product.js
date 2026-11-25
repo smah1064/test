@@ -58,6 +58,10 @@
     return alike.length ? alike.reduce((best, c) => (dist(c.hex, hex) < dist(best.hex, hex) ? c : best)) : color;
   }
   let cat = 'all';
+  // Ready designs on the page: a first screenful, then "Show more" (PAGE more at a time).
+  const PAGE = 24;
+  let limit = PAGE;
+  let shownCat = null;
   let hasDraft = false;
   try {
     // (Reading window.indexedDB throws when site data is blocked: caught below.)
@@ -193,7 +197,10 @@
     const used = lib.categories.filter((c) => lib.designs.some((d) => d.category === c.id));
     $('pp-cats').innerHTML = [{ id: 'all', name: null }, ...used]
       .map((c) => `<button class="chip ${c.id === cat ? 'active' : ''}" data-cat="${c.id}">${esc(c.name ? tr(c.name) : t('cat.all'))}</button>`).join('');
-    const list = lib.designs.filter((d) => cat === 'all' || d.category === cat);
+    const all = lib.designs.filter((d) => cat === 'all' || d.category === cat);
+    // A first screenful, then "Show more" (a T-shirt has about a hundred).
+    if (shownCat !== cat) { shownCat = cat; limit = PAGE; }
+    const list = all.slice(0, limit);
     $('pp-grid').innerHTML = list.map((d) => `
       <div class="card product-card design-card pp-design">
         <a class="thumb" href="/design?id=${encodeURIComponent(d.id)}&${q(colorFor(d))}"><img alt="${esc(tr(d.name))}" data-design="${esc(d.id)}"></a>
@@ -205,8 +212,22 @@
           </div>
         </div>
       </div>`).join('') || `<p class="muted">${esc(t('designs.empty'))}</p>`;
+    let more = $('pp-more');
+    if (!more) {
+      more = document.createElement('div');
+      more.id = 'pp-more';
+      more.className = 'pp-more';
+      $('pp-grid').after(more);
+      more.addEventListener('click', (e) => {
+        if (!e.target.closest('button')) return;
+        limit += PAGE;
+        renderDesigns();
+      });
+    }
+    more.innerHTML = all.length > list.length ? `<button type="button" class="btn">${esc(t('pp.moreDesigns', { n: POD.num(all.length - list.length) }))}</button>` : '';
     observe();
   }
+
 
   // Draw card pictures as they scroll into view, one at a time.
   let queue = Promise.resolve();

@@ -9,13 +9,15 @@
   try { sessionStorage.removeItem('pod-admin-password'); } catch (e) { /* old versions kept the password */ }
   let token = sessionStorage.getItem(KEY) || '';
   const authHeader = () => ({ Authorization: 'Bearer ' + token });
-  // Who is signed in: the owner, or a product manager ('products', staff: the Products tab only).
+  // Who is signed in: the owner, or a product manager ('products', staff: the Products and Ready designs tabs).
   const ROLE_KEY = 'pod-admin-role';
   const STAFF_MODE_KEY = 'pod-admin-staff-login';
   let role = '';
   let who = '';
   /** The only admin routes a product manager's token may use (the owner's answer 401 and would sign them out). */
-  const staffRoute = (url) => /^\/api\/admin\/(session|logout|catalog)(\/|\?|$)/.test(url);
+  const staffRoute = (url) => /^\/api\/admin\/(session|logout|catalog|library)(\/|\?|$)/.test(url) && !/^\/api\/admin\/library\/settings/.test(url);
+  /** The tabs a product manager sees. */
+  const STAFF_TABS = new Set(['products', 'library']);
   let tab = 'queue';
   let lastQueue = null;
   let lastOrders = null;
@@ -97,6 +99,7 @@
     sessionStorage.removeItem(KEY);
     sessionStorage.removeItem(ROLE_KEY);
     if (window.AdminProducts) AdminProducts.reset();
+    if (window.AdminUploads) AdminUploads.reset();
     applyRole();
     $('weak-pw').hidden = true;
     $('dash').hidden = true;
@@ -157,17 +160,17 @@
     if (role) sessionStorage.setItem(ROLE_KEY, role);
     applyRole();
   }
-  /** A product manager sees the Products tab only. */
+  /** A product manager sees the Products and Ready designs tabs (without the owner's text-only switch). */
   function applyRole() {
     const staff = role === 'products';
-    document.querySelectorAll('[data-tab]').forEach((b) => { b.hidden = staff && b.dataset.tab !== 'products'; });
-    const tabs = document.querySelector('#dash .tabs');
-    if (tabs) tabs.hidden = staff;
+    document.querySelectorAll('[data-tab]').forEach((b) => { b.hidden = staff && !STAFF_TABS.has(b.dataset.tab); });
     $('admin-who').hidden = !staff;
     $('admin-who').textContent = staff ? t('pm.signedInAs', { name: who }) : '';
+    $('lib-add').hidden = staff;
+    if (lastLibrary) renderLibRule();
     if (staff) {
       $('weak-pw').hidden = true;
-      if (tab !== 'products') showTab('products');
+      if (!STAFF_TABS.has(tab)) showTab('products');
     }
   }
   /** Who is signed in (the role is kept on the server with the token). */
@@ -186,7 +189,10 @@
     tab = next;
     document.querySelectorAll('[data-tab]').forEach((x) => x.classList.toggle('active', x.dataset.tab === tab));
     $('tab-products').hidden = tab !== 'products';
-    $('dash-title').dataset.i18n = tab === 'products' ? 'pm.pageTitle' : 'admin.queueTitle';
+    // (The heading says which tab is open: its button's own words, except the queue and products.)
+    const tabBtn = document.querySelector(`[data-tab="${tab}"]`);
+    const tabKey = tabBtn && (tabBtn.dataset.i18n || (tabBtn.querySelector('[data-i18n]') || {}).dataset?.i18n);
+    $('dash-title').dataset.i18n = tab === 'products' ? 'pm.pageTitle' : tab === 'queue' || !tabKey ? 'admin.queueTitle' : tabKey;
     $('dash-title').textContent = t($('dash-title').dataset.i18n);
     $('tab-queue').hidden = tab !== 'queue';
     $('tab-orders').hidden = tab !== 'orders';
@@ -911,7 +917,7 @@
   // The list is drawn again when a filter changes; after an action only the rows that changed are
   // redrawn and stay where they are (a design shown again doesn't jump out of "Paused" while reviewing).
   let lastLibrary = null;
-  const LIB = { view: 'all', q: '', cat: '', art: '', ids: [], html: new Map(), picked: new Set(), sig: '', drawn: false, ruleBusy: false, bulkBusy: false };
+  const LIB = { view: 'all', q: '', cat: '', art: '', sort: 'new', ids: [], html: new Map(), picked: new Set(), sig: '', drawn: false, ruleBusy: false, bulkBusy: false };
   const libById = new Map();
   const libHay = new Map();
   const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -923,7 +929,33 @@
     paused: (d) => libState(d) === 'paused',
     none: (d) => libState(d) === 'none',
     deleted: (d) => Boolean(d.deleted),
+    uploaded: (d) => !d.deleted && Boolean(d.uploaded), // from Upload designs (zip)
+    week: (d) => !d.deleted && Boolean(d.addedOn) && d.addedOn >= libWeekAgo(), // added in the last 7 days
   };
+  /** The day 6 days ago (YYYY-MM-DD): with today, the last 7 days. */
+  const libWeekAgo = () => {
+    const d = new Date(Date.now() - 6 * 864e5);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  /** "25 Nov" / «٢٥ نوفمبر» (with the year when it isn't this year). */
+  const libAddedDay = (ymd) => {
+    try {
+      const d = new Date(ymd + 'T12:00:00Z');
+      const year = d.getUTCFullYear() !== new Date().getFullYear();
+      return d.toLocaleDateString(POD.lang === 'ar' ? 'ar-EG' : 'en-GB', { day: 'numeric', month: 'short', ...(year ? { year: 'numeric' } : {}), timeZone: 'UTC' });
+    } catch (e) {
+      return ymd;
+    }
+  };
+  /** The list in the order picked: newest or oldest added first (undated last), or by name. Ties keep their order. */
+  function libSorted(list) {
+    if (LIB.sort === 'name') {
+      const coll = new Intl.Collator(POD.lang === 'ar' ? 'ar' : 'en', { sensitivity: 'base', numeric: true });
+      return list.slice().sort((a, b) => coll.compare(tr(a.name), tr(b.name)));
+    }
+    const dir = LIB.sort === 'old' ? 1 : -1;
+    return list.slice().sort((a, b) => (!a.addedOn || !b.addedOn ? Boolean(b.addedOn) - Boolean(a.addedOn) : a.addedOn === b.addedOn ? 0 : (a.addedOn < b.addedOn ? -1 : 1) * dir));
+  }
   // Search ignores case, Arabic short vowels and tatweel, the alef / yaa / taa marbuta spellings and digit styles (as /designs).
   const libNorm = (s) => String(s || '').toLowerCase()
     .replace(/[ً-ٰٟـ]/g, '')
@@ -932,7 +964,7 @@
     .replace(/[۰-۹]/g, (c) => String(c.charCodeAt(0) - 0x06F0))
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim();
-  const libSig = (lib) => JSON.stringify([lib.settings || null, lib.categories.length, lib.designs.map((d) => [d.id, d.hidden, d.deleted, d.limited, d.product, d.color, (d.products || []).join(' ')])]);
+  const libSig = (lib) => JSON.stringify([lib.settings || null, lib.categories.length, lib.designs.map((d) => [d.id, d.hidden, d.deleted, d.limited, d.product, d.color, (d.products || []).join(' '), d.addedOn])]);
   const libWhat = (n) => POD.plural('rd.n', n);
 
   function setLibrary(lib) {
@@ -980,7 +1012,7 @@
     }
   }
   function renderLibRule() {
-    const s = lastLibrary.settings;
+    const s = role === 'owner' ? lastLibrary.settings : null; // the switch is the owner's
     $('lib-rule').hidden = !s;
     if (!s) return;
     if (!LIB.ruleBusy) $('lib-limit').checked = Boolean(s.textOnlyLimited);
@@ -999,7 +1031,7 @@
   function renderLibRows() {
     if (!lastLibrary) return;
     if (!LIB_VIEWS[LIB.view]) LIB.view = 'all';
-    const list = libScoped().filter(LIB_VIEWS[LIB.view]);
+    const list = libSorted(libScoped().filter(LIB_VIEWS[LIB.view]));
     LIB.ids = list.map((d) => d.id);
     const ids = new Set(LIB.ids);
     for (const id of [...LIB.picked]) if (!ids.has(id)) LIB.picked.delete(id);
@@ -1057,8 +1089,9 @@
     const scoped = libScoped();
     const n = {};
     for (const v of Object.keys(LIB_VIEWS)) n[v] = scoped.filter(LIB_VIEWS[v]).length;
-    // "On no product" only when there are some (designs not paused, but the rule or the catalogue leaves them nowhere).
-    $('lib-chips').innerHTML = ['all', 'live', 'paused', 'none', 'deleted'].filter((v) => v !== 'none' || n.none || LIB.view === 'none')
+    // "New this week", "Uploaded" and "On no product" (not paused, but the rule or the catalogue leaves them nowhere) only when there are some.
+    const some = new Set(['week', 'uploaded', 'none']);
+    $('lib-chips').innerHTML = ['all', 'week', 'uploaded', 'live', 'paused', 'none', 'deleted'].filter((v) => !some.has(v) || n[v] || LIB.view === v)
       .map((v) => `<button type="button" class="chip rd-chip-${v} ${LIB.view === v ? 'active' : ''}" data-rd-filter="${v}" aria-pressed="${LIB.view === v}">${esc(t('rd.f.' + v))} <span class="rd-chip-n">${esc(POD.num(n[v]))}</span></button>`).join('');
     const total = lastLibrary.designs.filter((d) => !d.deleted).length;
     $('lib-count').textContent = LIB.view === 'deleted' ? t('rd.countDeleted', { what: libWhat(LIB.ids.length) }) : t('rd.count', { what: libWhat(LIB.ids.length), total: POD.num(total) });
@@ -1099,7 +1132,7 @@
         <button type="button" class="rd-thumb" data-rd-view="${id}" aria-label="${esc(t('rd.bigger', { name }))}">${libPicHtml(d)}</button>
         <div class="rd-main">
           <div class="rd-title"><strong dir="auto">${esc(name)}</strong> <bdi class="rd-id" dir="ltr">${id}</bdi></div>
-          <div class="muted small">${esc(libCatName(d.category))} · ${esc(t(d.custom ? 'rd.yours' : 'rd.starter'))}</div>
+          <div class="muted small">${esc([libCatName(d.category), d.uploaded ? t('rd.uploadedBy', { who: !d.by || d.by === 'owner' ? t('up.byOwner') : d.by }) : t(d.custom ? 'rd.yours' : 'rd.starter'), d.addedOn ? t('rd.added', { date: libAddedDay(d.addedOn) }) : ''].filter(Boolean).join(' · '))}</div>
           <div class="rd-pills">${libPill(st, t('rd.st.' + st))}${d.artwork ? libPill('art', t('rd.withArt')) : libPill('text', t('rd.textOnly'))}</div>
           ${note ? `<div class="small rd-note rd-note-${st}">${esc(note)}</div>` : ''}
         </div>
@@ -1396,6 +1429,10 @@
     LIB.cat = e.target.value;
     if (lastLibrary) renderLibRows();
   });
+  $('lib-sort').addEventListener('change', (e) => {
+    LIB.sort = e.target.value;
+    if (lastLibrary) renderLibRows();
+  });
   $('lib-fart').addEventListener('change', (e) => {
     LIB.art = e.target.value;
     if (lastLibrary) renderLibRows();
@@ -1484,7 +1521,7 @@
       return;
     }
     if (!role) await loadSession();
-    if (role === 'products' && tab !== 'products') showTab('products');
+    if (role === 'products' && !STAFF_TABS.has(tab)) showTab('products');
     if (tab === 'products') {
       $('login').hidden = true;
       $('dash').hidden = false;
@@ -1510,7 +1547,10 @@
       await ensureOrders(items);
       renderFilm((lastFilm = items));
     }
-    else if (tab === 'library') renderLibrary(await adminApi('/api/admin/library'), { auto });
+    else if (tab === 'library') {
+      renderLibrary(await adminApi('/api/admin/library'), { auto });
+      await AdminUploads.show({ auto }).catch((e) => { if (e.status === 401) throw e; });
+    }
     else {
       // Don't redraw while the admin is typing in a shipping box.
       if (document.activeElement && document.activeElement.closest && document.activeElement.closest('.ship-box') && lastOrders) return;
@@ -1533,6 +1573,7 @@
     renderReviewCount();
     if (tab === 'film' && lastFilm) renderFilm(lastFilm);
     if (tab === 'library' && lastLibrary) renderLibrary(lastLibrary);
+    if (tab === 'library') AdminUploads.onLang();
     if (tab === 'houses' && housesData) renderHouses(housesData);
     if (tab === 'accounts') renderAccounts();
     if (tab === 'coupons' && couponData) renderCoupons(couponData);
@@ -2648,6 +2689,15 @@
 
   AdminProducts.init({ api: adminApi, role: () => role });
   AdminPreview.init({ api: adminApi });
+  AdminUploads.init({
+    api: adminApi,
+    token: () => token,
+    signOut,
+    renderer: loadLibRenderer,
+    categories: () => (lastLibrary ? lastLibrary.categories : []),
+    // New designs published: the list below shows them.
+    published: () => adminApi('/api/admin/library').then((lib) => tab === 'library' && renderLibrary(lib)).catch(() => {}),
+  });
   // Who is signed in first (a product manager's page must never call the owner's routes), then the tab.
   refresh().catch(() => {});
   setInterval(() => !document.hidden && token && refresh({ auto: true }).catch(() => {}), 15000);

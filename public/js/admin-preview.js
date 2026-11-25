@@ -10,6 +10,7 @@ window.AdminPreview = (() => {
   let api = null;
   let data = null; // { on, people: [...] }
   let fresh = ''; // the person just invited: their row is highlighted
+  let said = null; // the last message under the form: { text, bad, err } (kept through a language switch)
 
   const box = () => $('tab-preview');
   const when = (iso) => new Date(iso).toLocaleString(POD.lang === 'ar' ? 'ar-EG' : 'en-GB', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
@@ -59,10 +60,11 @@ window.AdminPreview = (() => {
         </div>
       </div>`;
   }
-  const say = (text, bad) => {
+  const say = (text, bad, key) => {
+    said = { text, bad, key };
     const m = $('pv-msg');
     if (!m) return;
-    m.textContent = text;
+    m.textContent = key ? t(key) : text;
     m.classList.toggle('bad', Boolean(bad));
   };
   async function copy(text) {
@@ -99,10 +101,11 @@ window.AdminPreview = (() => {
         fresh = p.id;
         data = await api('/api/admin/preview');
         render();
-        say(t('pv.added'));
+        say('', false, 'pv.added');
         if (await copy(p.link)) POD.toast(t('pv.copied'));
       } catch (err) {
-        say(err.message, true);
+        // (The shop's refusal comes in the language asked in: its code says it again after a switch.)
+        say(err.message, true, err.code && window.POD_STRINGS && window.POD_STRINGS['pv.err.' + err.code] ? 'pv.err.' + err.code : null);
       }
     });
     root.addEventListener('click', async (e) => {
@@ -147,7 +150,13 @@ window.AdminPreview = (() => {
       if (typing != null) { $('pv-name').value = typing; $('pv-name').focus(); }
     },
     onLang() {
+      // (What was typed and the last message stay.)
+      const name = $('pv-name') ? $('pv-name').value : '';
+      const own = $('pv-own') ? $('pv-own').value : '';
       render();
+      if ($('pv-name')) $('pv-name').value = name;
+      if ($('pv-own')) $('pv-own').value = own;
+      if (said) say(said.text, said.bad, said.key);
     },
   };
 })();

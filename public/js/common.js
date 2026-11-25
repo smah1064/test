@@ -75,6 +75,7 @@
     }
     applyDir();
     applyI18n();
+    updateCartBadge(); // (its number in the new language's digits)
     document.dispatchEvent(new CustomEvent('pod:langchange', { detail: { lang } }));
   }
 

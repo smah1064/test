@@ -152,3 +152,11 @@ test('frozen: new picture designs never hide text designs; the owner decides (25
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
 });
+
+test('every design in the admin list says the day it was added', async () => {
+  await withServer({}, async ({ admin }) => {
+    const list = (await (await admin('/api/admin/library')).json()).designs;
+    assert.ok(list.length > 500);
+    assert.ok(list.every((d) => /^\d{4}-\d{2}-\d{2}$/.test(d.addedOn || '')), 'a day for every design');
+  });
+});

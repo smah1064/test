@@ -1340,7 +1340,11 @@
   function addObject(obj, { select = true, shrinkToFit = true, behindText = false } = {}) {
     if (select) st.openSheetOnSelect = true;
     cancelCrop();
-    const a = area();
+    // Where a new thing goes: the part of the print area meant for designs where the product has one
+    // (a wall calendar's top half above the month pad, a folder's front, a brochure's cover panel).
+    const full = area();
+    const z = full.readyZone ? (POD.lang === 'ar' && full.readyZoneRtl ? full.readyZoneRtl : full.readyZone) : null;
+    const a = z ? { x: full.x + full.w * z.x, y: full.y + full.h * z.y, w: full.w * z.w, h: full.h * z.h } : full;
     obj.set({ originX: 'center', originY: 'center', left: a.x + a.w / 2, top: a.y + a.h / 2 });
     const maxW = a.w * 0.85;
     const maxH = a.h * 0.85;
@@ -3392,6 +3396,7 @@
     if (b.classList.contains('sold-out')) return toast(tEd('ed.soldOutPick'));
     const oldInk = inkFor(surfaceHex());
     const fromColor = st.colorId;
+    const fromSize = st.sizeId; // (before a sold-out size is switched below: the pieces follow from here)
     st.colorId = b.dataset.color;
     // The chosen size sold out in this colour: the first size there is.
     if (!sizeOk(st.product, st.colorId, st.product.sizes.find((z) => z.id === st.sizeId))) {
@@ -3401,7 +3406,7 @@
         toast(tEd('ed.sizeSwitched'));
       }
     }
-    qtyFollow(fromColor, st.sizeId);
+    qtyFollow(fromColor, fromSize);
     const newInk = inkFor(surfaceHex());
     renderOptions();
     await applyMockup();
@@ -4757,6 +4762,8 @@
       if (!inlined.has(url)) inlined.set(url, toDataUrl(url));
       svg = svg.split(url).join(await inlined.get(url).catch(() => ''));
     }
+    // (And the site's own design pictures: uploaded ready designs.)
+    if (D.inlineSvgImages) svg = await D.inlineSvgImages(svg);
     const fonts = await window.POD_FX.fontFaceCss(canvas.getObjects());
     const note = `<!-- ebda3 artwork: ${side.printWidthIn} x ${side.printHeightIn} in${b ? ` + ${side.bleedIn} in bleed each side` : ''}. sRGB. -->`;
     return svg.replace(/<defs>/, `${note}<defs><style>${fonts}</style>`);

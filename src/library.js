@@ -422,6 +422,26 @@ class Library {
     this.index = { hidden: [], deleted: [], custom: [], done: [] };
     this.stamp = null;
     this.reload();
+    this.noteFirstSeen();
+  }
+  /** Starter designs without a known day (added in code since the dates were written): today. */
+  noteFirstSeen() {
+    const seen = this.index.firstSeen || {};
+    const fresh = SEED.filter((d) => !DATES[d.id] && !seen[d.id]);
+    if (!fresh.length) return;
+    try {
+      this.withLock(() => {
+        const day = new Date().toISOString().slice(0, 10);
+        this.index.firstSeen ||= {};
+        for (const d of fresh) this.index.firstSeen[d.id] ||= day;
+        this.save();
+      });
+    } catch (e) { /* read-only data folder: no day for those */ }
+  }
+  /** The day a design was added (YYYY-MM-DD), or null. */
+  addedOn(d) {
+    if (d.createdAt) return String(d.createdAt).slice(0, 10);
+    return DATES[d.id] || (this.index.firstSeen || {})[d.id] || null;
   }
   /**
    * One-time changes to the shop's own list (each runs once per shop, then is remembered in the
@@ -673,6 +693,10 @@ function showOn(d, list) {
   const from = fromP && fromP.colors.find((c) => c.id === d.color);
   return { product: id, color: from ? to.colors.reduce((best, c) => (distance(c.hex, from.hex) < distance(best.hex, from.hex) ? c : best)).id : to.colors[0].id };
 }
+// The day each starter design was added (from the code's history: src/library-dates.json); ones added later
+// in code get the day this shop first saw them (index.firstSeen).
+let DATES = {};
+try { DATES = require('./library-dates.json'); } catch (e) { DATES = {}; }
 // The first 87 picture designs (src/library-packs/styles.js), the ones the owner's choice was made with.
 const FIRST_ARTWORK = new Set((require('./library-packs/styles').designs || []).filter((d) => (d.items || []).some((it) => it.kind === 'image')).map((d) => d.id));
 /** Products with at least `min` starter designs drawn with artwork (leaving out paused or deleted ones). */

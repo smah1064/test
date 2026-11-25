@@ -118,11 +118,11 @@ window.PODSaved = (() => {
       <div class="cart-item saved-item${note(it) ? ' is-unavailable' : ''}">
         <img src="${esc(it.previewUrl)}" alt="${esc(t('cart.preview', { product: tr(it.productName) }))}" loading="lazy">
         <div>
-          <h3>${esc(tr(it.productName))} <span class="saved-state ready">${esc(t('saved.readyTag'))}</span></h3>
+          <h3>${esc(tr(it.productName))} ${note(it) ? `<span class="saved-state blocked">${esc(t('cart.blocked'))}</span>` : `<span class="saved-state ready">${esc(t('saved.readyTag'))}</span>`}</h3>
           <div class="meta">${meta(it)}</div>
           ${note(it) ? `<p class="unavail-note" role="note">${esc(note(it))}</p>` : ''}
           <div class="actions">
-            ${retired(it) ? '' : `<button class="btn btn-sm btn-primary" type="button" data-to-cart="${esc(it.designId)}">${esc(t('cart.moveToCart'))}</button>`}
+            ${retired(it) ? '' : `<button class="btn btn-sm ${note(it) ? '' : 'btn-primary'}" type="button" data-to-cart="${esc(it.designId)}">${esc(t('cart.moveToCart'))}</button>`}
             ${moreLink(it)}
             <button class="btn btn-sm btn-danger" type="button" data-saved-remove="${esc(it.designId)}">${esc(t('cart.remove'))}</button>
           </div>

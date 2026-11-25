@@ -1347,3 +1347,6 @@ html[dir="rtl"] .hm-arrow { transform: scaleX(-1); }
 
 /* Stock per colour and size: "only n left" next to a size nearly gone in the chosen colour */
 .few-tag { font-size: 10.5px; font-weight: 700; line-height: 1.4; padding: 0 6px; border-radius: 999px; background: #fff4e0; color: var(--warn); vertical-align: middle; white-space: nowrap; }
+/* Product page: "Show more designs" under the ready designs. */
+.pp-more { display: flex; justify-content: center; margin: 18px 0 4px; }
+.pp-more:empty { display: none; }

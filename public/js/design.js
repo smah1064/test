@@ -156,6 +156,10 @@
     $('dp-few').textContent = few ? t('pp.fewLeft', { n: POD.num(few) }) : '';
     $('dp-price').textContent = money(product.basePrice + size.surcharge);
     $('dp-edit').href = `/editor?library=${encodeURIComponent(design.id)}&product=${product.id}&color=${color.id}`;
+    // A design that is one picture (no words to change): "Make it yours in the editor".
+    const hasWords = (design.items || []).some((i) => i.kind === 'text') || (design.objects || []).some((o) => /text/i.test(o.type || ''));
+    $('dp-edit').dataset.i18n = hasWords ? 'design.customize' : 'design.customizePic';
+    $('dp-edit').textContent = t($('dp-edit').dataset.i18n);
     document.title = `${tr(design.name)} · ${t('brand')}`;
     const active = $('dp-products').querySelector('.active');
     if (active) active.scrollIntoView({ block: 'nearest', inline: 'center' });
