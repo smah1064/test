@@ -4060,7 +4060,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   const STATUS_LOG = { live: 'in the shop', hidden: 'paused', removed: 'stopped selling' };
   const logCatalog = (db, req, productId, what) => {
     db.catalogLog ||= [];
-    db.catalogLog.push({ at: new Date().toISOString(), who: req.adminWho.name, productId, what: String(what).slice(0, 200) });
+    // (A team member's change applied on an owner's approval: who approved it too.)
+    const w = req.adminWho;
+    db.catalogLog.push({ at: new Date().toISOString(), who: w.name, ...(w.approvalId ? { approvedBy: w.approvedByEmergency ? 'owner' : w.approvedBy } : {}), productId, what: String(what).slice(0, 200) });
     if (db.catalogLog.length > 500) db.catalogLog.splice(0, db.catalogLog.length - 500);
   };
   /** A product manager's edit with the money fields as they stand now (they can't change prices). */
@@ -4369,7 +4371,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       }
       if (typeof b.active === 'boolean') u.active = b.active;
       if (JSON.stringify([roles.rolesOf(u), u.active !== false]) !== before) {
-        u.gen = (u.gen || 0) + 1;
+        // (Not you: an owner adding a role to their own row stays signed in; they keep the owner role anyway.)
+        if (u.id !== req.adminWho.id) u.gen = (u.gen || 0) + 1;
         // Their changes still waiting are cancelled (switched off), or the ones their new roles can't make.
         const perms = roles.permsOf(roles.rolesOf(u));
         cancelOpenOf(db, u.id, req.adminWho, (a) => u.active === false || !perms.has((roles.ROUTES[a.action] || {}).perm),
@@ -4472,7 +4475,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     })() : {}),
     changes: changesOf(a),
     ...(changedSince(a) ? { changedSince: true } : {}),
-    method: a.method, path: a.path, status: a.status,
+    method: a.method, path: a.path, status: a.status === 'withdrawn' ? 'cancelled' : a.status,
     ...(a.decidedBy ? { decidedBy: a.decidedBy, decidedAt: a.decidedAt } : {}),
     ...(a.note ? { note: a.note } : {}), ...(a.error ? { error: a.error } : {}), ...(a.detail ? { detail: a.detail } : {}),
   });
@@ -4585,7 +4588,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     }
     if (key.includes('/coupons')) {
       const c = p.id && (store.db.coupons || []).find((x) => x.id === p.id);
-      const code = String(b.code || (c && c.code) || '');
+      // (The code as it will be made: capitals, no spaces.)
+      const code = b.code ? coupons.normCode(b.code) : String((c && c.code) || '');
       return enAr(code, code);
     }
     // (Each language on its own: its digits, its currency and its words.)
@@ -4594,13 +4598,23 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const desc = String(e.description || e.note || '').trim().slice(0, 80);
       return enAr([moneyIn(e.amount, 'en'), cat.en, desc].filter(Boolean).join(' — '), [moneyIn(e.amount, 'ar'), cat.ar, desc].filter(Boolean).join(' — '));
     };
-    if (key === 'POST /api/admin/expenses') return expense(b);
+    // (From the cleaned values, as they will be saved: "0x2710" is 10,000.)
+    if (key === 'POST /api/admin/expenses') return expense(accounting.cleanExpense(b).expense || b);
     if (key === 'DELETE /api/admin/expenses/:id') {
       const e = (store.db.expenses || []).find((x) => x.id === p.id);
       return e ? expense(e) : enAr('', '');
     }
-    const costText = (v, lang) => (v === null || v === '' ? (lang === 'ar' ? 'اتمسحت' : 'cleared') : accounting.money(v) === undefined ? String(v) : moneyIn(v, lang));
-    if (key === 'PATCH /api/admin/items/:itemId/cost') return enAr(`${orderNo(p.itemId)} → ${costText(b.actualCost, 'en')}`, `${orderNo(p.itemId)} ← ${costText(b.actualCost, 'ar')}`);
+    const costText = (v, lang) => {
+      const n = accounting.money(v);
+      return n === null || v === '' ? (lang === 'ar' ? 'اتمسحت' : 'cleared') : n === undefined ? String(v).slice(0, 20) : moneyIn(n, lang);
+    };
+    if (key === 'PATCH /api/admin/items/:itemId/cost') {
+      // (Which item: an order can have several.)
+      const f = store.findItem(p.itemId);
+      const prod = f && getProduct(f.item.productId);
+      const what = (l) => [orderNo(p.itemId), prod ? prod.name[l] : '', f && f.order.items.length > 1 ? `${f.order.items.indexOf(f.item) + 1}/${f.order.items.length}` : ''].filter(Boolean).join(' · ');
+      return enAr(`${what('en')} → ${costText(b.actualCost, 'en')}`, `${what('ar')} ← ${costText(b.actualCost, 'ar')}`);
+    }
     if (key === 'PATCH /api/admin/orders/:orderId/shipping-cost') return enAr(`${orderNo(p.orderId)} → ${costText(b.actualShipping, 'en')}`, `${orderNo(p.orderId)} ← ${costText(b.actualShipping, 'ar')}`);
     if (key === 'PUT /api/admin/accounts/settings') return enAr(`shipping cost ${costText(b.shippingCost, 'en')}`, `تكلفة الشحن ${costText(b.shippingCost, 'ar')}`);
     if (key === 'PUT /api/admin/pricing/:productId') {
@@ -4678,14 +4692,16 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const { coupon, error } = coupons.cleanCoupon(req.body, { products: PRODUCTS, categories: CATEGORIES });
       if (error) throw new HttpError(400, error);
       if ((store.db.coupons || []).some((c) => c.code === coupon.code)) throw new HttpError(409, 'couponExists');
+      // (A second request for a code already waiting would only fail when approved.)
+      if (approvalsAll().some((a) => (a.status === 'pending' || a.status === 'failed') && a.action === 'POST /api/admin/coupons' && a.body && coupons.normCode(a.body.code) === coupon.code)) throw new HttpError(409, 'couponWaiting');
     },
     'PUT /api/admin/coupons/:id': (req) => {
-      if (!(store.db.coupons || []).some((c) => c.id === req.params.id)) throw new HttpError(404, 'couponNotFound');
+      if (!(store.db.coupons || []).some((c) => c.id === req.params.id)) throw new HttpError(404, 'couponGone');
       const { coupon, error } = coupons.cleanCoupon(req.body, { products: PRODUCTS, categories: CATEGORIES });
       if (error) throw new HttpError(400, error);
       if ((store.db.coupons || []).some((c) => c.code === coupon.code && c.id !== req.params.id)) throw new HttpError(409, 'couponExists');
     },
-    'DELETE /api/admin/coupons/:id': (req) => { if (!(store.db.coupons || []).some((c) => c.id === req.params.id)) throw new HttpError(404, 'couponNotFound'); },
+    'DELETE /api/admin/coupons/:id': (req) => { if (!(store.db.coupons || []).some((c) => c.id === req.params.id)) throw new HttpError(404, 'couponGone'); },
     'PUT /api/admin/pricing/:productId': (req) => {
       const product = getProduct(req.params.productId);
       if (!product) throw new HttpError(404, 'unknownProduct');
@@ -4717,6 +4733,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   /** A change kept for an owner: 202 { pending: true, approval } (nothing changes until it's approved). */
   async function holdForApproval(req, res, key, route) {
     await readBody(req, res, route);
+    // (Nothing nested deeper than any real change: such a body can't be kept or saved safely.)
+    const depth = (v, d = 0) => (d > 24 ? d : v && typeof v === 'object' ? Math.max(d, ...Object.values(v).slice(0, 2000).map((x) => depth(x, d + 1))) : d);
+    if (!Buffer.isBuffer(req.body) && depth(req.body) > 20) throw new HttpError(400, 'badRequest');
     // (A change with nothing in it is refused: an empty edit would only fill the owner's list.)
     if (req.method !== 'DELETE' && !Buffer.isBuffer(req.body) && (!req.body || typeof req.body !== 'object' || Array.isArray(req.body) || !Object.keys(req.body).length)) throw new HttpError(400, 'nothingToApprove');
     const checked = (APPROVAL_CHECKS[key] && await APPROVAL_CHECKS[key](req)) || {};
@@ -5361,6 +5380,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (status === undefined) return res.json(adminItem(order, item, order.items.indexOf(item)));
     }
     if (!ITEM_STATUSES.includes(status)) throw new HttpError(400, 'badStatus', { list: ITEM_STATUSES.join(', ') });
+    // (A button on a list that's out of date: someone else moved the job meanwhile. QA admin round.)
+    const from = (req.body || {}).from;
+    if (typeof from === 'string' && from !== item.status) throw new HttpError(409, 'jobMoved');
     // A job waiting for review or for the customer's approval is cleared from the Review tab, not here.
     if (REVIEW_STATUSES.includes(item.status) && status !== item.status) throw new HttpError(409, 'notApproved');
     if (item.status !== status) {
@@ -5660,7 +5682,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (db.coupons.some((c) => c.code === coupon.code && c.id !== id)) throw new HttpError(409, 'couponExists');
       if (id) {
         const cur = db.coupons.find((c) => c.id === id);
-        if (!cur) throw new HttpError(404, 'couponNotFound');
+        if (!cur) throw new HttpError(404, 'couponGone');
         for (const k of Object.keys(cur)) if (!['id', 'createdAt'].includes(k)) delete cur[k];
         return Object.assign(cur, coupon, { updatedAt: new Date().toISOString() });
       }
@@ -5775,6 +5797,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   });
   app.delete('/api/admin/expenses/:id', requireAdmin, (req, res) => {
     store.mutate((db) => {
+      // (Already deleted: said so, e.g. a second approved request to delete it.)
+      if (!(db.expenses || []).some((e) => e.id === req.params.id)) throw new HttpError(404, 'expenseGone');
       db.expenses = (db.expenses || []).filter((e) => e.id !== req.params.id);
     });
     res.json({ ok: true });

@@ -368,7 +368,7 @@
     return `<ul class="pm-log-list">${rows.map((l) => {
       const p = products().find((x) => x.id === l.productId);
       return `<li><span class="pm-log-when">${esc(when(l.at))}</span>
-        <span><b dir="auto">${esc(whoName(l.who))}</b> · ${onlyId ? '' : `${p && canEdit(p) ? `<button type="button" class="link-btn" data-pm-act="edit" data-id="${esc(l.productId)}">${esc(tr(p.name))}</button>` : `<bdi dir="ltr">${esc(l.productId)}</bdi>`} · `}${esc(logWhat(l.what))}</span></li>`;
+        <span><b dir="auto">${esc(whoName(l.who))}</b>${l.approvedBy ? ` <span class="muted">(${esc(t('act.approvedBy', { name: `\u2068${whoName(l.approvedBy)}\u2069` }))})</span>` : ''} · ${onlyId ? '' : `${p && canEdit(p) ? `<button type="button" class="link-btn" data-pm-act="edit" data-id="${esc(l.productId)}">${esc(tr(p.name))}</button>` : `<bdi dir="ltr">${esc(l.productId)}</bdi>`} · `}${esc(logWhat(l.what))}</span></li>`;
     }).join('')}</ul>`;
   }
   function renderLog() {

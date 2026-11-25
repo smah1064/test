@@ -394,3 +394,47 @@ test('QA admin round: the activity log can\'t be flushed by the people it watche
   const refused = log.find((e) => e.whoId === ops.id && e.status === 400);
   assert.deepStrictEqual(refused.body.fields.slice(0, 2), ['k0', 'k1'], 'a refused request: its field names only');
 });
+
+test('QA admin round: a deeply nested request is refused and never stops the shop saving', async () => {
+  const cat = await addMember('cat13', ['catalogue']);
+  const deep = `${'['.repeat(5000)}"x"${']'.repeat(5000)}`;
+  const r = await fetch(`${base}/api/admin/catalog/tshirt`, { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cat.token}` }, body: `{"description":{"en":"deep"},"x":${deep}}` });
+  assert.strictEqual(r.status, 400);
+  // Everything else still saves.
+  assert.strictEqual((await call('/api/admin/staff', 'POST', { name: 'After', username: 'after13', roles: ['finance'] }, owner)).status, 201);
+  // And the store itself: a change that can't be written leaves the last saved data, and the next save works.
+  const { Store } = require('../src/store');
+  const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'pod-store-'));
+  const store = new Store(dir);
+  store.mutate((db) => { db.keep = 1; });
+  const loop = {};
+  loop.self = loop;
+  assert.throws(() => store.mutate((db) => { db.bad = loop; }));
+  assert.strictEqual(store.db.bad, undefined);
+  store.mutate((db) => { db.keep = 2; });
+  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(dir, 'db.json'), 'utf8')).keep, 2);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('QA admin round: coupon codes as they will be made, one waiting request per code; owners keep their sign-in editing their own row', async () => {
+  const fin = await addMember('fin16', ['finance']);
+  const r = await call('/api/admin/coupons', 'POST', { code: 'blackfriday', type: 'percent', value: 15 }, fin.token);
+  assert.strictEqual(r.status, 202, r.text);
+  assert.match(r.json.approval.summary.en, /BLACKFRIDAY/);
+  assert.strictEqual((await call('/api/admin/coupons', 'POST', { code: 'BlackFriday', type: 'percent', value: 20 }, fin.token)).json.code, 'couponWaiting');
+  const o = await addMember('owner16', ['owner']);
+  const ch = await call(`/api/admin/staff/${o.id}`, 'PATCH', { roles: ['owner', 'finance'] }, o.token);
+  assert.strictEqual(ch.status, 200);
+  assert.strictEqual((await call('/api/admin/session', 'GET', undefined, o.token)).status, 200, 'still signed in');
+  // Operations: no coupon (its code often names the amount) in what they get.
+  assert.strictEqual(require('../src/roles').withoutAmounts({ orders: [{ coupon: 'SAVE10', items: [{ coupon: { code: 'SAVE10', discount: 10 } }] }] }).orders[0].coupon, undefined);
+});
+
+test('QA admin round: gone targets and moved jobs say so', async () => {
+  // An expense deleted twice: the second says it's already gone; a deleted coupon says so in admin words.
+  const e = await call('/api/admin/expenses', 'POST', { amount: 5, category: 'other', date: '2026-11-25', description: 'tape' }, owner);
+  assert.strictEqual((await call(`/api/admin/expenses/${e.json.id}`, 'DELETE', undefined, owner)).status, 200);
+  assert.strictEqual((await call(`/api/admin/expenses/${e.json.id}`, 'DELETE', undefined, owner)).json.code, 'expenseGone');
+  const gone = await call('/api/admin/coupons/no-such-coupon', 'PUT', { code: 'GONE10', type: 'percent', value: 5 }, owner);
+  assert.strictEqual(gone.json.code, 'couponGone', gone.text);
+});

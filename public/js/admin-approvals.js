@@ -55,8 +55,8 @@ window.AdminApprovals = (() => {
     return `
       <div class="ap-result">
         <p class="small ap-decided">${esc(line)}</p>
-        ${a.note ? `<p class="small ap-note" dir="auto">${esc(t('ap.ownerNote', { note: inLang(a.note) }))}</p>` : ''}
-        ${a.error ? `<p class="small ap-error" dir="auto">${esc(t('ap.error', { error: inLang(a.error) }))}</p>` : ''}
+        ${a.note ? `<p class="small ap-note" dir="auto">${esc(t('ap.ownerNote', { note: `\u2068${inLang(a.note)}\u2069` }))}</p>` : ''}
+        ${a.error ? `<p class="small ap-error" dir="auto">${esc(t('ap.error', { error: `\u2068${inLang(a.error)}\u2069` }))}</p>` : ''}
         ${a.detail ? `<p class="small ap-detail" dir="auto">${esc(inLang(a.detail))}</p>` : ''}
       </div>`;
   }

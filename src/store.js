@@ -193,8 +193,16 @@ class Store {
     try {
       this.sync();
       const result = fn ? fn(this.db) : undefined;
-      const text = JSON.stringify(this.db, null, 2);
-      writeAtomic(this.dbPath, text);
+      let text;
+      try {
+        text = JSON.stringify(this.db, null, 2);
+        writeAtomic(this.dbPath, text);
+      } catch (e) {
+        // The data couldn't be written (something in it can't be saved): back to the last saved data, so one bad
+        // change never stops every later save (orders, sign-ups...). QA 25 Nov.
+        if (this.base) this.db = JSON.parse(JSON.stringify(this.base));
+        throw e;
+      }
       this.base = JSON.parse(text);
       this.stamp = this.fileStamp();
       return result;

@@ -217,7 +217,7 @@ test('every admin request goes through settle(): no screen takes a 202 answer fo
   // The zip upload's own requests (XHR) look for it too.
   const UP = read('js/admin-uploads.js');
   assert.match(UP, /if \(window\.AdminRoles && AdminRoles\.isPending\(body\)\) \{/);
-  assert.match(UP, /if \(err\.pending\) return say\(\(\) => AdminRoles\.pendingText\(err\.approval\), false\);/);
+  assert.match(UP, /if \(err\.pending\) \{[\s\S]{0,400}?const no = err\.skipped \|\| \[\];[\s\S]{0,300}?return say\(\(\) => \[AdminRoles\.pendingText\(err\.approval\)/);
   // Products: a section sent for approval keeps what was typed (it stays unsaved), and a dialog closes.
   const PM = read('js/admin-products.js');
   // (A section sent for approval is no longer "unsaved": Save isn't offered again for the same request, QA admin tester 4.)

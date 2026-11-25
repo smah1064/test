@@ -157,7 +157,10 @@ window.AdminRoles = (() => {
    */
   function settle(body) {
     if (!isPending(body)) return body;
-    throw announce(pendingError(body.approval));
+    const err = pendingError(body.approval);
+    // (What the server already said can't go through, e.g. the zip designs it won't publish.)
+    if (Array.isArray(body.skipped)) err.skipped = body.skipped;
+    throw announce(err);
   }
   const onPending = (fn) => { hook = typeof fn === 'function' ? fn : null; };
   /** A red toast with words just said as "sent for approval" (a caller that didn't look for `pending`): left out. */

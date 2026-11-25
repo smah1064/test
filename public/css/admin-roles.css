@@ -141,3 +141,6 @@
 
 /* The thing asked about changed after the request: approving replaces what's there now. */
 .ap-changed { margin: 6px 0 0; padding: 6px 10px; border-radius: 8px; background: #fff6e5; color: #7a4b00; }
+
+/* Long names without spaces wrap inside their card (phones). */
+.st-list, .st-list *, .ap-item, .ap-item * { overflow-wrap: anywhere; min-width: 0; }

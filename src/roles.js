@@ -152,6 +152,7 @@ const MONEY_KEYS = new Set([
   'subtotal', 'discount', 'total', 'orderTotal', 'price', 'unitPrice', 'lineTotal', 'linePrice', 'costAtOrder',
   'actualCost', 'actualShipping', 'cost', 'costs', 'fee', 'expressFee', 'amount', 'prices', 'basePrice',
   'extraSidePrice', 'surcharge', 'packPrice', 'spent', 'profit', 'revenue', 'margin',
+  'coupon', // (its code often names the amount: SAVE10)
 ]);
 /**
  * A copy without amounts: money keys dropped at any depth ('shipping' only when it is a number).

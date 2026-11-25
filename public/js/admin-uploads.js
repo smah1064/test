@@ -790,7 +790,13 @@ window.AdminUploads = (() => {
       paintBar();
       if (err.status === 401) return;
       // A staff member's designs wait for an owner's approval: said in plain words, the review stays as it is.
-      if (err.pending) return say(() => AdminRoles.pendingText(err.approval), false);
+      if (err.pending) {
+        // The designs that can't be published are marked now, as for a direct publish.
+        const no = err.skipped || [];
+        for (const s of no) itemErr.set(s.itemId, String(s.code || ''));
+        if (no.length) render();
+        return say(() => [AdminRoles.pendingText(err.approval), no.length ? POD.plural('up.notPublished', no.length) : ''].filter(Boolean).join(' '), Boolean(no.length));
+      }
       if (err.status === 404) return done(b.id, () => t('up.gone'));
       say(err.message, true);
     }

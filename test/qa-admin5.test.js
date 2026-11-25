@@ -270,7 +270,8 @@ test('Rights requests: an owner-only tab with a badge, opened by /admin#rights, 
   assert.strictEqual(staffRoute('/api/admin/takedowns/abc'), false);
   assert.match(ADMIN, /if \(tab !== 'rights' && can\('rights'\)\) AdminRights\.count\(\)/);
   // The alert's link.
-  assert.match(ADMIN, /const tabFromHash = \(\) => \(location\.hash === '#rights' \? 'rights' : ''\);\s*if \(tabFromHash\(\)\) showTab\(tabFromHash\(\)\);/);
+  // (#rights first; otherwise the tab this browser tab had open before a reload.)
+  assert.match(ADMIN, /const tabFromHash = \(\) => \(location\.hash === '#rights' \? 'rights' : ''\);[\s\S]{0,200}if \(tabFromHash\(\)\) showTab\(tabFromHash\(\)\);/);
   assert.match(ADMIN, /addEventListener\('hashchange'/);
   assert.match(ADMIN, /\$\('tab-rights'\)\.hidden = tab !== 'rights';/);
   assert.match(fs.readFileSync(path.join(__dirname, '../src/notify.js'), 'utf8'), /\/admin#rights/);

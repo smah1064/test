@@ -1089,7 +1089,7 @@ window.POD_STRINGS = {
   'admin.weakPw': ['Your admin password is easy to guess. In Hostinger, set ADMIN_PASSWORD to a long password (16+ characters with letters, numbers and symbols).', 'كلمة مرور الإدارة سهلة التخمين. من Hostinger غيّر ADMIN_PASSWORD إلى كلمة طويلة (16 حرفًا أو أكثر فيها حروف وأرقام ورموز).'],
   'admin.loginTitle': ['Production dashboard', 'لوحة الإنتاج'],
   'admin.loginText': ['Enter the admin password to see the print queue.', 'أدخل كلمة مرور الإدارة لعرض قائمة الطباعة.'],
-  'admin.password': ['Password', 'كلمة المرور'],
+  'admin.password': ['Password', 'كلمة السر'],
   'admin.signIn': ['Sign in', 'دخول'],
   'admin.queueTitle': ['Print queue', 'قائمة الطباعة'],
   'admin.tabQueue': ['Queue', 'القائمة'],

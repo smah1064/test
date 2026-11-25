@@ -3113,15 +3113,18 @@
     if (!btn) return;
     btn.disabled = true;
     try {
+      // (from: the status this list shows; if a colleague moved the job meanwhile, the server says so.)
+      const shown = itemById(btn.dataset.item);
       await adminApi('/api/admin/items/' + encodeURIComponent(btn.dataset.item), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: btn.dataset.status }),
+        body: JSON.stringify({ status: btn.dataset.status, ...(shown && shown.status ? { from: shown.status } : {}) }),
       });
       await refresh();
     } catch (err) {
       toast(err.message, 'error');
       btn.disabled = false;
+      if (err.status === 409) refresh().catch(() => {});
     }
   });
 
