@@ -71,7 +71,10 @@ async function pageAt(test, timeout = 15000) {
     const pages = context ? context.pages().filter((p) => !p.isClosed()) : [];
     for (const p of pages.reverse()) {
       try {
-        if (test(new URL(p.url())) && (await p.evaluate(() => document.readyState, null).catch(() => null))) return p;
+        if (!test(new URL(p.url()))) continue;
+        // A page Playwright lost track of may never answer: give it two seconds.
+        const ready = await Promise.race([p.evaluate(() => document.readyState).catch(() => null), sleep(2000).then(() => null)]);
+        if (ready) return p;
       } catch { /* not an address */ }
     }
     await sleep(400);
