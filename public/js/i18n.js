@@ -1020,6 +1020,7 @@ window.POD_STRINGS = {
   'checkout.placing': ['Placing order…', 'بنأكد الطلب…'],
   'checkout.fill': ['Please fill in: {field}', 'من فضلك أدخل: {field}'],
   'cart.added': ['Added to your cart', 'اتضاف للسلة'],
+  'cart.updated': ['Your cart item is updated', 'المنتج اللي في السلة اتعدّل'],
   // Delivery choice at checkout: standard costs the normal shipping fee, express adds its fee on top.
   'delivery.feeStandard': ['{price} shipping', 'شحن {price}'],
   'delivery.feeFree': ['Free shipping', 'شحن مجاني'],

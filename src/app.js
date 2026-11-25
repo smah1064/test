@@ -4777,6 +4777,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (!p) throw new HttpError(404, 'unknownProduct');
       const body = req.body && typeof req.body === 'object' ? req.body : {};
       if (body.prices !== undefined) throw new HttpError(403, 'ownerOnly');
+      // (A field products don't have is refused now: it would wait, be approved and change nothing, QA 25 Nov.)
+      const unknown = Object.keys(body).find((k) => !(k in EDIT_FIELDS));
+      if (unknown) throw new HttpError(400, 'badProductField', { field: unknown });
       const c = catalog.clean(p, staffPrices(p, body), { categories: CATEGORIES.map((x) => x.id), prev: catalogEdits()[p.id] || null });
       if (c.error) throw new HttpError(400, c.error, { field: c.field || '' });
       // (Kept as it will be applied: the owner never approves a number that won't happen.)

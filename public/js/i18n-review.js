@@ -68,6 +68,8 @@
     'pf.exportSize': ['The print file is {widthPx} × {heightPx} px; this size needs {expectedW} × {expectedH} px.', 'ملف الطباعة {widthPx} × {heightPx} px، والمقاس ده محتاج {expectedW} × {expectedH} px.'],
     'pf.empty': ['There is nothing to print on this side.', 'مفيش حاجة تتطبع على الوش ده.'],
     'pf.outsideSafe': ['Artwork comes closer than {mm} mm to the trim edge and may be cut off.', 'التصميم قريب من حافة القص أقل من {mm} مم وممكن يتقص.'],
+    'pf.outsideSafe.edge': ['Artwork touches the trim edge and may be cut off.', 'التصميم لازق في حافة القص، فممكن يتقص.'],
+    'pf.outsideSafe.named': ['“{name}” touches the trim edge and may be cut off.', '«{name}» لازق في حافة القص، فممكن يتقص.'],
     'pf.semiTransparent': ['{percent}% of the artwork is soft or half-transparent; DTF and DTG print that badly.', '{percent}% من التصميم شفاف جزئيًا أو باهت؛ ده بيطلع وحش في طباعة DTF و DTG.'],
     'pf.fontFallback': ['A font did not load when the file was made, a substitute was used: {fonts}.', 'فيه خط ما اتحمّلش وقت عمل الملف واتستخدم خط بديل: {fonts}.'],
     'pf.lowResImage': ['The photo “{name}” is only {dpi} DPI at its printed size.', 'الصورة “{name}” دقتها {dpi} DPI بس بالمقاس المطبوع.'],

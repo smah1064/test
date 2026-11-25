@@ -1376,6 +1376,9 @@
     await loadObjects(snap.o);
     st.designs[st.side] = snap.o;
     renderPlacement();
+    // The step as it stands now (its ink swapped, or anything the canvas normalised) is the history's: otherwise the
+    // next Undo's commit() saw a difference, cut the history there and pushed it again, so Undo got stuck (QA 25 Nov).
+    h.stack[h.i] = snapshot();
     refreshChrome();
     renderProps();
   }
@@ -2849,8 +2852,17 @@
     st.wordSel = i < 0 ? null : i;
     st.wordSelAt = i < 0 ? null : { text: o.text, start: words[i].start };
   }
+  /**
+   * A place in the text as Fabric counts it (letters as drawn: an emoji is one, though it is two JavaScript
+   * characters). wordsOf() counts JavaScript characters, as the rest of the word tools do (QA 25 Nov: an emoji
+   * before the word coloured the wrong letters).
+   */
+  const fabricAt = (o, i) => {
+    const split = fabric.util.string.graphemeSplit;
+    return split ? split(String(o.text || '').slice(0, i)).length : i;
+  };
   function wordColour(o, w) {
-    const st0 = o.getSelectionStyles ? o.getSelectionStyles(w.start, w.start + 1)[0] : null;
+    const st0 = o.getSelectionStyles ? o.getSelectionStyles(fabricAt(o, w.start), fabricAt(o, w.start) + 1)[0] : null;
     return toHex((st0 && st0.fill) || (isGradient(o.fill) || o.fill === 'transparent' ? baseColour(o) : o.fill));
   }
   const wordChips = (o, words) => words.map((w, i) => `<button type="button" class="word-chip ${st.wordSel === i ? 'active' : ''}" data-word="${i}" style="color:${wordColour(o, w)}">${esc(w.text)}</button>`).join('');
@@ -2894,7 +2906,7 @@
     followWordSel(o, words);
     const w = words[st.wordSel];
     if (!w) return;
-    o.setSelectionStyles({ fill: colour }, w.start, w.end);
+    o.setSelectionStyles({ fill: colour }, fabricAt(o, w.start), fabricAt(o, w.end));
     o.dirty = true;
     canvas.requestRenderAll();
   }
@@ -3482,7 +3494,9 @@
     }).join('');
     $('sizes').innerHTML = p.sizes.map((s) => {
       const out = !sizeOk(p, st.colorId, s);
-      return `<button class="chip ${s.id === st.sizeId ? 'active' : ''}${out ? ' sold-out' : ''}" data-size="${s.id}"${out ? ' aria-disabled="true"' : ''}>${esc(tr(s.label))}${out ? ` <span class="sold-tag">${esc(tEd('ed.soldOut'))}</span>` : POD.sizeNote(st.product, s) ? ` <span style="opacity:.7">${esc(POD.sizeNote(st.product, s))}</span>` : ''}</button>`;
+      // (A garment whose size isn't chosen yet shows none as chosen: Add to cart asks for it, QA 25 Nov.)
+      const askSize = p.category === 'apparel' && p.sizes.length > 1 && !st.sizePicked;
+      return `<button class="chip ${s.id === st.sizeId && !askSize ? 'active' : ''}${out ? ' sold-out' : ''}" data-size="${s.id}"${out ? ' aria-disabled="true"' : ''}>${esc(tr(s.label))}${out ? ` <span class="sold-tag">${esc(tEd('ed.soldOut'))}</span>` : POD.sizeNote(st.product, s) ? ` <span style="opacity:.7">${esc(POD.sizeNote(st.product, s))}</span>` : ''}</button>`;
     }).join('');
     // Print or embroidery (garments, caps, totes, aprons).
     $('method-field').hidden = !p.embroidery;
@@ -4327,13 +4341,14 @@
     renderOptions();
   }
   let qtyRedraw = false;
-  function renderQty() {
+  function renderQty({ force = false } = {}) {
     const box = $('qty-field');
     if (!box) return;
     // (While a quantity box is being typed in, drawing the boxes again would lose it and the next box
-    // just tapped: they're drawn once the focus leaves them, QA 25 Nov. The price is kept up to date.)
+    // just tapped: they're drawn once the focus leaves them, QA 25 Nov. The price is kept up to date.
+    // A new colour row asked for is drawn at once: force.)
     const typing = document.activeElement;
-    if (typing && typing.classList && typing.classList.contains('qty-in') && box.contains(typing)) {
+    if (!force && typing && typing.classList && typing.classList.contains('qty-in') && box.contains(typing)) {
       qtyRedraw = true;
       return;
     }
@@ -4430,7 +4445,8 @@
         g[e.target.value] = { [st.sizeId]: 1 };
         st.qty = g;
         refreshChrome();
-        renderQty();
+        // (Drawn now, with the new colour's row: it was waiting for a quantity box to lose its focus, QA 25 Nov.)
+        renderQty({ force: true });
       }
     });
     $('qty-field').addEventListener('focusout', () => setTimeout(redrawQtyIfLeft, 0));
@@ -5624,7 +5640,8 @@
         await POD.drafts.remove(st.product.id);
         try { localStorage.removeItem('pod-rescue:' + st.product.id); } catch (err) { /* private mode */ }
       }
-      location.href = '/cart?added=1';
+      // (An item changed from the cart says "updated", not "added", QA 25 Nov.)
+      location.href = at >= 0 ? '/cart?updated=1' : '/cart?added=1';
     } catch (e) {
       await showSide(original).catch(() => {});
       setZoom(prevZoom);

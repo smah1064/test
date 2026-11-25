@@ -2755,7 +2755,9 @@
     const p = {};
     const n = (v) => (typeof v === 'number' ? Math.round(v * 10) / 10 : v);
     for (const [k, v] of Object.entries(c.params || {})) p[k] = Array.isArray(v) ? v.map((x) => (typeof x === 'number' ? POD.num(x) : x)).join(POD.lang === 'ar' ? '، ' : ', ') : n(v);
-    return hasStr('pf.' + c.id) ? t('pf.' + c.id, p) : t('pf.unknown', { id: c.id });
+    // (Touching the edge, 0 mm: said in words, as the proof page does, not "closer than 0 mm", QA 25 Nov.)
+    const key = c.id === 'outsideSafe' && !Number((c.params || {}).mm) ? ((c.params || {}).name ? 'pf.outsideSafe.named' : 'pf.outsideSafe.edge') : 'pf.' + c.id;
+    return hasStr(key) ? t(key, p) : hasStr('pf.' + c.id) ? t('pf.' + c.id, p) : t('pf.unknown', { id: c.id });
   }
   function rvChecks(item) {
     const pf = item.preflight || proofOf(item).preflight;

@@ -234,8 +234,9 @@
       let delivery = 'standard';
       try { delivery = sessionStorage.getItem('pod-delivery') === 'express' ? 'express' : 'standard'; } catch (e) { /* private mode */ }
       const expressFee = () => (quote && quote.deliveryOptions ? quote.deliveryOptions.find((d) => d.speed === 'express').fee : (deliveryInfo ? deliveryInfo.expressFee : 0));
-      if (new URLSearchParams(location.search).get('added')) {
-        POD.toast(t('cart.added'));
+      const came = new URLSearchParams(location.search);
+      if (came.get('added') || came.get('updated')) {
+        POD.toast(t(came.get('updated') ? 'cart.updated' : 'cart.added'));
         history.replaceState(null, '', '/cart');
       }
 

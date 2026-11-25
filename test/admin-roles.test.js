@@ -500,3 +500,10 @@ test('QA admin round, last fixes: owners choose their own password; weak passwor
   assert.match(r.json.approval.summary.en, /^Ready designs: 1 design: pause/);
   assert.strictEqual((await call('/api/admin/library', 'PATCH', { ids: ['no-such-design'], hidden: true }, cat.token)).status, 404);
 });
+
+test('QA tester 1 (4:01 pm): a product field that doesn\'t exist is refused at once, not kept for approval', async () => {
+  const cat = await addMember('cat1601', ['catalogue']);
+  const r = await call('/api/admin/catalog/tshirt', 'PUT', { pricing: { basePrice: 1 } }, cat.token);
+  assert.strictEqual(r.status, 400);
+  assert.strictEqual(r.json.field, 'pricing');
+});
