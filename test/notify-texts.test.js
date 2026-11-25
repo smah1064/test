@@ -177,3 +177,16 @@ test('printing-house messages: Arabic name, digits and سم', () => {
   assert.match(en, /Front 25\.4 × 30\.5 cm \(moved 3 cm lower, 1\.5 cm left/);
   assert.match(en, /\*Quantity:\* 55/);
 });
+
+test('order messages count packs in copies: 1 × 200 + 1 × 1000 business cards is 1,200 copies, not 2 pieces (QA 25 Nov)', async () => {
+  process.env.ADMIN_LANG = 'en';
+  const cards = {
+    id: 'k', productId: 'bizcards', productName: n('Business Cards', 'كروت شخصية'), color: WHITE, size: { label: n('200 cards', '200 كارت') }, sides: FRONT, price: 1000, copies: 2,
+    // (Older orders have no pack marks on their lines: the product says.)
+    quantities: [{ color: WHITE, size: { id: '200', label: n('200 cards', '200 كارت') }, qty: 1, unitPrice: 250 }, { color: WHITE, size: { id: '1000', label: n('1000 cards', '1000 كارت') }, qty: 1, unitPrice: 600 }],
+  };
+  await notify.orderPlaced(order({ items: [cards] }), { origin: '', lang: 'en' });
+  const wa = sent.find((s) => s.kind === 'whatsapp').text;
+  assert.match(wa, /Business Cards · White · 1200 copies \(200 cards ×1, 1000 cards ×1\)/);
+  assert.doesNotMatch(wa, /2 pieces/);
+});

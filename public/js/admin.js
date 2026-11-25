@@ -268,6 +268,11 @@
   const qtyLines = (item) => (Array.isArray(item.quantities) ? item.quantities.filter((l) => l && Number(l.qty) > 0) : []);
   const piecesOf = (item) => Math.max(1, Number(item.copies) || qtyLines(item).reduce((n, l) => n + Number(l.qty), 0) || 1);
   const piecesText = (n) => t('adminQty.n.' + (n === 1 ? 'one' : n === 2 ? 'two' : n % 100 >= 3 && n % 100 <= 10 ? 'few' : 'many'), { n: POD.num(n) });
+  /** "1,200 copies" for packs (200 cards + 1000 cards), else "2 pieces" (QA 25 Nov). */
+  const countText = (item) => {
+    const copies = POD.packCopies ? POD.packCopies(qtyLines(item)) : null;
+    return copies != null ? POD.plural('qty.copies', copies) : piecesText(piecesOf(item));
+  };
   /** True when the shop prints more than one piece of this item in colours/sizes listed in quantities. */
   const hasQty = (item) => qtyLines(item).length > 1 || (qtyLines(item).length === 1 && piecesOf(item) > 1);
   /** The lines grouped by colour, in the order they come: [{ color, lines, qty }]. */
@@ -308,7 +313,7 @@
   function qtySummary(item) {
     return `<div class="qty-sum">${qtyGroups(item).map((g) => `<span class="qty-grp">${swatch(g.color)}<b>${esc(tr(g.color.name))}${tr(g.color.name) ? ':' : ''}</b>${g.lines.map((l) => `<span class="qty-chip">${esc(sizeName(l))}×<b>${esc(POD.num(Number(l.qty)))}</b></span>`).join('')}</span>`).join('')}</div>`;
   }
-  const piecesPill = (item) => (hasQty(item) ? ` <span class="qty-pieces">${esc(piecesText(piecesOf(item)))}</span>` : '');
+  const piecesPill = (item) => (hasQty(item) ? ` <span class="qty-pieces">${esc(countText(item))}</span>` : '');
   /** "Black · M" for one piece, or nothing when the summary below lists the colours and sizes. */
   const colourSizeText = (item) => (hasQty(item) ? [] : [tr(item.color.name), tr(item.size.label)]);
   const anyDark = (item) => (qtyLines(item).length ? qtyLines(item).some((l) => l.color && isDark(l.color.hex)) : isDark(item.color.hex));
@@ -2403,7 +2408,7 @@
   function reasonText(item, r) {
     const m = proofOf(item).merge || item.merge;
     if (r === 'nameList' && m && m.count) return `${t('rv.reason.nameList')}${SEP()}${t('rv.copies', { n: POD.num(m.count) })}`;
-    if (r === 'bulk') return `${t('rv.reason.bulk')}${SEP()}${piecesText(piecesOf(item))}`;
+    if (r === 'bulk') return `${t('rv.reason.bulk')}${SEP()}${countText(item)}`;
     return hasStr('rv.reason.' + r) ? t('rv.reason.' + r) : r;
   }
   function renderReview() {
@@ -2432,7 +2437,7 @@
           ${thumb ? `<img class="rv-thumb" src="${esc(thumb)}" alt="" ${item.sides ? zoomAttr(item) : ''}>` : '<span class="rv-thumb"></span>'}
           <div class="rv-sum">
             <div class="rv-line"><strong>${esc(item.orderNumber || '')}</strong> <span class="muted small">${esc(t('admin.spec.itemOf', { i: item.position, n: item.of }))}</span> ${pill(item.status)}${expressPill(item)}${samplePill(item)}</div>
-            <div class="rv-line"><b>${esc(tr(item.productName))}</b>${SEP()}${esc(m && m.count ? t('rv.copies', { n: POD.num(m.count) }) : piecesText(piecesOf(item)))}</div>
+            <div class="rv-line"><b>${esc(tr(item.productName))}</b>${SEP()}${esc(m && m.count ? t('rv.copies', { n: POD.num(m.count) }) : countText(item))}</div>
             <div class="rv-line small">${c.name ? line(c.name) : ''} ${c.phone || c.email ? `<bdi dir="ltr" class="muted">${esc(c.phone || c.email)}</bdi>` : ''}</div>
             <ul class="rv-reasons">${rvReasons(item).map((r) => `<li class="rv-reason rv-r-${esc(r)}">${esc(reasonText(item, r))}</li>`).join('')}</ul>
             <div class="muted small">${esc(t('rv.ordered', { date: when(item.orderedAt) }))}</div>

@@ -11,6 +11,7 @@
  * Sending never blocks or fails an order: results are recorded on it.
  */
 const { GOVERNORATES } = require('./egypt');
+const { getProduct } = require('./products');
 const { arabicDigits } = require('./i18n');
 
 const env = (k) => (process.env[k] || '').trim();
@@ -123,6 +124,16 @@ const govName = (id, lang) => tr((GOVERNORATES.find((g) => g.id === id) || {}).n
  * (and photo sets) show the total and every line with its count, like the printing-house
  * message (src/dispatch.js); name lists show the number of names; other items their copies.
  */
+/** Copies in an item's pack lines (100 cards × 2 = 200), from the lines' marks or the product as it is now; else null. */
+function packCopies(it, lines) {
+  const p = getProduct(it.productId);
+  const sizeOf = (l) => {
+    const z = p && l.size && p.sizes.find((x) => x.id === l.size.id);
+    return { pack: Boolean((l.size && l.size.pack) || (z && z.pack)), copies: Number((l.size && l.size.copies) || (z && z.copies)) || 1 };
+  };
+  if (!lines.length || !lines.every((l) => sizeOf(l).pack)) return null;
+  return lines.reduce((n, l) => n + Number(l.qty) * sizeOf(l).copies, 0);
+}
 function itemLine(it, lang) {
   const t = L[lang];
   const name = (v) => tr(v, lang);
@@ -135,9 +146,11 @@ function itemLine(it, lang) {
     const oneColor = new Set(lines.map(colorOf)).size === 1;
     const total = lines.reduce((n, l) => n + Number(l.qty), 0);
     const breakdown = lines.map((l) => `${[oneColor ? '' : colorOf(l), name(l.size && l.size.label)].filter(Boolean).join(' · ')} ×${num(Number(l.qty), lang)}`).join(t.listSep);
+    // Packs (100 cards × 2 + 1000 cards): the copies, never "2 pieces" (QA 25 Nov).
+    const copies = packCopies(it, lines);
     const count = photoset
       ? [Array.isArray(it.photos) && it.photos.length ? t.photos(it.photos.length) : '', t.copies(total)].filter(Boolean).join(' · ')
-      : t.pieces(total);
+      : copies != null ? t.copies(copies) : t.pieces(total);
     parts.push(oneColor ? colorOf(lines[0]) : '', `${count} (${breakdown})`);
     // A photo set's size label is its summary; its options (border…) are not on the lines.
     if (photoset && it.options && typeof it.options === 'object') parts.push(...Object.values(it.options).map((o) => name(o && o.name)));

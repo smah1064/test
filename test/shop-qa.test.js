@@ -171,3 +171,21 @@ test('QA batch: phone marks and dashes, +20 customer search, money in messages',
   const found = await (await fetch(`${base}/api/admin/customers?q=${encodeURIComponent('+20 100 555 6677')}`, { headers: { Authorization: `Bearer ${token}` } })).json();
   assert.ok((found.customers || []).some((c) => c.phone === '01005556677'));
 });
+
+test('the cart price check looks at a few phone numbers a day per visitor, not any number (coupon use stays private)', async () => {
+  token = (await (await post('/api/admin/login', { password: 'secret' })).json()).token;
+  assert.strictEqual((await post('/api/admin/coupons', { code: 'ONLYONCE', type: 'fixed', value: 20, perCustomer: 1 }, { Authorization: `Bearer ${token}` })).status, 201);
+  const mk = () => makeDesign({ productId: 'mug', color: 'white', size: '11oz', sides: { front: { editor: { objects: [{ type: 'i-text', text: 'x' }] } } } });
+  const used = '01055500011';
+  const d1 = await mk();
+  const q1 = await (await post('/api/cart/quote', { designIds: [d1.id], couponCode: 'ONLYONCE' }, { 'X-Forwarded-For': '10.77.0.1' })).json();
+  assert.strictEqual((await post('/api/orders', { customer: { ...CUSTOMER, phone: used }, designIds: [d1.id], couponCode: 'ONLYONCE', expectedTotal: q1.total }, { 'X-Forwarded-For': '10.77.0.1' })).status, 201);
+  const d2 = await mk();
+  const ask = (phone) => post('/api/cart/quote', { designIds: [d2.id], couponCode: 'ONLYONCE', phone }, { 'X-Forwarded-For': '10.77.0.9' }).then((r) => r.json());
+  // Three other numbers, then the used one: no longer looked at for this visitor (the quote can't tell).
+  for (const p of ['01055500021', '01055500022', '01055500023']) assert.strictEqual((await ask(p)).discount, 20);
+  assert.strictEqual((await ask(used)).discount, 20);
+  // The order still refuses it.
+  const o = await post('/api/orders', { customer: { ...CUSTOMER, phone: used }, designIds: [d2.id], couponCode: 'ONLYONCE', expectedTotal: (await ask(used)).total }, { 'X-Forwarded-For': '10.77.0.9' });
+  assert.strictEqual(o.status, 409);
+});

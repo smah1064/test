@@ -3044,6 +3044,21 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   };
 
   // The cart asks for today's prices before the customer orders.
+  // Phones whose coupon use the price check looked at, per visitor and day (a handful: a customer types one).
+  const phoneChecks = new Map();
+  function phoneCheckAllowed(ip, phone) {
+    const day = new Date().toISOString().slice(0, 10);
+    let e = phoneChecks.get(ip);
+    if (!e || e.day !== day) {
+      if (phoneChecks.size > 20000) phoneChecks.clear();
+      e = { day, phones: new Set() };
+      phoneChecks.set(ip, e);
+    }
+    if (e.phones.has(phone)) return true;
+    if (e.phones.size >= 3) return false;
+    e.phones.add(phone);
+    return true;
+  }
   app.post('/api/cart/quote', express.json({ limit: '20kb' }), (req, res) => {
     // Coupon codes that don't work count per visitor (codes can't be guessed by trying thousands);
     // a working code re-checked on every cart visit doesn't.
@@ -3093,7 +3108,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     let couponError = null;
     if (code) {
       // The phone typed at checkout (when there is one), so a coupon already used by this customer says so here too.
-      const phone = typeof (req.body || {}).phone === 'string' ? normalizeEgyptMobile(req.body.phone) : null;
+      // A visitor can have a few numbers checked a day, not any number (QA 25 Nov: anyone could learn which phones used
+      // a coupon); the signed-in customer's own number always. Ordering checks every phone anyway.
+      const typed = typeof (req.body || {}).phone === 'string' ? normalizeEgyptMobile(req.body.phone) : null;
+      const me = typed && currentCustomer(req);
+      const phone = typed && ((me && normalizeEgyptMobile(me.phone || '') === typed) || phoneCheckAllowed(req.ip, typed)) ? typed : null;
       const r = coupons.apply(findCoupon(code), { lines, orders: store.listOrders(), ...(phone ? { phone } : {}), shipping: lines.length ? shippingFor(subtotal) : 0 });
       if (r.ok) coupon = { code, discount: r.discount, freeShipping: r.freeShipping };
       else couponError = format(r.reason, r.params || {}, langOf(req));
@@ -4710,8 +4729,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const target = store.designFile(designId, design.kind === 'book' ? 'book-preview.pdf' : `preview-v${design.version || 0}.pdf`);
       if (!fs.existsSync(target)) {
         const title = `${order ? order.number + ' · ' : ''}${pickEn(design.productName) || ''}`;
+        // Several colours / sizes: each with its count ("White · 200 cards ×1, White · 1000 cards ×1"), not only the
+        // first one (QA 25 Nov).
+        const qtyLines = Array.isArray(design.quantities) ? design.quantities.filter((l) => l && Number(l.qty) > 0) : [];
         const lines = [
-          [design.color && pickEn(design.color.name), design.size && pickEn(design.size.label)].filter(Boolean).join(' · '),
+          qtyLines.length > 1 || (qtyLines.length === 1 && Number(qtyLines[0].qty) > 1)
+            ? qtyLines.map((l) => `${[l.color && pickEn(l.color.name), l.size && pickEn(l.size.label)].filter(Boolean).join(' · ')} ×${l.qty}`).join(', ')
+            : [design.color && pickEn(design.color.name), design.size && pickEn(design.size.label)].filter(Boolean).join(' · '),
           order ? `Ordered ${order.createdAt.slice(0, 10)}` : '',
         ].filter(Boolean);
         let pages;
