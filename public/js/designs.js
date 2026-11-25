@@ -103,6 +103,8 @@
       .replace(/[٠-٩]/g, (c) => String(c.charCodeAt(0) - 0x0660))
       .replace(/[۰-۹]/g, (c) => String(c.charCodeAt(0) - 0x06F0))
       .replace(/[^\p{L}\p{N}]+/gu, ' ')
+      // ("بابا نويل" is Santa, not dad: one word of its own, so a Father's Day search doesn't list Christmas. QA 25 Nov.)
+      .replace(/(^| )بابا نويل(?= |$)/g, '$1santa')
       .trim();
     // Spelt with or without the long ي (تيشرت / تيشيرت).
     const loose = (s) => s.replace(/ي/g, '').replace(/ +/g, ' ');
@@ -132,6 +134,7 @@
       idcard: 'id card, id badge, name badge, badge, بادج, كارنيه',
       phonecase: 'phone case, phone cover, mobile case, mobile cover, جراب, جراب موبايل, كفر موبايل',
       christmas: 'christmas, xmas, كريسماس',
+      santa: 'santa, santa claus, سانتا, سانتا كلوز',
       birthday: 'birthday, عيد ميلاد',
       dog: 'dog, puppy, كلب, كلاب',
       cat: 'cat, kitten, قطة, قطط',

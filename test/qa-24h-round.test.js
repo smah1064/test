@@ -180,3 +180,17 @@ test('a set-up link ends when the person chooses a new password themselves', asy
   assert.notStrictEqual(used.status, 200, used.text);
   assert.ok((await call('/api/admin/login', 'POST', { username: 'fin2x', password: 'my-own-new-pass-2' })).json.token);
 });
+
+test('search: father / dad / عيد الأب / بابا find the dad designs, not Santa (بابا نويل); Santa still found', () => {
+  const vm = require('vm');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'public/js/designs.js'), 'utf8');
+  const kit = src.slice(src.indexOf('// search-kit:start'), src.indexOf('// search-kit:end') + 18);
+  const S = vm.runInNewContext(`${kit}\nSEARCH`);
+  const santa = S.index('Merry Christmas (Santa) كريسماس سعيد (بابا نويل) christmas كريسماس');
+  const dad = S.index('Best dad أحسن بابا fathers day عيد الأب');
+  for (const q of ['father', "Father's Day", 'dad', 'عيد الأب', 'بابا', 'daddy']) {
+    assert.ok(S.match(dad, S.query(q)), `${q} finds the dad design`);
+    assert.ok(!S.match(santa, S.query(q)), `${q} doesn't find Santa`);
+  }
+  for (const q of ['santa', 'بابا نويل', 'christmas', 'كريسماس']) assert.ok(S.match(santa, S.query(q)), `${q} finds Santa`);
+});
