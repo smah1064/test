@@ -335,7 +335,8 @@
       b.disabled = false;
     }
   });
-  // Delete my account: with the password (or, with no password, ticking that they're sure).
+  // Delete my account: with the password (or, with no password, ticking that they're sure). Its own form, so its
+  // Delete button and Enter in its password box do the same, and Enter never sends "Change password" with empty boxes.
   $('del-open').addEventListener('click', () => {
     $('del-box').hidden = false;
     $('del-pw-field').hidden = !me.hasPassword;
@@ -343,7 +344,8 @@
     (me.hasPassword ? $('del-pw') : $('del-sure')).focus();
   });
   $('del-cancel').addEventListener('click', () => { $('del-box').hidden = true; $('del-pw').value = ''; $('del-sure').checked = false; });
-  $('del-go').addEventListener('click', async () => {
+  $('del-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
     const say = (m) => { $('del-msg').textContent = m; $('del-msg').hidden = false; };
     if (!$('del-sure').checked) return say(t('acct.deleteTick'));
     if (me.hasPassword && !$('del-pw').value) return say(t('acct.deleteNeedPw'));
@@ -359,9 +361,9 @@
       $('del-go').disabled = false;
     }
   });
-  $('v-security').addEventListener('submit', (e) => {
+  $('pw-form').addEventListener('submit', (e) => {
     e.preventDefault();
-    submit($('v-security'), async () => {
+    submit($('pw-form'), async () => {
       await POD.api('/api/account/password', json('POST', { current: $('pw-cur').value, password: $('pw-new').value }));
       $('pw-cur').value = '';
       $('pw-new').value = '';

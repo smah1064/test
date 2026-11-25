@@ -130,18 +130,22 @@
         <div class="field"><label for="pf-notes" data-i18n="checkout.notes"></label><input type="text" id="pf-notes" dir="auto" maxlength="500"></div>
         <button class="btn btn-primary" type="submit" data-i18n="houses.save"></button>
       </form>
-      <form class="card acct-card" id="v-security" novalidate hidden>
-        <div class="field" id="pw-cur-field"><label for="pw-cur" data-i18n="acct.currentPassword"></label><input id="pw-cur" type="password" autocomplete="current-password" maxlength="200"></div>
-        <div class="field"><label for="pw-new" data-i18n="acct.newPassword"></label><input id="pw-new" type="password" autocomplete="new-password" minlength="8" maxlength="200"></div>
-        <p class="small acct-nopass" id="pw-nopass" hidden data-i18n="acct.noPassHelp"></p>
-        <button class="btn btn-primary" type="submit" id="pw-submit" data-i18n="acct.changePassword"></button>
-        <p class="muted small" style="margin:10px 0 0" data-i18n="acct.changeNote"></p>
-        <div id="pw-forgot-box" style="margin-top:12px">
-          <button class="link-btn small" type="button" id="pw-forgot" data-i18n="acct.forgotCurrent"></button>
-          <p class="small" id="pw-forgot-msg" style="margin:6px 0 0;line-height:1.6"></p>
-        </div>
-        <!-- Delete my account (the privacy page promises it; owner's decision 25 Nov). -->
-        <div class="acct-delete" style="margin-top:22px;padding-top:14px;border-top:1px solid var(--line,#e5e5e5)">
+      <!-- Password, and Delete my account below it: one card, two forms (Enter in one never sends the other). -->
+      <div class="card acct-card" id="v-security" hidden>
+        <form id="pw-form" novalidate>
+          <div class="field" id="pw-cur-field"><label for="pw-cur" data-i18n="acct.currentPassword"></label><input id="pw-cur" type="password" autocomplete="current-password" maxlength="200"></div>
+          <div class="field"><label for="pw-new" data-i18n="acct.newPassword"></label><input id="pw-new" type="password" autocomplete="new-password" minlength="8" maxlength="200"></div>
+          <p class="small acct-nopass" id="pw-nopass" hidden data-i18n="acct.noPassHelp"></p>
+          <button class="btn btn-primary" type="submit" id="pw-submit" data-i18n="acct.changePassword"></button>
+          <p class="muted small" style="margin:10px 0 0" data-i18n="acct.changeNote"></p>
+          <div id="pw-forgot-box" style="margin-top:12px">
+            <button class="link-btn small" type="button" id="pw-forgot" data-i18n="acct.forgotCurrent"></button>
+            <p class="small" id="pw-forgot-msg" style="margin:6px 0 0;line-height:1.6"></p>
+          </div>
+        </form>
+        <!-- Delete my account (the privacy page promises it; owner's decision 25 Nov). Its own form: Enter in its password
+             box is its Delete button (with the tick), not "Change password" with empty boxes, which counted as a wrong password. -->
+        <form class="acct-delete" id="del-form" novalidate style="margin-top:22px;padding-top:14px;border-top:1px solid var(--line,#e5e5e5)">
           <h3 style="font-size:16px;margin:0 0 6px" data-i18n="acct.deleteTitle"></h3>
           <p class="muted small" style="margin:0 0 8px;line-height:1.6" data-i18n="acct.deleteHelp"></p>
           <button class="btn btn-sm btn-danger" type="button" id="del-open" data-i18n="acct.deleteOpen"></button>
@@ -149,13 +153,13 @@
             <div class="field" id="del-pw-field"><label for="del-pw" data-i18n="acct.deletePassword"></label><input id="del-pw" type="password" autocomplete="current-password" maxlength="200"></div>
             <label class="check" id="del-sure-field"><input type="checkbox" id="del-sure"> <span data-i18n="acct.deleteSure"></span></label>
             <div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap">
-              <button class="btn btn-danger" type="button" id="del-go" data-i18n="acct.deleteGo"></button>
+              <button class="btn btn-danger" type="submit" id="del-go" data-i18n="acct.deleteGo"></button>
               <button class="btn" type="button" id="del-cancel" data-i18n="houses.cancel"></button>
             </div>
             <p class="small" id="del-msg" role="alert" style="margin:8px 0 0;color:var(--danger,#b42318)" hidden></p>
           </div>
-        </div>
-      </form>
+        </form>
+      </div>
     </section>
   </main>
 
