@@ -4778,7 +4778,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const body = req.body && typeof req.body === 'object' ? req.body : {};
       if (body.prices !== undefined) throw new HttpError(403, 'ownerOnly');
       // (A field products don't have is refused now: it would wait, be approved and change nothing, QA 25 Nov.)
-      const unknown = Object.keys(body).find((k) => !(k in EDIT_FIELDS));
+      // (Every field a product edit can carry: the top-level ones and those that go with them, e.g. a pause's reason.)
+      const known = new Set([...Object.keys(EDIT_FIELDS), ...Object.values(EDIT_FIELDS).flat()]);
+      const unknown = Object.keys(body).find((k) => !known.has(k));
       if (unknown) throw new HttpError(400, 'badProductField', { field: unknown });
       const c = catalog.clean(p, staffPrices(p, body), { categories: CATEGORIES.map((x) => x.id), prev: catalogEdits()[p.id] || null });
       if (c.error) throw new HttpError(400, c.error, { field: c.field || '' });
