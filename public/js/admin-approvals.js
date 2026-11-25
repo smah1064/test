@@ -89,6 +89,7 @@ window.AdminApprovals = (() => {
           <span class="muted small ap-when">${esc(t('ap.sentAt', { when: when(a.at) }))}</span>
         </div>
         <p class="ap-summary" dir="auto">${esc(inLang(a.summary) || a.action || '')}</p>
+        ${a.changedSince && open(a) ? `<p class="small ap-changed" role="note">⚠ ${esc(t('ap.changedSince'))}</p>` : ''}
         ${a.thumb && /^data:image\/webp;base64,/.test(a.thumb) ? `<button type="button" class="ap-thumb-btn" data-ap-zoom aria-pressed="false" title="${esc(t('ap.photoZoom'))}"><img class="ap-thumb" src="${esc(a.thumb)}" alt="${esc(t('ap.photoAlt'))}" loading="lazy"></button>` : ''}
         ${changes ? `<div class="ap-details"><div class="muted small">${esc(t('ap.details'))}</div>${changes}</div>` : ''}
         ${details ? `<div class="ap-details"><div class="muted small">${esc(t('ap.details'))}</div><div class="ap-details-text" dir="auto">${esc(details)}</div></div>` : ''}

@@ -247,8 +247,10 @@ window.AdminStaff = (() => {
       const user = (r && r.user) || { id: username, name, username, roles, active: true, setupPending: true, createdAt: new Date().toISOString() };
       put(user);
       S.link = { id: user.id, name: user.name || name, username: user.username || username, url: absLink(r && r.setupLink) };
-      // A fresh form for the next person.
-      form.reset();
+      // A fresh form for the next person (also its defaults: a redraw while typing wrote the typed values into them).
+      for (const i of form.querySelectorAll('input')) {
+        if (i.type === 'checkbox') { i.checked = false; i.defaultChecked = false; } else { i.value = ''; i.defaultValue = ''; }
+      }
       POD.toast(t('staff.added', { name: user.name || name }));
       render();
       focusLink();

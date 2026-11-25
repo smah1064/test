@@ -138,3 +138,6 @@
 .ap-thumb { display: block; max-width: min(260px, 100%); max-height: 260px; border-radius: 8px; border: 1px solid var(--line, #e4e7ee); background: #fff; }
 .ap-thumb-btn.big { cursor: zoom-out; }
 .ap-thumb-btn.big .ap-thumb { max-width: 100%; max-height: none; }
+
+/* The thing asked about changed after the request: approving replaces what's there now. */
+.ap-changed { margin: 6px 0 0; padding: 6px 10px; border-radius: 8px; background: #fff6e5; color: #7a4b00; }

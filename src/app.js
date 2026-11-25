@@ -4452,6 +4452,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       try { return { thumb: `data:image/webp;base64,${fs.readFileSync(path.join(approvalDir, a.thumb)).toString('base64')}` }; } catch (e) { return {}; }
     })() : {}),
     changes: changesOf(a),
+    ...(changedSince(a) ? { changedSince: true } : {}),
     method: a.method, path: a.path, status: a.status,
     ...(a.decidedBy ? { decidedBy: a.decidedBy, decidedAt: a.decidedAt } : {}),
     ...(a.note ? { note: a.note } : {}), ...(a.error ? { error: a.error } : {}),
@@ -4498,6 +4499,18 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     }
     const t = JSON.stringify(roles.shortBody(v)).slice(0, 400);
     return enAr(t, t);
+  };
+  /**
+   * The product or coupon was changed after this request was made (by anyone): approving it replaces what's there
+   * now, so the owner is told.
+   */
+  const changedSince = (a) => {
+    if (!(a.status === 'pending' || a.status === 'failed')) return false;
+    const id = (/^\/api\/admin\/(?:catalog|coupons|pricing)\/([^/?]+)/.exec(a.path) || [])[1];
+    if (!id) return false;
+    const when = a.action.includes('/coupons') ? ((store.db.coupons || []).find((c) => c.id === id) || {}).updatedAt
+      : a.action.includes('/catalog') ? (catalogEdits()[decodeURIComponent(id)] || {}).updatedAt : null;
+    return Boolean(when && when > a.at);
   };
   /** The values a kept change asks for, field by field. */
   const changesOf = (a) => {
@@ -6191,7 +6204,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     // The field the admin's product screen should point at (admin → Products).
     const field = err.params && typeof err.params.field === 'string' && err.params.field ? { field: err.params.field } : {};
     // (An approved change run again: both languages of the reason, so the owner and the person each read their own.)
-    const both = req.adminWho && req.adminWho.approvalId ? { errorText: { en: format(key, err.params || {}, 'en'), ar: format(key, err.params || {}, 'ar') } } : {};
+    // (A product field by its name in each language, not its code.)
+    const named = (l) => {
+      const f = err.params && typeof err.params.field === 'string' && OWNER_FIELD_NAMES[err.params.field];
+      return f ? { ...err.params, field: f[l] } : err.params || {};
+    };
+    const both = req.adminWho && req.adminWho.approvalId ? { errorText: { en: format(key, named('en'), 'en'), ar: format(key, named('ar'), 'ar') } } : {};
     res.status(status).json({ error: message, code: key || undefined, ...field, ...both });
   });
 

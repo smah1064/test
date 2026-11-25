@@ -175,6 +175,7 @@
     access = null;
     sessionAt = 0;
     sessionStorage.removeItem(KEY);
+    try { sessionStorage.removeItem('pod-admin-tab'); } catch (e) { /* private mode */ }
     sessionStorage.removeItem(ROLE_KEY);
     if (window.AdminProducts) AdminProducts.reset();
     if (window.AdminUploads) AdminUploads.reset();
@@ -289,6 +290,8 @@
   }));
   function showTab(next) {
     tab = next;
+    // (Kept for this browser tab: a reload opens the same tab, when this person may open it.)
+    try { sessionStorage.setItem('pod-admin-tab', tab); } catch (e) { /* private mode */ }
     document.querySelectorAll('[data-tab]').forEach((x) => x.classList.toggle('active', x.dataset.tab === tab));
     $('tab-products').hidden = tab !== 'products';
     // (The heading says which tab is open: its button's own words, except the queue and products.)
@@ -3157,7 +3160,9 @@
   // /admin#rights: the owner's WhatsApp / email alert for a rights request opens Rights requests (a product
   // manager is sent to their own tabs as usual once the page knows who is signed in).
   const tabFromHash = () => (location.hash === '#rights' ? 'rights' : '');
+  const savedTab = (() => { try { return sessionStorage.getItem('pod-admin-tab') || ''; } catch (e) { return ''; } })();
   if (tabFromHash()) showTab(tabFromHash());
+  else if (savedTab && savedTab !== tab && document.querySelector(`[data-tab="${savedTab}"]`)) showTab(savedTab);
   window.addEventListener('hashchange', () => {
     const want = tabFromHash();
     if (want && want !== tab && AdminRoles.tabAllowed(access, want)) document.querySelector(`[data-tab="${want}"]`).click();

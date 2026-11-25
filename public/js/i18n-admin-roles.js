@@ -44,6 +44,7 @@ Object.assign(window.POD_STRINGS, {
   'ap.sent': ['Sent to an owner for approval: {summary}', 'اتبعت لصاحب الموقع للموافقة: {summary}'],
   'ap.aChange': ['your change', 'التعديل بتاعك'],
   'ap.photoAlt': ['The photo asked for', 'الصورة المطلوبة'],
+  'ap.changedSince': ['Changed after this request was sent: approving it replaces what is there now with the values below.', 'اتغير بعد ما الطلب ده اتبعت: الموافقة هتحط القيم اللي تحت مكان اللي موجود دلوقتي.'],
   'ap.photoZoom': ['Tap to see it bigger', 'دوس عشان تكبّرها'],
 
   // ---------- Approvals tab ----------
