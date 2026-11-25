@@ -8,6 +8,7 @@ const MESSAGES = {
   sidesRequired: { en: 'sides is required', ar: 'لازم تحدد أوجه التصميم' },
   designAtLeastOne: { en: 'Design at least one side before adding to cart', ar: 'صمّم وجه واحد على الأقل قبل ما تضيفه للسلة' },
   sideEmpty: { en: 'The {side} side has no design', ar: 'مفيش تصميم على وجه {side}' },
+  photoNoteNeeded: { en: 'Write what you changed for the customer first (they see it with the new proof).', ar: 'اكتب للعميل غيّرت إيه الأول (هيشوفها مع البروفة الجديدة).' },
   acctDeleteConfirm: { en: 'Tick that you\'re sure you want to delete your account.', ar: 'علّم إنك متأكد إنك عايز تمسح حسابك.' },
   proofTeam: { en: 'This is the customer\'s own link: the team can look but not decide here. To approve for them, use "Approve for printing" in Review with a note of how they confirmed.', ar: 'ده لينك العميل نفسه: الفريق يقدر يشوف بس مش يقرر من هنا. عشان توافق بالنيابة عنه، استخدم "وافق على الطباعة" في المراجعة مع ملاحظة إزاي أكّد.' },
   reviseTeam: { en: 'This is the customer\'s own edit link: the team can\'t send a new version with it. Use "Edit the design in the editor" in Review instead.', ar: 'ده لينك التعديل بتاع العميل: الفريق مينفعش يبعت بيه نسخة جديدة. استخدم "عدّل التصميم في المحرر" في المراجعة.' },

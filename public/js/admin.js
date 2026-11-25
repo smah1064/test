@@ -2690,8 +2690,8 @@
   // (A corrected file being chosen: the file window is open, so the card isn't drawn again under it and the file
   // chosen isn't lost. Two minutes at most. QA 25 Nov.)
   let rvPickingAt = 0;
-  document.addEventListener('click', (e) => { if (e.target.closest && e.target.closest('#rv-list [data-rv-file]')) rvPickingAt = Date.now(); }, true);
-  document.addEventListener('change', (e) => { if (e.target.closest && e.target.closest('#rv-list [data-rv-file]')) rvPickingAt = 0; }, true);
+  document.addEventListener('click', (e) => { if (e.target.closest && e.target.closest('#rv-list [data-rv-file], #rv-list [data-rv-photo], #rv-list .rv-photo-row label')) rvPickingAt = Date.now(); }, true);
+  document.addEventListener('change', (e) => { if (e.target.closest && e.target.closest('#rv-list [data-rv-file], #rv-list [data-rv-photo]')) rvPickingAt = 0; }, true);
   window.addEventListener('focus', () => { setTimeout(() => { rvPickingAt = 0; }, 1500); });
   async function loadReview() {
     // Don't redraw while the admin is typing a note, or choosing a file.
@@ -2831,7 +2831,7 @@
             ${proof.merge || item.merge ? rvNames(item) : ''}
             ${rvHistory(item)}
             ${rvActions(item)}
-            ${item.kind === 'book' || proof.pages ? '' : rvReplace(item)}
+            ${item.kind === 'book' || proof.pages || item.kind === 'photoset' ? rvPhotos(item) : rvReplace(item)}
             ${rvLinkBox(item)}
           </div>
         </div>
@@ -3114,6 +3114,67 @@
     const dv = new DataView(head.buffer);
     return { w: dv.getUint32(16), h: dv.getUint32(20) };
   }
+  /**
+   * Photo prints and kids' books (not made in the editor; owner's decision, 25 Nov): the team puts in a better photo
+   * (usually from the customer by WhatsApp), with the note of what changed; the customer approves the new proof.
+   */
+  function rvPhotos(item) {
+    const isBook = item.kind === 'book';
+    if (!can('review.work') || !(isBook || item.kind === 'photoset')) return '';
+    const photos = isBook ? [{ n: 'face' }] : (proofOf(item).photos || []);
+    if (!photos.length) return '';
+    const id = esc(item.id);
+    const busy = rvBusy.has(item.id);
+    return `
+      <section class="rv-box rv-photos">
+        <h3>${esc(t(isBook ? 'rv.photoBookTitle' : 'rv.photoTitle'))}</h3>
+        <p class="muted small" style="margin:0 0 8px">${esc(t(isBook ? 'rv.photoBookHelp' : 'rv.photoHelp'))}</p>
+        ${photos.slice(0, 60).map((p) => {
+          const key = item.id + ':photo:' + p.n;
+          return `
+          <div class="rv-photo-row" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:6px 0">
+            ${p.url ? `<img src="${esc(p.url)}" alt="" width="48" height="48" style="object-fit:cover;border-radius:6px" loading="lazy">` : ''}
+            <span class="small">${esc(isBook ? t('rv.photoChild') : t('rv.photoN', { n: POD.num(p.n) }))}${p.size && p.size.label ? ` · ${esc(tr(p.size.label))}` : ''}</span>
+            <label class="btn btn-sm${busy ? ' disabled' : ''}">${esc(t('rv.photoReplace'))}<input type="file" accept="image/*" hidden data-rv-photo="${id}" data-rv-n="${esc(String(p.n))}" ${busy ? 'disabled' : ''}></label>
+            ${rvSideMsg[key] ? msgHtml(rvSideMsg[key]) : ''}
+          </div>`;
+        }).join('')}
+      </section>`;
+  }
+  async function rvPhotoUpload(input) {
+    const id = input.dataset.rvPhoto;
+    const n = input.dataset.rvN;
+    const file = input.files && input.files[0];
+    input.value = '';
+    const item = rvFind(id);
+    if (!file || !item) return;
+    const key = id + ':photo:' + n;
+    const fail = (text) => { rvSideMsg[key] = { text, ok: false }; renderReview(); };
+    if (!/^image\//.test(file.type || '') && !/\.(jpe?g|png|webp|heic|heif)$/i.test(file.name || '')) return fail(t('rv.photoNotImage'));
+    const changeNote = (rvNote[id] || '').trim();
+    if (!changeNote) return fail(t('rv.replaceNoteNeeded'));
+    const nextV = (Number(proofOf(item).version) || 0) + 1;
+    if (!confirm(t('rv.replaceConfirm', { v: nextV }))) { delete rvSideMsg[key]; renderReview(); return; }
+    rvBusy.add(id);
+    rvSideMsg[key] = { text: t('rv.replaceUploading'), ok: true };
+    renderReview();
+    try {
+      const r = await adminApi(`/api/admin/items/${encodeURIComponent(id)}/photo/${encodeURIComponent(n)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': file.type || 'application/octet-stream', 'x-lang': POD.lang, 'x-review-note': encodeURIComponent(changeNote) },
+        body: file,
+      });
+      delete rvNote[id];
+      await rvAfter(id, r);
+      const v = proofOf(rvFind(id)).version || nextV;
+      rvSideMsg[key] = { text: t('rv.replaceDone', { v }), ok: true };
+      toast(t('rv.replaceDone', { v }));
+    } catch (err) {
+      rvSideMsg[key] = { text: err.message, ok: false };
+    }
+    rvBusy.delete(id);
+    renderReview();
+  }
   async function rvUpload(input) {
     const id = input.dataset.rvFile;
     const sideId = input.dataset.rvSide;
@@ -3193,6 +3254,7 @@
   });
   $('rv-list').addEventListener('change', (e) => {
     if (e.target.matches('[data-rv-file]')) rvUpload(e.target);
+    if (e.target.matches('[data-rv-photo]')) rvPhotoUpload(e.target);
   });
   // "Open in Review" from the print queue and the orders table.
   document.addEventListener('click', (e) => {

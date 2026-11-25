@@ -74,6 +74,7 @@ const ROUTES = {
   // asking (an owner's decision: held for an owner's approval when anyone else asks).
   'POST /api/admin/items/:itemId/shop-edit': { perm: 'review.work', label: L('Edited the design and sent it to the customer', 'عدّل التصميم وبعته للعميل يوافق عليه') },
   'POST /api/admin/items/:itemId/shop-edit/print': { perm: 'review.work', approve: true, label: L('Edited the design to print without asking the customer', 'عدّل التصميم للطباعة من غير ما يسأل العميل') },
+  'PUT /api/admin/items/:itemId/photo/:n': { perm: 'review.work', noBody: true, label: L('Replaced a photo', 'استبدل صورة') },
   'POST /api/admin/items/:itemId/resend-proof': { perm: 'review.work', label: L('Sent the proof again', 'بعت البروفة تاني') },
   'GET /api/admin/queue': { perm: 'orders.view' },
   'GET /api/admin/orders': { perm: 'orders.view' },

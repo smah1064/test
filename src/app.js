@@ -928,7 +928,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         id: sd.id, name: sd.name, widthIn: sd.widthIn, heightIn: sd.heightIn, bleedIn: sd.bleedIn || 0, safeIn: def ? def.safeIn || 0 : 0,
         ...(sd.process ? { process: sd.process } : {}),
         dpi: sd.dpi || null, widthPx: sd.widthPx || null, heightPx: sd.heightPx || null,
-        artworkUrl: d.kind === 'gangsheet' ? `/files/designs/${d.id}/front-preview.png` : `/files/designs/${d.id}/${sd.id}-proof.png?v=${d.version || 1}`,
+        artworkUrl: d.kind === 'gangsheet' ? `/files/designs/${d.id}/front-preview.png?v=${d.version || 1}` : `/files/designs/${d.id}/${sd.id}-proof.png?v=${d.version || 1}`,
         previewUrl: d.kind === 'book' ? `/files/designs/${d.id}/book-preview.png?v=${d.version || 0}`
           : d.replaced && d.replaced[sd.id] ? null : `/files/designs/${d.id}/${sd.id}-preview.png`,
       };
@@ -944,7 +944,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       sides: d.kind === 'book' ? [] : d.sides.map(side),
       ...(d.kind === 'book' ? { pages: bookFor(d.bookId).pages.map((_, i) => `/api/books/designs/${d.id}/pages/${i}.jpg?v=${d.version || 0}`) } : {}),
       ...(list ? { merge: { count: d.merge.count, columns: list.columns, sample: list.rows.slice(0, 3) } } : {}),
-      ...(d.kind === 'photoset' ? { photos: d.photos.map((p) => ({ n: p.n, size: p.size, copies: p.copies, orientation: p.orientation, dpi: p.dpi, url: `/files/designs/${d.id}/photos/${p.n}.jpg` })), options: d.options || null } : {}),
+      ...(d.kind === 'photoset' ? { photos: d.photos.map((p) => ({ n: p.n, size: p.size, copies: p.copies, orientation: p.orientation, dpi: p.dpi, url: `/files/designs/${d.id}/photos/${p.n}.jpg?v=${d.version || 1}` })), options: d.options || null } : {}),
       preflight: d.preflight ? { status: d.preflight.status, checks: d.preflight.checks } : { status: 'pass', checks: [] },
       review: { needed: reviewReasons(d).length > 0, reasons: reviewReasons(d) },
     };
@@ -1267,6 +1267,98 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (marked) replacingItems.delete(marked);
     }
   });
+  // ---------- A photo the shop replaces: photo prints and kids' books (owner's decision, 25 Nov) ----------
+  // These aren't made in the editor, so "Problem with this file?" had no way out: no print file to correct, and
+  // nothing for the customer to change. The team gets a better photo (usually by WhatsApp) and puts it in here with
+  // a note of what changed; the customer approves the new proof, as for a corrected print file.
+  //   Photo prints: one photo (n = 1, 2…), cut to its print size as the shop's photo page does.
+  //   Kids' books: the child's photo (n = face); the AI drawings are made again from it, within the shop's budget.
+  app.put('/api/admin/items/:itemId/photo/:n', adminOnly, express.raw({ type: () => true, limit: '25mb' }), async (req, res, next) => {
+    let marked = null;
+    try {
+      const found = store.findItem(req.params.itemId);
+      if (!found) throw new HttpError(404, 'itemNotFound');
+      const { order, item } = found;
+      const d = store.getDesign(item.designId);
+      if (!d || !['photoset', 'book'].includes(d.kind)) throw new HttpError(404, 'notFound');
+      if (['printing', 'printed', 'shipped'].includes(item.status)) throw new HttpError(409, 'alreadyPrinting');
+      if (replacingItems.has(item.id) || filmMaking.has(item.id)) throw new HttpError(409, 'fileBeingReplaced');
+      const photo = d.kind === 'photoset' ? (d.photos || []).find((p) => String(p.n) === req.params.n) : req.params.n === 'face' ? {} : null;
+      if (!photo) throw new HttpError(404, 'notFound');
+      let changeNote = '';
+      try { changeNote = decodeURIComponent(String(req.get('x-review-note') || '')).replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, ' ').trim().slice(0, 1000); } catch (e) { changeNote = ''; }
+      if (!noteText(changeNote, 1000)) throw new HttpError(400, 'photoNoteNeeded');
+      const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+      let meta;
+      try {
+        meta = await sharp()(buf, { limitInputPixels: 80e6 }).metadata();
+      } catch (e) { meta = null; }
+      if (!meta || !meta.width || !meta.height || !['jpeg', 'png', 'webp', 'heif', 'gif', 'tiff'].includes(meta.format)) throw new HttpError(400, 'badImage');
+      replacingItems.add(item.id);
+      marked = item.id;
+      // (A second photo before the customer answered: the same proof link and, within 10 minutes, one message.)
+      const proofOpen = item.status === 'awaiting_approval' && Boolean(item.proofToken);
+      const toldRecently = proofOpen && item.shopProofAt && Date.now() - Date.parse(item.shopProofAt) < 10 * 60 * 1000;
+      const noteBefore = proofOpen && item.review && item.review.note ? String(item.review.note) : '';
+      const v = d.version || 1;
+      const keepOld = (name) => {
+        const cur = store.designFile(d.id, name);
+        if (fs.existsSync(cur)) fs.copyFileSync(cur, store.designFile(d.id, name.replace(/\.(\w+)$/, `.v${v}.$1`)));
+      };
+      let what;
+      if (d.kind === 'photoset') {
+        // Its print size, filled (as the photo page crops), at 300 DPI; its small picture; the contact sheet again.
+        keepOld(photo.file);
+        const jpg = await sharp()(buf, { limitInputPixels: 80e6 }).rotate().resize(photo.px[0], photo.px[1], { fit: 'cover' }).jpeg({ quality: 92 }).toBuffer();
+        store.writeDesignFile(d.id, photo.file, jpegWithDpi(jpg, 300));
+        store.writeDesignFile(d.id, photo.thumb, await sharp()(jpg).resize(480, 480, { fit: 'inside' }).jpeg({ quality: 82 }).toBuffer());
+        // (How sharp it prints: the photo's own pixels over its print size.)
+        const long = Math.max(meta.width, meta.height) / Math.max(photo.px[0], photo.px[1]);
+        photo.dpi = Math.max(1, Math.min(10000, Math.round(300 * Math.min(1, long))));
+        const sheet = await photoContactSheet(d);
+        store.writeDesignFile(d.id, 'front-preview.png', sheet);
+        store.writeDesignFile(d.id, 'front-proof.png', sheet);
+        const dpis = d.photos.map((p) => p.dpi).filter(Boolean);
+        d.sides[0].dpi = dpis.length ? Math.min(...dpis) : 300;
+        what = `photo-${photo.n}`;
+      } else {
+        // The child's photo as the book page takes it; its drawings are made again (the cover now, the rest queued).
+        const book = bookFor(d.bookId);
+        keepOld('face.jpg');
+        const jpg = await sharp()(buf, { limitInputPixels: 80e6 }).rotate().resize(720, 900, { fit: 'cover' }).jpeg({ quality: 90 }).toBuffer();
+        store.writeDesignFile(d.id, 'face.jpg', jpg);
+        if (book.kind === 'coloring') store.writeDesignFile(d.id, 'face-line.png', await books.lineArt(jpg));
+        for (const f of fs.readdirSync(store.designDir(d.id))) if (/^redraw-\d+\.jpg$/.test(f) || f === 'face-cartoon.jpg') fs.rmSync(store.designFile(d.id, f), { force: true });
+        delete d.photoRemoved;
+        await makeCartoon(d, req.ip);
+        fs.rmSync(store.designFile(d.id, 'book-print.pdf'), { force: true });
+        fs.rmSync(store.designFile(d.id, 'book-preview.pdf'), { force: true });
+        what = 'face';
+      }
+      d.version = v + 1;
+      if (d.kind === 'book') store.writeDesignFile(d.id, 'book-preview.png', await (await books.renderPage(bookData(d), 0, 600)).png().toBuffer());
+      const now = new Date().toISOString();
+      if (item.approval && item.approval.sample) item.sampleWanted = true;
+      item.approval = null;
+      item.status = 'awaiting_approval';
+      const together = toldRecently && noteBefore && !noteBefore.split('\n').includes(changeNote) ? `${noteBefore}\n${changeNote}`.slice(0, 2000) : changeNote;
+      item.review = { ...(item.review || { needed: true, reasons: [] }), note: together };
+      item.approvals = [...(item.approvals || []), { action: 'changes', by: 'shop', at: now, replaced: true, proofHash: proofHashOf(d), version: d.version, side: what, note: changeNote }];
+      item.history.push({ status: item.status, at: now });
+      if (!proofOpen) newProofLink(item);
+      if (!toldRecently) item.shopProofAt = now;
+      store.save();
+      // (The book's other pages are drawn again in the background, from the new photo.)
+      if (d.kind === 'book') queueRedraw(order, item, { force: true });
+      if (!toldRecently) tellCustomer(order, item, 'proof', (item.review && item.review.note) || '', req);
+      if (marked) { replacingItems.delete(marked); marked = null; }
+      res.json(await reviewItem(order, item));
+    } catch (e) {
+      next(e);
+    } finally {
+      if (marked) replacingItems.delete(marked);
+    }
+  });
   app.post('/api/admin/items/:itemId/resend-proof', adminOnly, (req, res) => {
     const found = store.findItem(req.params.itemId);
     if (!found) throw new HttpError(404, 'itemNotFound');
@@ -1283,7 +1375,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   // like the customer's own (same product, same pieces, at the price agreed at checkout), then either goes to the
   // customer for approval with a note of what changed, or is printed without asking, with a note of why: that is an
   // owner's decision (held in Approvals for anyone else; an owner's own goes at once, logged).
-  const INVISIBLE_MARKS = /[­؜ᅟᅠ᠎​-‏‪-‮⁠-⁩ㅤ﻿ﾠ]/g;
+  const INVISIBLE_MARKS = /[\u00ad\u061c\u115f\u1160\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2069\u3164\ufeff\uffa0]/g;
   const noteText = (v, max) => {
     const t = typeof v === 'string' ? v.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, ' ').trim().slice(0, max) : '';
     return /[\p{L}\p{N}\p{S}\p{P}]/u.test(t.replace(INVISIBLE_MARKS, '')) ? t : '';
