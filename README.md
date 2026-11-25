@@ -207,9 +207,11 @@ Admin → **Products** changes the real products without touching the code (`src
   - A change that fails when approved is marked `failed` with the reason in both languages, and stays in the waiting list: it can be approved again or refused.
   - Approving checks the person as they are now: someone switched off, removed or without the role any more can't have their change applied, and switching someone off, removing them or taking a role away cancels their waiting changes.
   - Limits: an edit with nothing in it is refused, a photo is checked as a real picture before it waits (the owner sees a small copy), and one person has at most 50 changes waiting (20 pictures).
+  - The same change pressed again while it waits (same person, same address, same contents) isn't a second request: the answer is the waiting one with `already: true`, and the screen says "Already waiting for an owner". Coupon rows show a change waiting for approval.
+  - The owner's card reads every change in words (print areas, embroidery, new colours and sizes, size renames, printing methods, costs per size), not as code.
 - **Sign-in lockouts**: wrong passwords for a username from elsewhere don't lock a person out on a browser they signed in from before (a mark per person, like the owner's), only that address's own wrong tries.
 - **Daily order work** (status, shipping, sending to printing houses, review decisions, payments) happens at once and is logged.
-- **Activity log**: every change, sign-in and approval, one line each in `DATA_DIR/activity.jsonl` (the previous file is kept as `activity.jsonl.1` once it passes 4 MB). Passwords and tokens are never written. `GET /api/admin/activity`: owners see everyone, others only their own.
+- **Activity log**: every change, sign-in and approval, one line each in `DATA_DIR/activity.jsonl` (the previous file is kept as `activity.jsonl.1` once it passes 4 MB). Passwords and tokens are never written. `GET /api/admin/activity`: owners see everyone, others only their own. It answers 500 lines at most, newest first, with `more` and `next` when older lines are there; `before=<next>` reads the next page. The Activity tab shows the latest 500 with "Show older" for the rest, and its CSV holds every line of the chosen person and days (up to 50,000).
 
 ## Private preview (before the shop opens)
 
