@@ -44,9 +44,12 @@ function cleanCoupon(body, { products, categories }) {
     const n = Number(v);
     return Number.isFinite(n) && n >= min && n <= max ? round2(n) : undefined;
   };
-  const value = type === 'freeship' ? 0 : num(b.value, { min: 0.01, max: type === 'percent' ? 100 : 1e7 });
-  if (value === null || value === undefined) return { error: 'couponValueBad' };
-  const maxDiscount = num(b.maxDiscount, { min: 0.01 });
+  const value = type === 'freeship' ? 0 : num(b.value, { max: type === 'percent' ? 100 : 1e7 });
+  // Discounts are whole pounds (see discountOf): an amount off or a cap under 1 EGP would take nothing off.
+  if (type === 'fixed' && value != null && value < 1) return { error: 'couponFixedMin' };
+  if (value === null || value === undefined || (type === 'percent' && value < 0.01)) return { error: 'couponValueBad' };
+  const maxDiscount = num(b.maxDiscount);
+  if (maxDiscount != null && maxDiscount < 1) return { error: 'couponMaxMin' };
   const minOrder = num(b.minOrder);
   const maxUses = num(b.maxUses, { min: 1, max: 1e6 });
   const perCustomer = num(b.perCustomer, { min: 1, max: 1000 });
@@ -84,8 +87,11 @@ const usesBy = (orders, coupon, phone) => orders.filter((o) => usedOn(o, coupon)
 /**
  * What a coupon takes off this cart. `lines` = [{ productId, category, price }].
  * Returns { ok: true, discount, freeShipping, eligible, lines } or { ok: false, reason, params }.
+ * A coupon that takes nothing off this cart is refused rather than applied (so an order never uses
+ * it up for nothing): a discount that rounds to 0 pounds (1% of a 30 EGP cart), or free shipping
+ * when `shipping` (the cart's shipping before any coupon, when the caller gives it) is already 0.
  */
-function apply(coupon, { lines, orders = [], phone = null }) {
+function apply(coupon, { lines, orders = [], phone = null, shipping = null }) {
   if (!coupon || !coupon.active) return { ok: false, reason: 'couponNotFound' };
   const day = today();
   if (coupon.startsOn && day < coupon.startsOn) return { ok: false, reason: 'couponNotYet', params: { date: coupon.startsOn } };
@@ -101,7 +107,12 @@ function apply(coupon, { lines, orders = [], phone = null }) {
   if (!eligible && (coupon.type !== 'freeship' || limited)) return { ok: false, reason: 'couponNoItems' };
   // Which lines the discount came off (by index), so reports can charge it to those products only.
   const lineIdx = fits.map((f, i) => (f ? i : -1)).filter((i) => i >= 0);
-  return { ok: true, discount: discountOf(coupon, eligible), freeShipping: coupon.type === 'freeship', eligible, lines: lineIdx };
+  const freeShipping = coupon.type === 'freeship';
+  const discount = discountOf(coupon, eligible);
+  // Free shipping takes the shipping off, not the items (its discount is 0).
+  if (!freeShipping && !(discount > 0)) return { ok: false, reason: 'couponNoDiscount' };
+  if (freeShipping && typeof shipping === 'number' && !(shipping > 0)) return { ok: false, reason: 'couponShipFree' };
+  return { ok: true, discount, freeShipping, eligible, lines: lineIdx };
 }
 
 /**

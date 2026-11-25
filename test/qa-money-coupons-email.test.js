@@ -109,7 +109,8 @@ test('coupon discounts are rounded to whole pounds', () => {
   assert.strictEqual(off({ value: 15 }, 45), 7, '15% of 45 is 6.75: 7');
   assert.strictEqual(off({ value: 20 }, 450), 90, 'whole amounts stay as they are');
   assert.strictEqual(off({ value: 100 }, 35), 35, 'never more than the items');
-  assert.strictEqual(off({ value: 1 }, 35), 0, '1% of 35 is 0.35: nothing, never below 0');
+  // 1% of 35 is 0.35: no pound off, so the coupon isn't applied at all (see qa-svg-coupon.test.js).
+  assert.deepStrictEqual(coupons.apply(coupon({ value: 1 }), { lines: [line(35)] }), { ok: false, reason: 'couponNoDiscount' });
   // The cap: never more than it (a cap with piastres stops at the pound under it).
   assert.strictEqual(off({ value: 50, maxDiscount: 100 }, 450), 100);
   assert.strictEqual(off({ maxDiscount: 2.5 }, 35), 2);

@@ -424,35 +424,166 @@ const bearer = (req) => (/^Bearer\s+([A-Za-z0-9_.-]{20,})$/.exec(req.get('author
  * or nested tricks ("<scr<set/>ipt>", a ">" inside quotes, xl:href,
  * entity-encoded "javascript:") can't survive. The editor's own SVG export
  * contains none of these, so real print files are unchanged.
+ *
+ * Only what a browser reads as CSS or as a link is cleaned: the content of
+ * <style> elements, style="…" and other attributes (fill="url(…)"), and link
+ * attributes (href, src…). The customer's own words between the tags are
+ * never touched: "@import coffee", "Visit url(ebda3.me)" or "javascript: the
+ * good parts" on a T-shirt stay exactly as they were typed.
  */
 const SVG_DROP = new Set(['script', 'foreignobject', 'iframe', 'object', 'embed', 'handler', 'listener', 'animate', 'set', 'animatemotion', 'animatetransform', 'animatecolor', 'discard', 'audio', 'video', 'base', 'meta', 'link', 'frame', 'frameset']);
 const SAFE_LINK = /^(#|data:image\/(png|jpe?g|webp|gif);)/i;
+// Attributes that hold one address a browser follows or loads (SVG's own, and those of XHTML elements a
+// file may carry): kept only when SAFE_LINK. Lists of addresses (srcset…) are never needed in a print file.
+const LINK_ATTRS = new Set(['href', 'src', 'action', 'formaction', 'data', 'codebase', 'classid', 'poster', 'background', 'lowsrc', 'dynsrc', 'longdesc', 'cite', 'manifest', 'datasrc']);
+const LINK_LISTS = new Set(['srcset', 'imagesrcset', 'ping', 'archive']);
 function decodeEntities(v) {
   return String(v)
     .replace(/&#x([0-9a-f]+);?/gi, (m, h) => { const n = parseInt(h, 16); return n > 0 && n < 0x110000 ? String.fromCodePoint(n) : ''; })
     .replace(/&#(\d+);?/g, (m, d) => { const n = Number(d); return n > 0 && n < 0x110000 ? String.fromCodePoint(n) : ''; })
     .replace(/&(colon|tab|newline|lpar|rpar|sol|amp|quot|apos|lt|gt);?/gi, (m, e) => ({ colon: ':', tab: '\t', newline: '\n', lpar: '(', rpar: ')', sol: '/', amp: '&', quot: '"', apos: "'", lt: '<', gt: '>' })[e.toLowerCase()]);
 }
-// "java\tscript:", "j&#x61;vascript:"… once decoded and without blanks.
-const dangerousValue = (v) => /(javascript|vbscript|livescript):|data:(?!image\/(png|jpe?g|webp|gif);)/i.test(decodeEntities(v).replace(/[\s\u0000-\u001f]+/g, ''));
+/**
+ * Text as an XML parser reads it: character references and the five XML entities, once. `odd` says
+ * the text has an "&" that is none of these ("&colon;", "&#106" without ";", a lone "&"): XML can't
+ * read it, and an HTML page would read it differently, so such CSS is written out again from what
+ * was checked (with only &amp; &lt; &gt; &quot;), never as it came.
+ */
+const XML_ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
+const xmlChar = (n) => n === 9 || n === 10 || n === 13 || (n >= 0x20 && n <= 0xd7ff) || (n >= 0xe000 && n <= 0xfffd) || (n >= 0x10000 && n <= 0x10ffff);
+function xmlText(raw) {
+  let odd = false;
+  const text = String(raw).replace(/&(?:#x([0-9a-fA-F]{1,8})|#([0-9]{1,8})|(amp|lt|gt|quot|apos));|&/g, (m, hex, dec, name) => {
+    if (name) return XML_ENT[name];
+    const n = hex ? parseInt(hex, 16) : dec ? Number(dec) : -1;
+    if (!xmlChar(n)) { odd = true; return m; }
+    return String.fromCodePoint(n);
+  });
+  return { text, odd };
+}
+const escText = (v) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const escAttr = (v) => escText(v).replace(/"/g, '&quot;');
 const attrOut = (v) => String(v).replace(/&(?!(#\d+|#x[0-9a-f]+|[a-z][a-z0-9]*);)/gi, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+// A value that is a javascript: (vbscript:, data: other than a picture) address, as a browser reads one:
+// entities decoded, blanks and control characters left out ("&#106;ava\tscript:", " JaVaScRiPt:").
+const BAD_URL = /^((javascript|vbscript|livescript):|data:(?!image\/(png|jpe?g|webp|gif);))/i;
+const bareUrl = (v) => v.replace(/[\s\u0000-\u001f]+/g, '');
+const isBadUrl = (raw) => /[:&]/.test(raw) && (BAD_URL.test(bareUrl(decodeEntities(raw))) || BAD_URL.test(bareUrl(xmlText(raw).text)));
+const safeLink = (raw) => SAFE_LINK.test(decodeEntities(raw).trim()) && SAFE_LINK.test(xmlText(raw).text.trim());
+
+/**
+ * CSS that could load from elsewhere or run code. url() keeps in-file references (#id) and embedded
+ * pictures and fonts (data:); any other url() becomes none. @import (to its ";"), image-set(), image(),
+ * src() and expression() go. CSS escapes are read first and comments left out (as a space, never joining
+ * what was around them), so no backslash is left and what is checked is what a browser reads; what comes out is
+ * checked once more and dropped whole if anything is left. Forward scans and single regular-expression
+ * passes, so a crafted file ("url(" thousands of times with no ")") takes linear time.
+ */
+const SAFE_CSS_URL = /^(#|data:(image\/(png|jpe?g|gif|webp|avif|bmp)|font\/[\w.+-]+|application\/(font-[\w.+-]+|x-font-[\w.+-]+|vnd\.ms-fontobject|octet-stream))[;,])/i;
+const CSS_FUNCS = /(?:image-set|image|src|expression)[\s\u000c]*\(/gi;
+const CSS_RISK = /\\|\/\*|url\(|@import|(?:image-set|image|src|expression)[\s\u000c]*\(/i;
+const CSS_WS = /[ \t\n\r\u000c]/;
+/** The url( whose "(" is just before `k`: where it ends and the address in it; null when it never ends well. */
+function cssUrlAt(s, k) {
+  while (k < s.length && CSS_WS.test(s[k])) k++;
+  const q = s[k];
+  if (q === '"' || q === "'") {
+    const e = s.indexOf(q, k + 1);
+    if (e < 0) return null;
+    let m = e + 1;
+    while (m < s.length && CSS_WS.test(s[m])) m++;
+    return s[m] === ')' ? { end: m + 1, url: s.slice(k + 1, e) } : null;
+  }
+  const e = s.indexOf(')', k);
+  if (e < 0) return null;
+  const url = s.slice(k, e).replace(/[ \t\n\r\u000c]+$/, '');
+  // Quotes, brackets or blanks inside an unquoted url(): a browser loads nothing; it becomes none here.
+  return { end: e + 1, url: /["'(\s\u0000-\u001f\u007f]/.test(url) ? '' : url };
+}
+function cssUrls(s) {
+  const low = s.toLowerCase();
+  let out = '';
+  let i = 0;
+  for (;;) {
+    const u = low.indexOf('url(', i);
+    if (u < 0) break;
+    const r = cssUrlAt(s, u + 4);
+    if (!r) {
+      // Unfinished: it becomes none as far as the next ")", or with the rest of this CSS.
+      const e = s.indexOf(')', u + 4);
+      out += s.slice(i, u) + 'none';
+      if (e < 0) return out;
+      i = e + 1;
+      continue;
+    }
+    out += s.slice(i, u) + (SAFE_CSS_URL.test(r.url) ? s.slice(u, r.end) : 'none');
+    i = r.end;
+  }
+  return out + s.slice(i);
+}
+const cssUnescape = (m, hex, ch) => {
+  // (Only characters XML allows: "\1 " would make the file unreadable.)
+  if (hex) { const n = parseInt(hex, 16); return xmlChar(n) ? String.fromCodePoint(n) : String.fromCharCode(0xfffd); }
+  return ch === undefined || /[\n\r\f]/.test(ch) ? ' ' : ch;
+};
+function cleanCss(css) {
+  let s = String(css);
+  if (!CSS_RISK.test(s)) return s;
+  // Escapes read once ("\75 rl(" is "url("); a backslash still left ("\5c 75") becomes a space.
+  s = s.replace(/\\(?:([0-9a-fA-F]{1,6})[ \t\n\r\f]?|([\s\S])|$)/g, cssUnescape).replace(/\\/g, ' ');
+  s = s.replace(/\/\*[\s\S]*?(?:\*\/|$)/g, ' ');
+  s = s.replace(/@import[^;]*;?/gi, ' ').replace(CSS_FUNCS, 'none(');
+  s = cssUrls(s);
+  // Nothing that loads may be left (the steps above only write spaces and "none"; this is the safety net).
+  return /\\|@import|(?:image-set|image|src|expression)[\s\u000c]*\(/i.test(s) || cssUrls(s) !== s ? '' : s;
+}
+/**
+ * An attribute value or <style> text, read as XML: null when it stays exactly as written, else the
+ * cleaned CSS to write instead. `always`: it is CSS (style="…", <style>); any other attribute is only
+ * looked at when it has something CSS could load with (presentation attributes: fill="url(…)").
+ */
+function cleanedCss({ text, odd }, always) {
+  if (!always && !odd && !CSS_RISK.test(text)) return null;
+  const clean = cleanCss(text);
+  return odd || clean !== text ? clean : null;
+}
 
 function sanitizeSvg(text) {
   const s = String(text);
   let out = '';
   let i = 0;
   const skip = []; // names of dropped elements we are inside
+  // The <style> element being read: its name, its content as it will be written (`out`) and as a
+  // browser reads it (`css`), checked as a whole when the element ends.
+  let style = null;
   const emit = (str) => { if (!skip.length) out += str; };
+  // Text between tags: written as it is (the customer's words), or collected as CSS inside a <style>.
+  const emitText = (raw, written = raw.replace(/>/g, '&gt;')) => {
+    if (skip.length) return;
+    if (!style) { out += written; return; }
+    const x = xmlText(raw);
+    style.out += written;
+    style.css += x.text;
+    style.odd = style.odd || x.odd;
+  };
+  const endStyle = () => {
+    const clean = cleanedCss({ text: style.css, odd: style.odd }, true);
+    out += `${clean === null ? style.out : escText(clean)}</${style.name}>`;
+    style = null;
+  };
   while (i < s.length) {
     const lt = s.indexOf('<', i);
-    if (lt < 0) { emit(s.slice(i).replace(/>/g, '&gt;')); break; }
-    emit(s.slice(i, lt).replace(/>/g, '&gt;'));
+    if (lt < 0) { emitText(s.slice(i)); break; }
+    emitText(s.slice(i, lt));
     i = lt;
     if (s.startsWith('<!--', i)) { const e = s.indexOf('-->', i + 4); i = e < 0 ? s.length : e + 3; continue; }
     if (s.startsWith('<![CDATA[', i)) {
       const e = s.indexOf(']]>', i + 9);
-      const body = s.slice(i + 9, e < 0 ? s.length : e);
-      emit(`<![CDATA[${body.replace(/\]\]>/g, '')}]]>`);
+      const body = s.slice(i + 9, e < 0 ? s.length : e).replace(/\]\]>/g, '');
+      if (style && !skip.length) {
+        style.out += `<![CDATA[${body}]]>`;
+        style.css += body;
+      } else emit(`<![CDATA[${body}]]>`);
       i = e < 0 ? s.length : e + 3;
       continue;
     }
@@ -467,13 +598,13 @@ function sanitizeSvg(text) {
       const e = s.indexOf('?>', i + 2);
       const pi = s.slice(i, e < 0 ? s.length : e + 2);
       // Only the plain XML declaration at the very start is kept.
-      if (/^<\?xml\s[^<>]*\?>$/i.test(pi) && !out.trim()) emit(pi);
+      if (/^<\?xml\s[^<>]*\?>$/i.test(pi) && !out.trim() && !style) emit(pi);
       i = e < 0 ? s.length : e + 2;
       continue;
     }
     const closing = s[i + 1] === '/';
     const m = /^[A-Za-z_][\w:.-]*/.exec(s.slice(i + (closing ? 2 : 1), i + (closing ? 2 : 1) + 200));
-    if (!m) { emit('&lt;'); i += 1; continue; }
+    if (!m) { emitText('<', '&lt;'); i += 1; continue; }
     const name = m[0];
     const local = name.toLowerCase().replace(/^.*:/, '');
     let j = i + (closing ? 2 : 1) + name.length;
@@ -509,15 +640,18 @@ function sanitizeSvg(text) {
       }
       attrs.push([an[0], value]);
     }
-    if (broken) { emit('&lt;'); i += 1; continue; }
+    if (broken) { emitText('<', '&lt;'); i += 1; continue; }
     i = j;
     if (closing) {
       if (skip.length) { if (skip[skip.length - 1] === local) skip.pop(); continue; }
+      // The end of the <style> (or, in a broken file, of what holds it: the <style> ends there too).
+      if (style) { endStyle(); if (local === 'style') continue; }
       if (!SVG_DROP.has(local)) emit(`</${name}>`);
       continue;
     }
-    if (SVG_DROP.has(local) || skip.length) {
-      if (!selfClose && (SVG_DROP.has(local) ? true : skip.length)) skip.push(local);
+    // Dropped elements and everything in them; and any element inside a <style> (its text is the CSS).
+    if (SVG_DROP.has(local) || skip.length || style) {
+      if (!selfClose) skip.push(local);
       continue;
     }
     const kept = [];
@@ -526,45 +660,21 @@ function sanitizeSvg(text) {
       const alocal = lname.replace(/^.*:/, '');
       if (/^on/.test(alocal) || lname === 'xml:base' || alocal === 'attributename') continue;
       if (value == null) { kept.push(` ${an}`); continue; }
-      if (alocal === 'href' || alocal === 'src') {
-        if (!SAFE_LINK.test(decodeEntities(value).trim())) continue;
-      } else if (dangerousValue(value)) continue;
-      kept.push(` ${an}="${attrOut(value)}"`);
+      if (LINK_LISTS.has(alocal)) continue;
+      if (LINK_ATTRS.has(alocal)) {
+        if (safeLink(value)) kept.push(` ${an}="${attrOut(value)}"`);
+        continue;
+      }
+      // Any other attribute: never a javascript: address; CSS in it (style="…", fill="url(…)") is cleaned.
+      if (isBadUrl(value)) continue;
+      const clean = cleanedCss(xmlText(value), alocal === 'style');
+      kept.push(` ${an}="${clean === null ? attrOut(value) : escAttr(clean)}"`);
     }
     emit(`<${name}${kept.join('')}${selfClose ? '/>' : '>'}`);
+    if (local === 'style' && !selfClose) style = { name, out: '', css: '', odd: false };
   }
-  // CSS that could load from elsewhere (embedded fonts and images are data: URLs).
-  out = stripCssLoads(out);
-  out = out.replace(/(javascript|vbscript):/gi, '');
+  if (style) endStyle();
   return out;
-}
-
-/**
- * url(...) that isn't data: or #id becomes none, and @import ...; goes. A forward scan, so a crafted
- * file ("url(" thousands of times with no ")") takes linear time; an unfinished one drops the rest.
- */
-function stripCssLoads(s) {
-  const low = s.toLowerCase();
-  let out = '';
-  let i = 0;
-  for (;;) {
-    const u = low.indexOf('url(', i);
-    const m = low.indexOf('@import', i);
-    if (u === -1 && m === -1) break;
-    if (m !== -1 && (u === -1 || m < u)) {
-      const semi = low.indexOf(';', m);
-      out += s.slice(i, m);
-      if (semi === -1) return out;
-      i = semi + 1;
-      continue;
-    }
-    const close = low.indexOf(')', u);
-    if (close === -1) return out + s.slice(i, u) + 'none';
-    const inner = low.slice(u + 4, close).replace(/^\s*['"]?\s*/, '');
-    out += s.slice(i, u) + (inner.startsWith('data:') || inner.startsWith('#') ? s.slice(u, close + 1) : 'none');
-    i = close + 1;
-  }
-  return out + s.slice(i);
 }
 
 // ---------- Clean-up ----------
