@@ -22,6 +22,20 @@ function shot(name) {
   const png = execFileSync('adb', ['exec-out', 'screencap', '-p'], { maxBuffer: 64 * 1024 * 1024 });
   fs.writeFileSync(path.join(shotsDir, `android-${name}.png`), png);
 }
+/** Waits until the web view's address passes `test` (polling: a page that fails to load mustn't end the wait). */
+async function waitUrl(page, test, timeout = 30000, what = 'the page') {
+  const end = Date.now() + timeout;
+  let url = '';
+  while (Date.now() < end) {
+    try {
+      url = page.url();
+      if (test(new URL(url))) return url;
+    } catch { /* the page is changing */ }
+    await sleep(250);
+  }
+  throw new Error(`Timed out waiting for ${what} (last address: ${url})`);
+}
+
 function check(ok, message) {
   if (!ok) throw new Error(`Check failed: ${message}`);
   console.log(`  ✓ ${message}`);
@@ -64,21 +78,22 @@ try {
   adb('shell', 'am', 'start', '-W', '-a', 'android.intent.action.VIEW', '-d',
     `me.ebda3.app://open?url=${encodeURIComponent(SITE + '/cart')}`, PKG);
   await shop.waitFor(/^\/cart/, 'android', { since, what: '/cart' });
-  await page.waitForURL(/\/cart/, { timeout: 20000 });
+  await waitUrl(page, (u) => u.pathname === '/cart', 20000, '/cart');
   check(true, 'the cart page opened in the app');
   await sleep(1500);
   shot('2-cart-from-link');
 
   step('The Back button goes to the previous page');
   adb('shell', 'input', 'keyevent', 'KEYCODE_BACK');
-  await page.waitForURL((u) => new URL(u).pathname === '/', { timeout: 20000 });
+  await waitUrl(page, (u) => u.pathname === '/', 20000, 'the home page');
   check(true, 'back on the home page');
 
   step('No connection: the app\'s own page, then back by itself');
   await shop.down();
-  await page.evaluate(() => { location.href = '/designs'; });
-  await page.waitForURL(/^https:\/\/localhost\/offline\.html\?from=/, { timeout: 30000 });
+  await page.evaluate(() => { setTimeout(() => { location.href = '/designs'; }, 0); });
+  await waitUrl(page, (u) => u.origin === 'https://localhost' && u.pathname === '/offline.html' && u.searchParams.has('from'), 30000, 'the offline page');
   check(true, 'the "no connection" page is shown');
+  await page.waitForLoadState('load').catch(() => {});
   const text = await page.textContent('body');
   check(/مفيش اتصال/.test(text) && /No internet connection/.test(text), 'in Arabic and English');
   await sleep(1000);
@@ -86,14 +101,14 @@ try {
   since = Date.now();
   await shop.up();
   await shop.waitFor(/^\/designs/, 'android', { since, timeout: 40000, what: '/designs after the connection came back' });
-  await page.waitForURL(/\/designs/, { timeout: 20000 });
+  await waitUrl(page, (u) => u.pathname === '/designs', 20000, '/designs');
   check(true, 'back on the page by itself once the shop answered');
   await sleep(2500);
   shot('4-back-online');
 
   step('Back skips the "no connection" page');
   adb('shell', 'input', 'keyevent', 'KEYCODE_BACK');
-  await page.waitForURL((u) => new URL(u).pathname === '/', { timeout: 20000 });
+  await waitUrl(page, (u) => u.pathname === '/', 20000, 'the home page');
   check(true, 'back went to the home page, not to the "no connection" page');
 
   step('Saving a file the page makes (the editor\'s names example)');
