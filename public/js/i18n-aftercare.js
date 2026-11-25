@@ -233,6 +233,18 @@
       const total = this.isNameList(item) ? '' : `<span class="qty-total">${esc(copies != null ? window.POD.plural('qty.copies', copies) : this.piecesText(n))}</span>`;
       return `<div class="qty-break${inline ? ' qty-inline' : ''}" aria-label="${esc(t('qty.breakdown'))}">${rows}${total}</div>`;
     },
+    /** One item in "Which items do you want again?": the product, then its colour and size, or every colour and
+     *  size ordered (two of the same product are told apart: QA 25 Nov). Plain text. */
+    pickText(item) {
+      const { tr } = window.POD;
+      const parts = [tr(item.productName)];
+      if (this.showBreakdown(item)) parts.push(this.qtyText(item));
+      else {
+        if (item.color && item.color.name) parts.push(tr(item.color.name));
+        if (item.size && item.size.label) parts.push(tr(item.size.label));
+      }
+      return parts.filter(Boolean).join(window.POD.lang === 'ar' ? '، ' : ' · ');
+    },
     /** The same as plain text (WhatsApp messages): "Black: S×2, M×5 / White: M×2". */
     qtyText(item) {
       const { tr, num } = window.POD;

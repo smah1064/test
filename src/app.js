@@ -171,9 +171,26 @@ function jpegWithDpi(buf, dpi) {
   return Buffer.concat([out.subarray(0, 2), app0, out.subarray(2)]);
 }
 
-function cleanString(value, field, { max = 200, required = true } = {}) {
+/** Nested deeper than `depth`, or more than `most` values (walked without recursion: no stack overflow on a hostile body). */
+function nestedTooDeep(root, depth = 20, most = 50000) {
+  const stack = [[root, 0]];
+  let seen = 0;
+  while (stack.length) {
+    const [v, d] = stack.pop();
+    if (++seen > most || d > depth) return true;
+    if (v && typeof v === 'object') for (const x of Object.values(v)) stack.push([x, d + 1]);
+  }
+  return false;
+}
+
+function cleanString(value, field, { max = 200, required = true, lines = ' ' } = {}) {
   // Invisible characters (zero-width, direction marks pasted from phones) don't count as text.
-  const s = typeof value === 'string' ? value.replace(/[\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/g, '').trim() : '';
+  // One line: line breaks, tabs and other control characters become a space (an address's lines: `lines`),
+  // so a pasted name can't add lines of its own to the shop's WhatsApp alert or emails (QA tester 2, 25 Nov).
+  const s = typeof value === 'string'
+    ? value.replace(/[\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/g, '')
+      .replace(/\s*(?:\r\n|[\r\n\u0085\u2028\u2029])+\s*/g, lines).replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/[ \t]{2,}/g, ' ').trim()
+    : '';
   if (required && !s) throw new HttpError(400, 'fieldRequired', { field: FIELDS[field] });
   if (s.length > max) throw new HttpError(400, 'fieldTooLong', { field: FIELDS[field] });
   return s;
@@ -1513,7 +1530,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       ...(mergeList ? { merge: { count: mergeList.count, columns: mergeList.columns, sides: mergeList.sides, ...(mergeList.variantCols ? { variantCols: mergeList.variantCols } : {}) } } : {}),
       ...(lines ? { quantities: lines.map((l) => (picked.options ? { ...l, size: { ...l.size, label: withOptions(l.size.label, picked.options) } } : l)) } : {}),
       // The editor's own findings (fonts that didn't load, low-resolution photos, tiny text), checked again at /complete.
-      ...(Array.isArray((req.body || {}).clientChecks) && JSON.stringify(req.body.clientChecks).length < 20000 ? { clientChecks: req.body.clientChecks.slice(0, 50) } : {}),
+      // (Checked for depth first: a hostile body nested thousands deep made JSON.stringify overflow, QA 25 Nov.)
+      ...(Array.isArray((req.body || {}).clientChecks) && !nestedTooDeep(req.body.clientChecks, 6, 2000) && JSON.stringify(req.body.clientChecks).length < 20000 ? { clientChecks: req.body.clientChecks.slice(0, 50) } : {}),
       version: 1,
       currency: CURRENCY,
       orderId: null,
@@ -1549,10 +1567,15 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     res.status(201).json({ id: design.id, uploadToken: token, files });
   });
 
+  // Designs whose files are being checked (/complete): no more uploads until it is done (a file swapped in the
+  // middle would be marked ready without being checked: QA tester 2, 25 Nov).
+  const completing = new Set();
+  const fileHash = (f) => crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
   const uploadingDesign = (req) => {
     const design = UUID_RE.test(req.params.id) && store.getDesign(req.params.id);
     if (!design) throw new HttpError(404, 'designNotFound');
     if (design.status !== 'uploading' || design.uploadTokenHash !== sha(req.get('x-upload-token') || '')) throw new HttpError(403, 'notFound');
+    if (completing.has(design.id)) throw new HttpError(409, 'designCompleting');
     return design;
   };
 
@@ -1582,6 +1605,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         return res.json({ ...pub, previewUrl: `/files/designs/${prior.id}/front-preview.png` });
       }
       const design = uploadingDesign(req);
+      completing.add(design.id);
+      res.on('close', () => completing.delete(design.id));
       if (design.kind === 'photoset') {
         await completePhotoset(design);
         await runPreflight(design);
@@ -1610,6 +1635,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         const { uploadTokenHash, ...pub } = design; // eslint-disable-line no-unused-vars
         return res.json({ ...pub, previewUrl: `/files/designs/${design.id}/front-preview.png` });
       }
+      const checked = new Map(); // side -> the print file as checked
       for (const side of design.sides) {
         for (const name of [`${side.id}-print.png`, `${side.id}-preview.png`]) {
           if (!fs.existsSync(store.designFile(design.id, name))) throw new HttpError(400, 'sideEmpty', { side: side.name });
@@ -1635,6 +1661,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
           console.error('Could not embed colour profile/DPI:', err.message);
         }
         Object.assign(side, { widthPx: info.width, heightPx: info.height, dpi, hasSvg: fs.existsSync(store.designFile(design.id, `${side.id}-design.svg`)) });
+        checked.set(side.id, fileHash(file));
       }
       if (design.merge) checkMergeFiles(design);
       if (design.method === 'embroidery') await makeEmbroidery(design);
@@ -1642,6 +1669,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         await makeProofImages(design);
         await runPreflight(design);
       });
+      // (Another copy of the app may have taken an upload meanwhile: the files must be the ones checked.)
+      for (const side of design.sides) {
+        if (checked.get(side.id) !== fileHash(store.designFile(design.id, `${side.id}-print.png`))) throw new HttpError(409, 'designChanged');
+      }
       design.status = 'ready';
       delete design.uploadTokenHash;
       store.save();
@@ -3268,7 +3299,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       email: cleanEmail(cleanString(customer.email, 'email', { max: 200, required: false })),
       governorate: typeof customer.governorate === 'string' ? customer.governorate : '',
       city: cleanString(customer.city, 'city', { max: 100 }),
-      address: cleanString(customer.address, 'address', { max: 300 }),
+      address: cleanString(customer.address, 'address', { max: 300, lines: ', ' }),
       notes: cleanString(customer.notes, 'notes', { max: 500, required: false }),
     };
     c.phone = normalizeEgyptMobile(c.phone);
@@ -3283,6 +3314,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const d = typeof id === 'string' && UUID_RE.test(id) && store.getDesign(id);
       if (!d || (d.status && d.status !== 'ready')) throw new HttpError(400, 'designGone');
       if (d.orderId) throw new HttpError(409, 'designOrdered');
+      // A kids book being saved (another tab): ordered once the save is done, never half saved (QA 25 Nov).
+      if (bookSaves.has(d.id)) throw new HttpError(409, 'bookSaving');
       const why = designUnavailable(d);
       if (why) {
         const p = getProduct(d.productId);
@@ -5697,7 +5730,6 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   const TEAM_VIEW_MS = 30 * 60e3;
   const TEAM_COOKIE = 'pod_tv';
   const TEAM_TICKET_RE = /^([A-Za-z0-9_-]{20,600})\.([A-Za-z0-9_-]{43})$/;
-  const sha = (v) => crypto.createHash('sha256').update(String(v)).digest('hex');
   app.post('/api/admin/orders/:orderId/team-view', requireAdmin, (req, res) => {
     const order = UUID_RE.test(req.params.orderId) && store.getOrder(req.params.orderId);
     if (!order) throw new HttpError(404, 'orderNotFound');

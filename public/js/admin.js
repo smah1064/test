@@ -1885,7 +1885,7 @@
       const msg = link ? t('cu.waText', { name: POD.firstName ? POD.firstName(c.name) : c.name.split(' ')[0], url: link.url }) : '';
       return `
       <div class="card queue-row cu-row">
-        <div>
+        <div style="min-width:0;overflow-wrap:anywhere">
           <strong>${line(c.name)}</strong>
           ${c.linked.google ? '<span class="pill">Google</span>' : ''}${c.linked.facebook ? '<span class="pill">Facebook</span>' : ''}${c.hasPassword ? '' : `<span class="pill queued">${esc(t('cu.noPassword'))}</span>`}
           <div class="muted small"><bdi dir="ltr">${esc(c.phone || '—')}</bdi>${SEP()}<bdi dir="ltr">${esc(c.email || '—')}</bdi>${SEP()}${esc(t('cu.since', { date: POD.date(c.createdAt) }))}</div>

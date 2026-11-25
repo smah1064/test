@@ -381,7 +381,7 @@
             <h3 id="reo-pick-title">${esc(t('track.reorderPick'))}</h3>
             <ul>${o.items.map((item, i) => `
               <li><label><input type="checkbox" data-pick="${esc(item.id)}"${picking.has(item.id) ? ' checked' : ''}>
-                <span>${POD.num(i + 1)}. ${esc(tr(item.productName))}${item.color && item.color.name ? `${SEP()}${esc(tr(item.color.name))}` : ''}</span></label></li>`).join('')}</ul>
+                <span>${POD.num(i + 1)}. <bdi>${esc(PODAftercare.pickText(item))}</bdi></span></label></li>`).join('')}</ul>
             ${n ? '' : `<p class="muted small" role="status">${esc(t('track.reorderPickNone'))}</p>`}
             <div class="row">
               <button class="btn btn-primary" type="button" data-act="reorder-picked"${n ? '' : ' disabled'}>${esc(t('track.reorderAdd', { n: POD.num(n) }))}</button>

@@ -162,7 +162,7 @@
         <h3>${esc(t('track.reorderPick'))}</h3>
         <ul>${o.items.map((item, i) => `
           <li><label><input type="checkbox" data-pick="${esc(item.id)}" data-order="${esc(o.id)}"${pick.has(item.id) ? ' checked' : ''}>
-            <span>${esc(POD.num(i + 1))}. ${esc(tr(item.productName))}</span></label></li>`).join('')}</ul>
+            <span>${esc(POD.num(i + 1))}. <bdi>${esc(PODAftercare.pickText(item))}</bdi></span></label></li>`).join('')}</ul>
         <div class="row">
           <button class="btn btn-sm btn-primary" type="button" data-reorder-picked="${esc(o.id)}"${pick.size ? '' : ' disabled'}>${esc(t('track.reorderAdd', { n: POD.num(pick.size) }))}</button>
           <button class="btn btn-sm" type="button" data-reorder-cancel="${esc(o.id)}">${esc(t('track.reorderCancel'))}</button>

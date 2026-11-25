@@ -147,7 +147,10 @@ window.AdminUploads = (() => {
   }
 
   // ---------- Drawing ----------
+  // The language the box was last drawn in: drawn again when the Ready designs tab comes back after a switch.
+  let drawnLang = null;
   function render() {
+    drawnLang = POD.lang;
     const box = root();
     if (!box) return;
     box.innerHTML = S.batch ? reviewHtml() : homeHtml();
@@ -1209,11 +1212,13 @@ window.AdminUploads = (() => {
       if (!catalog) POD.loadCatalog().then((c) => { catalog = c; }).catch(() => {});
       const box = root();
       if (!box) return;
+      // (Not drawn yet, or drawn in the other language while another tab was open: QA 25 Nov.)
+      const stale = !box.firstElementChild || drawnLang !== POD.lang;
       if (S.batch || S.up) {
-        if (!box.firstElementChild) render();
+        if (stale) render();
         return;
       }
-      if (!box.firstElementChild) render();
+      if (stale) render();
       await loadList({ quiet: auto });
     },
     onLang() {

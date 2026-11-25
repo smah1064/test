@@ -248,6 +248,9 @@
           dog: 'dog, puppy, كلب, كلاب',
           cat: 'cat, kitten, قطة, قطط',
           kids: 'kids, kid, children, child, اطفال, طفل, ولاد, اولاد',
+          // ("Mother's Day" is searched as "mother day": the 's is left out below.)
+          mom: 'mom, mum, mommy, mummy, mama, mother, mother day, mothers day, ماما, الام, امي, عيد الام',
+          dad: 'dad, daddy, papa, father, father day, fathers day, بابا, الاب, ابويا, عيد الاب',
         };
         const sameAs = new Map();
         for (const [k, list] of Object.entries(SAME)) for (const w of list.split(',')) sameAs.set(norm(w), k);
@@ -301,7 +304,8 @@
         /** The words of a search: each as typed, its other forms and what it names; two words that name one thing
             ("t shirts", "بيزنس كارد") also count as one. */
         function query(q) {
-          const ws = norm(q).split(' ').filter(Boolean);
+          // (A lone "s" is the English 's: "mother's day" is "mother day".)
+          const ws = norm(q).split(' ').filter((w, i) => w && !(w === 's' && i > 0));
           const one = (w) => ({ word: w, forms: allForms(w).filter((f) => f !== w), concepts: conceptsOf(w) });
           const terms = [];
           for (let i = 0; i < ws.length; i++) {
