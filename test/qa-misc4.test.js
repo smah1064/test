@@ -203,7 +203,8 @@ test('booklets: the shop lists 24 pages × 100 copies and a design of it keeps i
 
 test('admin: after a reload the header shows the staff member\'s name, not the username', async () => {
   // The page takes the person's name from the session (shown), the username only when there is none.
-  assert.match(read('js/admin.js'), /const r = await adminApi\('\/api\/admin\/session'\);\s*\/\/[^\n]*\n\s*setAccess\(r, r\.shown \|\| r\.name\);/);
+  // (Lines may come between: the session also says whether email is set up.)
+  assert.match(read('js/admin.js'), /const r = await adminApi\('\/api\/admin\/session'\);\s*\/\/[^\n]*\n[\s\S]{0,200}?setAccess\(r, r\.shown \|\| r\.name\);/);
   assert.match(read('js/admin-roles.js'), /shown: \(typeof a\.shown === 'string' && a\.shown\) \|\| name \|\| fallbackName,/);
   const add = await post('/api/admin/staff', { name: 'Mostafa مصطفى', username: 'mostafa', password: 'a-long-password' }, owner);
   assert.strictEqual(add.status, 201, await add.clone().text());
