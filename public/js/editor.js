@@ -726,7 +726,7 @@
     if (sel && sel.type === 'image' && !crop) {
       const dpi = imageDpi(sel);
       const r = sel.getBoundingRect(true, true);
-      const txt = `${dpi} DPI`;
+      const txt = `${POD.num(dpi)} DPI`; // (Arabic page: Arabic digits, as in its message)
       ctx.setLineDash([]);
       ctx.font = `700 ${10 * px}px system-ui, sans-serif`;
       const tw = ctx.measureText(txt).width + 10 * px;
@@ -1003,11 +1003,18 @@
     const bar = document.createElement('div');
     bar.className = 'draft-bar';
     bar.setAttribute('role', 'status');
-    bar.innerHTML = `<span>${esc(t('draft.restored'))}${fixed ? ' ' + esc(t('draft.fixedOutside', { n: POD.num(fixed) })) : ''}</span>
+    const fill = () => {
+      bar.innerHTML = `<span>${esc(t('draft.restored'))}${fixed ? ' ' + esc(t('draft.fixedOutside', { n: POD.num(fixed) })) : ''}</span>
       <button type="button" class="btn btn-sm" data-draft="new">${esc(t('draft.startNew'))}</button>
       <button type="button" class="fly-close" data-draft="keep" aria-label="${esc(t('draft.keep'))}">✕</button>`;
+    };
+    fill();
     document.body.appendChild(bar);
-    const hide = () => bar.remove();
+    document.addEventListener('pod:langchange', fill); // (in the page's new language)
+    const hide = () => {
+      document.removeEventListener('pod:langchange', fill);
+      bar.remove();
+    };
     const timer = setTimeout(hide, 12000);
     bar.addEventListener('click', async (e) => {
       const b = e.target.closest('[data-draft]');
@@ -4121,7 +4128,7 @@
     const total = qtyTotal();
     const cell = (c, z) => (comboOut(p, c.id, z.id) && !(g[c.id] && g[c.id][z.id])
       ? `<span class="qty-out" title="${esc(tEd('ed.soldOut'))}">—</span>`
-      : `<input type="text" inputmode="numeric" maxlength="4" autocomplete="off" class="qty-in" data-qc="${c.id}" data-qz="${z.id}" value="${(g[c.id] && g[c.id][z.id]) || ''}" placeholder="0" aria-label="${esc(`${tr(c.name)} ${tr(z.label)}`)}">`);
+      : `<input type="text" inputmode="numeric" maxlength="4" autocomplete="off" class="qty-in${POD.comboFew(p, c.id, z.id) ? ' is-few' : ''}" data-qc="${c.id}" data-qz="${z.id}" value="${(g[c.id] && g[c.id][z.id]) || ''}" placeholder="0" aria-label="${esc(`${tr(c.name)} ${tr(z.label)}`)}"${POD.comboFew(p, c.id, z.id) ? ` title="${esc(t('fewLeftCombo', { colour: tr(c.name), size: tr(z.label), n: POD.num(POD.comboFew(p, c.id, z.id)) }))}"` : ''}>`);
     const simple = !mix().sizes && !mix().colors;
     box.innerHTML = `
       <label>${esc(t('qty.title'))}</label>
@@ -4156,6 +4163,16 @@
       // (Typed in Arabic or Persian digits too: a number box would drop those.)
       const n = String(v || '').replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).replace(/\D/g, '');
       g[c][z] = Math.max(0, Math.min(1000, Math.floor(Number(n) || 0)));
+      // Only a few left of this colour and size: no more than there are (the cart would refuse it).
+      const few = POD.comboFew(st.product, c, z);
+      if (few && g[c][z] > few) {
+        g[c][z] = few;
+        const colour = st.product.colors.find((x) => x.id === c);
+        const size = st.product.sizes.find((x) => x.id === z);
+        toast(t('fewLeftCombo', { colour: colour ? tr(colour.name) : c, size: size ? tr(size.label) : z, n: POD.num(few) }), 'error');
+        const box = $('qty-field') && $('qty-field').querySelector(`.qty-in[data-qc="${CSS.escape(c)}"][data-qz="${CSS.escape(z)}"]`);
+        if (box) box.value = String(few);
+      }
       // At least one piece: clearing the last box puts 1 back.
       if (!Object.values(g).some((row) => Object.values(row).some((n) => n > 0))) g[c][z] = 1;
       st.qty = g;
@@ -5254,7 +5271,7 @@
         await showSide(s.id);
         const issues = checkIssues();
         if (!overlapAt && issues.some((i) => i.overlap)) overlapAt = s.id;
-        issues.forEach((i) => problems.push(`• ${tr(s.name)}: ${t(i.key, { ...i.params, dpi: i.params.dpi, pt: i.params.pt })}`));
+        issues.forEach((i) => problems.push(`• ${tr(s.name)}: ${t(i.key === 'check.outside' ? 'check.outsideList' : i.key, { ...i.params, dpi: i.params.dpi, pt: i.params.pt })}`));
         clientChecks.push(...(await reportChecks(s.id, issues)));
         sidesPayload[s.id] = { editor: { version: fabric.version, objects: await inlineImages(st.designs[s.id]), ...(st.offsets[s.id] ? { offset: st.offsets[s.id] } : {}), ...(st.pattern ? { pattern: { ...st.pattern } } : {}) } };
         const withFields = useMerge && mergeSides.some((x) => x.id === s.id);

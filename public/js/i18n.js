@@ -781,6 +781,7 @@ window.POD_STRINGS = {
   'check.legendBleed': ['Bleed: extend backgrounds to here', 'هامش القص: مدّ الخلفيات حتى هنا'],
   'check.allGood': ['Everything will print sharp and in full.', 'كل شيء سيُطبع بوضوح وبالكامل.'],
   'check.outside': ['{name} is outside the print area and won’t be printed. Tap here to bring it back.', '{name} خارج منطقة الطباعة ولن يُطبع. اضغط هنا لإعادته.'],
+  'check.outsideList': ['{name} is outside the print area and won’t be printed.', '{name} خارج منطقة الطباعة ولن يُطبع.'],
   'check.cut': ['Part of {name} goes past the edge and will be cut off.', 'جزء من {name} يتجاوز الحافة وسيتم قصه.'],
   'check.safe': ['{name} is very close to the edge. Move it inside the green line.', '{name} قريب جدًا من الحافة. حرّكه داخل الخط الأخضر.'],
   'revise.confirm': ['Please check before sending:\n\n{list}\n\nSend the new version anyway?', 'من فضلك راجع قبل ما تبعت:\n\n{list}\n\nتبعت النسخة الجديدة برضه؟'],

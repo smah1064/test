@@ -1455,6 +1455,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         pdfCopies[`source-${v.pdfId}.pdf`] ||= fs.readFileSync(path.join(pdfUploadsDir, `${v.pdfId}.pdf`));
       }
     }
+    // A {field} left in the text (a business card's {Name}) can't be printed as it is: a name list fills it,
+    // or the customer types the real words. The editor says so; a ready design added as it is must not slip by.
+    if (!mergeList) {
+      const FIELD = /\{\s*[\p{L}\p{N}_][^{}\n]{0,39}\}/u; // ("{Name}", "{الاسم}": a word inside)
+      const texts = (objs) => (Array.isArray(objs) ? objs : []).flatMap((o) => (o && Array.isArray(o.objects) ? texts(o.objects) : [o && typeof o.text === 'string' ? o.text : '']));
+      if (Object.values(editor).some((ed) => texts(ed && ed.objects).some((tx) => FIELD.test(tx)))) throw new HttpError(400, 'fieldsUnfilled');
+    }
     const files = storedSides.flatMap((sd) => [`${sd.id}-print.png`, `${sd.id}-preview.png`, `${sd.id}-design.svg`, ...(sd.vector && sd.vector.overlay ? [`${sd.id}-overlay.png`] : [])]);
     if (mergeList) for (const sd of Object.keys(mergeList.sides)) files.push(`${sd}-merge-base.png`, `${sd}-merge.bin`);
     design.expectedFiles = files;
@@ -1928,8 +1935,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const vote = b.vote === 'up' ? 'up' : 'change';
     // (Direction controls go too: "\u202Eabc" would show reversed or spoof another reply.)
     const BIDI = /[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g;
-    const comment = String(b.comment || '').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').replace(BIDI, '').trim().slice(0, 500);
-    const name = String(b.name || '').replace(/[\u0000-\u001f\u007f]/g, '').replace(BIDI, '').trim().slice(0, 40);
+    // (Text only: {"a":1} isn't a name. Cut by whole characters, so an emoji at the end isn't halved.)
+    const cut = (v, n) => Array.from(v).slice(0, n).join('');
+    const comment = cut((typeof b.comment === 'string' ? b.comment : '').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').replace(BIDI, '').trim(), 500);
+    const name = cut((typeof b.name === 'string' ? b.name : '').replace(/[\u0000-\u001f\u007f]/g, '').replace(BIDI, '').trim(), 40);
     if (vote === 'change' && !comment) throw new HttpError(400, 'feedbackEmpty');
     sh.feedback = (sh.feedback || []).slice(-99);
     sh.feedback.push({ vote, comment, name, at: new Date().toISOString() });
@@ -3806,7 +3815,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     });
     res.json(previewView(req));
   });
-  app.get('/api/admin/session', requireCatalog, (req, res) => res.json({ ok: true, role: req.adminWho.role, ...(req.adminWho.role === 'owner' ? { weakPassword: auth.weak } : { name: req.adminWho.name }) }));
+  app.get('/api/admin/session', requireCatalog, (req, res) => res.json({ ok: true, role: req.adminWho.role, ...(req.adminWho.role === 'owner' ? { weakPassword: auth.weak } : { name: req.adminWho.name, shown: req.adminWho.shown || req.adminWho.name }) }));
 
   // ---------- Products (product manager) ----------
   // Changes are laid over the products as written (src/catalog.js); see the notes there.

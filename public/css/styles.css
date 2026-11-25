@@ -911,6 +911,7 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 .qty-grid td { padding: 2px 3px; text-align: center; }
 .qty-in { width: 44px; min-width: 38px; padding: 6px 2px; text-align: center; border: 1px solid var(--line, #ddd); border-radius: 8px; font: inherit; font-weight: 600; -moz-appearance: textfield; appearance: textfield; }
 .qty-in::-webkit-inner-spin-button, .qty-in::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.qty-in.is-few { border-color: #e0a23a; background: #fff8ec; } /* only a few left of this colour and size (title says how many) */
 .qty-in:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 .qty-sw { display: inline-block; width: 14px; height: 14px; border-radius: 50%; border: 1px solid rgba(0,0,0,.2); vertical-align: middle; margin-inline-end: 6px; }
 .qty-x { background: none; border: 0; font-size: 18px; color: var(--ink-2, #888); cursor: pointer; padding: 0 4px; }

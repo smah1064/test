@@ -100,7 +100,8 @@ const MESSAGES = {
   emailOff: { en: 'Email is not set up yet (BREVO_API_KEY and MAIL_FROM in Hostinger). Send by WhatsApp instead.', ar: 'البريد الإلكتروني غير مُعدّ بعد (BREVO_API_KEY و MAIL_FROM في Hostinger). أرسل عبر واتساب بدلًا من ذلك.' },
   houseEmailFailed: { en: 'The email could not be sent. Try again, or send by WhatsApp.', ar: 'تعذر إرسال البريد. حاول مرة أخرى أو أرسل عبر واتساب.' },
   linkExpired: { en: 'This download link has expired or is not valid. Ask the shop for a new one.', ar: 'رابط التحميل انتهت صلاحيته أو غير صالح. اطلب رابطًا جديدًا من المتجر.' },
-  artworkType: { en: 'Please choose an AI, EPS, JPG or PNG file', ar: 'من فضلك اختر ملف AI أو EPS أو JPG أو PNG' },
+  artworkType: { en: 'Please choose an AI, EPS, PDF, JPG or PNG file (this one can\'t be read)', ar: 'من فضلك اختر ملف AI أو EPS أو PDF أو JPG أو PNG (الملف ده مش بيتقري)' },
+  fieldsUnfilled: { en: 'Your design has a field in { } braces. Upload your name list, or type the real words instead.', ar: 'التصميم فيه حقل بين { }. ارفع قائمة الأسماء أو اكتب الكلام الحقيقي مكانه.' },
   artworkBad: { en: 'We could not open this file. Save it from Illustrator as "PDF compatible" AI or as EPS, then try again.', ar: 'لم نتمكن من فتح هذا الملف. احفظه من Illustrator كملف AI متوافق مع PDF أو كملف EPS ثم حاول مرة أخرى.' },
   pdfOnly: { en: 'Please choose a PDF file.', ar: 'من فضلك اختار ملف PDF.' },
   pdfBad: { en: 'We could not read the pages of this PDF. Save it again as a standard PDF (for example "Save as PDF" or "Export to PDF") and try again.', ar: 'معرفناش نقرا صفحات ملف الـ PDF ده. احفظه تاني كـ PDF عادي (مثلًا "حفظ كـ PDF" أو "تصدير PDF") وجرّب تاني.' },
@@ -231,7 +232,15 @@ function pick(value, lang) {
 // A5, 3D or 2XL stay; what a customer typed is passed in as text and isn't touched).
 const AR_DIGITS = '٠١٢٣٤٥٦٧٨٩';
 const LATIN_NUM = /(?<![A-Za-z0-9_\-/@:#=?&%"'.])\d+(?:[.,]\d+)*(?![A-Za-z0-9_\-/@:%"']|[.,]\d)/g;
-const arabicDigits = (s) => String(s).replace(LATIN_NUM, (m) => m.replace(/\d/g, (d) => AR_DIGITS[d]).replace(/\./g, '٫').replace(/,/g, '٬'));
+// (A number in English words stays as written: "iPhone 16 Pro", "Class of 2025"; as on the pages.)
+const LATIN_BEFORE = /[A-Za-z][A-Za-z'’]*\s+$/;
+const LATIN_AFTER = /^\s+[A-Za-z]/;
+const arabicDigits = (s) => {
+  const str = String(s);
+  return str.replace(LATIN_NUM, (m, at) => (LATIN_BEFORE.test(str.slice(Math.max(0, at - 40), at)) || LATIN_AFTER.test(str.slice(at + m.length, at + m.length + 4))
+    ? m
+    : m.replace(/\d/g, (d) => AR_DIGITS[d]).replace(/\./g, '٫').replace(/,/g, '٬')));
+};
 
 function format(key, params, lang) {
   const m = MESSAGES[key];

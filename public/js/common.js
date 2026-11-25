@@ -28,8 +28,15 @@
   // the customer typed (only the shop's texts go through here).
   const AR_DIGITS = '٠١٢٣٤٥٦٧٨٩';
   const LATIN_NUM = /(?<![A-Za-z0-9_\-/@:#=?&%"'.])\d+(?:[.,]\d+)*(?![A-Za-z0-9_\-/@:%"']|[.,]\d)/g;
+  // A number in English words stays as written ("iPhone 16 Pro", "Class of 2025", "30 and fabulous").
+  const LATIN_BEFORE = /[A-Za-z][A-Za-z'’]*\s+$/;
+  const LATIN_AFTER = /^\s+[A-Za-z]/;
   function arabicDigits(s) {
-    return String(s).replace(LATIN_NUM, (m) => m.replace(/\d/g, (d) => AR_DIGITS[d]).replace(/\./g, '٫').replace(/,/g, '٬'));
+    const str = String(s);
+    return str.replace(LATIN_NUM, (m, at) => {
+      if (LATIN_BEFORE.test(str.slice(Math.max(0, at - 40), at)) || LATIN_AFTER.test(str.slice(at + m.length, at + m.length + 4))) return m;
+      return m.replace(/\d/g, (d) => AR_DIGITS[d]).replace(/\./g, '٫').replace(/,/g, '٬');
+    });
   }
   function fill(str, params) {
     return params ? str.replace(/\{(\w+)\}/g, (_, k) => {
@@ -89,6 +96,9 @@
       }).then((catalog) => {
         hideEmptyMenus(catalog);
         return catalog;
+      }).catch((err) => {
+        catalogPromise = null; // (no connection or a server error: the next try asks again)
+        throw err;
       });
     }
     return catalogPromise;
