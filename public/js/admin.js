@@ -1797,8 +1797,10 @@
   function priceRow(p, field) {
     const e = acc.edits[p.id];
     const v = (k, def) => (e && e[k] !== undefined ? e[k] : def);
-    const price = Number(v('basePrice', p.basePrice)) + Number(v('size:' + p.sizes[0].id, p.sizes[0].surcharge));
-    const cost = Number(v('blank', p.costs.blank)) + Number(v('sizecost:' + p.sizes[0].id, p.sizes[0].costExtra)) + Number(v('printFirst', p.costs.printFirst)) + Number(v('other', p.costs.other));
+    // (The first regular pack: a 1-copy pack's price and cost per copy are another matter.)
+    const ref = p.sizes.find((z) => z.id === p.refSize) || p.sizes[0];
+    const price = Number(v('basePrice', p.basePrice)) + Number(v('size:' + ref.id, ref.surcharge));
+    const cost = Number(v('blank', p.costs.blank)) + Number(v('sizecost:' + ref.id, ref.costExtra)) + Number(v('printFirst', p.costs.printFirst)) + Number(v('other', p.costs.other));
     const profit = price - cost;
     const margin = price ? Math.round((profit / price) * 1000) / 10 : 0;
     const multi = p.sideCount > 1;

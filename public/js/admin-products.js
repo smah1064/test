@@ -1190,8 +1190,23 @@
   function updateFinals() {
     const raw = val('basePrice');
     const b = Number(raw) || 0;
+    const P = S.P;
+    const built = P && P.original && P.original.prices;
     root.querySelectorAll('[data-final]').forEach((el) => {
-      el.textContent = raw === '' ? t('pm.asBuilt') : POD.money(b + (Number(val('ps.' + el.dataset.final)) || 0));
+      if (raw === '') { el.textContent = t('pm.asBuilt'); return; }
+      const id = el.dataset.final;
+      const typed = Number(val('ps.' + id)) || 0;
+      // A small pack (1, 10, 25 copies) left as shown follows the product's price, as the server will
+      // save it: its share of the new price, never under 1 EGP.
+      const z = P && P.sizes.find((x) => x.id === id);
+      const defS = built && built.sizes ? Number(built.sizes[id]) : 0;
+      const defB = built ? Number(built.basePrice) : 0;
+      const share = (base) => Math.max(1, Math.round((base * (defB + defS)) / defB));
+      if (z && defS < 0 && defB > 0 && typed === (Number(z.surcharge) || 0) && (Number(P.basePrice) || 0) + typed === share(Number(P.basePrice) || 0)) {
+        el.textContent = POD.money(share(b));
+        return;
+      }
+      el.textContent = POD.money(b + typed);
     });
   }
   function savePrices(P) {

@@ -4810,16 +4810,19 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const d = accounting.defaultsFor(p.id);
     const c = (store.db.costs || {})[p.id] || {};
     const extra = p.extraSidePrice != null ? p.extraSidePrice : EXTRA_SIDE_PRICE;
-    const unit = accounting.itemCostFrom(store.db.costs, { productId: p.id, size: p.sizes[0], sides: [p.sides[0]] });
+    // (Unit cost and profit for the first regular pack, not a 1-copy one: those cost more per copy.)
+    const ref = p.sizes.find((sz) => !sz.smallPack) || p.sizes[0];
+    const unit = accounting.itemCostFrom(store.db.costs, { productId: p.id, size: ref, sides: [p.sides[0]] });
     return {
       id: p.id, name: p.name, category: p.category, kind: p.kind || 'product', sideCount: p.sides.length,
       basePrice: p.basePrice, extraSidePrice: extra,
-      sizes: p.sizes.map((sz) => ({ id: sz.id, label: sz.label, surcharge: sz.surcharge || 0, costExtra: (c.sizes && c.sizes[sz.id]) || 0 })),
+      sizes: p.sizes.map((sz) => ({ id: sz.id, label: sz.label, surcharge: sz.surcharge || 0, costExtra: (c.sizes && c.sizes[sz.id]) || 0, ...(sz.smallPack ? { smallPack: true } : {}) })),
+      refSize: ref.id,
       defaults: d, costs: { blank: c.blank || 0, printFirst: c.printFirst || 0, printExtra: c.printExtra || 0, embroidery: c.embroidery || 0, other: c.other || 0 },
       // Embroidered products: a stitching cost per piece.
       embroidered: Boolean(p.embroidery),
       costsSet: Boolean(store.db.costs && store.db.costs[p.id]),
-      unitCost: unit.total, unitProfit: accounting.round2(p.basePrice + (p.sizes[0].surcharge || 0) - unit.total),
+      unitCost: unit.total, unitProfit: accounting.round2(p.basePrice + (ref.surcharge || 0) - unit.total),
     };
   }
   // Archived products ("stop selling") are left out; their saved prices and costs stay in the data.
