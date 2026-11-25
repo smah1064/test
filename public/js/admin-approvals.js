@@ -158,8 +158,15 @@ window.AdminApprovals = (() => {
       if (e.status === 409) {
         try {
           await load();
-          const now = (S.list || []).find((x) => x.id === id);
+          let now = (S.list || []).find((x) => x.id === id);
+          // (The "Waiting" view no longer lists it: found among all of them, so the card stays with its result and
+          // the "Already decided by …" line instead of vanishing. QA 25 Nov.)
+          if (!now) {
+            const all = await cfg.api('/api/admin/approvals?status=all').catch(() => null);
+            now = ((all && all.approvals) || []).find((x) => x.id === id);
+          }
           if (now && now.status !== 'pending') S.decided.set(id, { ...a, ...now });
+          else if (!now) S.decided.set(id, a);
         } catch (err) { /* the 15-second refresh tries again */ }
       }
     }

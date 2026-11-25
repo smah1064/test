@@ -1176,23 +1176,35 @@
       body.variantStock = null;
       body.lowStockAt = lowOf();
     } else if (mode === 'variant') {
-      // Counts kept for colours or sizes that are off now stay as they are.
-      const vs = {};
-      const shown = new Set();
+      // Only the boxes changed on this page count: every other box keeps what is saved now (F, read just before
+      // saving), so a colleague's count or the pieces sold since aren't undone. Counts kept for colours or sizes that
+      // are off now stay as they are.
+      const F = S.availFresh && S.availFresh.id === P.id ? S.availFresh : null;
+      S.availFresh = null;
+      const shownWas = P.variantStock || {};
+      const vs = { ...((F && F.variantStock) || shownWas) };
       root.querySelectorAll('.pm-vs .pm-vs-in').forEach((el) => {
         const k = `${el.dataset.c}|${el.dataset.z}`;
-        shown.add(k);
         const raw = numText(el);
-        if (raw === '') return;
+        const before = shownWas[k] === undefined || shownWas[k] === null ? '' : shownWas[k];
+        if (raw === '') {
+          if (before !== '') delete vs[k];
+          return;
+        }
         const v = Number(raw);
         if (!Number.isInteger(v) || v < 0) { el.focus(); throw new Error(t('pm.badStock')); }
-        vs[k] = v;
+        if (v !== before) vs[k] = v;
       });
       if (!Object.keys(vs).length) throw new Error(t('pm.vs.empty'));
-      for (const [k, v] of Object.entries(P.variantStock || {})) if (!shown.has(k)) vs[k] = v;
       body.stock = null;
       body.variantStock = vs;
       body.lowStockAt = lowOf();
+      if (F) {
+        // Compared with what is saved now: nothing new here, nothing goes.
+        const sameNow = JSON.stringify(Object.entries(vs).sort()) === JSON.stringify(Object.entries(F.variantStock || {}).sort());
+        if (sameNow && F.variantStock) delete body.variantStock;
+        if (F.stock == null) delete body.stock;
+      }
     } else {
       body.stock = null;
       body.variantStock = null;
@@ -1817,6 +1829,16 @@
       return;
     }
     let rebased = false;
+    // (Stock per colour and size: only the boxes changed here go, on top of the counts saved now, so a colleague's
+    // count or the pieces sold since the page opened aren't put back. QA 25 Nov.)
+    if (name === 'avail' && val('stockMode') === 'variant') {
+      try {
+        const F = await api(`/api/admin/catalog/${enc(P.id)}`);
+        if (F && F.id === P.id) S.availFresh = F;
+      } catch (e) {
+        if (e.status === 401) return;
+      }
+    }
     if (name === 'colors' || name === 'sizes') {
       try {
         const F = await api(`/api/admin/catalog/${enc(P.id)}`);

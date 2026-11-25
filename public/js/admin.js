@@ -1878,8 +1878,8 @@
       return;
     }
     if (tab === 'queue') {
-      // Don't redraw while the admin is typing in a send form.
-      if (document.activeElement && document.activeElement.closest && document.activeElement.closest('.send-panel') && lastQueue) return;
+      // Don't redraw while the admin is typing in a send form, or the reason a job goes back to Review (QA 25 Nov).
+      if (document.activeElement && document.activeElement.closest && document.activeElement.closest('.send-panel, .back-review') && lastQueue) return;
       if (!housesData) housesData = await adminApi('/api/admin/houses').catch(() => null);
       const q = await adminApi('/api/admin/queue');
       await ensureOrders([...q.printing, ...q.waiting, ...q.toShip]);
@@ -2924,7 +2924,7 @@
               <td data-label="${esc(t('rv.col.by'))}"><span>${esc(by(a))}</span></td>
               <td data-label="${esc(t('rv.col.when'))}"><span>${a.at ? esc(when(a.at)) : '—'}</span></td>
               <td data-label="${esc(t('rv.col.version'))}"><span>${a.version != null ? esc(/^\d+$/.test(String(a.version)) ? POD.num(Number(a.version)) : String(a.version)) : '—'}</span></td>
-              <td data-label="${esc(t('rv.col.note'))}"><span dir="auto">${a.note && !isReplace(a) ? esc(a.note) : '<span class="muted">—</span>'}</span></td>
+              <td data-label="${esc(t('rv.col.note'))}"><span dir="auto">${a.note ? esc(a.note) : '<span class="muted">—</span>'}</span></td>
             </tr>`).join('')}
           </tbody>
         </table>` : `<p class="muted small">${esc(t('rv.historyNone'))}</p>`}
@@ -3118,6 +3118,8 @@
         headers: { 'Content-Type': 'image/png', 'x-lang': POD.lang, 'x-review-note': encodeURIComponent(changeNote) },
         body: file,
       });
+      // (Sent with this file: the next side or decision needs its own note. QA 25 Nov.)
+      delete rvNote[id];
       await rvAfter(id, r);
       const v = proofOf(rvFind(id)).version || nextV;
       rvSideMsg[key] = { text: t('rv.replaceDone', { v }), ok: true };

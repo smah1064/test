@@ -1161,6 +1161,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (buf.readUInt32BE(16) !== sd.widthPx || buf.readUInt32BE(20) !== sd.heightPx) throw new HttpError(400, 'replacementSize', { w: sd.widthPx, h: sd.heightPx });
       replacingItems.add(item.id);
       marked = item.id;
+      // A second side corrected before the customer answered (front, then back): the same proof link, which shows
+      // the latest files, and no second message within 10 minutes; the notes of what changed go together. QA 25 Nov.
+      const proofOpen = item.status === 'awaiting_approval' && Boolean(item.proofToken);
+      const toldRecently = proofOpen && item.shopProofAt && Date.now() - Date.parse(item.shopProofAt) < 10 * 60 * 1000;
+      const noteBefore = proofOpen && item.review && item.review.note ? String(item.review.note) : '';
       // What the shop changed, for the customer (with the new proof, in the email and on the proof page).
       let changeNote = '';
       try { changeNote = decodeURIComponent(String(req.get('x-review-note') || '')).replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, ' ').trim().slice(0, 1000); } catch (e) { changeNote = ''; }
@@ -1197,13 +1202,17 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       item.replaced = { ...(item.replaced || {}), [sd.id]: d.version };
       item.approval = null;
       item.status = 'awaiting_approval';
-      if (changeNote) item.review = { ...(item.review || { needed: true, reasons: [] }), note: changeNote };
+      if (changeNote) {
+        const together = toldRecently && noteBefore && !noteBefore.split('\n').includes(changeNote) ? `${noteBefore}\n${changeNote}`.slice(0, 2000) : changeNote;
+        item.review = { ...(item.review || { needed: true, reasons: [] }), note: together };
+      }
       item.approvals = [...(item.approvals || []), { action: 'changes', by: 'shop', at: now, replaced: true, proofHash: proofHashOf(d), version: d.version, side: sd.id, ...(changeNote ? { note: changeNote } : {}) }];
       item.preflight = d.preflight;
       item.history.push({ status: item.status, at: now });
-      newProofLink(item);
+      if (!proofOpen) newProofLink(item);
+      if (!toldRecently) item.shopProofAt = now;
       store.save();
-      tellCustomer(order, item, 'proof', (item.review && item.review.note) || '', req);
+      if (!toldRecently) tellCustomer(order, item, 'proof', (item.review && item.review.note) || '', req);
       res.json(await reviewItem(order, item));
     } catch (e) {
       next(e);
@@ -3965,6 +3974,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     }
     // A job still waiting for review or the customer's approval can't be shipped.
     if ((b.shipped === true || b.delivered === true) && order.items.some((it) => REVIEW_STATUSES.includes(it.status))) throw new HttpError(409, 'notApproved');
+    // …nor one whose corrected print file is being saved right now (it goes back to the customer for approval). QA 25 Nov.
+    if ((b.shipped === true || b.delivered === true) && order.items.some((it) => replacingItems.has(it.id))) throw new HttpError(409, 'fileBeingReplaced');
     order.shipment = s;
     let first = false;
     if (b.shipped === true || b.delivered === true) first = markShipped(order, req);
@@ -4709,6 +4720,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const x = (db.staff || []).find((y) => y.id === w.id);
       Object.assign(x, security.AdminAuth.hashStaffPassword(b.password));
       delete x.passwordByOther; // (their own now)
+      delete x.setup; // (a set-up link still open would replace it: QA 25 Nov)
       x.gen = (x.gen || 0) + 1; // other browsers are signed out
       return x;
     });
@@ -4784,6 +4796,28 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (typeof v === 'string' && words && words[v]) return words[v];
     const cat = field === 'category' && typeof v === 'string' && CATEGORIES.find((c) => c.id === v);
     if (cat) return enAr(cat.name.en, cat.name.ar);
+    // (A coupon code as it will be made: "EID٢٠" is saved as EID20. QA 25 Nov.)
+    if (field === 'code' && typeof v === 'string') { const c = coupons.normCode(v).slice(0, 40); return enAr(c, c); }
+    // (A coupon's categories and products, and a product's colours and sizes, by the shop's names for them.)
+    const listOf = (ids, nameOf) => {
+      const one = (l) => ids.slice(0, 20).map((id) => { const n = nameOf(String(id)); return n ? `\u2068${n[l] || n.en}\u2069` : String(id).slice(0, 40); }).join(l === 'ar' ? '، ' : ', ')
+        + (ids.length > 20 ? (l === 'ar' ? ` … (${arNum(ids.length)})` : ` … (${ids.length})`) : '');
+      return enAr(one('en') || '—', one('ar') || '—');
+    };
+    if (field === 'categories' && Array.isArray(v)) return listOf(v, (id) => { const c = CATEGORIES.find((x) => x.id === id); return c && c.name; });
+    if (field === 'products' && Array.isArray(v)) return listOf(v, (id) => { const p = PRODUCTS.find((x) => x.id === id); return p && p.name; });
+    if ((field === 'colors' || field === 'sizes') && v && typeof v === 'object' && !Array.isArray(v)) {
+      const nameOf = (id) => {
+        for (const p of PRODUCTS) {
+          const x = (field === 'colors' ? p.colors : p.sizes).find((y) => y.id === id);
+          if (x) return field === 'colors' ? x.name : x.label;
+        }
+        return null;
+      };
+      const state = (x) => (x && x.off ? enAr('off', 'مقفول') : x && x.soldOut ? enAr('sold out', 'خلصان') : enAr('on', 'شغال'));
+      const one = (l) => Object.entries(v).slice(0, 30).map(([id, x]) => { const n = nameOf(id); return `\u2068${n ? n[l] || n.en : String(id).slice(0, 40)}\u2069: ${state(x)[l]}`; }).join(l === 'ar' ? '، ' : ', ');
+      return enAr(one('en') || '—', one('ar') || '—');
+    }
     if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
       const day = (l) => { try { return new Date(`${v}T12:00:00Z`).toLocaleDateString(l === 'ar' ? 'ar-EG' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }); } catch (e) { return v; } };
       return enAr(day('en'), day('ar'));
@@ -5204,6 +5238,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const a = store.mutate((db) => {
       const x = (db.approvals || []).find((y) => y.id === req.params.id);
       if (!x) throw new HttpError(404, 'notFound');
+      // (Named on the activity line even when someone decided it first.)
+      res.locals.approvalId = x.id;
+      res.locals.summary = x.summary;
       if (!openForDecision(x)) throw new HttpError(409, 'approvalDecidedBy', { name: x.decidedBy && x.decidedBy.id === 'owner' ? (langOf(req) === 'ar' ? 'صاحب الموقع (دخول الطوارئ)' : 'the owner (emergency login)') : (x.decidedBy && x.decidedBy.name) || '—' });
       x.status = 'applying';
       x.applyingAt = new Date().toISOString();
@@ -5289,6 +5326,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const a = store.mutate((db) => {
       const x = (db.approvals || []).find((y) => y.id === req.params.id);
       if (!x) throw new HttpError(404, 'notFound');
+      // (The activity line says which change was refused or withdrawn, as an approval's does. QA 25 Nov.)
+      req.res.locals.approvalId = x.id;
+      if (x.summary && typeof x.summary === 'object') {
+        const verb = status === 'rejected' ? enAr('Refused a change', 'رفض تعديل') : enAr('Withdrew a change', 'سحب تعديل');
+        req.res.locals.summary = enAr(`${verb.en}: ${x.summary.en || x.summary.ar || ''}`, `${verb.ar}: ${x.summary.ar || x.summary.en || ''}`);
+      }
       // (A team member withdraws only their own; an owner any.)
       if (status === 'cancelled' && !(x.by && x.by.id === w.id) && !w.perms.has('approvals')) throw new HttpError(403, 'noPermission');
       if (!openForDecision(x)) throw new HttpError(409, 'approvalDecidedBy', { name: x.decidedBy && x.decidedBy.id === 'owner' ? (langOf(req) === 'ar' ? 'صاحب الموقع (دخول الطوارئ)' : 'the owner (emergency login)') : (x.decidedBy && x.decidedBy.name) || '—' });

@@ -90,6 +90,7 @@
     'rv.action.changes': ['Asked the customer for changes', 'طلب تعديلات من العميل'],
     'rv.action.replaced': ['Uploaded a corrected file', 'رفع ملف متصلّح'],
     'rv.action.resent': ['Resent the proof link', 'بعت لينك البروفة تاني'],
+    'rv.action.reopened': ['Sent back to Review', 'رجعت للمراجعة'],
     'rv.by.customer': ['Customer', 'العميل'],
     'rv.by.shop': ['Shop', 'إبداع'],
     'rv.via.checkout': ['at checkout', 'وقت الطلب'],

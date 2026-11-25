@@ -5925,11 +5925,14 @@
   if (st.revise) {
     if ($('save-draft')) $('save-draft').hidden = true; // one way out: send the new version
     // Still waiting for a new version? (Back after sending, or the shop has moved on): if not, back to the order.
+    const reviseOver = () => {
+      toast(t(st.revise.key ? 'revise.done' : 'revise.doneNoPage'));
+      st.dirty = false;
+      setTimeout(() => { location.href = st.revise.key ? POD.orderPath('order', st.revise.orderId, st.revise.key) : '/'; }, 2500);
+    };
     POD.api(`/api/orders/${encodeURIComponent(st.revise.orderId)}/items/${encodeURIComponent(st.revise.itemId)}/revise`, { headers: reviseHeaders() }).then((state) => {
       if (!state || state.status !== 'changes_requested') {
-        toast(t(st.revise.key ? 'revise.done' : 'revise.doneNoPage'));
-        st.dirty = false;
-        setTimeout(() => { location.href = st.revise.key ? POD.orderPath('order', st.revise.orderId, st.revise.key) : '/'; }, 2500);
+        reviseOver();
         return;
       }
       // The shop's note, kept in view while the customer makes the change.
@@ -5941,7 +5944,12 @@
       bar.innerHTML = `<span>${esc(note ? t(last.by === 'customer' ? 'revise.yourNote' : 'revise.shopNote', { note }) : t('revise.hint'))}</span><button type="button" class="fly-close" aria-label="${esc(t('draft.keep'))}">✕</button>`;
       bar.querySelector('button').addEventListener('click', () => bar.remove());
       document.body.appendChild(bar);
-    }).catch(() => toast(t('revise.hint')));
+    }).catch((e) => {
+      // An edit link already used (the new version was sent) or replaced by a newer one, or the order is gone: the
+      // same "already sent" as above, not a change to make again that then can't be sent. QA 25 Nov.
+      if (e && (e.status === 404 || (e.status === 403 && st.revise.rt))) reviseOver();
+      else toast(t('revise.hint'));
+    });
   }
   if (libraryDesign) {
     if (libraryDesign.kind === 'template') {
