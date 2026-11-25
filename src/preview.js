@@ -28,7 +28,11 @@ function newCode() {
   return s;
 }
 /** A typed code as stored: capitals, no spaces or dashes ("k7qx-4mpa" -> "K7QX4MPA"). */
-const normCode = (s) => String(s == null ? '' : s).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 24);
+// (Arabic-Indic digits, as an Arabic phone keyboard types them, count as the same digits.)
+const westernDigits = (s) => String(s == null ? '' : s).replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 0x660)).replace(/[\u06f0-\u06f9]/g, (d) => String(d.charCodeAt(0) - 0x6f0));
+const normCode = (s) => westernDigits(s).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 64);
+/** A code the owner typed uses only English letters and digits (and "@", spaces, dashes, dots to ignore). */
+const codeTyped = (s) => /^[A-Za-z0-9@\s._-]+$/.test(westernDigits(s));
 
 const mac = (key, body) => crypto.createHmac('sha256', key).update(body).digest('base64url').slice(0, 32);
 /** The cookie value for `who` ('owner', 's-<staff id>' or 'p-<person id>'): who.expiry.signature. */
@@ -79,4 +83,4 @@ const personRow = (p, base) => ({
 /** A name for a person: plain text, one line, up to 60 characters. */
 const cleanName = (v) => (typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f​-‏‪-‮⁠-⁩﻿]/g, '').trim().replace(/\s+/g, ' ').slice(0, 60) : '');
 
-module.exports = { COOKIE, DAYS, newCode, normCode, sign, verify, cookie, cookieFrom, isOpen, personRow, cleanName };
+module.exports = { COOKIE, DAYS, newCode, normCode, codeTyped, sign, verify, cookie, cookieFrom, isOpen, personRow, cleanName };

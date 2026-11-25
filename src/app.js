@@ -551,18 +551,35 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   if (previewStart && !store.db.preview) store.mutate((db) => { db.preview ||= { on: true, people: [] }; });
   const previewOn = () => Boolean(store.db.preview && store.db.preview.on);
   const previewPeople = () => (store.db.preview && store.db.preview.people) || [];
-  /** Who this request is let in as ('owner', 's-<staff>', 'p-<person>'), or null. */
+  // The owner's cookie names the admin password (a new password shuts old cookies out); a staff
+  // member's names their sign-in generation (a password reset by the owner does the same).
+  const ownerWho = () => `owner-${crypto.createHmac('sha256', auth.key).update('preview-owner').digest('hex').slice(0, 12)}`;
+  const staffWho = (u) => `s-${u.id}-${u.gen || 0}`;
+  /** Who this request is let in as ('owner-…', 's-<staff>-<gen>', 'p-<person>'), or null. */
   function previewWho(req) {
     const token = security.bearer(req);
-    if (token && auth.verify(token)) return 'owner';
+    if (token && auth.verify(token)) return ownerWho();
     const staff = token && auth.verifyStaff(token, staffList());
-    if (staff) return `s-${staff.id}`;
+    if (staff) return staffWho(staff);
     const v = preview.verify(auth.previewKey, preview.cookieFrom(req));
     if (!v) return null;
-    if (v.who === 'owner') return v.who;
-    if (v.who.startsWith('s-')) return staffList().some((u) => u.id === v.who.slice(2)) ? v.who : null;
+    if (v.who.startsWith('owner-')) return v.who === ownerWho() ? v.who : null;
+    if (v.who.startsWith('s-')) return staffList().some((u) => staffWho(u) === v.who) ? v.who : null;
     if (v.who.startsWith('p-')) return previewPeople().some((x) => x.id === v.who.slice(2) && !x.off) ? v.who : null;
     return null;
+  }
+  /**
+   * Where to send someone back to on this site: a path starting with exactly one "/" (never
+   * "//other.site" or "/\\other.site"), else the home page; `code` adds ?code=wrong / wait.
+   */
+  function previewBack(raw, code) {
+    let u;
+    try { u = new URL(String(raw || '/'), 'http://shop.invalid'); } catch (e) { u = null; }
+    if (!u || u.origin !== 'http://shop.invalid' || !/^\/(?![\/\\])/.test(String(raw || '/'))) u = new URL('/', 'http://shop.invalid');
+    u.searchParams.delete('invite');
+    u.searchParams.delete('code');
+    if (code) u.searchParams.set('code', code);
+    return `${u.pathname}${u.search}`;
   }
   const previewCookie = (req, res, who) => res.append('Set-Cookie', preview.cookie(preview.sign(auth.previewKey, who), { secure: isHttps(req) }));
   /** A person's last visit (saved at most every 10 minutes; a gap of 30 minutes starts a new visit). */
@@ -601,15 +618,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (req.path === '/robots.txt') return res.type('text').send('User-agent: *\nDisallow: /\n');
     // A personal link: https://<shop>/<any page>?invite=CODE
     if (req.method === 'GET' && typeof req.query.invite === 'string') {
-      const rest = new URLSearchParams(req.query);
-      rest.delete('invite');
-      const back = `${req.path}${rest.toString() ? `?${rest}` : ''}`;
+      // (The address as sent, its other parameters kept as they were.)
+      const back = previewBack(req.originalUrl);
       if (!previewWho(req)) {
-        if (previewWait(req)) return res.redirect(303, '/?code=wait');
+        if (previewWait(req)) return res.redirect(303, previewBack(back, 'wait'));
         const person = previewByCode(req.query.invite);
         if (!person) {
           limitHit('previewCode', req.ip);
-          return res.redirect(303, '/?code=wrong');
+          return res.redirect(303, previewBack(back, 'wrong'));
         }
         previewCookie(req, res, `p-${person.id}`);
         previewSeen(`p-${person.id}`);
@@ -619,7 +635,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const who = previewWho(req);
     if (who) {
       // The owner or staff, signed in to the dashboard: their browser gets in too.
-      if (!preview.cookieFrom(req) && !who.startsWith('p-')) previewCookie(req, res, who);
+      // (Also when theirs is out of date: an older form, or a password changed since.)
+      if (!who.startsWith('p-') && (preview.verify(auth.previewKey, preview.cookieFrom(req)) || {}).who !== who) previewCookie(req, res, who);
       previewSeen(who);
       return next();
     }
@@ -628,18 +645,20 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     previewClosed(req, res);
   });
   // The code typed on the "Opening soon" page (a plain form: works without JavaScript).
+  // `next`: the page the code was typed on, opened once they're in.
   app.post('/api/preview/enter', express.urlencoded({ extended: false, limit: '2kb' }), (req, res) => {
-    if (previewWait(req)) return res.redirect(303, '/?code=wait');
+    const back = previewBack((req.body || {}).next);
+    if (previewWait(req)) return res.redirect(303, previewBack(back, 'wait'));
     const person = previewOn() ? previewByCode((req.body || {}).code) : null;
     if (previewOn() && !person) {
       limitHit('previewCode', req.ip);
-      return res.redirect(303, '/?code=wrong');
+      return res.redirect(303, previewBack(back, 'wrong'));
     }
     if (person) {
       previewCookie(req, res, `p-${person.id}`);
       previewSeen(`p-${person.id}`);
     }
-    res.redirect(303, '/');
+    res.redirect(303, back);
   });
 
   // ---------- Product card pictures ----------
@@ -3628,12 +3647,15 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     // This browser is now known: a flood of wrong passwords from elsewhere won't lock the owner out of it.
     res.append('Set-Cookie', `pod-admin-device=${auth.deviceMark()}; Path=/api/admin/login; Max-Age=${180 * 24 * 3600}; HttpOnly; SameSite=Strict${isHttps(req) ? '; Secure' : ''}`);
     // The private preview lets this browser in too (the owner and staff see the shop as customers will).
-    previewCookie(req, res, result.user ? `s-${result.user.id}` : 'owner');
+    previewCookie(req, res, result.user ? staffWho(result.user) : ownerWho());
     if (result.user) return res.json({ token: result.token, expiresAt: new Date(result.expiresAt).toISOString(), role: result.user.role, name: result.user.name });
     res.json({ token: result.token, expiresAt: new Date(result.expiresAt).toISOString(), weakPassword: auth.weak, role: 'owner' });
   });
   app.post('/api/admin/logout', (req, res) => {
     auth.logout(security.bearer(req), staffList());
+    // Signed out: the private preview's way in for this browser goes too (an invited person's stays).
+    const v = preview.verify(auth.previewKey, preview.cookieFrom(req));
+    if (v && !v.who.startsWith('p-')) res.append('Set-Cookie', preview.cookie('', { secure: isHttps(req) }));
     res.status(204).end();
   });
   const staffList = () => store.db.staff || [];
@@ -3669,8 +3691,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const name = preview.cleanName((req.body || {}).name);
     if (!name) throw new HttpError(400, 'fieldRequired', { field: { en: 'Name', ar: 'الاسم' } });
     // The owner's own code ("@ezzatinvite" -> "EZZATINVITE": letters and digits, 6 to 24), or a made-up one.
-    const own = (req.body || {}).code ? preview.normCode(req.body.code) : '';
-    if ((req.body || {}).code && (own.length < 6 || own.length > 24)) throw new HttpError(400, 'previewCodeBad');
+    const rawCode = typeof (req.body || {}).code === 'string' ? req.body.code.trim() : '';
+    const own = rawCode ? preview.normCode(rawCode) : '';
+    // (English letters and digits, Arabic digits read as digits; anything else is refused rather than dropped.)
+    if (rawCode && (!preview.codeTyped(rawCode) || own.length < 6 || own.length > 24)) throw new HttpError(400, 'previewCodeBad');
     const person = store.mutate((db) => {
       db.preview ||= { on: false, people: [] };
       if (db.preview.people.length >= 500) throw new HttpError(400, 'badProductField', { field: 'people' });
@@ -4844,6 +4868,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   app.use('/api', (req, res) => res.status(404).json({ error: format('notFound', {}, langOf(req)) }));
   // Any other unknown address: the shop's own "page not found" page.
   app.use((req, res, next) => {
+    // (While private, a stranger asking for a missing file gets "Opening soon", not the shop's own 404.)
+    if (previewOn() && !previewWho(req)) return previewClosed(req, res);
     const html = (req.method === 'GET' || req.method === 'HEAD') && req.accepts('html') && pageFor('404');
     if (!html) return next();
     sendPage(res.status(404), '404', html);
