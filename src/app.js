@@ -476,6 +476,7 @@ const DEFAULT_LIMITS = {
   couponTry: [{ max: 15, ms: 10 * 60e3 }, { max: 60, ms: 24 * 3600e3 }], // coupon codes that didn't work, per visitor
   previewCode: [{ max: 10, ms: 15 * 60e3 }, { max: 40, ms: 24 * 3600e3 }], // private-preview codes that didn't work, per visitor
   staffSetup: [{ max: 10, ms: 15 * 60e3 }, { max: 40, ms: 24 * 3600e3 }], // team set-up links that didn't work, per visitor
+  myPassword: [{ max: 5, ms: 15 * 60e3 }, { max: 20, ms: 24 * 3600e3 }], // wrong current passwords on "Change my password", per person
   designZip: [{ max: 20, ms: 3600e3 }, { max: 100, ms: 24 * 3600e3 }], // design zips uploaded in the admin
   notifyCustomer: [{ max: 5, ms: 3600e3 }, { max: 20, ms: 24 * 3600e3 }], // order confirmations to one email address
   notifyCustomerAll: [{ max: 500, ms: 24 * 3600e3 }],
@@ -3816,6 +3817,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const result = username
       ? auth.staffLogin(req.ip, username, (req.body || {}).password, staffList(), { knownDevice: (u) => Boolean(u && auth.knownDevice(staffMark, `staff-${u.id}`)) })
       : auth.login(req.ip, (req.body || {}).password, { knownDevice: auth.knownDevice(mark) });
+    if (!result || result.wait) failedSignIn(req, username, Boolean(result && result.wait));
     if (!result) throw new HttpError(401, username ? 'wrongStaffLogin' : 'wrongPassword');
     if (result.wait) {
       // (Arabic counts: "دقيقة" for 1 and 11+, "دقيقتين" for 2, "دقائق" for 3 to 10.)
@@ -3852,6 +3854,30 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (v && !v.who.startsWith('p-')) res.append('Set-Cookie', preview.cookie('', { secure: isHttps(req) }));
     res.status(204).end();
   });
+  // Wrong sign-ins and lock-outs, for the owner to see someone guessing (a short line each; at most 20 per address
+  // per 10 minutes, then one line saying more came).
+  const failSeen = new Map();
+  function failedSignIn(req, username, locked) {
+    const now = Date.now();
+    const r = failSeen.get(req.ip) || { from: now, n: 0, told: false };
+    if (now - r.from > 10 * 60e3) Object.assign(r, { from: now, n: 0, told: false });
+    r.n += 1;
+    failSeen.set(req.ip, r);
+    if (failSeen.size > 2000) failSeen.clear();
+    if (r.n > 20) {
+      if (r.told) return;
+      r.told = true;
+    }
+    const name = String(username || '').slice(0, 30);
+    const many = r.n > 20;
+    activity.add({
+      whoId: name ? `try:${name}` : 'try:owner', who: name || 'owner', roles: [], action: locked ? 'signInLocked' : 'signInFailed', status: locked ? 429 : 401, ip: req.ip,
+      ...(name ? {} : { emergency: true }),
+      summary: many ? { en: 'Many wrong sign-ins from one address: the next ones in these 10 minutes are not listed', ar: 'محاولات دخول غلط كتير من نفس العنوان: اللي بعدها في العشر دقايق دي مش متسجلة' }
+        : locked ? { en: `Sign-in waiting (too many wrong passwords)${name ? `: ${name}` : ' (shared password)'}`, ar: `الدخول مستني (كلمات سر غلط كتير)${name ? `: ${name}` : ' (كلمة السر المشتركة)'}` }
+          : { en: `Wrong password${name ? `: ${name}` : ' (shared password)'}`, ar: `كلمة سر غلط${name ? `: ${name}` : ' (كلمة السر المشتركة)'}` },
+    });
+  }
   // ---------- Who is signed in, and what they may do (src/roles.js) ----------
   // Team members sign in with their own username and password; the shared password is the owner's
   // emergency way in (it always works, and every use is in the activity log).
@@ -4033,7 +4059,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const w = req.adminWho;
     const list = store.db.approvals || [];
     res.json({
-      ok: true, id: w.id, role: w.role, roles: w.roles, perms: [...w.perms],
+      ok: true, id: w.id, role: w.role, roles: w.roles, perms: [...w.perms], emailReady: notify.emailReady(),
       ...(w.emergency ? { emergency: true, weakPassword: auth.weak } : { name: w.name, shown: w.shown || w.name }),
       ...approvalCounts(w),
     });
@@ -4308,7 +4334,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         'role changed': { en: 'Cancelled: the person no longer has the role for it.', ar: 'اتلغى: الشخص مبقاش عنده الدور ده.' },
         removed: { en: 'Cancelled: the person was removed.', ar: 'اتلغى: الشخص اتشال من الفريق.' },
       }[why] || why;
-      for (const f of [a.file, a.thumb]) if (f) fs.rmSync(path.join(dataDir, 'approvals', f), { force: true });
+      for (const f of [a.file, a.thumb, a.bodyFile]) if (f) fs.rmSync(path.join(dataDir, 'approvals', f), { force: true });
     }
   };
   const staffRow = (u) => {
@@ -4441,7 +4467,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       u.gen = (u.gen || 0) + 1;
       return u;
     });
-    activity.add({ whoId: user.id, who: user.name || user.username, roles: roles.rolesOf(user), action: 'setup', label: { en: 'Chose their password (set-up link)', ar: 'اختار كلمة السر (لينك التجهيز)' }, summary: { en: 'Chose their password (set-up link)', ar: 'اختار كلمة السر (لينك التجهيز)' }, method: 'POST', path: '/api/admin/setup', status: 200, ip: req.ip });
+    activity.add({ whoId: user.id, who: user.name || user.username, roles: roles.rolesOf(user), action: 'setup', label: { en: 'Chose their password (set-up link)', ar: 'اختار كلمة السر (لينك التفعيل)' }, summary: { en: 'Chose their password (set-up link)', ar: 'اختار كلمة السر (لينك التفعيل)' }, method: 'POST', path: '/api/admin/setup', status: 200, ip: req.ip });
     res.json({ ok: true, username: user.username });
   });
   // A team member changes their own password ({ current, password }); they get a new sign-in back.
@@ -4450,8 +4476,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (w.emergency) throw new HttpError(400, 'emergencyPassword');
     const b = req.body || {};
     const u = staffAll().find((x) => x.id === w.id);
+    limitCheck(req, 'myPassword', w.id);
     const given = crypto.scryptSync(typeof b.current === 'string' ? b.current : '', u.salt, 32);
-    if (!crypto.timingSafeEqual(given, Buffer.from(u.hash, 'hex'))) throw new HttpError(400, 'wrongCurrentPassword');
+    if (!crypto.timingSafeEqual(given, Buffer.from(u.hash, 'hex'))) {
+      limitHit('myPassword', w.id);
+      throw new HttpError(400, 'wrongCurrentPassword');
+    }
     if (!staffPassword(b.password)) throw new HttpError(400, 'passwordTooShort');
     const user = store.mutate((db) => {
       const x = (db.staff || []).find((y) => y.id === w.id);
@@ -4466,9 +4496,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   // ---------- Owner approvals: catalogue and money changes by the team wait here ----------
   const approvalDir = path.join(dataDir, 'approvals');
   const approvalsAll = () => store.db.approvals || [];
+  /** A kept change's body (from its own file when big). */
+  const bodyOf = (a) => {
+    if (!a.bodyFile) return a.body;
+    try { return JSON.parse(fs.readFileSync(path.join(approvalDir, a.bodyFile), 'utf8')); } catch (e) { return null; }
+  };
   const approvalRow = (a) => ({
     id: a.id, at: a.at, by: a.by, roles: a.roles, action: a.action, label: a.label || null, summary: a.summary,
-    details: a.file ? { bytes: a.bytes, type: a.contentType || null } : roles.shortBody(a.body),
+    details: a.file ? { bytes: a.bytes, type: a.contentType || null } : roles.shortBody(bodyOf(a)),
     // A picture waiting: a small copy to look at (the full one is applied as sent).
     ...(a.thumb && a.status !== 'approved' ? (() => {
       try { return { thumb: `data:image/webp;base64,${fs.readFileSync(path.join(approvalDir, a.thumb)).toString('base64')}` }; } catch (e) { return {}; }
@@ -4510,7 +4545,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   const ownerValue = (v) => {
     if (v === null || v === undefined || v === '') return enAr('(empty)', '(فاضي)');
     if (typeof v === 'boolean') return v ? enAr('yes', 'أيوه') : enAr('no', 'لأ');
-    if (typeof v === 'number' || typeof v === 'string') return enAr(String(v).slice(0, 300), String(v).slice(0, 300));
+    if (typeof v === 'number' || typeof v === 'string') {
+      const t = String(v).length > 600 ? `${String(v).slice(0, 600)}…` : String(v);
+      return enAr(t, t);
+    }
     if (typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length && Object.keys(v).every((k) => k === 'en' || k === 'ar')) {
       const t = [v.en, v.ar].filter((x) => x !== undefined && x !== '').map(String).join(' / ').slice(0, 300);
       return enAr(t, t);
@@ -4537,8 +4575,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   /** The values a kept change asks for, field by field. */
   const changesOf = (a) => {
     if (a.file) return [{ field: enAr('photo', 'صورة'), value: enAr(`${Math.max(1, Math.round((a.bytes || 0) / 1024))} KB`, `${Math.max(1, Math.round((a.bytes || 0) / 1024))} KB`) }];
-    if (!a.body || typeof a.body !== 'object' || Array.isArray(a.body)) return [];
-    return Object.entries(a.body).slice(0, 30).map(([k, v]) => ({ field: OWNER_FIELD_NAMES[k] || enAr(k, k), value: ownerValue(v) }));
+    const body = bodyOf(a);
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return [];
+    const all = Object.entries(body);
+    const list = all.slice(0, 30).map(([k, v]) => ({ field: OWNER_FIELD_NAMES[k] || enAr(k, k), value: ownerValue(v) }));
+    // (More than fits here: said, so the owner knows the change holds more than shown.)
+    if (all.length > 30) list.push({ field: enAr('more', 'كمان'), value: enAr(`${all.length - 30} more fields`, `${all.length - 30} خانات كمان`) });
+    return list;
   };
   const EXPENSE_NAMES = {
     materials: enAr('Materials & blanks', 'خامات ومنتجات'), printing: enAr('Printing', 'طباعة'), shipping: enAr('Shipping', 'شحن'),
@@ -4554,6 +4597,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       return `${v} EGP`;
     }
   };
+  // "1 design" / "3 designs"; Arabic: تصميم واحد، تصميمين، ٣ تصميمات، ١١ تصميم.
+  const designsEn = (n) => (n === 1 ? '1 design' : `${n} designs`);
+  const arNum = (n) => String(n).replace(/\d/g, (d) => '٠١٢٣٤٥٦٧٨٩'[d]);
+  const designsAr = (n) => (n === 1 ? 'تصميم واحد' : n === 2 ? 'تصميمين' : n >= 3 && n <= 10 ? `${arNum(n)} تصميمات` : `${arNum(n)} تصميم`);
   /** What the change is about, in a few words (the product, coupon, order…), for the owner's list. */
   function approvalAbout(key, req) {
     const b = req.body && !Buffer.isBuffer(req.body) ? req.body : {};
@@ -4573,17 +4620,17 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (key === 'PATCH /api/admin/library') {
       const n = Array.isArray(b.ids) ? b.ids.length : 0;
       const what = b.deleted === true ? enAr('delete', 'مسح') : b.deleted === false ? enAr('bring back', 'رجوع') : b.hidden === true ? enAr('pause', 'إيقاف') : enAr('show', 'إظهار');
-      return enAr(`${n} designs: ${what.en}`, `${n} تصميم: ${what.ar}`);
+      return enAr(`${designsEn(n)}: ${what.en}`, `${designsAr(n)}: ${what.ar}`);
     }
     if (key.includes('/library/uploads')) {
       const batch = readBatch(p.batch);
       const n = batch ? publishPlan(batch, b.items).plan.length : Array.isArray(b.items) ? b.items.length : 0;
-      return enAr(`${n} designs`, `${n} تصميم`);
+      return enAr(designsEn(n), designsAr(n));
     }
     if (key.includes('/library')) {
       const d = p.id && library.all().find((x) => x.id === p.id);
       const nm = d ? d.name : { en: String(b.nameEn || p.id || ''), ar: String(b.nameAr || b.nameEn || p.id || '') };
-      const what = key.startsWith('DELETE') || b.deleted === true ? enAr('delete', 'مسح') : b.deleted === false ? enAr('bring back', 'رجوع') : b.hidden === true ? enAr('pause', 'إيقاف') : b.hidden === false ? enAr('show', 'إظهار') : enAr('', '');
+      const what = key.startsWith('DELETE') ? enAr('', '') : b.deleted === true ? enAr('delete', 'مسح') : b.deleted === false ? enAr('bring back', 'رجوع') : b.hidden === true ? enAr('pause', 'إيقاف') : b.hidden === false ? enAr('show', 'إظهار') : enAr('', '');
       return enAr([nm.en, what.en].filter(Boolean).join(': '), [nm.ar, what.ar].filter(Boolean).join(': '));
     }
     if (key.includes('/coupons')) {
@@ -4658,7 +4705,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       }
     },
     'PUT /api/admin/catalog/:id/photos': (req) => { if (!getProduct(req.params.id)) throw new HttpError(404, 'unknownProduct'); },
-    'DELETE /api/admin/catalog/:id/photos/:photoId': (req) => { if (!getProduct(req.params.id)) throw new HttpError(404, 'unknownProduct'); },
+    'DELETE /api/admin/catalog/:id/photos/:photoId': (req) => {
+      if (!getProduct(req.params.id)) throw new HttpError(404, 'unknownProduct');
+      if (!((catalogEdits()[req.params.id] || {}).photos || []).some((x) => x.id === req.params.photoId)) throw new HttpError(404, 'notFound');
+    },
     'POST /api/admin/library': (req) => {
       const b = req.body || {};
       const id = (String(b.share || '').match(/([A-Za-z0-9_-]{12})\/?(?:[?#].*)?$/) || [])[1];
@@ -4705,8 +4755,18 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     'PUT /api/admin/pricing/:productId': (req) => {
       const product = getProduct(req.params.productId);
       if (!product) throw new HttpError(404, 'unknownProduct');
-      const co = accounting.cleanCosts(product, (req.body || {}).costs || {});
+      const b = req.body || {};
+      // Costs only: without them there is nothing to approve, and a selling price is the owners' (refused now).
+      if (!b.costs || typeof b.costs !== 'object' || Array.isArray(b.costs)) throw new HttpError(400, 'nothingToApprove');
+      // (The screen sends the prices as they are shown: only a different one is a change of price.)
+      const same = (v, cur) => v === undefined || v === null || v === '' || accounting.money(v) === cur;
+      const extraNow = product.extraSidePrice != null ? product.extraSidePrice : EXTRA_SIDE_PRICE;
+      const sizesSame = !b.sizes || typeof b.sizes !== 'object' || product.sizes.every((sz) => same(b.sizes[sz.id], sz.surcharge || 0));
+      if (!same(b.basePrice, product.basePrice) || !same(b.extraSidePrice, extraNow) || !sizesSame) throw new HttpError(403, 'ownerOnly');
+      const co = accounting.cleanCosts(product, b.costs);
       if (co.error) throw new HttpError(400, co.error);
+      // What waits for the owner is the costs alone (the prices shown on the screen are never part of it).
+      req.body = { costs: b.costs };
     },
     'PUT /api/admin/accounts/settings': (req) => {
       const ship = accounting.money((req.body || {}).shippingCost);
@@ -4727,7 +4787,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     'DELETE /api/admin/expenses/:id': (req) => { if (!(store.db.expenses || []).some((e) => e.id === req.params.id)) throw new HttpError(404, 'notFound'); },
   };
   const readBody = (req, res, route) => new Promise((resolve, reject) => {
-    const parse = route.raw ? express.raw({ type: () => true, limit: route.raw }) : express.json({ limit: '256kb' });
+    // (The route's own size limit: a request kept for approval is never one it would refuse.)
+    const parse = route.raw ? express.raw({ type: () => true, limit: route.raw }) : express.json({ limit: route.limit || '100kb' });
     parse(req, res, (err) => (err ? reject(err) : resolve()));
   });
   /** A change kept for an owner: 202 { pending: true, approval } (nothing changes until it's approved). */
@@ -4738,6 +4799,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (!Buffer.isBuffer(req.body) && depth(req.body) > 20) throw new HttpError(400, 'badRequest');
     // (A change with nothing in it is refused: an empty edit would only fill the owner's list.)
     if (req.method !== 'DELETE' && !Buffer.isBuffer(req.body) && (!req.body || typeof req.body !== 'object' || Array.isArray(req.body) || !Object.keys(req.body).length)) throw new HttpError(400, 'nothingToApprove');
+    // (Keys that only trick JavaScript objects are never kept: what's approved is what the owner was shown.)
+    const clean = (v, d = 0) => (d > 24 || !v || typeof v !== 'object' || Buffer.isBuffer(v) ? v : Array.isArray(v) ? v.map((x) => clean(x, d + 1))
+      : Object.fromEntries(Object.entries(v).filter(([k]) => !['__proto__', 'constructor', 'prototype'].includes(k)).map(([k, x]) => [k, clean(x, d + 1)])));
+    if (!Buffer.isBuffer(req.body)) req.body = clean(req.body);
     const checked = (APPROVAL_CHECKS[key] && await APPROVAL_CHECKS[key](req)) || {};
     if (checked.answer) return res.json(checked.answer);
     // One person's waiting changes are limited (50, of which 20 pictures), so nobody can fill the list for everyone.
@@ -4756,6 +4821,15 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       lang: langOf(req),
       ...(raw ? { file: `${id}.bin`, bytes: req.body.length } : { body: req.body === undefined ? null : req.body }),
     };
+    // (A big change waits in its own file: the shop's data file stays small, so every save stays quick.)
+    const text = raw ? '' : JSON.stringify(a.body);
+    if (!raw && text.length > 16 * 1024) {
+      fs.mkdirSync(approvalDir, { recursive: true });
+      fs.writeFileSync(path.join(approvalDir, `${id}.json`), text);
+      a.bodyFile = `${id}.json`;
+      a.bytes = text.length;
+      delete a.body;
+    }
     if (raw) {
       fs.mkdirSync(approvalDir, { recursive: true });
       fs.writeFileSync(path.join(approvalDir, a.file), req.body);
@@ -4769,10 +4843,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (db.approvals.filter((x) => x.status === 'pending').length >= 500) throw new HttpError(429, 'tooManyApprovals');
       db.approvals.push(a);
       // Decided ones: the latest 300 are kept.
-      const done = db.approvals.filter((x) => x.status !== 'pending' && x.status !== 'applying');
+      const done = db.approvals.filter((x) => !['pending', 'applying', 'failed'].includes(x.status));
       if (done.length > 300) {
-        const drop = new Set(done.slice(0, done.length - 300).map((x) => x.id));
+        const old = done.slice(0, done.length - 300);
+        const drop = new Set(old.map((x) => x.id));
         db.approvals = db.approvals.filter((x) => !drop.has(x.id));
+        for (const x of old) for (const f of [x.file, x.thumb, x.bodyFile]) if (f) fs.rmSync(path.join(approvalDir, f), { force: true });
       }
     });
     res.locals.approvalId = id;
@@ -4787,20 +4863,23 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   app.get('/api/admin/approvals', adminGate, (req, res) => {
     const w = req.adminWho;
     const status = typeof req.query.status === 'string' ? req.query.status : 'pending';
-    const list = approvalsAll()
-      .filter((a) => w.perms.has('approvals') || (a.by && a.by.id === w.id))
+    const isOpen = (a) => a.status === 'pending' || a.status === 'failed' || a.status === 'applying';
+    const mine = approvalsAll().filter((a) => w.perms.has('approvals') || (a.by && a.by.id === w.id));
+    // (Those still to decide always; of the decided ones the latest 300.)
+    const keep = new Set([...mine.filter(isOpen), ...mine.filter((a) => !isOpen(a)).slice(-300)]);
+    const list = mine.filter((a) => keep.has(a))
       // ("pending": everything still to decide, including changes that failed when approved.)
       .filter((a) => status === 'all' || a.status === status || (status === 'pending' && (a.status === 'failed' || a.status === 'applying')))
-      .slice(-300).reverse();
+      .reverse();
     res.json({ approvals: list.map(approvalRow) });
   });
   app.post('/api/admin/approvals/:id/approve', adminGate, express.json({ limit: '4kb' }), asyncRoute(async (req, res) => {
     const w = req.adminWho;
-    const note = typeof (req.body || {}).note === 'string' ? req.body.note.replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 300) : '';
+    const note = typeof (req.body || {}).note === 'string' ? req.body.note.replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 500) : '';
     const a = store.mutate((db) => {
       const x = (db.approvals || []).find((y) => y.id === req.params.id);
       if (!x) throw new HttpError(404, 'notFound');
-      if (!openForDecision(x)) throw new HttpError(409, 'approvalDecided');
+      if (!openForDecision(x)) throw new HttpError(409, 'approvalDecidedBy', { name: (x.decidedBy && x.decidedBy.id === 'owner' ? null : x.decidedBy && x.decidedBy.name) || '—' });
       x.status = 'applying';
       x.applyingAt = new Date().toISOString();
       return { ...x };
@@ -4827,6 +4906,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     try {
       let body = null;
       if (a.file) body = fs.readFileSync(path.join(approvalDir, a.file));
+      else if (a.bodyFile) body = fs.readFileSync(path.join(approvalDir, a.bodyFile));
       else if (a.body !== null && a.body !== undefined) body = Buffer.from(JSON.stringify(a.body));
       replayServer ||= require('http').createServer(app);
       out = await roles.replay(replayServer, {
@@ -4870,19 +4950,19 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       else x.error = result && result.errorText ? { en: String(result.errorText.en).slice(0, 300), ar: String(result.errorText.ar).slice(0, 300) } : String((result && result.error) || `HTTP ${out.status}`).slice(0, 300);
       return x;
     });
-    if (ok && a.file) for (const f of [a.file, a.thumb]) if (f) fs.rmSync(path.join(approvalDir, f), { force: true });
+    if (ok) for (const f of [a.file, a.thumb, a.bodyFile]) if (f) fs.rmSync(path.join(approvalDir, f), { force: true });
     if (!ok) res.locals.outcome = 'failed';
     res.json({ approval: approvalRow(done), result });
   }));
   const closeApproval = (req, status) => {
     const w = req.adminWho;
-    const note = typeof (req.body || {}).note === 'string' ? req.body.note.replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 300) : '';
+    const note = typeof (req.body || {}).note === 'string' ? req.body.note.replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 500) : '';
     const a = store.mutate((db) => {
       const x = (db.approvals || []).find((y) => y.id === req.params.id);
       if (!x) throw new HttpError(404, 'notFound');
       // (A team member withdraws only their own; an owner any.)
       if (status === 'cancelled' && !(x.by && x.by.id === w.id) && !w.perms.has('approvals')) throw new HttpError(403, 'noPermission');
-      if (!openForDecision(x)) throw new HttpError(409, 'approvalDecided');
+      if (!openForDecision(x)) throw new HttpError(409, 'approvalDecidedBy', { name: (x.decidedBy && x.decidedBy.id === 'owner' ? null : x.decidedBy && x.decidedBy.name) || '—' });
       x.status = status;
       x.decidedBy = { id: w.id, name: w.shown || w.name };
       x.decidedAt = new Date().toISOString();
@@ -4890,7 +4970,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (note) x.note = note;
       return x;
     });
-    for (const f of [a.file, a.thumb]) if (f) fs.rmSync(path.join(approvalDir, f), { force: true });
+    for (const f of [a.file, a.thumb, a.bodyFile]) if (f) fs.rmSync(path.join(approvalDir, f), { force: true });
     return a;
   };
   app.post('/api/admin/approvals/:id/reject', adminGate, express.json({ limit: '4kb' }), (req, res) => {
@@ -5733,11 +5813,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (pr.error) throw new HttpError(400, pr.error);
     const co = accounting.cleanCosts(product, (req.body || {}).costs || {});
     if (co.error) throw new HttpError(400, co.error);
+    // (No costs sent: the saved ones stay; they're never wiped by a request about prices only.)
+    const costsSent = (req.body || {}).costs !== undefined;
     store.mutate((db) => {
       db.pricing ||= {};
       db.costs ||= {};
       if (!pr.pricing) { /* prices unchanged */ } else if (Object.keys(pr.pricing).length) db.pricing[product.id] = pr.pricing;
       else delete db.pricing[product.id];
+      if (!costsSent) return;
       if (Object.keys(co.costs).length) db.costs[product.id] = co.costs;
       else delete db.costs[product.id];
     });

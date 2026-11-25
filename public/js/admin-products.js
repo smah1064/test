@@ -1609,7 +1609,7 @@
           ${fld('embAt', t('pm.embAt'), `<select id="${fieldId('embAt')}" name="embAt">${['chest', 'center', 'top', 'same'].map((a) => `<option value="${a}" ${(sp ? sp.at : 'chest') === a ? 'selected' : ''}>${esc(t('pm.embAt.' + a))}</option>`).join('')}</select>`)}
           ${fld('embW', t('pm.embW'), inp('embW', sp && sp.at !== 'same' ? sp.cm[0] : 9, numAttrs({ min: 1, max: 40, need: true })), '', 'pm-emb-size')}
           ${fld('embH', t('pm.embH'), inp('embH', sp && sp.at !== 'same' ? sp.cm[1] : 9, numAttrs({ min: 1, max: 40, need: true })), '', 'pm-emb-size')}
-          ${fld('embPrice', t('pm.embPrice'), inp('embPrice', sp ? sp.surcharge : 150, numAttrs({ min: 0, need: true })))}
+          ${fld('embPrice', t('pm.embPrice'), inp('embPrice', sp ? sp.surcharge : 150, `${numAttrs({ min: 0, need: true })}${can('prices.edit') ? '' : ' readonly aria-readonly="true"'}`))}
           ${fld('embColors', t('pm.embColors'), inp('embColors', sp ? sp.maxColors : 6, numAttrs({ min: 1, max: 15, whole: true, need: true })))}
         </div>
       </div>` : ''}`;

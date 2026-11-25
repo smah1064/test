@@ -1257,6 +1257,7 @@ window.POD_STRINGS = {
   'houses.mapTitle': ['Who prints each product', 'مين يطبع كل منتج'],
   'houses.mapHelp': ['This printing house is chosen automatically when you send an item of that product. You can still pick another one for any item.', 'المطبعة دي بتتختار تلقائيًا لما تبعت منتج من النوع ده، وتقدر تختار غيرها لأي منتج.'],
   'houses.unset': ['— Not set —', '— غير محدد —'],
+  'houses.emailOffTeam': ['Email sending is not set up yet, so jobs can only go by WhatsApp for now. An owner can set it up.', 'الإرسال بالإيميل لسه مش متظبط، فالشغل يتبعت بواتساب بس دلوقتي. صاحب الموقع يقدر يظبطه.'],
   'houses.emailOff': ['Email sending is not set up yet, so jobs can only go by WhatsApp for now. To send by email, add BREVO_API_KEY and MAIL_FROM in Hostinger.', 'الإرسال بالإيميل غير مُعدّ بعد، فالشغل يتبعت بواتساب بس دلوقتي. للإرسال بالإيميل أضف BREVO_API_KEY و MAIL_FROM في Hostinger.'],
   'houses.send': ['Send to printing house', 'إرسال للمطبعة'],
   'houses.sendTo': ['Printing house', 'المطبعة'],

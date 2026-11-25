@@ -278,6 +278,7 @@
   async function loadSession() {
     const r = await adminApi('/api/admin/session');
     // The person's own name, as after signing in ("Mostafa مصطفى", not the username "mostafa").
+    if (typeof r.emailReady === 'boolean') emailReady = r.emailReady;
     setAccess(r, r.shown || r.name);
     sessionAt = Date.now();
     $('weak-pw').hidden = !(role === 'owner' && r.weakPassword);
@@ -613,7 +614,7 @@
           </div>
           <div class="field"><label>${esc(t('houses.via'))}</label><div class="chip-row">${ch('email', Boolean(house && house.email))}${ch('whatsapp', Boolean(house && house.whatsapp))}</div></div>
         </div>
-        ${emailOff ? `<p class="notice small" style="margin:0 0 10px">${esc(t('houses.emailOff'))}</p>` : ''}
+        ${emailOff ? `<p class="notice small" style="margin:0 0 10px">${esc(t(access && access.owner ? 'houses.emailOff' : 'houses.emailOffTeam'))}</p>` : ''}
         <div class="field"><label>${esc(t('houses.files'))}</label>
           <div class="send-files">${sendFormats(item).map((f) => `<label class="check-chip"><input type="checkbox" data-send-format="${item.id}" value="${f}" ${st.formats.has(f) ? 'checked' : ''}> ${esc(t('fmt.' + f))}</label>`).join('')}</div>
         </div>
@@ -893,6 +894,7 @@
 
   // ---------- Orders: shipping, delivery and payment ----------
   let notifySt = null; // which notification channels are set up
+  let emailReady = null; // email sending set up (from the session: the team can't read the notifications card)
   const shipOpen = new Set(); // order ids whose shipping box is open
   const shipDraft = {}; // order id -> unsaved field values
   const shipMsg = {}; // order id -> { text, ok }
@@ -945,7 +947,7 @@
     const steps = timelineOf(o).map((s) => `<li class="${s.at ? 'done' : ''}"><b>${esc(t('ship.step.' + s.step))}</b><span>${esc(s.at ? POD.date(s.at) : t('ship.notYet'))}</span></li>`).join('');
     const m = shipMsg[o.id];
     const email = o.customer && o.customer.email;
-    const hint = isShipped(o) ? '' : `<p class="muted small" style="margin:0">${esc(!email ? t('ship.noEmailHint') : notifySt && !notifySt.customerEmail ? t('ship.emailOffHint', { email }) : t('ship.emailHint', { email }))}</p>`;
+    const hint = isShipped(o) ? '' : `<p class="muted small" style="margin:0">${esc(!email ? t('ship.noEmailHint') : (notifySt ? !notifySt.customerEmail : emailReady === false) ? t('ship.emailOffHint', { email }) : t('ship.emailHint', { email }))}</p>`;
     return `<div class="ship-box" data-ship-box="${id}">
       <div class="ship-head">
         <h3>${esc(t('ship.title', { number: o.number }))}</h3>
@@ -2307,6 +2309,7 @@
     const typedKey = itemId ? 'item:' + itemId : 'ship:' + orderId;
     costSaving++;
     let saved = false;
+    let reset = false;
     try {
       if (itemId) await adminApi(`/api/admin/items/${encodeURIComponent(itemId)}/cost`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang }, body: JSON.stringify({ actualCost: value }) });
       else await adminApi(`/api/admin/orders/${encodeURIComponent(orderId)}/shipping-cost`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang }, body: JSON.stringify({ actualShipping: value }) });
@@ -2317,13 +2320,18 @@
       toast(t('houses.saved'));
       acc.report = await adminApi(`/api/admin/accounts?${rangeQuery()}`);
     } catch (err) {
-      // Sent for an owner's approval: the box keeps what was typed (the saved cost hasn't changed yet).
-      if (sentForApproval(err)) acc.typed[typedKey] = el.value;
-      else toast(err.message, 'error');
+      // Sent for an owner's approval: the box goes back to the saved cost (it hasn't changed yet; the request
+      // waits in My requests), so a refused one is never left looking like the cost.
+      if (sentForApproval(err)) {
+        delete acc.typed[typedKey];
+        if (document.activeElement === el) el.blur();
+        reset = true;
+      } else toast(err.message, 'error');
     } finally {
       costSaving--;
     }
     if (saved) renderAccounts({ keepBoxes: true });
+    else if (reset && !costSaving) renderOverview();
     else if (acc.redrawOrders && !typingCost() && !costSaving) renderOverview();
   });
   // Left the cost boxes (not for another one): the table catches up.
@@ -2342,8 +2350,10 @@
       toast(t('houses.saved'));
       await refreshAccounts();
     } catch (err) {
-      if (sentForApproval(err)) acc.shipTyped = true;
-      else toast(err.message, 'error');
+      if (sentForApproval(err)) {
+        acc.shipTyped = false;
+        await refreshAccounts();
+      } else toast(err.message, 'error');
     }
   });
   $('acc-csv').addEventListener('click', () => {
@@ -3174,6 +3184,13 @@
   // ---------- My account: who is signed in, change my password ----------
   document.addEventListener('click', (e) => {
     if ($('me-menu').open && !e.target.closest('#me-menu')) $('me-menu').open = false;
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && $('me-menu').open) {
+      $('me-menu').open = false;
+      const s = $('me-menu').querySelector('summary');
+      if (s) s.focus();
+    }
   });
   $('me-pw').addEventListener('click', () => {
     $('me-menu').open = false;

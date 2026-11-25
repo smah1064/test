@@ -30,7 +30,7 @@ const ROLE_PERMS = {
   catalogue: ['catalog.view', 'catalog.edit', 'library.view', 'library.edit', 'uploads'],
 };
 const ROLE_NAMES = {
-  owner: { en: 'Owner', ar: 'المالك' },
+  owner: { en: 'Owner', ar: 'صاحب الموقع' },
   finance: { en: 'Finance', ar: 'الحسابات' },
   operations: { en: 'Operations', ar: 'التشغيل' },
   catalogue: { en: 'Catalogue', ar: 'المنتجات والتصميمات' },
@@ -94,16 +94,16 @@ const ROUTES = {
   // Products and ready designs
   'GET /api/admin/catalog': { perm: 'catalog.view' },
   'GET /api/admin/catalog/:id': { perm: 'catalog.view' },
-  'PUT /api/admin/catalog/:id': { perm: 'catalog.edit', approve: true, label: L('Edit a product', 'تعديل منتج') },
-  'POST /api/admin/catalog': { perm: 'catalog.edit', approve: true, label: L('New product', 'منتج جديد') },
+  'PUT /api/admin/catalog/:id': { perm: 'catalog.edit', approve: true, limit: '200kb', label: L('Edit a product', 'تعديل منتج') },
+  'POST /api/admin/catalog': { perm: 'catalog.edit', approve: true, limit: '200kb', label: L('New product', 'منتج جديد') },
   'DELETE /api/admin/catalog/:id': { perm: 'catalog.edit', approve: true, label: L('Product back to the original', 'رجوع المنتج للأصل') },
   'POST /api/admin/catalog/:id/photos': { perm: 'catalog.edit', approve: true, raw: '15mb', label: L('Add a product photo', 'إضافة صورة منتج') },
-  'PUT /api/admin/catalog/:id/photos': { perm: 'catalog.edit', approve: true, label: L('Product photos order', 'ترتيب صور المنتج') },
+  'PUT /api/admin/catalog/:id/photos': { perm: 'catalog.edit', approve: true, limit: '8kb', label: L('Product photos order', 'ترتيب صور المنتج') },
   'DELETE /api/admin/catalog/:id/photos/:photoId': { perm: 'catalog.edit', approve: true, label: L('Delete a product photo', 'مسح صورة منتج') },
   'GET /api/admin/library': { perm: 'library.view' },
-  'POST /api/admin/library': { perm: 'library.edit', approve: true, label: L('Publish a ready design', 'نشر تصميم جاهز') },
-  'PATCH /api/admin/library': { perm: 'library.edit', approve: true, label: L('Pause / delete ready designs', 'إيقاف / مسح تصميمات جاهزة') },
-  'PATCH /api/admin/library/:id': { perm: 'library.edit', approve: true, label: L('Pause / delete a ready design', 'إيقاف / مسح تصميم جاهز') },
+  'POST /api/admin/library': { perm: 'library.edit', approve: true, limit: '8kb', label: L('Publish a ready design', 'نشر تصميم جاهز') },
+  'PATCH /api/admin/library': { perm: 'library.edit', approve: true, limit: '64kb', label: L('Ready designs', 'تصميمات جاهزة') },
+  'PATCH /api/admin/library/:id': { perm: 'library.edit', approve: true, limit: '1kb', label: L('Ready design', 'تصميم جاهز') },
   'DELETE /api/admin/library/:id': { perm: 'library.edit', approve: true, label: L('Delete a ready design', 'مسح تصميم جاهز') },
   'POST /api/admin/library/uploads': { perm: 'uploads', label: L('Uploaded designs (zip)', 'رفع تصميمات (zip)') },
   'POST /api/admin/library/uploads/start': { perm: 'uploads', label: L('Started a zip upload', 'بدأ رفع zip') },
@@ -112,7 +112,7 @@ const ROUTES = {
   'GET /api/admin/library/uploads': { perm: 'uploads' },
   'GET /api/admin/library/uploads/:batch': { perm: 'uploads' },
   'DELETE /api/admin/library/uploads/:batch': { perm: 'uploads', label: L('Removed an upload', 'شال رفع') },
-  'POST /api/admin/library/uploads/:batch/publish': { perm: 'uploads', approve: true, label: L('Publish uploaded designs', 'نشر التصميمات المرفوعة') },
+  'POST /api/admin/library/uploads/:batch/publish': { perm: 'uploads', approve: true, limit: '256kb', label: L('Publish uploaded designs', 'نشر التصميمات المرفوعة') },
 
   // Money
   'GET /api/admin/coupons': { perm: 'coupons.view' },

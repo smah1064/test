@@ -102,7 +102,7 @@ test('each role reaches its own screens only (403, not signed out)', async () =>
   }
   const refused = await call('/api/admin/staff', 'GET', undefined, ops.token, { 'Accept-Language': 'ar' });
   assert.strictEqual(refused.json.code, 'noPermission');
-  assert.match(refused.json.error, /المالك/);
+  assert.match(refused.json.error, /صاحب الموقع/);
   // A person with two roles gets both.
   const both = await addMember('both1', ['finance', 'operations']);
   assert.strictEqual(await can(both.token, '/api/admin/accounts'), 200);
@@ -205,8 +205,12 @@ test('money changes by finance wait; their cost edit keeps the owner\'s prices',
   assert.strictEqual(e.status, 202, e.text);
   // Costs of a product: the prices stay the owner's (the screen sends them along).
   const before = (await call('/api/admin/pricing', 'GET', undefined, owner)).json.products.find((p) => p.id === 'mug');
-  const p = await call('/api/admin/pricing/mug', 'PUT', { basePrice: 1, costs: { blank: 40 } }, fin.token);
+  // A different selling price is refused at once; the prices as shown and the costs go for approval.
+  assert.strictEqual((await call('/api/admin/pricing/mug', 'PUT', { basePrice: 1, costs: { blank: 40 } }, fin.token)).json.code, 'ownerOnly');
+  assert.strictEqual((await call('/api/admin/pricing/mug', 'PUT', { basePrice: before.basePrice }, fin.token)).json.code, 'nothingToApprove', 'no costs: nothing to approve');
+  const p = await call('/api/admin/pricing/mug', 'PUT', { basePrice: before.basePrice, costs: { blank: 40 } }, fin.token);
   assert.strictEqual(p.status, 202, p.text);
+  assert.deepStrictEqual(Object.keys((await call('/api/admin/approvals', 'GET', undefined, owner)).json.approvals.find((x) => x.id === p.json.approval.id).details), ['costs'], 'only the costs wait');
   assert.strictEqual((await call(`/api/admin/approvals/${p.json.approval.id}/approve`, 'POST', {}, owner)).json.approval.status, 'approved');
   const after = (await call('/api/admin/pricing', 'GET', undefined, owner)).json.products.find((x) => x.id === 'mug');
   assert.strictEqual(after.basePrice, before.basePrice);
@@ -437,4 +441,30 @@ test('QA admin round: gone targets and moved jobs say so', async () => {
   assert.strictEqual((await call(`/api/admin/expenses/${e.json.id}`, 'DELETE', undefined, owner)).json.code, 'expenseGone');
   const gone = await call('/api/admin/coupons/no-such-coupon', 'PUT', { code: 'GONE10', type: 'percent', value: 5 }, owner);
   assert.strictEqual(gone.json.code, 'couponGone', gone.text);
+});
+
+test('QA admin round, last wave: costs never wiped, wrong sign-ins logged, big requests kept outside the data file', async () => {
+  // The owner's own price change without costs leaves the saved costs as they are.
+  assert.strictEqual((await call('/api/admin/pricing/notebook', 'PUT', { basePrice: 199, costs: { blank: 30 } }, owner)).status, 200);
+  const nb = await call('/api/admin/pricing/notebook', 'PUT', { basePrice: 205 }, owner);
+  assert.strictEqual(nb.status, 200, nb.text);
+  assert.strictEqual(nb.json.costs.blank, 30, 'costs kept');
+  // Wrong sign-ins reach the activity log (the owner sees someone guessing).
+  await call('/api/admin/login', 'POST', { username: 'nobody-here', password: 'wrong-wrong-1' });
+  await call('/api/admin/login', 'POST', { password: 'not-the-shared-one' });
+  const log = (await call('/api/admin/activity?limit=500', 'GET', undefined, owner)).json.entries;
+  assert.ok(log.some((e) => e.action === 'signInFailed' && /nobody-here/.test(e.summary.en)));
+  assert.ok(log.some((e) => e.action === 'signInFailed' && e.emergency === true));
+  // A big change waits in its own file, and is applied whole when approved.
+  const cat = await addMember('cat20', ['catalogue']);
+  const long = 'x'.repeat(30000);
+  const r = await call('/api/admin/catalog/apron', 'PUT', { description: { en: `Big ${long}`, ar: `كبير ${long}` } }, cat.token);
+  assert.strictEqual(r.status, 202, r.text);
+  const db = JSON.parse(fs.readFileSync(path.join(dataDir, 'db.json'), 'utf8'));
+  assert.ok(!JSON.stringify(db.approvals).includes(long), 'not inside the data file');
+  assert.ok(fs.existsSync(path.join(dataDir, 'approvals', `${r.json.approval.id}.json`)));
+  const ok = await call(`/api/admin/approvals/${r.json.approval.id}/approve`, 'POST', {}, owner);
+  assert.strictEqual(ok.json.approval.status, 'approved', ok.text);
+  assert.ok((await call('/api/admin/catalog/apron', 'GET', undefined, owner)).json.description.en.startsWith('Big xxx'));
+  assert.ok(!fs.existsSync(path.join(dataDir, 'approvals', `${r.json.approval.id}.json`)), 'its file goes once applied');
 });
