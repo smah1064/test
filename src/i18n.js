@@ -218,6 +218,7 @@ const MESSAGES = {
   setupLinkBad: { en: 'This set-up link doesn\'t work any more. Ask an owner for a new one.', ar: 'لينك التجهيز ده مبقاش شغال. اطلب لينك جديد من المالك.' },
   emergencyPassword: { en: 'The shared password is changed on the hosting, not here.', ar: 'كلمة السر المشتركة بتتغير من الاستضافة، مش من هنا.' },
   wrongCurrentPassword: { en: 'Your current password is wrong.', ar: 'كلمة السر الحالية غلط.' },
+  passwordTooShort: { en: 'Choose a password of at least 10 characters.', ar: 'اختار كلمة سر 10 حروف على الأقل.' },
   approvalDecided: { en: 'This change was already decided.', ar: 'التعديل ده اتاخد فيه قرار خلاص.' },
   tooManyApprovals: { en: 'Too many changes are waiting for approval. Ask an owner to go through them first.', ar: 'فيه تعديلات كتير مستنية موافقة. اطلب من المالك يراجعها الأول.' },
   badStaff: { en: 'Enter a name, a username (small English letters and numbers) and at least one role. A password needs at least 10 characters.', ar: 'اكتب الاسم واسم مستخدم (حروف إنجليزي صغيرة وأرقام) واختار دور واحد على الأقل. كلمة السر 10 حروف على الأقل.' },

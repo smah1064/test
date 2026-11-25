@@ -57,7 +57,8 @@ test('a new team member gets a set-up link, chooses a password with it once, and
   // No password yet: no sign-in.
   assert.strictEqual((await call('/api/admin/login', 'POST', { username: 'salma', password: '' })).status, 401);
   const token = new URL(r.json.setupLink).searchParams.get('setup');
-  assert.strictEqual((await call('/api/admin/setup', 'POST', { token, password: 'short' })).status, 400);
+  // (A password the link refuses names "password" in its code: the page shows its own message.)
+  assert.strictEqual((await call('/api/admin/setup', 'POST', { token, password: 'short' })).json.code, 'passwordTooShort');
   assert.strictEqual((await call('/api/admin/setup', 'POST', { token: 'not-the-token', password: 'salma-long-password' })).status, 400);
   assert.strictEqual((await call('/api/admin/setup', 'POST', { token, password: 'salma-long-password' })).json.username, 'salma');
   assert.strictEqual((await call('/api/admin/setup', 'POST', { token, password: 'another-long-password' })).status, 400, 'the link works once');
@@ -114,7 +115,8 @@ test('a catalogue change by the team waits for an owner, then happens exactly as
   const r = await call('/api/admin/catalog/apron', 'PUT', { lowStockAt: 7 }, cat.token);
   assert.strictEqual(r.status, 202, r.text);
   assert.strictEqual(r.json.pending, true);
-  assert.match(r.json.approval.summary.en, /Edit a product: .*lowStockAt/);
+  assert.match(r.json.approval.summary.en, /Edit a product: .*\(low-stock alert\)/);
+  assert.match(r.json.approval.summary.ar, /تنبيه المخزون القليل/);
   assert.strictEqual((await call('/api/admin/catalog/apron', 'GET', undefined, owner)).json.lowStockAt, before, 'nothing changed yet');
   // Bad input is refused now, not after the owner approves it.
   assert.strictEqual((await call('/api/admin/catalog/apron', 'PUT', { stock: -1 }, cat.token)).status, 400);
@@ -140,6 +142,11 @@ test('a catalogue change by the team waits for an owner, then happens exactly as
   const log = (await call('/api/admin/activity', 'GET', undefined, owner)).json.entries;
   assert.ok(log.some((e) => e.approvalId === a.id && e.status === 202 && e.whoId === cat.id));
   assert.ok(log.some((e) => e.approvalId === a.id && e.status === 200 && e.whoId === cat.id && e.approvedBy === 'owner'));
+  // The screen reads who as { id, name } and what happened in both languages (not the route).
+  const applied = log.find((e) => e.approvalId === a.id && e.status === 200 && e.whoId === cat.id);
+  assert.deepStrictEqual(applied.who, { id: cat.id, name: 'CAT2' });
+  assert.match(applied.summary.ar, /تعديل منتج/);
+  assert.ok(log.filter((e) => e.action === 'signIn').every((e) => e.summary && e.summary.ar), 'sign-ins say so');
   // The team member's own log has only their entries.
   const mine = (await call('/api/admin/activity', 'GET', undefined, cat.token)).json.entries;
   assert.ok(mine.length && mine.every((e) => e.whoId === cat.id));

@@ -208,7 +208,9 @@ test('admin: after a reload the header shows the staff member\'s name, not the u
   const add = await post('/api/admin/staff', { name: 'Mostafa مصطفى', username: 'mostafa', password: 'a-long-password' }, owner);
   assert.strictEqual(add.status, 201, await add.clone().text());
   const login = await (await post('/api/admin/login', { username: 'mostafa', password: 'a-long-password' })).json();
-  assert.strictEqual(login.name, 'Mostafa مصطفى', 'right after signing in');
+  assert.strictEqual(login.shown, 'Mostafa مصطفى', 'right after signing in');
+  assert.strictEqual(login.name, 'mostafa', '(name: the username, as in the session)');
+  assert.ok(login.id, 'their id, so the Staff screen knows which row is theirs');
   const session = await (await req('GET', '/api/admin/session', undefined, login.token)).json();
   assert.strictEqual(session.role, 'catalogue', 'a product manager is the catalogue role now');
   assert.strictEqual(session.name, 'mostafa');

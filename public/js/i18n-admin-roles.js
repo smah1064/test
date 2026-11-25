@@ -99,6 +99,7 @@ Object.assign(window.POD_STRINGS, {
   'act.res.failed': ['Failed', 'حصلت مشكلة'],
   'act.emergency': ['Emergency login', 'دخول طوارئ'],
   'act.approval': ['Approval', 'موافقة'],
+  'act.approvedBy': ['Approved by {name}', 'وافق عليه {name}'],
   'act.none': ['Nothing logged for these filters.', 'مفيش حاجة متسجلة بالفلاتر دي.'],
   'act.count.one': ['1 entry', 'سطر واحد'],
   'act.count.two': ['2 entries', 'سطرين'],

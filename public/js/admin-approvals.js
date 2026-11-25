@@ -84,7 +84,6 @@ window.AdminApprovals = (() => {
         </div>
         <p class="ap-summary" dir="auto">${esc(inLang(a.summary) || a.action || '')}</p>
         ${details ? `<div class="ap-details"><div class="muted small">${esc(t('ap.details'))}</div><div class="ap-details-text" dir="auto">${esc(details)}</div></div>` : ''}
-        ${a.method || a.path ? `<p class="muted small ap-tech"><bdi dir="ltr">${esc([a.method, a.path].filter(Boolean).join(' '))}</bdi></p>` : ''}
         ${st !== 'pending' ? decidedHtml(a) : mine ? `<div class="ap-btns"><button class="btn btn-sm" type="button" data-ap-act="cancel" data-ap-id="${esc(a.id)}" ${S.busy.has(a.id) ? 'disabled' : ''}>${esc(t('ap.cancel'))}</button></div>` : decideHtml(a)}
         ${m ? `<p class="ro-msg ${m.ok ? 'ok' : 'bad'}" aria-live="polite">${esc(m.text)}</p>` : ''}
       </article>`;

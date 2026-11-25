@@ -3833,13 +3833,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         const u = (db.staff || []).find((x) => x.id === result.user.id);
         if (u) u.lastSignIn = new Date().toISOString();
       });
-      activity.add({ whoId: w.id, who: w.shown, roles: w.roles, action: 'signIn', label: { en: 'Signed in', ar: 'دخل' }, method: 'POST', path: '/api/admin/login', status: 200, ip: req.ip });
-      return res.json({ token: result.token, expiresAt, role: w.role, roles: w.roles, perms: [...w.perms], name: result.user.name, shown: w.shown });
+      activity.add({ whoId: w.id, who: w.shown, roles: w.roles, action: 'signIn', label: { en: 'Signed in', ar: 'دخل' }, summary: { en: 'Signed in', ar: 'دخل' }, method: 'POST', path: '/api/admin/login', status: 200, ip: req.ip });
+      // (name: the username; shown: the person's name, for the header.)
+      return res.json({ token: result.token, expiresAt, id: w.id, role: w.role, roles: w.roles, perms: [...w.perms], name: w.name, shown: w.shown });
     }
     // The shared password: the emergency way in, always written to the log.
-    activity.add({ whoId: 'owner', who: 'owner', roles: ['owner'], emergency: true, action: 'signIn', label: { en: 'Signed in with the shared password', ar: 'دخل بكلمة السر المشتركة' }, method: 'POST', path: '/api/admin/login', status: 200, ip: req.ip });
+    activity.add({ whoId: 'owner', who: 'owner', roles: ['owner'], emergency: true, action: 'signIn', label: { en: 'Signed in with the shared password', ar: 'دخل بكلمة السر المشتركة' }, summary: { en: 'Signed in with the shared password', ar: 'دخل بكلمة السر المشتركة' }, method: 'POST', path: '/api/admin/login', status: 200, ip: req.ip });
     const w = emergencyWho();
-    res.json({ token: result.token, expiresAt, weakPassword: auth.weak, role: 'owner', roles: w.roles, perms: [...w.perms], name: 'owner', emergency: true });
+    res.json({ token: result.token, expiresAt, weakPassword: auth.weak, id: w.id, role: 'owner', roles: w.roles, perms: [...w.perms], name: 'owner', emergency: true });
   });
   app.post('/api/admin/logout', (req, res) => {
     auth.logout(security.bearer(req), staffList());
@@ -3905,7 +3906,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         action: key, label: route.label || null, method: req.method, path: req.originalUrl.split('?')[0].slice(0, 300),
         status: res.statusCode, ...(res.locals.approvalId || who.approvalId ? { approvalId: res.locals.approvalId || who.approvalId } : {}),
         ...(who.approvedBy ? { approvedBy: who.approvedBy } : {}),
-        ...(res.locals.summary ? { summary: res.locals.summary } : {}),
+        ...((res.locals.summary || (who.approvalId && (findApproval(who.approvalId) || {}).summary) || route.label) ? { summary: res.locals.summary || (who.approvalId && (findApproval(who.approvalId) || {}).summary) || route.label } : {}),
         body: roles.shortBody(req.body && (Buffer.isBuffer(req.body) || Object.keys(req.body).length) ? req.body : undefined),
       }));
     }
@@ -3972,7 +3973,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const w = req.adminWho;
     const list = store.db.approvals || [];
     res.json({
-      ok: true, role: w.role, roles: w.roles, perms: [...w.perms],
+      ok: true, id: w.id, role: w.role, roles: w.roles, perms: [...w.perms],
       ...(w.emergency ? { emergency: true, weakPassword: auth.weak } : { name: w.name, shown: w.shown || w.name }),
       pendingApprovals: w.perms.has('approvals') ? list.filter((a) => a.status === 'pending').length : 0,
       myPending: list.filter((a) => a.status === 'pending' && a.by && a.by.id === w.id).length,
@@ -4341,7 +4342,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       limitHit('staffSetup', req.ip);
       throw new HttpError(400, 'setupLinkBad');
     }
-    if (!staffPassword(b.password)) throw new HttpError(400, 'badStaff');
+    if (!staffPassword(b.password)) throw new HttpError(400, 'passwordTooShort');
     const user = store.mutate((db) => {
       const u = (db.staff || []).find((x) => x.id === found.id);
       if (!u || !u.setup || u.setup.hash !== hash) throw new HttpError(400, 'setupLinkBad');
@@ -4350,7 +4351,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       u.gen = (u.gen || 0) + 1;
       return u;
     });
-    activity.add({ whoId: user.id, who: user.name || user.username, roles: roles.rolesOf(user), action: 'setup', label: { en: 'Chose their password (set-up link)', ar: 'اختار كلمة السر (لينك التجهيز)' }, method: 'POST', path: '/api/admin/setup', status: 200, ip: req.ip });
+    activity.add({ whoId: user.id, who: user.name || user.username, roles: roles.rolesOf(user), action: 'setup', label: { en: 'Chose their password (set-up link)', ar: 'اختار كلمة السر (لينك التجهيز)' }, summary: { en: 'Chose their password (set-up link)', ar: 'اختار كلمة السر (لينك التجهيز)' }, method: 'POST', path: '/api/admin/setup', status: 200, ip: req.ip });
     res.json({ ok: true, username: user.username });
   });
   // A team member changes their own password ({ current, password }); they get a new sign-in back.
@@ -4361,7 +4362,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const u = staffAll().find((x) => x.id === w.id);
     const given = crypto.scryptSync(typeof b.current === 'string' ? b.current : '', u.salt, 32);
     if (!crypto.timingSafeEqual(given, Buffer.from(u.hash, 'hex'))) throw new HttpError(400, 'wrongCurrentPassword');
-    if (!staffPassword(b.password)) throw new HttpError(400, 'badStaff');
+    if (!staffPassword(b.password)) throw new HttpError(400, 'passwordTooShort');
     const user = store.mutate((db) => {
       const x = (db.staff || []).find((y) => y.id === w.id);
       Object.assign(x, security.AdminAuth.hashStaffPassword(b.password));
@@ -4387,6 +4388,15 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     return p ? p.name : { en: String(id || ''), ar: String(id || '') };
   };
   const enAr = (en, ar) => ({ en, ar });
+  // The product fields a change touches, as the owner reads them.
+  const CATALOG_FIELD_NAMES = {
+    name: enAr('name', 'الاسم'), description: enAr('description', 'الوصف'), category: enAr('category', 'القسم'),
+    status: enAr('in the shop / paused', 'في الموقع / متوقف'), showAgainOn: enAr('back on', 'يرجع يوم'), hiddenReason: enAr('pause reason', 'سبب الإيقاف'), hiddenNote: enAr('pause note', 'ملاحظة الإيقاف'),
+    stock: enAr('stock', 'المخزون'), variantStock: enAr('stock per colour and size', 'المخزون لكل لون ومقاس'), lowStockAt: enAr('low-stock alert', 'تنبيه المخزون القليل'),
+    colors: enAr('colours', 'الألوان'), addColors: enAr('new colours', 'ألوان جديدة'), sizes: enAr('sizes', 'المقاسات'), addSizes: enAr('new sizes', 'مقاسات جديدة'),
+    sides: enAr('print areas', 'أماكن الطباعة'), process: enAr('printing method', 'طريقة الطباعة'), methods: enAr('printing methods', 'طرق الطباعة'), embroidery: enAr('embroidery', 'التطريز'),
+    prices: enAr('prices', 'الأسعار'), photos: enAr('photos', 'الصور'), order: enAr('photo order', 'ترتيب الصور'), main: enAr('main photo', 'الصورة الأساسية'),
+  };
   /** What the change is about, in a few words (the product, coupon, order…), for the owner's list. */
   function approvalAbout(key, req) {
     const b = req.body && !Buffer.isBuffer(req.body) ? req.body : {};
@@ -4398,8 +4408,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     };
     if (key.includes('/catalog')) {
       const n = key === 'POST /api/admin/catalog' ? { en: String(b.id || ''), ar: String(b.id || '') } : nameOfProduct(p.id);
-      const fields = Object.keys(b).filter((k) => !['id', 'template'].includes(k));
-      return enAr([n.en, fields.length && !Buffer.isBuffer(req.body) ? `(${fields.join(', ')})` : ''].filter(Boolean).join(' '), [n.ar, fields.length && !Buffer.isBuffer(req.body) ? `(${fields.join('، ')})` : ''].filter(Boolean).join(' '));
+      const fields = Buffer.isBuffer(req.body) ? [] : Object.keys(b).filter((k) => !['id', 'template'].includes(k)).map((k) => CATALOG_FIELD_NAMES[k] || enAr(k, k));
+      const list = (lang, comma) => (fields.length ? `(${[...new Set(fields.map((f) => f[lang]))].join(comma)})` : '');
+      return enAr([n.en, list('en', ', ')].filter(Boolean).join(' '), [n.ar, list('ar', '، ')].filter(Boolean).join(' '));
     }
     if (key === 'PATCH /api/admin/library') {
       const n = Array.isArray(b.ids) ? b.ids.length : 0;
@@ -4663,7 +4674,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const day = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : null);
     const who = w.perms.has('activity.all') ? (typeof req.query.who === 'string' && req.query.who ? req.query.who.slice(0, 40) : null) : w.id;
     const limit = Math.min(500, Math.max(1, parseInt(req.query.limit, 10) || 200));
-    res.json({ entries: activity.list({ who, from: day(req.query.from), to: day(req.query.to), limit }) });
+    // (who: { id, name } for the screen; older lines without a summary read as what they did.)
+    const entries = activity.list({ who, from: day(req.query.from), to: day(req.query.to), limit })
+      .map((e) => ({ ...e, who: { id: e.whoId, name: e.who }, summary: e.summary || e.label || null }));
+    res.json({ entries });
   });
 
   app.get('/api/admin/notifications', requireAdmin, (req, res) => {

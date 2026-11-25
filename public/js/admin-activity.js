@@ -27,12 +27,13 @@ window.AdminActivity = (() => {
   function rowHtml(e, own) {
     const res = AdminRoles.resultOf(e.status);
     const what = AdminRoles.inLang(e.summary) || e.action || '';
-    const tech = [e.method, e.path].filter(Boolean).join(' ');
+    // (Who approved a change made by someone else; the method and address only go in the CSV.)
+    const by = e.approvedBy ? t('act.approvedBy', { name: e.approvedBy }) : '';
     return `
       <tr class="act-row act-${res}">
         <td data-label="${esc(t('act.col.when'))}"><span class="act-when">${esc(AdminRoles.cairoTime(e.at))}</span></td>
         ${own ? `<td data-label="${esc(t('act.col.who'))}"><b dir="auto">${esc((e.who && e.who.name) || '—')}</b>${e.roles && e.roles.length ? `<div class="muted small">${esc(roleNames(e.roles))}</div>` : ''}</td>` : ''}
-        <td data-label="${esc(t('act.col.what'))}"><span dir="auto">${esc(what)}</span>${tech ? `<div class="muted small"><bdi dir="ltr">${esc(tech)}</bdi></div>` : ''}</td>
+        <td data-label="${esc(t('act.col.what'))}"><span dir="auto">${esc(what)}</span>${by ? `<div class="muted small" dir="auto">${esc(by)}</div>` : ''}</td>
         <td data-label="${esc(t('act.col.result'))}"><span class="ro-pill act-pill-${res}">${esc(t('act.res.' + res))}</span>${e.approvalId ? ` <span class="ro-pill act-pill-approval">${esc(t('act.approval'))}</span>` : ''}${e.emergency ? ` <span class="ro-pill act-pill-emergency">${esc(t('act.emergency'))}</span>` : ''}</td>
       </tr>`;
   }
