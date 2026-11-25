@@ -1198,6 +1198,13 @@
       body.variantStock = null;
       body.lowStockAt = null;
     }
+    // Only what changed here goes: a count the page showed when it opened would undo the sales made since (stock 5,
+    // 2 sold, the low-stock alert changed: stock back to 5. QA 25 Nov). A new count, or another way of counting, goes.
+    const was = { stock: P.stock == null ? null : P.stock, variantStock: P.variantStock || null, lowStockAt: P.lowStockAt == null ? null : P.lowStockAt };
+    const sameVs = (a, b) => JSON.stringify(Object.entries(a || {}).sort()) === JSON.stringify(Object.entries(b || {}).sort());
+    if ('stock' in body && body.stock === was.stock && (body.stock !== null || !('variantStock' in body) || sameVs(body.variantStock, was.variantStock))) delete body.stock;
+    if ('variantStock' in body && (body.variantStock === null ? was.variantStock === null : sameVs(body.variantStock, was.variantStock))) delete body.variantStock;
+    if ('lowStockAt' in body && body.lowStockAt === was.lowStockAt) delete body.lowStockAt;
     return body;
   }
 
@@ -1277,8 +1284,8 @@
       if (en) z.labelEn = en.value.trim();
     }
   }
-  function saveSizes(P) {
-    readSizeLabels();
+  function saveSizes(P, { rebased = false } = {}) {
+    if (!rebased) readSizeLabels();
     if (S.sizes.every((z) => z.state === 'off')) throw new Error(t('pm.needSize'));
     const sizes = {};
     const addSizes = [];
@@ -1757,8 +1764,49 @@
 
   // ---------- Saving a section ----------
   const SAVERS = { basics: saveBasics, avail: saveAvail, colors: saveColors, sizes: saveSizes, prices: savePrices, print: savePrint, tech: saveTech };
+  /**
+   * Colours and sizes are saved as whole lists: one opened earlier would drop a colour or size a colleague added
+   * meanwhile, or undo their sold-out mark (QA 25 Nov). So the product is read again just before saving, and only
+   * what was changed here (states, labels, additions, deletions) is put on top of it.
+   */
+  const optState = (o) => (o.off ? 'off' : o.soldOut ? 'soldOut' : 'on');
+  function rebaseColors(P, F) {
+    const before = new Map(P.colors.map((c) => [c.id, optState(c)]));
+    const fresh = F.colors.map((c) => ({ id: c.id, name: c.name, hex: c.hex, added: Boolean(c.added), state: optState(c) }));
+    const freshIds = new Set(fresh.map((c) => c.id));
+    const mine = new Set(S.colors.map((c) => c.id));
+    for (const c of S.colors) {
+      if (!before.has(c.id)) { if (!freshIds.has(c.id)) fresh.push({ ...c }); continue; }
+      const f = fresh.find((x) => x.id === c.id);
+      if (f && c.state !== before.get(c.id)) f.state = c.state;
+    }
+    const gone = new Set(P.colors.filter((c) => c.added && !mine.has(c.id)).map((c) => c.id));
+    S.colors = fresh.filter((c) => !gone.has(c.id));
+  }
+  function rebaseSizes(P, F) {
+    readSizeLabels();
+    const before = new Map(P.sizes.map((z) => [z.id, z]));
+    const ed = (F.edit && F.edit.sizes) || {};
+    const fresh = F.sizes.map((z) => ({
+      id: z.id, label: z.label, added: Boolean(z.added), state: optState(z), surcharge: z.surcharge || 0, printScale: z.printScale || null,
+      relabelled: Boolean(ed[z.id] && ed[z.id].label), labelEn: z.label.en, labelAr: z.label.ar,
+    }));
+    const freshIds = new Set(fresh.map((z) => z.id));
+    const mine = new Set(S.sizes.map((z) => z.id));
+    for (const z of S.sizes) {
+      const b = before.get(z.id);
+      if (!b) { if (!freshIds.has(z.id)) fresh.push({ ...z }); continue; }
+      const f = fresh.find((x) => x.id === z.id);
+      if (!f) continue; // deleted meanwhile
+      if (z.state !== optState(b)) f.state = z.state;
+      if (z.labelEn !== b.label.en || z.labelAr !== b.label.ar) Object.assign(f, { labelEn: z.labelEn, labelAr: z.labelAr, relabelled: true });
+      if (z.added && z.addedSurcharge != null) f.addedSurcharge = z.addedSurcharge;
+    }
+    const gone = new Set(P.sizes.filter((z) => z.added && !mine.has(z.id)).map((z) => z.id));
+    S.sizes = fresh.filter((z) => !gone.has(z.id));
+  }
   async function save(name) {
-    const P = S.P;
+    let P = S.P;
     secError(name, '');
     // A number box with a mistake in it: nothing is sent; the box says why, and so does the section.
     const bad = badNum(name);
@@ -1768,9 +1816,23 @@
       bad.el.focus({ preventScroll: true });
       return;
     }
+    let rebased = false;
+    if (name === 'colors' || name === 'sizes') {
+      try {
+        const F = await api(`/api/admin/catalog/${enc(P.id)}`);
+        if (F && Array.isArray(F.colors) && Array.isArray(F.sizes)) {
+          if (name === 'colors') rebaseColors(P, F);
+          else rebaseSizes(P, F);
+          P = F;
+          rebased = true;
+        }
+      } catch (e) {
+        if (e.status === 401) return;
+      }
+    }
     let body;
     try {
-      body = SAVERS[name](P);
+      body = SAVERS[name](P, { rebased });
     } catch (e) {
       secError(name, e.message);
       return;

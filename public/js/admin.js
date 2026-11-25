@@ -2332,14 +2332,22 @@
       // A box emptied or not a number: say so at the box, save nothing (never 0 in its place).
       const bad = Object.keys(ed).find((k) => priceProblem(k, ed[k]));
       if (bad) return void showPriceProblem(p.id, bad, priceProblem(bad, ed[bad]));
+      // Boxes not changed here keep what is saved now (read again just before saving): a colleague's new price isn't
+      // undone by a cost changed on a page opened earlier (QA 25 Nov).
+      let now = p;
+      try {
+        const fresh = await adminApi('/api/admin/pricing');
+        now = (fresh && Array.isArray(fresh.products) && fresh.products.find((x) => x.id === p.id)) || p;
+      } catch (err) { if (err.status === 401) return; }
       const v = (k, def) => (ed[k] !== undefined ? priceNum(ed[k]) : def);
+      const pSizes = (id) => (now.sizes || []).find((x) => x.id === id) || p.sizes.find((x) => x.id === id) || {};
       const body = {
-        basePrice: v('basePrice', p.basePrice), extraSidePrice: v('extraSidePrice', p.extraSidePrice),
-        sizes: Object.fromEntries(p.sizes.map((s) => [s.id, v('size:' + s.id, s.surcharge)])),
+        basePrice: v('basePrice', now.basePrice), extraSidePrice: v('extraSidePrice', now.extraSidePrice),
+        sizes: Object.fromEntries(p.sizes.map((s) => [s.id, v('size:' + s.id, pSizes(s.id).surcharge)])),
         costs: {
-          blank: v('blank', p.costs.blank), printFirst: v('printFirst', p.costs.printFirst), printExtra: v('printExtra', p.costs.printExtra), other: v('other', p.costs.other),
-          ...(p.embroidered ? { embroidery: v('embroidery', p.costs.embroidery || 0) } : {}),
-          sizes: Object.fromEntries(p.sizes.map((s) => [s.id, v('sizecost:' + s.id, s.costExtra)])),
+          blank: v('blank', now.costs.blank), printFirst: v('printFirst', now.costs.printFirst), printExtra: v('printExtra', now.costs.printExtra), other: v('other', now.costs.other),
+          ...(p.embroidered ? { embroidery: v('embroidery', now.costs.embroidery || 0) } : {}),
+          sizes: Object.fromEntries(p.sizes.map((s) => [s.id, v('sizecost:' + s.id, pSizes(s.id).costExtra)])),
         },
       };
       save.disabled = true;
@@ -2515,7 +2523,8 @@
     const parts = [c.type === 'percent' ? t('cp.sumPercent', { v: POD.num(c.value) }) : c.type === 'fixed' ? t('cp.sumFixed', { v: money(c.value) }) : t('cp.freeship')];
     if (c.maxDiscount) parts.push(t('cp.sumMax', { v: money(c.maxDiscount) }));
     if (c.minOrder) parts.push(t('cp.sumMin', { v: money(c.minOrder) }));
-    if (c.startsOn || c.endsOn) parts.push(`${c.startsOn || '…'} → ${c.endsOn || '…'}`);
+    // (Days in the page language, and in Arabic the arrow points the way it reads: "١ ديسمبر ← ٣١ ديسمبر". QA 25 Nov.)
+    if (c.startsOn || c.endsOn) parts.push(`${c.startsOn ? day(c.startsOn, true) : '…'} ${POD.lang === 'ar' ? '←' : '→'} ${c.endsOn ? day(c.endsOn, true) : '…'}`);
     if (c.perCustomer) parts.push(t('cp.sumPer', { n: POD.num(c.perCustomer) }));
     // Limited to some products and / or categories: name them in the page language.
     const only = [(c.products || []).length ? cpList(c.products, couponData.products) : '', c.categories.length ? cpList(c.categories, couponData.categories) : ''].filter(Boolean);
@@ -2560,7 +2569,12 @@
     $('cp-form').querySelectorAll('input[data-num]').forEach((el) => el.setCustomValidity(el.closest('[hidden]') ? '' : numProblem(el)));
   }
   $('cp-type').addEventListener('change', cpTypeChanged);
+  // The coupon as it was when its edit form opened: only what changed is sent (a colleague's pause made meanwhile
+  // isn't undone by saving a note from a form opened earlier. QA 25 Nov).
+  let cpEditing = null;
+  const cpNorm = (v) => (v === undefined || v === null || v === '' ? null : Array.isArray(v) ? [...v].map(String).sort() : typeof v === 'number' ? v : String(v));
   function resetCouponForm() {
+    cpEditing = null;
     $('cp-form').reset();
     $('cp-id').value = '';
     $('cp-active').checked = true;
@@ -2584,6 +2598,17 @@
         maxUses: numValue($('cp-uses')), perCustomer: numValue($('cp-per')), startsOn: $('cp-start').value, endsOn: $('cp-end').value,
         categories: [...cpPicked], products: id ? cpProducts : [], active: $('cp-active').checked, note: $('cp-note').value,
       };
+      if (id && cpEditing && cpEditing.id === id) {
+        for (const k of Object.keys(body)) if (JSON.stringify(cpNorm(body[k])) === JSON.stringify(cpNorm(cpEditing[k]))) delete body[k];
+        // (The value goes with its type: a percent and an amount aren't the same number.)
+        if ('type' in body && !('value' in body)) body.value = numValue($('cp-value'));
+        if (!Object.keys(body).length) {
+          resetCouponForm();
+          $('cp-msg').textContent = t('houses.saved');
+          setTimeout(() => { $('cp-msg').textContent = ''; }, 2500);
+          return;
+        }
+      }
       try {
         await adminApi(id ? `/api/admin/coupons/${encodeURIComponent(id)}` : '/api/admin/coupons', { method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang }, body: JSON.stringify(body) });
         resetCouponForm();
@@ -2603,6 +2628,7 @@
     try {
       if (ed) {
         const c = find(ed.dataset.cpEdit);
+        cpEditing = JSON.parse(JSON.stringify(c)); // what the form started from (only changes are sent)
         $('cp-id').value = c.id;
         $('cp-code').value = c.code;
         $('cp-type').value = c.type;
@@ -2626,7 +2652,7 @@
         $('cp-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
       } else if (tog) {
         const c = find(tog.dataset.cpToggle);
-        await adminApi(`/api/admin/coupons/${encodeURIComponent(c.id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang }, body: JSON.stringify({ ...c, active: !c.active }) });
+        await adminApi(`/api/admin/coupons/${encodeURIComponent(c.id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang }, body: JSON.stringify({ active: !c.active }) }); // (only the switch: QA 25 Nov)
         renderCoupons((couponData = await adminApi('/api/admin/coupons')));
       } else if (del && confirm(t('cp.confirmDelete', { code: find(del.dataset.cpDel).code }))) {
         await adminApi(`/api/admin/coupons/${encodeURIComponent(del.dataset.cpDel)}`, { method: 'DELETE' });

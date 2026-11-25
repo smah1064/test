@@ -153,6 +153,15 @@ window.AdminApprovals = (() => {
         : { text: t(next.status === 'approved' ? 'ap.approved' : next.status === 'rejected' ? 'ap.rejected' : 'ap.cancelled'), ok: next.status !== 'failed' };
     } catch (e) {
       if (e.status !== 401) S.msg[id] = { text: e.message, ok: false };
+      // Already decided by someone else ("the list is up to date now"): the list is asked again at once, so the
+      // card shows what was decided and the count is right (it waited for the next refresh: QA 25 Nov).
+      if (e.status === 409) {
+        try {
+          await load();
+          const now = (S.list || []).find((x) => x.id === id);
+          if (now && now.status !== 'pending') S.decided.set(id, { ...a, ...now });
+        } catch (err) { /* the 15-second refresh tries again */ }
+      }
     }
     S.busy.delete(id);
     render();

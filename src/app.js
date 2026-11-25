@@ -1140,7 +1140,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     }
   });
   // The shop fixes the artwork: a corrected print file (same size), kept as a new version; the customer approves it.
+  // While one is processed (a second or two), the job can't start printing or get another file (QA 25 Nov).
+  const replacingItems = new Set();
   app.put('/api/admin/items/:itemId/replacement/:side', adminOnly, express.raw({ type: () => true, limit: '60mb' }), async (req, res, next) => {
+    let marked = null;
+    res.on('close', () => { if (marked) replacingItems.delete(marked); });
     try {
       const found = store.findItem(req.params.itemId);
       if (!found) throw new HttpError(404, 'itemNotFound');
@@ -1149,11 +1153,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const sd = d && d.kind !== 'book' && d.kind !== 'gangsheet' && d.kind !== 'photoset' && d.sides.find((x) => x.id === req.params.side);
       if (!sd) throw new HttpError(404, 'notFound');
       if (['printing', 'printed', 'shipped'].includes(item.status)) throw new HttpError(409, 'alreadyPrinting');
+      if (replacingItems.has(item.id)) throw new HttpError(409, 'fileBeingReplaced');
       // A side with the customer's name list: its files are made per name, so one picture can't replace it.
       if (d.merge && d.merge.sides && d.merge.sides[sd.id]) throw new HttpError(409, 'replaceNames');
       const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
       if (buf.length < 24 || !buf.subarray(0, 8).equals(PNG_SIGNATURE)) throw new HttpError(400, 'badImage');
       if (buf.readUInt32BE(16) !== sd.widthPx || buf.readUInt32BE(20) !== sd.heightPx) throw new HttpError(400, 'replacementSize', { w: sd.widthPx, h: sd.heightPx });
+      replacingItems.add(item.id);
+      marked = item.id;
       // What the shop changed, for the customer (with the new proof, in the email and on the proof page).
       let changeNote = '';
       try { changeNote = decodeURIComponent(String(req.get('x-review-note') || '')).replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, ' ').trim().slice(0, 1000); } catch (e) { changeNote = ''; }
@@ -4196,9 +4203,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     // (A rights request: whose, about which link.)
     const td = /\/takedowns\//.test(req.originalUrl) && (store.db.takedowns || []).find((x) => x.id === p.id);
     if (td) { const w = [td.name, td.link].filter(Boolean).join(' · ').slice(0, 80); if (w) bits.unshift({ en: w, ar: w }); }
-    const head = [order ? `#${order.number}` : '', prod ? null : ''].filter(Boolean);
-    const en = [route.label.en, [head.join(''), prod ? prod.name.en : ''].filter(Boolean).join(' · '), bits.map((x) => x.en).join(', ')].filter(Boolean);
-    const ar = [route.label.ar, [head.join(''), prod ? prod.name.ar : ''].filter(Boolean).join(' · '), bits.map((x) => x.ar).join('، ')].filter(Boolean);
+    // (In Arabic the number is kept left to right: "#POD-1001", not "POD-1001#". QA 25 Nov.)
+    const head = order ? `#${order.number}` : '';
+    const en = [route.label.en, [head, prod ? prod.name.en : ''].filter(Boolean).join(' · '), bits.map((x) => x.en).join(', ')].filter(Boolean);
+    const ar = [route.label.ar, [head ? `\u2066${head}\u2069` : '', prod ? prod.name.ar : ''].filter(Boolean).join(' · '), bits.map((x) => x.ar).join('، ')].filter(Boolean);
     return en.length > 1 ? { en: en.join(': '), ar: ar.join(': ') } : null;
   }
   // ---------- Private preview: on/off and the people invited (owner only) ----------
@@ -4477,15 +4485,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     store.mutate((db) => {
       const e = db.catalog && db.catalog.products && db.catalog.products[p.id];
       if (!e || !e.photos) throw new HttpError(404, 'notFound');
-      if (Array.isArray(b.order)) {
-        const ids = e.photos.map((ph) => ph.id);
-        if (b.order.length !== ids.length || !ids.every((id) => b.order.includes(id))) throw new HttpError(400, 'badProductField', { field: 'order' });
-        e.photos = b.order.map((id) => e.photos.find((ph) => ph.id === id));
-      }
+      // Both checked before anything changes: a refused request keeps nothing (QA 25 Nov).
+      const ids = e.photos.map((ph) => ph.id);
+      if (Array.isArray(b.order) && (b.order.length !== ids.length || !ids.every((id) => b.order.includes(id)))) throw new HttpError(400, 'badProductField', { field: 'order' });
+      if (b.main !== undefined && b.main !== null && !ids.includes(b.main)) throw new HttpError(400, 'badProductField', { field: 'main' });
+      if (Array.isArray(b.order)) e.photos = b.order.map((id) => e.photos.find((ph) => ph.id === id));
       if (b.main !== undefined) {
         if (b.main === null) delete e.mainPhoto;
-        else if (e.photos.some((ph) => ph.id === b.main)) e.mainPhoto = b.main;
-        else throw new HttpError(400, 'badProductField', { field: 'main' });
+        else e.mainPhoto = b.main;
       }
       e.updatedAt = new Date().toISOString();
       e.updatedBy = req.adminWho.name;
@@ -4551,7 +4558,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     return { token, setup: { hash: crypto.createHash('sha256').update(token).digest('hex'), exp: Date.now() + SETUP_MS }, link: `${linkBase(req)}/admin?setup=${token}` };
   };
   const cleanStaffName = (v) => {
-    const s = typeof v === 'string' ? v.replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 60) : '';
+    // (No invisible direction marks either: "\u202Enimda" would show as "admin" in the team list. QA 25 Nov.)
+    const s = typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f<>\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/g, '').trim().slice(0, 60) : '';
     return /[\p{L}\p{N}]/u.test(s) ? s : '';
   };
   const COMMON_PASSWORDS = new Set(['password12', 'password123', 'password1234', 'qwertyuiop', 'qwerty1234', '1234567890', '0123456789', 'abcdefghij', 'abc1234567', 'iloveyou12', 'admin12345', 'admin123456', 'welcome123', 'ebda3ebda3', 'ebda312345']);
@@ -4595,10 +4603,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const user = store.mutate((db) => {
       const u = (db.staff || []).find((x) => x.id === req.params.id);
       if (!u) throw new HttpError(404, 'notFound');
-      if (name) u.name = name;
       const before = JSON.stringify([roles.rolesOf(u), u.active !== false]);
       // (Made an owner while on a password someone else typed: they choose their own first, with a set-up link.)
+      // Checked before anything changes: a refused change keeps nothing, not even the new name (QA 25 Nov).
       if (rs && rs.includes('owner') && !roles.rolesOf(u).includes('owner') && u.passwordByOther) throw new HttpError(409, 'ownerOwnPassword');
+      if (name) u.name = name;
       if (roles.rolesOf(u).includes('owner') || (rs && rs.includes('owner'))) u.everOwner = true;
       if (rs) {
         u.roles = rs;
@@ -4759,13 +4768,21 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   const VALUE_WORDS = {
     type: { percent: enAr('percent off', 'نسبة خصم'), fixed: enAr('amount off', 'مبلغ خصم'), freeShipping: enAr('free shipping', 'شحن مجاني') },
     status: { live: enAr('in the shop', 'في الموقع'), hidden: enAr('paused', 'متوقف مؤقتًا'), removed: enAr('stopped selling', 'وقف البيع') },
+    // (A pause's reason, as the Products tab says it. QA 25 Nov: the owner's card showed "stock".)
+    hiddenReason: {
+      stock: enAr('out of stock', 'المخزون خلص'), season: enAr('out of season', 'مش موسمه'), quality: enAr('quality problem', 'مشكلة في الجودة'),
+      supplier: enAr('supplier problem', 'مشكلة مع المورّد'), other: enAr('other', 'سبب تاني'),
+    },
   };
   const ownerValue = (v, field) => {
     if (v === null || v === undefined || v === '') return enAr('(empty)', '(فاضي)');
     if (typeof v === 'boolean') return v ? enAr('yes', 'أيوه') : enAr('no', 'لأ');
-    // (Expense categories by name: looked up when used, the list being defined further down.)
+    // (Expense categories by name: looked up when used, the list being defined further down. A product's category
+    // by the shop's own name for it.)
     const words = field === 'category' ? EXPENSE_NAMES : VALUE_WORDS[field];
     if (typeof v === 'string' && words && words[v]) return words[v];
+    const cat = field === 'category' && typeof v === 'string' && CATEGORIES.find((c) => c.id === v);
+    if (cat) return enAr(cat.name.en, cat.name.ar);
     if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
       const day = (l) => { try { return new Date(`${v}T12:00:00Z`).toLocaleDateString(l === 'ar' ? 'ar-EG' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }); } catch (e) { return v; } };
       return enAr(day('en'), day('ar'));
@@ -4878,9 +4895,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   function approvalAbout(key, req) {
     const b = req.body && !Buffer.isBuffer(req.body) ? req.body : {};
     const p = req.params;
-    const orderNo = (id) => {
+    // (In Arabic the number is kept left to right: "#POD-1001", not "POD-1001#". QA 25 Nov.)
+    const orderNo = (id, ar = false) => {
       const o = store.getOrder(id) || (store.findItem(id) || {}).order;
-      return o ? `#${o.number}` : '';
+      return o ? (ar ? `\u2066#${o.number}\u2069` : `#${o.number}`) : '';
     };
     if (key.includes('/catalog')) {
       const n = key === 'POST /api/admin/catalog' ? { en: String(b.id || ''), ar: String(b.id || '') } : nameOfProduct(p.id);
@@ -4934,10 +4952,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       // (Which item: an order can have several.)
       const f = store.findItem(p.itemId);
       const prod = f && getProduct(f.item.productId);
-      const what = (l) => [orderNo(p.itemId), prod ? prod.name[l] : '', f && f.order.items.length > 1 ? `${f.order.items.indexOf(f.item) + 1}/${f.order.items.length}` : ''].filter(Boolean).join(' · ');
+      const what = (l) => [orderNo(p.itemId, l === 'ar'), prod ? prod.name[l] : '', f && f.order.items.length > 1 ? `${f.order.items.indexOf(f.item) + 1}/${f.order.items.length}` : ''].filter(Boolean).join(' · ');
       return enAr(`${what('en')} → ${costText(b.actualCost, 'en')}`, `${what('ar')} ← ${costText(b.actualCost, 'ar')}`);
     }
-    if (key === 'PATCH /api/admin/orders/:orderId/shipping-cost') return enAr(`${orderNo(p.orderId)} → ${costText(b.actualShipping, 'en')}`, `${orderNo(p.orderId)} ← ${costText(b.actualShipping, 'ar')}`);
+    if (key === 'PATCH /api/admin/orders/:orderId/shipping-cost') return enAr(`${orderNo(p.orderId)} → ${costText(b.actualShipping, 'en')}`, `${orderNo(p.orderId, true)} ← ${costText(b.actualShipping, 'ar')}`);
     if (key === 'PUT /api/admin/accounts/settings') return enAr(`shipping cost ${costText(b.shippingCost, 'en')}`, `تكلفة الشحن ${costText(b.shippingCost, 'ar')}`);
     if (key === 'PUT /api/admin/pricing/:productId') {
       const n = nameOfProduct(p.productId);
@@ -5034,8 +5052,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (approvalsAll().some((a) => (a.status === 'pending' || a.status === 'failed') && a.action === 'POST /api/admin/coupons' && a.body && coupons.normCode(a.body.code) === coupon.code)) throw new HttpError(409, 'couponWaiting');
     },
     'PUT /api/admin/coupons/:id': (req) => {
-      if (!(store.db.coupons || []).some((c) => c.id === req.params.id)) throw new HttpError(404, 'couponGone');
-      const { coupon, error } = coupons.cleanCoupon(req.body, { products: PRODUCTS, categories: CATEGORIES });
+      const cur = (store.db.coupons || []).find((c) => c.id === req.params.id);
+      if (!cur) throw new HttpError(404, 'couponGone');
+      // (Only the changed fields come: checked as they'd be merged onto the coupon. See saveCoupon.)
+      const { coupon, error } = coupons.cleanCoupon({ ...cur, ...(req.body && typeof req.body === 'object' ? req.body : {}) }, { products: PRODUCTS, categories: CATEGORIES });
       if (error) throw new HttpError(400, error);
       if ((store.db.coupons || []).some((c) => c.code === coupon.code && c.id !== req.params.id)) throw new HttpError(409, 'couponExists');
       // (Only the fields a coupon is made of: its id, dates and counts are the shop's own.)
@@ -5845,6 +5865,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (typeof from === 'string' && from !== item.status) throw new HttpError(409, 'jobMoved');
     // A job waiting for review or for the customer's approval is cleared from the Review tab, not here.
     if (REVIEW_STATUSES.includes(item.status) && status !== item.status) throw new HttpError(409, 'notApproved');
+    // A corrected file for it is being processed (it then waits for the customer's approval): not now (QA 25 Nov).
+    if (replacingItems.has(item.id) && status !== item.status) throw new HttpError(409, 'fileBeingReplaced');
     if (item.status !== status) {
       item.status = status;
       item.history.push({ status, at: new Date().toISOString() });
@@ -6135,7 +6157,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     res.json({ coupons: list.map(couponRow), products: adminProductList(new Set(list.flatMap((c) => c.products || []))), categories: CATEGORIES });
   });
   const saveCoupon = (req, id) => {
-    const { coupon, error } = coupons.cleanCoupon(req.body, { products: PRODUCTS, categories: CATEGORIES });
+    // An edit sends only what changed (the form, or the list's pause switch): merged onto the coupon as it is now,
+    // so a colleague's change made meanwhile stays (QA 25 Nov). A whole coupon, as before, works the same.
+    const cur = id && (store.db.coupons || []).find((c) => c.id === id);
+    if (id && !cur) throw new HttpError(404, 'couponGone');
+    const input = cur && req.body && typeof req.body === 'object' && !Array.isArray(req.body)
+      ? (({ id: x, createdAt, updatedAt, ...rest }) => rest)({ ...cur, ...req.body }) // eslint-disable-line no-unused-vars
+      : req.body;
+    const { coupon, error } = coupons.cleanCoupon(input, { products: PRODUCTS, categories: CATEGORIES });
     if (error) throw new HttpError(400, error);
     return store.mutate((db) => {
       db.coupons ||= [];

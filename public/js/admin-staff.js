@@ -216,10 +216,21 @@ window.AdminStaff = (() => {
     if (!roles.length) return void (S.msg[id] = { text: t('staff.noRole'), ok: false }, render());
     // (Your own owner role stays, whatever the boxes say.)
     if (isMe(u) && rolesOf(u).includes('owner') && !roles.includes('owner')) roles.unshift('owner');
+    // Only what was changed here goes: a colleague's change made meanwhile (a role taken away) isn't undone by
+    // saving a name fix from a form opened earlier (QA 25 Nov).
+    const same = (a, b) => [...a].sort().join(',') === [...b].sort().join(',');
+    const body = {};
+    if (name !== (u.name || '')) body.name = name;
+    if (!same(roles, rolesOf(u))) body.roles = roles;
+    if (!Object.keys(body).length) {
+      S.editing = null;
+      S.msg[id] = { text: t('staff.saved'), ok: true };
+      return render();
+    }
     S.busy.add(id);
     try {
-      const r = await cfg.api(`/api/admin/staff/${encodeURIComponent(id)}`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify({ name, roles }) });
-      put((r && r.user) || { ...u, name, roles });
+      const r = await cfg.api(`/api/admin/staff/${encodeURIComponent(id)}`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(body) });
+      put((r && r.user) || { ...u, ...body });
       S.editing = null;
       S.msg[id] = { text: t('staff.saved'), ok: true };
     } catch (e) {
