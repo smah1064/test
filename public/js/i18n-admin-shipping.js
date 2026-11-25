@@ -25,7 +25,7 @@ Object.assign(window.POD_STRINGS, {
   'ship.courier': ['Courier', 'شركة الشحن'],
   'ship.courierPh': ['e.g. Bosta', 'مثلًا بوسطة'],
   'ship.courier.egyptPost': ['Egypt Post', 'البريد المصري'],
-  'ship.courier.own': ['Own delivery', 'توصيل من المحل'],
+  'ship.courier.own': ['Own delivery', 'توصيل بتاعنا'],
   'ship.trackingNumber': ['Tracking number', 'رقم التتبع'],
   'ship.trackingUrl': ['Tracking link', 'لينك التتبع'],
   'ship.eta': ['Expected delivery', 'الاستلام المتوقع'],

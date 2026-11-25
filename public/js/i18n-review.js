@@ -13,7 +13,7 @@
   Object.assign(S, {
     'rv.tab': ['Review', 'المراجعة'],
     'rv.title': ['Jobs to check before printing', 'شغل محتاج مراجعة قبل الطباعة'],
-    'rv.help': ['Complex or flagged jobs wait here until the shop approves them. Oldest first. Nothing here can be printed yet.', 'الطلبات المعقدة أو اللي عليها ملاحظات بتستنى هنا لحد ما المحل يوافق عليها. الأقدم الأول. مفيش حاجة هنا ينفع تتطبع لسه.'],
+    'rv.help': ['Complex or flagged jobs wait here until the shop approves them. Oldest first. Nothing here can be printed yet.', 'الطلبات المعقدة أو اللي عليها ملاحظات بتستنى هنا لحد ما إبداع يوافق عليها. الأقدم الأول. مفيش حاجة هنا ينفع تتطبع لسه.'],
     'rv.screenNote': ['This is a screen proof, not a printed colour proof: screens show light (RGB) and prints use ink, so colours can differ.', 'دي بروفة على الشاشة، مش بروفة ألوان مطبوعة: الشاشة بتعرض ألوان ضوء (RGB) والطباعة بالحبر، فالألوان ممكن تختلف.'],
     'rv.empty': ['Nothing to review. New flagged jobs will show up here.', 'مفيش حاجة محتاجة مراجعة. الطلبات الجديدة اللي محتاجة مراجعة هتظهر هنا.'],
     'rv.loadFailed': ['Could not load the review list.', 'مقدرناش نحمّل قائمة المراجعة.'],
@@ -29,7 +29,7 @@
     'rv.status.review': ['In review', 'قيد المراجعة'],
     'rv.status.awaiting_approval': ['Waiting for customer', 'في انتظار العميل'],
     'rv.status.changes_requested': ['Changes requested', 'مطلوب تعديلات'],
-    'rv.statusHelp.review': ['The shop needs to check this job before it can be printed.', 'المحل لازم يراجع الطلب ده قبل ما يتطبع.'],
+    'rv.statusHelp.review': ['The shop needs to check this job before it can be printed.', 'إبداع لازم يراجع الطلب ده قبل ما يتطبع.'],
     'rv.statusHelp.awaiting_approval': ['A new proof was sent. The job waits until the customer approves it.', 'اتبعتت بروفة جديدة. الطلب مستني لحد ما العميل يوافق عليها.'],
     'rv.statusHelp.changes_requested': ['Changes were asked for. The job waits for a new design or a corrected file.', 'اتطلبت تعديلات. الطلب مستني تصميم جديد أو ملف متصلّح.'],
 
@@ -91,7 +91,7 @@
     'rv.action.replaced': ['Uploaded a corrected file', 'رفع ملف متصلّح'],
     'rv.action.resent': ['Resent the proof link', 'بعت لينك البروفة تاني'],
     'rv.by.customer': ['Customer', 'العميل'],
-    'rv.by.shop': ['Shop', 'المحل'],
+    'rv.by.shop': ['Shop', 'إبداع'],
     'rv.via.checkout': ['at checkout', 'وقت الطلب'],
     'rv.via.proof-link': ['from the proof link', 'من لينك البروفة'],
     'rv.sampleAsked': ['Printed sample requested', 'طالب عينة مطبوعة'],
