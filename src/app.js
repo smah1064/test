@@ -4980,8 +4980,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   });
   app.put('/api/admin/accounts/settings', requireAdmin, express.json(), (req, res) => {
     const ship = accounting.money((req.body || {}).shippingCost);
-    if (ship === undefined) throw new HttpError(400, 'badCost');
-    const settings = store.mutate((db) => (db.accountSettings = { ...(db.accountSettings || {}), shippingCost: ship || 0 }));
+    // (An empty box is not 0: the owner types 0 for free shipping.)
+    if (ship === undefined || ship === null) throw new HttpError(400, 'badCost');
+    const settings = store.mutate((db) => (db.accountSettings = { ...(db.accountSettings || {}), shippingCost: ship }));
     res.json(settings);
   });
   const reportFor = (req) => {
