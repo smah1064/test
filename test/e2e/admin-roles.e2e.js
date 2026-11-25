@@ -455,6 +455,8 @@ test('Owner: Activity log (newest first, who, filters, CSV), Arabic and English'
       await page.fill('#act-to', '2026-11-25');
       await page.dispatchEvent('#act-to', 'change');
       await page.waitForFunction(() => document.getElementById('act-range').hidden);
+      // (The list is asked for again just after the range is accepted: wait for that request, not a fixed moment.)
+      for (let i = 0; i < 50 && !log.some((r) => r.p === '/api/admin/activity' && /from=2026-11-25/.test(r.q) && /to=2026-11-25/.test(r.q)); i++) await page.waitForTimeout(100);
       assert.ok(log.some((r) => r.p === '/api/admin/activity' && /from=2026-11-25/.test(r.q) && /to=2026-11-25/.test(r.q)));
       await page.selectOption('#act-who', '');
       await page.fill('#act-from', '');

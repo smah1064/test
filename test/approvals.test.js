@@ -164,7 +164,7 @@ test('flagged jobs go to a person first: failed checks, a sample, a big run', as
   const ch = await adminJson(`/api/admin/items/${a.id}/review`, { action: 'changes', note: 'The photo is too small for a mug.' });
   assert.strictEqual(ch.status, 200);
   assert.strictEqual((await ch.json()).status, 'changes_requested');
-  const pub = await (await fetch(`${base}/api/orders/${o.id}`)).json();
+  const pub = await (await fetch(`${base}/api/orders/${o.id}?k=${o.key}`)).json();
   assert.strictEqual(pub.items[0].status, 'changes_requested');
 });
 
@@ -194,7 +194,7 @@ test('a corrected file is a new version: kept apart, approved again by the custo
   assert.strictEqual((await admin(`/api/admin/files/${d.id}/front`)).status, 409);
 
   // The customer's link: the order page gives it while approval is waited for.
-  const pub = await (await fetch(`${base}/api/orders/${o.id}`)).json();
+  const pub = await (await fetch(`${base}/api/orders/${o.id}?k=${o.key}`)).json();
   const link = pub.items[0].proofUrl;
   assert.match(link, /^\/proof\?t=/);
   const t = link.split('t=')[1];
@@ -209,7 +209,7 @@ test('a corrected file is a new version: kept apart, approved again by the custo
   assert.strictEqual((await yes.json()).status, 'queued');
   // The link is used up.
   assert.strictEqual((await fetch(`${base}/api/proofs/${t}`)).status, 404);
-  const final = (await (await fetch(`${base}/api/orders/${o.id}`)).json()).items[0];
+  const final = (await (await fetch(`${base}/api/orders/${o.id}?k=${o.key}`)).json()).items[0];
   assert.strictEqual(final.approval.version, 2);
   assert.strictEqual(final.approval.via, 'proof-link');
   assert.deepStrictEqual(final.approvals.map((a) => a.action), ['approved', 'changes', 'approved']);
@@ -226,8 +226,14 @@ test('the customer can turn down a new proof with a comment', async () => {
   const t = re.proofLink.split('t=')[1];
   const no = await post(`/api/proofs/${t}`, { decision: 'reject', comment: 'Please keep the red colour' });
   assert.strictEqual(no.status, 200);
-  assert.strictEqual((await no.json()).status, 'changes_requested');
-  const item = (await (await fetch(`${base}/api/orders/${o.id}`)).json()).items[0];
+  const noBody = await no.json();
+  assert.strictEqual(noBody.status, 'changes_requested');
+  // The proof page has no order key: the answer says whether the customer can edit and resend it themselves.
+  assert.strictEqual(noBody.editable, true);
+  assert.ok(!('key' in noBody));
+  // …and the customer's own edit link for this item (the proof page sends them straight to the editor with it).
+  assert.match(noBody.reviseLink, /^\/editor\?design=[\w-]+&revise=[\w.-]+&rt=[\w-]+$/);
+  const item = (await (await fetch(`${base}/api/orders/${o.id}?k=${o.key}`)).json()).items[0];
   assert.strictEqual(item.approval, null);
   assert.strictEqual(item.approvals.at(-1).note, 'Please keep the red colour');
   assert.strictEqual((await admin(`/api/admin/files/${d.id}/front`)).status, 409);
@@ -292,6 +298,40 @@ test('accounts: "sold" counts pieces, not order lines', () => {
   assert.strictEqual(r.products.find((p) => p.productId === 'tshirt').units, 9);
 });
 
+test('a customer with no email gets the shop\'s edit link by WhatsApp: it opens that item only, with no amounts', async () => {
+  const qty = (n) => ({ quantities: [{ color: 'white', size: '11oz', qty: n }] });
+  const d = await makeDesign(qty(60));
+  const p1 = await proofOf(d.id);
+  const o = await (await order([d.id], { [d.id]: { proofHash: p1.proofHash } })).json();
+  const it = o.items[0];
+  assert.strictEqual(it.status, 'review');
+  // No edit link before the shop asks for changes.
+  let rv = (await (await admin('/api/admin/review')).json()).items.find((x) => x.id === it.id);
+  assert.strictEqual(rv.reviseLink, null);
+  assert.strictEqual((await adminJson(`/api/admin/items/${it.id}/review`, { action: 'changes', note: 'Make the text darker.' })).status, 200);
+  rv = (await (await admin('/api/admin/review')).json()).items.find((x) => x.id === it.id);
+  assert.match(rv.reviseLink, new RegExp(`^/editor\\?design=${d.id}&revise=${o.id}\\.${it.id}&rt=[A-Za-z0-9_-]{24}$`));
+  const rt = new URL(rv.reviseLink, base).searchParams.get('rt');
+  // The editor asks whether it still waits for changes, and the shop's note: with the link alone.
+  const state = await (await fetch(`${base}/api/orders/${o.id}/items/${it.id}/revise`, { headers: { 'x-revise-token': rt } })).json();
+  assert.deepStrictEqual(state, { status: 'changes_requested', note: 'Make the text darker.', by: 'shop' });
+  // The link opens neither the order page nor another item, and a wrong link nothing.
+  assert.strictEqual((await fetch(`${base}/api/orders/${o.id}`, { headers: { 'x-revise-token': rt } })).status, 403);
+  assert.strictEqual((await fetch(`${base}/api/orders/${o.id}/items/${it.id}/revise`, { headers: { 'x-revise-token': 'A'.repeat(24) } })).status, 403);
+  assert.strictEqual((await fetch(`${base}/api/orders/${o.id}/items/${it.id}/revise`)).status, 403);
+  // The new version, sent with the link alone: done, and the answer has no amounts and no key.
+  const nd = await makeDesign(qty(60));
+  const sent = await post(`/api/orders/${o.id}/items/${it.id}/revise`, { designId: nd.id }, { 'x-revise-token': rt });
+  assert.strictEqual(sent.status, 200, await sent.clone().text());
+  const body = await sent.json();
+  assert.deepStrictEqual(body, { ok: true, status: 'review' });
+  // Used once: the link ends with the new version.
+  assert.strictEqual((await post(`/api/orders/${o.id}/items/${it.id}/revise`, { designId: (await makeDesign(qty(60))).id }, { 'x-revise-token': rt })).status, 403);
+  const after = (await (await fetch(`${base}/api/orders/${o.id}?k=${o.key}`)).json()).items[0];
+  assert.strictEqual(after.designId, nd.id);
+  assert.strictEqual(after.status, 'review');
+});
+
 test('changes asked for: the customer edits the design and sends it again (same price), then approves its proof', async () => {
   const qty = (n) => ({ quantities: [{ color: 'white', size: '11oz', qty: n }] });
   const d = await makeDesign(qty(60));
@@ -299,7 +339,7 @@ test('changes asked for: the customer edits the design and sends it again (same 
   const o = await (await order([d.id], { [d.id]: { proofHash: p1.proofHash } })).json();
   const it = o.items[0];
   assert.strictEqual(it.status, 'review');
-  const revise = (designId, orderId = o.id, itemId = it.id) => post(`/api/orders/${orderId}/items/${itemId}/revise`, { designId });
+  const revise = (designId, orderId = o.id, itemId = it.id) => post(`/api/orders/${orderId}/items/${itemId}/revise?k=${o.key}`, { designId });
   // Only once the shop has asked for changes.
   const early = await makeDesign(qty(60));
   assert.strictEqual((await revise(early.id)).status, 409);
@@ -336,7 +376,7 @@ test('changes asked for: the customer edits the design and sends it again (same 
   const ap = await (await adminJson(`/api/admin/items/${it.id}/review`, { action: 'approve' })).json();
   assert.strictEqual(ap.status, 'awaiting_approval');
   assert.strictEqual((await admin(`/api/admin/files/${early.id}/front`)).status, 409);
-  const link = (await (await fetch(`${base}/api/orders/${o.id}`)).json()).items[0].proofUrl;
+  const link = (await (await fetch(`${base}/api/orders/${o.id}?k=${o.key}`)).json()).items[0].proofUrl;
   const t = link.split('t=')[1];
   const yes = await post(`/api/proofs/${t}`, { decision: 'approve', proofHash: p2.proofHash });
   assert.strictEqual(yes.status, 200, await yes.clone().text());
@@ -355,11 +395,11 @@ test('a revised item moves counted stock and can\'t switch to a sold-out colour 
   assert.strictEqual((await left())['white|11oz'], 10);
   assert.strictEqual((await adminJson(`/api/admin/items/${it.id}/review`, { action: 'changes', note: 'Black please.' })).status, 200);
   const black = await makeDesign(qtyC('black', 60));
-  const no = await post(`/api/orders/${o.id}/items/${it.id}/revise`, { designId: black.id });
+  const no = await post(`/api/orders/${o.id}/items/${it.id}/revise?k=${o.key}`, { designId: black.id });
   assert.strictEqual(no.status, 409, 'black is sold out');
   await put('/api/admin/catalog/mug', { variantStock: { 'white|11oz': 10, 'black|11oz': 60 } });
   const black2 = await makeDesign(qtyC('black', 60));
-  const ok = await post(`/api/orders/${o.id}/items/${it.id}/revise`, { designId: black2.id });
+  const ok = await post(`/api/orders/${o.id}/items/${it.id}/revise?k=${o.key}`, { designId: black2.id });
   assert.strictEqual(ok.status, 200, await ok.clone().text());
   const now = await left();
   assert.deepStrictEqual([now['white|11oz'], now['black|11oz']], [70, 0], 'white pieces back, black ones taken');

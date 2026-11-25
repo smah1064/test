@@ -29,6 +29,11 @@ Object.assign(window.POD_STRINGS, {
   'invoice.thanks': ['Thank you for your order! Every piece was printed just for you.', 'شكرًا لطلبك! كل قطعة في الطلب ده اتطبعت مخصوص عشانك.'],
   'invoice.print': ['Print / Save as PDF', 'طباعة / حفظ PDF'],
   'invoice.backToOrder': ['Back to order', 'الرجوع للطلب'],
+  // Opened without the order's key, or from an ended team link.
+  'invoice.linkNeededTitle': ['Open your invoice from your order link', 'افتح الفاتورة من لينك طلبك'],
+  'invoice.teamOverTitle': ['This team link has ended', 'لينك الفريق ده خلص'],
+  'team.toAdmin': ['Open the dashboard', 'افتح لوحة الإدارة'],
+  'invoice.noAmounts': ['The invoice shows amounts, which are hidden for your role.', 'الفاتورة فيها مبالغ، والمبالغ مخفية للدور بتاعك.'],
   // One artwork in several colours / sizes: a sub-row per line under the item.
   'invoice.qty.one': ['1 piece', 'قطعة واحدة'],
   'invoice.qty.two': ['2 pieces', 'قطعتين'],

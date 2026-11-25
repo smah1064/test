@@ -1118,7 +1118,7 @@
         try { sessionStorage.removeItem(KEY); sessionStorage.removeItem(DETAILS_KEY); } catch (e) { /* private mode */ }
         approvals.clear();
         saveApprovals();
-        location.href = '/order?id=' + encodeURIComponent(order.id) + '&new=1';
+        location.href = POD.orderPath('order', order.id, order.key) + '&new=1';
       }
       async function showPlacedOrder() {
         let k = null;

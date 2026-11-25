@@ -159,7 +159,10 @@ test('the print queue\'s payment lines: amounts when the answer has them, never 
   assert.match(ADMIN, /const totals = orders\.length \? AdminRoles\.anyAmount\(orders, 'total'\) : can\('orders\.amounts'\);/);
   assert.match(ADMIN, /\$\('orders-total-col'\)\.hidden = !totals;/);
   assert.match(ADMIN, /AdminRoles\.isAmount\(c\.spent\) \? t\('cu\.orders'/);
-  assert.match(ADMIN, /can\('orders\.amounts'\) \? `<a class="btn btn-sm" href="\/invoice/, 'the invoice (amounts) only for those who see amounts');
+  assert.match(ADMIN, /can\('orders\.amounts'\) \? `<button class="btn btn-sm" type="button" data-team-view="invoice"/, 'the invoice (amounts) only for those who see amounts');
+  // The customer page: a 30-minute team link for everyone with the orders tab (never the customer's own link).
+  assert.match(ADMIN, /data-team-view="order" data-order="\$\{id\}"/);
+  assert.doesNotMatch(ADMIN, /href="\/(order|invoice)\?id=/);
 });
 
 // ---------- A change waiting for an owner ----------

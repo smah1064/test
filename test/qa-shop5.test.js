@@ -83,6 +83,7 @@ function pod(lang) {
     esc: (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`),
     money: (n) => `EGP ${n}`,
     num: (n) => String(n),
+    orderKey: (id, k) => k || '', orderHeaders: (k) => (k ? { 'x-order-key': k } : {}), orderPath: (p, id, k) => `/${p}?id=${encodeURIComponent(id)}${k ? `&k=${k}` : ''}`,
     sep: () => (P.lang === 'ar' ? '، ' : ' · '),
     toast() {},
   };

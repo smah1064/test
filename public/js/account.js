@@ -182,7 +182,7 @@
       </div>`;
   }
   function orderCard(o) {
-    const href = `/order?id=${encodeURIComponent(o.id)}`;
+    const href = POD.orderPath('order', o.id, o.key);
     const busyNow = reo[o.id] && reo[o.id].busy;
     const pics = o.items.map((i) => i.sides && i.sides[0] && i.sides[0].previewUrl).filter(Boolean);
     return `
@@ -196,7 +196,7 @@
         <div class="acct-order-total">${esc(money(o.total))}</div>
         <div class="acct-order-actions">
           <a class="btn btn-sm" href="${href}">${esc(t('track.track'))}</a>
-          <a class="btn btn-sm" href="/invoice?id=${encodeURIComponent(o.id)}">${esc(t('track.invoice'))}</a>
+          <a class="btn btn-sm" href="${esc(POD.orderPath('invoice', o.id, o.key))}">${esc(t('track.invoice'))}</a>
           <button class="btn btn-sm btn-primary" type="button" data-reorder="${esc(o.id)}"${busyNow ? ' disabled' : ''}>${esc(t(busyNow ? 'track.reordering' : 'track.reorder'))}</button>
         </div>
         ${reo[o.id] && reo[o.id].pick ? pickHtml(o) : ''}
@@ -254,7 +254,7 @@
     reo[id] = { busy: true };
     renderOrders();
     try {
-      const r = await PODAftercare.reorder(id, itemIds && o && itemIds.length < o.items.length ? itemIds : undefined);
+      const r = await PODAftercare.reorder(id, itemIds && o && itemIds.length < o.items.length ? itemIds : undefined, o && o.key);
       if (r.added && !r.skipped.length) {
         location.href = '/cart?added=1';
         return;

@@ -162,7 +162,7 @@ test('ordered: one item with every photo, a ZIP for the print shop sorted by siz
   const r = accounting.report({ orders: [{ ...order, customer: { name: 'x' }, items: [item] }], costs: {}, expenses: [], settings: {} });
   assert.strictEqual(r.products.find((p) => p.productId === 'photoprints').units, 7);
   // Order again: the same photos, ready for the cart at today's prices.
-  const again = await (await post(`/api/orders/${order.id}/reorder`, {})).json();
+  const again = await (await post(`/api/orders/${order.id}/reorder?k=${order.key}`, {})).json();
   assert.strictEqual(again.skipped.length, 0);
   assert.strictEqual(again.items[0].price, item.price);
   assert.strictEqual(again.items[0].sizeLabel.en, item.size.label.en);

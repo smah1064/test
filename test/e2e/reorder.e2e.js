@@ -42,7 +42,7 @@ test('order again: tick only the mug, or use one item\'s own button', { timeout:
     const page = await ctx.newPage();
     const errors = [];
     page.on('pageerror', (e) => errors.push(String(e)));
-    await page.goto(`${srv.base}/order?id=${order.id}`);
+    await page.goto(`${srv.base}/order?id=${order.id}&k=${order.key}`);
     await page.waitForSelector('[data-act="reorder"]');
     // Each item has its own button.
     assert.strictEqual(await page.locator('[data-act="reorder-item"]').count(), 2);
@@ -57,7 +57,7 @@ test('order again: tick only the mug, or use one item\'s own button', { timeout:
     const cart = await page.evaluate(() => POD.getCart().map((i) => i.productId));
     assert.deepStrictEqual(cart, ['mug']);
     // One item's own button: the T-shirt joins it.
-    await page.goto(`${srv.base}/order?id=${order.id}`);
+    await page.goto(`${srv.base}/order?id=${order.id}&k=${order.key}`);
     await page.waitForSelector('[data-act="reorder-item"]');
     await page.locator('[data-act="reorder-item"]').first().click();
     await page.waitForURL(/\/cart/, { timeout: 30000 });

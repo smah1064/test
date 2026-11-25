@@ -4,6 +4,8 @@
   const { esc, t, tr } = POD;
   const content = document.getElementById('content');
   const token = new URLSearchParams(location.search).get('t') || '';
+  // The customer's proof link carries the order's key (the shop's own copy doesn't).
+  const linkKey = new URLSearchParams(location.search).get('k') || '';
   // view: 'loading' | 'gone' | 'failed' | 'replaced' | 'proof' | 'done'
   // 'replaced': the shop sent a newer proof while this page was open, so the answer could not be sent.
   // 'failed': the proof could not be loaded (no connection, the site busy): st.failure is the error, with "Try again".
@@ -12,7 +14,9 @@
   const st = { view: 'loading', data: null, error: null, failure: null, rejecting: false, sending: false, result: null, formError: '', ok: false, comment: '', unsent: '', editable: false };
 
   const icon = (d) => `<svg class="pf-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
-  const orderLink = (d) => (d && d.order && d.order.id ? `<a class="btn btn-primary" href="/order?id=${encodeURIComponent(d.order.id)}">${esc(t('proofPage.toOrder'))}</a>` : '');
+  // The order page: with its key when this device has it (the customer's own orders); else their email's link or account opens it.
+  const orderHref = (id) => POD.orderPath('order', id, POD.orderKey(id, linkKey));
+  const orderLink = (d) => (d && d.order && d.order.id ? `<a class="btn btn-primary" href="${esc(orderHref(d.order.id))}">${esc(t('proofPage.toOrder'))}</a>` : '');
   const statusText = (s) => { const k = 'item.' + s; return t(k) === k ? s : t(k); };
 
   function goneHtml(text) {
@@ -96,7 +100,7 @@
         <div class="card proof-done ${approved ? 'approved' : 'rejected'}" role="status" tabindex="-1" id="done">
           ${icon(approved ? '<circle cx="12" cy="12" r="10"/><path d="m7.5 12.5 3 3 6-6.5"/>' : '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>')}
           <h2 style="font-size:20px">${esc(t(approved ? 'proofPage.doneApprove' : st.editable ? 'proofPage.doneRejectEdit' : 'proofPage.doneReject'))}</h2>
-          ${!approved && st.editable ? `<a class="btn btn-primary" href="/order?id=${encodeURIComponent(d.order.id)}">${esc(t('proofPage.toOrderEdit'))}</a>` : orderLink(d)}
+          ${!approved && st.editable && st.reviseLink ? `<a class="btn btn-primary" href="${esc(st.reviseLink)}">${esc(t('item.editResend'))}</a>` : !approved && st.editable ? `<a class="btn btn-primary" href="${esc(orderHref(d.order.id))}">${esc(t('proofPage.toOrderEdit'))}</a>` : orderLink(d)}
         </div>`;
       document.getElementById('done').focus();
       return;
@@ -129,7 +133,12 @@
       });
       if (r && r.orderId && st.data.order && !st.data.order.id) st.data.order.id = r.orderId;
       // Changes asked for: an editor-made item can be edited and sent again from the order page (as that page offers).
-      if (decision === 'reject') st.editable = await canEditOnOrderPage(r && r.orderId);
+      if (decision === 'reject') st.editable = r && typeof r.editable === 'boolean' ? r.editable : await canEditOnOrderPage(r && r.orderId);
+      // Straight to the editor for this item (works on any phone, also without the order's link); the key goes
+      // along when this page has it, so the editor can go back to the order page afterwards.
+      const rl = r && typeof r.reviseLink === 'string' && /^\/editor\?design=[\w-]+&revise=[\w.-]+&rt=[\w-]+$/.test(r.reviseLink) ? r.reviseLink : null;
+      const k = st.data.order && st.data.order.id ? POD.orderKey(st.data.order.id, linkKey) : '';
+      st.reviseLink = rl ? rl + (k ? `&k=${encodeURIComponent(k)}` : '') : null;
       Object.assign(st, { view: 'done', result: decision, sending: false });
     } catch (e) {
       st.sending = false;
@@ -151,7 +160,7 @@
     const id = orderId || (st.data.order && st.data.order.id);
     if (!id) return false;
     try {
-      const o = await POD.api('/api/orders/' + encodeURIComponent(id));
+      const o = await POD.api('/api/orders/' + encodeURIComponent(id), { headers: POD.orderHeaders(POD.orderKey(id, linkKey)) });
       const it = (o.items || []).find((x) => x.id === st.data.item.id);
       return Boolean(it && it.status === 'changes_requested' && it.kind === 'product' && /^[0-9a-f-]{36}$/i.test(it.designId || ''));
     } catch (e) {

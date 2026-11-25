@@ -81,7 +81,7 @@ test('send again: same pieces are accepted after a price-list change; the sample
   assert.strictEqual((await admin('/api/admin/pricing/mug', { method: 'PUT', body: JSON.stringify({ basePrice: 999 }) })).status, 200);
   assert.strictEqual((await admin(`/api/admin/items/${it.id}/review`, { method: 'POST', body: JSON.stringify({ action: 'changes', note: 'Darker text' }) })).status, 200);
   const nd = await mug(60);
-  const r = await post(`/api/orders/${o.id}/items/${it.id}/revise`, { designId: nd.id });
+  const r = await post(`/api/orders/${o.id}/items/${it.id}/revise?k=${o.key}`, { designId: nd.id });
   assert.strictEqual(r.status, 200, await r.clone().text());
   const after = (await r.json()).items[0];
   assert.strictEqual(after.price, it.price, 'the price agreed at checkout stays');

@@ -863,6 +863,8 @@ window.POD_STRINGS = {
   'check.safe': ['{name} is very close to the edge. Move it inside the green line.', '{name} قريب أوي من الحافة. حرّكه جوّه الخط الأخضر.'],
   'revise.confirm': ['Please check before sending:\n\n{list}\n\nSend the new version anyway?', 'من فضلك راجع قبل ما تبعت:\n\n{list}\n\nتبعت النسخة الجديدة برضه؟'],
   'revise.done': ['This new version was already sent. Taking you back to your order…', 'النسخة الجديدة اتبعتت خلاص. راجعين لصفحة طلبك…'],
+  'revise.doneNoPage': ['This new version was already sent, or the shop has moved on.', 'النسخة الجديدة اتبعتت خلاص، أو إبداع كمل في الطلب.'],
+  'revise.sentNoPage': ['Sent! We’ll check your new version and send you its proof to approve.', 'اتبعت! هنراجع النسخة الجديدة ونبعتلك البروفة بتاعتها توافق عليها.'],
   'revise.shopNote': ['The shop asked: “{note}”. Make the change, then tap “Send the new version”.', 'إبداع طلب: “{note}”. اعمل التعديل وبعدين دوس “ابعت النسخة الجديدة”.'],
   'revise.yourNote': ['You asked: “{note}”. Make the change, then tap “Send the new version”.', 'إنت طلبت: “{note}”. اعمل التعديل وبعدين دوس “ابعت النسخة الجديدة”.'],
   'revise.send': ['Send the new version', 'ابعت النسخة الجديدة'],

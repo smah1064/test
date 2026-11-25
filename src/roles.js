@@ -73,6 +73,8 @@ const ROUTES = {
   'POST /api/admin/items/:itemId/resend-proof': { perm: 'review.work', label: L('Sent the proof again', 'بعت البروفة تاني') },
   'GET /api/admin/queue': { perm: 'orders.view' },
   'GET /api/admin/orders': { perm: 'orders.view' },
+  // A 30-minute link to the order page as the customer sees it (amounts only for people allowed them).
+  'POST /api/admin/orders/:orderId/team-view': { perm: 'orders.view', quiet: true, noBody: true },
   'PATCH /api/admin/orders/:orderId/shipment': { perm: 'orders.work', label: L('Shipping details', 'بيانات الشحن') },
   'PATCH /api/admin/orders/:orderId/payment': { perm: 'payments', label: L('Payment status', 'حالة الدفع') },
   'POST /api/admin/items/:itemId/redraw': { perm: 'production', label: L('Redrew a book', 'أعاد رسم كتاب') },
@@ -156,17 +158,35 @@ const MONEY_KEYS = new Set([
 ]);
 /**
  * A copy without amounts: money keys dropped at any depth ('shipping' only when it is a number).
- * A list's own `total` (the answer's top level: how many there are) is a count and stays.
+ * A list's own `total` (the answer's top level: how many there are) is a count and stays; an order's
+ * total (an order answer has a subtotal beside it) is money, even with its items list next to it.
  */
 function withoutAmounts(v, depth = 0) {
   if (depth > 12 || v === null || typeof v !== 'object') return v;
   if (Array.isArray(v)) return v.map((x) => withoutAmounts(x, depth + 1));
   const out = {};
+  const listCount = depth === 0 && !('subtotal' in v) && Object.values(v).some(Array.isArray);
   for (const [k, x] of Object.entries(v)) {
-    if (MONEY_KEYS.has(k) && !(depth === 0 && k === 'total' && Object.values(v).some(Array.isArray))) continue;
+    if (MONEY_KEYS.has(k) && !(k === 'total' && listCount)) continue;
     if (k === 'shipping' && typeof x === 'number') continue;
     out[k] = withoutAmounts(x, depth + 1);
   }
+  return out;
+}
+
+/**
+ * A copy without an order's secret keys (its customer link key, the cart's one-time key), at any depth:
+ * the dashboard never needs them, and a key would open the customer's order page.
+ */
+const SECRET_KEYS = new Set(['linkKey', 'orderKey']);
+function withoutSecrets(v, depth = 0) {
+  if (depth > 12 || v === null || typeof v !== 'object') return v;
+  if (Array.isArray(v)) return v.map((x) => withoutSecrets(x, depth + 1));
+  // (Plain objects only: a Date, a Buffer and the like go to JSON as they are.)
+  const proto = Object.getPrototypeOf(v);
+  if (proto !== Object.prototype && proto !== null) return v;
+  const out = {};
+  for (const [k, x] of Object.entries(v)) if (!SECRET_KEYS.has(k)) out[k] = withoutSecrets(x, depth + 1);
   return out;
 }
 
@@ -290,4 +310,4 @@ class ActivityLog {
   }
 }
 
-module.exports = { PERMS, ROLES, ROLE_PERMS, ROLE_NAMES, ROUTES, rolesOf, cleanRoles, permsOf, mainRole, routeOf, withoutAmounts, replay, shortBody, ActivityLog };
+module.exports = { PERMS, ROLES, ROLE_PERMS, ROLE_NAMES, ROUTES, rolesOf, cleanRoles, permsOf, mainRole, routeOf, withoutAmounts, withoutSecrets, replay, shortBody, ActivityLog };

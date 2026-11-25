@@ -49,6 +49,7 @@ Object.assign(window.POD_STRINGS, {
   'ship.badUrl': ['The tracking link must start with http:// or https://', 'لينك التتبع لازم يبدأ بـ http:// أو https://'],
   'ship.invoice': ['Invoice', 'الفاتورة'],
   'ship.orderPage': ['Customer page', 'صفحة العميل'],
+  'ship.orderPageHint': ['The order page as the customer sees it (amounts only if your role has them). The link works for 30 minutes.', 'صفحة الطلب زي ما العميل شايفها (المبالغ بس لو الدور بتاعك بيسمح). اللينك شغال ٣٠ دقيقة.'],
   'ship.shippedOn': ['Shipped {date}', 'اتشحن {date}'],
   'ship.deliveredOn': ['Delivered {date}', 'اتسلّم {date}'],
   'ship.mail': ['"On its way" email to the customer', 'إيميل "طلبك في الطريق" للعميل'],

@@ -67,7 +67,7 @@ test('a design id does not lead to its order; order again is limited per order',
   assert.ok(!JSON.stringify(got).includes(o.id), 'the design does not name the order');
   const codes = [];
   // (6 an hour: items can be ordered again one by one.)
-  for (let i = 0; i < 7; i++) codes.push((await post(`/api/orders/${o.id}/reorder`, {})).status);
+  for (let i = 0; i < 7; i++) codes.push((await post(`/api/orders/${o.id}/reorder?k=${o.key}`, {})).status);
   assert.deepStrictEqual(codes, [200, 200, 200, 200, 200, 200, 429]);
 });
 

@@ -64,6 +64,12 @@
       const { money, esc, t, tr } = POD;
       const params = new URLSearchParams(location.search);
       const content = document.getElementById('content');
+      const orderId = params.get('id') || '';
+      // The team's view (from the dashboard: a link that works for 30 minutes), or the customer's page and its key.
+      const team = /^[A-Za-z0-9_-]{20,600}\.[A-Za-z0-9_-]{43}$/.test(params.get('team') || '') ? params.get('team') : '';
+      let key = team ? '' : POD.orderKey(orderId, params.get('k'));
+      // Amounts on screen: the customer always; the team only when their role has them.
+      const showMoney = () => !(order && order.team && !order.team.amounts);
       // Per-item print steps; the last one fills when the whole order is delivered.
       const STEPS = ['queued', 'printing', 'printed', 'shipped', 'delivered'];
       const TRACK = ['placed', 'production', 'printed', 'shipped', 'delivered'];
@@ -206,12 +212,13 @@
         } else if (item.status === 'awaiting_approval') {
           const url = item.proofUrl || item.proofLink;
           const link = typeof url === 'string' && /^\/proof\?t=[\w-]+$/.test(url) ? url : null;
-          body = `<p>${esc(t('item.awaitingHint'))}</p>${link ? `<a class="btn btn-sm btn-primary" href="${esc(link)}">${esc(t('item.openProof'))}</a>` : `<p>${esc(t('item.awaitingLinkSent'))}</p>`}`;
+          // (The proof page's "back to my order" then works on any phone: the link carries the order's key.)
+          body = `<p>${esc(t('item.awaitingHint'))}</p>${team ? '' : link ? `<a class="btn btn-sm btn-primary" href="${esc(link + (key ? `&k=${encodeURIComponent(key)}` : ''))}">${esc(t('item.openProof'))}</a>` : `<p>${esc(t('item.awaitingLinkSent'))}</p>`}`;
         } else {
           const n = changesNote(item);
           // Editor-made items: the customer can make the change and send the new version themselves.
-          const editable = item.kind === 'product' && /^[0-9a-f-]{36}$/i.test(item.designId || '');
-          const edit = editable ? `<p>${esc(t('item.editHint'))}</p><a class="btn btn-sm btn-primary" href="/editor?design=${encodeURIComponent(item.designId)}&revise=${encodeURIComponent(order.id + '.' + item.id)}">${esc(t('item.editResend'))}</a>` : '';
+          const editable = !team && item.kind === 'product' && /^[0-9a-f-]{36}$/i.test(item.designId || '');
+          const edit = editable ? `<p>${esc(t('item.editHint'))}</p><a class="btn btn-sm btn-primary" href="/editor?design=${encodeURIComponent(item.designId)}&revise=${encodeURIComponent(order.id + '.' + item.id)}${key ? `&k=${encodeURIComponent(key)}` : ''}">${esc(t('item.editResend'))}</a>` : '';
           body = `${n ? `<p><strong>${esc(t(n.mine ? 'item.yourNote' : 'item.shopNote', { note: '\u2063' })).replace('\u2063', () => `<bdi>${esc(n.note)}</bdi>`)}</strong></p>` : ''}${edit}<p class="${editable ? 'muted small' : ''}">${esc(t(editable ? 'item.changesOrWait' : 'item.changesHint'))}</p>`;
         }
         return `<div class="item-proof-state ${item.status}">${body}</div>`;
@@ -237,6 +244,15 @@
           content.innerHTML = `<div class="card empty" role="alert" style="margin:40px auto;max-width:560px"><h2>${esc(t('net.title'))}</h2><p class="muted">${esc(t('net.text'))}</p><button class="btn btn-primary" type="button" data-act="retry">${esc(t('net.retry'))}</button></div>`;
           return;
         }
+        if (error && error.code === 'orderLinkNeeded') {
+          // The order's number without its key (a forwarded or typed link): where the customer finds the right one.
+          content.innerHTML = `<div class="card empty" role="alert" style="margin:40px auto;max-width:560px"><h2>${esc(t('order.linkNeededTitle'))}</h2><p class="muted">${esc(error.message)}</p><div class="row" style="justify-content:center;gap:8px;flex-wrap:wrap"><a class="btn btn-primary" href="/account">${esc(t('order.toAccount'))}</a><a class="btn" href="/">${esc(t('order.back'))}</a></div></div>`;
+          return;
+        }
+        if (error && team && error.status === 401) {
+          content.innerHTML = `<div class="card empty" role="alert" style="margin:40px auto;max-width:560px"><h2>${esc(t('team.overTitle'))}</h2><p class="muted">${esc(error.message)}</p><a class="btn btn-primary" href="/admin">${esc(t('team.toAdmin'))}</a></div>`;
+          return;
+        }
         if (error) {
           // A missing order: the heading already says so; other refusals show their message.
           content.innerHTML = `<div class="card empty" style="margin:40px auto;max-width:560px"><h2>${esc(t('order.notFound'))}</h2>${error.status === 404 ? '' : `<p class="muted">${esc(error.message)}</p>`}<a class="btn" href="/">${esc(t('order.back'))}</a></div>`;
@@ -252,8 +268,10 @@
         // The promised day (express or standard), shown at the top until the order is delivered.
         const arrives = o.delivery && dueDay(o) && !delivered
           ? `<p class="dlv-top">🚚 ${esc(t('delivery.line', { speed: t(o.delivery.speed === 'express' ? 'delivery.express' : 'delivery.standard'), date: POD.day(dueDay(o)) }))}</p>` : '';
-        const isNew = Boolean(params.get('new'));
+        const isNew = !team && Boolean(params.get('new'));
+        const money$ = showMoney();
         content.innerHTML = `
+          ${team ? teamBanner(o) : ''}
           <div class="page-head">
             ${isNew ? `
             <section class="card placed" aria-labelledby="placed-h">
@@ -269,13 +287,14 @@
             <h1>${esc(t('order.title', { n: o.number }))}</h1>
             <p class="muted">${esc(listed(POD.plural('order.meta', o.items.length, { status: t('order.' + shownStatus(o)), date: placedOn(o.createdAt) })))}</p>
             ${isNew ? '' : arrives}
+            ${team ? (money$ ? `<div class="order-actions"><a class="btn" href="/invoice?id=${encodeURIComponent(o.id)}&team=${encodeURIComponent(team)}">${esc(t('track.invoice'))}</a></div>` : '') : `
             <div class="order-actions">
-              <a class="btn" href="/invoice?id=${encodeURIComponent(o.id)}">${esc(t('track.invoice'))}</a>
+              <a class="btn" href="${esc(POD.orderPath('invoice', o.id, key))}">${esc(t('track.invoice'))}</a>
               <button class="btn" type="button" data-act="reorder" aria-expanded="${picking ? 'true' : 'false'}"${reo.busy ? ' disabled' : ''}>${esc(t(reo.busy ? 'track.reordering' : 'track.reorder'))}</button>
               <span class="muted small">${esc(t('track.reorderNote'))}</span>
             </div>
             ${picking ? pickHtml(o) : ''}
-            ${reorderNotice()}
+            ${reorderNotice()}`}
           </div>
           ${timelineHtml(o)}
           <div class="card order-items" style="margin-top:16px">
@@ -298,22 +317,23 @@
                   ${delivered ? '' : proofStateHtml(item)}
                   ${approvalHtml(item)}
                   <div class="status-steps">${STEPS.map((s, k) => `<div class="${k <= reached ? 'done' : ''}" title="${esc(t('item.' + s))}"></div>`).join('')}</div>
-                  ${o.items.length > 1 ? `<button class="btn btn-sm reo-one" type="button" data-act="reorder-item" data-item="${esc(item.id)}"${reo.busy ? ' disabled' : ''}>${esc(t('track.reorderItem'))}</button>` : ''}
+                  ${o.items.length > 1 && !team ? `<button class="btn btn-sm reo-one" type="button" data-act="reorder-item" data-item="${esc(item.id)}"${reo.busy ? ' disabled' : ''}>${esc(t('track.reorderItem'))}</button>` : ''}
                 </div>
-                <div class="price">${esc(money(item.price))}${pieces > 1 && item.unitPrice && POD.packCopies(item.quantities) == null ? `<div class="qty-each">${esc(t('qty.each', { price: money(item.unitPrice) }))}</div>` : ''}</div>
+                <div class="price">${money$ ? `${esc(money(item.price))}${pieces > 1 && item.unitPrice && POD.packCopies(item.quantities) == null ? `<div class="qty-each">${esc(t('qty.each', { price: money(item.unitPrice) }))}</div>` : ''}` : ''}</div>
               </div>`;
             }).join('')}
           </div>
           <div class="card summary" style="margin-top:16px;position:static">
+            ${money$ ? `
             <div class="line"><span>${esc(t('checkout.subtotal'))}</span><span>${esc(money(o.subtotal))}</span></div>
             ${o.discount || o.coupon ? `<div class="line discount-line"><span>${esc(t('coupon.discount'))} <bdi dir="ltr">${esc(o.coupon || '')}</bdi></span><span>${o.discount ? '-' + esc(money(o.discount)) : esc(t('coupon.freeShipping'))}</span></div>` : ''}
             ${shippingLines(o)}
-            <div class="line total"><span>${esc(t('checkout.total'))}</span><span>${esc(money(o.total))}</span></div>
+            <div class="line total"><span>${esc(t('checkout.total'))}</span><span>${esc(money(o.total))}</span></div>` : ''}
             ${o.delivery && dueDay(o) && !delivered ? `<p class="dlv-expected">🚚 ${esc(t('delivery.line', { speed: t(o.delivery.speed === 'express' ? 'delivery.express' : 'delivery.standard'), date: POD.day(dueDay(o)) }))}</p>` : ''}
-            ${o.payment && o.payment.method === 'cod' && o.payment.status !== 'paid' && !delivered ? `<div class="pay-box"><strong>${esc(t('order.payCod', { amount: money(o.total) }))}</strong><span>${esc(t('checkout.codText'))}</span></div>` : ''}
+            ${money$ && o.payment && o.payment.method === 'cod' && o.payment.status !== 'paid' && !delivered ? `<div class="pay-box"><strong>${esc(t('order.payCod', { amount: money(o.total) }))}</strong><span>${esc(t('checkout.codText'))}</span></div>` : ''}
             <p class="muted small" style="margin-bottom:0;overflow-wrap:anywhere">${deliverTo}</p>
           </div>
-          ${shopWa() ? `<div class="order-wa"><p>${esc(t('order.waText'))}</p><a class="btn btn-whatsapp" id="order-wa" target="_blank" rel="noopener" href="${esc(whatsappLink(o))}">${esc(t('order.waButton'))}</a></div>` : ''}`;
+          ${shopWa() && !team ? `<div class="order-wa"><p>${esc(t('order.waText'))}</p><a class="btn btn-whatsapp" id="order-wa" target="_blank" rel="noopener" href="${esc(whatsappLink(o))}">${esc(t('order.waButton'))}</a></div>` : ''}`;
       }
 
       /** Shipping, then the express fee on its own line. */
@@ -323,7 +343,26 @@
         return `<div class="line"><span>${esc(t('checkout.shipping'))}</span><span>${base ? esc(money(base)) : esc(t('free'))}</span></div>
           ${fee ? `<div class="line"><span>${esc(t('delivery.expressFee'))}</span><span>${esc(money(fee))}</span></div>` : ''}`;
       }
-      const pageLink = (o) => `${location.origin}/order?id=${encodeURIComponent(o.id)}`;
+      const pageLink = (o) => `${location.origin}${POD.orderPath('order', o.id, key)}`;
+      /** The team's view: what it is, until when it works, and (owners) the customer's own link to pass on. */
+      function teamBanner(o) {
+        const until = o.team && o.team.expiresAt ? new Date(o.team.expiresAt).toLocaleTimeString(POD.lang === 'ar' ? 'ar-EG' : 'en-GB', { hour: 'numeric', minute: '2-digit', timeZone: 'Africa/Cairo' }) : '';
+        return `
+          <div class="notice team-view" role="status" style="margin:16px 0">
+            <p style="margin:0"><strong>${esc(t('team.banner'))}</strong>${o.team && !o.team.amounts ? ` ${esc(t('team.noAmounts'))}` : ''}${until ? ` ${esc(t('team.until', { time: until }))}` : ''}</p>
+            ${o.customerLink ? `<button class="btn btn-sm" type="button" data-act="copy-customer" style="margin-top:8px">${esc(t('team.copyCustomer'))}</button>` : ''}
+          </div>`;
+      }
+      async function copyCustomerLink() {
+        const link = order && order.customerLink;
+        if (!link) return;
+        try {
+          await navigator.clipboard.writeText(/^https?:/.test(link) ? link : location.origin + link);
+          POD.toast(t('team.customerCopied'));
+        } catch (e) {
+          POD.toast(t('order.linkCopyFailed'));
+        }
+      }
       /** WhatsApp with the order link typed in: the customer picks their own chat ("Message yourself"). */
       const selfWhatsapp = (o) => `https://wa.me/?text=${encodeURIComponent(t('order.waSelf', { n: o.number, link: pageLink(o) }))}`;
       async function copyLink() {
@@ -351,7 +390,7 @@
           </div>`;
       }
       async function reorder(itemIds) {
-        if (reo.busy || !order) return;
+        if (reo.busy || !order || team) return;
         // Several items: first the list to tick (unless a single item's own button was used).
         if (!itemIds && order.items.length > 1 && !picking) {
           picking = new Set(order.items.map((it) => it.id));
@@ -364,7 +403,7 @@
         Object.assign(reo, { busy: true, added: 0, skipped: null, error: null });
         render();
         try {
-          const r = await PODAftercare.reorder(order.id, itemIds && itemIds.length < order.items.length ? itemIds : undefined);
+          const r = await PODAftercare.reorder(order.id, itemIds && itemIds.length < order.items.length ? itemIds : undefined, key);
           if (r.added && !r.skipped.length) {
             location.href = '/cart?added=1';
             return;
@@ -421,6 +460,7 @@
         }
         if (b.dataset.act === 'copy') copyNumber(b);
         if (b.dataset.act === 'copy-link') copyLink();
+        if (b.dataset.act === 'copy-customer') copyCustomerLink();
         if (b.dataset.act === 'retry') retry();
       });
       let retrying = false;
@@ -440,10 +480,19 @@
       async function load() {
         if (!shop) shop = await POD.loadCatalog().catch(() => null);
         try {
-          order = await POD.api('/api/orders/' + encodeURIComponent(params.get('id') || ''));
+          order = team
+            ? await POD.api('/api/orders/' + encodeURIComponent(orderId) + '/team', { headers: { 'x-team-view': team } })
+            : await POD.api('/api/orders/' + encodeURIComponent(orderId), { headers: POD.orderHeaders(key) });
           error = null;
+          if (!team && order.key && order.key !== key) key = order.key;
+          // The link in the address bar carries the key (copied from there, it still opens the order).
+          if (!team && key && new URLSearchParams(location.search).get('k') !== key) {
+            const u = new URL(location.href);
+            u.searchParams.set('k', key);
+            history.replaceState(null, '', u.toString());
+          }
           // Just placed here: remembered on this device (the cart does it too; this covers every way in).
-          if (params.get('new')) PODAftercare.rememberOrder(order);
+          if (!team && params.get('new')) PODAftercare.rememberOrder(order);
           // Back from the editor with a new version of an item.
           if (params.get('revised')) {
             POD.toast(t('item.revisedSent'));
@@ -452,18 +501,26 @@
             history.replaceState(null, '', u.toString());
           }
         } catch (e) {
-          // A failed refresh (weak signal) keeps showing the order already loaded.
-          if (order && e.status !== 404) return;
+          // A failed refresh (weak signal) keeps showing the order already loaded (not an ended team link).
+          if (order && e.status !== 404 && !(team && e.status === 401)) return;
+          if (team && e.status === 401) order = null;
           const stillOffline = Boolean(error && error.offline);
-          error = { status: e.status, message: e.message, offline: !e.status || e.status >= 500 };
+          error = { status: e.status, code: e.code, message: e.message, offline: !e.status || e.status >= 500 };
+          // Refused (no key, or an ended team link): asking again every 30 seconds changes nothing, and the
+          // message would be read out again each time.
+          if (e.code === 'orderLinkNeeded' || (team && e.status === 401)) clearInterval(poll);
           // (Still no connection: the message on screen stays as it is, not read out again every 30 seconds.)
           if (stillOffline && error.offline) return;
         }
         render();
       }
+      const poll = setInterval(load, 30000);
       await load();
-      setInterval(load, 30000);
-      document.addEventListener('pod:langchange', render);
+      // (The site's own message about a refusal comes in the language it was asked in: asked again in the new one.)
+      document.addEventListener('pod:langchange', () => {
+        if (!order && error && error.status && error.status !== 404) load();
+        else render();
+      });
     })();
   </script>
 </body>

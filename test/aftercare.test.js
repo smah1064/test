@@ -61,7 +61,7 @@ test('tracking, shipping details, delivery, payment and order again', async () =
   const order = await o.json();
 
   // A new order: placed, nothing else yet; invoice number and shop details for the invoice.
-  let got = await (await fetch(`${base}/api/orders/${order.id}`)).json();
+  let got = await (await fetch(`${base}/api/orders/${order.id}?k=${order.key}`)).json();
   assert.strictEqual(got.status, 'received');
   assert.deepStrictEqual(got.timeline.map((x) => x.step), ['placed', 'production', 'printed', 'shipped', 'delivered']);
   assert.ok(got.timeline[0].at && got.timeline.slice(1).every((x) => x.at === null));
@@ -76,7 +76,7 @@ test('tracking, shipping details, delivery, payment and order again', async () =
 
   // Production steps.
   for (const it of order.items) assert.strictEqual((await admin('PATCH', `/api/admin/items/${it.id}`, { status: 'printing' })).status, 200);
-  got = await (await fetch(`${base}/api/orders/${order.id}`)).json();
+  got = await (await fetch(`${base}/api/orders/${order.id}?k=${order.key}`)).json();
   assert.strictEqual(got.status, 'in_production');
   assert.ok(got.timeline[1].at);
   assert.strictEqual(got.timeline[2].at, null);
@@ -87,7 +87,7 @@ test('tracking, shipping details, delivery, payment and order again', async () =
   assert.strictEqual(r.status, 200);
   // The last item marked shipped ships the order.
   for (const it of order.items) await admin('PATCH', `/api/admin/items/${it.id}`, { status: 'shipped' });
-  got = await (await fetch(`${base}/api/orders/${order.id}`)).json();
+  got = await (await fetch(`${base}/api/orders/${order.id}?k=${order.key}`)).json();
   assert.strictEqual(got.status, 'shipped');
   assert.strictEqual(got.shipment.courier, 'Bosta');
   assert.strictEqual(got.shipment.trackingNumber, 'BX123');
@@ -97,14 +97,14 @@ test('tracking, shipping details, delivery, payment and order again', async () =
   r = await admin('PATCH', `/api/admin/orders/${order.id}/shipment`, { delivered: true });
   assert.strictEqual((await r.json()).status, 'delivered');
   assert.strictEqual((await admin('PATCH', `/api/admin/orders/${order.id}/payment`, { status: 'paid' })).status, 200);
-  got = await (await fetch(`${base}/api/orders/${order.id}`)).json();
+  got = await (await fetch(`${base}/api/orders/${order.id}?k=${order.key}`)).json();
   assert.strictEqual(got.status, 'delivered');
   assert.ok(got.timeline[4].at);
   assert.strictEqual(got.payment.status, 'paid');
   assert.strictEqual((await admin('PATCH', `/api/admin/orders/${order.id}/payment`, { status: 'free' })).status, 400);
 
   // Order again: exact copies with their own files, ready for the cart, at today's prices.
-  r = await json('POST', `/api/orders/${order.id}/reorder`);
+  r = await json('POST', `/api/orders/${order.id}/reorder?k=${order.key}`);
   assert.strictEqual(r.status, 200);
   const again = await r.json();
   assert.strictEqual(again.items.length, 2);
@@ -125,14 +125,14 @@ test('tracking, shipping details, delivery, payment and order again', async () =
   assert.strictEqual((await json('POST', '/api/orders/00000000-0000-4000-8000-000000000000/reorder')).status, 404);
 
   // Only some items again: the second one alone, copied with its own files; an unknown item is refused.
-  const one = await json('POST', `/api/orders/${order.id}/reorder`, { items: [got.items[1].id] });
+  const one = await json('POST', `/api/orders/${order.id}/reorder?k=${order.key}`, { items: [got.items[1].id] });
   assert.strictEqual(one.status, 200);
   const oneAgain = await one.json();
   assert.strictEqual(oneAgain.items.length, 1);
   assert.strictEqual(oneAgain.items[0].price, got.items[1].price);
   const copied = fs.readFileSync(path.join(dataDir, 'files', oneAgain.items[0].designId, 'front-print.png'));
   assert.ok(copied.equals(fs.readFileSync(path.join(dataDir, 'files', ids[1], 'front-print.png'))));
-  assert.strictEqual((await json('POST', `/api/orders/${order.id}/reorder`, { items: ['not-an-item'] })).status, 400);
+  assert.strictEqual((await json('POST', `/api/orders/${order.id}/reorder?k=${order.key}`, { items: ['not-an-item'] })).status, 400);
 });
 
 test('drafts kept on the account (open on another device)', async () => {

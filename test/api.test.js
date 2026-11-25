@@ -196,7 +196,7 @@ test('places an order with one print job per design and works through the queue 
   assert.ok(q.printing.some((i) => i.id === second.id));
   assert.ok(q.toShip.some((i) => i.id === first.id));
 
-  const pub = await (await fetch(`${base}/api/orders/${order.id}`)).json();
+  const pub = await (await fetch(`${base}/api/orders/${order.id}?k=${order.key}`)).json();
   assert.strictEqual(pub.status, 'in_production');
   assert.deepStrictEqual(pub.items[0].history.map((h) => h.status), ['queued', 'printing', 'printed']);
 });

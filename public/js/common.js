@@ -1165,6 +1165,28 @@
     return z.cm || [145, 100];
   };
 
+  // ---------- An order's secret key (src/app.js: orderOpenFor) ----------
+  // An order placed since the keys came in opens with its key: the customer's links carry it (?k=), and a guest's
+  // orders kept on this device have it in their link (i18n-aftercare.js, "pod-my-orders"). The team works with
+  // order numbers only, which alone no longer open an order. Older orders open with their number.
+  const ORDER_KEY_RE = /^[A-Za-z0-9_-]{16,64}$/;
+  /** The key for order `id`: `fromLink` (this page's ?k=) when it looks right, else the one kept on this device, else ''. */
+  function orderKey(id, fromLink) {
+    if (typeof fromLink === 'string' && ORDER_KEY_RE.test(fromLink)) return fromLink;
+    try {
+      const list = JSON.parse(localStorage.getItem('pod-my-orders') || '[]');
+      for (const o of Array.isArray(list) ? list : []) {
+        const m = o && typeof o.link === 'string' && /^\/order\?id=([\w-]+)&k=([A-Za-z0-9_-]{16,64})$/.exec(o.link);
+        if (m && m[1] === String(id)) return m[2];
+      }
+    } catch (e) { /* private mode */ }
+    return '';
+  }
+  /** Headers that open the order with its key ({} without one). */
+  const orderHeaders = (key) => (typeof key === 'string' && ORDER_KEY_RE.test(key) ? { 'x-order-key': key } : {});
+  /** "/order?id=…&k=…" (or /invoice): the key only when there is one. */
+  const orderPath = (page, id, key) => `/${page}?id=${encodeURIComponent(id)}${typeof key === 'string' && ORDER_KEY_RE.test(key) ? `&k=${encodeURIComponent(key)}` : ''}`;
+
   window.POD = {
     get lang() {
       return lang;
@@ -1175,5 +1197,6 @@
     productState, backOnDay, backText, similarProducts, similarHref, similarLabel, productHref, showUnavailable,
     getCart, setCart, getSaved, setSaved, moveItem, designFor, putFile, updateCartBadge, toast, esc, api, drafts, forgetPersonal,
     sizedArea, sizeView, canvasEdges, drawPattern, wrapOffsets, fabricCm,
+    orderKey, orderHeaders, orderPath,
   };
 })();

@@ -129,6 +129,8 @@
 
     'rv.link': ['Customer proof link', 'لينك البروفة للعميل'],
     'rv.linkNone': ['No proof link yet.', 'مفيش لينك بروفة لسه.'],
+    'rv.editLink': ['Customer\'s link to edit and send it again', 'لينك العميل يعدّل ويبعت تاني'],
+    'rv.editLinkHelp': ['For a customer with no email: send it on WhatsApp. It opens this design in the editor only.', 'لعميل من غير إيميل: ابعتهوله على واتساب. بيفتح التصميم ده في المحرر بس.'],
     'rv.copy': ['Copy', 'انسخ'],
     'rv.copied': ['Link copied', 'اللينك اتنسخ'],
     'rv.resend': ['Resend proof link', 'ابعت لينك البروفة تاني'],

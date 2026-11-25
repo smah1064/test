@@ -269,11 +269,21 @@ async function sendWhatsApp(cfg, text) {
   if (!res.ok || /error|invalid|not\s+allowed/i.test(body.replace(/<[^>]+>/g, ' ').slice(0, 2000))) throw new Error(`CallMeBot ${res.status}: ${body.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160)}`);
 }
 
+/**
+ * The customer's link to their order page (or invoice): with the order's secret key, which the team never
+ * sees (an order placed before the keys came in opens with its number, as its earlier emails do).
+ */
+function orderLink(base, order, page = 'order') {
+  if (!base || !order || !order.id) return '';
+  const b = String(base).replace(/\/+$/, '');
+  return `${b}/${page}?id=${encodeURIComponent(order.id)}${order.linkKey ? `&k=${encodeURIComponent(order.linkKey)}` : ''}`;
+}
+
 /** Send every configured notification for a new order. Returns a result per channel. */
 async function orderPlaced(order, { origin, lang, admin = true, customer = true }) {
   const cfg = config();
   const base = cfg.siteUrl || origin || '';
-  const links = { admin: base ? `${base}/admin` : '', track: base ? `${base}/order?id=${order.id}` : '' };
+  const links = { admin: base ? `${base}/admin` : '', track: orderLink(base, order) };
   const adminLang = cfg.adminLang;
   const custLang = lang === 'en' ? 'en' : 'ar';
   const result = {};
@@ -463,8 +473,7 @@ async function orderShipped(order, { siteUrl } = {}) {
     if (!to) return { email: 'skipped', reason: 'noEmail' };
     if (!emailReady()) return { email: 'skipped', reason: 'emailOff' };
     const base = (cfg.siteUrl || String(siteUrl || '')).replace(/\/+$/, '');
-    const id = encodeURIComponent(order.id);
-    const links = { track: base ? `${base}/order?id=${id}` : '', invoice: base ? `${base}/invoice?id=${id}` : '' };
+    const links = { track: orderLink(base, order), invoice: orderLink(base, order, 'invoice') };
     const lang = order.lang === 'en' ? 'en' : 'ar';
     const { subject, html, text } = shippedContent(order, links, lang);
     await sendEmail(cfg, to, subject, html, text);
@@ -480,13 +489,15 @@ async function orderShipped(order, { siteUrl } = {}) {
  * the shop asking for changes (kind 'changes'), with the shop's note and the
  * link. In the customer's language. Never throws. Returns like orderShipped.
  */
-async function proofMessage(order, item, { kind = 'proof', note = '', link = '' } = {}) {
+async function proofMessage(order, item, { kind = 'proof', note = '', link = '', orderLink: toOrder = '' } = {}) {
   try {
     const cfg = config();
     const to = order && order.customer && String(order.customer.email || '').trim();
     if (!to) return { email: 'skipped', reason: 'noEmail' };
     if (!emailReady()) return { email: 'skipped', reason: 'emailOff' };
     const ar = order.lang !== 'en';
+    // (The order page too, when the button opens the proof: its link carries the order's key.)
+    const orderTo = /^https?:\/\//.test(toOrder) && toOrder !== link ? toOrder : '';
     const h = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const product = item && item.productName ? tr(item.productName, ar ? 'ar' : 'en') : '';
     const T = ar
@@ -495,6 +506,7 @@ async function proofMessage(order, item, { kind = 'proof', note = '', link = '' 
         lead: kind === 'proof' ? `جهّزنالك بروفة جديدة لـ ${product}. راجعها ووافق عليها عشان نبدأ الطباعة.` : `راجعنا ${product} ومحتاج تعديل قبل ما نطبعه.`,
         button: kind === 'proof' ? 'راجع البروفة' : 'افتح الطلب',
         noteLabel: 'رسالة من إبداع:',
+        order: 'صفحة طلبك:',
         screen: 'دي بروفة على الشاشة؛ ألوان الطباعة ممكن تفرق شوية عن اللي شايفه على شاشتك.',
       }
       : {
@@ -502,6 +514,7 @@ async function proofMessage(order, item, { kind = 'proof', note = '', link = '' 
         lead: kind === 'proof' ? `We have a new proof for your ${product}. Please check and approve it so we can print.` : `We checked your ${product} and something needs changing before we print.`,
         button: kind === 'proof' ? 'Check the proof' : 'Open your order',
         noteLabel: 'Message from the print shop:',
+        order: 'Your order page:',
         screen: 'This is a screen proof; printed colours can look a little different from your screen.',
       };
     const dir = ar ? 'rtl' : 'ltr';
@@ -509,8 +522,9 @@ async function proofMessage(order, item, { kind = 'proof', note = '', link = '' 
       <p>${h(T.lead)}</p>
       ${note ? `<p><strong>${h(T.noteLabel)}</strong><br><span dir="auto">${h(note).replace(/\n/g, '<br>')}</span></p>` : ''}
       ${/^https?:\/\//.test(link) ? `<p><a href="${h(link)}" style="display:inline-block;background:#ca3d1a;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:bold">${h(T.button)}</a></p>` : ''}
+      ${orderTo ? `<p style="font-size:14px">${h(T.order)} <a href="${h(orderTo)}">${h(orderTo)}</a></p>` : ''}
       <p style="color:#666;font-size:13px">${h(T.screen)}</p></div>`;
-    const text = [T.lead, note ? `${T.noteLabel} ${note}` : '', link, T.screen].filter(Boolean).join('\n\n');
+    const text = [T.lead, note ? `${T.noteLabel} ${note}` : '', link, orderTo ? `${T.order} ${orderTo}` : '', T.screen].filter(Boolean).join('\n\n');
     await sendEmail(cfg, to, T.subject, html, text);
     return { email: 'sent' };
   } catch (e) {
@@ -519,4 +533,4 @@ async function proofMessage(order, item, { kind = 'proof', note = '', link = '' 
   }
 }
 
-module.exports = { status, orderPlaced, orderShipped, proofMessage, adminTest, revisionSent, rightsRequest, revisionText, emailReady, emailTo, shopWhatsApp: () => config().shopWhatsApp, siteUrl: () => config().siteUrl };
+module.exports = { orderLink, status, orderPlaced, orderShipped, proofMessage, adminTest, revisionSent, rightsRequest, revisionText, emailReady, emailTo, shopWhatsApp: () => config().shopWhatsApp, siteUrl: () => config().siteUrl };

@@ -131,6 +131,14 @@ const MESSAGES = {
   designGone: { en: 'A design in your cart no longer exists', ar: 'فيه تصميم في السلة مبقاش موجود' },
   designOrdered: { en: 'A design in your cart was already ordered', ar: 'فيه تصميم في السلة اتطلب خلاص' },
   orderNotFound: { en: 'Order not found', ar: 'الطلب ده مش موجود' },
+  orderLinkNeeded: {
+    en: 'To keep your order private, it opens from the link in your order email (or the one you sent yourself on WhatsApp), or from your account if you were signed in when you ordered.',
+    ar: 'عشان طلبك يفضل خاص بيك، بيتفتح من اللينك اللي في إيميل الطلب (أو اللي بعته لنفسك على واتساب)، أو من حسابك لو كنت مسجل دخول وانت بتطلب.',
+  },
+  teamViewOver: {
+    en: 'This team link has ended: they work for 30 minutes, and only while you are signed in to the dashboard. Open the order again from the dashboard.',
+    ar: 'لينك الفريق ده خلص: بيشتغل ٣٠ دقيقة بس، وطول ما انت مسجل دخول في لوحة الإدارة. افتح الطلب تاني من لوحة الإدارة.',
+  },
   wrongPassword: { en: 'Wrong shared owner password', ar: 'كلمة السر المشتركة غلط' },
   tooManyLogins: { en: 'Too many wrong passwords. Try again in {min} min.', ar: 'محاولات غلط كتير. جرّب تاني بعد {min} دقيقة.' },
   tooManyLoginsTwo: { en: 'Too many wrong passwords. Try again in {min} min.', ar: 'محاولات غلط كتير. جرّب تاني بعد دقيقتين.' },

@@ -168,9 +168,11 @@
       }
       const idx = Number(params.get('cart'));
       const cart = POD.getCart();
-      // From the order page's "Edit the design and send it again": ?revise=<order id>.<item id>.
+      // From the order page's "Edit the design and send it again": ?revise=<order id>.<item id>&k=<the order's key>.
       const rv = /^([0-9a-f-]{36})\.([0-9a-f-]{36})$/i.exec(params.get('revise') || '');
-      if (rv) st.revise = { orderId: rv[1], itemId: rv[2] };
+      // (Or the item's own edit link from the shop or the proof page: ?rt=…, no order key needed.)
+      const rt = /^[A-Za-z0-9_-]{20,40}$/.test(params.get('rt') || '') ? params.get('rt') : '';
+      if (rv) st.revise = { orderId: rv[1], itemId: rv[2], key: POD.orderKey(rv[1], params.get('k')), rt };
       // (A product the shop doesn't sell now opens another one: that is a new design, not this cart item.)
       if (!rv && st.product.id === saved.productId && params.get('cart') !== null && Number.isInteger(idx) && cart[idx] && cart[idx].designId === saved.id) {
         st.editingCartIndex = idx;
@@ -1043,7 +1045,7 @@
       try { localStorage.removeItem('pod-rescue:' + st.product.id); } catch (err) { /* private mode */ }
       // The same product, colour and size, empty: not the ready-made design, shared design or cart item it came from.
       const u = new URL(location.href);
-      for (const k of ['cart', 'library', 'share', 'design', 'revise', 'name']) u.searchParams.delete(k);
+      for (const k of ['cart', 'library', 'share', 'design', 'revise', 'k', 'rt', 'name']) u.searchParams.delete(k);
       u.searchParams.set('product', st.product.id);
       u.searchParams.set('color', st.colorId);
       if (st.sizePicked) u.searchParams.set('size', st.sizeId);
@@ -1079,7 +1081,7 @@
       // Their own design: the same product without the shared / ready design (nothing here was changed).
       st.dirty = false;
       const u = new URL(location.href);
-      for (const k of ['cart', 'library', 'share', 'design', 'revise', 'name', 'color', 'size']) u.searchParams.delete(k);
+      for (const k of ['cart', 'library', 'share', 'design', 'revise', 'k', 'rt', 'name', 'color', 'size']) u.searchParams.delete(k);
       u.searchParams.set('product', st.product.id);
       location.href = u.toString();
     });
@@ -5604,11 +5606,18 @@
       if (st.revise) {
         await POD.api(`/api/orders/${encodeURIComponent(st.revise.orderId)}/items/${encodeURIComponent(st.revise.itemId)}/revise`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...reviseHeaders() },
           body: JSON.stringify({ designId: design.id }),
         });
         st.dirty = false;
-        location.href = `/order?id=${encodeURIComponent(st.revise.orderId)}&revised=1`;
+        // Back to the order page when this browser can open it (its key, the account, or the browser it was
+        // ordered from); else (an edit link from the shop) a thank-you and the shop's home page.
+        const back = st.revise.key ? true : await POD.api('/api/orders/' + encodeURIComponent(st.revise.orderId)).then(() => true, () => false);
+        if (back) location.href = `${POD.orderPath('order', st.revise.orderId, st.revise.key)}&revised=1`;
+        else {
+          alert(t('revise.sentNoPage'));
+          location.href = '/';
+        }
         return;
       }
 
@@ -5851,21 +5860,23 @@
     draftChoice(lost.length);
   }
   if (fromShare) { toast(t('share.loaded')); scheduleDraft(); }
+  /** What opens "send a new version": the order's key and/or the item's own edit link. */
+  function reviseHeaders() {
+    return { ...POD.orderHeaders(st.revise.key), ...(st.revise.rt ? { 'x-revise-token': st.revise.rt } : {}) };
+  }
   if (st.revise) {
     if ($('save-draft')) $('save-draft').hidden = true; // one way out: send the new version
     // Still waiting for a new version? (Back after sending, or the shop has moved on): if not, back to the order.
-    POD.api('/api/orders/' + encodeURIComponent(st.revise.orderId)).then((order) => {
-      const item = (order.items || []).find((it) => it.id === st.revise.itemId);
-      if (!item || item.status !== 'changes_requested') {
-        toast(t('revise.done'));
+    POD.api(`/api/orders/${encodeURIComponent(st.revise.orderId)}/items/${encodeURIComponent(st.revise.itemId)}/revise`, { headers: reviseHeaders() }).then((state) => {
+      if (!state || state.status !== 'changes_requested') {
+        toast(t(st.revise.key ? 'revise.done' : 'revise.doneNoPage'));
         st.dirty = false;
-        setTimeout(() => { location.href = '/order?id=' + encodeURIComponent(st.revise.orderId); }, 2500);
+        setTimeout(() => { location.href = st.revise.key ? POD.orderPath('order', st.revise.orderId, st.revise.key) : '/'; }, 2500);
         return;
       }
       // The shop's note, kept in view while the customer makes the change.
-      const hist = Array.isArray(item.approvals) ? item.approvals : [];
-      const last = [...hist].reverse().find((h) => h && (h.action === 'changes' || h.action === 'rejected'));
-      const note = (last && last.note) || '';
+      const last = { by: state.by };
+      const note = state.note || '';
       const bar = document.createElement('div');
       bar.className = 'draft-bar revise-bar';
       bar.setAttribute('role', 'status');

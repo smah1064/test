@@ -79,7 +79,7 @@ test('express delivery adds its fee to the shipping, and the order keeps the spe
   assert.strictEqual(order.delivery.speed, 'express');
   assert.strictEqual(order.delivery.fee, expressFee());
   assert.match(order.delivery.by, /^\d{4}-\d{2}-\d{2}$/);
-  const again = await (await fetch(`${base}/api/orders/${order.id}`)).json();
+  const again = await (await fetch(`${base}/api/orders/${order.id}?k=${order.key}`)).json();
   assert.deepStrictEqual(again.delivery, order.delivery);
   // The shop sees it too.
   const { token } = await (await post('/api/admin/login', { password: 'secret' })).json();

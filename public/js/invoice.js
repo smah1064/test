@@ -1,10 +1,13 @@
-/* Printable invoice for one order: /invoice?id=<orderId> (the order id is the secret). */
+/* Printable invoice for one order: /invoice?id=<orderId>&k=<the order's key> (orders placed before the keys
+ * came in open with their id alone), or the team's view from the dashboard: /invoice?id=…&team=<30-minute link>. */
 (function () {
   'use strict';
 
   const { money, esc, t, tr } = POD;
   const params = new URLSearchParams(location.search);
   const orderId = params.get('id') || '';
+  const team = /^[A-Za-z0-9_-]{20,600}\.[A-Za-z0-9_-]{43}$/.test(params.get('team') || '') ? params.get('team') : '';
+  let key = team ? '' : POD.orderKey(orderId, params.get('k'));
   const content = document.getElementById('content');
   const actions = document.getElementById('inv-actions');
   const FALLBACK_SHOP = { name: { en: 'ebda3', ar: 'إبداع' }, url: null, whatsapp: null, email: null };
@@ -131,7 +134,14 @@
       actions.hidden = true;
       document.title = t('invoice.pageTitle');
       const why = errorText(error);
-      content.innerHTML = `<div class="card empty" style="margin-top:32px"><h2>${esc(t('order.notFound'))}</h2>${why ? `<p class="muted">${esc(why)}</p>` : ''}<a class="btn" href="/">${esc(t('order.back'))}</a></div>`;
+      const title = error.code === 'orderLinkNeeded' ? 'invoice.linkNeededTitle' : team && error.status === 401 ? 'invoice.teamOverTitle' : 'order.notFound';
+      content.innerHTML = `<div class="card empty" style="margin-top:32px"><h2>${esc(t(title))}</h2>${why ? `<p class="muted">${esc(why)}</p>` : ''}<a class="btn" href="${team ? '/admin' : '/'}">${esc(t(team ? 'team.toAdmin' : 'order.back'))}</a></div>`;
+      return;
+    }
+    if (order.team && !order.team.amounts) {
+      // (The dashboard offers the invoice only to people allowed amounts; a role changed since lands here.)
+      actions.hidden = true;
+      content.innerHTML = `<div class="card empty" style="margin-top:32px"><h2>${esc(t('invoice.title'))}</h2><p class="muted">${esc(t('invoice.noAmounts'))}</p></div>`;
       return;
     }
     const o = order;
@@ -157,7 +167,7 @@
     ].filter(Boolean).join('');
 
     document.title = t('invoice.docTitle', { n: inv });
-    document.getElementById('inv-back').href = '/order?id=' + encodeURIComponent(o.id || orderId);
+    document.getElementById('inv-back').href = team ? `/order?id=${encodeURIComponent(o.id || orderId)}&team=${encodeURIComponent(team)}` : POD.orderPath('order', o.id || orderId, key);
     actions.hidden = false;
 
     content.innerHTML = `
@@ -230,7 +240,10 @@
 
   async function load() {
     try {
-      order = await POD.api('/api/orders/' + encodeURIComponent(orderId));
+      order = team
+        ? await POD.api('/api/orders/' + encodeURIComponent(orderId) + '/team', { headers: { 'x-team-view': team } })
+        : await POD.api('/api/orders/' + encodeURIComponent(orderId), { headers: POD.orderHeaders(key) });
+      if (!team && order.key) key = order.key;
       error = null;
     } catch (e) {
       error = e;

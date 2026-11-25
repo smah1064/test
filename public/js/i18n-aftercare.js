@@ -5,6 +5,17 @@
   'use strict';
   const S = window.POD_STRINGS || (window.POD_STRINGS = {});
   Object.assign(S, {
+    // An order opened without its key (its number alone): where the customer finds its link.
+    'order.linkNeededTitle': ['Open your order from its link', 'افتح طلبك من اللينك بتاعه'],
+    'order.toAccount': ['My account', 'حسابي'],
+    // The order page as the team sees it (from the dashboard, a link that works for 30 minutes).
+    'team.banner': ['Team view: this order page as the customer sees it. Their buttons are switched off here.', 'عرض الفريق: صفحة الطلب دي زي ما العميل شايفها. الزراير بتاعته مقفولة هنا.'],
+    'team.noAmounts': ['Amounts are hidden for your role.', 'المبالغ مخفية للدور بتاعك.'],
+    'team.until': ['This link works until {time}.', 'اللينك ده شغال لحد {time}.'],
+    'team.copyCustomer': ["Copy the customer's link", 'انسخ لينك العميل'],
+    'team.customerCopied': ["Customer's link copied: send it to the customer only.", 'لينك العميل اتنسخ: ابعته للعميل بس.'],
+    'team.overTitle': ['This team link has ended', 'لينك الفريق ده خلص'],
+    'team.toAdmin': ['Open the dashboard', 'افتح لوحة الإدارة'],
     // Account: a password-reset link opened while already signed in
     'acct.resetKeep': ['Cancel and go to my account', 'إلغاء والرجوع لحسابي'],
     // Tracking timeline
@@ -100,9 +111,10 @@
   for (const k of Object.keys(fallback)) if (!S[k]) S[k] = fallback[k];
 
   // Orders placed from this browser: [{ number, link, date, total }], newest first, at most 10.
+  // The link carries the order's key (orders placed since the keys came in): the guest's way back to it.
   const DEVICE_KEY = 'pod-my-orders';
   const DEVICE_MAX = 10;
-  const LINK_RE = /^\/order\?id=[\w-]+$/;
+  const LINK_RE = /^\/order\?id=[\w-]+(&k=[A-Za-z0-9_-]{16,64})?$/;
   function deviceOrders() {
     try {
       const list = JSON.parse(localStorage.getItem(DEVICE_KEY) || '[]');
@@ -126,10 +138,12 @@
           const acct = localStorage.getItem('pod-acct');
           if (acct && acct !== '1') return;
         }
-        const link = '/order?id=' + encodeURIComponent(order.id);
+        // (Its key in the link: the guest's way back to it. Built here: this runs before POD is needed.)
+        const link = '/order?id=' + encodeURIComponent(order.id) + (typeof order.key === 'string' && /^[A-Za-z0-9_-]{16,64}$/.test(order.key) ? '&k=' + order.key : '');
         if (!LINK_RE.test(link)) return;
         const entry = { number: String(order.number), link, date: order.createdAt || new Date().toISOString(), total: Number(order.total) || 0 };
-        const list = [entry, ...deviceOrders().filter((o) => o.link !== link)].slice(0, DEVICE_MAX);
+        const same = (l) => l === link || l.split('&')[0] === link.split('&')[0];
+        const list = [entry, ...deviceOrders().filter((o) => !same(o.link))].slice(0, DEVICE_MAX);
         localStorage.setItem(DEVICE_KEY, JSON.stringify(list));
       } catch (e) { /* private mode, storage full */ }
     },
@@ -150,11 +164,12 @@
           </ul>
         </section>`;
     },
-    /** Copies the order's items (or only `itemIds`) into the cart, at today's prices. */
-    async reorder(orderId, itemIds) {
+    /** Copies the order's items (or only `itemIds`) into the cart, at today's prices (`key`: the order's key). */
+    async reorder(orderId, itemIds, key) {
       const r = await window.POD.api(`/api/orders/${encodeURIComponent(orderId)}/reorder`, {
         method: 'POST',
-        ...(Array.isArray(itemIds) ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: itemIds }) } : {}),
+        headers: { ...(typeof key === 'string' && /^[A-Za-z0-9_-]{16,64}$/.test(key) ? { 'x-order-key': key } : {}), ...(Array.isArray(itemIds) ? { 'Content-Type': 'application/json' } : {}) },
+        ...(Array.isArray(itemIds) ? { body: JSON.stringify({ items: itemIds }) } : {}),
       });
       const items = (r && Array.isArray(r.items)) ? r.items : [];
       if (items.length) window.POD.setCart(window.POD.getCart().concat(items));

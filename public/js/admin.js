@@ -966,8 +966,8 @@
         <h3>${esc(t('ship.title', { number: o.number }))}</h3>
         ${statusPill(orderState(o))}
         <div class="ship-links">
-          ${can('orders.amounts') ? `<a class="btn btn-sm" href="/invoice?id=${encodeURIComponent(o.id)}" target="_blank" rel="noopener">${esc(t('ship.invoice'))}</a>
-          <a class="btn btn-sm" href="/order?id=${encodeURIComponent(o.id)}" target="_blank" rel="noopener">${esc(t('ship.orderPage'))}</a>` : ''}
+          ${can('orders.amounts') ? `<button class="btn btn-sm" type="button" data-team-view="invoice" data-order="${id}">${esc(t('ship.invoice'))}</button>` : ''}
+          <button class="btn btn-sm" type="button" data-team-view="order" data-order="${id}" title="${esc(t('ship.orderPageHint'))}">${esc(t('ship.orderPage'))}</button>
         </div>
       </div>
       <div><div class="muted small" style="margin-bottom:6px">${esc(t('ship.timeline'))}</div><ol class="ship-steps">${steps}</ol></div>
@@ -1094,6 +1094,25 @@
     rerenderOrders();
   }
   $('orders').addEventListener('click', async (e) => {
+    // The order page (or invoice) as the customer sees it: a link that works for 30 minutes, amounts only for
+    // people allowed them (the order's own key never reaches the dashboard). The tab opens with the tap itself
+    // (a pop-up blocker lets that through), then goes to the link once it is made.
+    const tv = e.target.closest('[data-team-view]');
+    if (tv) {
+      const w = window.open('', '_blank');
+      try { if (w) w.opener = null; } catch (err) { /* (some browsers) */ }
+      try {
+        const r = await adminApi(`/api/admin/orders/${encodeURIComponent(tv.dataset.order)}/team-view`, { method: 'POST' });
+        const url = tv.dataset.teamView === 'invoice' ? r.invoice : r.link;
+        if (!url || !/^\/(order|invoice)\?/.test(url)) throw new Error(t('msg.requestFailed', { status: 403 }));
+        if (w && !w.closed) w.location.href = url;
+        else location.href = url;
+      } catch (err) {
+        if (w && !w.closed) w.close();
+        POD.toast(err.message, 'error');
+      }
+      return;
+    }
     const tog = e.target.closest('[data-ship-toggle]');
     if (tog) {
       const id = tog.dataset.shipToggle;
@@ -2885,10 +2904,16 @@
   function rvLinkBox(item) {
     const id = esc(item.id);
     const link = rvLink[item.id] || item.proofLink;
+    // Waiting for the customer's changes: their own "edit it and send it again" link, to pass on by WhatsApp
+    // (a customer with no email). It opens that item in the editor only: no amounts, nothing else of the order.
+    const edit = item.status === 'changes_requested' && typeof item.reviseLink === 'string' && /^\/editor\?/.test(item.reviseLink) ? item.reviseLink : null;
     return `
       <section class="rv-box">
         <h3>${esc(t('rv.link'))}</h3>
-        ${link ? `<div class="rv-link"><input type="text" readonly dir="ltr" id="rv-link-${id}" value="${esc(absLink(link))}" aria-label="${esc(t('rv.link'))}"><button class="btn btn-sm" type="button" data-rv-copy="${id}">${esc(t('rv.copy'))}</button></div>` : `<p class="muted small">${esc(t('rv.linkNone'))}</p>`}
+        ${link ? `<div class="rv-link"><input type="text" readonly dir="ltr" id="rv-link-${id}" value="${esc(absLink(link))}" aria-label="${esc(t('rv.link'))}"><button class="btn btn-sm" type="button" data-rv-copy="${id}">${esc(t('rv.copy'))}</button></div>` : edit ? '' : `<p class="muted small">${esc(t('rv.linkNone'))}</p>`}
+        ${edit ? `<p class="small" style="margin:8px 0 4px"><b>${esc(t('rv.editLink'))}</b></p>
+          <div class="rv-link"><input type="text" readonly dir="ltr" id="rv-link-edit-${id}" value="${esc(absLink(edit))}" aria-label="${esc(t('rv.editLink'))}"><button class="btn btn-sm" type="button" data-rv-copy="edit-${id}">${esc(t('rv.copy'))}</button></div>
+          <p class="muted small" style="margin:4px 0 0">${esc(t('rv.editLinkHelp'))}</p>` : ''}
         ${!can('review.work') ? '' : item.status === 'awaiting_approval'
           ? `<button class="btn btn-sm" type="button" data-rv-act="resend" data-rv-id="${id}" ${rvBusy.has(item.id) ? 'disabled' : ''}>↻ ${esc(t('rv.resend'))}</button>`
           : `<p class="muted small" style="margin:0">${esc(t('rv.resendWhen'))}</p>`}

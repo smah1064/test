@@ -116,7 +116,7 @@ Object.assign(window.POD_STRINGS, {
   'proofPage.doneApprove': ['Thank you! This proof is approved and the item goes to printing.', 'شكرًا! البروفة اتوافق عليها والمنتج رايح للطباعة.'],
   'proofPage.doneReject': ['Thank you, we got your request. Our team will make the changes and send you a new proof.', 'شكرًا، وصلنا طلبك. فريقنا هيعمل التعديلات ويبعتلك بروفة جديدة.'],
   // After asking for changes to an editor-made item: the customer can also make them.
-  'proofPage.doneRejectEdit': ['Thank you, we got your request. You can make the changes yourself: open your order page, edit the design and send it again. Or leave it to us and we’ll send you a new proof.', 'شكرًا، وصلنا طلبك. تقدر تعمل التعديلات بنفسك: افتح صفحة طلبك، عدّل التصميم وابعته تاني. أو سيبها علينا وهنبعتلك بروفة جديدة.'],
+  'proofPage.doneRejectEdit': ['Thank you, we got your request. You can make the changes yourself: edit the design and send it again. Or leave it to us and we’ll send you a new proof.', 'شكرًا، وصلنا طلبك. تقدر تعمل التعديلات بنفسك: عدّل التصميم وابعته تاني. أو سيبها علينا وهنبعتلك بروفة جديدة.'],
   'proofPage.toOrderEdit': ['Edit it from your order page', 'عدّله من صفحة طلبك'],
   'proofPage.toOrder': ['View your order', 'شوف طلبك'],
   'proofPage.gone': ['This proof link no longer works', 'لينك البروفة ده مابقاش شغّال'],

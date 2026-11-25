@@ -266,6 +266,11 @@ function withPacks(productId, lines) {
   });
 }
 
+/** Quantity lines without what they cost: proofs and saved designs are seen by the team (design ids, proof
+ *  links), who may not see amounts. The customer's cart and order pages work out their prices elsewhere. */
+// eslint-disable-next-line no-unused-vars
+const withoutLinePrices = (lines) => (Array.isArray(lines) ? lines.map(({ unitPrice, packPrice, lineTotal, price, ...l }) => l) : lines);
+
 function publicProduct(p) {
   return { ...p, sides: p.sides.map((s) => ({ ...s, printHeightIn: heightIn(s) })) };
 }
@@ -348,6 +353,15 @@ function publicOrder(order) {
     shop: shopInfo(),
     invoice: { number: `INV-${order.number}`, issuedAt: order.createdAt },
   };
+}
+
+/**
+ * The customer's own answer about their order: what publicOrder gives, plus the order's secret link key
+ * (orders placed since the keys came in). Only for the customer's ways in (the link, the cart, the
+ * account), never for the dashboard: the team works with the order number, which alone no longer opens it.
+ */
+function customerOrder(order) {
+  return { ...publicOrder(order), ...(order.linkKey ? { key: order.linkKey } : {}) };
 }
 
 const SHIPMENT_FIELDS = ['courier', 'trackingNumber', 'trackingUrl', 'eta', 'shippedAt', 'deliveredAt'];
@@ -885,7 +899,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       version: d.version || 1,
       proofHash: proofHashOf(d),
       product: product ? { id: product.id, name: product.name, ...(product.colorLabel ? { colorLabel: product.colorLabel } : {}) } : { id: d.productId, name: d.productName },
-      color: d.color, size: d.size, quantities: withPacks(d.productId, d.quantities), copies: copiesOf(d),
+      color: d.color, size: d.size, quantities: withoutLinePrices(withPacks(d.productId, d.quantities)), copies: copiesOf(d),
       method: d.method || 'print', process: d.process || (product && product.process) || null,
       ...(embSideOf(d) ? { embSide: embSideOf(d) } : {}),
       sides: d.kind === 'book' ? [] : d.sides.map(side),
@@ -924,6 +938,21 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     item.proofTokenAt = new Date().toISOString();
     return `/proof?t=${item.proofToken}`;
   }
+  /**
+   * "Edit it and send it again" for an item waiting for the customer's changes, without the order's key: a link
+   * for that item only (the editor, then the new version). The shop can pass it on by WhatsApp (a customer with
+   * no email), and the proof page gives it after "Ask for changes". It opens no amounts and no other item.
+   */
+  function newReviseLink(item) {
+    item.reviseToken = crypto.randomBytes(18).toString('base64url');
+    return reviseLinkOf(null, item);
+  }
+  function reviseLinkOf(order, item) {
+    if (!item.reviseToken || item.status !== 'changes_requested' || item.kind || !UUID_RE.test(item.designId || '')) return null;
+    const o = order || store.findItem(item.id)?.order;
+    return o ? `/editor?design=${item.designId}&revise=${o.id}.${item.id}&rt=${item.reviseToken}` : null;
+  }
+  const sameSecret = (a, b) => typeof a === 'string' && typeof b === 'string' && a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
   function findByProofToken(token) {
     if (!/^[A-Za-z0-9_-]{20,40}$/.test(String(token || ''))) return null;
     for (const order of store.listOrders()) {
@@ -949,8 +978,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   /** Email the customer a proof to approve, or the shop's request for changes (never blocks the request). */
   function tellCustomer(order, item, kind, note, req) {
     if (typeof notify.proofMessage !== 'function') return;
-    const link = item.proofToken ? `${siteOf(req)}/proof?t=${item.proofToken}` : `${siteOf(req)}/order?id=${order.id}`;
-    Promise.resolve().then(() => notify.proofMessage(order, item, { kind, note, link, siteUrl: siteOf(req) }))
+    const orderLink = notify.orderLink(siteOf(req), order);
+    // (The customer's proof link carries the order's key: "back to my order" works from any phone. The shop's
+    // own copy of the proof link, in Review, has no key.)
+    const link = item.proofToken ? `${siteOf(req)}/proof?t=${item.proofToken}${order.linkKey ? `&k=${order.linkKey}` : ''}` : orderLink;
+    Promise.resolve().then(() => notify.proofMessage(order, item, { kind, note, link, orderLink, siteUrl: siteOf(req) }))
       .then((r) => {
         item.proofEmails = [...(item.proofEmails || []), { kind, at: new Date().toISOString(), ...(r || {}) }].slice(-10);
         store.save();
@@ -964,6 +996,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       ...adminItem(order, item, order.items.indexOf(item)),
       proof: d ? await proofFor(d) : null,
       proofLink: item.proofToken ? `/proof?t=${item.proofToken}` : null,
+      reviseLink: reviseLinkOf(order, item),
       filesMatchApproval: d ? approvedFilesMatch(item, d) : false,
     };
   }
@@ -999,6 +1032,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       item.review = { ...(item.review || { needed: false, reasons: [] }), status: 'done' };
     } else if (b.decision === 'reject') {
       item.status = 'changes_requested';
+      newReviseLink(item);
       item.approvals = [...(item.approvals || []), { action: 'rejected', by: 'customer', at: now, proofHash: proofHashOf(d), version: d.version || 1, note: comment || null }];
     } else {
       throw new HttpError(400, 'badDecision');
@@ -1006,7 +1040,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     item.history.push({ status: item.status, at: now });
     delete item.proofToken;
     store.save();
-    res.json({ status: item.status, orderId: order.id });
+    // Changes asked for: can the customer make them in the editor from their order page? (Same rule as there;
+    // the proof page has no key to ask the order itself.)
+    const editable = item.status === 'changes_requested' && !item.kind && UUID_RE.test(item.designId || '');
+    res.json({ status: item.status, orderId: order.id, editable, ...(editable ? { reviseLink: reviseLinkOf(order, item) } : {}) });
   });
 
   // Shop: the jobs that need a person, and what they can do with them.
@@ -1047,6 +1084,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       } else if (b.action === 'changes') {
         if (!note) throw new HttpError(400, 'noteRequired');
         item.status = 'changes_requested';
+        newReviseLink(item);
         item.review = { ...(item.review || { reasons: [] }), needed: true, status: 'pending', note };
         item.approvals = [...(item.approvals || []), { action: 'changes', by: 'shop', at: now, note, proofHash: d ? proofHashOf(d) : null, version: d ? d.version || 1 : null }];
         tellCustomer(order, item, 'changes', note, req);
@@ -2047,7 +2085,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       throw new HttpError(404, 'designNotFound');
     }
     // A design id is in public picture links: it must not lead to the order (and the customer) it is in.
-    const { uploadTokenHash, orderId, revisionOf, ...pub } = design; // eslint-disable-line no-unused-vars
+    // Nor to what was paid: the editor works prices out itself (the team sees design ids, and the
+    // amounts are only for people allowed to see them).
+    const { uploadTokenHash, orderId, revisionOf, price, unitPrice, ...pub } = design; // eslint-disable-line no-unused-vars
+    if (Array.isArray(pub.quantities)) pub.quantities = withoutLinePrices(pub.quantities);
     const list = design.merge ? readMergeList(design) : null;
     res.json({ ...pub, editor, ...(list ? { mergeList: list } : {}) });
   });
@@ -2999,7 +3040,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   app.get('/api/account/orders', (req, res) => {
     const me = signedIn(req);
     res.set('Cache-Control', 'private, no-store');
-    res.json({ orders: store.listOrders().filter((o) => o.customerId === me.id).slice().reverse().map(publicOrder) });
+    res.json({ orders: store.listOrders().filter((o) => o.customerId === me.id).slice().reverse().map(customerOrder) });
   });
   app.post('/api/account/forgot', express.json({ limit: '10kb' }), async (req, res, next) => {
     try {
@@ -3144,14 +3185,78 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     res.set('Cache-Control', 'no-store');
     // Not placed: an empty answer (the cart asks this on every visit while it has a key).
     if (!order) return res.status(204).end();
-    res.json(publicOrder(order));
+    rememberOrderHere(req, res, order);
+    res.json(customerOrder(order));
   });
+  // ---------- Who may open a customer's order page ----------
+  // Its secret key (the x-order-key header, or ?k= from the customer's link), the account it was placed
+  // from, or, for an order placed before the keys came in, its number alone (as the links already sent have).
+  // The team sees order numbers, so a number alone must not open an order's amounts or act for the customer.
+  const LINK_KEY_RE = /^[A-Za-z0-9_-]{16,64}$/;
+  function orderOpenFor(req, order) {
+    if (!order.linkKey) return true;
+    const k = String(req.get('x-order-key') || (typeof req.query.k === 'string' ? req.query.k : '') || '');
+    if (LINK_KEY_RE.test(k) && sameSecret(k, order.linkKey)) return true;
+    // The browser a guest ordered from (its cookie, see rememberOrderHere): their own orders open there.
+    if (ordersHere(req).some(([id, key]) => id === order.id && sameSecret(key, order.linkKey))) return true;
+    const me = order.customerId ? currentCustomer(req) : null;
+    return Boolean(me && me.id === order.customerId);
+  }
+  // ---------- A guest's orders on the browser they ordered from ----------
+  // An HttpOnly cookie (only sent to /api/orders) with the last few guest orders and their keys: that browser
+  // opens them even without the key in the link (a cart page opened before an update, storage switched off,
+  // a proof link the shop sent by WhatsApp). Orders from an account are on the account instead.
+  const ORDERS_COOKIE = 'pod_orders';
+  const cookieOf = (req, name) => {
+    const m = new RegExp(`(?:^|;\\s*)${name}=([^;]*)`).exec(req.get('cookie') || '');
+    return m ? m[1] : '';
+  };
+  const ordersHere = (req) => cookieOf(req, ORDERS_COOKIE).split('|').slice(0, 8)
+    .map((x) => x.split('~')).filter(([id, key]) => UUID_RE.test(id || '') && LINK_KEY_RE.test(key || ''));
+  function rememberOrderHere(req, res, order) {
+    if (!order || !order.linkKey || order.customerId) return;
+    const list = [[order.id, order.linkKey], ...ordersHere(req).filter(([id]) => id !== order.id)].slice(0, 8);
+    res.append('Set-Cookie', `${ORDERS_COOKIE}=${list.map((x) => x.join('~')).join('|')}; Path=/api/orders; Max-Age=${180 * 86400}; HttpOnly; SameSite=Lax${isHttps(req) ? '; Secure' : ''}`);
+  }
+  /**
+   * The item a "send a new version" request is about: with the order's key (or the account it was placed from),
+   * or with that item's own edit link (x-revise-token, see newReviseLink). 404 / 403 otherwise.
+   */
+  function reviseItemFor(req) {
+    const order = UUID_RE.test(String(req.params.id || '')) && store.getOrder(req.params.id);
+    if (!order) throw new HttpError(404, 'orderNotFound');
+    const item = order.items.find((it) => it.id === req.params.itemId);
+    const rt = String(req.get('x-revise-token') || '');
+    if (item && rt && sameSecret(rt, item.reviseToken || '')) return { order, item, byLink: true };
+    if (!orderOpenFor(req, order)) throw new HttpError(403, 'orderLinkNeeded');
+    if (!item) throw new HttpError(404, 'itemNotFound');
+    return { order, item, byLink: false };
+  }
+  // The editor's "edit it and send it again": is the item still waiting for changes, and the shop's note.
+  app.get('/api/orders/:id/items/:itemId/revise', (req, res) => {
+    res.set({ 'Cache-Control': 'private, no-store' });
+    const { item } = reviseItemFor(req);
+    const hist = Array.isArray(item.approvals) ? item.approvals : [];
+    const last = [...hist].reverse().find((h) => h && (h.action === 'changes' || h.action === 'rejected'));
+    const note = (last && last.note) || (item.review && item.review.note) || null;
+    res.json({ status: item.status, note, by: last ? last.by : null });
+  });
+  /** The order the customer asks about, or 404 / 403 (the link without its key: "open it from your email"). */
+  function customerOrderFor(req, id) {
+    const order = UUID_RE.test(String(id || '')) && store.getOrder(id);
+    if (!order) throw new HttpError(404, 'orderNotFound');
+    if (!orderOpenFor(req, order)) throw new HttpError(403, 'orderLinkNeeded');
+    return order;
+  }
   app.post('/api/orders', express.json({ limit: '100kb' }), asyncRoute(async (req, res) => {
     const body = req.body && typeof req.body === 'object' ? req.body : {};
     const { designIds, expectedTotal } = body;
     const orderKey = typeof body.orderKey === 'string' && ORDER_KEY_RE.test(body.orderKey) ? body.orderKey : null;
     const already = orderKey && orderByKey(orderKey);
-    if (already) return res.status(200).json(publicOrder(already));
+    if (already) {
+      rememberOrderHere(req, res, already);
+      return res.status(200).json(customerOrder(already));
+    }
     const customer = body.customer && typeof body.customer === 'object' ? body.customer : {};
     const c = {
       name: cleanString(customer.name, 'name', { max: 120 }),
@@ -3288,6 +3393,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       // Cash on delivery: collected by the courier.
       payment: { method: 'cod', status: 'pending' },
       ...(orderKey ? { orderKey } : {}),
+      // The order page's secret key: only the customer's links (email, cart, account) carry it.
+      linkKey: crypto.randomBytes(16).toString('base64url'),
       lang: langOf(req),
     }, (db) => {
       // Checked again under the lock with the latest data: another copy may have just ordered one of these.
@@ -3317,7 +3424,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         if (cust && !cust.address) cust.address = { governorate: c.governorate, city: c.city, address: c.address, notes: c.notes || '' };
       });
     }
-    res.status(201).json(publicOrder(order));
+    rememberOrderHere(req, res, order);
+    res.status(201).json(customerOrder(order));
     // Books: the AI redraws every page with the child, in the background.
     for (const item of order.items) if (item.kind === 'book') queueRedraw(order, item);
     // Tell the shop and the customer, after answering: sending never holds up or fails an order.
@@ -3372,10 +3480,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     rateLimit(req, 'reorder');
     next();
   }, express.json({ limit: '2kb' }), (req, res) => {
-    const order = UUID_RE.test(req.params.id) && store.getOrder(req.params.id);
-    if (!order) throw new HttpError(404, 'orderNotFound');
-    const item = order.items.find((it) => it.id === req.params.itemId);
-    if (!item) throw new HttpError(404, 'itemNotFound');
+    const { order, item, byLink } = reviseItemFor(req);
     if (item.status !== 'changes_requested') throw new HttpError(409, 'reviseNotNeeded');
     if (item.kind) throw new HttpError(409, 'reviseNotEditable'); // books, photo sets, film sheets
     const id = (req.body || {}).designId;
@@ -3446,9 +3551,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       it.approvals = [...(it.approvals || []), { action: 'revised', by: 'customer', at: now, proofHash: proofHashOf(nd), version: nd.version }];
       it.history.push({ status: 'review', at: now });
       delete it.proofToken;
+      delete it.reviseToken;
     });
     const saved = store.getOrder(order.id);
-    res.json(publicOrder(saved));
+    // (With the item's own edit link only: no amounts and no key, just that it was sent.)
+    res.json(byLink ? { ok: true, status: 'review' } : customerOrder(saved));
     // Tell the shop a new version is waiting in Review (after answering; it never holds up the customer).
     if (!limiter.hit('notify:*', LIMITS.notify)) {
       const it = saved.items.find((x) => x.id === item.id);
@@ -3457,9 +3564,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   });
 
   app.get('/api/orders/:id', (req, res) => {
-    const order = UUID_RE.test(req.params.id) && store.getOrder(req.params.id);
-    if (!order) throw new HttpError(404, 'orderNotFound');
-    res.json(publicOrder(order));
+    // (Before the check: a refusal is never kept by a cache either, for the customer whose link has the key.)
+    res.set({ 'Cache-Control': 'private, no-store', Vary: 'x-order-key, Cookie' });
+    const order = customerOrderFor(req, req.params.id);
+    res.json(customerOrder(order));
   });
 
   // ---------- After the order: order again, drafts on the account, shipping ----------
@@ -3510,8 +3618,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
 
   // Order again: an exact copy of every item, at today's prices, ready for the cart.
   app.post('/api/orders/:id/reorder', express.json({ limit: '8kb' }), (req, res) => {
-    const order = UUID_RE.test(req.params.id) && store.getOrder(req.params.id);
-    if (!order) throw new HttpError(404, 'orderNotFound');
+    const order = customerOrderFor(req, req.params.id);
     // Only some of the items ({ items: [item ids] }), or the whole order.
     const asked = Array.isArray((req.body || {}).items) ? new Set(req.body.items.filter((x) => typeof x === 'string').slice(0, 100)) : null;
     const chosen = order.items.map((it, i) => ({ it, i })).filter(({ it }) => !asked || asked.has(it.id));
@@ -3943,9 +4050,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         throw new HttpError(403, 'noPermission');
       }
     }
-    if (!who.perms.has('orders.amounts') && NO_AMOUNTS.has(route.perm)) {
+    {
+      // An order's secret keys never reach the dashboard (whoever asks), and amounts only people allowed them.
+      const hideAmounts = !who.perms.has('orders.amounts') && NO_AMOUNTS.has(route.perm);
       const send = res.json.bind(res);
-      res.json = (body) => send(roles.withoutAmounts(body));
+      res.json = (body) => send(roles.withoutSecrets(hideAmounts ? roles.withoutAmounts(body) : body));
     }
     if (req.method !== 'GET' && req.method !== 'HEAD' && !route.quiet) {
       res.on('finish', () => !refusedTooMany(who, res.statusCode) && activity.add({
@@ -5571,6 +5680,73 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       notifications: o.notifications || null,
     }));
     res.json({ orders });
+  });
+
+  // ---------- The order page as the team sees it (a link that works for 30 minutes) ----------
+  // The dashboard asks for a link; the order page shows the order as the customer sees it, without the
+  // amounts for people not allowed them, and without the customer's buttons. The link holds no secret of
+  // the customer's (an order's key never reaches the dashboard). It is signed (any copy of the app can check
+  // it, also after a restart), works only in the browser that asked for it (an HttpOnly cookie), and every use
+  // checks the sign-in that made it again: signed out, switched off or a changed role ends it at once.
+  const TEAM_VIEW_MS = 30 * 60e3;
+  const TEAM_COOKIE = 'pod_tv';
+  const TEAM_TICKET_RE = /^([A-Za-z0-9_-]{20,600})\.([A-Za-z0-9_-]{43})$/;
+  const sha = (v) => crypto.createHash('sha256').update(String(v)).digest('hex');
+  app.post('/api/admin/orders/:orderId/team-view', requireAdmin, (req, res) => {
+    const order = UUID_RE.test(req.params.orderId) && store.getOrder(req.params.orderId);
+    if (!order) throw new HttpError(404, 'orderNotFound');
+    const who = req.adminWho;
+    const token = security.bearer(req);
+    if (!token || who.approvalId) throw new HttpError(401, 'signInAgain');
+    // This browser's mark (made once per browser session), so the link works only here.
+    let mark = cookieOf(req, TEAM_COOKIE);
+    if (!/^[A-Za-z0-9_-]{32}$/.test(mark)) {
+      mark = crypto.randomBytes(24).toString('base64url');
+      res.append('Set-Cookie', `${TEAM_COOKIE}=${mark}; Path=/api/orders; HttpOnly; SameSite=Strict${isHttps(req) ? '; Secure' : ''}`);
+    }
+    const exp = Date.now() + TEAM_VIEW_MS;
+    const body = Buffer.from(JSON.stringify({
+      o: order.id, e: exp, k: who.emergency ? 'o' : 's', i: who.id, g: who.emergency ? 0 : ((staffAll().find((u) => u.id === who.id) || {}).gen || 0),
+      x: parseInt(token.split('.')[0], 36) || 0, h: sha(token), b: sha(mark).slice(0, 32),
+    })).toString('base64url');
+    const ticket = `${body}.${auth.sign(`team-view.${body}`)}`;
+    const q = `id=${encodeURIComponent(order.id)}&team=${ticket}`;
+    res.json({ link: `/order?${q}`, invoice: who.perms.has('orders.amounts') ? `/invoice?${q}` : null, expiresAt: new Date(exp).toISOString() });
+  });
+  /** The person a team link was made for, as they are now (null: the link is over, or not this browser's). */
+  function teamViewer(req, orderId) {
+    const m = TEAM_TICKET_RE.exec(String(req.get('x-team-view') || ''));
+    if (!m || !sameSecret(m[2], auth.sign(`team-view.${m[1]}`))) return null;
+    let t;
+    try { t = JSON.parse(Buffer.from(m[1], 'base64url').toString('utf8')); } catch (e) { return null; }
+    const now = Date.now();
+    if (!t || t.o !== orderId || !(t.e > now) || !(t.x > now)) return null;
+    const mark = cookieOf(req, TEAM_COOKIE);
+    if (!/^[A-Za-z0-9_-]{32}$/.test(mark) || !sameSecret(sha(mark).slice(0, 32), String(t.b || ''))) return null;
+    // The sign-in that made it: not signed out since (any copy of the app sees that), not expired.
+    if (typeof t.h !== 'string' || auth.revoked()[t.h]) return null;
+    let who = null;
+    if (t.k === 'o') who = emergencyWho();
+    else if (t.k === 's') {
+      const u = staffList().find((x) => x.id === t.i);
+      if (u && (u.gen || 0) === t.g) who = whoOf(u);
+    }
+    if (!who || !who.perms.has('orders.view')) return null;
+    return { who, exp: t.e };
+  }
+  app.get('/api/orders/:id/team', (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    const order = UUID_RE.test(req.params.id) && store.getOrder(req.params.id);
+    const t = order && teamViewer(req, order.id);
+    if (!t) throw new HttpError(401, 'teamViewOver');
+    const amounts = t.who.perms.has('orders.amounts');
+    const view = {
+      ...publicOrder(order),
+      team: { amounts, owner: t.who.role === 'owner', expiresAt: new Date(t.exp).toISOString() },
+      // An owner can pass the customer their own link again (a guest who lost the email).
+      ...(t.who.role === 'owner' && order.linkKey ? { customerLink: notify.orderLink(linkBase(req), order) || `/order?id=${encodeURIComponent(order.id)}&k=${encodeURIComponent(order.linkKey)}` } : {}),
+    };
+    res.json(amounts ? view : roles.withoutAmounts(view));
   });
 
   // Redraw a book's pages again (after fixing the AI key, or if the shop wants a fresh try).
