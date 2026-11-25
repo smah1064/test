@@ -112,7 +112,11 @@
     const phone = phoneKey((o.customer && o.customer.phone) || '');
     if (q.phone && phone && phone.includes(q.phone)) return true;
     const text = haystack(o, withCoupon);
-    return q.words.every((w) => (w.text.length && w.text.every((x) => text.includes(x))) || Boolean(w.phone && phone && phone.includes(w.phone)));
+    // (Typed without the space inside: "pod1003" for POD-1003, "عبدالرحمن" for عبد الرحمن. Six letters or more, so a
+    // short word doesn't match across two words. QA 25 Nov.)
+    const tight = text.replace(/ /g, '');
+    const has = (x) => text.includes(x) || (x.length >= 6 && tight.includes(x));
+    return q.words.every((w) => (w.text.length && w.text.every(has)) || Boolean(w.phone && phone && phone.includes(w.phone)));
   }
 
   // ---------- Chips, filters, order ----------
@@ -124,7 +128,8 @@
     // An item waits for the customer: their approval of the proof, or the changes the shop asked for.
     customer: (o) => itemsOf(o).some((i) => i.status === 'awaiting_approval' || i.status === 'changes_requested'),
     received: (o, ctx) => ctx.state(o) === 'received',
-    in_production: (o, ctx) => ctx.state(o) === 'in_production',
+    // (Not the ones ready to ship: each order in one stage. QA 25 Nov.)
+    in_production: (o, ctx) => ctx.state(o) === 'in_production' && !CHIP_TEST.ready(o),
     // Every item printed (or already handed over), the order not shipped yet.
     ready: (o) => itemsOf(o).length > 0 && itemsOf(o).every((i) => i.status === 'printed' || i.status === 'shipped') && !isShipped(o),
     shipped: (o, ctx) => ctx.state(o) === 'shipped',

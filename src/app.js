@@ -1032,7 +1032,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const d = store.getDesign(item.designId);
       if (!d) throw new HttpError(404, 'proofNotFound');
       res.set('Cache-Control', 'no-store');
-      res.json({ order: { id: order.id, number: order.number }, item: { id: item.id, position: order.items.indexOf(item) + 1, productName: item.productName }, proof: await proofFor(d), note: (item.review && item.review.note) || null, status: item.status });
+      const reviseLink = item.status === 'changes_requested' ? reviseLinkOf(order, item) : null;
+      res.json({ order: { id: order.id, number: order.number }, item: { id: item.id, position: order.items.indexOf(item) + 1, productName: item.productName }, proof: await proofFor(d), note: (item.review && item.review.note) || null, status: item.status, ...(reviseLink ? { reviseLink } : {}) });
     } catch (e) {
       next(e);
     }
@@ -1060,7 +1061,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       throw new HttpError(400, 'badDecision');
     }
     item.history.push({ status: item.status, at: now });
-    delete item.proofToken;
+    // (The link stays: opened again it shows the decision, and after "Ask for changes" the edit link again — it said
+    // "no longer works" on a reload. QA 25 Nov. A new proof gets a new link.)
     store.save();
     // Changes asked for: can the customer make them in the editor from their order page? (Same rule as there;
     // the proof page has no key to ask the order itself.)
@@ -1156,7 +1158,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   const replacingItems = new Set();
   app.put('/api/admin/items/:itemId/replacement/:side', adminOnly, express.raw({ type: () => true, limit: '60mb' }), async (req, res, next) => {
     let marked = null;
-    res.on('close', () => { if (marked) replacingItems.delete(marked); });
+    // (Held until the new file is fully saved, not until the connection closes: a dropped connection let the job
+    // start printing while the file was still being swapped. QA 25 Nov.)
     try {
       const found = store.findItem(req.params.itemId);
       if (!found) throw new HttpError(404, 'itemNotFound');
@@ -1225,9 +1228,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (!toldRecently) item.shopProofAt = now;
       store.save();
       if (!toldRecently) tellCustomer(order, item, 'proof', (item.review && item.review.note) || '', req);
+      if (marked) { replacingItems.delete(marked); marked = null; }
       res.json(await reviewItem(order, item));
     } catch (e) {
       next(e);
+    } finally {
+      if (marked) replacingItems.delete(marked);
     }
   });
   app.post('/api/admin/items/:itemId/resend-proof', adminOnly, (req, res) => {
@@ -3509,6 +3515,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       for (const x of counted) {
         if (x.combo) x.e.variantStock[x.combo] -= x.n;
         else x.e.stock -= x.n;
+        x.e.stockAt = new Date().toISOString(); // (a stock count waiting for approval is told: "changed since")
       }
     });
     // A signed-in customer without a saved address keeps this one for next time.
@@ -3615,6 +3622,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       for (const x of counted) {
         if (x.combo) x.e.variantStock[x.combo] -= x.n;
         else x.e.stock -= x.n;
+        x.e.stockAt = new Date().toISOString(); // (a stock count waiting for approval is told: "changed since")
       }
       const prev = db.designs[it.designId];
       const now = new Date().toISOString();
@@ -4897,14 +4905,32 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (a.before !== undefined) return JSON.stringify(moneyNow(a.action, a.path)) !== JSON.stringify(a.before);
     const id = (/^\/api\/admin\/(?:catalog|coupons|pricing)\/([^/?]+)/.exec(a.path) || [])[1];
     if (!id) return false;
+    // (A stock count: pieces sold since it was asked count as a change too. QA 25 Nov.)
+    const e = a.action.includes('/catalog') ? catalogEdits()[decodeURIComponent(id)] || {} : null;
+    const kept = e ? bodyOf(a) || {} : {};
     const when = a.action.includes('/coupons') ? ((store.db.coupons || []).find((c) => c.id === id) || {}).updatedAt
-      : a.action.includes('/catalog') ? (catalogEdits()[decodeURIComponent(id)] || {}).updatedAt : null;
+      : e ? [e.updatedAt, ('stock' in kept || 'variantStock' in kept) ? e.stockAt : null].filter(Boolean).sort().pop() : null;
     return Boolean(when && when > a.at);
   };
   /** Pictures of the designs a change publishes (zip uploads, a share link), for the owner to look at. */
   const picsOf = (a) => {
     if (!(a.status === 'pending' || a.status === 'failed')) return [];
     const b = bodyOf(a) || {};
+    // A product photo to delete, or a new photo order / main photo: the photos themselves, as the owner will see
+    // them in the shop (they showed as hex ids. QA 25 Nov).
+    const ph = /^\/api\/admin\/catalog\/([^/?]+)\/photos(?:\/([^/?]+))?$/.exec(a.path || '');
+    if (ph) {
+      const pid = decodeURIComponent(ph[1]);
+      const have = new Set((((catalogEdits()[pid] || {}).photos) || []).map((x) => x.id));
+      const url = (id) => `/catalog-photos/${encodeURIComponent(pid)}/${encodeURIComponent(id)}.webp`;
+      if (a.method === 'DELETE' && ph[2] && have.has(decodeURIComponent(ph[2]))) return [{ url: url(decodeURIComponent(ph[2])), name: enAr('Photo to delete', 'الصورة اللي هتتمسح') }];
+      if (a.method === 'PUT' && !ph[2]) {
+        const out = [];
+        if (typeof b.main === 'string' && have.has(b.main)) out.push({ url: url(b.main), name: enAr('New main photo', 'الصورة الأساسية الجديدة') });
+        if (Array.isArray(b.order)) b.order.filter((id) => have.has(id)).slice(0, 12).forEach((id, i) => out.push({ url: url(id), name: enAr(`Photo ${i + 1}`, `صورة ${arNum(i + 1)}`) }));
+        return out;
+      }
+    }
     const m = /\/library\/uploads\/([^/?]+)\/publish/.exec(a.path || '');
     if (m && Array.isArray(b.items)) {
       const batch = readBatch(decodeURIComponent(m[1]));
@@ -4927,7 +4953,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const body = a.action === 'POST /api/admin/expenses' && kept && typeof kept === 'object' ? accounting.cleanExpense(kept).expense || kept : kept;
     if (!body || typeof body !== 'object' || Array.isArray(body)) return [];
     const all = Object.entries(body);
-    const list = all.slice(0, 30).map(([k, v]) => ({ field: OWNER_FIELD_NAMES[k] || enAr(k, k), value: ownerValue(v, k) }));
+    // (A photo order or main photo: in words, the photos themselves are shown with the card, not their ids.)
+    const photoOrder = a.method === 'PUT' && /^\/api\/admin\/catalog\/[^/?]+\/photos$/.test(a.path || '');
+    const valueOf = (k, v) => {
+      if (photoOrder && k === 'main') return v ? enAr('the photo shown as "New main photo"', 'الصورة اللي مكتوب عليها "الصورة الأساسية الجديدة"') : enAr('(empty)', '(فاضي)');
+      if (photoOrder && k === 'order' && Array.isArray(v)) return enAr(`${v.length} photos, in the order shown`, `${arNum(v.length)} صور، بالترتيب اللي ظاهر`);
+      return ownerValue(v, k);
+    };
+    const list = all.slice(0, 30).map(([k, v]) => ({ field: OWNER_FIELD_NAMES[k] || enAr(k, k), value: valueOf(k, v) }));
     // (More than fits here: said, so the owner knows the change holds more than shown.)
     if (all.length > 30) list.push({ field: enAr('more', 'كمان'), value: enAr(`${all.length - 30} more fields`, `${all.length - 30} خانات كمان`) });
     return list;
@@ -6287,7 +6320,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     // Selling prices are the owners': a cost change by finance keeps the prices as they are.
     // (A request with costs only, such as a finance person's cost change approved after they were made an owner,
     // changes the costs only: no price sent isn't "every price emptied". QA 25 Nov.)
-    const ownPrices = req.adminWho.perms.has('prices.edit') && Object.keys(req.body || {}).some((k) => k !== 'costs');
+    // (A held request being approved, kept with its costs only: it was a cost change by someone without the prices,
+    // even when they've been made an owner since. Sent by an owner directly, costs alone still means "back to the
+    // built-in prices" too.)
+    const sentKeys = Object.keys(req.body || {});
+    const costsOnly = sentKeys.length > 0 && sentKeys.every((k) => k === 'costs');
+    const ownPrices = req.adminWho.perms.has('prices.edit') && !(req.adminWho.approvalId && costsOnly);
     const pr = ownPrices ? accounting.cleanPricing(product, req.body || {}) : { pricing: null };
     if (pr.error) throw new HttpError(400, pr.error);
     const co = accounting.cleanCosts(product, (req.body || {}).costs || {});

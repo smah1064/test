@@ -112,7 +112,7 @@
   // and sits exactly as the browser shows it in one colour. A line in one
   // colour keeps the browser's own layout; so does an English line with a
   // coloured word in a left-to-right box (Fabric places it right).
-  const RTL_CH = /[֐-ࣿיִ-﷿ﹰ-ﻼ]/;
+  const RTL_CH = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFC]/;
   /** Whether line `lineIndex` (with words in other colours or fonts) is drawn by renderBidiLine. */
   function styledBidiLine(o, line, lineIndex) {
     if (o.path || o.charSpacing || (o.textAlign || '').includes('justify') || !line || line.length < 2) return false;

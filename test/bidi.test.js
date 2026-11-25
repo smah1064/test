@@ -245,3 +245,16 @@ test('the underline of such a line is drawn under each piece where it is drawn, 
   const h = 40 / 15;
   assert.deepStrictEqual(rects, [['#111', -60, 36, 70, h], ['#e03131', 10, 36, 40, h], ['#111', 50, 36, 50, h]]);
 });
+
+test('emoji, ★, curly quotes, dashes and … are not Arabic letters: an English line keeps its order (QA 25 Nov)', () => {
+  // (The Arabic letter range was written with a decomposed U+FB1D, which made every symbol from U+05B4 to U+FDFF and
+  // every emoji's halves read as Arabic.)
+  for (const line of ['🎂 Happy Birthday', 'Best mum ever! ❤️', '“Ahmed” – 2026…', '★ Ahmed ★ 10', '™ € •']) {
+    const runs = bidiRuns(Array.from(line), false);
+    assert.ok(runs.every((r) => !r.rtl), `${line}: ${JSON.stringify(Array.from(runs, (r) => [r.rtl, r.start, r.end]))}`);
+  }
+  // Arabic still reads as Arabic, Hebrew presentation forms too.
+  assert.ok(bidiRuns(Array.from('عيد سعيد'), false).some((r) => r.rtl));
+  assert.ok(bidiRuns(Array.from('יִﬞ'), false).some((r) => r.rtl));
+  assert.ok(bidiRuns(Array.from('ﻻ'), false).some((r) => r.rtl));
+});

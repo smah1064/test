@@ -106,6 +106,12 @@
       return;
     }
     const waiting = !d.status || d.status === 'awaiting_approval';
+    // (Opened again after "Ask for changes": the item's edit link, as right after asking. QA 25 Nov.)
+    const editAgain = (x) => {
+      const rl = x.status === 'changes_requested' && typeof x.reviseLink === 'string' && /^\/editor\?design=[\w-]+&revise=[\w.-]+&rt=[\w-]+$/.test(x.reviseLink) ? x.reviseLink : null;
+      const k = x.order && x.order.id ? POD.orderKey(x.order.id, linkKey) : '';
+      return rl ? `<a class="btn btn-primary" href="${esc(rl + (k ? `&k=${encodeURIComponent(k)}` : ''))}">${esc(t('item.editResend'))}</a>` : '';
+    };
     const focused = document.activeElement && document.activeElement.id;
     content.innerHTML = `${head}
       ${d.note ? `<div class="shop-note" role="note"><strong>${esc(t('proofPage.note'))}</strong><p dir="auto">${esc(d.note)}</p></div>` : ''}
@@ -116,7 +122,7 @@
       <section class="card proof-card" style="margin-top:16px" aria-labelledby="decide-h">
         <h2 id="decide-h" style="font-size:18px;margin:0">${esc(t('proofPage.decide'))}</h2>
         ${PODProof.screenNote()}
-        ${waiting ? decideHtml() : `<p class="notice" role="status">${esc(t('proofPage.notWaiting', { status: statusText(d.status) }))}</p><div>${orderLink(d)}</div>`}
+        ${waiting ? decideHtml() : `<p class="notice" role="status">${esc(t('proofPage.notWaiting', { status: statusText(d.status) }))}</p><div>${editAgain(d) || orderLink(d)}</div>`}
       </section>`;
     if (focused && document.getElementById(focused)) document.getElementById(focused).focus();
   }

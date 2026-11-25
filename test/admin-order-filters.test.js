@@ -169,12 +169,13 @@ test('each status chip, with live counts within the search and the more filters'
   assert.deepStrictEqual(chip('review'), want('review'));
   assert.deepStrictEqual(chip('customer'), want('awaiting', 'changes'));
   assert.deepStrictEqual(chip('received'), want('received', 'late', 'dueToday'));
-  assert.deepStrictEqual(chip('in_production'), want('printing', 'ready', 'printedShipped'));
+  // (Each order in one stage: those ready to ship aren't counted in production too. QA 25 Nov.)
+  assert.deepStrictEqual(chip('in_production'), want('printing', 'printedShipped'));
   assert.deepStrictEqual(chip('ready'), want('ready'));
   assert.deepStrictEqual(chip('shipped'), want('shipped', 'lateShipped'));
   assert.deepStrictEqual(chip('delivered'), want('delivered', 'deliveredAt', 'deliveredLate'));
   assert.deepStrictEqual(chip('late'), want('late', 'lateShipped'), 'by-day passed in Cairo, not delivered (shipped still counts)');
-  assert.deepStrictEqual(plain(r.counts), { all: 14, review: 1, customer: 2, received: 3, in_production: 3, ready: 1, shipped: 2, delivered: 3, late: 2 });
+  assert.deepStrictEqual(plain(r.counts), { all: 14, review: 1, customer: 2, received: 3, in_production: 2, ready: 1, shipped: 2, delivered: 3, late: 2 });
   // Counts follow the search and the more filters (not the chip picked).
   const express = run(all, { speed: 'express', chip: 'review' });
   assert.deepStrictEqual(plain(express.counts), { all: 1, review: 0, customer: 0, received: 1, in_production: 0, ready: 0, shipped: 0, delivered: 0, late: 1 });

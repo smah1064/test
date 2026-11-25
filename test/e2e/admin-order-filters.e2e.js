@@ -154,7 +154,7 @@ test('owner: search by phone, number, Arabic letters and digits, coupon; chips; 
   assert.strictEqual(await page.getAttribute('[data-of-chip="all"]', 'aria-pressed'), 'true');
   assert.strictEqual(await page.getAttribute('#of-chips', 'role'), 'group');
   assert.match(await page.getAttribute('#of-q', 'placeholder'), /coupon/, 'the owner may search coupons');
-  assert.deepStrictEqual(await chipNumbers(page), { all: String(total), review: '1', customer: '1', received: String(FILLERS + 1), in_production: '1', ready: '1', shipped: '1', delivered: '1', late: '0' });
+  assert.deepStrictEqual(await chipNumbers(page), { all: String(total), review: '1', customer: '1', received: String(FILLERS + 1), in_production: '0', ready: '1', shipped: '1', delivered: '1', late: '0' });
 
   // ---------- Search ----------
   const finds = async (q, want, why = q) => { await search(page, q); assert.deepStrictEqual(await rows(page), want.map((o) => o.number), why); };
@@ -190,7 +190,7 @@ test('owner: search by phone, number, Arabic letters and digits, coupon; chips; 
   assert.strictEqual(await page.isHidden('#of-clear'), true);
 
   // ---------- Chips ----------
-  for (const [c, o] of [['review', O.review], ['customer', O.customer], ['ready', O.ready], ['shipped', O.shipped], ['delivered', O.delivered], ['in_production', O.ready]]) {
+  for (const [c, o] of [['review', O.review], ['customer', O.customer], ['ready', O.ready], ['shipped', O.shipped], ['delivered', O.delivered]]) {
     await chip(page, c);
     assert.deepStrictEqual(await rows(page), [o.number], c);
     assert.deepStrictEqual(await page.$$eval('[data-of-chip][aria-pressed="true"]', (bs) => bs.map((b) => b.dataset.ofChip)), [c]);
@@ -350,8 +350,8 @@ test('Operations: the same search and chips, no coupon search, nothing about amo
     assert.deepStrictEqual(await rows(page), [O.shipped.number]);
     await page.click('#of-clear');
     assert.deepStrictEqual(await chipNumbers(page), lang === 'en'
-      ? { all: '53', review: '1', customer: '1', received: '48', in_production: '1', ready: '1', shipped: '1', delivered: '1', late: '0' }
-      : { all: '٥٣', review: '١', customer: '١', received: '٤٨', in_production: '١', ready: '١', shipped: '١', delivered: '١', late: '٠' });
+      ? { all: '53', review: '1', customer: '1', received: '48', in_production: '0', ready: '1', shipped: '1', delivered: '1', late: '0' }
+      : { all: '٥٣', review: '١', customer: '١', received: '٤٨', in_production: '٠', ready: '١', shipped: '١', delivered: '١', late: '٠' });
     assert.strictEqual(await overflow(page), 0, `${lang} ${width}`);
     await shot(page, `ops-${lang}-${width}`, { tall: width === 360 ? 1500 : 0 });
     assert.deepStrictEqual(page.errors, []);

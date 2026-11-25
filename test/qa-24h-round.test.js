@@ -266,3 +266,37 @@ test('while a corrected file is being saved: review decisions and the printing-h
   const pub = (await call(`/api/orders/${o.id}?k=${o.key}`)).json;
   assert.strictEqual(pub.items[0].status, 'awaiting_approval');
 });
+
+test('approvals: a photo to delete and a new photo order show the photos, not their ids', async () => {
+  const add = await call('/api/admin/staff', 'POST', { name: 'Cat Two', username: 'cat2x', roles: ['catalogue'], password: 'cat-two-passphrase' }, owner);
+  assert.strictEqual(add.status, 201, add.text);
+  const cat = (await call('/api/admin/login', 'POST', { username: 'cat2x', password: 'cat-two-passphrase' })).json.token;
+  const png = (c) => sharp({ create: { width: 300, height: 300, channels: 3, background: c } }).png().toBuffer();
+  const up = async (c) => fetch(`${base}/api/admin/catalog/cap/photos`, { method: 'POST', headers: { Authorization: `Bearer ${owner}`, 'Content-Type': 'image/png' }, body: await png(c) }).then((r) => r.json());
+  await up('#cc0000');
+  const two = await up('#0000cc');
+  const ids = two.photos.map((p) => p.id);
+  const del = await call(`/api/admin/catalog/cap/photos/${ids[0]}`, 'DELETE', undefined, cat);
+  assert.strictEqual(del.status, 202, del.text);
+  const ord = await call('/api/admin/catalog/cap/photos', 'PUT', { order: [...ids].reverse(), main: ids[1] }, cat);
+  assert.strictEqual(ord.status, 202, ord.text);
+  const rows = (await call('/api/admin/approvals', 'GET', undefined, owner)).json.approvals;
+  const dRow = rows.find((x) => x.id === (del.json.approval || del.json).id);
+  const oRow = rows.find((x) => x.id === (ord.json.approval || ord.json).id);
+  assert.ok(dRow.pics && dRow.pics[0].url.includes(ids[0]), JSON.stringify(dRow));
+  assert.ok(oRow.pics.length >= 2 && oRow.pics[0].url.includes(ids[1]), JSON.stringify(oRow.pics));
+  assert.ok(!JSON.stringify(oRow.changes).includes(ids[0]), JSON.stringify(oRow.changes));
+});
+
+test('a stock count waiting for approval is marked "changed since" when pieces are sold meanwhile', async () => {
+  assert.strictEqual((await call('/api/admin/catalog/mug', 'PUT', { stock: 12 }, owner)).status, 200);
+  const cat = (await call('/api/admin/login', 'POST', { username: 'cat2x', password: 'cat-two-passphrase' })).json.token;
+  const held = await call('/api/admin/catalog/mug', 'PUT', { stock: 20 }, cat);
+  assert.strictEqual(held.status, 202, held.text);
+  const id = (held.json.approval || held.json).id;
+  const row = async () => (await call('/api/admin/approvals', 'GET', undefined, owner)).json.approvals.find((x) => x.id === id);
+  assert.ok(!(await row()).changedSince, 'nothing changed yet');
+  await new Promise((r) => setTimeout(r, 5));
+  await approvedMug();
+  assert.ok((await row()).changedSince, 'a sale since the request is a change');
+});

@@ -207,8 +207,11 @@ test('a corrected file is a new version: kept apart, approved again by the custo
   const yes = await post(`/api/proofs/${t}`, { decision: 'approve', proofHash: p2.proofHash });
   assert.strictEqual(yes.status, 200);
   assert.strictEqual((await yes.json()).status, 'queued');
-  // The link is used up.
-  assert.strictEqual((await fetch(`${base}/api/proofs/${t}`)).status, 404);
+  // The link is used: opened again it shows the decision (QA 25 Nov: it said "no longer works"), and decides nothing more.
+  const again = await fetch(`${base}/api/proofs/${t}`);
+  assert.strictEqual(again.status, 200);
+  assert.strictEqual((await again.json()).status, 'queued');
+  assert.strictEqual((await post(`/api/proofs/${t}`, { decision: 'reject', comment: 'late' })).status, 409);
   const final = (await (await fetch(`${base}/api/orders/${o.id}?k=${o.key}`)).json()).items[0];
   assert.strictEqual(final.approval.version, 2);
   assert.strictEqual(final.approval.via, 'proof-link');
