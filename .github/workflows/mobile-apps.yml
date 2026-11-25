@@ -13,10 +13,8 @@ on:
 permissions:
   contents: read
 
-# A new push waits for the running build to finish (the iPhone build is slow to start), keeping only the newest one waiting.
-concurrency:
-  group: mobile-apps-${{ github.ref }}
-  cancel-in-progress: false
+# Runs for different pushes go side by side (nothing is cancelled half-way); only publishing the Android test app
+# takes turns, and an older push never replaces the app of a newer one (see publish-android-test).
 
 env:
   NODE_VERSION: '22'
@@ -239,6 +237,9 @@ jobs:
     if: github.ref == 'refs/heads/mobile-apps'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    concurrency:
+      group: publish-android-test
+      cancel-in-progress: false
     permissions:
       contents: write
     steps:
@@ -252,6 +253,11 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -e
+          head=$(gh api "repos/$GH_REPO/commits/$GITHUB_REF_NAME" --jq .sha)
+          if [ "$head" != "$GITHUB_SHA" ]; then
+            echo "Not published: a newer push ($head) is on the branch, and its run publishes the test app." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           src=$(ls apk/*.apk | head -1)
           cp "$src" ebda3-android-test.apk
           notes="Test version of the إبداع Android app (built $(date -u '+%Y-%m-%d %H:%M') UTC from ${GITHUB_SHA::7}, $(basename "$src")).
