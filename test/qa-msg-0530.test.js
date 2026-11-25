@@ -151,11 +151,12 @@ test('EPS without %%EndComments is drawn at full size, like one with it', async 
     const m = await sharp(Buffer.from(await r.arrayBuffer())).metadata();
     return [m.width, m.height];
   };
-  // A red circle of 80 pt on a 200 x 100 pt artwork: fitted into 800 px, the circle is 320 px wide.
+  // A red circle of 80 pt on a 200 x 100 pt artwork: the circle itself gets the 800 px (it was 320 px:
+  // the artwork's box fitted into 800 px).
   const draw = '1 0 0 setrgbcolor newpath 100 50 40 0 360 arc fill\nshowpage\n%%EOF\n';
   try {
     const withEnd = await size(`%!PS-Adobe-3.0 EPSF-3.0\n%%BoundingBox: 0 0 200 100\n%%EndComments\n${draw}`);
-    assert.ok(withEnd[0] >= 316 && withEnd[0] <= 324 && Math.abs(withEnd[0] - withEnd[1]) <= 2, `with %%EndComments: ${withEnd}`);
+    assert.ok(withEnd[0] >= 790 && withEnd[0] <= 800 && Math.abs(withEnd[0] - withEnd[1]) <= 2, `with %%EndComments: ${withEnd}`);
     const cases = {
       'no %%EndComments': `%!PS-Adobe-3.0 EPSF-3.0\n%%Creator: tiny\n%%Pages: 1\n%%BoundingBox: 0 0 200 100\n${draw}`,
       'no %%EndComments, Windows line ends': `%!PS-Adobe-3.0 EPSF-3.0\r\n%%BoundingBox: 0 0 200 100\r\n${draw.replace(/\n/g, '\r\n')}`,

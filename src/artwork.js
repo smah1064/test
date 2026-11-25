@@ -59,7 +59,8 @@ const memMb = (pid) => {
   }
 };
 
-function runWorker(data, kind, px, timeoutMs, pages = null, job = null) {
+// (opts: { probe } or { region } for convertArtwork's steps, see the worker.)
+function runWorker(data, kind, px, timeoutMs, pages = null, job = null, opts = null) {
   return new Promise((resolve, reject) => {
     const child = fork(path.join(__dirname, 'artwork-worker.mjs'), [], {
       execArgv: FLAGS,
@@ -92,13 +93,28 @@ function runWorker(data, kind, px, timeoutMs, pages = null, job = null) {
         done = true;
         clearTimeout(timer);
         clearInterval(watch);
-        runWorker(data, kind, px, timeoutMs, pages, job).then(resolve, reject);
+        runWorker(data, kind, px, timeoutMs, pages, job, opts).then(resolve, reject);
         return;
       }
       finish(reject, fail('failed', `converter stopped (code ${code}, ${signal || 'no signal'}): ${stderr.trim().slice(-400)}`));
     });
-    child.send(job ? { job } : { data, kind, px, pages });
+    child.send(job ? { job } : { data, kind, px, pages, ...opts });
   });
+}
+
+/** A PNG's RGBA pixels: { data, width, height }. */
+async function pixelsOf(png) {
+  const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  return { data, width: info.width, height: info.height };
+}
+/** A part ({ left, top, width, height }) of RGBA pixels, as a copy. */
+function cropPixels(pic, b) {
+  const data = Buffer.allocUnsafe(b.width * b.height * 4);
+  for (let y = 0; y < b.height; y++) {
+    const from = ((b.top + y) * pic.width + b.left) * 4;
+    pic.data.copy(data, y * b.width * 4, from, from + b.width * 4);
+  }
+  return { data, width: b.width, height: b.height };
 }
 
 /**
@@ -106,13 +122,13 @@ function runWorker(data, kind, px, timeoutMs, pages = null, job = null) {
  * rectangle behind the design. When the picture's edges are (almost) all
  * opaque white, the white connected to the edges becomes transparent; white
  * shapes inside the design (white letters on a dark badge) stay. Soft edges
- * keep a little transparency so the outline stays smooth. Returns a new PNG,
- * or null when there is no white background.
+ * keep a little transparency so the outline stays smooth. Changes the RGBA
+ * pixels in place; returns false when there is no white background. `force`:
+ * the white background was already found on another drawing of the same
+ * artwork (a closer one, whose edges may be the design's own): clear it
+ * without looking at the edges again.
  */
-async function clearWhiteBackground(png) {
-  const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-  const W = info.width;
-  const H = info.height;
+function clearWhiteBackground({ data, width: W, height: H }, { force = false } = {}) {
   // White, at any opacity (the page's edge rows are drawn half-transparent).
   const isWhite = (i) => data[i * 4] > 245 && data[i * 4 + 1] > 245 && data[i * 4 + 2] > 245;
   // Only when the frame of the picture is white (not when the design itself touches the edge).
@@ -120,7 +136,7 @@ async function clearWhiteBackground(png) {
   let white = 0;
   for (let x = 0; x < W; x++) for (const y of [0, H - 1]) { edge++; if (isWhite(y * W + x)) white++; }
   for (let y = 0; y < H; y++) for (const x of [0, W - 1]) { edge++; if (isWhite(y * W + x)) white++; }
-  if (white / edge < 0.9) return null;
+  if (!force && white / edge < 0.9) return false;
   const seen = new Uint8Array(W * H);
   const stack = new Int32Array(W * H);
   let top = 0;
@@ -145,73 +161,207 @@ async function clearWhiteBackground(png) {
     const lightness = Math.min(data[i * 4], data[i * 4 + 1], data[i * 4 + 2]);
     if (lightness > 180) data[i * 4 + 3] = Math.round(data[i * 4 + 3] * (255 - lightness) / 75);
   }
-  return sharp(data, { raw: info }).png().toBuffer();
+  return true;
+}
+
+/** The box around the RGBA pixels that aren't fully transparent ({ left, top, width, height }), or null. */
+function opaqueBox({ data, width: w, height: h }) {
+  let top = h;
+  let bottom = -1;
+  let left = w;
+  let right = -1;
+  for (let y = 0; y < h; y++) {
+    const row = y * w;
+    for (let x = 0; x < w; x++) {
+      if (data[(row + x) * 4 + 3] > 0) {
+        if (y < top) top = y;
+        bottom = y;
+        if (x < left) left = x;
+        if (x > right) right = x;
+      }
+    }
+  }
+  return bottom < 0 ? null : { left, top, width: right - left + 1, height: bottom - top + 1 };
 }
 
 /**
- * Converts an AI/EPS file to a trimmed, transparent PNG whose longest side is
+ * The artwork cut out of a drawing (a PNG): the empty margin around it first, then its white artboard
+ * (see clearWhiteBackground; `clear`: null = look at the edges, true / false = as found on another
+ * drawing of the same artwork), then only the transparent margin that leaves (a trim by colour
+ * would take the artwork's own solid background, e.g. a red logo panel, for margin and cut it away).
+ * Returns { pic: its RGBA pixels, box: where it is in the drawing, cleared }.
+ */
+async function cutOut(png, clear = null) {
+  const drawn = await pixelsOf(png);
+  const page = opaqueBox(drawn);
+  if (!page) throw new ArtworkError('empty'); // nothing visible was drawn
+  const pic = cropPixels(drawn, page);
+  const cleared = clear !== false && clearWhiteBackground(pic, { force: clear === true });
+  const art = opaqueBox(pic);
+  if (!art) throw new ArtworkError('empty');
+  return { pic: cropPixels(pic, art), box: { left: page.left + art.left, top: page.top + art.top, width: art.width, height: art.height }, cleared };
+}
+
+// The finest a drawing is made (a 6 mm logo still gets 3000 pixels), and the most pixels a whole page may span
+// at that density: Ghostscript slows down with it (a big shape drawn at a huge size, even if only a corner is kept;
+// an A0 page still gets about 10000 DPI).
+const MAX_DPI = 12000;
+const MAX_PAGE_PX = 5e5;
+
+/** A probe's box ("%%HiResBoundingBox: x0 y0 x1 y1", page points): the biggest one printed, or null when nothing was drawn. */
+function probeBox(log) {
+  let best = null;
+  for (const m of String(log || '').matchAll(/%%HiResBoundingBox:\s*(\S+)\s+(\S+)\s+(\S+)\s+(\S+)/g)) {
+    const [x0, y0, x1, y1] = m.slice(1, 5).map(Number);
+    if (![x0, y0, x1, y1].every(Number.isFinite) || !(x1 > x0 && y1 > y0)) continue;
+    if (!best || (x1 - x0) * (y1 - y0) > (best.x1 - best.x0) * (best.y1 - best.y0)) best = { x0, y0, x1, y1 };
+  }
+  return best;
+}
+const boxArea = (b) => Math.max(0, b.x1 - b.x0) * Math.max(0, b.y1 - b.y0);
+const boxSide = (b) => Math.max(b.x1 - b.x0, b.y1 - b.y0);
+const overlap = (a, b) => boxArea({ x0: Math.max(a.x0, b.x0), y0: Math.max(a.y0, b.y0), x1: Math.min(a.x1, b.x1), y1: Math.min(a.y1, b.y1) });
+
+/**
+ * The most pixels per point a picture (photo) of a PDF has when it fills `box`: its own width x height over
+ * the box (0 when unknown, as for pictures inside PostScript). A picture's dictionary is never compressed.
+ */
+function pictureDensity(text, box) {
+  let most = 0;
+  for (const m of text.matchAll(/\/Subtype\s*\/Image\b/g)) {
+    const from = text.lastIndexOf('obj', m.index);
+    const to = text.indexOf('stream', m.index);
+    if (from < 0 || to < 0 || m.index - from > 4000 || to - m.index > 4000) continue;
+    const dict = text.slice(from, to);
+    const w = /\/Width\s+(\d+)\b(?!\s+\d+\s+R)/.exec(dict);
+    const h = /\/Height\s+(\d+)\b(?!\s+\d+\s+R)/.exec(dict);
+    if (w && h) most = Math.max(most, Number(w[1]) * Number(h[1]));
+  }
+  return most && boxArea(box) > 0 ? Math.sqrt(most / boxArea(box)) : 0;
+}
+
+/**
+ * Converts an AI/EPS/PDF file to a trimmed, transparent PNG whose longest side is
  * at most `px` pixels. Returns { png, width, height }.
+ *
+ * The artwork itself gets the `px` pixels, not its page: a 7 cm logo on an empty A4 page is drawn as
+ * finely as a page-sized one. Steps (each a Ghostscript run in the separate process, stopped after `timeoutMs`
+ * like the single drawing before; all of them within twice that):
+ *  1. the box around everything drawn on the page, and the page's size (no picture: quick); when the file
+ *     has photos in it, the box around those too;
+ *  2. that box drawn with its longer side at `px` and cut out as always (margin, white artboard);
+ *  3. when what's left is smaller (a logo on a white page or artboard), only that part drawn again,
+ *     finer (the box it is drawn in, with a margin, stays within about px), until its longer side is `px`.
+ * A drawing that is mostly a photo is not enlarged beyond the photo's own pixels (nor made smaller than the
+ * whole page fitted into `px`, as before): enlarged it gains no detail, only a resolution the editor would trust.
+ * If the first step gets no answer, the whole page is fitted into px x px as before; if a finer drawing
+ * fails or time runs short, the coarser one is kept.
  */
 async function convertArtwork(buf, { px = 4000, timeoutMs = 25000 } = {}) {
   const found = sniff(buf);
   if (!found) throw new ArtworkError('type');
   if (running >= MAX_JOBS) throw new ArtworkError('busy');
   running++;
-  let out;
   try {
-    out = await runWorker(found.data, found.kind, px, timeoutMs);
+    return await drawArtwork(found, px, timeoutMs);
   } finally {
     running--;
   }
-  if (!out.png || !out.png.length) {
-    const err = new ArtworkError('failed');
-    err.detail = out.log;
-    throw err;
+}
+
+/** RGBA pixels as a PNG, made smaller by `scale` when it is below 1. Returns { png, width, height }. */
+async function encode({ data, width, height }, scale = 1) {
+  let img = sharp(data, { raw: { width, height, channels: 4 } });
+  const w = Math.max(1, Math.round(width * scale));
+  const h = Math.max(1, Math.round(height * scale));
+  if (scale < 1 && (w < width || h < height)) img = img.resize(w, h, { fit: 'fill' });
+  const out = await img.png({ compressionLevel: 6 }).toBuffer({ resolveWithObject: true });
+  return { png: out.data, width: out.info.width, height: out.info.height };
+}
+
+async function drawArtwork({ data, kind }, px, timeoutMs) {
+  const deadline = Date.now() + 2 * timeoutMs;
+  const run = (opts) => {
+    const ms = Math.min(timeoutMs, deadline - Date.now());
+    if (ms < 250) return Promise.reject(Object.assign(new ArtworkError('timeout'), { detail: 'no time left' }));
+    return runWorker(data, kind, px, ms, null, null, opts);
+  };
+  const failed = (out) => Object.assign(new ArtworkError('failed'), { detail: out.log });
+  const pngOf = (out) => Buffer.from(out.png.buffer, out.png.byteOffset, out.png.byteLength);
+  // The scale that keeps a picture within px and to `scale` (a few pixels off that aim: not worth a softer picture).
+  const fit = (pic, scale = 1) => {
+    const side = Math.max(pic.width, pic.height);
+    const s = Math.min(1, scale, px / side);
+    return side <= px && side * (1 - s) < 4 ? 1 : s;
+  };
+  const probe = await run({ probe: 'all' });
+  const size = /PAGESIZE \[(\S+) (\S+)\]/.exec(probe.log || '');
+  const page = size && [Number(size[1]), Number(size[2])];
+  if (!page || !(page[0] > 0 && page[1] > 0)) {
+    // No answer from the probe: the whole page fitted into px x px, as before.
+    const out = await run(null);
+    if (!out.png || !out.png.length) throw failed(out);
+    const { pic } = await cutOut(pngOf(out));
+    return encode(pic, fit(pic));
   }
-  /** The picture cut to the box around its non-transparent pixels. */
-  async function cropToOpaque(buf) {
-    const { data, info } = await sharp(buf).ensureAlpha().extractChannel(3).raw().toBuffer({ resolveWithObject: true });
-    const { width: w, height: h } = info;
-    let top = h;
-    let bottom = -1;
-    let left = w;
-    let right = -1;
-    for (let y = 0; y < h; y++) {
-      const row = y * w;
-      for (let x = 0; x < w; x++) {
-        if (data[row + x] > 0) {
-          if (y < top) top = y;
-          bottom = y;
-          if (x < left) left = x;
-          if (x > right) right = x;
-        }
-      }
+  const marks = probeBox(probe.log);
+  if (!marks) throw new ArtworkError('empty');
+  const far = Math.max(page[0], page[1], ...[marks.x0, marks.y0, marks.x1, marks.y1].map(Math.abs));
+  const finest = Math.min(MAX_DPI / 72, MAX_PAGE_PX / far);
+  /** `box` (page points, with a margin) drawn at about d pixels per point and cut out; `at`: the artwork's box in page points. */
+  const shot = async (box, d, clear, margin) => {
+    const res = Math.round(72 * d * 1000) / 1000;
+    const k = res / 72;
+    const m = margin == null ? 4 / k : margin;
+    const x = Math.round((box.x0 - m) * 1000) / 1000;
+    const y = Math.round((box.y0 - m) * 1000) / 1000;
+    const W = Math.max(1, Math.ceil((box.x1 + m - x) * k));
+    const H = Math.max(1, Math.ceil((box.y1 + m - y) * k));
+    if (W * H > (px + 100) ** 2) throw Object.assign(new ArtworkError('failed'), { detail: `region ${W}x${H}` }); // (never: a safety net)
+    const out = await run({ region: { x, y, W, H, res } });
+    if (!out.png || !out.png.length) throw failed(out);
+    const cut = await cutOut(pngOf(out), clear);
+    const b = cut.box;
+    return { ...cut, d: k, at: { x0: x + b.left / k, x1: x + (b.left + b.width) / k, y0: y + (H - b.top - b.height) / k, y1: y + (H - b.top) / k } };
+  };
+  // Photos in it (a PDF names them; PostScript draws them with these operators): where they are drawn.
+  const text = data.toString('latin1');
+  let photos = null;
+  if (kind === 'pdf' ? /\/Subtype\s*\/Image\b/.test(text) : /\b(?:image|colorimage|imagemask)\b/.test(text)) {
+    try {
+      photos = probeBox((await run({ probe: 'images' })).log);
+    } catch (e) {
+      photos = { x0: -Infinity, y0: -Infinity, x1: Infinity, y1: Infinity }; // not known: as if all photo (the size it had before)
     }
-    if (bottom < 0) throw new Error('empty');
-    const box = { left, top, width: right - left + 1, height: bottom - top + 1 };
-    const out = await sharp(buf).ensureAlpha().extract(box).png({ compressionLevel: 6 }).toBuffer({ resolveWithObject: true });
-    return out;
   }
-  // Cut away the empty margin around the artwork.
-  let png = Buffer.from(out.png.buffer, out.png.byteOffset, out.png.byteLength);
-  // The page area first (Ghostscript leaves an empty margin around it), then its white artboard.
+  // A drawing that is mostly photo: no finer than the photo's own pixels, nor coarser than the whole page fitted into px.
+  const own = photos && kind === 'pdf' ? pictureDensity(text, photos) : 0;
+  const most = (box) => (photos && overlap(photos, box) >= 0.5 * boxArea(box) ? Math.max(px / Math.max(page[0], page[1]), own) : Infinity);
+  // The density that gives a box's longer side px pixels (px - 2: the soft edge adds up to a pixel each side,
+  // and a picture made smaller to fit would lose a little sharpness).
+  const aim = (box) => Math.min(finest, (px - 2) / boxSide(box), most(box));
+  let best = await shot(marks, aim(marks), null);
+  const clear = best.cleared;
+  let want = aim(best.at);
   try {
-    const page = await sharp(png).trim({ threshold: 1 }).png().toBuffer();
-    png = (await clearWhiteBackground(page)) || page;
+    for (let i = 0; i < 4 && want > best.d * 1.02; i++) {
+      // The margin covers where the last, coarser drawing could have been wrong by a pixel or two; the whole
+      // box drawn (artwork and margin) stays within about px.
+      const d = Math.min(want, (px + 50) / (boxSide(best.at) + 4 / best.d));
+      if (d <= best.d * 1.02) break;
+      const next = await shot(best.at, d, clear, Math.max(4 / d, 2 / best.d));
+      // The same artwork, give or take a pixel or two of the coarser drawing (else keep the one we have).
+      const was = boxSide(best.at);
+      const slack = 3 / best.d;
+      const now = boxSide(next.at);
+      if (!(now > 0.8 * was - slack && now < 1.25 * was + slack)) break;
+      best = next;
+      want = aim(best.at); // (measured more closely now)
+    }
   } catch (e) {
-    throw new ArtworkError('empty'); // nothing visible was drawn
+    // Out of time or a finer drawing failed: the one we have is still good.
   }
-  // Then only the transparent margin left by clearing the artboard: a trim by colour would take the
-  // artwork's own solid background (e.g. a red logo panel) for margin and cut it away.
-  let trimmed;
-  try {
-    trimmed = await cropToOpaque(png);
-  } catch (e) {
-    throw new ArtworkError('empty'); // nothing visible was drawn
-  }
-  const stats = await sharp(trimmed.data).stats();
-  if (stats.channels[3] && stats.channels[3].max === 0) throw new ArtworkError('empty');
-  return { png: trimmed.data, width: trimmed.info.width, height: trimmed.info.height };
+  return encode(best.pic, fit(best.pic, want / best.d));
 }
 
 /** A Ghostscript job in the separate process, one at a time with the others (see runJob in the worker). */
