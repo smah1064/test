@@ -313,6 +313,10 @@ function monthCanvas(w, h, accent) {
   return c;
 }
 const metal = () => new THREE.MeshStandardMaterial({ color: '#9aa0a8', metalness: 0.8, roughness: 0.3 });
+/** Polished chrome (a pen's clip, ring and tip). */
+function chrome() {
+  return new THREE.MeshStandardMaterial({ color: '#dde1e6', metalness: 1, roughness: 0.17, envMapIntensity: 1.25 });
+}
 /** A thin card panel (front texture + plain back), hinged at its top edge, hanging down. */
 function hangingPanel(w, h, frontMat, backMat, t = 0.014) {
   const p = new THREE.Group();
@@ -1203,11 +1207,13 @@ function tiled(cv, renderer, inches, color = true) {
 function laserLook(color, product) {
   const id = color.id;
   const m = product.model || {};
-  if (m.type === 'cardholder') return 'leather';
+  const name = JSON.stringify(color.name || '').toLowerCase();
+  if (m.type === 'cardholder' || m.type === 'wallet') return 'leather';
+  // Pens: coated metal, or a wooden (bamboo) barrel.
+  if (m.type === 'pen') return id === 'bamboo' || name.includes('bamboo') || name.includes('wood') ? 'wood' : 'metal';
   if (id === 'clear' || m.clear) return 'clear';
   if (id === 'slate') return 'slate';
   if (['gold', 'silver', 'rosegold'].includes(id)) return 'mirror';
-  const name = JSON.stringify(color.name || '').toLowerCase();
   if (['natural', 'wood', 'walnut'].includes(id) || name.includes('wood')) return 'wood';
   return 'acrylic';
 }
@@ -1240,6 +1246,13 @@ function laserMats(look, hex, renderer, painted) {
     return {
       face: new THREE.MeshPhysicalMaterial({ map, bumpMap: bump, bumpScale: 1.2, roughness: 0.55, metalness: 0, clearcoat: 0.25, clearcoatRoughness: 0.55, sheen: 0.5, sheenRoughness: 0.6, sheenColor: new THREE.Color(hex).lerp(new THREE.Color('#ffffff'), 0.25), envMapIntensity: 0.5 }),
       edge: std({ color: new THREE.Color(hex).multiplyScalar(0.7), roughness: 0.4, envMapIntensity: 0.5 }),
+    };
+  }
+  if (look === 'metal') {
+    // Coated metal (pens): the colour coat over the metal, a little glossy; the edge is the bare chrome.
+    return {
+      face: new THREE.MeshPhysicalMaterial({ color: hex, metalness: 0.55, roughness: 0.36, clearcoat: 0.6, clearcoatRoughness: 0.08, envMapIntensity: 1 }),
+      edge: chrome(),
     };
   }
   if (look === 'mirror') {
@@ -1299,15 +1312,27 @@ function cutSheet(shape, depth, mats, bevel = 0) {
  * The engraving: the design (already in the engrave tone, on a transparent
  * background) laid on the surface, so the material shows around it. Covers a
  * w x h box (or `shape` within it), centred on the origin and facing +z.
+ * `radius`: laid round a barrel whose length runs along x (the width runs along
+ * it, the height goes round it), still centred on +z. `metal`: the bare metal
+ * under a coat (a little shiny) rather than a matte burn.
  */
 function engraving(crop, w, h, renderer, opts = {}) {
   const tx = texture(crop, renderer);
-  const geo = opts.shape ? new THREE.ShapeGeometry(opts.shape, 48) : new THREE.PlaneGeometry(w, h);
+  const geo = opts.shape ? new THREE.ShapeGeometry(opts.shape, 48) : new THREE.PlaneGeometry(w, h, 1, opts.radius ? 32 : 1);
   if (opts.shape) boxUV(geo, w, h);
+  if (opts.radius) {
+    const p = geo.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const a = p.getY(i) / opts.radius;
+      p.setXYZ(i, p.getX(i), opts.radius * Math.sin(a), opts.radius * Math.cos(a));
+    }
+    geo.computeVertexNormals();
+  }
   const m = new THREE.MeshStandardMaterial({
     map: tx, transparent: true, alphaTest: 0.04, depthWrite: false, metalness: 0,
     roughness: opts.frosted ? 0.95 : 0.88, envMapIntensity: opts.frosted ? 0.9 : 0.4,
     ...(opts.frosted ? { color: opts.frosted === true ? '#e6ecef' : opts.frosted } : {}),
+    ...(opts.metal ? { metalness: 0.35, roughness: 0.6, envMapIntensity: 0.8 } : {}),
     polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
   });
   const mesh = new THREE.Mesh(geo, m);
@@ -1650,6 +1675,181 @@ function laserCardholder(mats, crop, w, h, m, k, renderer, color) {
     g.add(e);
   }
   g.rotation.set(-Math.PI / 2, 0, 0.18);
+  g.userData.viewDir = LOOK_DOWN;
+  return g;
+}
+
+/**
+ * A round part of a pen, turned about its length (x): `profile` is [x, radius]
+ * pairs from left to right. UVs in inches, u along the pen and v round it
+ * (so wood grain runs along the barrel), with the seam at the back.
+ */
+function penPart(profile, R, material) {
+  const geo = new THREE.LatheGeometry(profile.map(([x, r]) => new THREE.Vector2(r, x)), 72, Math.PI, Math.PI * 2);
+  geo.rotateZ(-Math.PI / 2); // the lathe's axis (y) along x; its front (+z) stays in front
+  const uv = geo.attributes.uv;
+  const p = geo.attributes.position;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, p.getX(i), (0.5 - uv.getX(i)) * Math.PI * 2 * R);
+  uv.needsUpdate = true;
+  return new THREE.Mesh(geo, material);
+}
+/**
+ * The ballpoint pen, lying down: the cap with its clip on the left, a chrome
+ * ring, the barrel and the tapered tip on the right. The engraving runs along
+ * the barrel between the ring and the tip, on the side facing the camera.
+ */
+function laserPen(look, mats, crop, w, h, m, renderer) {
+  const L = m.lengthIn || 5.6;
+  const R = (m.diameterIn || 0.43) / 2;
+  const x0 = -L / 2;
+  const x1 = L / 2;
+  const body = mats.face; // the coated metal or the bamboo
+  // (Bamboo: a finer grain than on a board, so a few straight fibres show across the thin barrel.)
+  if (look === 'wood') for (const tx of [body.map, body.bumpMap]) tx.repeat.set(1 / 5, 1 / 5);
+  const steel = look === 'metal' ? mats.edge : chrome();
+  const xr = x0 + 1.5; // the cap's ring
+  const ringW = 0.1;
+  const xt = x1 - 0.62; // where the tip starts
+  const g = new THREE.Group();
+  // End button, cap, ring, barrel (closed at the tip end), tip and the ball.
+  const dome = Array.from({ length: 7 }, (_, i) => {
+    const a = (i / 6) * (Math.PI / 2);
+    return [x0 + 0.07 * (1 - Math.cos(a)), 0.15 * Math.sin(a)];
+  });
+  g.add(penPart([...dome, [x0 + 0.17, 0.15]], R, steel));
+  g.add(penPart([[x0 + 0.15, 0], [x0 + 0.15, 0.16], [x0 + 0.16, 0.19], [x0 + 0.19, R - 0.007], [x0 + 0.24, R], [xr + 0.01, R]], R, body));
+  g.add(penPart([[xr, R - 0.012], [xr + 0.008, R + 0.008], [xr + ringW - 0.008, R + 0.008], [xr + ringW, R - 0.012]], R, steel));
+  g.add(penPart([[xr + ringW - 0.01, R], [xt - 0.45, R], [xt - 0.2, R - 0.006], [xt - 0.02, R - 0.02], [xt, R - 0.03], [xt, 0]], R, body));
+  const tip = [];
+  for (let i = 0; i <= 10; i++) {
+    const s = i / 10;
+    tip.push([xt - 0.01 + s * (x1 - 0.08 - xt + 0.01), R - 0.04 - (R - 0.04 - 0.045) * Math.pow(s, 1.25)]);
+  }
+  tip.push([x1 - 0.04, 0.032], [x1 - 0.015, 0.02], [x1, 0]);
+  g.add(penPart(tip, R, steel));
+  // The clip on top of the cap: a foot on the cap, an arm over it and a rounded end resting on the barrel.
+  const xa = x0 + 0.17;
+  const xe = x0 + 1.85;
+  const s = new THREE.Shape();
+  s.moveTo(xa, R - 0.05);
+  s.lineTo(xa, R + 0.06);
+  s.quadraticCurveTo(xa, R + 0.088, xa + 0.05, R + 0.088);
+  s.lineTo(xe - 0.12, R + 0.058);
+  s.quadraticCurveTo(xe, R + 0.055, xe, R + 0.018);
+  s.quadraticCurveTo(xe, R - 0.008, xe - 0.08, R - 0.006);
+  s.lineTo(xe - 0.17, R + 0.018);
+  s.lineTo(xa + 0.36, R + 0.046);
+  s.lineTo(xa + 0.3, R - 0.05);
+  s.lineTo(xa, R - 0.05);
+  const cw = 0.1;
+  const clipGeo = new THREE.ExtrudeGeometry(s, { depth: cw, bevelEnabled: true, bevelThickness: 0.012, bevelSize: 0.008, bevelSegments: 3, curveSegments: 12 });
+  clipGeo.translate(0, 0, -cw / 2);
+  g.add(new THREE.Mesh(clipGeo, steel));
+  if (crop) {
+    // Along the barrel, in the middle of the part between the ring and the tip.
+    const e = engraving(crop, w, h, renderer, { radius: R + 0.003, metal: look === 'metal' });
+    e.position.x = (xr + ringW + xt) / 2;
+    g.add(e);
+  }
+  // Rolled a little towards the camera (which looks from a little above), the clip going back over the top.
+  const lift = 0.42;
+  g.rotation.x = -lift;
+  g.userData.viewDir = new THREE.Vector3(0, Math.sin(lift), Math.cos(lift));
+  g.userData.fitWidth = true;
+  g.userData.shadow = [L * 1.1, 0.9];
+  return g;
+}
+
+/**
+ * A closed bifold leather wallet, lying face up: the two halves joined by the
+ * rounded fold (the spine) on the left, open on the other three edges (the
+ * card pockets' layers show between them), stitched round the front and back.
+ * The engraving sits where the print area is on the 2D mockup.
+ */
+function laserWallet(mats, crop, w, h, m, renderer, color, side) {
+  const [W, H] = m.outerIn || [4.33, 3.54];
+  const D = m.depthIn || 0.45;
+  const t = 0.07; // each half's outer leather
+  const S = D / 2; // the fold's radius
+  const xs = -W / 2 + S; // where the fold meets the flat halves
+  const r = 0.24; // the open corners' radius
+  const bevel = 0.01;
+  /** A panel from the fold to the right edge, `inset` in from the open edges, rounded at the open corners. */
+  const panel = (inset = 0, from = xs) => {
+    const x2 = W / 2 - inset;
+    const y2 = H / 2 - inset;
+    const rr = Math.max(0.02, r - inset);
+    const p = new THREE.Shape();
+    p.moveTo(from, -y2);
+    p.lineTo(x2 - rr, -y2);
+    p.quadraticCurveTo(x2, -y2, x2, -y2 + rr);
+    p.lineTo(x2, y2 - rr);
+    p.quadraticCurveTo(x2, y2, x2 - rr, y2);
+    p.lineTo(from, y2);
+    p.lineTo(from, -y2);
+    return p;
+  };
+  const g = new THREE.Group();
+  for (const sgn of [1, -1]) {
+    const outer = cutSheet(panel(), t, mats, bevel);
+    outer.position.z = sgn * (D / 2 - t / 2);
+    g.add(outer);
+    // The pockets inside each half, a little further in from the edges each, and their edges a shade darker.
+    [[0.03, 0.055], [0.075, 0.07]].forEach(([inset, th], i) => {
+      const inner = { face: mats.face, edge: mats.edge.clone() };
+      inner.edge.color.multiplyScalar(i ? 0.72 : 0.86);
+      const layer = cutSheet(panel(inset, xs - 0.02), th, inner);
+      const top = D / 2 - t - 0.004 - (i ? 0.059 : 0);
+      layer.position.z = sgn * (top - th / 2);
+      g.add(layer);
+    });
+  }
+  // The dark slit between the two halves.
+  const dark = new THREE.MeshStandardMaterial({ color: '#120d0b', roughness: 1 });
+  g.add(cutSheet(panel(0.13, xs - 0.02), 0.03, { face: dark, edge: dark }));
+  // The fold: a half tube of leather round the left edge, its cut ends at the top and bottom.
+  // (As thick as the halves with their rounded edges, so the fold meets their faces flush.)
+  const fold = new THREE.Shape();
+  fold.absarc(xs, 0, S + bevel, Math.PI / 2, Math.PI * 1.5, false);
+  fold.lineTo(xs, -S + t);
+  fold.absarc(xs, 0, S - t, Math.PI * 1.5, Math.PI / 2, true);
+  fold.lineTo(xs, S + bevel);
+  const foldGeo = new THREE.ExtrudeGeometry(fold, { depth: H, bevelEnabled: false, curveSegments: 32 });
+  foldGeo.rotateX(Math.PI / 2); // the shape's y becomes z (thickness), its length runs along y
+  foldGeo.translate(0, H / 2, 0);
+  g.add(new THREE.Mesh(foldGeo, [mats.edge, mats.face]));
+  // Stitching round each face, a little in from the edges (further from the fold), as on the 2D mockup.
+  const thread = color.id === 'black' ? '#77726c' : '#efe4cc';
+  const inset = 0.15;
+  const sx0 = xs + 0.2;
+  const sx1 = W / 2 - inset;
+  const sy = H / 2 - inset;
+  const rs = r - inset * 0.6;
+  const path = new THREE.Path();
+  path.moveTo(sx0, -sy + 0.08);
+  path.quadraticCurveTo(sx0, -sy, sx0 + 0.08, -sy);
+  path.lineTo(sx1 - rs, -sy);
+  path.quadraticCurveTo(sx1, -sy, sx1, -sy + rs);
+  path.lineTo(sx1, sy - rs);
+  path.quadraticCurveTo(sx1, sy, sx1 - rs, sy);
+  path.lineTo(sx0 + 0.08, sy);
+  path.quadraticCurveTo(sx0, sy, sx0, sy - 0.08);
+  path.lineTo(sx0, -sy + 0.08);
+  g.add(stitches(path, D / 2 + bevel + 0.004, 0.11, thread));
+  g.add(stitches(path, -D / 2 - bevel - 0.004, 0.11, thread));
+  if (crop) {
+    // The print area's place on the front, from the 2D mockup (wallet x 70..430, y 170..440).
+    const MOCK = { x: 70, y: 170, w: 360, h: 270 };
+    const pa = side.printArea;
+    const e = engraving(crop, w, h, renderer);
+    e.position.set(
+      ((pa.x + pa.w / 2 - (MOCK.x + MOCK.w / 2)) / MOCK.w) * W,
+      -((pa.y + pa.h / 2 - (MOCK.y + MOCK.h / 2)) / MOCK.h) * H,
+      D / 2 + bevel + 0.004,
+    );
+    g.add(e);
+  }
+  g.rotation.set(-Math.PI / 2, 0, 0.16);
   g.userData.viewDir = LOOK_DOWN;
   return g;
 }
@@ -2055,10 +2255,12 @@ function buildLaser(m, color, tex, renderer, product) {
   if (m.type === 'tray') return laserTray(mats, crop, w, h, m, k, renderer);
   if (m.type === 'frame') return laserFrame(mats, crop, w, h, m, k, renderer);
   if (m.type === 'cardholder') return laserCardholder(mats, crop, w, h, m, k, renderer, color);
+  if (m.type === 'pen') return laserPen(look, mats, crop, w, h, m, renderer);
+  if (m.type === 'wallet') return laserWallet(mats, crop, w, h, m, renderer, color, side);
   return laserBlock(look, mats, crop, w, h, m, renderer);
 }
 
-function contactShadow(width, y) {
+function contactShadow(width, y, depth = width * 0.55) {
   const c = canvas(256, 256);
   const ctx = c.getContext('2d');
   const grd = ctx.createRadialGradient(128, 128, 10, 128, 128, 128);
@@ -2067,7 +2269,7 @@ function contactShadow(width, y) {
   ctx.fillStyle = grd;
   ctx.fillRect(0, 0, 256, 256);
   const tx = new THREE.CanvasTexture(c);
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(width, width * 0.55), new THREE.MeshBasicMaterial({ map: tx, transparent: true, depthWrite: false }));
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(width, depth), new THREE.MeshBasicMaterial({ map: tx, transparent: true, depthWrite: false }));
   m.rotation.x = -Math.PI / 2;
   m.position.y = y;
   return m;
@@ -2134,6 +2336,7 @@ export function mount(container, { product, color, textures, spin = true, viewSc
   // tight: many phones have a 16-bit depth buffer, and a wide near/far range
   // makes nearby surfaces flicker into stripes (z-fighting).
   let radius = 1;
+  let wide = null; // a long, thin product (a pen): its half sizes, fitted to fill the view's width
   const camera = new THREE.PerspectiveCamera(32, 1, 1, 100);
   let viewDir = new THREE.Vector3(0.18, 0.16, 0.97).normalize();
   const controls = new OrbitControls(camera, renderer.domElement);
@@ -2145,7 +2348,9 @@ export function mount(container, { product, color, textures, spin = true, viewSc
   const fit = (aspect) => {
     const halfV = THREE.MathUtils.degToRad(camera.fov / 2);
     const halfH = Math.atan(Math.tan(halfV) * aspect);
-    const dist = (radius / Math.sin(Math.min(halfV, halfH))) * 1.05;
+    const dist = wide
+      ? Math.max(wide.x / Math.tan(halfH), Math.max(wide.y, wide.z) / Math.tan(halfV)) * 1.12
+      : (radius / Math.sin(Math.min(halfV, halfH))) * 1.05;
     controls.minDistance = dist * 0.45;
     controls.maxDistance = dist * 2.2;
     camera.near = Math.max(dist * 0.03, dist * 0.45 - radius * 1.45);
@@ -2174,9 +2379,12 @@ export function mount(container, { product, color, textures, spin = true, viewSc
     const size = box.getSize(new THREE.Vector3());
     const center = box.getCenter(new THREE.Vector3());
     o.position.sub(center);
-    scene.add(contactShadow(Math.max(size.x, size.z) * 1.6, -size.y / 2 - 0.05));
+    const sh = o.userData.shadow;
+    scene.add(sh ? contactShadow(sh[0], -size.y / 2 - 0.05, sh[1]) : contactShadow(Math.max(size.x, size.z) * 1.6, -size.y / 2 - 0.05));
     // A smaller size of the product (viewScale < 1) stays as far away as the biggest one: it looks smaller.
-    radius = (Math.max(size.x, size.y, size.z) * 0.62) / Math.max(0.3, Math.min(1, viewScale || 1));
+    const vs = Math.max(0.3, Math.min(1, viewScale || 1));
+    radius = (Math.max(size.x, size.y, size.z) * 0.62) / vs;
+    wide = o.userData.fitWidth ? size.clone().multiplyScalar(0.5 / vs) : null;
     if (o.userData.viewDir) viewDir = o.userData.viewDir;
     fitted = 0;
     resize();
@@ -2192,7 +2400,7 @@ export function mount(container, { product, color, textures, spin = true, viewSc
     ready = Promise.resolve();
   }
 
-  container.__pod3d = { camera, controls, ready }; // for tests and debugging
+  container.__pod3d = { camera, controls, ready, scene }; // for tests and debugging
   let raf = 0;
   const loop = () => {
     raf = requestAnimationFrame(loop);
