@@ -1725,7 +1725,8 @@ PRODUCTS.push(
         + '<rect x="142" y="277" width="10" height="46" fill="{{S}}" stroke="{{L}}" stroke-width="1.5"/>'
         + '<rect x="60" y="270" width="14" height="10" rx="3" fill="{{S}}" stroke="{{L}}" stroke-width="1.5"/><rect x="58" y="261" width="120" height="11" rx="5.5" fill="{{S}}" stroke="{{L}}" stroke-width="2"/>'
         + '<rect x="70" y="284" width="334" height="7" rx="3.5" fill="#fff" opacity=".22"/>'),
-      printArea: { x: 166, y: 283, w: 236, h: 34 },
+      // (238 × 34: at 300 DPI the print file is exactly 532 × 76 px, the same shape as the area.)
+      printArea: { x: 166, y: 283, w: 238, h: 34 },
       printWidthIn: 45 / 25.4,
     }],
     cardArt: '<path d="M180 300 l8 -8 l8 8 l-8 8z" fill="{{I}}"/><rect x="206" y="296" width="176" height="8" rx="4" fill="{{I}}"/>',

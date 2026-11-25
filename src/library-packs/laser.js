@@ -30,7 +30,7 @@ const sign = forProduct('weddingsign', 240 / 360, 'clear');
 const door = forProduct('doorsign', 360 / 180, 'natural');
 const ramadan = forProduct('ramadandecor', 1, 'gold');
 const puzzle = forProduct('namepuzzle', 390 / 130, 'natural');
-const pen = forProduct('engrpen', 236 / 34, 'black');
+const pen = forProduct('engrpen', 238 / 34, 'black');
 const wallet = forProduct('engrwallet', 230 / 130, 'brown');
 
 // A thin divider: two short lines with a small diamond between them.
