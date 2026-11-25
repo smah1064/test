@@ -1,6 +1,7 @@
 'use strict';
 
-// The product manager (admin → Products): hiding products, stock, sold-out colours and sizes,
+// The product manager (admin → Products): pausing products (with a day they come back) and
+// stopping selling them (archived), stock, sold-out colours and sizes,
 // print setup, new products made from another one, photos, prices, and the staff sign-in
 // that only opens the Products screen.
 const test = require('node:test');
@@ -417,4 +418,174 @@ test('stock per colour and size: each combination counted, sold out on its own, 
   assert.strictEqual((await put('/api/admin/catalog/sweatshirt', { variantStock: { 'nope|XL': 1 } })).status, 400);
   assert.strictEqual((await put('/api/admin/catalog/sweatshirt', { variantStock: null })).status, 200);
   assert.ok((await shop()).some((x) => x.id === 'sweatshirt'));
+});
+
+// ---------- Pause (with a day it comes back) vs stop selling (archive) ----------
+const SHOP_DAY = new Intl.DateTimeFormat('en-CA', { timeZone: process.env.SHOP_TIMEZONE || 'Africa/Cairo', year: 'numeric', month: '2-digit', day: '2-digit' });
+const shopToday = () => SHOP_DAY.format(new Date());
+const dayPlus = (d, n) => new Date(Date.parse(`${d}T12:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
+const nameOf = async (id) => (await fetch(`${base}/api/products/${id}/name`)).json();
+const adminRow = async (id) => (await req('GET', `/api/admin/catalog/${id}`, undefined, owner)).json();
+
+test('pause: an optional day it comes back by itself; a day already gone is refused', async () => {
+  const today = shopToday();
+  // Yesterday (in the shop's time zone) is refused, with the field named.
+  const past = await put('/api/admin/catalog/polo', { status: 'hidden', hiddenReason: 'season', showAgainOn: dayPlus(today, -1) });
+  assert.strictEqual(past.status, 400);
+  const pb = await past.json();
+  assert.strictEqual(pb.code, 'badProductField');
+  assert.strictEqual(pb.field, 'showAgainOn');
+  for (const bad of ['2026-13-01', '1/3/2027', 20270301, '2027-02-30']) {
+    assert.strictEqual((await put('/api/admin/catalog/polo', { status: 'hidden', showAgainOn: bad })).status, 400, String(bad));
+  }
+  assert.strictEqual((await adminRow('polo')).status, 'live', 'nothing saved');
+
+  // A day ahead: paused, and the shop knows when it's back.
+  const later = dayPlus(today, 30);
+  const r = await put('/api/admin/catalog/polo', { status: 'hidden', hiddenReason: 'season', hiddenNote: 'Ramadan', showAgainOn: later });
+  assert.strictEqual(r.status, 200, await r.clone().text());
+  const row = await r.json();
+  assert.strictEqual(row.showAgainOn, later);
+  assert.strictEqual(row.visible, false);
+  assert.strictEqual(row.pausedUntilPassed, undefined);
+  assert.ok(!(await shop()).some((p) => p.id === 'polo'));
+  assert.deepStrictEqual(await nameOf('polo'), { id: 'polo', name: byId('polo').name, category: 'apparel', available: false, state: 'paused', backOn: later });
+  const cat = await (await req('GET', '/api/admin/catalog', undefined, owner)).json();
+  assert.strictEqual(cat.today, today, 'the admin gets the shop\'s day for its date picker');
+  assert.ok(cat.log.some((l) => l.productId === 'polo' && l.what === 'paused'), 'logged as paused');
+  // Another change keeps the pause and its day.
+  await put('/api/admin/catalog/polo', { lowStockAt: 4 });
+  assert.strictEqual((await adminRow('polo')).showAgainOn, later);
+
+  // The day is today: it counts as live (no job needed), and the admin sees that its pause is over.
+  const t = await put('/api/admin/catalog/polo', { status: 'hidden', hiddenReason: 'season', showAgainOn: today });
+  assert.strictEqual(t.status, 200, await t.clone().text());
+  const back = await t.json();
+  assert.strictEqual(back.status, 'hidden');
+  assert.strictEqual(back.visible, true);
+  assert.strictEqual(back.pausedUntilPassed, true);
+  assert.ok((await shop()).some((p) => p.id === 'polo'), 'back in the shop on its day');
+  assert.strictEqual((await shop()).find((p) => p.id === 'polo').showAgainOn, undefined, 'pause details stay in the admin');
+  const n = await nameOf('polo');
+  assert.strictEqual(n.state, 'live');
+  assert.strictEqual(n.available, true);
+  assert.strictEqual(n.backOn, undefined);
+  const d = await makeDesign('polo');
+  assert.strictEqual(d.status, 201, 'designable again');
+
+  // Paused without a day: no backOn. Live or archived: the day is cleared.
+  await put('/api/admin/catalog/polo', { status: 'hidden', hiddenReason: 'supplier' });
+  const nd = await nameOf('polo');
+  assert.strictEqual(nd.state, 'paused');
+  assert.strictEqual(nd.backOn, undefined);
+  await put('/api/admin/catalog/polo', { status: 'hidden', showAgainOn: later });
+  assert.strictEqual((await put('/api/admin/catalog/polo', { status: 'live' })).status, 200);
+  assert.strictEqual((await adminRow('polo')).showAgainOn, null);
+  await put('/api/admin/catalog/polo', { status: 'hidden', showAgainOn: later });
+  await put('/api/admin/catalog/polo', { status: 'removed', showAgainOn: later });
+  const arch = await adminRow('polo');
+  assert.strictEqual(arch.status, 'removed');
+  assert.strictEqual(arch.showAgainOn, null, 'an archived product has no return day');
+  assert.strictEqual((await adminRow('polo')).edit.showAgainOn, undefined);
+  // A day on its own needs a paused product; on a live one it isn't kept.
+  await put('/api/admin/catalog/polo', { status: 'live' });
+  await put('/api/admin/catalog/polo', { showAgainOn: later });
+  assert.strictEqual((await adminRow('polo')).showAgainOn, null);
+});
+
+test('stop selling: productRetired for new designs, the cart, orders and books; sell again restores it', async () => {
+  const before = await makeDesign('jersey');
+  assert.strictEqual(before.status, 201);
+  const r = await put('/api/admin/catalog/jersey', { status: 'removed', hiddenNote: 'replaced by the new jersey' });
+  assert.strictEqual(r.status, 200);
+  assert.strictEqual((await r.json()).visible, false);
+  assert.ok(!(await shop()).some((p) => p.id === 'jersey'));
+  // A new design.
+  const again = await makeDesign('jersey');
+  assert.strictEqual(again.status, 409);
+  assert.strictEqual(again.body.code, 'productRetired');
+  // The cart, in English and Arabic.
+  const q = async (lang) => (await fetch(`${base}/api/cart/quote`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-lang': lang }, body: JSON.stringify({ designIds: [before.body.id] }) })).json();
+  const en = await q('en');
+  assert.strictEqual(en.items[0].unavailable, 'productRetired');
+  assert.match(en.items[0].unavailableText, /no longer sold/);
+  assert.ok(en.items[0].unavailableText.includes(byId('jersey').name.en));
+  const ar = await q('ar');
+  assert.match(ar.items[0].unavailableText, /مبقاش بيتباع/);
+  // The order.
+  const o = await order([before.body.id]);
+  assert.strictEqual(o.status, 409);
+  assert.strictEqual((await o.json()).code, 'productRetired');
+  // Its name and where it stands, for saved designs and carts.
+  assert.deepStrictEqual(await nameOf('jersey'), { id: 'jersey', name: byId('jersey').name, category: 'apparel', available: false, state: 'retired' });
+  const cat = await (await req('GET', '/api/admin/catalog', undefined, owner)).json();
+  assert.ok(cat.log.some((l) => l.productId === 'jersey' && l.what === 'stopped selling'));
+  assert.ok(cat.products.some((p) => p.id === 'jersey' && p.status === 'removed'), 'the Products screen still lists it (Archived)');
+  // A book that's no longer sold.
+  const book = PRODUCTS.find((p) => p.kind === 'book');
+  await put(`/api/admin/catalog/${book.id}`, { status: 'removed' });
+  const made = await post(`/api/books/${book.book}/designs`, {});
+  assert.strictEqual(made.status, 409);
+  assert.strictEqual((await made.json()).code, 'productRetired');
+  await put(`/api/admin/catalog/${book.id}`, { status: 'live' });
+  // Sell again: everything as it was, and the old cart orders.
+  await put('/api/admin/catalog/jersey', { status: 'live' });
+  assert.strictEqual((await nameOf('jersey')).state, 'live');
+  assert.strictEqual((await order([before.body.id])).status, 201);
+});
+
+test('the name answer: live, paused, sold out and retired', async () => {
+  assert.strictEqual((await nameOf('onesie')).state, 'live');
+  await put('/api/admin/catalog/onesie', { stock: 0 });
+  const so = await nameOf('onesie');
+  assert.strictEqual(so.state, 'soldOut');
+  assert.strictEqual(so.available, false);
+  assert.strictEqual(so.category, 'apparel');
+  // A colour sold out everywhere is sold out too.
+  await put('/api/admin/catalog/onesie', { stock: null, colors: Object.fromEntries(byId('onesie').colors.map((c) => [c.id, { soldOut: true }])) });
+  assert.strictEqual((await nameOf('onesie')).state, 'soldOut');
+  // Paused wins over sold out (back soon); archived wins over both.
+  await put('/api/admin/catalog/onesie', { status: 'hidden', hiddenReason: 'quality' });
+  assert.strictEqual((await nameOf('onesie')).state, 'paused');
+  await put('/api/admin/catalog/onesie', { status: 'removed' });
+  assert.strictEqual((await nameOf('onesie')).state, 'retired');
+  await put('/api/admin/catalog/onesie', { status: 'live', colors: {} });
+  assert.strictEqual((await nameOf('onesie')).state, 'live');
+});
+
+test('archived products leave Accounts → Prices, the coupon and printing-house lists unless still used there', async () => {
+  const admin = (url, method = 'GET', body) => req(method, url, body, owner);
+  // A coupon limited to one product, a printing house set for another.
+  const cp = await admin('/api/admin/coupons', 'POST', { code: 'PENCIL10', type: 'percent', value: 10, products: ['pencilcase'] });
+  assert.strictEqual(cp.status, 201, await cp.clone().text());
+  const house = await (await admin('/api/admin/houses', 'POST', { name: 'Bag House', email: 'bags@house.example', prefer: 'email' })).json();
+  assert.strictEqual((await admin('/api/admin/product-houses', 'PUT', { productId: 'lunchbag', houseId: house.id })).status, 200);
+  for (const id of ['deskmat', 'pencilcase', 'lunchbag']) assert.strictEqual((await put(`/api/admin/catalog/${id}`, { status: 'removed' })).status, 200);
+
+  const pricing = await (await admin('/api/admin/pricing')).json();
+  for (const id of ['deskmat', 'pencilcase', 'lunchbag']) assert.ok(!pricing.products.some((p) => p.id === id), `${id} not in prices`);
+  assert.ok(pricing.products.some((p) => p.id === 'tshirt'));
+  // Its prices can still be saved (kept for when it's sold again).
+  assert.strictEqual((await admin('/api/admin/pricing/deskmat', 'PUT', { costs: { blank: 50 } })).status, 200);
+
+  const coupons = await (await admin('/api/admin/coupons')).json();
+  assert.ok(!coupons.products.some((p) => p.id === 'deskmat'), 'unused archived product left out of the coupon list');
+  assert.ok(!coupons.products.some((p) => p.id === 'lunchbag'));
+  assert.deepStrictEqual(coupons.products.find((p) => p.id === 'pencilcase'), { id: 'pencilcase', name: byId('pencilcase').name, category: 'school', archived: true }, 'kept while a coupon names it');
+  assert.ok(coupons.products.some((p) => p.id === 'tshirt' && !p.archived));
+
+  const houses = await (await admin('/api/admin/houses')).json();
+  assert.ok(!houses.products.some((p) => p.id === 'deskmat'));
+  assert.ok(!houses.products.some((p) => p.id === 'pencilcase'));
+  assert.strictEqual(houses.products.find((p) => p.id === 'lunchbag').archived, true, 'kept while a house is set for it');
+  // The house no longer set: it leaves that list too.
+  await admin('/api/admin/product-houses', 'PUT', { productId: 'lunchbag', houseId: null });
+  assert.ok(!(await (await admin('/api/admin/houses')).json()).products.some((p) => p.id === 'lunchbag'));
+  // The Products screen keeps them all (its Archived filter).
+  const cat = await (await admin('/api/admin/catalog')).json();
+  for (const id of ['deskmat', 'pencilcase', 'lunchbag']) assert.strictEqual(cat.products.find((p) => p.id === id).status, 'removed');
+  // Sold again: back in every list.
+  await put('/api/admin/catalog/deskmat', { status: 'live' });
+  assert.ok((await (await admin('/api/admin/pricing')).json()).products.some((p) => p.id === 'deskmat'));
+  assert.ok((await (await admin('/api/admin/coupons')).json()).products.some((p) => p.id === 'deskmat' && !p.archived));
 });

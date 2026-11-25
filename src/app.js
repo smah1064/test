@@ -579,11 +579,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     });
   });
 
-  // The name of any product, also one hidden from the shop (saved drafts and carts name it).
+  // The name of any product, also one not in the shop (saved drafts and carts name it), and where
+  // it stands: 'live', 'paused' (back soon; `backOn` when it comes back on a set day), 'retired'
+  // (no longer sold: the page offers similar products from the same category) or 'soldOut'.
   app.get('/api/products/:id/name', (req, res) => {
     const p = getProduct(req.params.id);
     if (!p) throw new HttpError(404, 'unknownProduct');
-    res.json({ id: p.id, name: p.name, available: catalog.visible(p) });
+    const s = catalog.shopState(p);
+    res.json({ id: p.id, name: p.name, category: p.category, available: s.state === 'live', state: s.state, ...(s.backOn ? { backOn: s.backOn } : {}) });
   });
 
   // ---------- Designs ----------
@@ -2201,8 +2204,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const book = bookFor(req.params.id);
       if (!book) throw new HttpError(404, 'notFound');
       const product = bookProduct(book);
-      // Hidden in admin → Products.
-      if (!catalog.visible(product)) throw new HttpError(409, 'productUnavailable', { name: product.name[langOf(req)] || product.name.en });
+      // Paused or no longer sold (admin → Products).
+      const why = catalog.unavailable(product);
+      if (why) throw new HttpError(409, why, { name: product.name[langOf(req)] || product.name.en });
       const token = crypto.randomBytes(24).toString('hex');
       const side = product.sides[0];
       const px = books.PRINT_PX;
@@ -2406,7 +2410,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   }, 3000).unref();
 
   // ---------- Orders ----------
-  /** Why a design can't be ordered now (product hidden / sold out by the product manager), or null. */
+  /** Why a design can't be ordered now (product paused, no longer sold or sold out: admin → Products), or null. */
   const designUnavailable = (d) => {
     if (!d || d.kind === 'gangsheet') return null;
     const product = getProduct(d.productId);
@@ -3546,11 +3550,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     return { ...row, pricesChanged: Boolean(Object.keys(pr).length), original: { ...row.original, ...(d ? { prices: { basePrice: d.basePrice, extraSidePrice: d.extraSidePrice, sizes: d.sizes } } : {}) } };
   };
   // Top-level fields of an edit and the keys each one holds (a field sent with its default value clears it).
+  // The status carries its pause details (reason, note, return day): sending a status clears the
+  // others it doesn't send. The return day can also be changed on its own.
   const EDIT_FIELDS = {
-    name: ['name'], description: ['description'], category: ['category'], status: ['status', 'hiddenReason', 'hiddenNote'],
+    name: ['name'], description: ['description'], category: ['category'], status: ['status', 'hiddenReason', 'hiddenNote', 'showAgainOn'], showAgainOn: ['showAgainOn'],
     stock: ['stock'], variantStock: ['variantStock'], lowStockAt: ['lowStockAt'], colors: ['colors'], addColors: ['addColors'], sizes: ['sizes'], addSizes: ['addSizes'],
     sides: ['sides'], process: ['process'], methods: ['methods'], embroidery: ['embroidery'],
   };
+  const STATUS_LOG = { live: 'in the shop', hidden: 'paused', removed: 'stopped selling' };
   const logCatalog = (db, req, productId, what) => {
     db.catalogLog ||= [];
     db.catalogLog.push({ at: new Date().toISOString(), who: req.adminWho.name, productId, what: String(what).slice(0, 200) });
@@ -3576,6 +3583,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const next = { ...prev };
       for (const k of sent) for (const key of EDIT_FIELDS[k]) delete next[key];
       for (const k of sent) for (const key of EDIT_FIELDS[k]) if (c.edit[key] !== undefined) next[key] = c.edit[key];
+      // A pause whose return day has gone by: it is in the shop already, so it's saved as live.
+      if (next.status === 'hidden' && next.showAgainOn && next.showAgainOn < catalog.today()) {
+        for (const key of EDIT_FIELDS.status) delete next[key];
+      }
       if (pricing) {
         db.pricing ||= {};
         if (Object.keys(pricing).length) db.pricing[product.id] = pricing;
@@ -3589,7 +3600,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const keep = Object.keys(next).filter((k) => !['updatedAt', 'updatedBy'].includes(k));
       if (keep.length) db.catalog.products[product.id] = next;
       else delete db.catalog.products[product.id];
-      if (changed || pricing) logCatalog(db, req, product.id, [...sent, ...(pricing ? ['prices'] : [])].join(', '));
+      // A new status is logged as what happened (paused, stopped selling, back in the shop).
+      const was = prev.status || 'live';
+      const now = next.status || 'live';
+      const words = sent.filter((k) => k !== 'status' && !(k === 'showAgainOn' && sent.includes('status')));
+      if (was !== now) words.unshift(STATUS_LOG[now]);
+      else if (sent.includes('status')) words.unshift('status');
+      if (changed || pricing) logCatalog(db, req, product.id, [...words, ...(pricing ? ['prices'] : [])].join(', '));
     });
     syncCatalog();
   };
@@ -3599,6 +3616,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       categories: CATEGORIES,
       hideReasons: catalog.HIDE_REASONS,
       maxPhotos: catalog.MAX_PHOTOS,
+      today: catalog.today(), // the shop's day: the earliest a pause can end
       mockup: { width: MOCKUP_WIDTH, height: MOCKUP_HEIGHT },
       products: PRODUCTS.map(adminProduct),
       log: (store.db.catalogLog || []).slice(-50).reverse(),
@@ -3649,8 +3667,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     res.status(201).json(adminProduct(getProduct(n.id)));
   });
   // Back to the product as written (built-in products). Products are never deleted, so old orders,
-  // accounts and the change log keep naming them: they are removed from the shop (status 'removed')
-  // and can be shown again any time.
+  // accounts and the change log keep naming them: they are archived instead ("stop selling", status 'removed')
+  // and can be sold again any time.
   app.delete('/api/admin/catalog/:id', requireCatalog, (req, res) => {
     const p = getProduct(req.params.id);
     if (!p) throw new HttpError(404, 'unknownProduct');
@@ -4166,8 +4184,15 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
 
   // ---------- Coupons (admin) ----------
   const couponRow = (c) => ({ ...c, uses: coupons.usesOf(store.listOrders(), c), discountGiven: accounting.round2(store.listOrders().filter((o) => coupons.usedOn(o, c)).reduce((n, o) => n + (o.discount || 0), 0)) });
+  /**
+   * Products for the admin's pick lists (coupons, printing houses): archived products ("stop selling")
+   * are left out, except ones still in use there (`keep`), marked `archived` so the screen can say so.
+   */
+  const adminProductList = (keep = new Set()) => PRODUCTS.filter((p) => p.status !== 'removed' || keep.has(p.id))
+    .map((p) => ({ id: p.id, name: p.name, category: p.category, ...(p.status === 'removed' ? { archived: true } : {}) }));
   app.get('/api/admin/coupons', requireAdmin, (req, res) => {
-    res.json({ coupons: (store.db.coupons || []).map(couponRow), products: PRODUCTS.map((p) => ({ id: p.id, name: p.name, category: p.category })), categories: CATEGORIES });
+    const list = store.db.coupons || [];
+    res.json({ coupons: list.map(couponRow), products: adminProductList(new Set(list.flatMap((c) => c.products || []))), categories: CATEGORIES });
   });
   const saveCoupon = (req, id) => {
     const { coupon, error } = coupons.cleanCoupon(req.body, { products: PRODUCTS, categories: CATEGORIES });
@@ -4212,8 +4237,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       unitCost: unit.total, unitProfit: accounting.round2(p.basePrice + (p.sizes[0].surcharge || 0) - unit.total),
     };
   }
+  // Archived products ("stop selling") are left out; their saved prices and costs stay in the data.
   app.get('/api/admin/pricing', requireAdmin, (req, res) => {
-    res.json({ categories: CATEGORIES, products: PRODUCTS.map(pricingRow), settings: store.db.accountSettings || { shippingCost: 0 }, shippingCharged: SHIPPING_FLAT, freeShippingOver: FREE_SHIPPING_OVER });
+    res.json({ categories: CATEGORIES, products: PRODUCTS.filter((p) => p.status !== 'removed').map(pricingRow), settings: store.db.accountSettings || { shippingCost: 0 }, shippingCharged: SHIPPING_FLAT, freeShippingOver: FREE_SHIPPING_OVER });
   });
   app.put('/api/admin/pricing/:productId', requireAdmin, express.json(), (req, res) => {
     const product = getProduct(req.params.productId);
@@ -4311,7 +4337,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     res.json({
       houses: houses(),
       productHouses: productHouses(),
-      products: PRODUCTS.map((p) => ({ id: p.id, name: p.name, category: p.category })),
+      // Archived products only while a house is still set for them.
+      products: adminProductList(new Set(Object.keys(productHouses()))),
       categories: CATEGORIES,
       email: notify.emailReady(),
     });

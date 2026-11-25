@@ -11,8 +11,9 @@
  *
  * An edit can:
  *  - change the name, description and category;
- *  - hide the product (out of stock, season, other: with a note) or remove it
- *    from the shop (kept for old orders; can be put back);
+ *  - pause the product (status 'hidden': out of stock, season, other, with a note and
+ *    an optional day it comes back by itself, `showAgainOn`) or stop selling it (status
+ *    'removed', "archived": kept for old orders; can be sold again);
  *  - count stock, for the whole product or per colour and size ("black|XL": 4): a colour,
  *    size or combination at 0 shows as sold out, the product hides itself when nothing is
  *    left, and every order takes its pieces off;
@@ -26,7 +27,7 @@
  * and then changed: { template: 'tshirt', ... }.
  *
  * Products are never deleted from the list (old orders and designs still need them):
- * "removed" ones are hidden from the shop and from new orders.
+ * "removed" (archived) ones are left out of the shop and of new orders.
  */
 
 const STATUSES = ['live', 'hidden', 'removed'];
@@ -41,6 +42,15 @@ const PROCESS_FAMILIES = [
   ['textile'],
 ];
 const EMB_AT = ['chest', 'center', 'top', 'same'];
+// "Show it again on" is a day in the shop's time zone (like coupons and the accounts).
+const DAY_FMT = new Intl.DateTimeFormat('en-CA', { timeZone: process.env.SHOP_TIMEZONE || 'Africa/Cairo', year: 'numeric', month: '2-digit', day: '2-digit' });
+/** Today in the shop's time zone ('YYYY-MM-DD'). */
+const today = () => DAY_FMT.format(new Date());
+const isDay = (d) => {
+  if (typeof d !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
+  const t = Date.parse(`${d}T00:00:00Z`);
+  return Number.isFinite(t) && new Date(t).toISOString().slice(0, 10) === d; // no 30 February
+};
 const MAX_PHOTOS = 12;
 const MAX_ADDED = 200;
 
@@ -90,6 +100,7 @@ function applyEdit(p, e) {
     p.hiddenReason = e.hiddenReason || null;
     p.hiddenNote = e.hiddenNote || '';
   }
+  if (p.status === 'hidden' && isDay(e.showAgainOn)) p.showAgainOn = e.showAgainOn;
   if (typeof e.stock === 'number') p.stock = e.stock;
   if (isObj(e.variantStock) && Object.keys(e.variantStock).length) {
     p.variantStock = { ...e.variantStock };
@@ -214,10 +225,16 @@ function comboLeft(p, colorId, sizeId) {
   return typeof v === 'number' ? v : null;
 }
 const out = (x) => x.off || x.soldOut || x.stockOut;
-/** Shown and orderable in the shop: live, and in stock when stock is counted. */
+/**
+ * A paused product whose "show it again on" day has come (today or earlier, in the shop's
+ * time zone): it counts as live again. Worked out when asked, so every copy of the app agrees
+ * and no job has to run at midnight.
+ */
+const pauseOver = (p) => Boolean(p && p.status === 'hidden' && p.showAgainOn && p.showAgainOn <= today());
+/** Shown and orderable in the shop: live (or back from a pause), and in stock when stock is counted. */
 function visible(p) {
   if (!p) return false;
-  if (p.status && p.status !== 'live') return false;
+  if (p.status && p.status !== 'live' && !pauseOver(p)) return false;
   if (typeof p.stock === 'number' && p.stock <= 0) return false;
   const colors = p.colors.filter((c) => !out(c));
   const sizes = p.sizes.filter((z) => !out(z));
@@ -229,6 +246,8 @@ function visible(p) {
 /** Why a product can't be ordered right now (null when it can). */
 function unavailable(p, { colorId, sizeId, sideIds } = {}) {
   if (!p) return 'unknownProduct';
+  // Archived ("stop selling"): the shop says it's no longer sold and offers similar products.
+  if (p.status === 'removed') return 'productRetired';
   if (!visible(p)) return 'productUnavailable';
   if (colorId) {
     const c = p.colors.find((x) => x.id === colorId);
@@ -242,9 +261,19 @@ function unavailable(p, { colorId, sizeId, sideIds } = {}) {
   if (sideIds && sideIds.some((id) => (p.sides.find((s) => s.id === id) || {}).off)) return 'sideUnavailable';
   return null;
 }
+/**
+ * Where a product stands for shoppers (GET /api/products/:id/name): 'live', 'paused' (back soon,
+ * with `backOn` when it has a return day), 'retired' (no longer sold) or 'soldOut' (out of stock,
+ * or every colour or size sold out).
+ */
+function shopState(p) {
+  if (p.status === 'removed') return { state: 'retired' };
+  if (p.status === 'hidden' && !pauseOver(p)) return { state: 'paused', ...(p.showAgainOn ? { backOn: p.showAgainOn } : {}) };
+  return { state: visible(p) ? 'live' : 'soldOut' };
+}
 /** The product as the shop shows it: colours and sizes that are off are left out, sold-out ones are marked. */
 function forShop(p) {
-  const { status, hiddenReason, hiddenNote, stock, lowStockAt, updatedAt, updatedBy, variantStock, ...rest } = p;
+  const { status, hiddenReason, hiddenNote, showAgainOn, stock, lowStockAt, updatedAt, updatedBy, variantStock, ...rest } = p;
   const low = typeof lowStockAt === 'number' ? lowStockAt : 5;
   // Per colour and size: which combinations are sold out, and the few left of those nearly gone
   // (the counts themselves stay in the admin).
@@ -320,6 +349,16 @@ function clean(p, body, { categories = [], prev = null } = {}) {
       }
       const note = text(b.hiddenNote, 200);
       if (note) out.hiddenNote = note;
+    }
+  }
+  // The day a paused product comes back by itself (null or '' = none). Kept only while paused:
+  // cleared when the product goes live or is archived. A day already gone is refused.
+  if (b.showAgainOn !== undefined && b.showAgainOn !== null && b.showAgainOn !== '') {
+    if (!isDay(b.showAgainOn)) return bad('showAgainOn');
+    const status = b.status !== undefined ? b.status : (prev && prev.status) || 'live';
+    if (status === 'hidden') {
+      if (b.showAgainOn < today()) return bad('showAgainOn');
+      out.showAgainOn = b.showAgainOn;
     }
   }
   if (b.stock !== undefined && b.stock !== null && b.stock !== '') {
@@ -525,6 +564,9 @@ function forAdmin(p, edit) {
     template: p.base || null,
     status: p.status || 'live',
     visible: visible(p),
+    // Paused until a day: the day, and whether it has come (the product is in the shop again).
+    showAgainOn: p.status === 'hidden' && p.showAgainOn ? p.showAgainOn : null,
+    ...(pauseOver(p) ? { pausedUntilPassed: true } : {}),
     stock: typeof p.stock === 'number' ? p.stock : null,
     variantStock: p.variantStock || null,
     lowStockAt: typeof p.lowStockAt === 'number' ? p.lowStockAt : 5,
@@ -549,7 +591,7 @@ function forAdmin(p, edit) {
 
 module.exports = {
   comboLeft,
-  init, apply, visible, unavailable, forShop, forAdmin, clean, cleanNew, keepFixed, processChoices, canEmbroider,
+  init, apply, visible, unavailable, shopState, today, forShop, forAdmin, clean, cleanNew, keepFixed, processChoices, canEmbroider,
   STATUSES, HIDE_REASONS, MAX_PHOTOS,
   isBuiltIn: (id) => Boolean(base && base.has(id)),
 };

@@ -563,8 +563,9 @@
     $('house-map').innerHTML = d.categories.map((c) => {
       const prods = d.products.filter((p) => p.category === c.id);
       if (!prods.length) return '';
+      // An archived product ("stop selling") is only listed while a house is still set for it.
       return `<h3 class="house-map-cat">${esc(tr(c.name))}</h3><div class="house-map-grid">${prods.map((p) => `
-        <label class="house-map-row"><span>${esc(tr(p.name))}</span><select data-map-product="${esc(p.id)}" ${d.houses.length ? '' : 'disabled'}>${opts(p.id)}</select></label>`).join('')}</div>`;
+        <label class="house-map-row"><span>${esc(tr(p.name))}${p.archived ? ` <span class="pill queued" title="${esc(t('pm.arch.houseHelp'))}">${esc(t('pm.arch.tag'))}</span>` : ''}</span><select data-map-product="${esc(p.id)}" ${d.houses.length ? '' : 'disabled'}>${opts(p.id)}</select></label>`).join('')}</div>`;
     }).join('');
   }
   function resetHouseForm() {
@@ -1437,7 +1438,11 @@
   const cpPicked = new Set();
   // The form has no product picker: a coupon limited to some products keeps that list when edited.
   let cpProducts = [];
-  const cpList = (ids, from) => ids.map((id) => tr((from.find((x) => x.id === id) || {}).name || id)).join(POD.lang === 'ar' ? '، ' : ', ');
+  // Products the shop stopped selling (archived) are named as such.
+  const cpList = (ids, from) => ids.map((id) => {
+    const x = from.find((y) => y.id === id) || {};
+    return tr(x.name || id) + (x.archived ? ` (${t('pm.arch.tag')})` : '');
+  }).join(POD.lang === 'ar' ? '، ' : ', ');
   function cpProductsNote() {
     let el = $('cp-prod-note');
     if (!el) {

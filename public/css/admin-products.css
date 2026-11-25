@@ -13,7 +13,8 @@
 .pm-pill { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; line-height: 1.3; }
 .pm-pill-live { background: var(--pm-live-bg); color: var(--pm-live); }
 .pm-pill-hidden { background: var(--pm-warn-bg); color: var(--pm-warn); }
-.pm-pill-removed { background: #eef1f6; color: var(--ink-2); text-decoration: line-through; text-decoration-thickness: 1px; }
+.pm-pill-removed { background: #e9ebef; color: #4a5160; }
+.pm-pill-back { background: #e8eefc; color: #1d4fa8; }
 .pm-pill-bad { background: var(--pm-bad-bg); color: var(--bad); }
 .pm-pill-warn { background: var(--pm-warn-bg); color: var(--pm-warn); }
 .pm-pill-muted { background: #eef1f6; color: var(--ink-2); }
@@ -35,6 +36,10 @@
 .pm-chg-line { margin: 0 0 10px; }
 .pm-out { display: block; padding: 9px 11px; border: 1px dashed var(--line); border-radius: 10px; background: #fafbfc; font-size: 14px; font-variant-numeric: tabular-nums; }
 .pm-btn-ok { border-color: #b7e2c8; color: var(--pm-live); }
+.pm-btn-stop { border-color: #f1caca; color: var(--bad); }
+.pm-btn-stop:hover { background: var(--pm-bad-bg); border-color: #e9a9a9; }
+.pm-btn-danger { background: var(--bad); border-color: var(--bad); color: #fff; }
+.pm-btn-danger:hover { background: #a61f1f; border-color: #a61f1f; }
 
 /* ---------- List ---------- */
 .pm-top { padding: 16px 18px; margin-bottom: 12px; }
@@ -46,6 +51,9 @@
 .pm-chips .chip { display: inline-flex; gap: 6px; align-items: center; }
 .pm-chip-n { font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 999px; background: #eef1f6; color: var(--ink-2); }
 .pm-chips .chip.active .pm-chip-n { background: rgba(255, 255, 255, .2); color: #fff; }
+/* Archived sits apart at the end: those products are not in "All". */
+.pm-chips .chip[data-pm-filter="archived"] { margin-inline-start: auto; border-style: dashed; }
+.pm-chips .chip[data-pm-filter="archived"].active { border-style: solid; }
 .pm-count { margin: 0 2px 8px; }
 .pm-list { display: grid; gap: 8px; }
 .pm-row { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 10px 14px; }
@@ -88,6 +96,12 @@
 .pm-dlg-form .field { margin-bottom: 4px; }
 .pm-dlg-btns { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; margin-top: 4px; }
 .pm-reasons { border: 0; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.pm-dlg-form > p.pm-dlg-hint { margin-top: -4px; }
+.pm-date { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.pm-date input[type="date"] { flex: 0 1 220px; min-width: 0; font-variant-numeric: tabular-nums; }
+.pm-back-said { display: block; margin-top: 6px; line-height: 1.5; }
+.pm-stop-list { margin: 0; padding-inline-start: 20px; display: grid; gap: 6px; font-size: 14px; line-height: 1.55; color: var(--ink); }
+.pm-stop-list b { font-weight: 700; }
 .pm-reasons legend { font-size: 13px; font-weight: 600; color: var(--ink-2); margin-bottom: 6px; padding: 0; }
 .pm-radio { display: inline-flex; align-items: center; gap: 6px; margin: 0; padding: 7px 11px; border: 1px solid var(--line); border-radius: 999px; font-size: 13px; color: var(--ink); cursor: pointer; }
 .pm-radio:has(input:checked) { border-color: var(--ink); background: #f3f4f6; }
@@ -116,6 +130,7 @@
 .pm-jump a:hover { background: #f1f3f6; color: var(--ink); }
 .pm-banner { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: space-between; padding: 12px 16px; border-radius: var(--radius); background: var(--pm-warn-bg); color: #6b4200; border: 1px solid #f1d9a6; }
 .pm-banner.is-new { background: #e8eefc; color: #17397a; border-color: #c8d6f6; }
+.pm-banner.is-archived { background: #f1f3f6; color: #3a404c; border-color: #dde1e8; }
 .pm-banner > div { flex: 1 1 260px; line-height: 1.5; }
 .pm-sec { padding: 16px 18px; scroll-margin-top: 120px; }
 .pm-sec-head { margin-bottom: 12px; }
@@ -132,11 +147,9 @@
 .pm-seg-opt + .pm-seg-opt span { border-inline-start: 1px solid var(--line); }
 .pm-seg-opt input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: -2px; }
 .pm-seg-opt input:checked + span { background: var(--ink); color: #fff; }
-.pm-o-on input:checked + span, .pm-st-live input:checked + span { background: var(--pm-live); }
-.pm-o-soldOut input:checked + span, .pm-st-hidden input:checked + span { background: #b26b00; }
-.pm-o-off input:checked + span, .pm-st-removed input:checked + span { background: #5b6372; }
-.pm-seg-3 { display: flex; width: 100%; max-width: 460px; }
-.pm-seg-3 .pm-seg-opt { flex: 1; text-align: center; }
+.pm-o-on input:checked + span { background: var(--pm-live); }
+.pm-o-soldOut input:checked + span { background: #b26b00; }
+.pm-o-off input:checked + span { background: #5b6372; }
 .pm-stock { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
 .pm-stock > p { margin: 4px 0 10px; }
 .pm-stock-fields { max-width: 520px; }
@@ -232,8 +245,26 @@
 .pm-ph-btns [data-ph="main"] { flex: 1; }
 .pm-ph-btns [data-ph="del"] { margin-inline-start: auto; }
 
-/* Danger zone */
+/* Status: In the shop / Paused / Stopped selling, with its buttons */
+.pm-state { display: flex; gap: 10px 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 12px 14px; border: 1px solid var(--line); border-inline-start-width: 4px; border-radius: 10px; margin-bottom: 4px; }
+.pm-state-live { border-inline-start-color: var(--pm-live); background: #f6fbf8; }
+.pm-state-hidden { border-inline-start-color: #c98a00; background: #fffaf0; }
+.pm-state-removed { border-inline-start-color: #8a91a0; background: #f6f7f9; }
+.pm-state-text { flex: 1 1 280px; min-width: 0; }
+.pm-state-text p { margin: 4px 0 0; line-height: 1.55; color: var(--ink-2); }
+.pm-state-lbl { font-size: 12px; font-weight: 700; color: var(--ink-3); margin-bottom: 2px; }
+.pm-state-name { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 16px; }
+.pm-state-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--pm-live); flex: none; }
+.pm-state-hidden .pm-state-dot { background: #c98a00; }
+.pm-state-removed .pm-state-dot { background: #8a91a0; }
+.pm-state-why { font-size: 13px; font-weight: 600; color: var(--pm-warn); }
+.pm-state-why::before { content: "·"; margin-inline-end: 8px; color: var(--ink-3); }
+.pm-state-acts { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* Stop selling / undo */
+.pm-dangers { display: grid; gap: 10px; }
 .pm-danger { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 12px; border: 1px solid #f3c7c7; border-radius: 10px; background: #fffafa; }
+.pm-danger-ok { border-color: #b7e2c8; background: #f6fbf8; }
 .pm-danger > div { flex: 1 1 260px; }
 .pm-danger p { margin: 4px 0 0; line-height: 1.5; }
 .pm-inuse { margin-top: 10px; display: grid; gap: 8px; justify-items: start; }
@@ -268,6 +299,10 @@
   .pm-dlg-form { padding: 16px; }
   .pm-dlg-btns .btn { flex: 1; }
   .pm-who { display: none; }
+  .pm-state-acts { width: 100%; }
+  .pm-state-acts .btn { flex: 1 1 auto; }
+  .pm-danger .btn { width: 100%; }
+  .pm-date input[type="date"] { flex: 1 1 auto; }
 }
 
 /* ---------- Hover zoom: booklets and other many-page items wrap into rows that fit the window ---------- */

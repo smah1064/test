@@ -1,6 +1,6 @@
 /*
  * Admin → Products: the product manager's screen (the owner sees it too).
- * List with search and filters, quick hide / show, the edit page (basics, availability,
+ * List with search and filters, quick pause / stop selling / show again, the edit page (basics, availability,
  * colours, sizes, prices, print setup with a visual print-area editor, technology and
  * embroidery, photos), new products made from an existing one, the change log, and the
  * owner's staff accounts. Server contract: /api/admin/catalog* and /api/admin/staff*.
@@ -86,22 +86,60 @@
   }
 
   // ---------- Status ----------
+  // status 'hidden' = Paused (for a while, maybe until a day), 'removed' = Stopped selling (Archived).
   const NEW_NOTE = 'New product: check it, then show it in the shop';
+  const isNew = (p) => p.status === 'hidden' && !p.builtIn && p.hiddenNote === NEW_NOTE;
+  /** Paused now: its "show it again on" day (if any) hasn't come yet. */
+  const isPaused = (p) => p.status === 'hidden' && !p.pausedUntilPassed;
+  const isArchived = (p) => p.status === 'removed';
+  /** Set to be in the shop: live, or back from a pause on its day. */
+  const isOn = (p) => !isPaused(p) && !isArchived(p);
+  /** Stock is counted (the product leaves the shop by itself at 0). */
+  const countsStock = (p) => (p.stock !== null && p.stock !== undefined) || Boolean(p.variantStock);
+  const cairoToday = () => {
+    try { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Cairo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); } catch (e) { return new Date().toISOString().slice(0, 10); }
+  };
+  /** Today in the shop's time zone (the server says which day it is there). */
+  const shopToday = () => (S.data && S.data.today) || cairoToday();
+  /** A day ('2027-03-01') in words in the page's language and digits ("1 March", "١ مارس"). */
+  function dayText(d, { weekday = false } = {}) {
+    if (!d) return '';
+    try {
+      return new Date(`${d}T12:00:00Z`).toLocaleDateString(POD.lang === 'ar' ? 'ar-EG' : 'en-GB', {
+        ...(weekday ? { weekday: 'long' } : {}), day: 'numeric', month: 'long', ...(d.slice(0, 4) === shopToday().slice(0, 4) ? {} : { year: 'numeric' }), timeZone: 'UTC',
+      });
+    } catch (e) {
+      return d;
+    }
+  }
+  const pausedText = (p) => [t('pm.st.paused'), p.hiddenReason ? t('pm.reason.' + p.hiddenReason) : ''].filter(Boolean).join(' · ');
   function whyHidden(p) {
-    if (p.status === 'removed') return t('pm.st.removed');
-    if (p.status === 'hidden' && !p.builtIn && p.hiddenNote === NEW_NOTE) return t('pm.st.new');
-    if (p.status === 'hidden') return t('pm.st.hidden') + (p.hiddenReason ? ` · ${t('pm.reason.' + p.hiddenReason)}` : '');
+    if (isArchived(p)) return t('pm.st.retired');
+    if (isNew(p)) return t('pm.st.new');
+    if (isPaused(p)) return pausedText(p) + (p.showAgainOn ? ` · ${t('pm.st.backOn', { date: dayText(p.showAgainOn) })}` : '');
     if (p.stock !== null && p.stock <= 0) return t('pm.st.noStock');
     const vs = stockInfo(p);
     if (vs && vs.kind === 'variant' && vs.counted && vs.left === 0) return t('pm.st.noStock');
     if (!p.colors.some((c) => !c.off && !c.soldOut)) return t('pm.st.noColor');
     if (!p.sizes.some((z) => !z.off && !z.soldOut)) return t('pm.st.noSize');
-    return t('pm.st.hidden');
+    return t('pm.st.notShown');
   }
   function statusPill(p) {
     if (!canEdit(p)) return pill('pm-pill-muted', t('pm.st.ownPage'));
-    if (p.visible) return pill('pm-pill-live', t('pm.st.live'));
-    return pill(p.status === 'removed' ? 'pm-pill-removed' : 'pm-pill-hidden', whyHidden(p), p.hiddenNote || '');
+    // Back from a pause on its day: in the shop, with a small "back since".
+    if (p.visible) return pill('pm-pill-live', t('pm.st.live')) + (p.pausedUntilPassed ? pill('pm-pill-muted', t('pm.st.backSince', { date: dayText(p.showAgainOn) })) : '');
+    if (isArchived(p)) return pill('pm-pill-removed', t('pm.st.retired'), p.hiddenNote || '');
+    if (isPaused(p) && !isNew(p)) return pill('pm-pill-hidden', pausedText(p), p.hiddenNote || '') + (p.showAgainOn ? pill('pm-pill-back', t('pm.st.backOn', { date: dayText(p.showAgainOn) })) : '');
+    return pill('pm-pill-hidden', whyHidden(p), p.hiddenNote || '');
+  }
+  /** The quick status buttons: Pause / Show in the shop, Stop selling, or Sell again. */
+  function statusActs(p, cls = 'btn btn-sm') {
+    const id = esc(p.id);
+    if (isArchived(p)) return `<button class="${cls} pm-btn-ok" type="button" data-pm-act="sell-again" data-id="${id}">${esc(t('pm.sellAgain'))}</button>`;
+    return (isPaused(p)
+      ? `<button class="${cls} pm-btn-ok" type="button" data-pm-act="show" data-id="${id}">${esc(t('pm.show'))}</button>`
+      : `<button class="${cls}" type="button" data-pm-act="pause" data-id="${id}">${esc(t('pm.pause'))}</button>`)
+      + `<button class="${cls} pm-btn-stop" type="button" data-pm-act="stop" data-id="${id}">${esc(t('pm.stopSelling'))}</button>`;
   }
   /**
    * What the product's stock says: null when not counted; { kind: 'whole', total } for one count;
@@ -145,7 +183,7 @@
     if (p.stock <= p.lowStockAt) return pill('pm-pill-warn', t('pm.stock.low', { n: POD.num(p.stock) }));
     return pill('pm-pill-muted', t('pm.stock.n', { n: POD.num(p.stock) }));
   }
-  const noteOf = (p) => (p.hiddenNote && p.status !== 'live' ? (p.hiddenNote === 'New product: check it, then show it in the shop' ? t('pm.newNote') : p.hiddenNote) : '');
+  const noteOf = (p) => (p.hiddenNote && (isPaused(p) || isArchived(p)) ? (p.hiddenNote === NEW_NOTE ? t('pm.newNote') : p.hiddenNote) : '');
   const lastChange = (p) => (p.updatedAt ? t('pm.lastChange', { who: p.updatedBy || (p.edit && p.edit.updatedBy) || '—', when: when(p.updatedAt) }) : '');
   const priceFrom = (p) => {
     const on = p.sizes.filter((z) => !z.off);
@@ -192,17 +230,18 @@
   // =====================================================================
   // List
   // =====================================================================
+  // Archived products (stopped selling) show under their own filter only.
   const FILTERS = {
-    all: () => true,
+    all: (p) => !isArchived(p),
     live: (p) => p.visible,
-    hidden: (p) => !p.visible && p.status !== 'removed',
-    removed: (p) => p.status === 'removed',
+    paused: isPaused,
     stock: (p) => {
-      const s = stockInfo(p);
+      const s = !isArchived(p) && stockInfo(p);
       if (!s) return false;
       return s.kind === 'variant' ? Boolean(s.out.length || s.low.length) : s.total <= p.lowStockAt;
     },
-    added: (p) => !p.builtIn,
+    added: (p) => !p.builtIn && !isArchived(p),
+    archived: isArchived,
   };
   function matches(p) {
     if (S.cat && p.category !== S.cat) return false;
@@ -257,9 +296,11 @@
       const n = inScope.filter(FILTERS[f]).length;
       return `<button type="button" class="chip ${S.filter === f ? 'active' : ''}" data-pm-filter="${f}" aria-pressed="${S.filter === f}">${esc(t('pm.f.' + f))} <span class="pm-chip-n">${esc(POD.num(n))}</span></button>`;
     }).join('');
+    if (!FILTERS[S.filter]) S.filter = 'all';
     const list = inScope.filter(FILTERS[S.filter]);
-    document.getElementById('pm-count').textContent = t('pm.count', { n: POD.num(list.length), total: POD.num(products().length) });
-    box.innerHTML = list.length ? list.map(rowHtml).join('') : `<div class="card pm-empty">${esc(t('pm.none'))}</div>`;
+    const arch = S.filter === 'archived';
+    document.getElementById('pm-count').textContent = arch ? t('pm.countArchived', { n: POD.num(list.length) }) : t('pm.count', { n: POD.num(list.length), total: POD.num(products().filter(FILTERS.all).length) });
+    box.innerHTML = list.length ? list.map(rowHtml).join('') : `<div class="card pm-empty">${esc(t(arch && !S.q.trim() && !S.cat ? 'pm.noneArchived' : 'pm.none'))}</div>`;
   }
 
   function rowHtml(p) {
@@ -279,8 +320,7 @@
         </div>
         <div class="pm-row-acts">
           ${!edit ? `<span class="muted small">${esc(t('pm.bookNote'))}</span>` : `
-          ${p.status === 'live' ? `<button class="btn btn-sm" type="button" data-pm-act="hide" data-id="${esc(p.id)}">${esc(t('pm.hide'))}</button>`
-            : `<button class="btn btn-sm pm-btn-ok" type="button" data-pm-act="show" data-id="${esc(p.id)}">${esc(t('pm.show'))}</button>`}
+          ${statusActs(p)}
           <button class="btn btn-sm btn-dark" type="button" data-pm-act="edit" data-id="${esc(p.id)}">${esc(t('pm.edit'))}</button>
           ${p.kind ? '' : `<button class="btn btn-sm" type="button" data-pm-act="copy" data-id="${esc(p.id)}">${esc(t('pm.copy'))}</button>`}`}
         </div>
@@ -288,7 +328,9 @@
   }
 
   // ---------- Change log ----------
-  const LOG_WORDS = ['name', 'description', 'category', 'status', 'stock', 'variantStock', 'lowStockAt', 'colors', 'addColors', 'sizes', 'addSizes', 'sides', 'process', 'methods', 'embroidery', 'prices'];
+  const LOG_WORDS = ['name', 'description', 'category', 'status', 'showAgainOn', 'stock', 'variantStock', 'lowStockAt', 'colors', 'addColors', 'sizes', 'addSizes', 'sides', 'process', 'methods', 'embroidery', 'prices'];
+  // A new status is logged as what happened.
+  const LOG_STATUS = { paused: 'pm.log.paused', 'stopped selling': 'pm.log.stopped', 'in the shop': 'pm.log.inShop' };
   function logWhat(what) {
     const s = String(what || '');
     let m = /^new product from (.+)$/.exec(s);
@@ -296,7 +338,12 @@
     const fixed = { 'photo added': 'pm.log.photoAdded', 'photo removed': 'pm.log.photoRemoved', 'photos arranged': 'pm.log.photosArranged', deleted: 'pm.log.deleted', 'reset to the original': 'pm.log.reset' };
     if (fixed[s]) return t(fixed[s]);
     const parts = s.split(/,\s*/).filter(Boolean);
-    if (parts.length && parts.every((x) => LOG_WORDS.includes(x))) return t('pm.log.changed', { what: parts.map((x) => t('pm.w.' + x)).join(POD.lang === 'ar' ? '، ' : ', ') });
+    if (parts.length && parts.every((x) => LOG_WORDS.includes(x) || LOG_STATUS[x])) {
+      const said = parts.filter((x) => LOG_STATUS[x]).map((x) => t(LOG_STATUS[x]));
+      const rest = parts.filter((x) => !LOG_STATUS[x]);
+      if (rest.length) said.push(t('pm.log.changed', { what: rest.map((x) => t('pm.w.' + x)).join(POD.lang === 'ar' ? '، ' : ', ') }));
+      return said.join(' · ');
+    }
     return s;
   }
   function logHtml(onlyId) {
@@ -314,14 +361,14 @@
   }
 
   // =====================================================================
-  // Dialogs (hide, new product, staff password)
+  // Dialogs (pause, stop selling, new product, staff password)
   // =====================================================================
-  function dialog(html, onSubmit, { wide = false } = {}) {
+  function dialog(html, onSubmit, { wide = false, danger = false } = {}) {
     const d = document.createElement('dialog');
     d.className = 'pm-dlg' + (wide ? ' pm-dlg-wide' : '');
     d.innerHTML = `<form method="dialog" class="pm-dlg-form" novalidate>${html}
       <p class="pm-err" role="alert" hidden></p>
-      <div class="pm-dlg-btns"><button class="btn" type="button" data-dlg-cancel>${esc(t('pm.cancel'))}</button><button class="btn btn-primary" type="submit" data-dlg-ok></button></div></form>`;
+      <div class="pm-dlg-btns"><button class="btn" type="button" data-dlg-cancel>${esc(t('pm.cancel'))}</button><button class="btn ${danger ? 'pm-btn-danger' : 'btn-primary'}" type="submit" data-dlg-ok></button></div></form>`;
     document.body.appendChild(d);
     const form = d.querySelector('form');
     const err = d.querySelector('.pm-err');
@@ -345,32 +392,93 @@
     return d;
   }
 
-  function hideDialog(p, then) {
-    const reasons = (S.data && S.data.hideReasons) || ['stock', 'season', 'quality', 'supplier', 'other'];
-    const d = dialog(`
-      <h3>${esc(t('pm.hideTitle', { name: tr(p.name) }))}</h3>
-      <p class="muted small">${esc(t('pm.hideHelp'))}</p>
-      <fieldset class="pm-reasons"><legend>${esc(t('pm.reason'))}</legend>
-        ${reasons.map((r, i) => `<label class="pm-radio"><input type="radio" name="reason" value="${r}" ${i === 0 ? 'checked' : ''}> ${esc(t('pm.reason.' + r))}</label>`).join('')}
-      </fieldset>
-      <div class="field"><label for="pm-hide-note">${esc(t('pm.note'))}</label><input type="text" id="pm-hide-note" name="note" maxlength="200" placeholder="${esc(t('pm.notePh'))}"></div>
-      <label class="check pm-hide-remove"><input type="checkbox" name="removeIt"> <span>${esc(t('pm.removeInstead'))}</span></label>`, async (form) => {
-      const body = { status: form.removeIt.checked ? 'removed' : 'hidden', hiddenReason: form.reason.value, hiddenNote: form.note.value.trim() };
-      const P = await send('PUT', `/api/admin/catalog/${enc(p.id)}`, body);
-      putProduct(P);
-      toast(t(body.status === 'removed' ? 'pm.removedOk' : 'pm.hiddenOk', { name: tr(P.name) }));
-      reloadLater();
-      if (then) then(P);
-    });
-    d.querySelector('[data-dlg-ok]').textContent = t('pm.hide');
+  /** Save a new status (and its pause details) from a dialog or a button. */
+  async function saveStatus(p, body) {
+    let P;
+    try {
+      P = await send('PUT', `/api/admin/catalog/${enc(p.id)}`, body);
+    } catch (e) {
+      // The day went by while the dialog was open (or the computer's clock is ahead of the shop's).
+      if (e.code === 'badProductField' && /showAgainOn/.test(e.message)) throw new Error(t('pm.backOnPast'));
+      throw e;
+    }
+    putProduct(P);
+    reloadLater();
+    return P;
   }
 
+  /**
+   * Pause: out of the shop for a while (customers see "back soon"), with a reason, a note and an
+   * optional day it comes back by itself. Also changes the pause of a product already paused.
+   */
+  function pauseDialog(p, then) {
+    const counted = countsStock(p);
+    // Counted stock takes the product out of the shop by itself at 0: no "out of stock" pause.
+    const reasons = ((S.data && S.data.hideReasons) || ['stock', 'season', 'quality', 'supplier', 'other']).filter((r) => !(counted && r === 'stock'));
+    const cur = isPaused(p) ? p : null;
+    const picked = cur && reasons.includes(cur.hiddenReason) ? cur.hiddenReason : reasons[0];
+    const today = shopToday();
+    const said = (v) => (!v ? t('pm.backOnHelp') : v < today ? t('pm.backOnPast') : t('pm.backOnSays', { date: dayText(v, { weekday: true }) }));
+    const d = dialog(`
+      <h3>${esc(t('pm.pauseTitle', { name: tr(p.name) }))}</h3>
+      <p class="muted small">${esc(t('pm.pauseHelp'))}</p>
+      <fieldset class="pm-reasons"><legend>${esc(t('pm.reason'))}</legend>
+        ${reasons.map((r) => `<label class="pm-radio"><input type="radio" name="reason" value="${r}" ${r === picked ? 'checked' : ''}> ${esc(t('pm.reason.' + r))}</label>`).join('')}
+      </fieldset>
+      ${counted ? `<p class="muted small pm-dlg-hint">${esc(t('pm.noStockReason'))}</p>` : ''}
+      <div class="field"><label for="pm-hide-note">${esc(t('pm.note'))}</label><input type="text" id="pm-hide-note" name="note" maxlength="200" placeholder="${esc(t('pm.notePh'))}" value="${esc(cur ? noteOf(cur) : '')}"></div>
+      <div class="field pm-back-on"><label for="pm-back-on">${esc(t('pm.backOnLabel'))}</label>
+        <div class="pm-date"><input type="date" id="pm-back-on" name="backOn" min="${esc(today)}" value="${esc((cur && cur.showAgainOn) || '')}"><button class="btn btn-sm" type="button" data-dlg-no-date ${cur && cur.showAgainOn ? '' : 'hidden'}>${esc(t('pm.noDate'))}</button></div>
+        <span class="muted small pm-back-said" data-back-said aria-live="polite">${esc(said(cur && cur.showAgainOn))}</span></div>`, async (form) => {
+      const day = form.backOn.value;
+      if (day && (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day < shopToday())) throw new Error(t('pm.backOnPast'));
+      let note = form.note.value.trim();
+      if (cur && note === t('pm.newNote') && cur.hiddenNote === NEW_NOTE) note = NEW_NOTE;
+      const body = { status: 'hidden', hiddenReason: form.reason.value, hiddenNote: note };
+      if (day) body.showAgainOn = day;
+      const P = await saveStatus(p, body);
+      toast(day ? t('pm.pausedUntil', { name: tr(P.name), date: dayText(day) }) : t('pm.pausedOk', { name: tr(P.name) }));
+      if (then) then(P);
+    });
+    d.querySelector('[data-dlg-ok]').textContent = t(cur ? 'pm.savePause' : 'pm.pause');
+    const input = d.querySelector('#pm-back-on');
+    const clear = d.querySelector('[data-dlg-no-date]');
+    const sync = () => {
+      d.querySelector('[data-back-said]').textContent = said(input.value);
+      clear.hidden = !input.value;
+    };
+    input.addEventListener('input', sync);
+    input.addEventListener('change', sync);
+    clear.addEventListener('click', () => { input.value = ''; sync(); input.focus(); });
+  }
+
+  /** Stop selling: the product moves to Archived. Nothing is deleted; it can be sold again any time. */
+  function stopDialog(p, then) {
+    const d = dialog(`
+      <h3>${esc(t('pm.stopTitle', { name: tr(p.name) }))}</h3>
+      <ul class="pm-stop-list">
+        <li>${esc(t('pm.stop.archive'))}</li>
+        <li>${esc(t('pm.stop.customers'))}</li>
+        <li><b>${esc(t('pm.stop.kept'))}</b></li>
+        <li>${esc(t('pm.stop.back'))}</li>
+      </ul>
+      ${isArchived(p) ? '' : `<p class="muted small pm-dlg-hint">${esc(t('pm.stop.pauseInstead'))} <button type="button" class="link-btn" data-dlg-pause>${esc(t('pm.stop.pauseBtn'))}</button></p>`}
+      <div class="field"><label for="pm-stop-note">${esc(t('pm.note'))}</label><input type="text" id="pm-stop-note" name="note" maxlength="200" placeholder="${esc(t('pm.stopNotePh'))}"></div>`, async (form) => {
+      const P = await saveStatus(p, { status: 'removed', hiddenNote: form.note.value.trim() });
+      toast(t('pm.stoppedOk', { name: tr(P.name) }));
+      if (then) then(P);
+    }, { danger: true });
+    d.querySelector('[data-dlg-ok]').textContent = t('pm.stopSelling');
+    const pause = d.querySelector('[data-dlg-pause]');
+    if (pause) pause.addEventListener('click', () => { d.close(); pauseDialog(p, then); });
+  }
+
+  /** Back in the shop: a paused product ("Show in the shop") or an archived one ("Sell again"). */
   async function showInShop(p, then) {
+    const again = isArchived(p);
     try {
-      const P = await send('PUT', `/api/admin/catalog/${enc(p.id)}`, { status: 'live' });
-      putProduct(P);
-      toast(P.visible ? t('pm.shownOk', { name: tr(P.name) }) : t('pm.shownButHidden', { why: whyHidden(P) }), P.visible ? undefined : 'error');
-      reloadLater();
+      const P = await saveStatus(p, { status: 'live' });
+      toast(P.visible ? t(again ? 'pm.soldAgainOk' : 'pm.shownOk', { name: tr(P.name) }) : t('pm.shownButHidden', { why: whyHidden(P) }), P.visible ? undefined : 'error');
       if (then) then(P);
     } catch (e) {
       toast(e.message, 'error');
@@ -680,11 +788,14 @@
   const jumpHtml = () => `<nav class="card pm-jump" aria-label="${esc(t('pm.sections'))}">${SECTIONS.map((s) => `<a href="#pm-sec-${s}" data-pm-jump="${s}">${esc(t('pm.s.' + s))}</a>`).join('')}</nav>`;
   function bannerHtml(P) {
     if (P.visible) return '';
-    const isNew = !P.builtIn && P.hiddenNote === 'New product: check it, then show it in the shop';
-    const text = isNew ? t('pm.newBanner') : P.status === 'live' ? t('pm.liveButHidden', { why: whyHidden(P) }) : t('pm.hiddenBanner', { why: whyHidden(P) });
-    const note = !isNew && P.hiddenNote && P.status !== 'live' ? `<div class="small">${esc(P.hiddenNote)}</div>` : '';
-    return `<div class="pm-banner ${isNew ? 'is-new' : ''}" id="pm-banner" role="status"><div><b>${esc(text)}</b>${note}</div>
-      ${P.status !== 'live' ? `<button class="btn btn-primary btn-sm" type="button" data-pm-act="publish">${esc(t(isNew ? 'pm.publishNew' : 'pm.show'))}</button>` : `<a class="btn btn-sm" href="#pm-sec-avail">${esc(t('pm.s.avail'))}</a>`}</div>`;
+    const neu = isNew(P);
+    const arch = isArchived(P);
+    const text = neu ? t('pm.newBanner') : arch ? t('pm.retiredBanner') : isOn(P) ? t('pm.liveButHidden', { why: whyHidden(P) }) : t('pm.hiddenBanner', { why: whyHidden(P) });
+    const note = !neu && noteOf(P) ? `<div class="small">${esc(noteOf(P))}</div>` : '';
+    const btn = arch ? `<button class="btn btn-primary btn-sm" type="button" data-pm-act="sell-again">${esc(t('pm.sellAgain'))}</button>`
+      : !isOn(P) ? `<button class="btn btn-primary btn-sm" type="button" data-pm-act="publish">${esc(t(neu ? 'pm.publishNew' : 'pm.show'))}</button>`
+        : `<a class="btn btn-sm" href="#pm-sec-avail">${esc(t('pm.s.avail'))}</a>`;
+    return `<div class="pm-banner ${neu ? 'is-new' : arch ? 'is-archived' : ''}" id="pm-banner" role="status"><div><b>${esc(text)}</b>${note}</div>${btn}</div>`;
   }
 
   function renderEdit() {
@@ -712,6 +823,20 @@
     for (const s of redo) rerender(s);
     const l = document.getElementById('pm-plog');
     if (l) l.innerHTML = logHtml(P.id);
+  }
+  /** The status changed (pause, stop selling, back in the shop): redraw what shows it, nothing else. */
+  function refreshStatus(P) {
+    S.P = P;
+    const head = document.getElementById('pm-ehead');
+    if (!head) return renderEdit();
+    head.outerHTML = headHtml(P);
+    document.getElementById('pm-banner-slot').innerHTML = bannerHtml(P);
+    const st = document.getElementById('pm-status');
+    if (st) st.outerHTML = statusPanel(P);
+    rerender('danger');
+    const l = document.getElementById('pm-plog');
+    if (l) l.innerHTML = logHtml(P.id);
+    return undefined;
   }
   function rerender(name) {
     const el = document.getElementById('pm-sec-' + name);
@@ -782,24 +907,44 @@
   }
 
   // ---------- b) Availability ----------
+  /**
+   * Where the product stands (In the shop / Paused / Stopped selling) and its buttons. They save
+   * right away (with their dialogs); the section's Save button is for the stock below.
+   */
+  function statusPanel(P) {
+    const st = isArchived(P) ? 'removed' : isPaused(P) ? 'hidden' : 'live';
+    const lines = [];
+    if (st === 'live') {
+      lines.push(t('pm.status.liveHelp'));
+      if (P.pausedUntilPassed) lines.push(t('pm.status.backSince', { date: dayText(P.showAgainOn) }));
+    } else if (st === 'hidden') {
+      lines.push(t(isNew(P) ? 'pm.status.newHelp' : 'pm.status.hiddenHelp'));
+      lines.push(P.showAgainOn ? t('pm.status.backOn', { date: dayText(P.showAgainOn, { weekday: true }) }) : t('pm.status.noDay'));
+    } else lines.push(t('pm.status.removedHelp'));
+    const why = st === 'hidden' && P.hiddenReason && !isNew(P) ? t('pm.reason.' + P.hiddenReason) : '';
+    const note = noteOf(P);
+    const acts = st === 'removed' ? statusActs(P, 'btn')
+      : st === 'hidden' ? `<button class="btn btn-primary" type="button" data-pm-act="show" data-id="${esc(P.id)}">${esc(t(isNew(P) ? 'pm.publishNew' : 'pm.show'))}</button>
+        <button class="btn" type="button" data-pm-act="pause" data-id="${esc(P.id)}">${esc(t('pm.changePause'))}</button>
+        <button class="btn pm-btn-stop" type="button" data-pm-act="stop" data-id="${esc(P.id)}">${esc(t('pm.stopSelling'))}</button>`
+        : statusActs(P, 'btn');
+    return `<div class="pm-state pm-state-${st}" id="pm-status">
+      <div class="pm-state-text">
+        <div class="pm-state-lbl">${esc(t('pm.status'))}</div>
+        <div class="pm-state-name"><span class="pm-state-dot" aria-hidden="true"></span><b>${esc(t('pm.status.' + st))}</b>${why ? `<span class="pm-state-why">${esc(why)}</span>` : ''}</div>
+        ${lines.map((l) => `<p class="small">${esc(l)}</p>`).join('')}
+        ${note ? `<p class="small pm-note">${esc(t('pm.noteSaid', { note }))}</p>` : ''}
+      </div>
+      <div class="pm-state-acts">${acts}</div>
+    </div>`;
+  }
   function availBody(P) {
     const e = P.edit || {};
     const mode = stockModeOf(P);
-    const reasons = (S.data && S.data.hideReasons) || [];
-    const statusMark = mark(P.status !== 'live', 'status');
-    const why = P.status === 'live' && !P.visible ? `<p class="notice small">${esc(t('pm.liveButHidden', { why: whyHidden(P) }))}</p>` : '';
+    const why = isOn(P) && !P.visible ? `<p class="notice small">${esc(t('pm.liveButHidden', { why: whyHidden(P) }))}</p>` : '';
     return `
-      <fieldset class="pm-fs"><legend class="pm-lbl">${esc(t('pm.status'))} ${statusMark}</legend>
-        <div class="pm-seg pm-seg-3" role="radiogroup">
-          ${['live', 'hidden', 'removed'].map((s) => `<label class="pm-seg-opt pm-st-${s}"><input type="radio" name="status" value="${s}" ${P.status === s ? 'checked' : ''}><span>${esc(t('pm.status.' + s))}</span></label>`).join('')}
-        </div>
-        <p class="muted small" data-pm-status-help>${esc(t('pm.status.' + P.status + 'Help'))}</p>
-      </fieldset>
+      ${statusPanel(P)}
       ${why}
-      <div class="pm-grid2 pm-reason-box" ${P.status === 'live' ? 'hidden' : ''}>
-        ${fld('hiddenReason', t('pm.reason'), `<select id="${fieldId('hiddenReason')}" name="hiddenReason">${reasons.map((r) => `<option value="${r}" ${P.hiddenReason === r ? 'selected' : ''}>${esc(t('pm.reason.' + r))}</option>`).join('')}</select>`)}
-        ${fld('hiddenNote', t('pm.note'), inp('hiddenNote', P.hiddenNote === 'New product: check it, then show it in the shop' ? t('pm.newNote') : P.hiddenNote || '', `type="text" maxlength="200" placeholder="${esc(t('pm.notePh'))}"`))}
-      </div>
       <div class="pm-stock">
         <fieldset class="pm-fs"><legend class="pm-lbl">${esc(t('pm.stockMode'))} ${mark(e.stock !== undefined || e.variantStock !== undefined, 'stock')}</legend>
           <div class="pm-modes" role="radiogroup">
@@ -881,15 +1026,9 @@
     const k = box.querySelector('[data-pm-key-low]');
     if (k) k.textContent = t('pm.vs.keyLow', { n: POD.num(low) });
   }
+  /** The stock part of the section (the status buttons save on their own). */
   function saveAvail(P) {
-    const status = val('status');
-    const body = { status };
-    if (status !== 'live') {
-      body.hiddenReason = val('hiddenReason');
-      let note = val('hiddenNote').trim();
-      if (note === t('pm.newNote') && P.hiddenNote === 'New product: check it, then show it in the shop') note = P.hiddenNote;
-      body.hiddenNote = note;
-    }
+    const body = {};
     const mode = val('stockMode');
     const lowOf = () => {
       const low = val('lowStockAt');
@@ -1426,18 +1565,18 @@
     }
   }
 
-  // ---------- i) Danger zone ----------
+  // ---------- i) Stop selling / undo ----------
   // Products are never deleted (old orders, accounts and the change log keep naming them):
-  // they are removed from the shop, and can be shown again any time.
+  // they are archived ("stop selling"), and can be sold again any time.
   function dangerBody(P) {
     const undo = P.builtIn ? `<div class="pm-danger"><div><b>${esc(t('pm.undoAll'))}</b><p class="muted small">${esc(t('pm.undoAllHelp'))}</p></div>
         <button type="button" class="btn btn-danger" data-pm-act="undo-all" ${P.edit ? '' : 'disabled'}>${esc(t('pm.undoAll'))}</button></div>` : '';
-    const keep = P.status === 'removed'
-      ? `<div class="pm-danger"><div><b>${esc(t('pm.showAgain'))}</b><p class="muted small">${esc(t('pm.showAgainHelp'))}</p></div>
-        <button type="button" class="btn pm-btn-ok" data-pm-act="show-again">${esc(t('pm.showAgain'))}</button></div>`
-      : `<div class="pm-danger"><div><b>${esc(t('pm.removeTitle'))}</b><p class="muted small">${esc(t('pm.removeHelp'))}</p></div>
-        <button type="button" class="btn btn-danger" data-pm-act="remove-instead">${esc(t('pm.removeTitle'))}</button></div>`;
-    return undo + keep;
+    const keep = isArchived(P)
+      ? `<div class="pm-danger pm-danger-ok"><div><b>${esc(t('pm.sellAgain'))}</b><p class="muted small">${esc(t('pm.sellAgainHelp'))}</p></div>
+        <button type="button" class="btn pm-btn-ok" data-pm-act="sell-again">${esc(t('pm.sellAgain'))}</button></div>`
+      : `<div class="pm-danger"><div><b>${esc(t('pm.stopSelling'))}</b><p class="muted small">${esc(t('pm.stopHelp'))}</p></div>
+        <button type="button" class="btn btn-danger" data-pm-act="stop">${esc(t('pm.stopSelling'))}</button></div>`;
+    return `<div class="pm-dangers">${keep}${undo}</div>`;
   }
 
   // ---------- Saving a section ----------
@@ -1496,10 +1635,6 @@
       setDirty(secName);
       rerender(secName);
       return;
-    } else if (kind === 'status') {
-      root.querySelector('[name=status][value=live]').checked = true;
-      syncAvail();
-      secName = 'avail';
     } else if (kind === 'stock') {
       root.querySelector('[name=stockMode][value=none]').checked = true;
       syncAvail();
@@ -1541,11 +1676,6 @@
     if (secName) setDirty(secName);
   }
   function syncAvail() {
-    const st = val('status');
-    const box = root.querySelector('.pm-reason-box');
-    if (box) box.hidden = st === 'live';
-    const help = root.querySelector('[data-pm-status-help]');
-    if (help) help.textContent = t('pm.status.' + st + 'Help');
     const mode = val('stockMode') || 'none';
     const sf = root.querySelector('.pm-stock-fields');
     if (sf) sf.hidden = mode === 'none';
@@ -1588,15 +1718,17 @@
     const p = id ? products().find((x) => x.id === id) || (S.P && S.P.id === id ? S.P : null) : S.P;
     const afterQuick = (P) => {
       if (S.view === 'list') renderRows();
-      else if (S.P && S.P.id === P.id) { S.P = P; refreshEdit('avail'); }
+      else if (S.P && S.P.id === P.id) refreshStatus(P);
     };
     switch (act) {
       case 'new': return newDialog(null);
       case 'copy': return newDialog(p);
       case 'edit': return openEdit(id);
       case 'back': return backToList() && history.state && history.state.pm ? history.back() : undefined;
-      case 'hide': return hideDialog(p, afterQuick);
-      case 'show': return showInShop(p, afterQuick);
+      case 'pause': return pauseDialog(p, afterQuick);
+      case 'stop': return stopDialog(p, afterQuick);
+      case 'show':
+      case 'sell-again': return showInShop(p, afterQuick);
       case 'publish': return showInShop(S.P, afterQuick);
       case 'staff':
         S.staffOpen = !S.staffOpen;
@@ -1654,8 +1786,6 @@
         setDirty('avail');
         return syncVariant();
       case 'undo-all': return undoAll();
-      case 'remove-instead': return removeInstead();
-      case 'show-again': return showInShop(S.P, (P) => { S.P = P; refreshEdit('avail'); refreshEdit('danger'); });
       default: return undefined;
     }
   }
@@ -1709,19 +1839,6 @@
       secError('danger', e.message);
     }
   }
-  async function removeInstead() {
-    try {
-      S.P = await send('PUT', `/api/admin/catalog/${enc(S.P.id)}`, { status: 'removed', hiddenReason: 'other', hiddenNote: S.P.hiddenNote || '' });
-      putProduct(S.P);
-      refreshEdit('avail');
-      refreshEdit('danger');
-      toast(t('pm.removedOk', { name: tr(S.P.name) }));
-      reloadLater();
-    } catch (e) {
-      secError('danger', e.message);
-    }
-  }
-
   function onInput(e) {
     const el = e.target;
     if (!root.contains(el)) return;
@@ -1767,6 +1884,9 @@
     const el = e.target;
     if (!root.contains(el)) return;
     if (el.id === 'pm-cat') { S.cat = el.value; renderRows(); return; }
+    // The search box was handled as it was typed. Redrawing the list again when it loses focus
+    // (on the press of a row's button) would swallow that click.
+    if (el.id === 'pm-q') return;
     if (el.id === 'pm-file') { if (el.files.length) uploadPhotos(el.files); el.value = ''; return; }
     if (el.closest('[data-sec="print"]') && el.name) {
       if (onPrintInput(el, true)) setDirty('print');
