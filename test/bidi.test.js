@@ -101,3 +101,26 @@ test('levels follow the bidi rules: digits after Arabic sit inside the Arabic, a
   const tail = bidiRuns(Array.from('عرض 3D  '), true);
   assert.strictEqual(tail[tail.length - 1].level, 1);
 });
+
+// Checked against Chromium's own layout (the canvas draws one-colour lines with it, and the
+// editor's caret follows this order): brackets read with the words inside them (rule N0).
+test('brackets keep both ends around the words inside them (rule N0)', () => {
+  /** The line as shown, left to right, letter by letter (a right-to-left stretch reversed). */
+  const order = (text, baseRtl = true) => {
+    const line = Array.from(text);
+    return bidiOrder(bidiRuns(line, baseRtl)).map((r) => {
+      const s = line.slice(r.start, r.end);
+      return (r.rtl ? s.reverse() : s).join('');
+    }).join('');
+  };
+  // English in brackets inside Arabic: the brackets stay on the Arabic side (drawn mirrored).
+  assert.strictEqual(order('السعر (USD) 250 جنيه'), 'هينج 250 )USD( رعسلا');
+  // English with brackets in a right-to-left box: one left-to-right stretch, ")" stays at the end.
+  assert.strictEqual(order('abc (def)'), 'abc (def)');
+  assert.strictEqual(order('Price (USD) 5'), 'Price (USD) 5');
+  // Arabic in brackets inside English.
+  assert.strictEqual(order('Pro (مرحبا) 5', false), 'Pro (ابحرم) 5');
+  assert.strictEqual(order('3D ؟ (مرحبا)', false), '3D )ابحرم( ؟');
+  // A bracket without its pair is an ordinary sign: at the end of the line it goes to the box's side.
+  assert.strictEqual(order('abc def)'), ')abc def');
+});

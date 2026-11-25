@@ -63,7 +63,68 @@
     if (/[\p{L}\p{Nd}\p{Mc}\u200E]/u.test(ch)) return 'L';
     return 'ON';
   }
-  /** The bidi level of every character of a line (UAX #9 rules W1-W7, N1-N2, I1-I2 and L1). */
+  // Paired brackets (Unicode BidiBrackets.txt): opening → closing.
+  const OPEN_BRACKET = {
+    '(': ')', '[': ']', '{': '}', '⁅': '⁆', '⁽': '⁾', '₍': '₎', '⌈': '⌉', '⌊': '⌋',
+    '〈': '〉', '❨': '❩', '❪': '❫', '❬': '❭', '❮': '❯', '❰': '❱',
+    '❲': '❳', '❴': '❵', '⟅': '⟆', '⟦': '⟧', '⟨': '⟩', '⟪': '⟫',
+    '⟬': '⟭', '⟮': '⟯', '⦃': '⦄', '⦅': '⦆', '⦇': '⦈', '⦉': '⦊',
+    '⦋': '⦌', '⦍': '⦐', '⦏': '⦎', '⦑': '⦒', '⦓': '⦔', '⦕': '⦖',
+    '⦗': '⦘', '⧘': '⧙', '⧚': '⧛', '⧼': '⧽', '⸢': '⸣', '⸤': '⸥',
+    '⸦': '⸧', '⸨': '⸩', '《': '》', '「': '」', '『': '』', '【': '】',
+    '〔': '〕', '〖': '〗', '〘': '〙', '〚': '〛', '﹙': '﹚', '﹛': '﹜',
+    '﹝': '﹞', '（': '）', '［': '］', '｛': '｝', '｟': '｠', '｢': '｣',
+  };
+  const CLOSE_BRACKET = new Set(Object.values(OPEN_BRACKET));
+  const sameBracket = (ch) => (ch === '\u2329' ? '\u3008' : ch === '\u232A' ? '\u3009' : ch); // canonical equivalents
+  /** UAX #9 BD16 + N0 on resolved types `t` (changed in place). */
+  function bracketPairs(line, t, orig, baseRtl) {
+    const n = t.length;
+    const e = baseRtl ? 'R' : 'L';
+    const strongOf = (x) => (x === 'L' ? 'L' : x === 'R' || x === 'EN' || x === 'AN' ? 'R' : null);
+    const pairs = [];
+    const stack = [];
+    for (let i = 0; i < n; i++) {
+      if (t[i] !== 'ON') continue;
+      const ch = sameBracket(line[i]);
+      if (OPEN_BRACKET[ch]) {
+        if (stack.length === 63) break;
+        stack.push({ close: OPEN_BRACKET[ch], at: i });
+      } else if (CLOSE_BRACKET.has(ch)) {
+        for (let k = stack.length - 1; k >= 0; k--) {
+          if (stack[k].close !== ch) continue;
+          pairs.push([stack[k].at, i]);
+          stack.length = k;
+          break;
+        }
+      }
+    }
+    pairs.sort((a, b) => a[0] - b[0]);
+    for (const [open, close] of pairs) {
+      let inside = null;
+      for (let k = open + 1; k < close; k++) {
+        const s = strongOf(t[k]);
+        if (s === e) { inside = e; break; }
+        if (s) inside = s;
+      }
+      if (!inside) continue;
+      let d = e;
+      if (inside !== e) {
+        // Only the opposite direction inside: the brackets follow it when the text before them does too.
+        let before = e;
+        for (let k = open - 1; k >= 0; k--) {
+          const s = strongOf(t[k]);
+          if (s) { before = s; break; }
+        }
+        d = before;
+      }
+      for (const p of [open, close]) {
+        t[p] = d;
+        for (let k = p + 1; k < n && orig[k] === 'NSM'; k++) t[k] = d;
+      }
+    }
+  }
+  /** The bidi level of every character of a line (UAX #9 rules W1-W7, N0-N2, I1-I2 and L1). */
   function bidiLevels(line, baseRtl) {
     const n = line.length;
     const sos = baseRtl ? 'R' : 'L';
@@ -99,6 +160,9 @@
       if (t[i] === 'L' || t[i] === 'R') strong = t[i];
       else if (t[i] === 'EN' && strong === 'L') t[i] = 'L';
     }
+    // N0: a pair of brackets reads with the words inside it, so "(USD)" in Arabic
+    // text or "abc (def)" in a right-to-left box keep both brackets in place.
+    bracketPairs(line, t, orig, baseRtl);
     // N1/N2: spaces and marks take the direction around them when both sides agree
     // (numbers count as right-to-left here), else the text's own.
     const side = (x) => (x === 'L' ? 'L' : 'R');
@@ -147,10 +211,14 @@
     }
     return out;
   }
-  function renderBidiLine(method, ctx, line, left, top, lineIndex) {
-    const rtl = this.direction === 'rtl';
-    const lineHeight = this.getHeightOfLine(lineIndex);
-    top -= (lineHeight * this._fontSizeFraction) / this.lineHeight;
+  /**
+   * Where such a line is drawn: its stretches in display order (left to right),
+   * each with its pieces { text, first, last, w, x }. `left` is the line's start
+   * as Fabric gives it (left edge, or right edge for right-to-left text); `ctx`
+   * is only used to measure. The caret code (bidi-caret.js) uses the same layout.
+   */
+  function bidiLineLayout(o, ctx, line, left, lineIndex) {
+    const rtl = o.direction === 'rtl';
     const runs = bidiRuns(line, rtl);
     let total = 0;
     ctx.save();
@@ -159,11 +227,11 @@
       const pieces = [];
       let s = run.start;
       for (let i = run.start; i < run.end; i++) {
-        if (i === run.end - 1 || fabric.util.hasStyleChanged(this.getCompleteStyleDeclaration(lineIndex, i), this.getCompleteStyleDeclaration(lineIndex, i + 1), false)) {
+        if (i === run.end - 1 || fabric.util.hasStyleChanged(o.getCompleteStyleDeclaration(lineIndex, i), o.getCompleteStyleDeclaration(lineIndex, i + 1), false)) {
           const text = line.slice(s, i + 1).join('');
-          ctx.font = this._getFontDeclaration(this.getCompleteStyleDeclaration(lineIndex, i));
+          ctx.font = o._getFontDeclaration(o.getCompleteStyleDeclaration(lineIndex, i));
           ctx.direction = run.rtl ? 'rtl' : 'ltr';
-          pieces.push({ text, last: i, w: ctx.measureText(text).width });
+          pieces.push({ text, first: s, last: i, w: ctx.measureText(text).width });
           s = i + 1;
         }
       }
@@ -174,18 +242,28 @@
     }
     ctx.restore();
     // Fabric gives the line's start: its left edge, or its right edge for right-to-left text.
-    const lineW = this.getLineWidth(lineIndex);
+    const lineW = o.getLineWidth(lineIndex);
     const boxLeft = rtl ? left - lineW : left;
-    const align = this.textAlign || 'left';
+    const align = o.textAlign || 'left';
     let x = boxLeft + (align.includes('center') ? (lineW - total) / 2 : align.includes('right') ? lineW - total : 0);
-    ctx.save();
-    ctx.textAlign = 'left';
-    for (const run of bidiOrder(runs)) {
-      ctx.direction = run.rtl ? 'rtl' : 'ltr';
+    const order = bidiOrder(runs);
+    for (const run of order) {
       for (const p of run.pieces) {
-        this._renderChar(method, ctx, lineIndex, p.last, p.text, x, top, lineHeight);
+        p.x = x;
         x += p.w;
       }
+    }
+    return order;
+  }
+  function renderBidiLine(method, ctx, line, left, top, lineIndex) {
+    const lineHeight = this.getHeightOfLine(lineIndex);
+    top -= (lineHeight * this._fontSizeFraction) / this.lineHeight;
+    const order = bidiLineLayout(this, ctx, line, left, lineIndex);
+    ctx.save();
+    ctx.textAlign = 'left';
+    for (const run of order) {
+      ctx.direction = run.rtl ? 'rtl' : 'ltr';
+      for (const p of run.pieces) this._renderChar(method, ctx, lineIndex, p.last, p.text, p.x, top, lineHeight);
     }
     ctx.restore();
   }
@@ -697,5 +775,5 @@
     o.dirty = true;
   }
 
-  window.POD_FX = { laserTone, maskPath, roundRectPath, removeBackground, fontFaceCss, bidiRuns, bidiOrder };
+  window.POD_FX = { laserTone, maskPath, roundRectPath, removeBackground, fontFaceCss, bidiLevels, bidiRuns, bidiOrder, mixedStyledLine, bidiLineLayout };
 })();
