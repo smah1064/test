@@ -73,6 +73,19 @@ public class ShellWebViewClient extends BridgeWebViewClient {
         shell.onPageChanging(url);
         super.onPageCommitVisible(view, url);
         shell.onContentVisible(url);
+        // Test builds only (Capacitor logs nothing in store builds); the address without its query, which may hold an
+        // order's key.
+        Logger.debug(ShellPlugin.TAG, "Page shown: " + withoutQuery(url));
+    }
+
+    static String withoutQuery(String url) {
+        if (url == null) return "";
+        int end = url.length();
+        int q = url.indexOf('?');
+        int h = url.indexOf('#');
+        if (q >= 0) end = Math.min(end, q);
+        if (h >= 0) end = Math.min(end, h);
+        return url.substring(0, end);
     }
 
     @Override
