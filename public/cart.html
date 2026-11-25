@@ -684,9 +684,9 @@
         return !couponCode && couponNote && couponNote.msg ? couponNote : null;
       }
       const wordsFor = (r) => couponWords.get(`${r.code}\n${r.msg}`) || {};
-      /** A refusal in the page's language (in the shop's first words until it has been asked again). */
-      const refusalText = (r) => (r.lang === POD.lang ? r.msg : wordsFor(r)[POD.lang] || r.msg);
-      const needsWords = (r) => Boolean(r) && r.lang !== POD.lang && !wordsFor(r)[POD.lang];
+      /** A refusal in the page's language (in the shop's first words until it has been asked again; the page's own by its key). */
+      const refusalText = (r) => (r.key ? t(r.key) : r.lang === POD.lang ? r.msg : wordsFor(r)[POD.lang] || r.msg);
+      const needsWords = (r) => Boolean(r) && !r.key && r.lang !== POD.lang && !wordsFor(r)[POD.lang];
       /** The same refusal in two languages: each wording finds the other. */
       function learnWords(code, a, b) {
         if (!a || !b || !b.msg || a.lang === b.lang) return;
@@ -1153,9 +1153,22 @@
         .replace(/[\uff01-\uff5e]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0))
         .replace(/[\u061c\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, '')
         .trim().toUpperCase().replace(/\s+/g, '');
+      // The shop's codes are English letters and digits (src/coupons.js): a code with Arabic (or other) letters, such
+      // as "عيد20", is told so here in the page's words, without asking the shop (it isn't counted as a wrong try).
+      const notLatin = (code) => /\p{L}/u.test(code.replace(/[A-Z]/g, ''));
       const applyCoupon = async () => {
         const code = couponOf(document.getElementById('coupon').value);
         couponNote = null;
+        if (notLatin(code)) {
+          const had = couponCode;
+          setCoupon('');
+          couponNote = { code, key: 'coupon.latinOnly', msg: t('coupon.latinOnly'), lang: POD.lang };
+          document.getElementById('coupon').blur();
+          if (had) await refreshPrices(); // the code in use before comes off, as with any refused code
+          render();
+          showCode();
+          return;
+        }
         setCoupon(code);
         document.getElementById('coupon').blur();
         await refreshPrices();

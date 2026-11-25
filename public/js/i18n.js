@@ -309,6 +309,8 @@ window.POD_STRINGS = {
   'coupon.discount': ['Discount', 'الخصم'],
   'coupon.applied': ['Coupon applied ✓', 'الكوبون اتطبّق ✓'],
   'coupon.freeShipping': ['Free shipping', 'شحن مجاني'],
+  // A code typed with Arabic letters ("عيد20"): the shop's codes are English letters and digits (public/cart.html).
+  'coupon.latinOnly': ['Coupon codes are in English letters and numbers, like EID20', 'كود الخصم بيتكتب بحروف إنجليزي وأرقام، زي EID20'],
   'nav.account': ['Account', 'حسابي'],
   'acct.pageTitle': ['My account · ebda3', 'حسابي · إبداع'],
   'acct.signIn': ['Sign in', 'تسجيل الدخول'],
@@ -563,6 +565,8 @@ window.POD_STRINGS = {
   'design.product': ['Product', 'المنتج'],
   'design.color': ['Colour', 'اللون'],
   'design.size': ['Size', 'المقاس'],
+  // Clothes on the ready-design page: no size marked until the customer picks one.
+  'design.pickSize': ['Pick your size', 'اختار مقاسك'],
   'design.priceNote': ['Printed just for you', 'بيتطبع مخصوص ليك'],
   'design.add': ['Add to cart', 'أضف إلى السلة'],
   'design.customize': ['✏️ Change the words in the editor', '✏️ غيّر الكلام في المحرر'],
@@ -1432,6 +1436,8 @@ window.POD_STRINGS = {
   'soldOutCombo': ['{colour} in {size}: sold out', '{colour} مقاس {size}: خلصان'],
   'fewLeftCombo': ['{colour} in {size}: only {n} left', '{colour} مقاس {size}: فاضل {n} بس'],
   'sizeMovedTo': ['{size} is sold out in this colour, so {to} is picked', 'مقاس {size} خلصان في اللون ده، فاخترنالك {to}'],
+  // Clothes (ready-design page): the size the customer picked is sold out in the colour they switched to.
+  'sizeSoldOutPick': ['{size} is sold out in this colour. Pick another size.', 'مقاس {size} خلصان في اللون ده. اختار مقاس تاني.'],
 
   // ---------- Paused (back soon) or stopped selling (similar products instead) ----------
   'avail.backSoonShort': ['back soon', 'هيرجع قريب'],

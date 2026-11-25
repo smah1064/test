@@ -657,6 +657,7 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 .dp-price { display: flex; align-items: baseline; gap: 10px; margin: 8px 0 12px; }
 .dp-price .amount { font-size: 26px; font-weight: 800; }
 #dp-edit { margin-top: 8px; }
+.dp-size-hint { color: var(--accent); } /* "Pick your size": clothes, until a size is picked */
 /* The customer's own name in place of a sample one ("LAILA"), above Add to cart, and the question before printing the sample. */
 .dp-names { background: #f6f7f9; border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin: 0 0 12px; }
 .dp-names .field { margin-bottom: 10px; }

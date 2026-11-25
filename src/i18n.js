@@ -55,7 +55,8 @@ const MESSAGES = {
   acctWrongCurrent: { en: 'Your current password is not right', ar: 'كلمة المرور الحالية مش صحيحة' },
   acctSignIn: { en: 'Please sign in', ar: 'سجّل دخول من فضلك' },
   acctResetExpired: { en: 'This reset link has expired. Ask for a new one.', ar: 'رابط إعادة التعيين انتهى. اطلب رابط جديد.' },
-  couponCodeBad: { en: 'Codes are 3-24 letters or numbers (no spaces)', ar: 'الكود من 3 لـ 24 حرف أو رقم (من غير مسافات)' },
+  // (Admin → Coupons. A customer typing a code with Arabic letters is told on the cart page: public/cart.html.)
+  couponCodeBad: { en: 'Codes are 3-24 English letters or numbers (no spaces), like EID20', ar: 'الكود من 3 لـ 24 حرف إنجليزي أو رقم (من غير مسافات)، زي EID20' },
   couponTypeBad: { en: 'Choose the kind of discount', ar: 'اختار نوع الخصم' },
   couponValueBad: { en: 'Check the discount amount and limits', ar: 'راجع قيمة الخصم والحدود' },
   couponFixedMin: { en: 'The amount off must be at least EGP 1 (discounts are in whole pounds)', ar: 'مبلغ الخصم لازم يكون ١ ج.م. على الأقل (الخصم بالجنيه الكامل)' },
@@ -195,6 +196,10 @@ const MESSAGES = {
   sideUnavailable: { en: 'One side of {name} can\'t be printed right now. Remove the design from that side.', ar: 'وش من {name} مش متاح للطباعة دلوقتي. شيل التصميم من الوش ده.' },
   variantUnavailable: { en: 'This colour in this size of {name} is sold out right now. Please choose another colour or size.', ar: 'اللون ده بالمقاس ده من {name} خلصان دلوقتي. اختار لون أو مقاس تاني.' },
   notEnoughStock: { en: 'Only {left} of {name} left. Please order fewer pieces.', ar: 'فاضل {left} بس من {name}. اطلب عدد أقل.' },
+  // Nothing left of it for this item: never "Only 0 left… order fewer" (format() picks this one for notEnoughStock with left 0).
+  stockNoneLeft: { en: 'No more pieces of {name} are left for this item.', ar: 'مفيش قطع تانية فاضلة من {name} للمنتج ده.' },
+  // The cart's prices (POST /api/cart/quote): what is left is all taken by the items above this one in the cart.
+  stockInCart: { en: 'The last pieces of {name} are in another item in your cart.', ar: 'آخر قطع من {name} في منتج تاني في سلتك.' },
   badProductField: { en: 'Please check this field: {field}', ar: 'راجع الخانة دي: {field}' },
   needOneColor: { en: 'Keep at least one colour on.', ar: 'خلّي لون واحد على الأقل شغال.' },
   needOneSize: { en: 'Keep at least one size on.', ar: 'خلّي مقاس واحد على الأقل شغال.' },
@@ -247,6 +252,8 @@ const arabicDigits = (s) => {
 };
 
 function format(key, params, lang) {
+  // "Only 0 left… order fewer": never; nothing left for the item has its own words.
+  if (key === 'notEnoughStock' && params && typeof params.left === 'number' && params.left <= 0) key = 'stockNoneLeft';
   const m = MESSAGES[key];
   if (!m) return key;
   return (lang === 'ar' ? arabicDigits(m.ar) : m[lang]).replace(/\{(\w+)\}/g, (_, k) => {

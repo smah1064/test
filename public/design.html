@@ -58,7 +58,8 @@
         <p class="dp-gone" id="dp-gone" role="status" hidden></p>
         <div class="field"><label data-i18n="design.product"></label><div class="dp-products" id="dp-products"></div></div>
         <div class="field"><label><span data-i18n="design.color"></span>: <span id="dp-color-name" class="muted"></span></label><div class="swatches" id="dp-colors"></div></div>
-        <div class="field"><label data-i18n="design.size"></label><div class="chips" id="dp-sizes"></div></div>
+        <!-- Clothes: no size marked until the customer picks one, "Pick your size" meanwhile (public/js/design.js) -->
+        <div class="field"><label><span data-i18n="design.size"></span><span id="dp-size-hint" hidden>: <span class="dp-size-hint" data-i18n="design.pickSize"></span></span></label><div class="chips" id="dp-sizes"></div></div>
         <p class="pp-few" id="dp-few" role="status" hidden></p>
         <div class="dp-price"><span class="amount" id="dp-price"></span><span class="muted small" data-i18n="design.priceNote"></span></div>
         <p class="notice" id="dp-fill" style="margin:0 0 12px" data-i18n="design.fillNote" hidden></p>

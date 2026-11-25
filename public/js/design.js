@@ -126,8 +126,9 @@
     return null;
   }
   choose(instead ? instead.id : params.get('product'), params.get('color'));
-  // Clothes: the size the customer picked (a link with &size= counts). Until then the first size is shown,
-  // and "Add to cart" asks which one (never ordered silently in the first size), as the editor does.
+  // Clothes (two sizes or more): the size the customer picked (a tap, or a link with &size=). Until then no size
+  // looks picked ("Pick your size" by the sizes; the picture and the price use the first one meanwhile), and
+  // "Add to cart" asks which one (never ordered silently in the first size), as the editor does.
   let pickedSize = null;
   {
     const asked = state.product.sizes.find((s) => s.id === params.get('size') && POD.sizeOk(state.product, state.color.id, s));
@@ -136,7 +137,10 @@
       pickedSize = asked.id;
     }
   }
-  const needsSize = () => state.product.category === 'apparel' && state.product.sizes.length > 1 && pickedSize !== state.size.id;
+  const asksSize = () => state.product.category === 'apparel' && state.product.sizes.length > 1;
+  /** The size shown is the customer's: picked by them, or the only choice (not clothes, or one size). */
+  const sizeChosen = () => !asksSize() || pickedSize === state.size.id;
+  const needsSize = () => !sizeChosen();
   const sizeParam = () => (pickedSize && pickedSize === state.size.id ? `&size=${encodeURIComponent(state.size.id)}` : '');
   // A design with places for the customer's own details ({Name}, {Phone}…) would print those words as they are:
   // they are filled in in the editor (which refuses them too), so it is never added to the cart from here.
@@ -290,15 +294,19 @@
       : `<button type="button" class="swatch ${c.id === color.id ? 'active' : ''}" data-color="${esc(c.id)}" title="${esc(tr(c.name))}" aria-label="${esc(tr(c.name))}" style="background:${esc(c.hex)}"></button>`)).join('');
     $('dp-color-name').textContent = tr(color.name);
     // Sizes sold out (in every colour, or in the chosen one when stock is counted per colour and size): crossed out.
+    // Clothes: no size marked until the customer picks one.
+    const chosen = sizeChosen();
     $('dp-sizes').innerHTML = product.sizes.map((s) => {
       if (POD.sizeOk(product, color.id, s)) {
-        return `<button type="button" class="chip ${s.id === size.id ? 'active' : ''}" data-size="${esc(s.id)}" aria-pressed="${s.id === size.id}">${esc(tr(s.label))}${POD.sizeNote(product, s) ? ` <span style="opacity:.7">${esc(POD.sizeNote(product, s))}</span>` : ''}</button>`;
+        const on = chosen && s.id === size.id;
+        return `<button type="button" class="chip ${on ? 'active' : ''}" data-size="${esc(s.id)}" aria-pressed="${on}">${esc(tr(s.label))}${POD.sizeNote(product, s) ? ` <span style="opacity:.7">${esc(POD.sizeNote(product, s))}</span>` : ''}</button>`;
       }
       const why = s.soldOut ? t('soldOut') : t('soldOutCombo', { colour: tr(color.name), size: tr(s.label) });
       return `<button type="button" class="chip sold-out" aria-disabled="true" data-sold-size="${esc(s.id)}" title="${esc(why)}" aria-label="${esc(why)}"><span class="sold-label">${esc(tr(s.label))}</span> <span class="sold-tag">${esc(t('soldOut'))}</span></button>`;
     }).join('');
-    // "Only n left": of the chosen colour in the chosen size, else of the whole product.
-    const few = POD.comboFew(product, color.id, size.id) || product.fewLeft || 0;
+    $('dp-size-hint').hidden = chosen;
+    // "Only n left": of the chosen colour in the chosen size (once a size is picked), else of the whole product.
+    const few = (chosen && POD.comboFew(product, color.id, size.id)) || product.fewLeft || 0;
     $('dp-few').hidden = !few;
     $('dp-few').textContent = few ? t('pp.fewLeft', { n: POD.num(few) }) : '';
     $('dp-price').textContent = money(product.basePrice + size.surcharge);
@@ -336,6 +344,9 @@
     const b = e.target.closest('[data-product]');
     if (!b || b.dataset.product === state.product.id) return;
     choose(b.dataset.product, state.color.id);
+    // The size the customer picked stays picked on another product that has it (left in this colour).
+    const again = pickedSize && state.product.sizes.find((s) => s.id === pickedSize && POD.sizeOk(state.product, state.color.id, s));
+    if (again) state.size = again;
     renderOptions();
     syncUrl();
     draw();
@@ -357,8 +368,14 @@
     const b = e.target.closest('[data-color]');
     if (!b || b.dataset.color === state.color.id) return;
     const moved = choose(state.product.id, b.dataset.color);
+    // When the size shown is sold out in this colour: clothes, the customer's size is un-picked ("pick another"), or,
+    // with none picked yet, the first one left is used without a word; other products: the next size, said.
+    const hadPicked = Boolean(moved) && pickedSize === moved.id;
+    if (hadPicked && asksSize()) pickedSize = null;
     renderOptions();
-    if (moved) POD.toast(t('sizeMovedTo', { size: tr(moved.label), to: tr(state.size.label) }));
+    if (moved && asksSize()) {
+      if (hadPicked) POD.toast(t('sizeSoldOutPick', { size: tr(moved.label) }));
+    } else if (moved) POD.toast(t('sizeMovedTo', { size: tr(moved.label), to: tr(state.size.label) }));
     syncUrl();
     draw();
   });
