@@ -338,8 +338,9 @@ function publicItem(item) {
     unitPrice: item.unitPrice != null ? item.unitPrice : item.quantities && new Set(item.quantities.map((l) => l.unitPrice)).size > 1 ? null : round2(item.price / (item.copies || 1)),
     quantities: withPacks(item.productId, item.quantities),
     approval: item.approval || null,
-    approvals: item.approvals || [],
-    review: item.review ? { needed: item.review.needed, reasons: item.review.reasons, status: item.review.status, note: item.review.note || null } : null,
+    // (The team's reason for sending an approved item back stays with the team: see adminItem.)
+    approvals: (item.approvals || []).map((a) => (a && a.action === 'reopened' ? { action: a.action, by: a.by, at: a.at, version: a.version } : a)),
+    review: item.review ? { needed: item.review.needed, reasons: (item.review.reasons || []).filter((r) => r !== 'reopened'), status: item.review.status, note: item.review.note || null } : null,
     preflight: item.preflight ? { status: item.preflight.status, checks: item.preflight.checks } : null,
     // The order id is the customer's key: a waiting proof can be opened from the order page.
     proofUrl: item.status === 'awaiting_approval' && item.proofToken ? `/proof?t=${item.proofToken}` : null,
@@ -463,6 +464,9 @@ function adminItem(order, item, index) {
     sends: item.sends || [],
     imports: item.imports || null,
     rightsConfirmedAt: item.rightsConfirmedAt || null,
+    // Sent back to Review after the customer approved it: why, by the team (not shown to the customer).
+    ...(item.review && item.review.reopenReason ? { review: { ...publicItem(item).review, reasons: item.review.reasons || [], reopenReason: item.review.reopenReason } } : {}),
+    approvals: item.approvals || [],
   };
 }
 
@@ -1083,12 +1087,31 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const found = store.findItem(req.params.itemId);
       if (!found) throw new HttpError(404, 'itemNotFound');
       const { order, item } = found;
-      // Only a job that is waiting for review (a Review tab left open must not send a shipped job back).
-      if (!REVIEW_STATUSES.includes(item.status)) throw new HttpError(409, 'notInReview');
       const d = store.getDesign(item.designId);
       const b = req.body || {};
       const note = String(b.note || '').trim().slice(0, 2000);
       const now = new Date().toISOString();
+      if (b.action === 'reopen') {
+        // An item the customer approved, that can't be printed as it is (owner's request, 25 Nov): back to Review,
+        // where the shop fixes the file (the customer approves the new proof) or asks the customer for a change.
+        // Waiting to print or on the press only; printed or shipped jobs are not sent back. The reason is the team's:
+        // the customer hears nothing until the shop sends the new proof or the change request.
+        if (!['queued', 'printing'].includes(item.status)) throw new HttpError(409, 'reopenNotNow');
+        if (!note) throw new HttpError(400, 'noteRequired');
+        const warnings = [];
+        for (const sd of (item.sends || []).filter((x) => x.status === 'sent' || x.status === 'opened').slice(-3)) warnings.push({ kind: 'house', house: sd.houseName, at: sd.at });
+        if (item.filmBatch) warnings.push({ kind: 'film', film: item.filmBatch.id, at: item.filmBatch.at });
+        item.status = 'review';
+        item.review = { needed: true, reasons: [...new Set(['reopened', ...((item.review && item.review.reasons) || [])])], status: 'pending', reopenReason: note };
+        item.approvals = [...(item.approvals || []), { action: 'reopened', by: 'shop', at: now, note, proofHash: d ? proofHashOf(d) : null, version: d ? d.version || 1 : null }];
+        // A film made with the old artwork can't be used for it: it goes on a new film once approved again.
+        delete item.filmBatch;
+        item.history.push({ status: item.status, at: now });
+        store.save();
+        return res.json({ ...(await reviewItem(order, item)), warnings });
+      }
+      // Only a job that is waiting for review (a Review tab left open must not send a shipped job back).
+      if (!REVIEW_STATUSES.includes(item.status)) throw new HttpError(409, 'notInReview');
       if (b.action === 'approve') {
         // Printed only from what the customer approved; otherwise they get the proof first.
         if (item.approval && d && approvedFilesMatch(item, d)) item.status = 'queued';
@@ -1131,6 +1154,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
       if (buf.length < 24 || !buf.subarray(0, 8).equals(PNG_SIGNATURE)) throw new HttpError(400, 'badImage');
       if (buf.readUInt32BE(16) !== sd.widthPx || buf.readUInt32BE(20) !== sd.heightPx) throw new HttpError(400, 'replacementSize', { w: sd.widthPx, h: sd.heightPx });
+      // What the shop changed, for the customer (with the new proof, in the email and on the proof page).
+      let changeNote = '';
+      try { changeNote = decodeURIComponent(String(req.get('x-review-note') || '')).replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, ' ').trim().slice(0, 1000); } catch (e) { changeNote = ''; }
       // The old file stays, so every version that was ever approved can be found again.
       const v = d.version || 1;
       const cur = store.designFile(d.id, `${sd.id}-print.png`);
@@ -1164,7 +1190,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       item.replaced = { ...(item.replaced || {}), [sd.id]: d.version };
       item.approval = null;
       item.status = 'awaiting_approval';
-      item.approvals = [...(item.approvals || []), { action: 'changes', by: 'shop', at: now, replaced: true, proofHash: proofHashOf(d), version: d.version, side: sd.id }];
+      if (changeNote) item.review = { ...(item.review || { needed: true, reasons: [] }), note: changeNote };
+      item.approvals = [...(item.approvals || []), { action: 'changes', by: 'shop', at: now, replaced: true, proofHash: proofHashOf(d), version: d.version, side: sd.id, ...(changeNote ? { note: changeNote } : {}) }];
       item.preflight = d.preflight;
       item.history.push({ status: item.status, at: now });
       newProofLink(item);
@@ -4138,7 +4165,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   // What daily work was about, for the activity log: the order and item, and what was set.
   const WORK_WORDS = {
     queued: ['queued', 'في الانتظار'], printing: ['printing', 'بيتطبع'], printed: ['printed', 'اتطبع'], shipped: ['shipped', 'اتشحن'], delivered: ['delivered', 'اتسلم'],
-    paid: ['paid', 'اتدفع'], pending: ['not paid yet', 'لسه متدفعش'], approve: ['approved', 'اتوافق عليه'], changes: ['changes asked', 'اتطلب تعديلات'],
+    paid: ['paid', 'اتدفع'], pending: ['not paid yet', 'لسه متدفعش'], approve: ['approved', 'اتوافق عليه'], changes: ['changes asked', 'اتطلب تعديلات'], reopen: ['sent back to Review after approval', 'رجع للمراجعة بعد الموافقة'],
     dtf: ['print method: DTF', 'طريقة الطباعة: DTF'], dtg: ['print method: DTG', 'طريقة الطباعة: DTG'], embroidery: ['embroidery', 'تطريز'],
     done: ['handled', 'اتعمل'], new: ['open again', 'اتفتح تاني'], whatsapp: ['WhatsApp', 'واتساب'], email: ['email', 'إيميل'],
   };

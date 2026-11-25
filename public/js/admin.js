@@ -853,9 +853,76 @@
             ${sendButton(item, true)}
             ${item.status === 'printing' ? `<button class="btn btn-lg shrink" data-item="${item.id}" data-status="queued" title="${esc(t('admin.backToQueue.title'))}">${esc(t('admin.backToQueue'))}</button>` : ''}
           </div>
+          ${backPanel(item)}
         </div>
       </div>`;
   }
+  // ---------- An approved job that can't be printed as it is: back to Review (owner's request, 25 Nov) ----------
+  // From the press or the waiting list: the reason (for the team) is required. In Review the shop then fixes the file
+  // (the customer approves the new proof, with a note of what changed) or asks the customer for a change.
+  const backOpen = new Set();
+  const backMsg = {};
+  const backBusy = new Set();
+  function backPanel(item) {
+    if (!can('review.work') || !['queued', 'printing'].includes(item.status)) return '';
+    const id = esc(item.id);
+    const m = backMsg[item.id];
+    if (!backOpen.has(item.id)) {
+      return `<div class="back-review">${m ? msgHtml(m) : ''}<button class="btn btn-sm" type="button" data-back-open="${id}">⚠ ${esc(t('back.open'))}</button></div>`;
+    }
+    return `
+      <div class="back-review card" role="group" aria-labelledby="back-h-${id}" style="margin-top:10px;padding:12px">
+        <h4 id="back-h-${id}" style="margin:0 0 4px">${esc(t('back.title'))}</h4>
+        <p class="muted small" style="margin:0 0 8px">${esc(t('back.help'))}</p>
+        <label class="small" for="back-why-${id}"><b>${esc(t('back.why'))}</b></label>
+        <textarea id="back-why-${id}" data-back-why="${id}" rows="2" maxlength="1000" dir="auto" placeholder="${esc(t('back.whyPh'))}" style="width:100%">${esc(backWhy[item.id] || '')}</textarea>
+        <div class="row" style="flex-wrap:wrap;gap:8px;margin-top:8px">
+          <button class="btn btn-sm btn-primary" type="button" data-back-send="${id}" ${backBusy.has(item.id) ? 'disabled' : ''}>${esc(t('back.send'))}</button>
+          <button class="btn btn-sm" type="button" data-back-cancel="${id}">${esc(t('back.cancel'))}</button>
+        </div>
+        ${m ? msgHtml(m) : ''}
+      </div>`;
+  }
+  const backWhy = {};
+  document.addEventListener('input', (e) => {
+    const id = e.target && e.target.dataset && e.target.dataset.backWhy;
+    if (id) backWhy[id] = e.target.value;
+  });
+  document.addEventListener('click', async (e) => {
+    const openB = e.target.closest('[data-back-open]');
+    const cancel = e.target.closest('[data-back-cancel]');
+    const send = e.target.closest('[data-back-send]');
+    if (!openB && !cancel && !send) return;
+    const id = (openB || cancel || send).dataset.backOpen || (openB || cancel || send).dataset.backCancel || (openB || cancel || send).dataset.backSend;
+    if (openB) { backOpen.add(id); delete backMsg[id]; }
+    if (cancel) { backOpen.delete(id); delete backMsg[id]; }
+    if (send) {
+      const why = (backWhy[id] || '').trim();
+      if (!why) {
+        backMsg[id] = { text: t('back.whyNeeded'), ok: false };
+      } else if (!backBusy.has(id)) {
+        backBusy.add(id);
+        if (lastQueue) renderQueue(lastQueue);
+        try {
+          const r = await adminApi(`/api/admin/items/${encodeURIComponent(id)}/review`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'reopen', note: why }) });
+          backOpen.delete(id);
+          delete backWhy[id];
+          // Sent to a printing house or on a DTF film already: said, so it is stopped there too.
+          const warn = (r.warnings || []).map((w) => (w.kind === 'house' ? t('back.warnHouse', { house: w.house, date: POD.date(w.at) }) : t('back.warnFilm', { film: w.film }))).join(' ');
+          toast(warn ? `${t('back.done')} ${warn}` : t('back.done'), warn ? 'error' : undefined);
+          delete backMsg[id];
+          loadReviewCount();
+          await refresh();
+        } catch (err) {
+          backMsg[id] = { text: err.message, ok: false };
+        }
+        backBusy.delete(id);
+      }
+    }
+    if (lastQueue) renderQueue(lastQueue);
+    const box = document.getElementById('back-why-' + id);
+    if (openB && box) box.focus();
+  });
 
   /** Imported design: a badge, and where it came from (the customer confirmed the rights). */
   const importBadge = (item) => (item.imports && item.imports.length ? ` <span class="pill import-pill" title="${esc(t('admin.imported.title'))}">${esc(t('admin.imported'))}</span>` : '');
@@ -880,7 +947,7 @@
           ${sendButton(item)}
           <button class="btn btn-sm ${item.status === 'queued' ? 'btn-primary' : ''}" data-item="${item.id}" data-status="${next.status}">${esc(t(next.label))}</button>
         </div>
-        ${isOpen ? `<div class="queue-details">${spec(item)}${importInfo(item)}${item.sides.map((s) => printFiles(item, s)).join('')}${previewFile(item)}</div>` : ''}
+        ${isOpen ? `<div class="queue-details">${spec(item)}${importInfo(item)}${item.sides.map((s) => printFiles(item, s)).join('')}${previewFile(item)}${backPanel(item)}</div>` : ''}
         ${sendOpen.has(item.id) || (item.sends && item.sends.length) ? `<div class="queue-details">${sendHistory(item)}${sendPanel(item)}</div>` : ''}
       </div>`;
   }
@@ -2649,6 +2716,7 @@
   }
 
   function reasonText(item, r) {
+    if (r === 'reopened') return t('rv.reason.reopened', { why: (item.review && item.review.reopenReason) || '' });
     const m = proofOf(item).merge || item.merge;
     if (r === 'nameList' && m && m.count) return `${t('rv.reason.nameList')}${SEP()}${t('rv.copies', { n: POD.num(m.count) })}`;
     if (r === 'bulk') return `${t('rv.reason.bulk')}${SEP()}${countText(item)}`;
@@ -3007,6 +3075,9 @@
     if (size.w !== Number(side.widthPx) || size.h !== Number(side.heightPx)) {
       return fail(t('rv.replaceBadSize', { w: size.w, h: size.h, side: tr(side.name), ew: side.widthPx, eh: side.heightPx }));
     }
+    // What was changed, for the customer (with the new proof): required, so they know what to look at.
+    const changeNote = (rvNote[id] || '').trim();
+    if (!changeNote) return fail(t('rv.replaceNoteNeeded'));
     const nextV = (Number(proofOf(item).version) || 0) + 1;
     if (!confirm(t('rv.replaceConfirm', { v: nextV }))) { delete rvSideMsg[key]; renderReview(); return; }
     rvBusy.add(id);
@@ -3015,7 +3086,7 @@
     try {
       const r = await adminApi(`/api/admin/items/${encodeURIComponent(id)}/replacement/${encodeURIComponent(sideId)}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'image/png', 'x-lang': POD.lang },
+        headers: { 'Content-Type': 'image/png', 'x-lang': POD.lang, 'x-review-note': encodeURIComponent(changeNote) },
         body: file,
       });
       await rvAfter(id, r);

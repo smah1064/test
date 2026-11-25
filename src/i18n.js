@@ -8,6 +8,7 @@ const MESSAGES = {
   sidesRequired: { en: 'sides is required', ar: 'لازم تحدد أوجه التصميم' },
   designAtLeastOne: { en: 'Design at least one side before adding to cart', ar: 'صمّم وجه واحد على الأقل قبل ما تضيفه للسلة' },
   sideEmpty: { en: 'The {side} side has no design', ar: 'مفيش تصميم على وجه {side}' },
+  reopenNotNow: { en: 'Only an item waiting to print or on the press can be sent back to Review.', ar: 'القطعة ترجع للمراجعة بس وهي مستنية الطباعة أو بتتطبع.' },
   bookSaving: { en: 'Your book is still being saved. Please try again in a moment.', ar: 'الكتاب لسه بيتحفظ. جرب تاني بعد لحظة.' },
   designCompleting: { en: 'This design is being saved. Please wait a moment.', ar: 'التصميم ده بيتحفظ دلوقتي. استنى لحظة.' },
   designChanged: { en: 'The design changed while it was being saved. Please try again.', ar: 'التصميم اتغير وهو بيتحفظ. جرب تاني.' },
