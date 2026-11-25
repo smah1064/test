@@ -29,7 +29,7 @@ const shopIds = async (base) => new Set((await (await fetch(`${base}/api/library
 
 test('the starter designs: 155 drawn with real artwork, the rest only text, shapes and icons', () => {
   assert.strictEqual(SEED.filter(usesArtwork).length, 155);
-  assert.strictEqual(SEED.length - SEED.filter(usesArtwork).length, 410);
+  assert.strictEqual(SEED.length - SEED.filter(usesArtwork).length, 418); // (+ 8 for the engraved pen and wallet, 25 Nov)
 });
 
 test('pause, delete and bring back one design, or many at once', async () => {

@@ -114,8 +114,10 @@
     const rows = [[t('proof.product'), esc(tr(proof.product && proof.product.name))]];
     // Packs (100 cards, A5 × 500…): the copies ("1,200 copies"), not the number of packs (QA 25 Nov).
     const copies = POD.packCopies ? POD.packCopies(lines) : null;
+    // (Pens and wallets come in packs of pieces: "Pieces", not "Copies".)
+    const copiesLabel = POD.packWord && POD.packWord(lines) === 'qty.unitPieces' ? 'proof.pieces' : 'proof.copiesTotal';
     if (lines.length > 1) {
-      rows.push(copies != null ? [t('proof.copiesTotal'), `<span class="qty-pieces">${esc(POD.num(copies))}</span>${qtyHtml(lines)}`] : [t('proof.pieces'), `<span class="qty-pieces">${esc(POD.num(n))}</span>${qtyHtml(lines)}`]);
+      rows.push(copies != null ? [t(copiesLabel), `<span class="qty-pieces">${esc(POD.num(copies))}</span>${qtyHtml(lines)}`] : [t('proof.pieces'), `<span class="qty-pieces">${esc(POD.num(n))}</span>${qtyHtml(lines)}`]);
     } else {
       const one = lines[0];
       const color = (one && one.color) || proof.color || {};
@@ -123,7 +125,7 @@
       // Products with their own word for it (business cards and photos: "Paper").
       rows.push([proof.product && proof.product.colorLabel ? tr(proof.product.colorLabel) : t('proof.color'), `${color.hex ? `<span class="qty-dot" style="background:${esc(color.hex)}"></span> ` : ''}${esc(tr(color.name))}`]);
       if (tr(size.label)) rows.push([t('proof.size'), esc(tr(size.label))]);
-      if (n > 1 && !names) rows.push(copies != null ? [t('proof.copiesTotal'), esc(POD.num(copies))] : [t('proof.pieces'), esc(POD.num(n))]);
+      if (n > 1 && !names) rows.push(copies != null ? [t(copiesLabel), esc(POD.num(copies))] : [t('proof.pieces'), esc(POD.num(n))]);
     }
     if (names) rows.push([t('proof.copies'), esc(namesText(names))]);
     // Embroidered chest with a printed back: both ways are listed.

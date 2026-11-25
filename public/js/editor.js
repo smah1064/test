@@ -4239,12 +4239,12 @@
     $('price').textContent = money(total);
     // Packs (100 cards, A5 × 500…): counted in copies ("for 300 copies"), not pieces.
     const copies = packs() && !(p.merge && st.mergeList) ? copiesIn(qtyLines()) : null;
-    if (notes && pieces > 1) notes.push(copies != null ? POD.plural('qty.copiesFor', copies) : plural('qty.priceNote', pieces));
+    if (notes && pieces > 1) notes.push(copies != null ? POD.plural(`${packWordHere()}For`, copies) : plural('qty.priceNote', pieces));
     // Phones: the number of pieces under the price; tapping it opens the quantities.
     const chip = $('qty-chip');
     if (chip) {
       chip.hidden = p.kind === 'book';
-      chip.textContent = copies != null ? POD.plural('qty.copiesChip', copies) : plural(p.merge && st.mergeList ? 'qty.chipNames' : 'qty.chip', pieces);
+      chip.textContent = copies != null ? POD.plural(`${packWordHere()}Chip`, copies) : plural(p.merge && st.mergeList ? 'qty.chipNames' : 'qty.chip', pieces);
     }
   }
   if ($('qty-chip')) {
@@ -4354,11 +4354,13 @@
   /** "12 pieces in total", or for packs "300 copies in total". */
   // (No size chosen yet: no box holds the piece, so the line asks for the size, not "1 piece in total". QA 25 Nov.)
   const qtySumText = () => (!st.sizePicked && mix().sizes && !packs() && qtyLines().length === 1 && qtyTotal() === 1 ? t('qty.chooseSize')
-    : packs() ? POD.plural('qty.copiesTotal', copiesIn(qtyLines())) : qtyTotalText(qtyTotal()));
+    : packs() ? POD.plural(`${packWordHere()}Total`, copiesIn(qtyLines())) : qtyTotalText(qtyTotal()));
 
   // ---------- Packs: "100 cards", "A5 × 500", "8 pages × 10 copies"… ----------
   /** Sold in packs whose sizes count copies (`copies` per pack, `family` = the same paper size / page count). */
   const packs = () => st.product.sizes.length > 0 && st.product.sizes.every((z) => z.pack);
+  /** Copies of a print ("100 cards": qty.copies…) or pieces (pens, wallets: qty.unitPieces…). */
+  const packWordHere = () => (st.product.sizes.some((z) => z.unit === 'piece') ? 'qty.unitPieces' : 'qty.copies');
   const sizeById = (id) => st.product.sizes.find((z) => z.id === id);
   const copiesIn = (lines) => lines.reduce((n, l) => n + l.qty * ((sizeById(l.size) || {}).copies || 1), 0);
   const counted = (z) => z && typeof z.copies === 'number' && z.copies > 0;

@@ -359,7 +359,7 @@
   /** "1,200 copies" for packs (200 cards + 1000 cards), else "2 pieces" (QA 25 Nov). */
   const countText = (item) => {
     const copies = POD.packCopies ? POD.packCopies(qtyLines(item)) : null;
-    return copies != null ? POD.plural('qty.copies', copies) : piecesText(piecesOf(item));
+    return copies != null ? POD.plural(POD.packWord ? POD.packWord(qtyLines(item)) : 'qty.copies', copies) : piecesText(piecesOf(item));
   };
   /** True when the shop prints more than one piece of this item in colours/sizes listed in quantities. */
   const hasQty = (item) => qtyLines(item).length > 1 || (qtyLines(item).length === 1 && piecesOf(item) > 1);

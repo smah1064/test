@@ -82,7 +82,7 @@
         <td>
           <div class="prod">${esc(tr(item.productName))}</div>
           ${desc ? `<div class="desc">${esc(desc)}</div>` : ''}
-          ${copies > 1 ? `<div class="copies">${esc(packCopies(lines) != null ? POD.plural('qty.copies', packCopies(lines)) : one && !item.merge ? t('invoice.qty.same', { pieces: piecesText(copies), price: money(unit) }) : copiesText(copies, money(unit)))}</div>` : ''}
+          ${copies > 1 ? `<div class="copies">${esc(packCopies(lines) != null ? POD.plural(POD.packWord(lines), packCopies(lines)) : one && !item.merge ? t('invoice.qty.same', { pieces: piecesText(copies), price: money(unit) }) : copiesText(copies, money(unit)))}</div>` : ''}
         </td>
         <td class="num opt">${esc(POD.num(copies))}</td>
         <td class="num opt">${esc(money(unit))}</td>
@@ -106,7 +106,7 @@
         <td>
           <div class="prod">${esc(tr(item.productName))}</div>
           ${desc ? `<div class="desc">${esc(desc)}</div>` : ''}
-          <div class="copies">${esc(t('invoice.qty.mixed', { pieces: packCopies(lines) != null ? POD.plural('qty.copies', packCopies(lines)) : piecesText(copies) }))}</div>
+          <div class="copies">${esc(t('invoice.qty.mixed', { pieces: packCopies(lines) != null ? POD.plural(POD.packWord(lines), packCopies(lines)) : piecesText(copies) }))}</div>
         </td>
         <td class="num opt">${esc(POD.num(copies))}</td>
         <td class="num opt">${unit != null ? esc(money(unit)) : ''}</td>

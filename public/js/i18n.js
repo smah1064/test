@@ -408,6 +408,11 @@ window.POD_STRINGS = {
   'qty.copies.one': ['1 copy', 'نسخة واحدة'], 'qty.copies.two': ['2 copies', 'نسختين'], 'qty.copies.few': ['{n} copies', '{n} نسخ'], 'qty.copies.many': ['{n} copies', '{n} نسخة'],
   'qty.copiesTotal.one': ['1 copy in total', 'الإجمالي نسخة واحدة'], 'qty.copiesTotal.two': ['2 copies in total', 'الإجمالي نسختين'], 'qty.copiesTotal.few': ['{n} copies in total', 'الإجمالي {n} نسخ'], 'qty.copiesTotal.many': ['{n} copies in total', 'الإجمالي {n} نسخة'],
   'qty.copiesFor.one': ['for 1 copy', 'لنسخة واحدة'], 'qty.copiesFor.two': ['for 2 copies', 'لنسختين'], 'qty.copiesFor.few': ['for {n} copies', 'لـ {n} نسخ'], 'qty.copiesFor.many': ['for {n} copies', 'لـ {n} نسخة'],
+  // Packs of things (pens, wallets): pieces, said like copies are.
+  'qty.unitPieces.one': ['1 piece', 'قطعة واحدة'], 'qty.unitPieces.two': ['2 pieces', 'قطعتين'], 'qty.unitPieces.few': ['{n} pieces', '{n} قطع'], 'qty.unitPieces.many': ['{n} pieces', '{n} قطعة'],
+  'qty.unitPiecesTotal.one': ['1 piece in total', 'الإجمالي قطعة واحدة'], 'qty.unitPiecesTotal.two': ['2 pieces in total', 'الإجمالي قطعتين'], 'qty.unitPiecesTotal.few': ['{n} pieces in total', 'الإجمالي {n} قطع'], 'qty.unitPiecesTotal.many': ['{n} pieces in total', 'الإجمالي {n} قطعة'],
+  'qty.unitPiecesFor.one': ['for 1 piece', 'لقطعة واحدة'], 'qty.unitPiecesFor.two': ['for 2 pieces', 'لقطعتين'], 'qty.unitPiecesFor.few': ['for {n} pieces', 'لـ {n} قطع'], 'qty.unitPiecesFor.many': ['for {n} pieces', 'لـ {n} قطعة'],
+  'qty.unitPiecesChip.one': ['1 pc ✎', 'قطعة واحدة ✎'], 'qty.unitPiecesChip.two': ['2 pcs ✎', 'قطعتين ✎'], 'qty.unitPiecesChip.few': ['{n} pcs ✎', '{n} قطع ✎'], 'qty.unitPiecesChip.many': ['{n} pcs ✎', '{n} قطعة ✎'],
   'qty.copiesChip.one': ['1 copy ✎', 'نسخة واحدة ✎'], 'qty.copiesChip.two': ['2 copies ✎', 'نسختين ✎'], 'qty.copiesChip.few': ['{n} copies ✎', '{n} نسخ ✎'], 'qty.copiesChip.many': ['{n} copies ✎', '{n} نسخة ✎'],
   'qty.helpPacks': ['How many of each amount. The price is for all of them.', 'كام مرة من كل كمية. السعر للكل.'],
   // The typed number reached a bigger pack that costs less: the boxes move to it.

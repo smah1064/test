@@ -322,6 +322,10 @@
     if (!list.length || !list.every((l) => l.size && l.size.pack)) return null;
     return list.reduce((n, l) => n + Number(l.qty) * (Number(l.size.copies) || 1), 0);
   }
+  /** The word packs count in: printed copies ("100 cards": qty.copies) or pieces (pens, wallets: qty.unitPieces). */
+  function packWord(lines) {
+    return (Array.isArray(lines) ? lines : []).some((l) => l && l.size && l.size.unit === 'piece') ? 'qty.unitPieces' : 'qty.copies';
+  }
   const pluralForm = (n) => (n === 1 ? 'one' : n === 2 ? 'two' : n % 100 >= 3 && n % 100 <= 10 ? 'few' : 'many');
   /** t() for a count, from the keys base.one / .two / .few / .many; {n} is in the page's digits. */
   function plural(base, n, params) {
@@ -1242,7 +1246,7 @@
     },
     t, tr, arabicDigits, latinDigits, sep, setLang, applyI18n,
     loadCatalog, assetId, canPick, firstPick, comboOut, comboFew, sizeOk, colorOk, productPicture, thumbFallback, fillMockup, mockupUrl, svgDataUrl, luminance,
-    money, date, day, num, plural, pluralForm, packCopies, captcha, fromPrice, sizeNote, firstName,
+    money, date, day, num, plural, pluralForm, packCopies, packWord, captcha, fromPrice, sizeNote, firstName,
     productState, backOnDay, backText, similarProducts, similarHref, similarLabel, productHref, showUnavailable,
     getCart, setCart, getSaved, setSaved, moveItem, designFor, putFile, updateCartBadge, toast, esc, api, drafts, forgetPersonal,
     sizedArea, placedArea, sizeView, canvasEdges, drawPattern, wrapOffsets, fabricCm,

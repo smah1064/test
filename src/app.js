@@ -275,7 +275,7 @@ function fieldsOf(designs) {
 }
 
 /** A pack size's marks for the cart, order and invoice: "100 cards" × 2 is 200 copies, not 2 pieces. */
-const packOf = (z) => (z && z.pack ? { pack: true, ...(z.copies ? { copies: z.copies } : {}) } : {});
+const packOf = (z) => (z && z.pack ? { pack: true, ...(z.copies ? { copies: z.copies } : {}), ...(z.unit ? { unit: z.unit } : {}) } : {});
 /** Quantity lines with their packs marked, from the product as it is now (designs saved before the marks too). */
 function withPacks(productId, lines) {
   if (!Array.isArray(lines)) return lines || null;

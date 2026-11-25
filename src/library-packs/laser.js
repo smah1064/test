@@ -3,7 +3,7 @@
 // Laser products (CO2 laser): starter designs for each engraved or cut product.
 //
 // Engraved products (plaque, coasters, tray, frame band, card holder, wedding
-// sign, door sign) come out in ONE tone, the burn on the material: these
+// sign, door sign, pen barrel, wallet) come out in ONE tone, the burn on the material: these
 // designs work with line weights and shapes, never colour, and keep away from
 // big solid areas. Cut products (cake topper, Ramadan decoration) are cut
 // around the outline, so every element touches the rest and the piece holds
@@ -30,6 +30,8 @@ const sign = forProduct('weddingsign', 240 / 360, 'clear');
 const door = forProduct('doorsign', 360 / 180, 'natural');
 const ramadan = forProduct('ramadandecor', 1, 'gold');
 const puzzle = forProduct('namepuzzle', 390 / 130, 'natural');
+const pen = forProduct('engrpen', 236 / 34, 'black');
+const wallet = forProduct('engrwallet', 230 / 130, 'brown');
 
 // A thin divider: two short lines with a small diamond between them.
 const divider = (y, half = 0.22, gap = 0.05, x = 0.5) => [
@@ -480,6 +482,44 @@ const designs = [
     T('عمر', 'Lalezar', 0.24, 0.44, 0.5, { sampleName: 'kid' }),
     S('star', 0.15, 0.78, 0.5),
   ], 'blue'),
+
+  // ---------- Pen barrel (a long thin band, about 45 × 6.5 mm: one line, nothing thinner than 2 mm) ----------
+  pen('lz-pen-name-en', 'business', 'Pen: name in script', 'قلم بالاسم إنجليزي', [
+    T('Ahmed Hassan', 'Dancing Script', 0.095, 0.5, 0.5, { weight: 'bold', sampleName: 'name' }),
+  ]),
+  pen('lz-pen-name-ar', 'business', 'Pen: name in Arabic calligraphy', 'قلم بالاسم بالخط العربي', [
+    T('أحمد حسن', 'Aref Ruqaa', 0.1, 0.5, 0.47, { weight: 'bold', sampleName: 'name' }),
+  ]),
+  pen('lz-pen-monogram', 'business', 'Pen: initials and name', 'قلم بالحروف والاسم', [
+    T('AH', 'Playfair Display', 0.1, 0.13, 0.5, { weight: 'bold', sampleName: 'initials' }),
+    S('diamond', 0.025, 0.27, 0.5),
+    T('AHMED HASSAN', 'Montserrat', 0.05, 0.62, 0.5, { spacing: 250, weight: 'bold', sampleName: 'name' }),
+  ]),
+  pen('lz-pen-teacher-ar', 'school', 'Pen: thank you, teacher', 'قلم شكراً يا أحلى مِس', [
+    S('heart', 0.03, 0.07, 0.5),
+    T('شكراً يا أحلى مِس', 'Aref Ruqaa', 0.095, 0.5, 0.46, { weight: 'bold' }),
+    S('heart', 0.03, 0.93, 0.5),
+  ], 'gold'),
+
+  // ---------- Leather wallet front (about 7 × 4 cm) ----------
+  wallet('lz-wallet-monogram', 'family', 'Wallet: initials in a ring', 'محفظة بالحروف في دايرة', [
+    S('ring', 0.42, 0.5, 0.5),
+    T('AH', 'Playfair Display', 0.17, 0.5, 0.5, { spacing: 50, sampleName: 'initials' }),
+  ]),
+  wallet('lz-wallet-name-ar', 'family', 'Wallet: name in Arabic calligraphy', 'محفظة بالاسم بالخط العربي', [
+    T('أحمد حسن', 'Aref Ruqaa', 0.16, 0.5, 0.44, { weight: 'bold', sampleName: 'name' }),
+    ...divider(0.8, 0.16),
+  ], 'black'),
+  wallet('lz-wallet-best-dad-ar', 'family', 'Wallet: the best dad', 'محفظة أحلى بابا في الدنيا', [
+    T('أحلى بابا', 'Aref Ruqaa', 0.16, 0.5, 0.36, { weight: 'bold' }),
+    T('في الدنيا', 'Aref Ruqaa', 0.09, 0.5, 0.66, { weight: 'bold' }),
+    S('heart', 0.05, 0.5, 0.88),
+  ], 'tan'),
+  wallet('lz-wallet-love-en', 'love', 'Wallet: his name, a heart and your date', 'محفظة باسمه وقلب وتاريخكم', [
+    T('Ahmed', 'Dancing Script', 0.16, 0.5, 0.34, { weight: 'bold', sampleName: 'his' }),
+    S('heart', 0.05, 0.5, 0.63),
+    T('15 . 02 . 2027', 'Montserrat', 0.045, 0.5, 0.84, { spacing: 150 }),
+  ], 'burgundy'),
 ];
 
 module.exports = { categories, designs };

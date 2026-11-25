@@ -56,7 +56,7 @@ const file = (id, format) => fetch(`${base}/api/admin/files/${id}/front?format=$
 
 test('every laser product has materials with an engraved tone, a laser kind and a laser process', () => {
   const laser = PRODUCTS.filter((p) => p.laser);
-  assert.strictEqual(laser.length, 10);
+  assert.strictEqual(laser.length, 12); // (+ the engraved pen and wallet, 25 Nov)
   for (const p of laser) {
     assert.strictEqual(p.category, 'laser');
     assert.ok(['engrave', 'lasercut'].includes(p.process), p.id);

@@ -201,6 +201,7 @@
         notebook: 'كراسة دفتر', mousepad: 'mouse pad', deskmat: 'mouse pad', keychain: 'key ring ميداليه', stickersheet: 'stickers ستيكر لزق',
         bizcards: 'business cards visit كارت فيزيت', canvas: 'painting wall art لوحة', canvaswide: 'painting wall art لوحة', photoprints: 'photos pictures صور',
         storybook: 'kids book story كتاب قصة اطفال', coloringbook: 'kids book coloring تلوين اطفال', caketopper: 'cake topper تورتة', namepuzzle: 'puzzle بازل',
+        engrpen: 'pen pens ballpoint قلم اقلام أقلام قلم جاف', engrwallet: 'wallet purse محفظة محفظه محافظ',
         calendar: 'calendar نتيجه نتيجة تقويم نتيجة حيطة', deskcalendar: 'calendar نتيجه نتيجة تقويم مكتب', labels: 'label sticker ليبل استيكر لاصق', banners: 'banner بانر يافطة فليكس لافتة',
         menus: 'menu منيو قايمة طعام مطعم كافيه', brochures: 'brochure flyer بروشور مطوية', booklets: 'catalog catalogue booklet كتالوج كتيب', folders: 'folder فولدر ملف',
         notepads: 'notepad pad بلوك نوت مفكرة', postcards: 'postcard thank you card بوستكارد كارت شكر', giftvouchers: 'voucher gift card كوبون قسيمة جيفت كارد',
@@ -467,13 +468,13 @@
       // ---------- Rows: new and best sellers, then by theme ----------
       // Ids that don't exist (yet) are skipped, so a row only shows what the shop sells.
       const BEST = ['tshirt', 'mug', 'bizcards', 'stickersheet', 'hoodie', 'cushion', 'invitations', 'tote'];
-      const NEW = ['menus', 'calendar', 'labels', 'postcards', 'photobook', 'magnets', 'wrappingpaper', 'brochures', 'engrplaque', 'caketopper'];
+      const NEW = ['engrpen', 'engrwallet', 'menus', 'calendar', 'labels', 'postcards', 'photobook', 'magnets', 'wrappingpaper', 'brochures', 'engrplaque', 'caketopper'];
       const ROWS = [
         { key: 'fresh', ids: [...NEW.slice(0, 4), ...BEST.slice(0, 6)], badge: (id) => (NEW.includes(id) || (byId(id) || {}).base ? 'new' : 'best') },
         { key: 'cards', ids: ['invitations', 'greetingcard', 'postcards', 'foldedcards', 'giftvouchers', 'bookmarks', 'eidenvelopes', 'certificates'], link: '/?cat=occasions#products' },
         { key: 'wear', ids: ['tshirt', 'hoodie', 'sweatshirt', 'oversized', 'polo', 'kidstee', 'cap', 'tote', 'apron'], link: '/?cat=apparel#products' },
         { key: 'home', ids: ['mug', 'cushion', 'poster', 'canvas', 'coasters', 'calendar', 'deskcalendar', 'bedsheet', 'curtains', 'magnets'], link: '/?cat=home#products' },
-        { key: 'gifts', ids: ['magicmug', 'couplemugs', 'photobook', 'engrframe', 'keychain', 'namepuzzle', 'tumbler', 'prayermat', 'wrappingpaper'], link: '/?cat=occasions#products' },
+        { key: 'gifts', ids: ['magicmug', 'couplemugs', 'photobook', 'engrframe', 'engrwallet', 'engrpen', 'keychain', 'namepuzzle', 'tumbler', 'prayermat', 'wrappingpaper'], link: '/?cat=occasions#products' },
         { key: 'biz', ids: ['bizcards', 'flyers', 'brochures', 'menus', 'labels', 'letterhead', 'logostickers', 'paperbags', 'booklets', 'rollup', 'banners', 'windowstickers', 'idcards', 'notepads', 'folders', 'giftvouchers'], link: '/?cat=business#products' },
         { key: 'events', ids: ['weddingsign', 'tablenumbers', 'placecards', 'caketopper', 'ramadandecor', 'invitations', 'eidenvelopes', 'tablecloth'], link: '/?cat=occasions#products' },
         { key: 'laser', ids: products.filter((p) => p.category === 'laser').map((p) => p.id), link: '/?cat=laser#products' },

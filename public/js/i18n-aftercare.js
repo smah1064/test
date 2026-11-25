@@ -230,7 +230,7 @@
       const n = this.pieces(item);
       // Packs (100 cards × 2 + 1000 cards): the copies, never "3 pieces" (QA 25 Nov).
       const copies = window.POD.packCopies ? window.POD.packCopies(item.quantities) : null;
-      const total = this.isNameList(item) ? '' : `<span class="qty-total">${esc(copies != null ? window.POD.plural('qty.copies', copies) : this.piecesText(n))}</span>`;
+      const total = this.isNameList(item) ? '' : `<span class="qty-total">${esc(copies != null ? window.POD.plural(window.POD.packWord ? window.POD.packWord(item.quantities) : 'qty.copies', copies) : this.piecesText(n))}</span>`;
       return `<div class="qty-break${inline ? ' qty-inline' : ''}" aria-label="${esc(t('qty.breakdown'))}">${rows}${total}</div>`;
     },
     /** One item in "Which items do you want again?": the product, then its colour and size, or every colour and

@@ -66,6 +66,12 @@ const FLAGGED = {
   'lz-card-name-title-en': [['Ahmed Hassan', 'name']],
   'lz-card-name-title-ar': [['م. أحمد حسن', 'name']],
   'lz-card-initial-name': [['A', 'initial'], ['AHMED HASSAN', 'name']],
+  'lz-pen-name-en': [['Ahmed Hassan', 'name']],
+  'lz-pen-name-ar': [['أحمد حسن', 'name']],
+  'lz-pen-monogram': [['AH', 'initials'], ['AHMED HASSAN', 'name']],
+  'lz-wallet-monogram': [['AH', 'initials']],
+  'lz-wallet-name-ar': [['أحمد حسن', 'name']],
+  'lz-wallet-love-en': [['Ahmed', 'his']],
   'lz-sign-welcome-en': [['Ahmed', 'his'], ['Sara', 'her']],
   'lz-sign-welcome-ar': [['أحمد', 'his'], ['سارة', 'her']],
   'lz-sign-katb-ketab-ar': [['أحمد & سارة', 'names']],
@@ -121,7 +127,7 @@ test('every flagged design really has its sample text, marked, and nothing else 
     }
   }
   assert.deepStrictEqual(problems, []);
-  assert.strictEqual(Object.keys(FLAGGED).length, 74);
+  assert.strictEqual(Object.keys(FLAGGED).length, 80); // (+ 6 pen and wallet designs with a name, 25 Nov)
 });
 
 test('the marks are well formed: a known kind, the name part inside the text once, never on {field} designs', () => {

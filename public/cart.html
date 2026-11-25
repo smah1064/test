@@ -365,7 +365,7 @@
         // Packs (100 cards × 2 + 1000 cards): the copies, never "3 pieces" (QA 25 Nov).
         const copies = !isNames && pieces > 1 ? POD.packCopies(lines) : null;
         const badge = names > 1 ? `<span class="cart-copies">${esc(t(names % 100 >= 3 && names % 100 <= 10 ? 'cart.copies.few' : 'cart.copies', { n: POD.num(names) }))}</span>`
-          : copies != null ? `<span class="qty-pieces">${esc(POD.plural('qty.copies', copies))}</span>`
+          : copies != null ? `<span class="qty-pieces">${esc(POD.plural(POD.packWord(lines), copies))}</span>`
             : !isNames && pieces > 1 ? `<span class="qty-pieces">${esc(piecesText(pieces))}</span>` : '';
         if (lines.length > 1) return `${badge}${qtyBreakdown(lines)}${printed}`;
         const color = one && one.color ? one.color.name : item.colorName;

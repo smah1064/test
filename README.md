@@ -454,6 +454,14 @@ Each new order item keeps a copy of its costs on the order day, so changing cost
 - **Links in emails** (password reset, order alerts, proofs, shipping) use `SITE_URL`, or the request's host only when it is one of the shop's own (`ALLOWED_HOSTS`, default `ebda3.me,www.ebda3.me`), so a forged Host header can't send customers to another site. Reset emails: at most 3 an hour per account.
 - **Daily security review:** a scheduled review checks the whole shop every night, fixes clear low-risk problems with tests, and reports the rest.
 
+## Laser engraving and cutting
+
+Twelve laser products (category `laser` in `src/products.js`; production files from `src/laser.js`: an engraving bitmap and LightBurn cut lines). Their "colours" are materials, each with the tone the engraving takes on it (`ink`), and their ready designs are drawn for each one's print area in `src/library-packs/laser.js`.
+
+- **Engraved pen** (`engrpen`, 25 Nov): black, navy and gold coated metal (the engraving shows the bright metal under the coat) and bamboo (burnt dark), engraved along the barrel (45 mm); 1, 10, 25 or 50 pens (180, 135, 120, 110 EGP each).
+- **Engraved leather wallet** (`engrwallet`, 25 Nov): a bifold in black, brown, tan or burgundy, engraved on the front (7 × 4 cm); 1, 5 or 10 (450, 410, 400 EGP each).
+- Packs of these two count pieces ("الإجمالي ١١ قطعة"), not copies as cards do (`unit: 'piece'` on their sizes). Four ready designs each (names, monogram, "thank you, teacher", "the best dad", his name and your date). Prices are starting points: change them in the dashboard.
+
 ## Photo mockups
 
 Each photo is a white (or natural) product on a light background, plus a mask from background removal. To add or replace one:

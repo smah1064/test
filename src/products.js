@@ -2895,6 +2895,8 @@ function pageSides(product, sizeId) {
 // when they cost less, and counts copies, not pieces (owner, 25 Nov). Window stickers are sizes in cm and photo
 // books count photos: not copies.
 const NOT_COPIES = new Set(['windowstickers', 'photobook']);
+// Packs of things, not printed copies: "10 pens", "5 wallets" add up as pieces ("الإجمالي ١٠ قطع", not "١٠ نسخ").
+const PIECE_PACKS = new Set(['engrpen', 'engrwallet']);
 for (const p of PRODUCTS) {
   if (NOT_COPIES.has(p.id) || !p.sizes.length || !p.sizes.every((z) => z.pack)) continue;
   const parsed = p.sizes.map((z) => /^(?:(.+)-)?(\d+)$/.exec(z.id));
@@ -2902,6 +2904,7 @@ for (const p of PRODUCTS) {
   p.sizes.forEach((z, i) => {
     z.copies = Number(parsed[i][2]);
     z.family = parsed[i][1] || '';
+    if (PIECE_PACKS.has(p.id)) z.unit = 'piece';
   });
 }
 
