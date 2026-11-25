@@ -188,6 +188,8 @@
   if (!params.get('design') && params.get('library')) {
     try {
       libraryDesign = await POD.api('/api/library/' + encodeURIComponent(params.get('library')));
+      // The customer's own name(s) typed on the ready-design page (/design: &name=…, one per sample name, in order).
+      if (params.has('name') && D.withNames) libraryDesign = D.withNames(libraryDesign, params.getAll('name'));
       if (params.get('color')) st.colorId = params.get('color');
     } catch (e) {
       libraryError = e; // said after the drafts: the customer's own version may still be here
@@ -1030,7 +1032,7 @@
       try { localStorage.removeItem('pod-rescue:' + st.product.id); } catch (err) { /* private mode */ }
       // The same product, colour and size, empty: not the ready-made design, shared design or cart item it came from.
       const u = new URL(location.href);
-      for (const k of ['cart', 'library', 'share', 'design', 'revise']) u.searchParams.delete(k);
+      for (const k of ['cart', 'library', 'share', 'design', 'revise', 'name']) u.searchParams.delete(k);
       u.searchParams.set('product', st.product.id);
       u.searchParams.set('color', st.colorId);
       if (st.sizePicked) u.searchParams.set('size', st.sizeId);
