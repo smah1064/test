@@ -40,6 +40,7 @@
     sizes: null, // sizes being edited [{ id, label, labelEn, labelAr, added, state, surcharge, printScale }]
     sides: null, // print setup being edited { [sideId]: { x, y, w, h, widthCm, safeMm, bleedMm, off } }
     resets: new Set(), // fields to send back to the original on save ('description', 'category')
+    shown: {}, // { [section]: the product the section was last filled from } (what "changed here" is compared with)
     lock: {},
     previewHex: null,
     busy: false,
@@ -729,6 +730,7 @@
 
   /** Build the editable copies of colours, sizes and sides from the product. */
   function initModels(P, which) {
+    for (const s of which) S.shown[s] = P;
     if (which.includes('colors')) {
       S.colors = P.colors.map((c) => ({ id: c.id, name: c.name, hex: c.hex, added: Boolean(c.added), state: c.off ? 'off' : c.soldOut ? 'soldOut' : 'on' }));
     }
@@ -1017,24 +1019,43 @@
       ${fld('category', t('pm.category'), `<select id="${fieldId('category')}" name="category" ${rc ? 'disabled' : ''}>${S.data.categories.map((c) => `<option value="${esc(c.id)}" ${P.category === c.id ? 'selected' : ''}>${esc(tr(c.name))}</option>`).join('')}</select>`, rc ? `<span class="pm-chg">${esc(t('pm.willReset'))}</span>` : mark(e.category !== undefined, 'category'))}
     </div>`;
   }
-  function saveBasics(P) {
+  /**
+   * A name or description { en, ar } to save: the language(s) changed here (compared with what the section showed,
+   * `was`) on top of the text saved now (`now`); null when neither language was changed here. The server keeps the
+   * whole object sent, so the other language has to be the one saved now (a colleague's Arabic name stays, QA 25 Nov).
+   */
+  function langsChanged(here, was, now) {
+    const w = was || {};
+    const changed = ['en', 'ar'].filter((k) => here[k] !== (w[k] || ''));
+    if (!changed.length) return null;
+    const out = { en: (now || {}).en || '', ar: (now || {}).ar || '' };
+    for (const k of changed) out[k] = here[k];
+    return out;
+  }
+  /**
+   * Name, description and category: only what was changed here goes. `shown` is the product the section was filled
+   * from, `fresh` the product as saved now (read just before saving; the shown one when it couldn't be read).
+   */
+  function saveBasics(P, { shown = P, fresh = null } = {}) {
+    const F = fresh || shown;
     const body = {};
-    const name = { en: val('name.en').trim(), ar: val('name.ar').trim() };
-    if (!name.en || !name.ar) throw new Error(t('pm.needNames'));
-    if (name.en !== P.name.en || name.ar !== P.name.ar) {
+    const typed = { en: val('name.en').trim(), ar: val('name.ar').trim() };
+    if (!typed.en || !typed.ar) throw new Error(t('pm.needNames'));
+    const name = langsChanged(typed, shown.name, F.name);
+    if (name) {
       // Back to the name as written: clear the change instead of saving a copy of it.
       body.name = P.builtIn && name.en === P.original.name.en && name.ar === P.original.name.ar ? {} : name;
     }
     if (S.resets.has('description')) body.description = {};
     else {
-      const d = { en: val('desc.en').trim(), ar: val('desc.ar').trim() };
-      if (d.en !== ((P.description || {}).en || '') || d.ar !== ((P.description || {}).ar || '')) {
+      const d = langsChanged({ en: val('desc.en').trim(), ar: val('desc.ar').trim() }, shown.description, F.description);
+      if (d) {
         if (!d.en || !d.ar) throw new Error(t('pm.needDesc'));
         body.description = d;
       }
     }
     if (S.resets.has('category')) body.category = '';
-    else if (val('category') !== P.category) body.category = val('category');
+    else if (val('category') !== shown.category) body.category = val('category');
     return body;
   }
 
@@ -1600,13 +1621,33 @@
     updateSideMark(sid);
     return true;
   }
-  function savePrint(P) {
+  /**
+   * The print setup is saved as one field for all sides: one opened earlier would put back a side a colleague switched
+   * off, or their print area (QA 25 Nov). Each side's on/off, print width, margins and area are as saved now (`fresh`)
+   * unless changed here (compared with what the section showed); nothing changed here, nothing goes.
+   */
+  function savePrint(P, { shown = P, fresh = null } = {}) {
+    const F = fresh || shown;
     const sides = {};
-    for (const sd of P.sides) {
+    let mine = false;
+    for (const sd of F.sides) {
       const st = S.sides[sd.id];
-      sides[sd.id] = { off: st.off, printWidthCm: r2(st.widthCm), safeMm: r2(st.safeMm), bleedMm: r2(st.bleedMm), area: { x: r2(st.x), y: r2(st.y), w: r2(st.w), h: r2(st.h) } };
+      const was = shown.sides.find((x) => x.id === sd.id);
+      const pa = sd.printArea;
+      const out = { off: Boolean(sd.off), printWidthCm: r2(sd.printWidthCm), safeMm: r2(sd.safeMm), bleedMm: r2(sd.bleedMm), area: { x: r2(pa.x), y: r2(pa.y), w: r2(pa.w), h: r2(pa.h) } };
+      if (st && was) {
+        const wa = was.printArea;
+        if (st.off !== Boolean(was.off)) { out.off = st.off; mine = true; }
+        if (r2(st.widthCm) !== r2(was.printWidthCm)) { out.printWidthCm = r2(st.widthCm); mine = true; }
+        if (r2(st.safeMm) !== r2(was.safeMm)) { out.safeMm = r2(st.safeMm); mine = true; }
+        if (r2(st.bleedMm) !== r2(was.bleedMm)) { out.bleedMm = r2(st.bleedMm); mine = true; }
+        // (The area is one box: moved or resized here, it goes as it is here.)
+        if (['x', 'y', 'w', 'h'].some((k) => r2(st[k]) !== r2(wa[k]))) { out.area = { x: r2(st.x), y: r2(st.y), w: r2(st.w), h: r2(st.h) }; mine = true; }
+      }
+      sides[sd.id] = out;
     }
-    if (P.sides.every((sd) => S.sides[sd.id].off)) throw new Error(t('pm.needSide'));
+    if (!mine) return {};
+    if (Object.values(sides).every((x) => x.off)) throw new Error(t('pm.needSide'));
     return { sides };
   }
 
@@ -1637,21 +1678,47 @@
         </div>
       </div>` : ''}`;
   }
-  function saveTech(P) {
+  /**
+   * Technology and embroidery: only what was changed here goes, on top of what is saved now (`fresh`). The embroidery
+   * settings are one field: one opened earlier would put back the price a colleague changed (QA 25 Nov), so each
+   * setting not changed here (compared with what the section showed) is the one saved now.
+   */
+  function saveTech(P, { shown = P, fresh = null } = {}) {
+    const F = fresh || shown;
     const body = {};
-    const choices = P.processChoices || [P.process];
+    const choices = shown.processChoices || [shown.process];
     if (choices.length > 1) {
-      body.process = val('process');
-      body.methods = choices.filter((c) => c === body.process || val('m.' + c));
+      const proc = val('process');
+      const ticked = (c) => c === proc || Boolean(val('m.' + c));
+      const wasMethods = shown.methods || [shown.process];
+      const wasTicked = (c) => c === shown.process || wasMethods.includes(c);
+      const changed = choices.filter((c) => ticked(c) !== wasTicked(c));
+      if (proc !== shown.process || changed.length) {
+        // (Sent together: the methods always include the process.)
+        body.process = proc !== shown.process ? proc : F.process;
+        const now = new Set(F.methods || [F.process]);
+        for (const c of changed) if (ticked(c)) now.add(c); else now.delete(c);
+        body.methods = choices.filter((c) => c === body.process || now.has(c));
+      }
     }
-    if (P.canEmbroider) {
-      if (!val('embOn')) body.embroidery = false;
-      else {
-        const at = val('embAt');
-        const cmW = Number(val('embW'));
-        const cmH = Number(val('embH'));
-        if (at !== 'same' && !(cmW >= 1 && cmW <= 40 && cmH >= 1 && cmH <= 40)) throw new Error(t('pm.badEmb'));
-        body.embroidery = { at, cm: at === 'same' ? [0, 0] : [cmW, cmH], surcharge: Number(val('embPrice')) || 0, maxColors: Number(val('embColors')) || 6 };
+    if (shown.canEmbroider) {
+      const sp = shown.embroiderySpec;
+      if (!val('embOn')) {
+        if (sp) body.embroidery = false; // switched off here
+      } else {
+        // What the boxes showed (techBody's defaults when it was off), what they hold, and what is saved now.
+        const of = (s) => ({ at: s.at, w: s.at !== 'same' ? s.cm[0] : null, h: s.at !== 'same' ? s.cm[1] : null, surcharge: s.surcharge, maxColors: s.maxColors || 6 });
+        const was = sp ? { ...of(sp), w: sp.at !== 'same' ? sp.cm[0] : 9, h: sp.at !== 'same' ? sp.cm[1] : 9 } : { at: 'chest', w: 9, h: 9, surcharge: 150, maxColors: 6 };
+        const here = { at: val('embAt'), w: Number(val('embW')), h: Number(val('embH')), surcharge: Number(val('embPrice')) || 0, maxColors: Number(val('embColors')) || 6 };
+        const changed = Object.keys(here).filter((k) => here[k] !== was[k]);
+        if (!sp || changed.length) {
+          const e = F.embroiderySpec ? of(F.embroiderySpec) : { ...here };
+          for (const k of changed) e[k] = here[k];
+          if (e.w == null) e.w = here.w;
+          if (e.h == null) e.h = here.h;
+          if (e.at !== 'same' && !(e.w >= 1 && e.w <= 40 && e.h >= 1 && e.h <= 40)) throw new Error(t('pm.badEmb'));
+          body.embroidery = { at: e.at, cm: e.at === 'same' ? [0, 0] : [e.w, e.h], surcharge: e.surcharge, maxColors: e.maxColors };
+        }
       }
     }
     return body;
@@ -1839,6 +1906,18 @@
         if (e.status === 401) return;
       }
     }
+    // Name and description, print areas, technology and embroidery are saved as whole fields ({ en, ar }, all sides,
+    // all embroidery settings): what wasn't changed here is taken from the product as saved now, so a colleague's
+    // other language, side or embroidery price isn't put back (QA 25 Nov).
+    let fresh = null;
+    if (name === 'basics' || name === 'print' || name === 'tech') {
+      try {
+        const F = await api(`/api/admin/catalog/${enc(P.id)}`);
+        if (F && F.id === P.id && Array.isArray(F.sides)) fresh = F;
+      } catch (e) {
+        if (e.status === 401) return;
+      }
+    }
     if (name === 'colors' || name === 'sizes') {
       try {
         const F = await api(`/api/admin/catalog/${enc(P.id)}`);
@@ -1854,7 +1933,7 @@
     }
     let body;
     try {
-      body = SAVERS[name](P, { rebased });
+      body = SAVERS[name](P, { rebased, fresh, shown: S.shown[name] || P });
     } catch (e) {
       secError(name, e.message);
       return;
