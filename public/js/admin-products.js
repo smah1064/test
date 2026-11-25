@@ -1195,15 +1195,17 @@
     root.querySelectorAll('[data-final]').forEach((el) => {
       if (raw === '') { el.textContent = t('pm.asBuilt'); return; }
       const id = el.dataset.final;
-      const typed = Number(val('ps.' + id)) || 0;
-      // A small pack (1, 10, 25 copies) left as shown follows the product's price, as the server will
-      // save it: its share of the new price, never under 1 EGP.
+      const typedRaw = val('ps.' + id);
+      const typed = Number(typedRaw) || 0;
+      // A small pack (1, 10, 25 copies) left as shown stays as it is, as the server will save it: the
+      // owner's own price for it stays that price whatever the product's price, and a pack that follows
+      // the product's price (or whose box was emptied) gets its share of the new price, never under 1 EGP.
       const z = P && P.sizes.find((x) => x.id === id);
       const defS = built && built.sizes ? Number(built.sizes[id]) : 0;
       const defB = built ? Number(built.basePrice) : 0;
       const share = (base) => Math.max(1, Math.round((base * (defB + defS)) / defB));
-      if (z && defS < 0 && defB > 0 && typed === (Number(z.surcharge) || 0) && (Number(P.basePrice) || 0) + typed === share(Number(P.basePrice) || 0)) {
-        el.textContent = POD.money(share(b));
+      if (z && z.smallPack && defB > 0 && (typedRaw === '' || typed === (Number(z.surcharge) || 0))) {
+        el.textContent = POD.money(z.ownPrice && typedRaw !== '' ? (Number(P.basePrice) || 0) + typed : share(b));
         return;
       }
       el.textContent = POD.money(b + typed);

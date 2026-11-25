@@ -9,7 +9,8 @@
  *    page and the order total use them right away. Small packs (sizes
  *    marked `smallPack`: 1, 10, 25 copies…) keep their share of the
  *    product's price when the owner changes it, unless the owner set the
- *    pack's own price.
+ *    pack's own price: that is kept as the pack's final price (`packs`),
+ *    whatever the product's price does.
  *  - Costs (db.costs), per product: blank item cost (plus extra per size,
  *    which can be negative: a single copy needs less than a whole pack),
  *    printing cost for the first side and for each extra side, packaging /
@@ -86,7 +87,27 @@ function packSurcharge(d, sizeId, base) {
   return round2(price - base);
 }
 
-/** Lay the saved prices over the defaults (cheap when nothing changed). */
+/**
+ * The owner's own price for a small pack in a product's saved prices `o`, or null when the pack follows
+ * the product's price. It is saved as the pack's final price (`packs: { sizeId: EGP }`), so it stays the
+ * same whatever the product's price does.
+ * Prices saved before kept it in `sizes`, as an amount added to the product's price. That amount was
+ * always saved in the same record as the product's price it was written against (both admin screens save
+ * the product's whole row at once; a record without `basePrice` was saved at the built-in price), so it is
+ * read at that price: the pack keeps exactly the price the shop was charging for it, and is written as
+ * its own final price the next time the product's prices are saved.
+ */
+function ownPackPrice(o, d, sizeId) {
+  if (o.packs && o.packs[sizeId] != null) return o.packs[sizeId];
+  if (o.sizes && o.sizes[sizeId] != null) return round2((o.basePrice != null ? o.basePrice : d.basePrice) + o.sizes[sizeId]);
+  return null;
+}
+
+/**
+ * Lay the saved prices over the defaults (cheap when nothing changed). A small pack with the owner's own
+ * price gets `ownPrice: true` on its size, so the admin's product page can show that it keeps its price
+ * when the product's price changes (and cleanPricing keeps it when the pack is saved as shown).
+ */
 function applyPricing(products, pricing) {
   const key = JSON.stringify(pricing || {});
   if (key === appliedKey) return false;
@@ -100,12 +121,21 @@ function applyPricing(products, pricing) {
     else if (d.hadExtra) p.extraSidePrice = d.extraSidePrice;
     else delete p.extraSidePrice;
     for (const s of p.sizes) {
-      const own = o.sizes && o.sizes[s.id] != null ? o.sizes[s.id] : null;
-      if (!s.smallPack) s.surcharge = own != null ? own : d.sizes[s.id];
-      // Small packs: the owner's own price for the pack wins, else its share of the product's price
-      // (so /api/products, the cart, orders and the admin all see the same amount); either way the
-      // pack never sells under 1 EGP.
-      else s.surcharge = Math.max(own != null ? own : packSurcharge(d, s.id, p.basePrice), round2(1 - p.basePrice));
+      if (!s.smallPack) {
+        s.surcharge = o.sizes && o.sizes[s.id] != null ? o.sizes[s.id] : d.sizes[s.id];
+        continue;
+      }
+      // Small packs: the owner's own price for the pack wins whatever the product's price, else the pack
+      // keeps its share of the product's price (so /api/products, the cart, orders and the admin all see
+      // the same amount); either way the pack never sells under 1 EGP.
+      const own = ownPackPrice(o, d, s.id);
+      if (own != null) {
+        s.surcharge = round2(Math.max(1, own) - p.basePrice);
+        s.ownPrice = true;
+      } else {
+        s.surcharge = Math.max(packSurcharge(d, s.id, p.basePrice), round2(1 - p.basePrice));
+        delete s.ownPrice;
+      }
     }
   }
   return true;
@@ -123,24 +153,37 @@ function cleanPricing(product, body) {
   if (extra !== null && extra !== d.extraSidePrice) out.extraSidePrice = extra;
   const finalBase = out.basePrice != null ? out.basePrice : d.basePrice;
   const sizes = {};
+  const packs = {};
   for (const s of product.sizes) {
     const v = money(body.sizes && body.sizes[s.id], { min: -1e6 });
     if (v === undefined) return { error: 'badPrice' };
-    if (v === null) continue;
-    if (s.smallPack) {
-      // The admin sends every size as it shows it (`product` carries the prices as they stand now).
-      // A small pack left at its share of the product's price keeps following it: the amount it shows
-      // for today's price, or the one it would have at the price being saved, is no price of its own.
-      const following = s.surcharge === packSurcharge(d, s.id, product.basePrice);
-      if (v === packSurcharge(d, s.id, finalBase) || (following && v === s.surcharge)) continue;
-      sizes[s.id] = v;
-    } else if (v !== d.sizes[s.id]) sizes[s.id] = v;
+    if (v === null) continue; // emptied: back to the built-in price (a small pack follows the product's price)
+    if (!s.smallPack) {
+      if (v !== d.sizes[s.id]) sizes[s.id] = v;
+      continue;
+    }
+    // Small packs. The admin sends every size as it shows it, as an amount added to the product's price
+    // (`product` carries the prices as they stand now). Left as shown, a pack stays as it is: its own
+    // price stays that price (whatever product price is being saved), and a pack that follows the
+    // product's price keeps following it.
+    if (v === s.surcharge) {
+      if (s.ownPrice) packs[s.id] = round2(product.basePrice + s.surcharge);
+      continue;
+    }
+    // Changed: the amount is read against the price being saved. The pack's share of that price is no
+    // price of its own; any other amount makes the pack's own price, which is its final price.
+    if (v === packSurcharge(d, s.id, finalBase)) continue;
+    const own = round2(finalBase + v);
+    if (own < 1) return { error: 'badPrice' };
+    packs[s.id] = own;
   }
   if (Object.keys(sizes).length) out.sizes = sizes;
-  // A size must never cost less than nothing. Small packs that follow the product's price are
-  // always 1 EGP or more, so a lower product price is never refused because of them.
+  if (Object.keys(packs).length) out.packs = packs;
+  // A size must never cost less than nothing. Small packs are checked above: their own prices are 1 EGP
+  // or more and don't depend on the product's price, and those that follow the product's price never go
+  // under 1 EGP, so a new product price is never refused because of a small pack.
   for (const s of product.sizes) {
-    if (s.smallPack && sizes[s.id] == null) continue;
+    if (s.smallPack) continue;
     const sur = sizes[s.id] != null ? sizes[s.id] : d.sizes[s.id];
     if (finalBase + sur < 1) return { error: 'badPrice' };
   }
