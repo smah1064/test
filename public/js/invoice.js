@@ -168,7 +168,7 @@
         <section class="inv-parties">
           <div>
             <h2>${esc(t('invoice.billTo'))}</h2>
-            <p class="who">${esc(c.name || '')}</p>
+            <p class="who" dir="auto">${esc(c.name || '')}</p>
             ${place ? `<p>${esc(place)}</p>` : ''}
           </div>
           <div>

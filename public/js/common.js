@@ -311,9 +311,12 @@
   function backOnDay(ymd) {
     const year = Number(String(ymd).slice(0, 4));
     try {
-      return new Date(ymd + 'T12:00:00Z').toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-GB', {
-        weekday: 'long', day: 'numeric', month: 'long', ...(year !== new Date().getFullYear() ? { year: 'numeric' } : {}), timeZone: 'UTC',
-      });
+      const d = new Date(ymd + 'T12:00:00Z');
+      const withYear = year !== new Date().getFullYear();
+      if (lang === 'ar') return d.toLocaleDateString('ar-EG', { weekday: 'long', day: 'numeric', month: 'long', ...(withYear ? { year: 'numeric' } : {}), timeZone: 'UTC' });
+      // English the same way with or without the year: "Sunday 10 January 2027".
+      const part = (o) => d.toLocaleDateString('en-GB', { ...o, timeZone: 'UTC' });
+      return [part({ weekday: 'long' }), part({ day: 'numeric' }), part({ month: 'long' }), withYear ? part({ year: 'numeric' }) : ''].filter(Boolean).join(' ');
     } catch (e) {
       return lang === 'ar' ? arabicDigits(ymd) : ymd;
     }
@@ -465,7 +468,7 @@
   function updateCartBadge() {
     const n = getCart().length;
     document.querySelectorAll('[data-cart-count]').forEach((el) => {
-      el.textContent = n;
+      el.textContent = num(n); // (Arabic digits on Arabic pages)
       el.hidden = n === 0;
     });
   }

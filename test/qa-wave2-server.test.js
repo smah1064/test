@@ -86,9 +86,9 @@ test('a shared booklet keeps its binding for "Open a copy"', async () => {
   };
   const left = await share({ binding: 'left' });
   assert.strictEqual(left.options.binding.id, 'left');
-  // The first choice (on the right) isn't stored, as on a design: none means the first one.
+  // The binding is kept either way (it is shown on the cart, proof, order and admin).
   const right = await share({ binding: 'right' });
-  assert.ok(!right.options || !right.options.binding);
+  assert.strictEqual(right.options.binding.id, 'right');
   // Unknown options are simply left out (a share is not an order).
   const odd = await share({ binding: 'diagonal', glitter: 'yes' });
   assert.ok(!odd.options);
@@ -129,15 +129,23 @@ test('a PDF longer than asked: its first pages and its last one (for the back co
 });
 
 test('booklet PDFs: a daily budget for the whole shop, so the disk can\'t be filled', async () => {
+  const one = await pdf(1);
+  const mb = one.length / 1048576;
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pod-pdfbudget-'));
-  const app = createApp({ dataDir: dir, adminPassword: 'secret-owner-pass', cleanupEvery: 0, requireApproval: false, limits: { pdfPagesMB: 2 } });
+  // Room for two of these PDFs a day.
+  const app = createApp({ dataDir: dir, adminPassword: 'secret-owner-pass', cleanupEvery: 0, requireApproval: false, limits: { pdfPagesMB: mb * 2.5 } });
   const srv = await new Promise((resolve) => { const s = app.listen(0, () => resolve(s)); });
   try {
     const url = `http://127.0.0.1:${srv.address().port}/api/artwork/pages`;
-    const send = async () => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/pdf', 'x-page-w': '420', 'x-page-h': '595', 'x-forwarded-for': `10.0.0.${Math.floor(Math.random() * 200)}` }, body: await pdf(1) });
-    assert.strictEqual((await send()).status, 200);
-    assert.strictEqual((await send()).status, 200);
-    assert.strictEqual((await send()).status, 429, 'over the shop\'s 2 MB for today');
+    const send = async (body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/pdf', 'x-page-w': '420', 'x-page-h': '595', 'x-forwarded-for': `10.0.0.${Math.floor(Math.random() * 200)}` }, body });
+    // A PDF that can't be read takes nothing from the budget.
+    const junk = Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.alloc(Math.ceil(one.length * 3), 0x41)]);
+    assert.strictEqual((await send(junk)).status, 400);
+    assert.strictEqual((await send(one)).status, 200);
+    assert.strictEqual((await send(one)).status, 200);
+    const over = await send(one);
+    assert.strictEqual(over.status, 429, 'over the shop\'s room for today');
+    assert.strictEqual((await over.json()).code, 'pdfBudget');
   } finally {
     srv.close();
     fs.rmSync(dir, { recursive: true, force: true });

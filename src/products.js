@@ -2091,6 +2091,7 @@ PRODUCTS.push(
     paged: true,
     options: [{
       id: 'binding',
+      keepDefault: true, // always shown (cart, proof, order, admin): either side matters for the print
       name: t('Binding', 'التدبيس'),
       help: t('Arabic booklets open on the right, English ones on the left: it sets the order of the pages.', 'الكتيبات العربي بتتفتح من اليمين والإنجليزي من الشمال: ده بيحدد ترتيب الصفحات.'),
       choices: [
@@ -2668,7 +2669,7 @@ function cleanOptions(product, raw) {
     if (want == null || want === '') continue;
     const choice = opt.choices.find((c) => c.id === String(want));
     if (!choice) return { error: true };
-    if (choice === opt.choices[0]) continue; // the default (no lamination) isn't kept
+    if (choice === opt.choices[0] && !opt.keepDefault) continue; // the default (no lamination) isn't kept
     out[opt.id] = { id: choice.id, name: choice.name, optionName: opt.name };
   }
   return { options: Object.keys(out).length ? out : null };

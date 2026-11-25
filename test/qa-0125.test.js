@@ -45,7 +45,7 @@ test('booklets: the size is the page count, so a design is never mixed with othe
   for (const size of ['32-100', '16-50', '8-100']) {
     const r = await order([{ color: 'matte', size: '8-50', qty: 1 }, { color: 'matte', size, qty: 1 }]);
     assert.strictEqual(r.status, 400, size);
-    assert.strictEqual((await r.json()).code, 'qtyNoSizes');
+    assert.strictEqual((await r.json()).code, 'qtyOnePageCount');
   }
   // More copies of the chosen size, in both cover finishes: accepted.
   const ok = await order([{ color: 'matte', size: '8-50', qty: 2 }, { color: 'gloss', size: '8-50', qty: 1 }]);

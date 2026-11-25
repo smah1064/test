@@ -22,7 +22,7 @@ if (!adminPassword) {
 // Private preview: the real shop starts private the first time it runs with this (only invited people,
 // the owner and staff get in; the owner opens it to everyone from the dashboard). PREVIEW_LOCK=off
 // skips that for test copies (QA, local runs).
-createApp({ dataDir, adminPassword, libraryOnce: ['pause-no-artwork'], previewStart: process.env.PREVIEW_LOCK !== 'off' }).listen(port, () => {
+createApp({ dataDir, adminPassword, libraryOnce: ['pause-no-artwork', 'unpause-artwork-enough'], previewStart: process.env.PREVIEW_LOCK !== 'off' }).listen(port, () => {
   console.log(`Print-on-demand shop running at http://localhost:${port}`);
   console.log(`Production dashboard:            http://localhost:${port}/admin`);
 });
