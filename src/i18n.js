@@ -63,6 +63,8 @@ const MESSAGES = {
   zipBad: { en: 'That file isn\'t a zip we can open. Make a new zip of the design pictures and try again.', ar: 'الملف ده مش zip نقدر نفتحه. اعمل zip جديد للصور وجرب تاني.' },
   zipTooBig: { en: 'The zip is too big once opened. Split the designs into smaller zips.', ar: 'الـ zip كبير أوي بعد ما يتفتح. قسّم التصميمات على كذا zip أصغر.' },
   zipTooMany: { en: 'Too many files in one zip. Split the designs into smaller zips (up to 300 files each).', ar: 'ملفات كتير أوي في zip واحد. قسّمها على كذا zip (لحد ٣٠٠ ملف في كل واحد).' },
+  zipOver: { en: 'The zip is over {max} MB. Split the designs into smaller zips.', ar: 'الـ zip أكبر من {max} ميجا. قسّم التصميمات على كذا zip أصغر.' },
+  uploadNotReady: { en: 'The pictures in this upload are still being read. Try again in a moment.', ar: 'لسه بنقرا الصور اللي في الرفع ده. جرّب كمان شوية.' },
   zipEmpty: { en: 'No design pictures found in the zip (PNG, JPG, WEBP or SVG).', ar: 'مفيش صور تصميمات في الـ zip ده (PNG أو JPG أو WEBP أو SVG).' },
   notPicture: { en: 'Not a picture', ar: 'مش صورة' },
   tooSmall: { en: 'Too small to print well', ar: 'صغيرة أوي على الطباعة' },
