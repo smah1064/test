@@ -84,3 +84,39 @@ test('Editor, no size chosen yet: no size box holds the 1; a number typed under 
     await srv.close();
   }
 });
+
+test('Editor: several pictures chosen at once all go on the design; a second colour added before a size is chosen holds no piece', { timeout: 90000 }, async () => {
+  const { chromium } = loadPlaywright();
+  const { openEditor } = require('./helpers');
+  const sharp = require('sharp');
+  const srv = await startServer();
+  const browser = await chromium.launch();
+  try {
+    const ctx = await newContext(browser);
+    const page = await openEditor(ctx, srv.base, 'tshirt', '&color=white');
+    const png = (c) => sharp({ create: { width: 400, height: 400, channels: 4, background: c } }).png().toBuffer();
+    await page.setInputFiles('#file-input', [
+      { name: 'one.png', mimeType: 'image/png', buffer: await png('#cc0000') },
+      { name: 'two.png', mimeType: 'image/png', buffer: await png('#0000cc') },
+      { name: 'three.png', mimeType: 'image/png', buffer: await png('#00aa00') },
+    ]);
+    await page.waitForFunction(() => window.__editor.canvas.getObjects().filter((o) => o.type === 'image').length >= 3, null, { timeout: 30000 });
+    // Quantities: no size chosen, a second colour.
+    await page.waitForSelector('#qty-add');
+    const second = await page.$eval('#qty-add', (el) => [...el.options].map((o) => o.value).find(Boolean));
+    await page.selectOption('#qty-add', second);
+    await page.waitForTimeout(300);
+    const values = await page.$$eval('#qty-field .qty-in', (els) => els.map((e) => e.value).filter(Boolean));
+    assert.deepStrictEqual(values, [], 'no size box holds a piece nobody chose');
+    await page.fill(`#qty-field .qty-in[data-qc="${second}"][data-qz="M"]`, '2');
+    await page.dispatchEvent(`#qty-field .qty-in[data-qc="${second}"][data-qz="M"]`, 'change');
+    await page.waitForTimeout(300);
+    const qty = await page.evaluate(() => window.__editor.st.qty);
+    const lines = Object.entries(qty).flatMap(([c, row]) => Object.entries(row).filter(([, n]) => n > 0).map(([z, n]) => `${c}|${z}|${n}`));
+    assert.deepStrictEqual(lines, [`${second}|M|2`]);
+    assert.deepStrictEqual(page.errors, []);
+  } finally {
+    await browser.close();
+    await srv.close();
+  }
+});

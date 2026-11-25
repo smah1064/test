@@ -1801,7 +1801,11 @@
   const addFiles = serial(async (list) => {
     const files = [...(list || [])].filter(Boolean);
     if (!files.length) return;
-    if (!st.product.paged) return addImageFile(files[0]);
+    // (Several pictures chosen at once: each goes on the design, one after another; only the first was. QA 25 Nov.)
+    if (!st.product.paged) {
+      for (const f of files.slice(0, 10)) await addImageFile(f);
+      return;
+    }
     if (files.length === 1 && isPdf(files[0])) return addPdfPages(files[0]);
     if (files.length === 1) return addImageFile(files[0]);
     const pages = activeSides();
@@ -4521,7 +4525,8 @@
       }
       if (e.target.id === 'qty-add' && e.target.value) {
         const g = qtyGrid();
-        g[e.target.value] = { [st.sizeId]: 1 };
+        // (No size picked yet: the new colour's row starts empty, no piece under a size nobody chose. QA 25 Nov.)
+        g[e.target.value] = !st.sizePicked && mix().sizes ? {} : { [st.sizeId]: 1 };
         st.qty = g;
         refreshChrome();
         // (Drawn now, with the new colour's row: it was waiting for a quantity box to lose its focus, QA 25 Nov.)

@@ -2687,10 +2687,17 @@
     reviewData = { items: items.slice().sort(byAgeRv) };
     reviewCount = reviewData.items.length;
   }
+  // (A corrected file being chosen: the file window is open, so the card isn't drawn again under it and the file
+  // chosen isn't lost. Two minutes at most. QA 25 Nov.)
+  let rvPickingAt = 0;
+  document.addEventListener('click', (e) => { if (e.target.closest && e.target.closest('#rv-list [data-rv-file]')) rvPickingAt = Date.now(); }, true);
+  document.addEventListener('change', (e) => { if (e.target.closest && e.target.closest('#rv-list [data-rv-file]')) rvPickingAt = 0; }, true);
+  window.addEventListener('focus', () => { setTimeout(() => { rvPickingAt = 0; }, 1500); });
   async function loadReview() {
-    // Don't redraw while the admin is typing a note.
+    // Don't redraw while the admin is typing a note, or choosing a file.
     const ae = document.activeElement;
     if (reviewData && ae && ae.closest && ae.closest('#rv-list') && ae.tagName === 'TEXTAREA') return;
+    if (reviewData && rvPickingAt && Date.now() - rvPickingAt < 120000) return;
     try {
       const items = (await adminApi('/api/admin/review')).items || [];
       await ensureOrders(items);
