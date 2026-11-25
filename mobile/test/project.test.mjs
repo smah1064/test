@@ -41,6 +41,7 @@ describe('app settings (capacitor.config.ts)', () => {
     assert.equal(c.server.cleartext, false);
     assert.equal(c.server.errorPath, undefined, 'the app handles connection errors itself');
     assert.equal(c.android.webContentsDebuggingEnabled, false);
+    assert.equal(c.android.allowMixedContent, false);
     assert.equal(c.ios.webContentsDebuggingEnabled, false);
     assert.equal(c.android.appendUserAgent, `Ebda3App/${readVersion()} (android)`);
     assert.equal(c.ios.appendUserAgent, `Ebda3App/${readVersion()} (ios)`);
@@ -52,6 +53,7 @@ describe('app settings (capacitor.config.ts)', () => {
     assert.equal(c.server.url, 'http://10.0.2.2:3600');
     assert.equal(c.server.cleartext, true);
     assert.equal(c.android.webContentsDebuggingEnabled, true);
+    assert.equal(c.android.allowMixedContent, true);
     assert.throws(() => capacitorConfig({ EBDA3_SITE_URL: 'ftp://example.com' }), /http\(s\)/);
   });
 });

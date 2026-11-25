@@ -201,6 +201,7 @@
     '.e3a-sheet{width:100%;max-width:460px;box-sizing:border-box;background:#fff;color:#16181d;border-radius:18px 18px 0 0;',
     'padding:22px 20px 20px;box-shadow:0 -8px 30px rgba(0,0,0,.18)}',
     '.e3a-block .e3a-sheet{border-radius:18px;margin:16px;box-shadow:none;background:transparent;text-align:center}',
+    '.e3a-logo{display:block;width:96px;height:96px;margin:0 auto 20px;border-radius:22px}',
     '.e3a-sheet h2{margin:0 0 8px;font-size:19px;line-height:1.4;font-weight:800}',
     '.e3a-sheet p{margin:0 0 18px;font-size:15px;line-height:1.6;color:#5b606b}',
     '.e3a-row{display:flex;gap:10px;flex-wrap:wrap}',
@@ -669,6 +670,15 @@
       box.className = 'e3a-sheet';
       box.setAttribute('role', 'dialog');
       box.setAttribute('aria-modal', 'true');
+      if (o.block) {
+        // The shop's own icon (a file the site serves to everyone); left out if it can't load.
+        var logo = document.createElement('img');
+        logo.className = 'e3a-logo';
+        logo.alt = '';
+        logo.src = '/icon-192.png';
+        logo.onerror = function () { if (logo.parentNode) logo.parentNode.removeChild(logo); };
+        box.appendChild(logo);
+      }
       var h = document.createElement('h2');
       h.textContent = o.title;
       var p = document.createElement('p');

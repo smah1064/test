@@ -1,6 +1,7 @@
 package me.ebda3.app.shell;
 
 import android.net.Uri;
+import android.os.Build;
 import android.net.http.SslError;
 import android.webkit.RenderProcessGoneDetail;
 import android.webkit.SslErrorHandler;
@@ -8,6 +9,7 @@ import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
+import androidx.annotation.RequiresApi;
 import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeWebViewClient;
 import com.getcapacitor.Logger;
@@ -77,6 +79,7 @@ public class ShellWebViewClient extends BridgeWebViewClient {
     }
 
     @Override
+    @RequiresApi(api = Build.VERSION_CODES.O) // only called on Android 8+
     public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
         if (super.onRenderProcessGone(view, detail)) return true;
         // The web view can't be used any more: start the screen again (it reopens the page it was on).

@@ -36,6 +36,8 @@ const config: CapacitorConfig = {
   android: {
     appendUserAgent: `Ebda3App/${pkg.version} (android)`,
     webContentsDebuggingEnabled: testSite,
+    // Test builds only: the app's own pages (https://localhost) may check a plain-http test shop.
+    allowMixedContent: testSite && site.protocol === 'http:',
   },
   ios: {
     appendUserAgent: `Ebda3App/${pkg.version} (ios)`,

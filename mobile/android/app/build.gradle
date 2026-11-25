@@ -67,6 +67,9 @@ android {
         abortOnError true
         checkReleaseBuilds true
         warningsAsErrors false
+        // Every finding in the build log too (the online builds show it).
+        textReport true
+        textOutput file('stdout')
     }
 }
 

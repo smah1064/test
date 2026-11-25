@@ -145,6 +145,7 @@ jobs:
               process.stdout.write(phone.udid);
             });')
           echo "Simulator: $udid"
+          echo "SIM_UDID=$udid" >> "$GITHUB_ENV"
           xcrun simctl boot "$udid"
           xcrun simctl bootstatus "$udid" -b
           xcrun simctl install "$udid" mobile/ios/App/build/Build/Products/Debug-iphonesimulator/App.app
@@ -155,9 +156,77 @@ jobs:
           xcrun simctl openurl "$udid" "me.ebda3.app://open?url=https%3A%2F%2Febda3.me%2Fprivacy"
           sleep 8
           xcrun simctl io "$udid" screenshot screenshots/iphone-deep-link.png
+      - name: Website packages (for a copy of the shop)
+        run: npm ci --no-audit --no-fund
+      - name: Test app that uses the copy of the shop
+        working-directory: mobile
+        env:
+          EBDA3_SITE_URL: http://localhost:3600
+        run: |
+          set -o pipefail
+          npx cap sync ios
+          cd ios/App
+          xcodebuild -project App.xcodeproj -scheme App -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build-test CODE_SIGNING_ALLOWED=NO build | tail -n 20
+      - name: Checks on the iPhone simulator (links, no connection, back online)
+        working-directory: mobile
+        run: node test/device/ios.mjs "$SIM_UDID" ios/App/build-test/Build/Products/Debug-iphonesimulator/App.app ../screenshots
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: iphone-screenshots
+          path: screenshots/
+          retention-days: 30
+
+  android-device:
+    name: Android emulator checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            mobile/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - name: Website packages (for a copy of the shop)
+        run: npm ci --no-audit --no-fund
+      - name: App packages
+        working-directory: mobile
+        run: npm ci --no-audit --no-fund
+      - name: Test app that uses the copy of the shop
+        working-directory: mobile
+        env:
+          EBDA3_SITE_URL: http://10.0.2.2:3600
+        run: |
+          npx cap sync android
+          cd android && ./gradlew --no-daemon assembleDebug
+      - name: Let the emulator use the computer's speed-up (KVM)
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Checks on an Android 14 emulator (links, back button, no connection, saving)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          working-directory: mobile
+          script: node test/device/android.mjs android/app/build/outputs/apk/debug/app-debug.apk ../screenshots
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-screenshots
           path: screenshots/
           retention-days: 30

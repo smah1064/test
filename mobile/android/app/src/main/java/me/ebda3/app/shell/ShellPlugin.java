@@ -302,7 +302,12 @@ public class ShellPlugin extends Plugin {
                 .build();
             tab.launchUrl(activity, url);
         } catch (ActivityNotFoundException e) {
-            openExternal(url);
+            // No browser that supports tabs: any app that can show the link (and nothing more if there is none).
+            try {
+                activity.startActivity(new Intent(Intent.ACTION_VIEW, url).addCategory(Intent.CATEGORY_BROWSABLE));
+            } catch (ActivityNotFoundException none) {
+                Logger.warn(TAG, "No app can open " + url);
+            }
         }
     }
 
