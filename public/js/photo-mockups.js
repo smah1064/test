@@ -21,7 +21,10 @@
     'tshirt:back': { ...P('tshirt-back'), rect: { cx: 499, top: 300, w: 306 }, warp: 'fabric' },
     'kidstee:front': { ...P('tshirt-front'), rect: { cx: 499, top: 315, w: 236 }, warp: 'fabric' },
     'kidstee:back': { ...P('tshirt-back'), rect: { cx: 499, top: 295, w: 230 }, warp: 'fabric' },
-    'hoodie:front': { ...P('hoodie-front'), rect: { cx: 500, top: 368, w: 255 }, warp: 'fabric' },
+    // Hoodie fronts: the print starts about 3 in (kids 2 in) below the neckline's V where the hood crosses
+    // (y 405 on this photo; the drawstring eyelets are at y 375) and ends above the kangaroo pocket (y 785).
+    // Same photo scale as before (24.3 px per inch; kids 31.25), so the photo stays where it was in the editor.
+    'hoodie:front': { ...P('hoodie-front'), rect: { cx: 500, top: 478.5, w: 255 }, warp: 'fabric' },
     'hoodie:back': { ...P('hoodie-back'), rect: { cx: 502, top: 405, w: 290 }, warp: 'fabric' },
     'sweatshirt:front': { ...P('sweatshirt-front'), rect: { cx: 500, top: 330, w: 290 }, warp: 'fabric' },
     'sweatshirt:back': { ...P('sweatshirt-back'), rect: { cx: 500, top: 300, w: 290 }, warp: 'fabric' },
@@ -42,7 +45,7 @@
     'oversized:back': { ...P('oversized-back'), rect: { cx: 500, top: 311, w: 413 }, warp: 'fabric' },
     'ziphoodie:front': { ...P('ziphoodie-front'), rect: { cx: 631, top: 410, w: 124 }, warp: 'fabric' },
     'ziphoodie:back': { ...P('hoodie-back'), rect: { cx: 504, top: 402, w: 339 }, warp: 'fabric' },
-    'kidshoodie:front': { ...P('hoodie-front'), rect: { cx: 502, top: 372, w: 250 }, warp: 'fabric' },
+    'kidshoodie:front': { ...P('hoodie-front'), rect: { cx: 502, top: 467.83, w: 250 }, warp: 'fabric' },
     'kidshoodie:back': { ...P('hoodie-back'), rect: { cx: 504, top: 401, w: 320 }, warp: 'fabric' },
     'denim:back': { ...P('denim-back'), rect: { cx: 502, top: 470, w: 340 }, warp: 'fabric', base: '#4a6fa5' },
     'apron:front': { ...P('apron-front'), rect: { cx: 493, top: 330, w: 320 }, warp: 'fabric' },
@@ -109,9 +112,11 @@
     'kidstee:front': [M('kidstee-boy-front', 'boy', { cx: 505, top: 467, w: 190 }), M('kidstee-girl-front', 'girl', { cx: 507, top: 471, w: 199 })],
     'kidstee:back': [M('kidstee-boy-back', 'boy', { cx: 506, top: 411, w: 170 }), M('kidstee-girl-back', 'girl', { cx: 506, top: 410, w: 168 })],
     'kidshoodie:back': [M('kidshoodie-boy-back', 'boy', { cx: 503, top: 535, w: 184 }), M('kidshoodie-girl-back', 'girl', { cx: 507, top: 558, w: 182 })],
-    'hoodie:front': [M('hoodie-man-front', 'man', { cx: 503, top: 412, w: 191 }), M('hoodie-woman-front', 'woman', { cx: 502, top: 435, w: 189 })],
+    // Hoodie fronts: 3 in (kids 2 in) below the neckline's V where the hood crosses (man y 384, woman 400,
+    // boy 420, girl 422), as on the product photo.
+    'hoodie:front': [M('hoodie-man-front', 'man', { cx: 503, top: 439, w: 191 }), M('hoodie-woman-front', 'woman', { cx: 502, top: 454, w: 189 })],
     'hoodie:back': [M('hoodie-man-back', 'man', { cx: 504, top: 495, w: 196 }), M('hoodie-woman-back', 'woman', { cx: 510, top: 522, w: 188 })],
-    'kidshoodie:front': [M('kidshoodie-boy-front', 'boy', { cx: 504, top: 459, w: 168 }), M('kidshoodie-girl-front', 'girl', { cx: 507, top: 461, w: 176 })],
+    'kidshoodie:front': [M('kidshoodie-boy-front', 'boy', { cx: 504, top: 462, w: 168 }), M('kidshoodie-girl-front', 'girl', { cx: 507, top: 466, w: 176 })],
     'ziphoodie:front': [M('ziphoodie-man-front', 'man', { cx: 580, top: 443, w: 73 })],
     'sweatshirt:front': [M('sweatshirt-man-front', 'man', { cx: 503, top: 439, w: 218 }), M('sweatshirt-woman-front', 'woman', { cx: 501, top: 457, w: 216 })],
     'sweatshirt:back': [M('sweatshirt-man-back', 'man', { cx: 504, top: 355, w: 196 }), M('sweatshirt-woman-back', 'woman', { cx: 517, top: 384, w: 189 })],

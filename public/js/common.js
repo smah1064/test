@@ -1045,6 +1045,22 @@
     return { ...a, x: Math.round((a.x + a.w / 2 - w / 2) * 10) / 10, w, h, ...(a.rx ? { rx: a.rx * f } : {}) };
   }
   /**
+   * Where a saved side's objects were placed (mockup units: objects are kept where they were drawn,
+   * not relative to the print area). `saved` is the side as saved: { objects, offset, area }. `area`
+   * is the standard print area for the design's size that the save recorded (saved with each side
+   * since the hoodie fronts moved, 25 Nov 2026). Sides saved before that were placed in the side's
+   * `formerArea` when its print area has moved since (the hoodie fronts: from the collar), else in
+   * the area as it is. Plus the customer's move (`offset`). When this differs from the side's area
+   * now, the editor carries the objects across (as when the size or product changes).
+   */
+  function placedArea(product, side, sizeId, saved) {
+    const rec = saved && saved.area;
+    const off = saved && saved.offset;
+    const ok = rec && [rec.x, rec.y, rec.w, rec.h].every((v) => typeof v === 'number' && Number.isFinite(v)) && rec.w > 0 && rec.h > 0;
+    const a = ok ? { x: rec.x, y: rec.y, w: rec.w, h: rec.h } : sizedArea(product, side.formerArea ? { ...side, printArea: side.formerArea } : side, sizeId);
+    return off ? { ...a, x: a.x + (Number(off.dx) || 0), y: a.y + (Number(off.dy) || 0) } : a;
+  }
+  /**
    * How big this size is drawn (1 = the biggest size fills the picture), true to
    * size. Garments: smaller sizes show a smaller garment, so the print looks the
    * same size on screen and the garment grows or shrinks around it. Sizes that
@@ -1196,7 +1212,7 @@
     money, date, day, num, plural, pluralForm, packCopies, captcha, fromPrice, sizeNote, firstName,
     productState, backOnDay, backText, similarProducts, similarHref, similarLabel, productHref, showUnavailable,
     getCart, setCart, getSaved, setSaved, moveItem, designFor, putFile, updateCartBadge, toast, esc, api, drafts, forgetPersonal,
-    sizedArea, sizeView, canvasEdges, drawPattern, wrapOffsets, fabricCm,
+    sizedArea, placedArea, sizeView, canvasEdges, drawPattern, wrapOffsets, fabricCm,
     orderKey, orderHeaders, orderPath,
   };
 })();

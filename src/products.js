@@ -184,8 +184,17 @@ const PRODUCTS = [
             '<path d="M232 128 L228 205 M268 128 L272 205" stroke="{{L}}" stroke-width="3" stroke-linecap="round"/>' +
             '<path d="M178 425 L322 425 L344 515 L156 515 Z" fill="none" stroke="{{L}}" stroke-width="2.5" stroke-linejoin="round"/>'
         ),
-        printArea: { x: 175, y: 175, w: 150, h: 200 },
+        // 10.5 × 10.5 in (26.7 cm square), its top about 3 in (7.6 cm) below the neckline where the hood
+        // crosses (on the product photo, public/js/photo-mockups.js), so it sits under the drawstring
+        // eyelets, and ending well above the kangaroo pocket on every size. Here: below the drawn
+        // drawstrings (they end at y 205) and above the pocket (y 425).
+        printArea: { x: 175, y: 240, w: 150, h: 150 },
         printWidthIn: 10.5,
+        // Until 25 Nov 2026 the area was 10.5 × 14 in starting at the collar (between the drawstrings).
+        // Designs saved before then hold their objects (mockup units) where that area was.
+        formerArea: { x: 175, y: 175, w: 150, h: 200 },
+        // The embroidered chest logo stays where it was (4.5 cm under that former area's top).
+        chestLogoY: 200.3,
       },
       {
         id: 'back',
@@ -636,8 +645,15 @@ PRODUCTS.push(
             '<path d="M232 128 L228 205 M268 128 L272 205" stroke="{{L}}" stroke-width="3" stroke-linecap="round"/>' +
             '<path d="M178 425 L322 425 L344 515 L156 515 Z" fill="none" stroke="{{L}}" stroke-width="2.5" stroke-linejoin="round"/>'
         ),
-        printArea: { x: 190, y: 200, w: 120, h: 160 },
+        // 8 × 8 in (20.3 cm square), its top about 2 in (5 cm) below the neckline where the hood crosses,
+        // under the drawstring eyelets, ending above the pocket on the smallest size too. Here: below the
+        // drawn drawstrings (they end at y 224) and above the pocket (y 400).
+        printArea: { x: 190, y: 246, w: 120, h: 120 },
         printWidthIn: 8,
+        // Until 25 Nov 2026: 8 × 10.7 in from the collar (see the hoodie).
+        formerArea: { x: 190, y: 200, w: 120, h: 160 },
+        // The embroidered chest logo stays where it was (2.5 cm under that former area's top).
+        chestLogoY: 214.8,
       },
       {
         id: 'back',
@@ -2452,7 +2468,10 @@ function embroideryFor(p, e) {
   if (e.at === 'same') [x, y] = [a.x, a.y];
   // Left chest: the print area's top is about 2.5 cm below the collar; a chest logo starts
   // about 7 cm below it (adults; 5 cm on kids' sizes), as embroidered shirts are made.
-  if (e.at === 'chest') [x, y] = [a.x + a.w * 0.78 - w / 2, Math.min(a.y + (e.cm[0] >= 9 ? 4.5 : 2.5) * upc, a.y + a.h - h)];
+  // Where the print area starts lower than that (hoodies: below the drawstrings' eyelets), the side
+  // gives the logo's top itself (chestLogoY, mockup units).
+  const chestTop = side.chestLogoY != null ? side.chestLogoY : a.y + (e.cm && e.cm[0] >= 9 ? 4.5 : 2.5) * upc;
+  if (e.at === 'chest') [x, y] = [a.x + a.w * 0.78 - w / 2, Math.min(chestTop, a.y + a.h - h)];
   if (e.at === 'top') y = a.y + a.h * 0.05;
   const r1 = (v) => Math.round(v * 10) / 10;
   return {
@@ -2632,20 +2651,38 @@ function printAreaFor(product, sideId, sizeId) {
   return { ...a, x: Math.round((a.x + a.w / 2 - w / 2) * 10) / 10, y: a.y, w, h, ...(a.rx ? { rx: a.rx * f } : {}) };
 }
 
+/**
+ * Where a saved side's objects were placed (mockup units), as public/js/common.js placedArea: the
+ * standard area for the size that the save recorded (`saved.area`), else the side's `formerArea` when
+ * its print area has moved since (hoodie fronts, 25 Nov 2026), else the area as it is; plus the
+ * customer's move (`saved.offset`).
+ */
+function placedAreaFor(product, sideId, sizeId, saved) {
+  const side = product.sides.find((s) => s.id === sideId);
+  const rec = saved && saved.area;
+  const off = saved && saved.offset;
+  const ok = rec && [rec.x, rec.y, rec.w, rec.h].every((v) => typeof v === 'number' && Number.isFinite(v)) && rec.w > 0 && rec.h > 0;
+  const a = ok ? { x: rec.x, y: rec.y, w: rec.w, h: rec.h }
+    : side.formerArea ? printAreaFor({ ...product, sides: [{ ...side, printArea: side.formerArea }] }, sideId, sizeId)
+      : printAreaFor(product, sideId, sizeId);
+  return off ? { ...a, x: a.x + (Number(off.dx) || 0), y: a.y + (Number(off.dy) || 0) } : a;
+}
+
 // Garments and bags: the customer can move the print area within this zone
 // (mockup units, checked against the product photos). Rules: the top stays at
 // least 2.5 cm below the collar / neck / hood seam (and the tote's top hem),
 // the bottom at least 2.5 cm above the hem, waistband or leg binding, and the
 // sides about 1 cm clear of armhole / side / raglan / panel seams, plackets,
 // zips and pockets. Where a standard printArea itself sits closer than that
-// (e.g. tshirt front, oversized front, hoodie fronts, jersey front, tote) the
-// zone starts at the standard area so it stays allowed.
+// (e.g. tshirt front, oversized front, jersey front, tote) the zone starts at
+// the standard area so it stays allowed. Pullover and kids hoodie fronts: the
+// zone ends 2.5 cm (adults) / 1.4 cm (kids) above the kangaroo pocket.
 const MOVE_ZONES = {
   'tshirt:front': { x: 126, y: 140, w: 248, h: 357 },
   'tshirt:back': { x: 124, y: 111, w: 252, h: 379 },
   'kidstee:front': { x: 123, y: 137, w: 256, h: 417 },
   'kidstee:back': { x: 119, y: 150, w: 261, h: 399 },
-  'hoodie:front': { x: 156, y: 175, w: 191, h: 230 },
+  'hoodie:front': { x: 156, y: 211, w: 191, h: 194 },
   'hoodie:back': { x: 107, y: 180, w: 286, h: 346 },
   'sweatshirt:front': { x: 115, y: 126, w: 270, h: 370 },
   'sweatshirt:back': { x: 119, y: 131, w: 264, h: 355 },
@@ -2656,7 +2693,7 @@ const MOVE_ZONES = {
   'ziphoodie:back': { x: 124, y: 180, w: 250, h: 299 },
   'denim:back': { x: 160, y: 226, w: 181, h: 217 },
   'onesie:front': { x: 190, y: 188, w: 120, h: 167 },
-  'kidshoodie:front': { x: 173, y: 200, w: 155, h: 190 },
+  'kidshoodie:front': { x: 173, y: 231, w: 155, h: 159 },
   'kidshoodie:back': { x: 147, y: 200, w: 206, h: 255 },
   'shorts:front': { x: 264, y: 273, w: 89, h: 116 },
   'jersey:front': { x: 153, y: 150, w: 194, h: 337 },
@@ -2806,6 +2843,7 @@ module.exports = {
   variantColumns,
   REPEATS,
   printAreaFor,
+  placedAreaFor,
   printHeightFor,
   printWidthFor,
   CATEGORIES,

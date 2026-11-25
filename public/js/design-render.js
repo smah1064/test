@@ -256,7 +256,10 @@
       files[`${side.id}-print.png`] = await printBlob(st);
       files[`${side.id}-preview.png`] = await previewBlob(st);
       files[`${side.id}-design.svg`] = new Blob([await svgText(st)], { type: 'image/svg+xml' });
-      sidesBody[side.id] = { editor: { version: fabric.version, objects: serialize(st), library: design.id } };
+      // `area`: the standard print area (for this size) the objects are placed in, so they can be
+      // carried across if the product's print area moves later (POD.placedArea).
+      const a = st.side.printArea;
+      sidesBody[side.id] = { editor: { version: fabric.version, objects: serialize(st), library: design.id, area: { x: a.x, y: a.y, w: a.w, h: a.h } } };
     }
     onProgress('upload');
     const created = await POD.api('/api/designs', {
