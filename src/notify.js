@@ -56,7 +56,7 @@ const arCount = (n, one, two, few, many) => (n === 1 ? one : n === 2 ? two : n %
 const enCount = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const L = {
   ar: {
-    newOrder: 'طلب جديد', items: (n) => arCount(n, 'منتج واحد', 'منتجان', 'منتجات', 'منتج'), brand: 'إبداع',
+    newOrder: 'طلب جديد', items: (n) => arCount(n, 'منتج واحد', 'منتجين', 'منتجات', 'منتج'), brand: 'إبداع',
     total: 'الإجمالي', subtotal: 'المنتجات', discount: 'الخصم', shipping: 'الشحن', free: 'مجاني', cod: 'الدفع عند الاستلام',
     customer: 'العميل', phone: 'الموبايل', email: 'البريد', address: 'العنوان', notes: 'ملاحظات',
     openAdmin: 'افتح لوحة الإنتاج', track: 'تابع طلبك',
@@ -236,6 +236,10 @@ const emailText = (order, links, lang, forAdmin) => {
     '',
     ...order.items.map((it, i) => `${num(i + 1, lang)}. ${itemLine(it, lang)} · ${money(it.price, lang)}`),
     '',
+    // (The same sums as the HTML part, so the lines add up to the total: QA 25 Nov.)
+    `${t.subtotal}: ${money(order.subtotal, lang)}`,
+    ...(order.discount ? [`${t.discount}${order.coupon ? ` (${order.coupon.code})` : ''}: -${money(order.discount, lang)}`] : []),
+    `${order.delivery && order.delivery.speed === 'express' ? `${t.shipping} (${t.express})` : t.shipping}: ${order.shipping ? money(order.shipping, lang) : t.free}`,
     `${t.total} (${t.cod}): ${money(order.total, lang)}`,
     deliveryText(order, lang),
     forAdmin ? `${t.customer}: ${c.name} · ${c.phone}${c.email ? ' · ' + c.email : ''}\n${t.address}: ${addressOf(c, lang)}${c.notes ? `\n${t.notes}: ${c.notes}` : ''}` : `${t.address}: ${addressOf(c, lang)}`,
@@ -487,11 +491,11 @@ async function proofMessage(order, item, { kind = 'proof', note = '', link = '' 
     const product = item && item.productName ? tr(item.productName, ar ? 'ar' : 'en') : '';
     const T = ar
       ? {
-        subject: kind === 'proof' ? `طلبك ${order.number}: نحتاج موافقتك على البروفة` : `طلبك ${order.number}: مطلوب تعديل قبل الطباعة`,
-        lead: kind === 'proof' ? `جهّزنا بروفة جديدة لـ ${product}. راجعها ووافق عليها لنبدأ الطباعة.` : `راجعنا ${product} ونحتاج إلى تعديل قبل الطباعة.`,
+        subject: kind === 'proof' ? `طلبك ${order.number}: محتاجين موافقتك على البروفة` : `طلبك ${order.number}: محتاج تعديل قبل الطباعة`,
+        lead: kind === 'proof' ? `جهّزنالك بروفة جديدة لـ ${product}. راجعها ووافق عليها عشان نبدأ الطباعة.` : `راجعنا ${product} ومحتاج تعديل قبل ما نطبعه.`,
         button: kind === 'proof' ? 'راجع البروفة' : 'افتح الطلب',
-        noteLabel: 'رسالة من المطبعة:',
-        screen: 'هذه بروفة على الشاشة؛ قد تختلف الألوان المطبوعة قليلًا عمّا تراه على شاشتك.',
+        noteLabel: 'رسالة من إبداع:',
+        screen: 'دي بروفة على الشاشة؛ ألوان الطباعة ممكن تفرق شوية عن اللي شايفه على شاشتك.',
       }
       : {
         subject: kind === 'proof' ? `Order ${order.number}: please approve your proof` : `Order ${order.number}: a change is needed before printing`,
@@ -503,7 +507,7 @@ async function proofMessage(order, item, { kind = 'proof', note = '', link = '' 
     const dir = ar ? 'rtl' : 'ltr';
     const html = `<div dir="${dir}" style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;color:#1b1f27">
       <p>${h(T.lead)}</p>
-      ${note ? `<p><strong>${h(T.noteLabel)}</strong><br>${h(note).replace(/\n/g, '<br>')}</p>` : ''}
+      ${note ? `<p><strong>${h(T.noteLabel)}</strong><br><span dir="auto">${h(note).replace(/\n/g, '<br>')}</span></p>` : ''}
       ${/^https?:\/\//.test(link) ? `<p><a href="${h(link)}" style="display:inline-block;background:#ca3d1a;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:bold">${h(T.button)}</a></p>` : ''}
       <p style="color:#666;font-size:13px">${h(T.screen)}</p></div>`;
     const text = [T.lead, note ? `${T.noteLabel} ${note}` : '', link, T.screen].filter(Boolean).join('\n\n');

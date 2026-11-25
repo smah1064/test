@@ -699,7 +699,17 @@ test('ready-made designs: starter catalog, owner adds from a share link, hides a
   const preview = 'data:image/png;base64,' + png(60, 72).toString('base64');
   const sh = await (await post('/api/shares', { productId: 'hoodie', color: 'black', size: 'L', sides: { front: { objects: [{ type: 'i-text', text: 'Shop design', left: 250, top: 300 }] } }, previews: { front: preview } })).json();
   assert.strictEqual((await admin('/api/admin/library', { method: 'POST', body: JSON.stringify({ share: `http://x/s/${sh.id}` }) })).status, 400); // a name is required
-  const added = await (await admin('/api/admin/library', { method: 'POST', body: JSON.stringify({ share: `https://shop.example/s/${sh.id}`, nameAr: 'تصميم المحل', category: 'funny' }) })).json();
+  // The English shop needs an English name: never the Arabic one copied over (QA 25 Nov).
+  const arOnly = await admin('/api/admin/library', { method: 'POST', body: JSON.stringify({ share: `https://shop.example/s/${sh.id}`, nameAr: 'تصميم المحل', category: 'funny' }) });
+  assert.strictEqual(arOnly.status, 400);
+  assert.strictEqual((await arOnly.json()).code, 'libNameEnMissing');
+  const arInEn = await admin('/api/admin/library', { method: 'POST', body: JSON.stringify({ share: `https://shop.example/s/${sh.id}`, nameAr: 'تصميم المحل', nameEn: 'قهوة الصبح', category: 'funny' }) });
+  assert.strictEqual((await arInEn.json()).code, 'libNameEnArabic');
+  const added = await (await admin('/api/admin/library', { method: 'POST', body: JSON.stringify({ share: `https://shop.example/s/${sh.id}`, nameAr: 'تصميم المحل', nameEn: 'Shop design $\' $& $$', category: 'funny' }) })).json();
+  // A name with "$'", "$&" or "$$" stays as typed in the page head (link previews).
+  const page = await (await fetch(`${base}/design?id=${added.id}`)).text();
+  assert.ok(page.includes('Shop design $&#39; $&amp; $$') || page.includes("Shop design $' $&amp; $$"), page.match(/<title>[^<]*<\/title>/)[0]);
+  assert.ok(page.length < 30000, 'the rest of the page is not pasted into the head');
   assert.match(added.id, /^c-[0-9a-f]{12}$/);
   assert.strictEqual(added.product, 'hoodie');
   const full = await (await fetch(base + '/api/library/' + added.id)).json();

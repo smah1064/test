@@ -310,4 +310,6 @@ test('free shipping and one-pound coupons still apply', async () => {
   assert.strictEqual(r.status, 201, await r.clone().text());
   const list = (await (await admin('/api/admin/coupons')).json()).coupons;
   assert.strictEqual(list.find((c) => c.code === 'SHIPFREE').uses, 1);
+  // What it gave: the shipping it waived, not "EGP 0" (QA 25 Nov).
+  assert.strictEqual(list.find((c) => c.code === 'SHIPFREE').discountGiven, plain.shipping);
 });

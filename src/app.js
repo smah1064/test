@@ -3250,7 +3250,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const r = coupons.apply(findCoupon(code), { lines, orders: store.listOrders(), phone: c.phone, shipping: shippingFor(subtotal) });
       if (!r.ok) throw new HttpError(409, r.reason, r.params || {});
       // The items it came off (a coupon for one product): the accounts charge the discount to those.
-      applied = { id: findCoupon(code).id, code, type: findCoupon(code).type, discount: r.discount, freeShipping: r.freeShipping, items: r.lines.map((i) => items[i].id) };
+      applied = { id: findCoupon(code).id, code, type: findCoupon(code).type, discount: r.discount, freeShipping: r.freeShipping, ...(r.freeShipping ? { shippingWaived: shippingFor(subtotal) } : {}), items: r.lines.map((i) => items[i].id) };
     }
     const discount = applied ? applied.discount : 0;
     // Standard (5 business days) or express (2, for a fee added to the shipping).
@@ -3763,7 +3763,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const text = (v, max) => (v == null ? null : String(v).replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max) || null);
     const s = { ...(order.shipment || {}) };
     if ('courier' in b) s.courier = text(b.courier, 60);
-    if ('trackingNumber' in b) s.trackingNumber = text(b.trackingNumber, 80);
+    // (Typed with Arabic or Persian digits: kept in Latin digits, as couriers and the English email show them.)
+    if ('trackingNumber' in b) s.trackingNumber = text(typeof b.trackingNumber === 'string' ? b.trackingNumber.replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)) : b.trackingNumber, 80);
     if ('trackingUrl' in b) {
       const u = text(b.trackingUrl, 500);
       if (u && !/^https?:\/\/[^\s]+$/i.test(u)) throw new HttpError(400, 'badTrackingUrl');
@@ -4225,13 +4226,16 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const nameAr = String(b.nameAr || '').trim().slice(0, 60);
     const nameEn = String(b.nameEn || '').trim().slice(0, 60);
     if (!nameAr && !nameEn) throw new HttpError(400, 'fieldRequired', { field: { en: 'Name', ar: 'الاسم' } });
+    // The English shop shows the English name: never the Arabic one copied over (QA 25 Nov, as for zip uploads).
+    if (!nameEn) throw new HttpError(400, 'libNameEnMissing');
+    if (ARABIC_LETTERS.test(nameEn)) throw new HttpError(400, 'libNameEnArabic');
     const category = DESIGN_CATEGORIES.some((c) => c.id === b.category) ? b.category : DESIGN_CATEGORIES[0].id;
     const product = getProduct(sh.productId);
     // A printed side first; a design that is only embroidery keeps the embroidery's own spot.
     const side = sh.sides.find((sd) => sd.id !== EMB) || sh.sides[0];
     const editor = JSON.parse(fs.readFileSync(shareFile(sh.id, 'editor.json'), 'utf8'));
     const meta = library.addCustom({
-      name: { ar: nameAr || nameEn, en: nameEn || nameAr },
+      name: { ar: nameAr || nameEn, en: nameEn },
       category,
       product: product.id,
       color: sh.color.id,
@@ -4923,7 +4927,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   });
 
   // ---------- Coupons (admin) ----------
-  const couponRow = (c) => ({ ...c, uses: coupons.usesOf(store.listOrders(), c), discountGiven: accounting.round2(store.listOrders().filter((o) => coupons.usedOn(o, c)).reduce((n, o) => n + (o.discount || 0), 0)) });
+  // What a coupon gave: the discounts, and the shipping a free-shipping coupon waived (QA 25 Nov: it showed 0).
+  const waivedOf = (o) => (o.coupon && o.coupon.freeShipping ? Number(o.coupon.shippingWaived != null ? o.coupon.shippingWaived : shippingFor(o.subtotal)) || 0 : 0);
+  const couponRow = (c) => ({ ...c, uses: coupons.usesOf(store.listOrders(), c), discountGiven: accounting.round2(store.listOrders().filter((o) => coupons.usedOn(o, c)).reduce((n, o) => n + (o.discount || 0) + waivedOf(o), 0)) });
   /**
    * Products for the admin's pick lists (coupons, printing houses): archived products ("stop selling")
    * are left out, except ones still in use there (`keep`), marked `archived` so the screen can say so.
@@ -5355,10 +5361,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       '<meta property="og:type" content="website">',
       '<meta name="twitter:card" content="summary_large_image">',
     ].join('\n  ');
+    // (Functions, not strings, as replacements: a name with "$'" or "$&" stays as typed, QA 25 Nov.)
     return html
       .replace(/[ \t]*<meta (?:property="og:[^"]*"|name="twitter:[^"]*")[^>]*>\n?/g, '')
-      .replace(/<title>[\s\S]*?<\/title>/, `<title>${escAttr(title)}</title>`)
-      .replace('</head>', `  ${tags}\n</head>`);
+      .replace(/<title>[\s\S]*?<\/title>/, () => `<title>${escAttr(title)}</title>`)
+      .replace('</head>', () => `  ${tags}\n</head>`);
   }
   const both = (t) => (t && typeof t === 'object' ? [t.ar, t.en].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).join(' · ') : String(t || ''));
   /** The preview of /product, /design or /book for its id, or null (the general card). */
@@ -5377,13 +5384,17 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (name === 'design') {
       const d = library.shown(String(req.query.id || ''));
       if (!d) return null;
-      const image = d.uploaded ? `${origin}/library-art/${d.id}/web.png` : d.kind === 'objects' && fs.existsSync(library.previewPath(d.id)) ? `${origin}/api/library/${d.id}/preview.png` : thumb(String(req.query.product || d.product || ''), String(req.query.color || d.color || ''));
+      // A picture of the design itself when the shop has one; else the shop's card (never a blank product, which
+      // would look like the design is missing, QA 25 Nov).
+      const image = d.uploaded ? `${origin}/library-art/${d.id}/web.png` : d.kind === 'objects' && fs.existsSync(library.previewPath(d.id)) ? `${origin}/api/library/${d.id}/preview.png` : `${origin}/img/og-ebda3.png`;
       return { title: `${both(d.name)} · إبداع`, description: 'تصميم جاهز تطبعه على منتجك، أو تعدّله على ذوقك · A ready design to print as it is, or make it yours', image, url: `${origin}/design?id=${encodeURIComponent(d.id)}` };
     }
     if (name === 'book') {
       const b = bookFor(String(req.query.b || ''));
       if (!b) return null;
-      return { title: `${both(b.title)} · إبداع`, description: both(b.blurb), image: `${origin}/api/books/${b.id}/sample/0.jpg`, url: `${origin}/book?b=${encodeURIComponent(b.id)}` };
+      // The title's {name} is the child's: "Your child" until it's theirs.
+      const named = (t) => (t && typeof t === 'object' ? { ar: String(t.ar || '').replace(/\{name\}/g, 'طفلك'), en: String(t.en || '').replace(/\{name\}('s)?/g, (m, s) => (s ? 'Your child\'s' : 'Your child')) } : t);
+      return { title: `${both(named(b.title))} · إبداع`, description: both(named(b.blurb)), image: `${origin}/api/books/${b.id}/sample/0.jpg`, url: `${origin}/book?b=${encodeURIComponent(b.id)}` };
     }
     return null;
   }

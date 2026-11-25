@@ -190,3 +190,12 @@ test('order messages count packs in copies: 1 × 200 + 1 × 1000 business cards 
   assert.match(wa, /Business Cards · White · 1200 copies \(200 cards ×1, 1000 cards ×1\)/);
   assert.doesNotMatch(wa, /2 pieces/);
 });
+
+test('the plain-text order email has the same sums as the HTML one (they add up to the total)', async () => {
+  process.env.ADMIN_LANG = 'en';
+  await notify.orderPlaced(order({ lang: 'en', discount: 100, coupon: { code: 'EID20' } }), { origin: '', lang: 'en' });
+  const mail = sent.find((s) => s.kind === 'email' && s.body.to[0].email === 'mona@example.test').body;
+  assert.match(mail.textContent, /Subtotal: EGP 28,020|Items: EGP 28,020|28,020/);
+  assert.match(mail.textContent, /EID20\): -\S*EGP\s100/);
+  assert.match(mail.textContent, /Shipping \(.*\): \S*EGP\s100/);
+});
