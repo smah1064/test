@@ -71,8 +71,12 @@ npm run sync           # copy the app's files and settings into both native proj
   `EBDA3_UPLOAD_KEYSTORE*` variables are set, see `android/app/build.gradle`).
 - **iPhone** (needs a Mac with Xcode, or the online build): open `ios/App/App.xcodeproj` after `npm run sync`.
 - **Online builds**: every push to the `mobile-apps` branch runs `.github/workflows/mobile-apps.yml` on GitHub:
-  the tests, the Android logic tests and lint, an Android test app (download it from the run's *Artifacts*), a
-  store bundle build, the iPhone link tests and an iPhone simulator build with screenshots.
+  the tests, the Android logic tests and lint, a store bundle build, an Android test app checked on an Android 14
+  emulator against a copy of the shop (`test/device/android.mjs`: links, Back, no connection, saving a file, outside
+  links), the iPhone link tests and an iPhone simulator build checked the same way (`test/device/ios.mjs`).
+  When every Android check passes, the Android test app (showing https://ebda3.me) is published at one fixed link:
+  https://github.com/smah1064/test/releases/download/android-test/ebda3-android-test.apk (a newer passing push
+  replaces it). Runs for different pushes go side by side; only publishing takes turns.
 - **A test build against a copy of the shop**: start the shop locally
   (`PREVIEW_LOCK=off PORT=3600 DATA_DIR=/tmp/app-data ADMIN_PASSWORD=pw node server.js` in the repo root), then
   `EBDA3_SITE_URL=http://10.0.2.2:3600 npx cap sync android` (Android emulator) or
