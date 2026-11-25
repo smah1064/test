@@ -14,10 +14,10 @@ const { PRODUCTS } = require('../src/products');
 
 const file = (src) => path.join(__dirname, '../public', src);
 
-test('the sarcastic pack has 12 designs with unique ids and names', () => {
-  assert.strictEqual(pack.designs.length, 12);
+test('the sarcastic pack has 22 designs with unique ids and names', () => {
+  assert.strictEqual(pack.designs.length, 22);
   const ids = new Set(pack.designs.map((d) => d.id));
-  assert.strictEqual(ids.size, 12);
+  assert.strictEqual(ids.size, 22);
   for (const d of pack.designs) {
     assert.match(d.id, /^sq-[a-z0-9-]+$/);
     assert.ok(d.name.en && /[؀-ۿ]/.test(d.name.ar), d.id);
@@ -27,7 +27,7 @@ test('the sarcastic pack has 12 designs with unique ids and names', () => {
 });
 
 test('the sarcastic artwork files exist, dark and white, and are plain vectors', () => {
-  for (const d of pack.designs) {
+  for (const d of pack.designs.filter((x) => x.items[0].src.endsWith('.svg'))) {
     const [art] = d.items;
     assert.strictEqual(art.kind, 'image');
     for (const [src, fill] of [[art.src, '#16181d'], [art.dark, '#ffffff']]) {
@@ -38,6 +38,20 @@ test('the sarcastic artwork files exist, dark and white, and are plain vectors',
       const fills = new Set([...svg.matchAll(/fill="([^"]+)"/g)].map((m) => m[1]));
       assert.deepStrictEqual([...fills], [fill], src);
     }
+  }
+});
+
+test('the colour pictures are full-size transparent PNGs, shown on light colours', async () => {
+  const sharp = require('sharp');
+  const sloths = pack.designs.filter((d) => d.items[0].src.endsWith('.png'));
+  assert.strictEqual(sloths.length, 6);
+  for (const d of sloths) {
+    const [art] = d.items;
+    assert.match(art.src, /^\/img\/art\/sarcastic\/[a-z0-9-]+\.png$/);
+    assert.strictEqual(art.dark, undefined);
+    assert.strictEqual(d.color, 'white');
+    const m = await sharp(file(art.src)).metadata();
+    assert.ok(m.hasAlpha && Math.max(m.width, m.height) >= 3000, `${art.src} ${m.width}x${m.height}`);
   }
 });
 
