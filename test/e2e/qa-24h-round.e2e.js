@@ -120,3 +120,27 @@ test('Editor: several pictures chosen at once all go on the design; a second col
     await srv.close();
   }
 });
+
+test('Editor: red text on a black shirt shows (no warning); navy on black is warned about', { timeout: 90000 }, async () => {
+  const { chromium } = loadPlaywright();
+  const { openEditor } = require('./helpers');
+  const srv = await startServer();
+  const browser = await chromium.launch();
+  try {
+    const ctx = await newContext(browser);
+    const page = await openEditor(ctx, srv.base, 'tshirt', '&color=black');
+    const warned = (fill) => page.evaluate(async (f) => {
+      const c = window.__editor.canvas;
+      c.getObjects().slice().forEach((o) => { if (o.type === 'i-text' || o.type === 'textbox') c.remove(o); });
+      const t = new fabric.IText('Happy Birthday', { left: c.getWidth() / 2, top: c.getHeight() / 2, originX: 'center', originY: 'center', fontSize: 40, fill: f });
+      c.add(t);
+      c.renderAll();
+      return window.__editor.checkIssues().some((i) => i.key === 'check.inkOnColour');
+    }, fill);
+    assert.strictEqual(await warned('#ff0000'), false, 'red on black shows');
+    assert.strictEqual(await warned('#0a1530'), true, 'navy on black hardly shows');
+  } finally {
+    await browser.close();
+    await srv.close();
+  }
+});

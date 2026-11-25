@@ -4092,7 +4092,15 @@
       }
       const garments = st.product.colors.filter((c) => ids.has(c.id) && c.hex);
       if (garments.length >= 1) {
-        const ratio = (a, b) => { const x = POD.luminance(a); const y = POD.luminance(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+        // (The contrast of how bright colours look, from linear light: red on a black shirt shows well, navy doesn't. The
+        // gamma-encoded brightness flagged red on black. QA 25 Nov.)
+        const lin = (hex) => {
+          const m = /^#?([0-9a-f]{6})/i.exec(String(hex || ''));
+          if (!m) return POD.luminance(hex);
+          const c = [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16) / 255).map((v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+          return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+        };
+        const ratio = (a, b) => { const x = lin(a); const y = lin(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
         for (const o of objs) {
           if (!isText(o)) continue;
           const ink = typeof o.fill === 'string' && o.fill !== 'transparent' ? o.fill : typeof o.stroke === 'string' ? o.stroke : null;
