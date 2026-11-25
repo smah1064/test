@@ -1,8 +1,9 @@
 'use strict';
 
 // Arabic words with "the" / "for (the)" in front (الأم, للأب, لأمي), Valentine's / Teacher's Day and a new baby
-// (QA 25 Nov), the home page's sizes ("tshirt xl", "A5 flyers"), its order (كوب: the mugs before كوبونات) and more
-// of the shop's words (مصلية, فنجان, قميص). The search block and the home page's lines are run as they are.
+// (QA 25 Nov), the home page's sizes ("tshirt xl", "A5 flyers") and colours ("تيشيرت أبيض", "black hoodie"), its order
+// (كوب: the mugs before كوبونات) and more of the shop's words (مصلية, فنجان, قميص). The search block and the home page's
+// lines are run as they are.
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -80,21 +81,17 @@ test('a short word after its article is still found while typing and at the star
 const page = read('public/index.html');
 function home() {
   const S = vm.runInNewContext(`${page.slice(page.indexOf('// search-kit:start'), page.indexOf('// search-kit:end'))}\nSEARCH`);
-  const aliases = vm.runInNewContext(`(${page.match(/const ALIASES = (\{[\s\S]*?\n\s*\});/)[1]})`);
-  // The line of index.html that gives a product's size words, run as it is.
-  const line = page.match(/const sizeWords = [^\n]+;/);
-  assert.ok(line, 'index.html has sizeWords');
-  const sizeWords = vm.runInNewContext(`${line[0]}\nsizeWords`);
-  // The product text as index.html builds it (names, descriptions, category, aliases, sizes).
-  assert.match(page, /ALIASES\[p\.id\] \|\| ALIASES\[POD\.assetId\(p\)\] \|\| '', sizeWords\(p\)\]\.join\(' '\)/);
-  assert.match(page, /return \[p\.id, \{ all: SEARCH\.index\(text, true\), name: ` \$\{norm\(name\)\} `, named: SEARCH\.index\(name, true\), sized: SEARCH\.index\(sizeWords\(p\), true\) \}\];/);
+  const ALIASES = vm.runInNewContext(`(${page.match(/const ALIASES = (\{[\s\S]*?\n\s*\});/)[1]})`);
+  // index.html's lines from the product text (names, descriptions, category, aliases, sizes, colours) to `found`
+  // (what a search lists), run as they are.
+  const from = page.indexOf('const catName = ');
+  const to = page.indexOf('// Real product photos');
+  assert.ok(from > 0 && to > from, 'index.html has the product text');
+  const block = page.slice(from, to);
+  for (const name of ['sizeWords', 'colorWords', 'hay', 'isColor', 'found']) assert.match(block, new RegExp(`const ${name} = `));
   const { PRODUCTS, CATEGORIES } = require('../src/products');
-  const cat = (id) => (CATEGORIES.find((c) => c.id === id) || { name: {} }).name;
-  const hay = new Map(PRODUCTS.map((p) => {
-    const name = `${p.name.en} ${p.name.ar}`;
-    const text = [p.id, name, p.description && p.description.en, p.description && p.description.ar, cat(p.category).en, cat(p.category).ar, aliases[p.id] || aliases[p.base] || '', sizeWords(p)].join(' ');
-    return [p.id, { all: S.index(text, true), name: ` ${S.norm(name)} `, named: S.index(name, true), sized: S.index(sizeWords(p), true) }];
-  }));
+  const ctx = { products: PRODUCTS, categories: CATEGORIES, ALIASES, SEARCH: S, norm: S.norm, loose: S.loose, POD: { assetId: (p) => p.base || p.id } };
+  const { hay, isColor, found } = vm.runInNewContext(`${block}\n({ hay, isColor, found })`, ctx);
   // The page's own ordering line, run as it is: names first, whole words before words that only start with it.
   const rankLine = page.match(/const rank = \(p\) => [^\n]+;/);
   assert.ok(rankLine, 'index.html has rank');
@@ -102,8 +99,8 @@ function home() {
   const find = (q) => {
     const ts = S.norm(q).split(' ').filter(Boolean);
     const qs = S.query(q);
-    const rank = vm.runInNewContext(`${rankLine[0]}\nrank`, { hay, ts, qs, SEARCH: S, loose: S.loose });
-    return PRODUCTS.filter((p) => S.match(hay.get(p.id).all, qs)).map((p, i) => [rank(p), i, p.id]).sort((x, y) => x[0] - y[0] || x[1] - y[1]).map((x) => x[2]);
+    const rank = vm.runInNewContext(`${rankLine[0]}\nrank`, { hay, ts, qs, SEARCH: S, loose: S.loose, isColor });
+    return PRODUCTS.filter((p) => found(p, qs)).map((p, i) => [rank(p), i, p.id]).sort((x, y) => x[0] - y[0] || x[1] - y[1]).map((x) => x[2]);
   };
   return { S, PRODUCTS, find };
 }
@@ -167,4 +164,65 @@ test('home search: مصلية / مصلاية find the prayer mat, فنجان the
     for (const id of ['tshirt', 'polo', 'oversized', 'jersey']) assert.ok(got.includes(id), `${w} finds ${id} (got ${got.join(', ') || 'nothing'})`);
     assert.ok(!got.includes('mug'));
   }
+});
+
+test('home search: a product with a colour ("تيشيرت أبيض", "هودي اسود", "مج ابيض", "white t-shirt", "black hoodie") lists that product in that colour', () => {
+  const { PRODUCTS, find } = home();
+  const byId = Object.fromEntries(PRODUCTS.map((p) => [p.id, p]));
+  // The colours' names, without the note after them (the magic mug is "Black (turns white when hot)").
+  const comesIn = (id, en) => byId[id].colors.some((c) => c.name.en.split(/[(:,]/)[0].toLowerCase().split(' ').includes(en));
+  const tees = ['tshirt', 'kidstee', 'polo', 'oversized', 'jersey'];
+  // "تيشيرت" alone lists what it did before the colours came in, in the same order.
+  assert.deepStrictEqual(find('تيشيرت'), [...tees, 'sweatshirt']);
+  // The T-shirts that come in white (the Sweatshirt doesn't), with and without hamza and ال, in both languages.
+  for (const q of ['تيشيرت أبيض', 'تيشيرت ابيض', 'التيشيرت الأبيض', 'white t-shirt', 'white tshirts', 't-shirt White']) {
+    assert.deepStrictEqual(find(q), tees.filter((id) => comesIn(id, 'white')), q);
+  }
+  for (const q of ['هودي اسود', 'هودي أسود', 'الهودي الأسود', 'black hoodie', 'hoodies black']) {
+    assert.deepStrictEqual(find(q), ['hoodie', 'ziphoodie', 'kidshoodie'], q);
+  }
+  for (const q of ['مج ابيض', 'مج أبيض', 'white mug']) {
+    const got = find(q);
+    assert.strictEqual(got[0], 'mug', `${q}: ${got.join(', ')}`);
+    assert.ok(got.includes('couplemugs'), `${q}: ${got.join(', ')}`);
+    // The magic mug is black: "(turns white when hot)" is a note, not a colour.
+    assert.ok(!got.includes('magicmug'), `${q}: ${got.join(', ')}`);
+    for (const id of got) assert.ok(comesIn(id, 'white'), `${q}: ${id} comes in white`);
+  }
+  // A colour the product doesn't come in: none of it (the hoodies have no white).
+  for (const q of ['هودي ابيض', 'white hoodie']) for (const id of ['hoodie', 'ziphoodie', 'kidshoodie']) assert.ok(!find(q).includes(id), `${q}: ${find(q).join(', ')}`);
+  // The colour is not looked for in the names, as a size isn't: "navy t-shirt" lists the T-shirts in navy before the
+  // Sweatshirt (navy too), in the order "t-shirt" lists them.
+  for (const q of ['navy t-shirt', 'تيشيرت كحلي', 'tshirt xl navy']) {
+    const got = find(q);
+    const named = got.filter((id) => id !== 'sweatshirt');
+    assert.deepStrictEqual(got.slice(0, named.length), named, `${q}: the T-shirts first (${got.join(', ')})`);
+    assert.ok(named.length >= 3 && named.every((id) => tees.includes(id) && comesIn(id, 'navy')), `${q}: ${got.join(', ')}`);
+  }
+  assert.ok(find('navy t-shirt').includes('sweatshirt'), 'the navy Sweatshirt is still listed, after the T-shirts');
+});
+
+test('home search: colours alone list the products in them, and make no other word find more', () => {
+  const { PRODUCTS, find } = home();
+  const byId = Object.fromEntries(PRODUCTS.map((p) => [p.id, p]));
+  // "white" alone may list everything that comes in white; not the hoodies (none is white).
+  const white = find('white');
+  for (const id of ['tshirt', 'mug', 'cap']) assert.ok(white.includes(id), `white: ${white.join(', ')}`);
+  for (const id of ['hoodie', 'ziphoodie', 'magicmug']) assert.ok(!white.includes(id), `white: ${white.join(', ')}`);
+  // A colour is a whole word, spelt as it is: "mat" is not the matte cards, "black" not the blackout curtains,
+  // ورد (roses) not the pink (وردي) products, and "art" / "design" not the notes after a colour's name.
+  for (const id of ['bizcards', 'postcards', 'menus']) assert.ok(!find('mat').includes(id), `mat: ${find('mat').join(', ')}`);
+  assert.ok(find('mat').includes('prayermat') && find('mat').includes('deskmat'));
+  assert.ok(!find('black').includes('curtains') && !find('black curtains').includes('curtains'));
+  for (const id of ['mug', 'onesie', 'kidstee']) assert.ok(!find('ورد').includes(id), `ورد: ${find('ورد').join(', ')}`);
+  assert.ok(!find('art').includes('coloringbook') && !find('design').includes('canvas'));
+  // The calendar ("Matte card", 100 calendars) is not a card by name: in "card" and "card 100" it stays with the
+  // products found by their other words (after the gift vouchers and folders, which come before it in the catalogue),
+  // not with the business cards and postcards.
+  for (const q of ['card', 'card 100', 'كارت', 'كارت 100']) {
+    const got = find(q);
+    const at = got.indexOf('calendar');
+    assert.ok(at > got.indexOf('bizcards') && at > got.indexOf('giftvouchers') && at > got.indexOf('folders') && got.indexOf('folders') >= 0, `${q}: ${got.join(', ')}`);
+  }
+  assert.ok(byId.calendar.colors.some((c) => /card/i.test(c.name.en)), 'the calendar is still on card (else this check says nothing)');
 });

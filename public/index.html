@@ -379,17 +379,24 @@
       // A product's sizes and quantities, by id and in both languages: "tshirt xl", "A5 flyers", "كروت شخصية 100", "مج 11oz".
       // (Not "One size" / "مقاس واحد": "size", "one" or "واحد" alone would list every bag and cap.)
       const sizeWords = (p) => (p.sizes || []).filter((z) => z.id !== 'one').flatMap((z) => [z.id, z.label && z.label.en, z.label && z.label.ar]).filter(Boolean).join(' ');
+      // Its colours in both languages: "white t-shirt", "هودي اسود", "مج ابيض" list the products that come in that colour.
+      // Only the colour's name, not the note after it: the magic mug is black "(turns white when hot)", not a white mug.
+      const colorWords = (p) => (p.colors || []).flatMap((c) => [c.name && c.name.en, c.name && c.name.ar]).filter(Boolean).map((n) => n.split(/[(:,،]/)[0]).join(' ');
       const hay = new Map(products.map((p) => {
         const name = `${p.name.en} ${p.name.ar}`;
         const text = [p.id, name, p.description && p.description.en, p.description && p.description.ar, catName(p.category).en, catName(p.category).ar, ALIASES[p.id] || ALIASES[POD.assetId(p)] || '', sizeWords(p)].join(' ');
         // (true: everything the shop's search found before is still found.)
-        return [p.id, { all: SEARCH.index(text, true), name: ` ${norm(name)} `, named: SEARCH.index(name, true), sized: SEARCH.index(sizeWords(p), true) }];
+        return [p.id, { all: SEARCH.index(text, true), name: ` ${norm(name)} `, named: SEARCH.index(name, true), sized: SEARCH.index(sizeWords(p), true), colored: SEARCH.index(colorWords(p)) }];
       }));
       // The search, on product text only: markup typed into the box ("<b>") is not a word.
       const typed = () => q.replace(/<[^<>]*>/g, ' ');
       // Its words as typed (names with them come first), and with their other forms (what finds the products).
       const terms = () => norm(typed()).split(' ').filter(Boolean);
-      const found = (p, qs) => SEARCH.match(hay.get(p.id).all, qs);
+      // One of the product's colours: a whole word, as typed or in another form ("whites", "الأبيض"), and spelt as it is
+      // (not without its ي), so "mat" is not the matte cards, "black" not the blackout curtains, ورد not pink (وردي).
+      const isColor = (h, term) => [term.word, ...term.forms].some((f) => f && h.colored.text.includes(` ${f} `));
+      // Every word is in the product's text or is one of its colours.
+      const found = (p, qs) => { const h = hay.get(p.id); return qs.every((term) => SEARCH.match(h.all, [term]) || isColor(h, term)); };
 
       // Real product photos, recoloured on the server (small cached WebP);
       // the drawn mockup is the fallback if a picture can't load.
@@ -557,9 +564,11 @@
         // Products whose name matches come first: names with the words as whole words, in another form or language
         // ("hoodies", "مجات", كوب: the mugs), then names with a word that only starts with them (كوبونات after the
         // mugs, للكابلز after the cap; at the start of a word, so "tshirt" puts T-shirts before the Sweatshirt), then
-        // names spelt another way, then the rest (description, category). A size typed with the product ("tshirt xl")
-        // is not looked for in the name, so the T-shirts still come before the Sweatshirt.
-        const rank = (p) => { const h = hay.get(p.id); const tw = ts.filter((w) => ts.length < 2 || !SEARCH.match(h.sized, SEARCH.query(w))); const tq = tw.length === ts.length ? qs : SEARCH.query(tw.join(' ')); return SEARCH.match(h.named, tq, 'word') ? 0 : tw.every((w) => h.name.includes(` ${w}`)) ? 1 : tw.every((w) => loose(h.name).includes(` ${loose(w)}`)) ? 2 : SEARCH.match(h.named, tq, true) ? 3 : 4; };
+        // names spelt another way, then the rest (description, category). A size or a colour typed with the product
+        // ("tshirt xl", "white t-shirt") is not looked for in the name, so the T-shirts still come before the Sweatshirt.
+        // (A colour only when another word is left: in "card 100" the calendar, in "Matte card" with 100 calendars, is not
+        // a card by name.)
+        const rank = (p) => { const h = hay.get(p.id); const tz = ts.filter((w) => ts.length < 2 || !SEARCH.match(h.sized, SEARCH.query(w))); const tc = tz.filter((w) => !SEARCH.query(w).every((term) => isColor(h, term))); const tw = tc.length ? tc : tz; const tq = tw.length === ts.length ? qs : SEARCH.query(tw.join(' ')); return SEARCH.match(h.named, tq, 'word') ? 0 : tw.every((w) => h.name.includes(` ${w}`)) ? 1 : tw.every((w) => loose(h.name).includes(` ${loose(w)}`)) ? 2 : SEARCH.match(h.named, tq, true) ? 3 : 4; };
         if (ts.length) list = list.map((p, i) => [rank(p), i, p]).sort((x, y) => x[0] - y[0] || x[1] - y[1]).map((x) => x[2]);
         document.getElementById('home-count').textContent = searching && list.length ? POD.plural('home.found', list.length, { q: q.trim() }) : '';
         if (!list.length) {
