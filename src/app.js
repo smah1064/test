@@ -3907,7 +3907,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         status: res.statusCode, ...(res.locals.approvalId || who.approvalId ? { approvalId: res.locals.approvalId || who.approvalId } : {}),
         ...(who.approvedBy ? { approvedBy: who.approvedBy } : {}),
         ...((res.locals.summary || (who.approvalId && (findApproval(who.approvalId) || {}).summary) || route.label) ? { summary: res.locals.summary || (who.approvalId && (findApproval(who.approvalId) || {}).summary) || route.label } : {}),
-        body: roles.shortBody(req.body && (Buffer.isBuffer(req.body) || Object.keys(req.body).length) ? req.body : undefined),
+        // (Never a password: those routes log no body at all.)
+        body: route.noBody ? undefined : roles.shortBody(req.body && (Buffer.isBuffer(req.body) || Object.keys(req.body).length) ? req.body : undefined),
       }));
     }
     if (route.approve && who.role !== 'owner' && !who.approvalId) return holdForApproval(req, res, key, route).catch(next);
@@ -4650,7 +4651,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const x = (db.approvals || []).find((y) => y.id === req.params.id);
       if (!x) throw new HttpError(404, 'notFound');
       // (A team member withdraws only their own; an owner any.)
-      if (status === 'withdrawn' && !(x.by && x.by.id === w.id) && !w.perms.has('approvals')) throw new HttpError(403, 'noPermission');
+      if (status === 'cancelled' && !(x.by && x.by.id === w.id) && !w.perms.has('approvals')) throw new HttpError(403, 'noPermission');
       if (!openForDecision(x)) throw new HttpError(409, 'approvalDecided');
       x.status = status;
       x.decidedBy = { id: w.id, name: w.shown || w.name };
@@ -4666,7 +4667,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     res.json({ approval: approvalRow(closeApproval(req, 'rejected')) });
   });
   app.delete('/api/admin/approvals/:id', adminGate, (req, res) => {
-    res.json({ approval: approvalRow(closeApproval(req, 'withdrawn')) });
+    // (Withdrawn by the person who asked: "cancelled", as the screens show it.)
+    res.json({ approval: approvalRow(closeApproval(req, 'cancelled')) });
   });
   // ---------- Activity log: who changed what (owners see everyone; the team their own) ----------
   app.get('/api/admin/activity', adminGate, (req, res) => {

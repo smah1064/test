@@ -162,7 +162,7 @@ test('refused and withdrawn changes never happen; photos (binary) wait and apply
   const r2 = await call('/api/admin/catalog/mug', 'PUT', { lowStockAt: 4 }, cat.token);
   const other = await addMember('cat4', ['catalogue']);
   assert.strictEqual((await call(`/api/admin/approvals/${r2.json.approval.id}`, 'DELETE', undefined, other.token)).status, 403, 'not someone else\'s');
-  assert.strictEqual((await call(`/api/admin/approvals/${r2.json.approval.id}`, 'DELETE', undefined, cat.token)).json.approval.status, 'withdrawn');
+  assert.strictEqual((await call(`/api/admin/approvals/${r2.json.approval.id}`, 'DELETE', undefined, cat.token)).json.approval.status, 'cancelled');
   assert.strictEqual((await call(`/api/admin/approvals/${r2.json.approval.id}/approve`, 'POST', {}, owner)).status, 409);
   assert.strictEqual((await call('/api/admin/catalog/mug', 'GET', undefined, owner)).json.lowStockAt, before);
   // A product photo (sent as a picture, not JSON).
@@ -273,6 +273,11 @@ test('switching someone off or changing their roles signs them out; they can cha
   assert.strictEqual((await call('/api/admin/me/password', 'PUT', { current: 'wrong', password: 'mem1-new-long-password' }, t2)).json.code, 'wrongCurrentPassword');
   const pw = await call('/api/admin/me/password', 'PUT', { current: 'mem1-long-password', password: 'mem1-new-long-password' }, t2);
   assert.strictEqual(pw.status, 200, pw.text);
+  // No password in the activity log, old or new (QA admin tester 1).
+  const logText = JSON.stringify((await call('/api/admin/activity?limit=500', 'GET', undefined, owner)).json) + fs.readFileSync(path.join(dataDir, 'activity.jsonl'), 'utf8');
+  assert.ok(!/mem1-long-password|mem1-new-long-password/.test(logText), 'no password anywhere in the log');
+  assert.strictEqual(require('../src/roles').shortBody({ current: 'x', password: 'y', code: 'SAVE10' }).current, '•••');
+  assert.strictEqual(require('../src/roles').shortBody({ code: 'SAVE10' }).code, 'SAVE10', 'a coupon code is not a secret');
   assert.strictEqual((await call('/api/admin/session', 'GET', undefined, pw.json.token)).status, 200, 'the new sign-in works');
   assert.strictEqual((await call('/api/admin/session', 'GET', undefined, t2)).status, 401, 'the old one doesn\'t');
   // Switched off: out, and can't sign in.

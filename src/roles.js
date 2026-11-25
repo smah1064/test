@@ -63,7 +63,7 @@ const ROUTES = {
   'POST /api/admin/approvals/:id/reject': { perm: 'approvals', label: L('Refused a change', 'رفض تعديل') },
   'DELETE /api/admin/approvals/:id': { perm: null, label: L('Withdrew a change', 'سحب تعديل') },
   'GET /api/admin/activity': { perm: null },
-  'PUT /api/admin/me/password': { perm: null, label: L('Changed own password', 'غيّر كلمة السر بتاعته') },
+  'PUT /api/admin/me/password': { perm: null, noBody: true, label: L('Changed own password', 'غيّر كلمة السر بتاعته') },
 
   // Review (proofs a person checks) and orders
   'GET /api/admin/review': { perm: 'review.view' },
@@ -133,7 +133,7 @@ const ROUTES = {
   'POST /api/admin/staff': { perm: 'staff', label: L('Added a team member', 'أضاف حد للفريق') },
   'PATCH /api/admin/staff/:id': { perm: 'staff', label: L('Changed a team member', 'عدّل حد في الفريق') },
   'POST /api/admin/staff/:id/setup-link': { perm: 'staff', label: L('New set-up link', 'لينك تجهيز جديد') },
-  'PUT /api/admin/staff/:id/password': { perm: 'staff', label: L('Set a team member\'s password', 'غيّر كلمة سر حد في الفريق') },
+  'PUT /api/admin/staff/:id/password': { perm: 'staff', noBody: true, label: L('Set a team member\'s password', 'غيّر كلمة سر حد في الفريق') },
   'DELETE /api/admin/staff/:id': { perm: 'staff', label: L('Removed a team member', 'شال حد من الفريق') },
   'GET /api/admin/preview': { perm: 'preview' },
   'PUT /api/admin/preview': { perm: 'preview', label: L('Private preview on/off', 'المعاينة الخاصة تشغيل/إيقاف') },
@@ -211,7 +211,8 @@ function replay(server, { method, url, headers = {}, body }) {
 }
 
 // ---------- Activity log: one line per change, in a file next to the data ----------
-const REDACT = /pass(word)?|token|secret|hash|salt/i;
+// (current: the old password when someone changes theirs.)
+const REDACT = /pass|token|secret|hash|salt|^current$|^key$/i;
 /** A short, safe copy of a request body for the log (passwords and tokens removed, long text cut). */
 function shortBody(v, depth = 0) {
   if (v === null || v === undefined) return v;
