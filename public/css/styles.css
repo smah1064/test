@@ -768,8 +768,22 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 .acc-stat.neg b, td.neg { color: var(--danger, #c0392b); }
 .acc-ship { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 16px; margin: 12px 0; }
 .acc-h { font-size: 17px; margin: 22px 0 8px; }
+/* Custom days the wrong way round: the hint takes its own line in the period card. */
+.acc-range-msg { flex-basis: 100%; margin: 0; }
+.acc-range-msg .btn { margin-inline-start: 6px; vertical-align: middle; }
+/* "Add an expense": a form card like the printing houses' and coupons' (it had no inner space); the description widest. */
+.acc-exp-form { padding: 18px; margin-bottom: 14px; }
+.acc-exp-form .lib-form { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr); }
+@media (max-width: 860px) {
+  .acc-exp-form .lib-form { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .acc-exp-form .lib-form .field:first-child { grid-column: auto; }
+  .acc-exp-form .lib-form .field:nth-child(3) { grid-column: 1 / -1; }
+}
+@media (max-width: 420px) { .acc-exp-form .lib-form { grid-template-columns: minmax(0, 1fr); } }
 .acc-table td, .acc-table th { vertical-align: top; white-space: nowrap; }
 .acc-table td:nth-child(2) { white-space: normal; }
+/* An expense's description wraps (each in its own direction, see admin.js). */
+.acc-table td.acc-exp-desc { white-space: normal; min-width: 12em; }
 .acc-table tr.acc-detail td { background: #fafafa; white-space: normal; }
 .acc-cost-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 6px 0; border-bottom: 1px dashed #e5e5e5; }
 .acc-cost-line > span:first-child { font-weight: 600; }

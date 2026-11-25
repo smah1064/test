@@ -41,7 +41,11 @@ Object.assign(window.POD_STRINGS, {
   'ship.emailHint': ['When you mark it shipped, {email} gets an email with these details.', 'لما تعلّم إنه اتشحن، هيوصل لـ {email} إيميل بالتفاصيل دي.'],
   'ship.emailOffHint': ['Email sending is not set up, so {email} will not get a "shipped" email: send the tracking number by WhatsApp or phone.', 'إرسال الإيميل مش متظبط، فـ {email} مش هيوصله إيميل الشحن: ابعتله رقم التتبع واتساب أو تليفون.'],
   'ship.noEmailHint': ['The customer gave no email: send the tracking number by WhatsApp or phone.', 'العميل ما كتبش إيميل: ابعتله رقم التتبع واتساب أو تليفون.'],
-  'ship.notPrinted': ['Some items are not printed yet. Mark the whole order shipped anyway?', 'فيه منتجات لسه ما اتطبعتش. تعلّم الطلب كله إنه اتشحن برضه؟'],
+  // "Mark shipped" / "Mark delivered" with items not printed yet: which ones, then the question (both mark every item shipped).
+  'ship.notPrintedList': ['Not printed yet: {list}.', 'لسه ما اتطبعش: {list}.'],
+  'ship.notPrintedShip': ['Mark the whole order shipped anyway?', 'تسجّل الطلب كله إنه اتشحن برضه؟'],
+  'ship.notPrintedDeliver': ['Mark the whole order shipped and delivered anyway? These items will be marked shipped too.', 'تسجّل الطلب كله إنه اتشحن واتسلّم برضه؟ المنتجات دي هتتسجّل إنها اتشحنت هي كمان.'],
+  'ship.mailToo': ['{email} will get the "on its way" email.', 'وهيوصل لـ {email} إيميل "طلبك في الطريق".'],
   'ship.badUrl': ['The tracking link must start with http:// or https://', 'لينك التتبع لازم يبدأ بـ http:// أو https://'],
   'ship.invoice': ['Invoice', 'الفاتورة'],
   'ship.orderPage': ['Customer page', 'صفحة العميل'],

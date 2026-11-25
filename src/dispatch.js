@@ -15,6 +15,7 @@ const crypto = require('crypto');
 const { normalizeEgyptMobile, normalizeDigits } = require('./egypt');
 const { arabicDigits } = require('./i18n');
 const { PRODUCTS } = require('./products');
+const { threadName } = require('./embroidery');
 
 const LINK_DAYS = 30;
 // (The same pattern as src/app.js: an address that can receive mail.)
@@ -97,6 +98,7 @@ const T = {
   en: {
     dir: 'ltr', hello: (n) => `Hello ${n},`, intro: 'Please print the following job for ebda3:',
     cm: 'cm', order: 'Order', product: 'Product', colour: 'Colour / size', method: 'Print method', sides: 'Print areas', qty: 'Quantity',
+    threads: 'Thread colours, in sewing order', next: ' → ',
     placement: (v) => `moved ${v} from the standard position, see the preview PDF`,
     note: 'Note', files: 'Files', attached: 'attached to this email', expires: (d) => `Download links work until ${d}.`,
     thanks: 'Thank you!', subject: (o, p) => `Print job ${o} · ${p}`,
@@ -106,6 +108,7 @@ const T = {
   ar: {
     dir: 'rtl', hello: (n) => `أهلًا ${n}،`, intro: 'من فضلك اطبعوا الشغل ده لـ إبداع:',
     cm: 'سم', order: 'الطلب', product: 'المنتج', colour: 'اللون / المقاس', method: 'طريقة الطباعة', sides: 'أماكن الطباعة', qty: 'الكمية',
+    threads: 'ألوان الخيط بترتيب التطريز', next: ' ← ',
     placement: (v) => `متحرك ${v} عن المكان القياسي، شوف ملف المعاينة`,
     note: 'ملاحظة', files: 'الملفات', attached: 'مرفقة في الإيميل ده', expires: (d) => `روابط التحميل شغالة لحد ${d}.`,
     thanks: 'شكرًا!', subject: (o, p) => `شغل طباعة ${o} · ${p}`,
@@ -194,6 +197,21 @@ function quantityText(item, lang) {
  */
 const colourSize = (color, size, lang) => [pick(color && color.name, lang), pick(size && size.label, lang)].filter(Boolean).join(lang === 'ar' ? '، ' : ' · ');
 
+/**
+ * Embroidery: the thread colours in the order they are sewn, named in the message language with their hex
+ * ("1. Red #d01c1f → 2. Gold #c9a227" / «١. أحمر #d01c1f ← ٢. دهبي #c9a227»). A DST file only marks where the
+ * thread changes, so without this the printing house doesn't know which colours to load (QA 25 Nov). The colours
+ * are the design's (digitised with the DST that is sent), else the item's. In Arabic a left-to-right mark keeps
+ * the "#" in front of its code.
+ */
+function threadsText(item, design, lang) {
+  if (!processesOf(item).includes('embroidery')) return '';
+  const emb = [design && design.emb, item.emb].find((e) => e && Array.isArray(e.colors) && e.colors.length);
+  if (!emb) return '';
+  const t = T[lang];
+  return emb.colors.map((c, k) => `${digits(k + 1, lang)}. ${threadName(c, lang)} ${lang === 'ar' ? '\u200e' : ''}${String(c.hex || '').toLowerCase()}`).join(t.next);
+}
+
 /** The job's facts, in the admin's language. */
 function jobLines(order, item, design, lang) {
   const t = T[lang];
@@ -210,6 +228,7 @@ function jobLines(order, item, design, lang) {
       ? item.quantities.map((l) => `${colourSize(l.color, l.size, lang)} ×${digits(l.qty, lang)}`).join(lang === 'ar' ? '؛ ' : ', ')
       : colourSize(item.color, item.size, lang)],
     [t.method, methodName(item, lang)],
+    [t.threads, threadsText(item, design, lang)],
     ...(sides ? [[t.sides, sides]] : []),
     [t.qty, quantityText(item, lang)],
   ].filter(([, v]) => v);

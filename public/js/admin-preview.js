@@ -12,6 +12,8 @@ window.AdminPreview = (() => {
   let fresh = ''; // the person just invited: their row is highlighted
   let said = null; // the last message under the form: { text, bad, err } (kept through a language switch)
   let drawnIn = ''; // the language the tab was last drawn in
+  // An invitation is being made: one at a time (QA 25 Nov: a double-click made two invitations with two codes).
+  let adding = false;
 
   const box = () => $('tab-preview');
   const when = (iso) => new Date(iso).toLocaleString(POD.lang === 'ar' ? 'ar-EG' : 'en-GB', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
@@ -35,7 +37,7 @@ window.AdminPreview = (() => {
         <div class="pv-add-row">
           <div class="field"><label for="pv-name">${esc(t('pv.name'))}</label><input type="text" id="pv-name" maxlength="60" dir="auto" required placeholder="${esc(t('pv.namePh'))}"></div>
           <div class="field pv-own"><label for="pv-own">${esc(t('pv.ownCode'))}</label><input type="text" id="pv-own" maxlength="40" dir="ltr" autocapitalize="characters" spellcheck="false" placeholder="${esc(t('pv.ownCodePh'))}"></div>
-          <button class="btn btn-primary shrink" type="submit">${esc(t('pv.add'))}</button>
+          <button class="btn btn-primary shrink" type="submit" ${adding ? 'disabled' : ''}>${esc(t('pv.add'))}</button>
         </div>
         <p class="small pv-msg" id="pv-msg" role="status"></p>
       </form>
@@ -95,9 +97,14 @@ window.AdminPreview = (() => {
     root.addEventListener('submit', async (e) => {
       if (e.target.id !== 'pv-add') return;
       e.preventDefault();
+      // (Another submit while the first is out, a double-click or Enter again, is ignored.)
+      if (adding) return;
       const name = $('pv-name').value.trim();
       const code = $('pv-own').value.trim();
       if (!name) return;
+      adding = true;
+      const button = () => $('pv-add') && $('pv-add').querySelector('button[type="submit"]');
+      if (button()) button().disabled = true;
       try {
         const p = await api('/api/admin/preview/people', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, ...(code ? { code } : {}) }) });
         fresh = p.id;
@@ -108,6 +115,9 @@ window.AdminPreview = (() => {
       } catch (err) {
         // (The shop's refusal comes in the language asked in: its code says it again after a switch.)
         say(err.message, true, err.code && window.POD_STRINGS && window.POD_STRINGS['pv.err.' + err.code] ? 'pv.err.' + err.code : null);
+      } finally {
+        adding = false;
+        if (button()) button().disabled = false;
       }
     });
     root.addEventListener('click', async (e) => {

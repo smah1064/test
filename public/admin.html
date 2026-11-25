@@ -49,8 +49,9 @@
     .ship-msg.bad { color: var(--bad); }
     /* Embroidery with a printed side: both ways it's made, each with its instructions. */
     .method-step { margin-top: 4px; }
-    /* Number boxes ([data-num]) with something that isn't a number in them. */
-    #dash input[data-num]:invalid { border-color: var(--bad); }
+    /* Number boxes ([data-num]) with something that isn't a number in them. An empty box that must be filled (an
+       expense's amount) only once the admin tried to send it, not red from the start or after an expense is added. */
+    #dash input[data-num]:not([required]):invalid, #dash input[data-num][required]:user-invalid { border-color: var(--bad); }
     @media (max-width: 960px) { .ship-fields { grid-template-columns: 1fr 1fr; } }
     @media (max-width: 700px) {
       #tab-orders .orders-card { overflow: visible !important; background: transparent; border: 0; box-shadow: none; }
@@ -228,6 +229,7 @@
               <label class="small"><span data-i18n="acc.from"></span> <input type="date" id="acc-from"></label>
               <label class="small"><span data-i18n="acc.to"></span> <input type="date" id="acc-to"></label>
             </div>
+            <p class="notice small acc-range-msg" id="acc-range-msg" role="alert" hidden><span data-i18n="acc.rangeBackwards"></span> <button class="btn btn-sm" type="button" id="acc-range-swap" data-i18n="acc.swapDates"></button></p>
             <button class="btn btn-sm" id="acc-csv" data-i18n="acc.csv"></button>
           </div>
           <p class="notice" id="acc-missing" hidden style="margin:0 0 12px"></p>
@@ -338,6 +340,8 @@
   <script src="/js/i18n-admin-preview.js"></script>
   <script src="/js/i18n-admin-uploads.js"></script>
   <script src="/js/i18n-admin-rights.js"></script>
+  <script src="/js/i18n-admin-threads.js"></script>
+  <script src="/js/i18n-admin-more.js"></script>
   <script src="/js/common.js"></script>
   <script src="/js/pack-prices.js"></script>
   <script src="/js/admin-products.js"></script>

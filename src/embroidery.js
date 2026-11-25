@@ -27,15 +27,30 @@ const TRIM_AFTER = 5; // mm: jumps this long get a trim (three tiny jumps, as mo
 const PX_PER_MM = 5; // working resolution
 const MAX_COLORS = 6;
 
-/** Common embroidery thread shades (name, hex). */
+/**
+ * Common embroidery thread shades: English name, hex, Arabic name. A digitised design keeps the English name and
+ * the hex (src/app.js design.emb); threadName() gives the name in a language. The admin shows the same names from
+ * public/js/i18n-admin-threads.js ('thread.<English name>'), kept equal to this list by a test.
+ */
 const THREADS = [
-  ['White', '#ffffff'], ['Snow', '#f4f4ef'], ['Black', '#111111'], ['Charcoal', '#3a3a3c'], ['Grey', '#8a8d91'], ['Silver', '#c3c6ca'],
-  ['Red', '#d01c1f'], ['Dark red', '#8e1b22'], ['Orange', '#f2711c'], ['Coral', '#ff6b5a'], ['Yellow', '#ffd21f'], ['Gold', '#c9a227'],
-  ['Cream', '#f3e5c0'], ['Beige', '#d8c3a0'], ['Brown', '#6b4226'], ['Tan', '#b08250'], ['Lime', '#9ccc3a'], ['Green', '#2e9b48'],
-  ['Dark green', '#1c5b35'], ['Olive', '#6f7a32'], ['Mint', '#9fe0c3'], ['Teal', '#138f8c'], ['Turquoise', '#21b5c6'], ['Sky blue', '#7cc3ef'],
-  ['Blue', '#1f6fd1'], ['Royal blue', '#2443a6'], ['Navy', '#1b2550'], ['Purple', '#6a3fa0'], ['Lavender', '#b49ad9'], ['Pink', '#f58fb7'],
-  ['Hot pink', '#e23d8b'], ['Magenta', '#b5267a'], ['Peach', '#f7b58f'], ['Skin', '#e8b996'],
+  ['White', '#ffffff', 'أبيض'], ['Snow', '#f4f4ef', 'أوف وايت'], ['Black', '#111111', 'أسود'], ['Charcoal', '#3a3a3c', 'رمادي فحمي'], ['Grey', '#8a8d91', 'رمادي'], ['Silver', '#c3c6ca', 'فضي'],
+  ['Red', '#d01c1f', 'أحمر'], ['Dark red', '#8e1b22', 'أحمر غامق'], ['Orange', '#f2711c', 'برتقاني'], ['Coral', '#ff6b5a', 'مرجاني'], ['Yellow', '#ffd21f', 'أصفر'], ['Gold', '#c9a227', 'دهبي'],
+  ['Cream', '#f3e5c0', 'كريمي'], ['Beige', '#d8c3a0', 'بيج'], ['Brown', '#6b4226', 'بني'], ['Tan', '#b08250', 'عسلي'], ['Lime', '#9ccc3a', 'أخضر فاتح'], ['Green', '#2e9b48', 'أخضر'],
+  ['Dark green', '#1c5b35', 'أخضر غامق'], ['Olive', '#6f7a32', 'زيتي'], ['Mint', '#9fe0c3', 'نعناعي'], ['Teal', '#138f8c', 'بترولي'], ['Turquoise', '#21b5c6', 'تركواز'], ['Sky blue', '#7cc3ef', 'لبني'],
+  ['Blue', '#1f6fd1', 'أزرق'], ['Royal blue', '#2443a6', 'أزرق ملكي'], ['Navy', '#1b2550', 'كحلي'], ['Purple', '#6a3fa0', 'بنفسجي'], ['Lavender', '#b49ad9', 'لافندر'], ['Pink', '#f58fb7', 'بينك'],
+  ['Hot pink', '#e23d8b', 'فوشيا'], ['Magenta', '#b5267a', 'ماجنتا'], ['Peach', '#f7b58f', 'خوخي'], ['Skin', '#e8b996', 'لون البشرة'],
 ];
+/**
+ * A thread colour ({ name, hex } as a design keeps it) named in a language: "Gold" / «دهبي». Found by its English
+ * name, else by its hex; a colour not in the list keeps the name it has.
+ */
+function threadName(c, lang) {
+  const name = String((c && c.name) || '');
+  const hex = String((c && c.hex) || '').toLowerCase();
+  const th = THREADS.find((x) => x[0] === name) || THREADS.find((x) => x[1] === hex);
+  if (!th) return name;
+  return lang === 'ar' ? th[2] : th[0];
+}
 const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
 const dist2 = (a, b) => (a[0] - b[0]) ** 2 * 0.3 + (a[1] - b[1]) ** 2 * 0.59 + (a[2] - b[2]) ** 2 * 0.11;
 function nearestThread(c) {
@@ -454,4 +469,4 @@ async function stitchPreview(d, { pxPerMm = 8, background = '#ffffff' } = {}) {
   return sharp(Buffer.from(svg), { limitInputPixels: 2e8 }).png().toBuffer();
 }
 
-module.exports = { digitize, toDst, stitchPreview, record, readRecord, nearestThread, THREADS, MAX_COLORS };
+module.exports = { digitize, toDst, stitchPreview, record, readRecord, nearestThread, threadName, THREADS, MAX_COLORS };

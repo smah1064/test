@@ -39,6 +39,35 @@
   document.addEventListener('input', (e) => {
     if (e.target.matches && e.target.matches('input[data-num]')) checkNum(e.target);
   });
+  /**
+   * Forms that add something (a ready design, an expense, a coupon): one request at a time. While it is out the
+   * form's button is off and another submit (a double-click, Enter pressed again) is ignored, so nothing is saved
+   * twice (QA 25 Nov: a double-click added the expense twice and counted it twice in the net profit).
+   */
+  const sending = new WeakSet();
+  async function sendOnce(form, work) {
+    if (sending.has(form)) return false;
+    sending.add(form);
+    const buttons = [...form.querySelectorAll('button[type="submit"]')];
+    buttons.forEach((b) => { b.disabled = true; });
+    try {
+      await work();
+      return true;
+    } finally {
+      sending.delete(form);
+      buttons.forEach((b) => { b.disabled = false; });
+    }
+  }
+  /**
+   * A string as HTML with some of its values (names a customer or the owner typed) each in its own direction:
+   * "Print Co." keeps its dot and "عيد Eid" its order inside a line of the other language (QA 25 Nov).
+   */
+  function tIsolated(key, params, own) {
+    const marks = Object.keys(own).map((k, n) => [k, `\u0001${n}\u0001`]);
+    let html = esc(listed(t(key, { ...params, ...Object.fromEntries(marks) })));
+    for (const [k, m] of marks) html = html.replace(m, `<bdi dir="auto">${esc(own[k])}</bdi>`);
+    return html;
+  }
   try { sessionStorage.removeItem('pod-admin-password'); } catch (e) { /* old versions kept the password */ }
   let token = sessionStorage.getItem(KEY) || '';
   const authHeader = () => ({ Authorization: 'Bearer ' + token });
@@ -320,6 +349,8 @@
 
   /** One line the customer typed (Arabic, English or both): its own direction, so it is never scrambled. */
   const line = (v) => `<bdi dir="auto">${esc(v)}</bdi>`;
+  /** The same for plain text (a <select>'s options can't hold a <bdi>): "Print Co." between isolating marks. */
+  const isolate = (v) => `\u2068${v}\u2069`;
   function address(c) {
     if (c.governorate || c.address) {
       // City and governorate with the page's comma: "Dokki, Giza" / «الدقي، الجيزة» (not "Dokki، Giza" in English).
@@ -354,6 +385,11 @@
   }
   /** "Embroidery + DTG print" / «تطريز + طباعة DTG». */
   const methodBoth = (procs) => t('admin.methodBoth', { print: procs.filter((p) => p !== 'embroidery').map((p) => (hasStr('method.' + p) ? t('method.' + p) : p.toUpperCase())).join(' + ') });
+  /**
+   * A thread colour's name in the page's language: «دهبي» / "Gold" (QA 25 Nov: "Red / Gold / Lime" in Arabic).
+   * The names are the shades of src/embroidery.js THREADS (js/i18n-admin-threads.js); an item keeps the English one.
+   */
+  const threadName = (c) => (c && hasStr('thread.' + c.name) ? t('thread.' + c.name) : String((c && c.name) || ''));
   function spec(item) {
     const c = item.customer;
     return `
@@ -364,7 +400,7 @@
         ${item.kind === 'photoset' ? `<dt>${esc(t('fmt.photos-zip'))}</dt><dd>${esc(listed(t('admin.photoFiles', { n: counted('admin.photos', (item.photos || []).length), prints: counted('admin.prints', (item.photos || []).reduce((n, p) => n + p.copies, 0)) })))}${SEP()}${esc(t('admin.photoSpec'))}${item.sides[0] && item.sides[0].dpi && item.sides[0].dpi < 150 ? `<div class="small" style="color:var(--warn);margin-top:4px">⚠ ${esc(t('admin.photoLowRes'))}</div>` : ''}</dd>` : item.sides.map((s) => `<dt>${esc(t('admin.spec.print', { side: tr(s.name) }))}</dt><dd><bdi dir="ltr">${cm(s.widthIn)} × ${cm(s.heightIn)} cm (${s.widthIn} × ${s.heightIn} in)</bdi>${s.bleedIn ? ` <bdi>${esc(t('admin.bleed', { mm: Math.round(s.bleedIn * 25.4) }))}</bdi>` : ''}${SEP()}<bdi dir="ltr">${s.widthPx} × ${s.heightPx} px · ${s.dpi} DPI · sRGB</bdi>${s.offsetCm ? `<div class="placement-note">📍 ${esc(t('admin.placement', { v: placementText(s.offsetCm) }))}</div>` : ''}</dd>`).join('')}
         ${item.emb ? `<dt>${esc(t('admin.emb'))}</dt><dd>
           <div><strong>${esc(listed(t('admin.embSummary', { n: POD.num(item.emb.stitches), c: POD.plural('emb.threads', item.emb.colors.length), w: item.emb.widthMm, h: item.emb.heightMm })))}</strong></div>
-          <ol class="emb-threads">${item.emb.colors.map((c) => `<li><span class="dot" style="display:inline-block;vertical-align:middle;background:${esc(c.hex)}"></span> ${esc(c.name)} <span class="muted">(${esc(c.hex)}${SEP()}${esc(POD.num(c.stitches))})</span></li>`).join('')}</ol>
+          <ol class="emb-threads">${item.emb.colors.map((c) => `<li><span class="dot" style="display:inline-block;vertical-align:middle;background:${esc(c.hex)}"></span> ${esc(threadName(c))} <span class="muted">(<bdi dir="ltr">${esc(c.hex)}</bdi>${SEP()}${esc(POD.num(c.stitches))})</span></li>`).join('')}</ol>
           ${(item.emb.warnings || []).filter((w) => w !== 'empty').map((w) => `<div class="small" style="color:var(--warn)">⚠ ${esc(t('admin.embWarn.' + w))}</div>`).join('')}
         </dd>` : ''}
         ${item.merge ? `<dt>${esc(t('admin.mergeCopies'))}</dt><dd><strong>${esc(t('admin.mergeSpec', { n: POD.num(item.merge.count), cols: item.merge.columns.join(', ') }))}</strong></dd>` : ''}
@@ -381,7 +417,7 @@
         ${item.kind === 'gangsheet' && item.sides[0] ? `<dt>${esc(t('admin.spec.print', { side: tr(item.sides[0].name) }))}</dt><dd>${esc(listed(t('admin.sheetInfo', { w: POD.num(item.sides[0].widthIn * 2.54), l: POD.num(Math.round(item.sides[0].heightIn * 2.54)), n: POD.num(item.pieces || 0), dpi: item.sides[0].dpi || '?' })))}</dd>` : ''}
         <dt>${esc(t('admin.spec.shipTo'))}</dt><dd>${address(c)}</dd>
         ${c.phone ? `<dt>${esc(t('admin.spec.phone'))}</dt><dd><a href="tel:${esc(c.phone)}" dir="ltr">${esc(c.phone)}</a></dd>` : ''}
-        ${c.email ? `<dt>${esc(t('admin.spec.email'))}</dt><dd>${esc(c.email)}</dd>` : ''}
+        ${c.email ? `<dt>${esc(t('admin.spec.email'))}</dt><dd><bdi dir="ltr">${esc(c.email)}</bdi></dd>` : ''}
         ${item.payment && item.payment.status === 'paid' ? `<dt>${esc(t('admin.spec.payment'))}</dt><dd><span class="pill pay-paid">${esc(t('admin.paidPill'))}</span> ${esc(t('admin.paidNothing', { amount: money(item.orderTotal) }))}</dd>`
     : item.payment && item.payment.method === 'cod' ? `<dt>${esc(t('admin.spec.payment'))}</dt><dd>${esc(t('admin.collect', { amount: money(item.orderTotal) }))}</dd>` : ''}
         ${item.coupon ? `<dt>${esc(t('coupon.discount'))}</dt><dd><bdi dir="ltr">${esc(item.coupon.code)}</bdi>${SEP()}-${esc(money(item.coupon.discount))}</dd>` : ''}
@@ -484,17 +520,20 @@
     const house = findHouse(houseId);
     // Only files offered for this item (photo sets have no preview PDF).
     const offered = sendFormats(item);
-    // Embroidery goes as the stitch file; a print PDF only when something is printed too. Booklets go imposed.
+    // Embroidery goes as the stitch file with the picture of the stitches (a DST only marks where the thread
+    // changes; the picture shows the colours, which the message lists too); a print PDF only when something is
+    // printed too. Booklets go imposed.
     const stitched = item.sides.filter((sd) => (sd.process || item.process) === 'embroidery').length;
     const printedToo = item.sides.length > stitched;
-    const main = item.paged ? ['booklet-imposed'] : [...(stitched ? ['dst'] : []), ...(!stitched || printedToo ? [printPdfKey(item)] : [])];
+    const main = item.paged ? ['booklet-imposed'] : [...(stitched ? ['dst', 'stitches'] : []), ...(!stitched || printedToo ? [printPdfKey(item)] : [])];
     return { houseId, channel: house ? house.prefer : 'email', formats: new Set([...main, 'preview-pdf'].filter((f) => offered.includes(f))), note: '', msg: '', busy: false };
   }
   const when = (iso) => new Date(iso).toLocaleString(POD.lang === 'ar' ? 'ar-EG' : 'en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   function sendHistory(item) {
     const list = (item.sends || []).slice(-3).reverse();
     if (!list.length) return '';
-    return `<div class="send-history">${list.map((x) => `<div>📤 ${esc(listed(t('houses.sentLine', { house: x.houseName, channel: t(x.channel === 'email' ? 'houses.byEmail' : 'houses.byWhatsApp'), date: when(x.at) })))}</div>`).join('')}</div>`;
+    // (The printing house's name in its own direction: "Print Co." keeps its dot on an Arabic page.)
+    return `<div class="send-history">${list.map((x) => `<div>📤 ${tIsolated('houses.sentLine', { channel: t(x.channel === 'email' ? 'houses.byEmail' : 'houses.byWhatsApp'), date: when(x.at) }, { house: x.houseName })}</div>`).join('')}</div>`;
   }
   function sendButton(item, big) {
     return `<button class="btn ${big ? 'btn-lg shrink' : 'btn-sm'}" data-send-toggle="${item.id}" type="button">📤 ${esc(t('houses.send'))}</button>`;
@@ -514,7 +553,7 @@
       <div class="send-panel" data-send-panel="${item.id}">
         <div class="send-grid">
           <div class="field"><label>${esc(t('houses.sendTo'))}</label>
-            <select data-send-house="${item.id}">${housesData.houses.map((h) => `<option value="${esc(h.id)}" ${h.id === st.houseId ? 'selected' : ''}>${esc(h.name)}${h.id === def ? ` · ${esc(t('houses.default'))}` : ''}</option>`).join('')}</select>
+            <select data-send-house="${item.id}">${housesData.houses.map((h) => `<option value="${esc(h.id)}" ${h.id === st.houseId ? 'selected' : ''}>${esc(isolate(h.name))}${h.id === def ? `${esc(SEP())}${esc(t('houses.default'))}` : ''}</option>`).join('')}</select>
           </div>
           <div class="field"><label>${esc(t('houses.via'))}</label><div class="chip-row">${ch('email', Boolean(house && house.email))}${ch('whatsapp', Boolean(house && house.whatsapp))}</div></div>
         </div>
@@ -522,7 +561,7 @@
         <div class="field"><label>${esc(t('houses.files'))}</label>
           <div class="send-files">${sendFormats(item).map((f) => `<label class="check-chip"><input type="checkbox" data-send-format="${item.id}" value="${f}" ${st.formats.has(f) ? 'checked' : ''}> ${esc(t('fmt.' + f))}</label>`).join('')}</div>
         </div>
-        <div class="field"><label>${esc(t('houses.note'))}</label><textarea rows="2" maxlength="500" data-send-note="${item.id}">${esc(st.note)}</textarea></div>
+        <div class="field"><label>${esc(t('houses.note'))}</label><textarea rows="2" maxlength="500" dir="auto" data-send-note="${item.id}">${esc(st.note)}</textarea></div>
         <div class="row" style="flex-wrap:wrap;gap:10px;align-items:center">
           <button class="btn btn-primary shrink" type="button" data-send-go="${item.id}" ${st.busy || emailOff || !st.formats.size ? 'disabled' : ''}>${esc(t(st.busy ? 'houses.sending' : 'houses.sendNow'))}</button>
           <span class="small send-msg">${st.msg || ''}</span>
@@ -547,7 +586,7 @@
     const id = btn.dataset.sendGo;
     const st = sendState[id];
     const item = itemById(id);
-    if (!st || !item) return;
+    if (!st || !item || st.busy) return;
     // Open the WhatsApp window now (browsers block it after waiting for the server).
     const win = st.channel === 'whatsapp' ? window.open('about:blank', '_blank') : null;
     st.busy = true;
@@ -563,9 +602,9 @@
       const house = findHouse(st.houseId);
       if (r.whatsappUrl) {
         if (win) { win.opener = null; win.location.href = r.whatsappUrl; }
-        st.msg = `<span style="color:var(--ok);font-weight:600">${esc(t('houses.sentWhatsApp', { house: house ? house.name : '' }))}</span> <a class="btn btn-sm" href="${esc(r.whatsappUrl)}" target="_blank" rel="noopener">${esc(t('houses.openWhatsApp'))}</a>`;
+        st.msg = `<span style="color:var(--ok);font-weight:600">${tIsolated('houses.sentWhatsApp', {}, { house: house ? house.name : '' })}</span> <a class="btn btn-sm" href="${esc(r.whatsappUrl)}" target="_blank" rel="noopener">${esc(t('houses.openWhatsApp'))}</a>`;
       } else {
-        st.msg = `<span style="color:var(--ok);font-weight:600">${esc(t('houses.sentEmail', { house: house ? house.name : '' }))}</span>`;
+        st.msg = `<span style="color:var(--ok);font-weight:600">${tIsolated('houses.sentEmail', {}, { house: house ? house.name : '' })}</span>`;
         toast(t('houses.sentEmail', { house: house ? house.name : '' }));
       }
     } catch (err) {
@@ -615,9 +654,9 @@
       ? d.houses.map((h) => `
         <div class="card house-row">
           <div>
-            <strong>${esc(h.name)}</strong> <span class="pill queued">${esc(t(h.prefer === 'email' ? 'houses.byEmail' : 'houses.byWhatsApp'))}</span>
+            <strong>${line(h.name)}</strong> <span class="pill queued">${esc(t(h.prefer === 'email' ? 'houses.byEmail' : 'houses.byWhatsApp'))}</span>
             <div class="muted small">${[h.email ? `✉️ <bdi dir="ltr">${esc(h.email)}</bdi>` : '', h.whatsapp ? `💬 <bdi dir="ltr">+${esc(h.whatsapp)}</bdi>${waSavedBad(h.whatsapp) ? ` <span class="pill wa-bad-pill">${esc(t('houses.waCheck'))}</span>` : ''}` : '', esc(t(uses(h.id) === 1 ? 'houses.product1' : 'houses.products', { n: POD.num(uses(h.id)) }))].filter(Boolean).join(SEP())}</div>
-            ${h.notes ? `<div class="muted small">${esc(h.notes)}</div>` : ''}
+            ${h.notes ? `<div class="muted small">${line(h.notes)}</div>` : ''}
           </div>
           <div class="row" style="gap:8px;flex:0 0 auto">
             <button class="btn btn-sm" type="button" data-house-edit="${esc(h.id)}">${esc(t('houses.edit'))}</button>
@@ -625,7 +664,7 @@
           </div>
         </div>`).join('')
       : `<p class="muted">${esc(t('houses.empty'))}</p>`;
-    const opts = (pid) => `<option value="">${esc(t('houses.unset'))}</option>${d.houses.map((h) => `<option value="${esc(h.id)}" ${d.productHouses[pid] === h.id ? 'selected' : ''}>${esc(h.name)}</option>`).join('')}`;
+    const opts = (pid) => `<option value="">${esc(t('houses.unset'))}</option>${d.houses.map((h) => `<option value="${esc(h.id)}" ${d.productHouses[pid] === h.id ? 'selected' : ''}>${esc(isolate(h.name))}</option>`).join('')}`;
     $('house-map').innerHTML = d.categories.map((c) => {
       const prods = d.products.filter((p) => p.category === c.id);
       if (!prods.length) return '';
@@ -810,7 +849,10 @@
     const year = withYear && Number(ymd.slice(0, 4)) !== new Date().getFullYear();
     return new Date(ymd + 'T12:00:00Z').toLocaleDateString(POD.lang === 'ar' ? 'ar-EG' : 'en-GB', { weekday: 'short', day: 'numeric', month: 'short', ...(year ? { year: 'numeric' } : {}), timeZone: 'UTC' });
   };
-  const shipValue = (o, k) => (shipDraft[o.id] && shipDraft[o.id][k] !== undefined ? shipDraft[o.id][k] : (o.shipment && o.shipment[k]) || '');
+  const shipValue = (o, k) => {
+    const v = shipDraft[o.id] && shipDraft[o.id][k] !== undefined ? shipDraft[o.id][k] : (o.shipment && o.shipment[k]) || '';
+    return k === 'trackingNumber' ? trackingText(v) : v;
+  };
   const TIMELINE_STEPS = ['placed', 'production', 'printed', 'shipped', 'delivered'];
   function timelineOf(o) {
     if (Array.isArray(o.timeline) && o.timeline.length) return o.timeline;
@@ -818,13 +860,20 @@
     const sh = o.shipment || {};
     return TIMELINE_STEPS.map((step) => ({ step, at: step === 'placed' ? o.createdAt : step === 'shipped' ? sh.shippedAt || null : step === 'delivered' ? sh.deliveredAt || null : null }));
   }
+  /** A tracking number in 0-9 ("٧٧٨٨-AB" typed on an Arabic keyboard is 7788-AB for the courier and the English email). */
+  const trackingText = (v) => POD.latinDigits(v);
+  /**
+   * Courier · tracking number · delivered / expected day, each part in its own direction (QA 25 Nov: in one <bdi>
+   * "Bosta بوسطة", "7788-AB" and the date ran into each other: "AB · Delivered … 11:15-٧٧٨٨ · Bosta بوسطة").
+   */
   function shipNote(o) {
     const sh = o.shipment || {};
     const bits = [];
-    if (sh.courier || sh.trackingNumber) bits.push([sh.courier, sh.trackingNumber].filter(Boolean).join(SEP()));
-    if (isDelivered(o) && sh.deliveredAt) bits.push(t('ship.deliveredOn', { date: POD.date(sh.deliveredAt) }));
-    else if (isShipped(o) && sh.eta) bits.push(t('ship.etaShort', { date: day(sh.eta) }));
-    return bits.length ? `<span class="ship-note"><bdi>${esc(bits.join(SEP()))}</bdi></span>` : '';
+    if (sh.courier) bits.push(`<bdi dir="auto">${esc(sh.courier)}</bdi>`);
+    if (sh.trackingNumber) bits.push(`<bdi dir="ltr">${esc(trackingText(sh.trackingNumber))}</bdi>`);
+    if (isDelivered(o) && sh.deliveredAt) bits.push(`<bdi>${esc(t('ship.deliveredOn', { date: POD.date(sh.deliveredAt) }))}</bdi>`);
+    else if (isShipped(o) && sh.eta) bits.push(`<bdi>${esc(t('ship.etaShort', { date: day(sh.eta) }))}</bdi>`);
+    return bits.length ? `<span class="ship-note">${bits.join(esc(SEP()))}</span>` : '';
   }
   function shipBox(o) {
     const id = esc(o.id);
@@ -891,6 +940,12 @@
   $('orders').addEventListener('input', (e) => {
     const f = e.target.closest('[data-ship-field]');
     if (!f) return;
+    // The tracking number in 0-9 as it is typed (the cursor stays where it was: each digit is one character).
+    if (f.dataset.shipField === 'trackingNumber' && trackingText(f.value) !== f.value) {
+      const [a, b] = [f.selectionStart, f.selectionEnd];
+      f.value = trackingText(f.value);
+      try { f.setSelectionRange(a, b); } catch (err) { /* (no cursor) */ }
+    }
     (shipDraft[f.dataset.order] ||= {})[f.dataset.shipField] = f.value;
     const msg = f.closest('.ship-box').querySelector('.ship-msg');
     if (msg && shipMsg[f.dataset.order]) { delete shipMsg[f.dataset.order]; msg.textContent = ''; msg.className = 'ship-msg'; }
@@ -899,9 +954,28 @@
     const out = {};
     for (const k of SHIP_FIELDS) {
       const el = document.getElementById(`ship-${k}-${id}`);
-      if (el) out[k] = el.value.trim() || null;
+      if (el) out[k] = (k === 'trackingNumber' ? trackingText(el.value) : el.value).trim() || null;
     }
     return out;
+  }
+  /** An order's items that are not printed yet, numbered as in the order: "1. T-shirt (Queued), 2. Mug (Printing)". */
+  function unprintedList(o) {
+    return o.items.map((i, k) => ({ i, k })).filter(({ i }) => i.status !== 'printed' && i.status !== 'shipped')
+      .map(({ i, k }) => `${o.items.length > 1 ? `${POD.num(k + 1)}. ` : ''}${tr(i.productName)} (${t('admin.status.' + i.status)})`)
+      .join(POD.lang === 'ar' ? '، ' : ', ');
+  }
+  /**
+   * "Mark shipped" or "Mark delivered" on an order with items not printed yet: asked first, naming them, and saying
+   * when the customer gets the "on its way" email (QA 25 Nov: "Mark delivered" moved a queued and a printing item
+   * to shipped and delivered without a word). Items still in review: the server refuses by itself.
+   */
+  function confirmUnprinted(o, deliver) {
+    if (!o || o.items.some((i) => IN_REVIEW.has(i.status))) return true;
+    const list = unprintedList(o);
+    if (!list) return true;
+    const email = !isShipped(o) && o.customer && o.customer.email;
+    const mail = email && (!notifySt || notifySt.customerEmail) ? `\n\n${t('ship.mailToo', { email })}` : '';
+    return confirm(`${t('ship.notPrintedList', { list })}\n\n${t(deliver ? 'ship.notPrintedDeliver' : 'ship.notPrintedShip')}${mail}`);
   }
   async function saveShipment(id, extra, doneKey, btn) {
     const o = orderById(id);
@@ -945,13 +1019,14 @@
     if (save) return saveShipment(save.dataset.shipSave, {}, 'ship.saved', save);
     const shipped = e.target.closest('[data-ship-shipped]');
     if (shipped) {
-      const o = orderById(shipped.dataset.shipShipped);
-      if (o && o.items.some((i) => i.status !== 'printed' && i.status !== 'shipped') && !confirm(t('ship.notPrinted'))) return;
+      if (!confirmUnprinted(orderById(shipped.dataset.shipShipped), false)) return;
       return saveShipment(shipped.dataset.shipShipped, { shipped: true }, 'ship.shippedDone', shipped);
     }
     const del = e.target.closest('[data-ship-delivered]');
     if (del) {
       const on = Boolean(del.dataset.value);
+      // Delivered also marks every item shipped and sends the "on its way" email: asked first like "Mark shipped".
+      if (on && !confirmUnprinted(orderById(del.dataset.shipDelivered), true)) return;
       return saveShipment(del.dataset.shipDelivered, { delivered: on }, on ? 'ship.deliveredDone' : 'ship.undeliveredDone', del);
     }
     const pay = e.target.closest('[data-pay]');
@@ -1539,27 +1614,30 @@
       if (lastLibrary) renderLibRule();
     }
   });
-  $('lib-add').addEventListener('submit', async (e) => {
+  // (One at a time: a double-click added the design twice.)
+  $('lib-add').addEventListener('submit', (e) => {
     e.preventDefault();
-    const msg = $('lib-msg');
-    msg.style.color = '';
-    msg.textContent = t('notify.sending');
-    try {
-      const d = await adminApi('/api/admin/library', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ share: $('lib-share').value, nameAr: $('lib-name-ar').value, nameEn: $('lib-name-en').value, category: $('lib-cat').value }),
-      });
-      msg.style.color = 'var(--ok)';
-      msg.textContent = t('lib.added', { name: tr(d.name) });
-      $('lib-share').value = '';
-      $('lib-name-ar').value = '';
-      $('lib-name-en').value = '';
-      renderLibrary(await adminApi('/api/admin/library'));
-    } catch (err) {
-      msg.style.color = '#c92a2a';
-      msg.textContent = err.message;
-    }
+    sendOnce($('lib-add'), async () => {
+      const msg = $('lib-msg');
+      msg.style.color = '';
+      msg.textContent = t('notify.sending');
+      try {
+        const d = await adminApi('/api/admin/library', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ share: $('lib-share').value, nameAr: $('lib-name-ar').value, nameEn: $('lib-name-en').value, category: $('lib-cat').value }),
+        });
+        msg.style.color = 'var(--ok)';
+        msg.textContent = t('lib.added', { name: tr(d.name) });
+        $('lib-share').value = '';
+        $('lib-name-ar').value = '';
+        $('lib-name-en').value = '';
+        renderLibrary(await adminApi('/api/admin/library'));
+      } catch (err) {
+        msg.style.color = '#c92a2a';
+        msg.textContent = err.message;
+      }
+    });
   });
 
   // ---------- Order notifications ----------
@@ -1786,6 +1864,8 @@
     return ['', ''];
   }
   const rangeQuery = () => { const [f, to] = periodRange(acc.period); return `from=${encodeURIComponent(f || '')}&to=${encodeURIComponent(to || '')}`; };
+  /** The custom period's start is after its end (QA 25 Nov: every total just read 0). */
+  const rangeBackwards = () => acc.period === 'custom' && Boolean(acc.from && acc.to) && acc.from > acc.to;
   const cls = (n) => (n < 0 ? 'neg' : n > 0 ? 'pos' : '');
   async function refreshAccounts({ auto = false } = {}) {
     // The 15-second refresh doesn't redraw while the admin is typing a price or a cost.
@@ -1847,6 +1927,8 @@
     $('acc-periods').innerHTML = ['month', 'lastMonth', 'year', 'all', 'custom']
       .map((p) => `<button class="chip ${acc.period === p ? 'active' : ''}" data-acc-period="${p}" type="button">${esc(t('acc.period.' + p))}</button>`).join('');
     $('acc-custom').hidden = acc.period !== 'custom';
+    // Custom days the wrong way round: say so (and offer to swap them), not just zeros everywhere.
+    $('acc-range-msg').hidden = !rangeBackwards();
     $('acc-missing').hidden = !tt.missingCosts;
     $('acc-missing').textContent = POD.plural('acc.missing', tt.missingCosts);
     const tile = (label, value, extra, c = '') => `<div class="card stat acc-stat ${c}"><b>${esc(value)}</b><span>${esc(label)}</span>${extra ? `<small class="muted">${esc(extra)}</small>` : ''}</div>`;
@@ -1904,13 +1986,13 @@
     const [f, to] = periodRange(acc.period);
     // Days as the rest of the dashboard shows them ("Sun 1 Nov to Wed 25 Nov"), not raw YYYY-MM-DD.
     const range = f || to ? ` (${t('acc.periodDays', { from: f ? day(f, true) : '…', to: to ? day(to, true) : '…' })})` : '';
-    $('acc-exp-period').textContent = t('acc.expPeriod', { period: t('acc.period.' + acc.period) + range, total: money(r.totals.expenses) });
+    $('acc-exp-period').textContent = t('acc.expPeriod', { period: t('acc.period.' + acc.period) + range, total: money(r.totals.expenses) }) + (rangeBackwards() ? ` ${t('acc.rangeBackwards')}` : '');
     if (!$('exp-cat').options.length) $('exp-cat').innerHTML = (r.categories || []).map((c) => `<option value="${c}">${esc(t('acc.cat.' + c))}</option>`).join('');
     else [...$('exp-cat').options].forEach((o) => { o.textContent = t('acc.cat.' + o.value); });
     if (!$('exp-date').value) $('exp-date').value = ymd(new Date());
     $('acc-exp-list').innerHTML = r.expenses.length
       ? `<thead><tr><th>${esc(t('acc.date'))}</th><th>${esc(t('acc.category'))}</th><th>${esc(t('acc.description'))}</th><th>${esc(t('acc.amount'))}</th><th></th></tr></thead><tbody>${r.expenses.map((e) => `
-        <tr><td>${esc(day(e.date, true))}</td><td>${esc(t('acc.cat.' + e.category))}</td><td>${esc(e.description)}</td><td>${money(e.amount)}</td><td><button class="btn btn-sm" type="button" data-exp-del="${e.id}">${esc(t('houses.delete'))}</button></td></tr>`).join('')}</tbody>`
+        <tr><td>${esc(day(e.date, true))}</td><td>${esc(t('acc.cat.' + e.category))}</td><td class="acc-exp-desc">${line(e.description)}</td><td>${money(e.amount)}</td><td><button class="btn btn-sm" type="button" data-exp-del="${e.id}">${esc(t('houses.delete'))}</button></td></tr>`).join('')}</tbody>`
       : `<tbody><tr><td class="muted">${esc(t('acc.noExpenses'))}</td></tr></tbody>`;
   }
   /*
@@ -2022,6 +2104,12 @@
     if (per) {
       acc.period = per.dataset.accPeriod;
       if (acc.period === 'custom' && !acc.from) { const [f, to] = periodRange('month'); acc.from = f; acc.to = to; $('acc-from').value = f; $('acc-to').value = to; }
+      return refreshAccounts().catch((err) => toast(err.message, 'error'));
+    }
+    if (e.target.closest('#acc-range-swap')) {
+      [acc.from, acc.to] = [acc.to, acc.from];
+      $('acc-from').value = acc.from;
+      $('acc-to').value = acc.to;
       return refreshAccounts().catch((err) => toast(err.message, 'error'));
     }
     const ord = e.target.closest('[data-acc-order]');
@@ -2165,18 +2253,23 @@
     b.click();
     b.remove();
   });
-  $('acc-exp-form').addEventListener('submit', async (e) => {
+  // (One at a time: a double-click saved the expense twice and counted it twice in the net profit.)
+  $('acc-exp-form').addEventListener('submit', (e) => {
     e.preventDefault();
-    try {
-      await adminApi('/api/admin/expenses', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang }, body: JSON.stringify({ date: $('exp-date').value, category: $('exp-cat').value, description: $('exp-desc').value, amount: Number(numValue($('exp-amount'))) }) });
-      $('exp-desc').value = '';
-      $('exp-amount').value = '';
-      $('exp-msg').textContent = t('houses.saved');
-      setTimeout(() => { $('exp-msg').textContent = ''; }, 2500);
-      await refreshAccounts();
-    } catch (err) {
-      $('exp-msg').textContent = err.message;
-    }
+    sendOnce($('acc-exp-form'), async () => {
+      try {
+        await adminApi('/api/admin/expenses', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang }, body: JSON.stringify({ date: $('exp-date').value, category: $('exp-cat').value, description: $('exp-desc').value, amount: Number(numValue($('exp-amount'))) }) });
+        // A fresh form for the next one (its amount box isn't marked as wrong), on the same day and type.
+        const keep = [$('exp-date').value, $('exp-cat').value];
+        $('acc-exp-form').reset();
+        [$('exp-date').value, $('exp-cat').value] = keep;
+        $('exp-msg').textContent = t('houses.saved');
+        setTimeout(() => { $('exp-msg').textContent = ''; }, 2500);
+        await refreshAccounts();
+      } catch (err) {
+        $('exp-msg').textContent = err.message;
+      }
+    });
   });
 
   // ---------- Coupons ----------
@@ -2228,7 +2321,7 @@
           <strong dir="ltr" style="font-size:16px">${esc(c.code)}</strong> <span class="pill ${state === 'live' ? 'printed' : 'queued'}">${esc(t('cp.state.' + state))}</span>
           <div class="muted small">${esc(couponSummary(c))}</div>
           <div class="small">${esc(listed(t('cp.usage', { n: POD.num(c.uses), max: c.maxUses ? POD.num(c.maxUses) : '∞', v: money(c.discountGiven) })))}</div>
-          ${c.note ? `<div class="muted small">${esc(c.note)}</div>` : ''}
+          ${c.note ? `<div class="muted small">${line(c.note)}</div>` : ''}
         </div>
         <div class="row" style="gap:8px;flex:0 0 auto">
           <button class="btn btn-sm" type="button" data-cp-toggle="${esc(c.id)}">${esc(t(c.active ? 'cp.pause' : 'cp.resume'))}</button>
@@ -2264,23 +2357,26 @@
   }
   $('cp-cancel').addEventListener('click', resetCouponForm);
   $('cp-cats').addEventListener('change', (e) => { if (e.target.dataset.cpCat !== undefined) { if (e.target.checked) cpPicked.add(e.target.value); else cpPicked.delete(e.target.value); } });
-  $('cp-form').addEventListener('submit', async (e) => {
+  // (One at a time: a double-click sent the coupon twice, and the second answer said its code was taken.)
+  $('cp-form').addEventListener('submit', (e) => {
     e.preventDefault();
-    const id = $('cp-id').value;
-    const body = {
-      code: $('cp-code').value, type: $('cp-type').value, value: numValue($('cp-value')), maxDiscount: numValue($('cp-max')), minOrder: numValue($('cp-min')),
-      maxUses: numValue($('cp-uses')), perCustomer: numValue($('cp-per')), startsOn: $('cp-start').value, endsOn: $('cp-end').value,
-      categories: [...cpPicked], products: id ? cpProducts : [], active: $('cp-active').checked, note: $('cp-note').value,
-    };
-    try {
-      await adminApi(id ? `/api/admin/coupons/${encodeURIComponent(id)}` : '/api/admin/coupons', { method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang }, body: JSON.stringify(body) });
-      resetCouponForm();
-      $('cp-msg').textContent = t('houses.saved');
-      setTimeout(() => { $('cp-msg').textContent = ''; }, 2500);
-      renderCoupons((couponData = await adminApi('/api/admin/coupons')));
-    } catch (err) {
-      $('cp-msg').textContent = err.message;
-    }
+    sendOnce($('cp-form'), async () => {
+      const id = $('cp-id').value;
+      const body = {
+        code: $('cp-code').value, type: $('cp-type').value, value: numValue($('cp-value')), maxDiscount: numValue($('cp-max')), minOrder: numValue($('cp-min')),
+        maxUses: numValue($('cp-uses')), perCustomer: numValue($('cp-per')), startsOn: $('cp-start').value, endsOn: $('cp-end').value,
+        categories: [...cpPicked], products: id ? cpProducts : [], active: $('cp-active').checked, note: $('cp-note').value,
+      };
+      try {
+        await adminApi(id ? `/api/admin/coupons/${encodeURIComponent(id)}` : '/api/admin/coupons', { method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json', 'x-lang': POD.lang }, body: JSON.stringify(body) });
+        resetCouponForm();
+        $('cp-msg').textContent = t('houses.saved');
+        setTimeout(() => { $('cp-msg').textContent = ''; }, 2500);
+        renderCoupons((couponData = await adminApi('/api/admin/coupons')));
+      } catch (err) {
+        $('cp-msg').textContent = err.message;
+      }
+    });
   });
   $('cp-list').addEventListener('click', async (e) => {
     const find = (id) => couponData.coupons.find((c) => c.id === id);
@@ -2492,7 +2588,12 @@
       <div class="rv-pages">${shown.map((u, k) => `<figure><img src="${esc(u)}" alt="" loading="lazy" data-zoom="${esc(JSON.stringify([u]))}"><figcaption>${esc(POD.num(k + 1))}</figcaption></figure>`).join('')}</div>
       ${pages.length > shown.length ? `<div class="muted small">${esc(t('rv.morePages', { n: POD.num(pages.length - shown.length) }))}</div>` : ''}</div>`;
   }
-  /** One printed side: the print file on a checkerboard with the trim and safe lines, then its sizes. */
+  /**
+   * One printed side: the print file on a checkerboard with the trim and safe lines, then its sizes. (This card is
+   * the owner's check, in the page's language and digits like the rest of Review; the job card for the print floor
+   * keeps its sizes in 0-9, see cm above. In the page's direction too: "١٢٠٠ × ١٦٠٠" forced left to right reads
+   * 1600 × 1200.)
+   */
   function rvArtwork(s) {
     const b = Number(s.bleedIn) || 0;
     const safe = Number(s.safeIn) || 0;
@@ -2513,14 +2614,19 @@
         <figcaption><b>${esc(t('rv.artwork', { side: tr(s.name) }))}</b></figcaption>
         ${board}
         <dl class="rv-dims small">
-          <dt>${esc(t('rv.size'))}</dt><dd><bdi dir="ltr">${cm(w)} × ${cm(h)} cm (${w} × ${h} in)</bdi>${extra ? `<div class="muted">${esc(extra)}</div>` : ''}</dd>
-          ${s.dpi || s.widthPx ? `<dt>DPI · px</dt><dd><bdi dir="ltr">${esc(t('rv.resolution', { dpi: s.dpi || '?', w: s.widthPx || '?', h: s.heightPx || '?' }))}</bdi></dd>` : ''}
+          <dt>${esc(t('rv.size'))}</dt><dd>${esc(t('rv.sizeLine', { w: Number(cm(w)), h: Number(cm(h)), wi: Math.round(w * 100) / 100, hi: Math.round(h * 100) / 100 }))}${extra ? `<div class="muted">${esc(extra)}</div>` : ''}</dd>
+          ${s.dpi || s.widthPx ? `<dt>DPI · px</dt><dd>${esc(t('rv.resolution', { dpi: s.dpi || '?', w: s.widthPx || '?', h: s.heightPx || '?' }))}</dd>` : ''}
         </dl>
       </figure>`;
   }
+  /**
+   * A print check in the page's words and digits: numbers stay numbers, so t() writes them as ١٢٣ on the Arabic
+   * page like the rest of the card (QA 25 Nov: "1200 × 1600 px", "139 DPI" inside Arabic sentences).
+   */
   function checkText(c) {
     const p = {};
-    for (const [k, v] of Object.entries(c.params || {})) p[k] = Array.isArray(v) ? v.join(', ') : typeof v === 'number' ? String(Math.round(v * 10) / 10) : v;
+    const n = (v) => (typeof v === 'number' ? Math.round(v * 10) / 10 : v);
+    for (const [k, v] of Object.entries(c.params || {})) p[k] = Array.isArray(v) ? v.map((x) => (typeof x === 'number' ? POD.num(x) : x)).join(POD.lang === 'ar' ? '، ' : ', ') : n(v);
     return hasStr('pf.' + c.id) ? t('pf.' + c.id, p) : t('pf.unknown', { id: c.id });
   }
   function rvChecks(item) {
@@ -2571,7 +2677,7 @@
               <td data-label="${esc(t('rv.col.action'))}"><span><b>${esc(what(a))}</b>${a.sample ? ` <span class="pill rv-sample">${esc(t('rv.sampleAsked'))}</span>` : ''}</span></td>
               <td data-label="${esc(t('rv.col.by'))}"><span>${esc(by(a))}</span></td>
               <td data-label="${esc(t('rv.col.when'))}"><span>${a.at ? esc(when(a.at)) : '—'}</span></td>
-              <td data-label="${esc(t('rv.col.version'))}"><span>${a.version != null ? esc(String(a.version)) : '—'}</span></td>
+              <td data-label="${esc(t('rv.col.version'))}"><span>${a.version != null ? esc(/^\d+$/.test(String(a.version)) ? POD.num(Number(a.version)) : String(a.version)) : '—'}</span></td>
               <td data-label="${esc(t('rv.col.note'))}"><span dir="auto">${a.note && !isReplace(a) ? esc(a.note) : '<span class="muted">—</span>'}</span></td>
             </tr>`).join('')}
           </tbody>
