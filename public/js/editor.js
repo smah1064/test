@@ -249,17 +249,21 @@
     } catch (e) { /* unreadable: ignored */ }
   }
   if (!(draft && draft.designs && Object.values(draft.designs).some((o) => o && o.length))) draft = null;
+  // The name(s) typed on the ready-design page this time: another name than the draft's opens the design with it (the
+  // draft is kept, as for another design); the same ones (a reload) bring the draft back. QA 25 Nov.
+  const typedNames = params.has('name') ? params.getAll('name').join('\n') : null;
   if (draft && libraryDesign) {
-    if (draft.library && draft.library === params.get('library')) libraryDesign = null;
+    if (draft.library && draft.library === params.get('library') && (typedNames === null || (draft.libraryNames || null) === typedNames)) libraryDesign = null;
     else {
       // Another design (or one from scratch): the ready-made design opens as asked, the saved one is kept.
       heldDraft = draft;
       draft = null;
     }
   }
-  if (libraryDesign) st.libraryId = params.get('library');
+  if (libraryDesign) { st.libraryId = params.get('library'); st.libraryNames = typedNames; }
   if (draft) {
     st.libraryId = typeof draft.library === 'string' ? draft.library : null;
+    st.libraryNames = typeof draft.libraryNames === 'string' ? draft.libraryNames : null;
     st.colorId = draft.colorId;
     st.sizeId = draft.sizeId;
     // Drafts from before embroidery was a layer: their stitched front is the embroidery layer now.
@@ -4426,12 +4430,15 @@
       return;
     }
     const g = qtyGrid();
+    // (No size picked yet: the one piece kept for the first size isn't shown under it, so no size looks chosen and a
+    // number typed under another size is that size only. QA 25 Nov.)
+    const unpickedOne = !st.sizePicked && mix().sizes && qtyLines().length === 1 && qtyTotal() === 1;
     const sizes = mix().sizes ? p.sizes.filter((z) => canPick(z) || z.id === st.sizeId) : p.sizes.filter((z) => z.id === st.sizeId);
     const colors = p.colors.filter((c) => g[c.id]);
     const total = qtyTotal();
     const cell = (c, z) => (comboOut(p, c.id, z.id) && !(g[c.id] && g[c.id][z.id])
       ? `<span class="qty-out" title="${esc(tEd('ed.soldOut'))}">—</span>`
-      : `<input type="text" inputmode="numeric" maxlength="4" autocomplete="off" class="qty-in${POD.comboFew(p, c.id, z.id) ? ' is-few' : ''}" data-qc="${c.id}" data-qz="${z.id}" value="${(g[c.id] && g[c.id][z.id]) || ''}" placeholder="0" aria-label="${esc(`${tr(c.name)} ${tr(z.label)}`)}"${POD.comboFew(p, c.id, z.id) ? ` title="${esc(t('fewLeftCombo', { colour: tr(c.name), size: tr(z.label), n: POD.num(POD.comboFew(p, c.id, z.id)) }))}"` : ''}>`);
+      : `<input type="text" inputmode="numeric" maxlength="4" autocomplete="off" class="qty-in${POD.comboFew(p, c.id, z.id) ? ' is-few' : ''}" data-qc="${c.id}" data-qz="${z.id}" value="${unpickedOne ? '' : (g[c.id] && g[c.id][z.id]) || ''}" placeholder="0" aria-label="${esc(`${tr(c.name)} ${tr(z.label)}`)}"${POD.comboFew(p, c.id, z.id) ? ` title="${esc(t('fewLeftCombo', { colour: tr(c.name), size: tr(z.label), n: POD.num(POD.comboFew(p, c.id, z.id)) }))}"` : ''}>`);
     const simple = !mix().sizes && !mix().colors;
     box.innerHTML = `
       <label>${esc(t('qty.title'))}</label>
@@ -4461,7 +4468,11 @@
   }
   if ($('qty-field')) {
     const setCell = (c, z, v) => {
+      // No size picked yet: the one piece kept for the first size isn't the customer's. A number typed under another
+      // size is that size only, and that size is the one picked (an S nobody chose was ordered too: QA 25 Nov).
+      const unpicked = !st.sizePicked && mix().sizes && qtyLines().length === 1 && qtyTotal() === 1;
       const g = qtyGrid();
+      if (unpicked && !(c === st.colorId && z === st.sizeId) && g[st.colorId]) delete g[st.colorId][st.sizeId];
       g[c] ||= {};
       // (Typed in Arabic or Persian digits too: a number box would drop those.)
       const n = String(v || '').replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).replace(/\D/g, '');
@@ -4480,6 +4491,10 @@
       if (!Object.values(g).some((row) => Object.values(row).some((n) => n > 0))) g[c][z] = 1;
       st.qty = g;
       st.sizePicked = true; // typed per size
+      if (unpicked && z !== st.sizeId && g[c][z] > 0 && !(g[st.colorId] && g[st.colorId][st.sizeId])) {
+        changeSize(z);
+        renderOptions();
+      }
     };
     $('qty-field').addEventListener('change', (e) => {
       const i = e.target.closest('.qty-in');
@@ -5412,7 +5427,7 @@
     for (const s of keptSides()) designs[s.id] = s.id === st.side ? serialize() : (st.designs[s.id] || []);
     const empty = !Object.values(designs).some((o) => o.length);
     const productId = st.product.id;
-    const meta = { productId, colorId: st.colorId, sizeId: st.sizeId, side: st.side, offsets: { ...st.offsets }, areas: placedAreas(), ...(st.pattern ? { pattern: { ...st.pattern } } : {}), method: st.method, options: st.options || {}, mergeList: st.mergeList || null, qty: st.qty || null, library: st.libraryId || null, sizePicked: Boolean(st.sizePicked) };
+    const meta = { productId, colorId: st.colorId, sizeId: st.sizeId, side: st.side, offsets: { ...st.offsets }, areas: placedAreas(), ...(st.pattern ? { pattern: { ...st.pattern } } : {}), method: st.method, options: st.options || {}, mergeList: st.mergeList || null, qty: st.qty || null, library: st.libraryId || null, libraryNames: st.libraryNames || null, sizePicked: Boolean(st.sizePicked) };
     let preview = null;
     if (!empty && !quick) {
       try {
@@ -5453,7 +5468,7 @@
       if (!Object.values(designs).some((o) => o.length)) return;
       let acct = '';
       try { const v = localStorage.getItem('pod-acct'); acct = v && v !== '1' ? v : ''; } catch (e) { /* private mode */ }
-      const json = JSON.stringify({ at: Date.now(), acct, productId: st.product.id, colorId: st.colorId, sizeId: st.sizeId, side: st.side, offsets: st.offsets, areas: placedAreas(), pattern: st.pattern || null, method: st.method, options: st.options || {}, qty: st.qty || null, library: st.libraryId || null, sizePicked: Boolean(st.sizePicked), designs });
+      const json = JSON.stringify({ at: Date.now(), acct, productId: st.product.id, colorId: st.colorId, sizeId: st.sizeId, side: st.side, offsets: st.offsets, areas: placedAreas(), pattern: st.pattern || null, method: st.method, options: st.options || {}, qty: st.qty || null, library: st.libraryId || null, libraryNames: st.libraryNames || null, sizePicked: Boolean(st.sizePicked), designs });
       // Pictures live in the browser's memory only while the page is open: those designs rely on the real save.
       if (json.includes('"blob:') || json.length > 1500000) return;
       localStorage.setItem('pod-rescue:' + st.product.id, json);

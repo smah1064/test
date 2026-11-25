@@ -194,3 +194,75 @@ test('search: father / dad / عيد الأب / بابا find the dad designs, no
   }
   for (const q of ['santa', 'بابا نويل', 'christmas', 'كريسماس']) assert.ok(S.match(santa, S.query(q)), `${q} finds Santa`);
 });
+
+test('weak team passwords are refused: the username, its name, qwerty12345, password1234!', async () => {
+  const add = await call('/api/admin/staff', 'POST', { name: 'Mostafa Ali', username: 'mostafa.ali', roles: ['catalogue'] }, owner);
+  assert.strictEqual(add.status, 201, add.text);
+  const token = new URL(add.json.setupLink, base).searchParams.get('setup');
+  for (const weak of ['mostafa.ali', 'mostafa.ali2024', 'Mostafa2024!!', 'qwerty12345', 'password1234!', '1q2w3e4r5t', 'ebda3ebda3!!']) {
+    const r = await call('/api/admin/setup', 'POST', { token, password: weak });
+    assert.strictEqual(r.status, 400, `${weak} -> ${r.text}`);
+    assert.strictEqual(r.json.code, 'passwordTooShort');
+  }
+  assert.strictEqual((await call('/api/admin/staff', 'POST', { name: 'Op', username: 'opweak', roles: ['operations'], password: 'opweak12345' }, owner)).status, 400);
+  const ok = await call('/api/admin/setup', 'POST', { token, password: 'sunny-garden-maadi' });
+  assert.strictEqual(ok.status, 200, ok.text);
+});
+
+test('"Approve for printing" on a corrected file waiting for the customer: queued for them (with how they confirmed), link kept', async () => {
+  const o = await approvedMug();
+  const it = o.items[0];
+  assert.strictEqual((await call(`/api/admin/items/${it.id}/review`, 'POST', { action: 'reopen', note: 'Too close to the handle' }, owner)).status, 200);
+  const r = await fetch(`${base}/api/admin/items/${it.id}/replacement/front`, { method: 'PUT', headers: { Authorization: `Bearer ${owner}`, 'Content-Type': 'image/png', 'x-review-note': encodeURIComponent('Moved 1 cm') }, body: await art(MUG.w, MUG.h, { r: 0, g: 90, b: 0 }) });
+  assert.strictEqual(r.status, 200, await r.text());
+  const before = (await call('/api/admin/review', 'GET', undefined, owner)).json.items.find((x) => x.id === it.id);
+  assert.strictEqual(before.status, 'awaiting_approval');
+  const noNote = await call(`/api/admin/items/${it.id}/review`, 'POST', { action: 'approve' }, owner);
+  assert.strictEqual(noNote.status, 400);
+  assert.strictEqual(noNote.json.code, 'confirmNoteRequired');
+  const ok = await call(`/api/admin/items/${it.id}/review`, 'POST', { action: 'approve', note: 'Confirmed on WhatsApp' }, owner);
+  assert.strictEqual(ok.status, 200, ok.text);
+  const pub = (await call(`/api/orders/${o.id}?k=${o.key}`)).json;
+  assert.strictEqual(pub.items[0].status, 'queued');
+  // The customer's link wasn't replaced: it says the proof is done, not "not valid any more".
+  const token = before.proofLink.split('t=')[1];
+  assert.notStrictEqual((await call(`/api/proofs/${token}`)).status, 404);
+  const start = await call(`/api/admin/items/${it.id}`, 'PATCH', { status: 'printing' }, owner);
+  assert.strictEqual(start.status, 200, start.text);
+});
+
+test('a finance cost change approved after the person became an owner changes the costs only, not the prices', async () => {
+  const before = (await call('/api/admin/pricing', 'GET', undefined, owner)).json.products.find((p) => p.id === 'mug');
+  const set = await call('/api/admin/pricing/mug', 'PUT', { basePrice: 265, extraSidePrice: before.extraSidePrice, sizes: Object.fromEntries(before.sizes.map((z) => [z.id, z.surcharge])), costs: before.costs }, owner);
+  assert.strictEqual(set.status, 200, set.text);
+  const add = await call('/api/admin/staff', 'POST', { name: 'Fin Three', username: 'fin3x', roles: ['finance'] }, owner);
+  const token = new URL(add.json.setupLink, base).searchParams.get('setup');
+  assert.strictEqual((await call('/api/admin/setup', 'POST', { token, password: 'river-nile-sunset' })).status, 200);
+  const fin = (await call('/api/admin/login', 'POST', { username: 'fin3x', password: 'river-nile-sunset' })).json.token;
+  const held = await call('/api/admin/pricing/mug', 'PUT', { basePrice: 265, extraSidePrice: before.extraSidePrice, sizes: {}, costs: { ...before.costs, blank: 44 } }, fin);
+  assert.strictEqual(held.status, 202, held.text);
+  assert.strictEqual((await call(`/api/admin/staff/${add.json.user.id}`, 'PATCH', { roles: ['owner'] }, owner)).status, 200);
+  const id = (held.json.approval || held.json).id;
+  const ok = await call(`/api/admin/approvals/${id}/approve`, 'POST', {}, owner);
+  assert.strictEqual(ok.status, 200, ok.text);
+  const now = (await call('/api/admin/pricing', 'GET', undefined, owner)).json.products.find((p) => p.id === 'mug');
+  assert.strictEqual(now.costs.blank, 44);
+  assert.strictEqual(now.basePrice, 265, 'the owner\'s price stays');
+});
+
+test('while a corrected file is being saved: review decisions and the printing-house send wait; a DTF film refuses it', async () => {
+  const o = await approvedMug();
+  const it = o.items[0];
+  assert.strictEqual((await call(`/api/admin/items/${it.id}/review`, 'POST', { action: 'reopen', note: 'Blurry' }, owner)).status, 200);
+  const png = await art(MUG.w, MUG.h, { r: 10, g: 10, b: 120 });
+  const replace = fetch(`${base}/api/admin/items/${it.id}/replacement/front`, { method: 'PUT', headers: { Authorization: `Bearer ${owner}`, 'Content-Type': 'image/png', 'x-review-note': encodeURIComponent('Sharper') }, body: png });
+  await new Promise((r) => setTimeout(r, 30));
+  const approve = await call(`/api/admin/items/${it.id}/review`, 'POST', { action: 'approve' }, owner);
+  const changes = await call(`/api/admin/items/${it.id}/review`, 'POST', { action: 'changes', note: 'Please change' }, owner);
+  const r1 = await replace;
+  assert.strictEqual(r1.status, 200, await r1.text());
+  assert.strictEqual(approve.status, 409, approve.text);
+  assert.strictEqual(changes.status, 409, changes.text);
+  const pub = (await call(`/api/orders/${o.id}?k=${o.key}`)).json;
+  assert.strictEqual(pub.items[0].status, 'awaiting_approval');
+});

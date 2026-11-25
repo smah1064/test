@@ -63,6 +63,7 @@
     (async () => {
       const { money, esc, t, tr } = POD;
       const params = new URLSearchParams(location.search);
+      let remembered = false;
       const content = document.getElementById('content');
       const orderId = params.get('id') || '';
       // The team's view (from the dashboard: a link that works for 30 minutes), or the customer's page and its key.
@@ -492,9 +493,12 @@
             history.replaceState(null, '', u.toString());
           }
           // Just placed here: remembered on this device (the cart does it too; this covers every way in).
-          if (!team && params.get('new')) PODAftercare.rememberOrder(order);
+          // (Read from the address as it is now, not as the page opened: the 30-second refresh said "sent" again every
+          // time. QA 25 Nov.)
+          const nowParams = new URLSearchParams(location.search);
+          if (!team && nowParams.get('new') && !remembered) { remembered = true; PODAftercare.rememberOrder(order); }
           // Back from the editor with a new version of an item.
-          if (params.get('revised')) {
+          if (nowParams.get('revised')) {
             POD.toast(t('item.revisedSent'));
             const u = new URL(location.href);
             u.searchParams.delete('revised');

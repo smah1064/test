@@ -59,3 +59,28 @@ test('Products › stock per colour and size: saving one box keeps a colleague\'
     await srv.close();
   }
 });
+
+test('Editor, no size chosen yet: no size box holds the 1; a number typed under M is M only, and M is the size', { timeout: 90000 }, async () => {
+  const { chromium } = loadPlaywright();
+  const { openEditor } = require('./helpers');
+  const srv = await startServer();
+  const browser = await chromium.launch();
+  try {
+    const ctx = await newContext(browser);
+    const page = await openEditor(ctx, srv.base, 'tshirt', '&color=white');
+    await page.waitForSelector('#qty-field .qty-in[data-qz="M"]');
+    const values = await page.$$eval('#qty-field .qty-in', (els) => els.map((e) => [e.dataset.qz, e.value]));
+    assert.ok(values.every(([, v]) => v === ''), JSON.stringify(values));
+    await page.fill('#qty-field .qty-in[data-qz="M"]', '2');
+    await page.dispatchEvent('#qty-field .qty-in[data-qz="M"]', 'change');
+    await page.waitForTimeout(300);
+    const st = await page.evaluate(() => ({ qty: window.__editor.st.qty, size: window.__editor.st.sizeId, picked: window.__editor.st.sizePicked }));
+    assert.deepStrictEqual(st.qty, { white: { M: 2 } }, JSON.stringify(st));
+    assert.strictEqual(st.size, 'M');
+    assert.strictEqual(st.picked, true);
+    assert.deepStrictEqual(page.errors, []);
+  } finally {
+    await browser.close();
+    await srv.close();
+  }
+});

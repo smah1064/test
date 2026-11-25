@@ -95,6 +95,7 @@
     'rv.by.shop': ['Shop', 'إبداع'],
     'rv.via.checkout': ['at checkout', 'وقت الطلب'],
     'rv.via.proof-link': ['from the proof link', 'من لينك البروفة'],
+    'rv.via.shop': ['for the customer (they confirmed another way)', 'بالنيابة عن العميل (أكّد بطريقة تانية)'],
     'rv.sampleAsked': ['Printed sample requested', 'طالب عينة مطبوعة'],
     'rv.customerComment': ['Customer’s comment', 'تعليق العميل'],
     'rv.shopNote': ['Your note to the customer', 'ملاحظتك للعميل'],
@@ -116,7 +117,7 @@
     'rv.resendWhen': ['The proof link can be resent while the job waits for the customer.', 'تقدر تبعت لينك البروفة تاني وقت ما الطلب مستني العميل.'],
     'rv.changesSent': ['The customer was asked for changes.', 'اتبعت للعميل إنه يعدّل.'],
     'rv.working': ['Saving…', 'جاري الحفظ…'],
-    'rv.awaitingNote': ['Waiting for the customer to approve version {v}. You can still approve it yourself if they confirmed another way.', 'مستنيين العميل يوافق على النسخة {v}. تقدر توافق بنفسك لو العميل أكّد بطريقة تانية.'],
+    'rv.awaitingNote': ['Waiting for the customer to approve version {v}. You can still approve it yourself if they confirmed another way: write how in the note (e.g. "Confirmed on WhatsApp").', 'مستنيين العميل يوافق على النسخة {v}. تقدر توافق بنفسك لو العميل أكّد بطريقة تانية: اكتب إزاي في الملاحظة (مثلاً "أكّد على واتساب").'],
 
     'rv.replace': ['Corrected print file', 'ملف طباعة متصلّح'],
     'rv.replaceHelp': ['Upload a fixed PNG for a side. It must be exactly the same pixel size. First write in "Note to the customer" what you changed: they get the new proof with your note, and it prints only once they approve it.', 'ارفع PNG متصلّح لأي وش. لازم يكون نفس المقاس بالبكسل بالظبط. اكتب الأول في "ملاحظة للعميل" غيّرت إيه: هتوصله البروفة الجديدة مع ملاحظتك، ومش هتتطبع غير لما يوافق عليها.'],

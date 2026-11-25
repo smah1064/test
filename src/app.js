@@ -1087,6 +1087,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const found = store.findItem(req.params.itemId);
       if (!found) throw new HttpError(404, 'itemNotFound');
       const { order, item } = found;
+      // (No decision while a corrected file for it is being saved: it would be about the file before. QA 25 Nov.)
+      if (replacingItems.has(item.id)) throw new HttpError(409, 'fileBeingReplaced');
       const d = store.getDesign(item.designId);
       const b = req.body || {};
       const note = String(b.note || '').trim().slice(0, 2000);
@@ -1112,7 +1114,17 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       }
       // Only a job that is waiting for review (a Review tab left open must not send a shipped job back).
       if (!REVIEW_STATUSES.includes(item.status)) throw new HttpError(409, 'notInReview');
-      if (b.action === 'approve') {
+      if (b.action === 'approve' && item.status === 'awaiting_approval' && d) {
+        // The proof is with the customer and they confirmed another way (WhatsApp, a call), as the Review card says:
+        // approved by the shop for them, with the note of how. Their proof link isn't replaced and they aren't sent
+        // a second proof (it made a new link and killed the first: QA 25 Nov).
+        if (!note) throw new HttpError(400, 'confirmNoteRequired');
+        recordApproval(item, d, { via: 'shop', note, sample: Boolean(item.sampleWanted || (item.approval && item.approval.sample)) });
+        item.approval.by = 'shop';
+        item.approvals[item.approvals.length - 1].by = 'shop';
+        item.status = 'queued';
+        item.review = { ...(item.review || { reasons: [] }), needed: true, status: 'done' };
+      } else if (b.action === 'approve') {
         // Printed only from what the customer approved; otherwise they get the proof first.
         if (item.approval && d && approvedFilesMatch(item, d)) item.status = 'queued';
         else {
@@ -4575,8 +4587,20 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     return /[\p{L}\p{N}]/u.test(s) ? s : '';
   };
   const COMMON_PASSWORDS = new Set(['password12', 'password123', 'password1234', 'qwertyuiop', 'qwerty1234', '1234567890', '0123456789', 'abcdefghij', 'abc1234567', 'iloveyou12', 'admin12345', 'admin123456', 'welcome123', 'ebda3ebda3', 'ebda312345']);
-  const staffPassword = (pw) => typeof pw === 'string' && pw.length >= 10 && pw.length <= 200 && pw.trim().length >= 10
-    && new Set(pw).size >= 4 && !/^\d+$/.test(pw) && !COMMON_PASSWORDS.has(pw.toLowerCase());
+  // (Parts that guess easily: what's left of a password without them, its owner's username and name, must still be
+  // six characters or more, four of them different. "mostafa.ali" for mostafa.ali, "qwerty12345", "password1234!"
+  // are refused. QA 25 Nov.)
+  const WEAK_PARTS = ['password', 'passw0rd', 'qwerty', 'azerty', 'asdfgh', 'zxcvbn', '1q2w3e4r', '1q2w3e', 'q1w2e3', 'abc123', '1234567890',
+    '123456', '12345', '654321', 'iloveyou', 'welcome', 'letmein', 'admin', 'ebda3', 'ebdaa', 'abcdef', '00000', '11111'];
+  const staffPassword = (pw, who) => {
+    if (!(typeof pw === 'string' && pw.length >= 10 && pw.length <= 200 && pw.trim().length >= 10
+      && new Set(pw).size >= 4 && !/^\d+$/.test(pw) && !COMMON_PASSWORDS.has(pw.toLowerCase()))) return false;
+    let rest = pw.toLowerCase();
+    const own = who ? [String(who.username || ''), ...String(who.name || '').split(/[\s._-]+/)].map((x) => x.toLowerCase()).filter((x) => x.length >= 3) : [];
+    for (const part of [...own.sort((a, b) => b.length - a.length), ...WEAK_PARTS]) rest = rest.split(part).join('');
+    // (What's left only digits and signs, "2024!!": a letter too, or ten of them.)
+    return rest.length >= 6 && new Set(rest).size >= 4 && (/\p{L}/u.test(rest) || rest.length >= 10);
+  };
   app.get('/api/admin/staff', requireAdmin, (req, res) => res.json({
     staff: staffAll().map(staffRow),
     roles: roles.ROLES.map((id) => ({ id, name: roles.ROLE_NAMES[id], perms: roles.ROLE_PERMS[id] })),
@@ -4588,7 +4612,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const username = typeof b.username === 'string' ? b.username.trim().toLowerCase() : '';
     const rs = roles.cleanRoles(b.roles !== undefined ? b.roles : b.role !== undefined ? b.role : ['catalogue']);
     if (!name || !/^[a-z0-9][a-z0-9._-]{2,29}$/.test(username) || !rs) throw new HttpError(400, 'badStaff');
-    if (b.password !== undefined && !staffPassword(b.password)) throw new HttpError(400, 'badStaff');
+    if (b.password !== undefined && !staffPassword(b.password, { username, name })) throw new HttpError(400, 'passwordTooShort');
     if (b.password !== undefined && rs.includes('owner')) throw new HttpError(403, 'ownerPasswordLink');
     const s = b.password === undefined ? newSetup(req) : null;
     const user = {
@@ -4657,7 +4681,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const target = staffAll().find((x) => x.id === req.params.id);
     // (Ever an owner counts: demoting someone, typing their password, then making them owner again is refused too.)
     if (target && (target.id === req.adminWho.id || roles.rolesOf(target).includes('owner') || target.everOwner)) throw new HttpError(403, 'ownerPasswordLink');
-    if (!staffPassword(pw)) throw new HttpError(400, 'badStaff');
+    if (!staffPassword(pw, target)) throw new HttpError(400, 'passwordTooShort');
     store.mutate((db) => {
       const u = (db.staff || []).find((x) => x.id === req.params.id);
       if (!u) throw new HttpError(404, 'notFound');
@@ -4690,7 +4714,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       limitHit('staffSetup', req.ip);
       throw new HttpError(400, 'setupLinkBad');
     }
-    if (!staffPassword(b.password)) throw new HttpError(400, 'passwordTooShort');
+    if (!staffPassword(b.password, found)) throw new HttpError(400, 'passwordTooShort');
     const user = store.mutate((db) => {
       const u = (db.staff || []).find((x) => x.id === found.id);
       if (!u || !u.setup || u.setup.hash !== hash) throw new HttpError(400, 'setupLinkBad');
@@ -4715,7 +4739,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       limitHit('myPassword', w.id);
       throw new HttpError(400, 'wrongCurrentPassword');
     }
-    if (!staffPassword(b.password)) throw new HttpError(400, 'passwordTooShort');
+    if (!staffPassword(b.password, u)) throw new HttpError(400, 'passwordTooShort');
     const user = store.mutate((db) => {
       const x = (db.staff || []).find((y) => y.id === w.id);
       Object.assign(x, security.AdminAuth.hashStaffPassword(b.password));
@@ -6261,7 +6285,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const product = getProduct(req.params.productId);
     if (!product) throw new HttpError(404, 'unknownProduct');
     // Selling prices are the owners': a cost change by finance keeps the prices as they are.
-    const ownPrices = req.adminWho.perms.has('prices.edit');
+    // (A request with costs only, such as a finance person's cost change approved after they were made an owner,
+    // changes the costs only: no price sent isn't "every price emptied". QA 25 Nov.)
+    const ownPrices = req.adminWho.perms.has('prices.edit') && Object.keys(req.body || {}).some((k) => k !== 'costs');
     const pr = ownPrices ? accounting.cleanPricing(product, req.body || {}) : { pricing: null };
     if (pr.error) throw new HttpError(400, pr.error);
     const co = accounting.cleanCosts(product, (req.body || {}).costs || {});
@@ -6426,6 +6452,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (!wanted.length) throw new HttpError(400, 'houseNoFiles');
       const design = store.getDesign(item.designId);
       if (!design) throw new HttpError(404, 'notFound');
+      // Only what the customer approved goes to a printing house (not while a corrected file is being saved, nor
+      // a job waiting for review or the customer's approval). QA 25 Nov.
+      if (replacingItems.has(item.id)) throw new HttpError(409, 'fileBeingReplaced');
+      if (REVIEW_STATUSES.includes(item.status) || !approvedFilesMatch(item, design)) throw new HttpError(409, 'notApproved');
       const lang = req.get('x-lang') === 'en' ? 'en' : 'ar';
       const siteUrl = notify.siteUrl() || `${req.protocol}://${req.get('host')}`;
 
@@ -6528,6 +6558,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const ids = Array.isArray(req.body && req.body.itemIds) ? req.body.itemIds : [];
       const chosen = dtfOpen().filter((i) => ids.includes(i.id));
       if (!chosen.length) throw new HttpError(400, 'itemNotFound');
+      // Only what the customer approved goes on a film: not a job whose corrected file is being saved, nor one whose
+      // files are no longer the approved ones. QA 25 Nov.
+      for (const it of chosen) {
+        if (replacingItems.has(it.id)) throw new HttpError(409, 'fileBeingReplaced');
+        const f = store.findItem(it.id);
+        const dz = f && store.getDesign(f.item.designId);
+        if (!f || !dz || !approvedFilesMatch(f.item, dz)) throw new HttpError(409, 'notApproved');
+      }
       const pieces = [];
       for (const it of chosen) {
         // Name lists: one transfer per row, each with that row's name (background + the row's picture).
@@ -6584,7 +6622,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         const id = `F${(db.nextFilmNumber = (db.nextFilmNumber || 0) + 1)}`;
         for (const it of chosen) {
           const found = store.findItem(it.id);
-          if (found) found.item.filmBatch = { id, at };
+          // (Still waiting to print or on the press: one sent back to Review meanwhile isn't marked as on this film.)
+          if (found && ['queued', 'printing'].includes(found.item.status)) found.item.filmBatch = { id, at };
         }
         return id;
       });
