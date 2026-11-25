@@ -288,8 +288,9 @@ const FITS = {
   artsy: { products: [...STYLE, 'calendar', 'deskcalendar', 'bookmarks'] },
   luxury: { products: [...WEAR, 'polo', 'cap', ...MUGS, 'tumbler', 'cushion', ...WALL, 'plaque', 'tote', 'phonecase', 'notebook', 'coasters', 'keychain', 'deskmat', 'notepads', 'deskcalendar'] },
   trends: { products: [...STYLE] },
-  // Christmas cards (src/library-packs/christmas.js): whole printed cards, so the card products only.
-  christmas: { products: ['greetingcard', 'foldedcards', 'postcards'] },
+  // Christmas quotes (src/library-packs/christmas.js; its printed cards list their own products). Not on
+  // greeting / folded cards: 28 artwork designs there would hide their text-only designs (limitTextOnly).
+  christmas: { products: [...STYLE, ...KIDS_WEAR] },
 };
 // A subject missing from the table (a new pack) still goes on the everyday products.
 const FITS_OTHER = { products: [...WEAR, ...MUGS, 'tumbler', 'cushion', 'poster', 'tote'] };
