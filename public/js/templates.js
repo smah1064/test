@@ -458,7 +458,10 @@
       if (i.kind === 'sticker' || i.kind === 'art' || i.kind === 'image') {
         o = stickerObjs[idx];
         if (!o) return null;
-        if (i.fit) {
+        if (i.full) {
+          // A picture made edge to edge (a mouse pad print): covers the whole area, no margin.
+          o.scale(Math.max(area.w / o.width, area.h / o.height));
+        } else if (i.fit) {
           // A whole picture (uploaded designs): as big as fits in the area, both ways.
           o.scale(Math.min((area.w * i.fit) / o.width, (area.h * i.fit) / o.height));
         } else {
@@ -503,6 +506,8 @@
     // Keep everything well inside the edges: a margin of 8% of the area's short side (at least
     // the product's safe zone, `inset`) all round. Too big: shrunk round the middle; then
     // moved in if a part still sits in the margin.
+    // (A design with an edge-to-edge picture keeps no margin.)
+    if (tpl.items.some((i) => i.full && i.kind === 'image')) return objs;
     const pad = Math.max(inset, Math.min(area.w, area.h) * 0.08);
     const box = { x: area.x + pad, y: area.y + pad, w: area.w - 2 * pad, h: area.h - 2 * pad };
     const bounds = () => {
