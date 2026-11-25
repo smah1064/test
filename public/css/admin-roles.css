@@ -144,3 +144,11 @@
 
 /* Long names without spaces wrap inside their card (phones). */
 .st-list, .st-list *, .ap-item, .ap-item * { overflow-wrap: anywhere; min-width: 0; }
+
+/* The designs a change publishes: small pictures to look at before approving. */
+.ap-pics { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 2px; }
+.ap-pic { margin: 0; width: 96px; }
+.ap-pic img { display: block; width: 96px; height: 96px; object-fit: contain; border-radius: 8px; border: 1px solid var(--line, #e4e7ee); background: #fff; }
+.ap-pic figcaption { font-size: 12px; line-height: 1.3; margin-top: 3px; overflow-wrap: anywhere; }
+/* A long "sent for approval" message gets the width of a phone. */
+@media (max-width: 600px) { .toast.toast-pending { max-width: calc(100vw - 24px); width: calc(100vw - 24px); } }

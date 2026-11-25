@@ -874,7 +874,11 @@
     const el = document.getElementById('pm-sec-' + name);
     if (!el) return;
     const d = el.querySelector('.pm-dirty');
-    if (d) d.hidden = !on;
+    if (d) {
+      d.hidden = !on;
+      d.textContent = t('pm.unsaved');
+      d.classList.remove('pm-waiting');
+    }
     const u = el.querySelector('[data-pm-undo]');
     if (u) u.hidden = !on;
     const b = el.querySelector('[data-pm-save]');
@@ -1795,6 +1799,13 @@
       if (sentForApproval(e)) {
         setDirty(name, false);
         if (btn) btn.disabled = true;
+        // (Said on the section: waiting for an owner. A new change makes it "not saved yet" again.)
+        const d = document.querySelector(`#pm-sec-${name} .pm-dirty`);
+        if (d) {
+          d.textContent = t('ap.waitingHere');
+          d.classList.add('pm-waiting');
+          d.hidden = false;
+        }
         return;
       }
       secError(name, e.message);

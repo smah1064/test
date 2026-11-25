@@ -222,7 +222,7 @@ window.AdminRoles = (() => {
       rows.push([
         cairoTime(e.at, lang),
         e.at || '',
-        (e.who && e.who.name) || '',
+        !e.who ? '' : e.who.id === 'owner' ? t('me.emergencyName') : [e.who.name, e.who.username && e.who.username !== e.who.name ? `(${e.who.username})` : ''].filter(Boolean).join(' '),
         (e.roles || []).map((r) => (role ? role(r) : r)).join(lang === 'ar' ? '، ' : ', '),
         inLang(e.summary, lang) || e.action || '',
         result ? result(e.outcome === 'failed' ? 'failed' : resultOf(e.status)) : e.outcome === 'failed' ? 'failed' : resultOf(e.status),

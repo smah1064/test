@@ -221,7 +221,7 @@ test('every admin request goes through settle(): no screen takes a 202 answer fo
   // Products: a section sent for approval keeps what was typed (it stays unsaved), and a dialog closes.
   const PM = read('js/admin-products.js');
   // (A section sent for approval is no longer "unsaved": Save isn't offered again for the same request, QA admin tester 4.)
-  assert.match(PM, /if \(sentForApproval\(e\)\) \{\s*setDirty\(name, false\);\s*if \(btn\) btn\.disabled = true;\s*return;\s*\}\s*secError\(name, e\.message\);/);
+  assert.match(PM, /if \(sentForApproval\(e\)\) \{\s*setDirty\(name, false\);\s*if \(btn\) btn\.disabled = true;[\s\S]{0,500}?t\('ap\.waitingHere'\)[\s\S]{0,200}?return;\s*\}\s*secError\(name, e\.message\);/);
   assert.match(PM, /if \(sentForApproval\(ex\)\) return void d\.close\(\);/);
   // The page loads the helpers after common.js and before the screens.
   const html = read('admin.html');

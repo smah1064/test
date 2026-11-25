@@ -25,7 +25,7 @@ window.AdminActivity = (() => {
 
   // ---------- Drawing ----------
   // The shared password's sign-in reads as the owner's emergency login, not its id.
-  const nameOf = (w) => (!w ? '—' : w.id === 'owner' ? t('me.emergencyName') : w.name || w.id || '—');
+  const nameOf = (w) => (!w ? '—' : w.id === 'owner' ? t('me.emergencyName') : [w.name || w.id || '—', w.username && w.username !== w.name ? `(${w.username})` : ''].filter(Boolean).join(' '));
   function rowHtml(e, own) {
     // (outcome 'failed': an approval whose change couldn't be applied.)
     const res = e.outcome === 'failed' ? 'failed' : AdminRoles.resultOf(e.status);

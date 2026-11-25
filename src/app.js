@@ -3928,7 +3928,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     req.adminWho = who;
     if (!who.approvalId) {
       const allowed = route.perm === 'owner-only' ? who.role === 'owner' : !route.perm || who.perms.has(route.perm);
-      if (!allowed) throw new HttpError(403, 'noPermission');
+      if (!allowed) {
+        if (!refusedTooMany(who, 403)) {
+          activity.add({ whoId: who.id, who: who.shown || who.name, roles: who.roles, action: key, label: route.label || null, method: req.method, path: req.originalUrl.split('?')[0].slice(0, 300), status: 403,
+            summary: { en: `Not allowed for their role: ${(route.label && route.label.en) || key}`, ar: `مش مسموح للدور بتاعه: ${(route.label && route.label.ar) || key}` } });
+        }
+        throw new HttpError(403, 'noPermission');
+      }
     }
     if (!who.perms.has('orders.amounts') && NO_AMOUNTS.has(route.perm)) {
       const send = res.json.bind(res);
@@ -3978,6 +3984,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   const WORK_WORDS = {
     queued: ['queued', 'في الانتظار'], printing: ['printing', 'بيتطبع'], printed: ['printed', 'اتطبع'], shipped: ['shipped', 'اتشحن'], delivered: ['delivered', 'اتسلم'],
     paid: ['paid', 'اتدفع'], pending: ['not paid yet', 'لسه متدفعش'], approve: ['approved', 'اتوافق عليه'], changes: ['changes asked', 'اتطلب تعديلات'],
+    dtf: ['print method: DTF', 'طريقة الطباعة: DTF'], dtg: ['print method: DTG', 'طريقة الطباعة: DTG'], embroidery: ['embroidery', 'تطريز'],
     done: ['handled', 'اتعمل'], new: ['open again', 'اتفتح تاني'], whatsapp: ['WhatsApp', 'واتساب'], email: ['email', 'إيميل'],
   };
   function workAbout(route, req) {
@@ -3987,7 +3994,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const found = p.itemId ? store.findItem(p.itemId) : null;
     const order = found ? found.order : p.orderId ? store.getOrder(p.orderId) : null;
     if (!order && !Object.keys(b).length) return null;
-    const prod = found && getProduct(found.item.productId);
+    // (The product: of the job, or the one a printing house is set for.)
+    const prod = (found && getProduct(found.item.productId)) || (typeof b.productId === 'string' && getProduct(b.productId)) || null;
     const word = (v) => (WORK_WORDS[v] ? { en: WORK_WORDS[v][0], ar: WORK_WORDS[v][1] } : v == null ? null : { en: String(v).slice(0, 60), ar: String(v).slice(0, 60) });
     const bits = [];
     for (const k of ['status', 'decision', 'action', 'process', 'via', 'channel']) if (typeof b[k] === 'string') bits.push(word(b[k]));
@@ -3996,6 +4004,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (h) bits.push({ en: h.name, ar: h.name });
     }
     for (const k of ['courier', 'trackingNumber']) if (typeof b[k] === 'string' && b[k].trim()) bits.push({ en: b[k].trim().slice(0, 40), ar: b[k].trim().slice(0, 40) });
+    // (A rights request: whose, about which link.)
+    const td = /\/takedowns\//.test(req.originalUrl) && (store.db.takedowns || []).find((x) => x.id === p.id);
+    if (td) { const w = [td.name, td.link].filter(Boolean).join(' · ').slice(0, 80); if (w) bits.unshift({ en: w, ar: w }); }
     const head = [order ? `#${order.number}` : '', prod ? null : ''].filter(Boolean);
     const en = [route.label.en, [head.join(''), prod ? prod.name.en : ''].filter(Boolean).join(' · '), bits.map((x) => x.en).join(', ')].filter(Boolean);
     const ar = [route.label.ar, [head.join(''), prod ? prod.name.ar : ''].filter(Boolean).join(' · '), bits.map((x) => x.ar).join('، ')].filter(Boolean);
@@ -4366,7 +4377,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (b.password !== undefined && !staffPassword(b.password)) throw new HttpError(400, 'badStaff');
     const s = b.password === undefined ? newSetup(req) : null;
     const user = {
-      id: crypto.randomBytes(8).toString('hex'), name, username, roles: rs, active: true, gen: 0,
+      id: crypto.randomBytes(8).toString('hex'), name, username, roles: rs, active: true, gen: 0, ...(rs.includes('owner') ? { everOwner: true } : {}),
       createdAt: new Date().toISOString(), createdBy: req.adminWho.shown || req.adminWho.name,
       ...(s ? { setup: s.setup } : security.AdminAuth.hashStaffPassword(b.password)),
     };
@@ -4391,6 +4402,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (!u) throw new HttpError(404, 'notFound');
       if (name) u.name = name;
       const before = JSON.stringify([roles.rolesOf(u), u.active !== false]);
+      if (roles.rolesOf(u).includes('owner') || (rs && rs.includes('owner'))) u.everOwner = true;
       if (rs) {
         u.roles = rs;
         delete u.role;
@@ -4425,7 +4437,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const pw = (req.body || {}).password;
     // (Not an owner's, and not your own: an owner gets a set-up link, and your own needs your current one.)
     const target = staffAll().find((x) => x.id === req.params.id);
-    if (target && (target.id === req.adminWho.id || roles.rolesOf(target).includes('owner'))) throw new HttpError(403, 'ownerPasswordLink');
+    // (Ever an owner counts: demoting someone, typing their password, then making them owner again is refused too.)
+    if (target && (target.id === req.adminWho.id || roles.rolesOf(target).includes('owner') || target.everOwner)) throw new HttpError(403, 'ownerPasswordLink');
     if (!staffPassword(pw)) throw new HttpError(400, 'badStaff');
     store.mutate((db) => {
       const u = (db.staff || []).find((x) => x.id === req.params.id);
@@ -4509,6 +4522,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       try { return { thumb: `data:image/webp;base64,${fs.readFileSync(path.join(approvalDir, a.thumb)).toString('base64')}` }; } catch (e) { return {}; }
     })() : {}),
     changes: changesOf(a),
+    ...(picsOf(a).length ? { pics: picsOf(a) } : {}),
     ...(changedSince(a) ? { changedSince: true } : {}),
     method: a.method, path: a.path, status: a.status === 'withdrawn' ? 'cancelled' : a.status,
     ...(a.decidedBy ? { decidedBy: a.decidedBy, decidedAt: a.decidedAt } : {}),
@@ -4542,16 +4556,45 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     nameEn: enAr('English name', 'الاسم بالإنجليزي'), nameAr: enAr('Arabic name', 'الاسم بالعربي'), items: enAr('designs', 'التصميمات'),
   };
   /** One value as the owner reads it (both languages of a name, yes / no, short lists). */
-  const ownerValue = (v) => {
+  const VALUE_WORDS = {
+    type: { percent: enAr('percent off', 'نسبة خصم'), fixed: enAr('amount off', 'مبلغ خصم'), freeShipping: enAr('free shipping', 'شحن مجاني') },
+    status: { live: enAr('in the shop', 'في الموقع'), hidden: enAr('paused', 'متوقف مؤقتًا'), removed: enAr('stopped selling', 'وقف البيع') },
+  };
+  const ownerValue = (v, field) => {
     if (v === null || v === undefined || v === '') return enAr('(empty)', '(فاضي)');
     if (typeof v === 'boolean') return v ? enAr('yes', 'أيوه') : enAr('no', 'لأ');
-    if (typeof v === 'number' || typeof v === 'string') {
-      const t = String(v).length > 600 ? `${String(v).slice(0, 600)}…` : String(v);
+    // (Expense categories by name: looked up when used, the list being defined further down.)
+    const words = field === 'category' ? EXPENSE_NAMES : VALUE_WORDS[field];
+    if (typeof v === 'string' && words && words[v]) return words[v];
+    if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
+      const day = (l) => { try { return new Date(`${v}T12:00:00Z`).toLocaleDateString(l === 'ar' ? 'ar-EG' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }); } catch (e) { return v; } };
+      return enAr(day('en'), day('ar'));
+    }
+    if (typeof v === 'number' || (typeof v === 'string' && ['amount', 'value', 'minOrder', 'maxDiscount', 'actualCost', 'actualShipping', 'shippingCost'].includes(field) && accounting.money(v) != null)) {
+      const n = typeof v === 'number' ? v : accounting.money(v);
+      return ['amount', 'minOrder', 'maxDiscount', 'actualCost', 'actualShipping', 'shippingCost'].includes(field) ? enAr(moneyIn(n, 'en'), moneyIn(n, 'ar')) : enAr(String(n), arNum(n));
+    }
+    if (typeof v === 'string') {
+      const t = v.length > 600 ? `${v.slice(0, 600)}…` : v;
       return enAr(t, t);
     }
+    if (field === 'items' && Array.isArray(v)) {
+      const names = (l) => v.slice(0, 20).map((x) => (x && x.name && typeof x.name === 'object' ? `\u2068${String(x.name[l] || x.name.en || x.name.ar || '').slice(0, 60)}\u2069` : '')).filter(Boolean).join(l === 'ar' ? '، ' : ', ') || '—';
+      return enAr(names('en'), names('ar'));
+    }
+    if (field === 'ids' && Array.isArray(v)) {
+      const lib = new Map(library.all().map((d) => [d.id, d.name]));
+      const names = (l) => v.slice(0, 20).map((id) => { const n = lib.get(String(id)); return n ? `\u2068${n[l] || n.en}\u2069` : String(id); }).join(l === 'ar' ? '، ' : ', ') + (v.length > 20 ? (l === 'ar' ? ` … (${arNum(v.length)})` : ` … (${v.length})`) : '');
+      return enAr(names('en'), names('ar'));
+    }
+    if (field === 'costs' && typeof v === 'object' && !Array.isArray(v)) {
+      const parts = (l) => Object.entries(v).slice(0, 12).filter(([, x]) => typeof x !== 'object').map(([k, x]) => `${(OWNER_FIELD_NAMES[k] || enAr(k, k))[l]} ${accounting.money(x) != null ? moneyIn(accounting.money(x), l) : String(x).slice(0, 20)}`).join(l === 'ar' ? '، ' : ', ');
+      return enAr(parts('en') || '—', parts('ar') || '—');
+    }
     if (typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length && Object.keys(v).every((k) => k === 'en' || k === 'ar')) {
-      const t = [v.en, v.ar].filter((x) => x !== undefined && x !== '').map(String).join(' / ').slice(0, 300);
-      return enAr(t, t);
+      // (Each language's own text in its own direction, so a mixed pair never reads jumbled.)
+      const part = (x) => `\u2068${String(x).length > 600 ? `${String(x).slice(0, 600)}…` : String(x)}\u2069`;
+      return enAr([v.en, v.ar].filter((x) => x !== undefined && x !== '').map(part).join(' / '), [v.ar, v.en].filter((x) => x !== undefined && x !== '').map(part).join(' / '));
     }
     if (Array.isArray(v) && v.every((x) => typeof x === 'string' || typeof x === 'number')) {
       const t = v.slice(0, 30).join(', ') + (v.length > 30 ? ` … (${v.length})` : '');
@@ -4564,21 +4607,51 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
    * The product or coupon was changed after this request was made (by anyone): approving it replaces what's there
    * now, so the owner is told.
    */
+  /** What a money change would replace, as it was when asked (compared when the owner looks). */
+  const moneyNow = (action, path) => {
+    const id = decodeURIComponent((/\/(?:items|orders|pricing)\/([^/?]+)/.exec(path) || [])[1] || '');
+    if (action === 'PATCH /api/admin/items/:itemId/cost') { const f = store.findItem(id); return f ? f.item.actualCost ?? null : null; }
+    if (action === 'PATCH /api/admin/orders/:orderId/shipping-cost') { const o = store.getOrder(id); return o ? o.actualShipping ?? null : null; }
+    if (action === 'PUT /api/admin/accounts/settings') return (store.db.accountSettings || {}).shippingCost ?? null;
+    if (action === 'PUT /api/admin/pricing/:productId') return JSON.stringify((store.db.costs || {})[id] || {});
+    return undefined;
+  };
   const changedSince = (a) => {
     if (!(a.status === 'pending' || a.status === 'failed')) return false;
+    if (a.before !== undefined) return JSON.stringify(moneyNow(a.action, a.path)) !== JSON.stringify(a.before);
     const id = (/^\/api\/admin\/(?:catalog|coupons|pricing)\/([^/?]+)/.exec(a.path) || [])[1];
     if (!id) return false;
     const when = a.action.includes('/coupons') ? ((store.db.coupons || []).find((c) => c.id === id) || {}).updatedAt
       : a.action.includes('/catalog') ? (catalogEdits()[decodeURIComponent(id)] || {}).updatedAt : null;
     return Boolean(when && when > a.at);
   };
+  /** Pictures of the designs a change publishes (zip uploads, a share link), for the owner to look at. */
+  const picsOf = (a) => {
+    if (!(a.status === 'pending' || a.status === 'failed')) return [];
+    const b = bodyOf(a) || {};
+    const m = /\/library\/uploads\/([^/?]+)\/publish/.exec(a.path || '');
+    if (m && Array.isArray(b.items)) {
+      const batch = readBatch(decodeURIComponent(m[1]));
+      if (!batch) return [];
+      return b.items.slice(0, 24).filter((x) => x && batch.items.some((it) => it.id === x.id))
+        .map((x) => ({ url: `/library-upload/${batch.id}/${x.id}.png`, name: x.name && typeof x.name === 'object' ? { en: String(x.name.en || ''), ar: String(x.name.ar || x.name.en || '') } : null }));
+    }
+    if (a.action === 'POST /api/admin/library') {
+      const id = (String(b.share || '').match(/([A-Za-z0-9_-]{12})\/?(?:[?#].*)?$/) || [])[1];
+      const sh = id && readShare(id);
+      return sh ? [{ url: `/api/shares/${sh.id}/preview/${(sh.sides[0] || {}).id}.png`, name: null }] : [];
+    }
+    return [];
+  };
   /** The values a kept change asks for, field by field. */
   const changesOf = (a) => {
     if (a.file) return [{ field: enAr('photo', 'صورة'), value: enAr(`${Math.max(1, Math.round((a.bytes || 0) / 1024))} KB`, `${Math.max(1, Math.round((a.bytes || 0) / 1024))} KB`) }];
-    const body = bodyOf(a);
+    const kept = bodyOf(a);
+    // (An expense as it will be saved: the amount read as a number, the category one of the list.)
+    const body = a.action === 'POST /api/admin/expenses' && kept && typeof kept === 'object' ? accounting.cleanExpense(kept).expense || kept : kept;
     if (!body || typeof body !== 'object' || Array.isArray(body)) return [];
     const all = Object.entries(body);
-    const list = all.slice(0, 30).map(([k, v]) => ({ field: OWNER_FIELD_NAMES[k] || enAr(k, k), value: ownerValue(v) }));
+    const list = all.slice(0, 30).map(([k, v]) => ({ field: OWNER_FIELD_NAMES[k] || enAr(k, k), value: ownerValue(v, k) }));
     // (More than fits here: said, so the owner knows the change holds more than shown.)
     if (all.length > 30) list.push({ field: enAr('more', 'كمان'), value: enAr(`${all.length - 30} more fields`, `${all.length - 30} خانات كمان`) });
     return list;
@@ -4599,7 +4672,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   };
   // "1 design" / "3 designs"; Arabic: تصميم واحد، تصميمين، ٣ تصميمات، ١١ تصميم.
   const designsEn = (n) => (n === 1 ? '1 design' : `${n} designs`);
-  const arNum = (n) => String(n).replace(/\d/g, (d) => '٠١٢٣٤٥٦٧٨٩'[d]);
+  const arNum = (n) => String(n).replace(/\d/g, (d) => '٠١٢٣٤٥٦٧٨٩'[d]).replace('.', '٫');
   const designsAr = (n) => (n === 1 ? 'تصميم واحد' : n === 2 ? 'تصميمين' : n >= 3 && n <= 10 ? `${arNum(n)} تصميمات` : `${arNum(n)} تصميم`);
   /** What the change is about, in a few words (the product, coupon, order…), for the owner's list. */
   function approvalAbout(key, req) {
@@ -4637,7 +4710,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const c = p.id && (store.db.coupons || []).find((x) => x.id === p.id);
       // (The code as it will be made: capitals, no spaces.)
       const code = b.code ? coupons.normCode(b.code) : String((c && c.code) || '');
-      return enAr(code, code);
+      // (Switching a coupon off or on says so.)
+      const onOff = key.startsWith('PUT') && c && typeof b.active === 'boolean' && b.active !== (c.active !== false) ? (b.active ? enAr(' (switch on)', ' (تشغيل)') : enAr(' (pause)', ' (إيقاف)')) : enAr('', '');
+      return enAr(code + onOff.en, code + onOff.ar);
     }
     // (Each language on its own: its digits, its currency and its words.)
     const expense = (e) => {
@@ -4679,6 +4754,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (body.prices !== undefined) throw new HttpError(403, 'ownerOnly');
       const c = catalog.clean(p, staffPrices(p, body), { categories: CATEGORIES.map((x) => x.id), prev: catalogEdits()[p.id] || null });
       if (c.error) throw new HttpError(400, c.error, { field: c.field || '' });
+      // (Kept as it will be applied: the owner never approves a number that won't happen.)
+      req.body = staffPrices(p, body);
     },
     'POST /api/admin/catalog': (req) => {
       const n = catalog.cleanNew(req.body && typeof req.body === 'object' ? req.body : {}, PRODUCTS);
@@ -4750,6 +4827,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const { coupon, error } = coupons.cleanCoupon(req.body, { products: PRODUCTS, categories: CATEGORIES });
       if (error) throw new HttpError(400, error);
       if ((store.db.coupons || []).some((c) => c.code === coupon.code && c.id !== req.params.id)) throw new HttpError(409, 'couponExists');
+      // (Only the fields a coupon is made of: its id, dates and counts are the shop's own.)
+      const own = ['code', 'type', 'value', 'minOrder', 'maxDiscount', 'maxUses', 'perCustomer', 'startsOn', 'endsOn', 'active', 'products', 'categories', 'note'];
+      req.body = Object.fromEntries(Object.entries(req.body || {}).filter(([k]) => own.includes(k)));
+      // (A code already waiting in another request: one at a time.)
+      if (approvalsAll().some((a) => (a.status === 'pending' || a.status === 'failed') && /^(POST|PUT) \/api\/admin\/coupons/.test(a.action) && a.body && coupons.normCode(a.body.code) === coupon.code && !a.path.endsWith(`/${req.params.id}`))) throw new HttpError(409, 'couponWaiting');
     },
     'DELETE /api/admin/coupons/:id': (req) => { if (!(store.db.coupons || []).some((c) => c.id === req.params.id)) throw new HttpError(404, 'couponGone'); },
     'PUT /api/admin/pricing/:productId': (req) => {
@@ -4795,8 +4877,18 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   async function holdForApproval(req, res, key, route) {
     await readBody(req, res, route);
     // (Nothing nested deeper than any real change: such a body can't be kept or saved safely.)
-    const depth = (v, d = 0) => (d > 24 ? d : v && typeof v === 'object' ? Math.max(d, ...Object.values(v).slice(0, 2000).map((x) => depth(x, d + 1))) : d);
-    if (!Buffer.isBuffer(req.body) && depth(req.body) > 20) throw new HttpError(400, 'badRequest');
+    // (Walked without recursion: every value, at most 50,000 of them, none deeper than 20.)
+    const tooDeep = (root) => {
+      const stack = [[root, 0]];
+      let seen = 0;
+      while (stack.length) {
+        const [v, d] = stack.pop();
+        if (++seen > 50000 || d > 20) return true;
+        if (v && typeof v === 'object') for (const x of Object.values(v)) stack.push([x, d + 1]);
+      }
+      return false;
+    };
+    if (!Buffer.isBuffer(req.body) && tooDeep(req.body)) throw new HttpError(400, 'badRequest');
     // (A change with nothing in it is refused: an empty edit would only fill the owner's list.)
     if (req.method !== 'DELETE' && !Buffer.isBuffer(req.body) && (!req.body || typeof req.body !== 'object' || Array.isArray(req.body) || !Object.keys(req.body).length)) throw new HttpError(400, 'nothingToApprove');
     // (Keys that only trick JavaScript objects are never kept: what's approved is what the owner was shown.)
@@ -4819,6 +4911,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       action: key, label, summary: { en: [label.en, about.en].filter(Boolean).join(': '), ar: [label.ar, about.ar].filter(Boolean).join(': ') },
       method: req.method, path: req.originalUrl.slice(0, 500), contentType: String(req.get('content-type') || '').slice(0, 100),
       lang: langOf(req),
+      ...(moneyNow(key, req.originalUrl) !== undefined ? { before: moneyNow(key, req.originalUrl) } : {}),
       ...(raw ? { file: `${id}.bin`, bytes: req.body.length } : { body: req.body === undefined ? null : req.body }),
     };
     // (A big change waits in its own file: the shop's data file stays small, so every save stays quick.)
@@ -4946,8 +5039,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       delete x.applyingAt;
       if (note) x.note = note;
       if (ok) delete x.error;
-      if (detail) x.detail = detail;
       else x.error = result && result.errorText ? { en: String(result.errorText.en).slice(0, 300), ar: String(result.errorText.ar).slice(0, 300) } : String((result && result.error) || `HTTP ${out.status}`).slice(0, 300);
+      if (detail) x.detail = detail;
       return x;
     });
     if (ok) for (const f of [a.file, a.thumb, a.bodyFile]) if (f) fs.rmSync(path.join(approvalDir, f), { force: true });
@@ -4988,7 +5081,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const limit = Math.min(500, Math.max(1, parseInt(req.query.limit, 10) || 200));
     // (who: { id, name } for the screen; older lines without a summary read as what they did.)
     const entries = activity.list({ who, from: day(req.query.from), to: day(req.query.to), limit })
-      .map((e) => ({ ...e, who: { id: e.whoId, name: e.who }, summary: e.summary || e.label || null }));
+      .map((e) => {
+        // (The username too: two people can share a name.)
+        const u = staffAll().find((x) => x.id === e.whoId);
+        return { ...e, who: { id: e.whoId, name: e.who, ...(u ? { username: u.username } : {}) }, summary: e.summary || e.label || null };
+      });
     res.json({ entries });
   });
 

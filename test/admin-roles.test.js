@@ -134,6 +134,7 @@ test('a catalogue change by the team waits for an owner, then happens exactly as
   const ok = await call(`/api/admin/approvals/${a.id}/approve`, 'POST', { note: 'fine' }, owner);
   assert.strictEqual(ok.status, 200, ok.text);
   assert.strictEqual(ok.json.approval.status, 'approved');
+  assert.strictEqual(ok.json.approval.error, undefined, 'an approved change carries no reason (QA: "Why: HTTP 200")');
   const apron = (await call('/api/admin/catalog/apron', 'GET', undefined, owner)).json;
   assert.strictEqual(apron.lowStockAt, 7);
   assert.strictEqual(apron.updatedBy, 'cat2', 'made by the team member');
@@ -144,7 +145,7 @@ test('a catalogue change by the team waits for an owner, then happens exactly as
   assert.ok(log.some((e) => e.approvalId === a.id && e.status === 200 && e.whoId === cat.id && e.approvedByEmergency === true), 'approved with the shared password');
   // The screen reads who as { id, name } and what happened in both languages (not the route).
   const applied = log.find((e) => e.approvalId === a.id && e.status === 200 && e.whoId === cat.id);
-  assert.deepStrictEqual(applied.who, { id: cat.id, name: 'CAT2' });
+  assert.deepStrictEqual(applied.who, { id: cat.id, name: 'CAT2', username: 'cat2' }, '(the username too: two people can share a name)');
   assert.match(applied.summary.ar, /تعديل منتج/);
   assert.ok(log.filter((e) => e.action === 'signIn').every((e) => e.summary && e.summary.ar), 'sign-ins say so');
   // The team member's own log has only their entries.
@@ -184,8 +185,8 @@ test('money changes by finance wait; their cost edit keeps the owner\'s prices',
   assert.ok(!(await call('/api/admin/coupons', 'GET', undefined, owner)).json.coupons.some((x) => x.code === 'FIN10'));
   // The owner sees the values asked for, field by field (QA admin tester 2: no approving blind).
   const asked = (await call('/api/admin/approvals', 'GET', undefined, owner)).json.approvals.find((x) => x.id === c.json.approval.id);
-  assert.deepStrictEqual(asked.changes.find((x) => x.field.en === 'value'), { field: { en: 'value', ar: 'القيمة' }, value: { en: '10', ar: '10' } });
-  assert.ok(asked.changes.some((x) => x.field.ar === 'النوع' && x.value.en === 'percent'));
+  assert.deepStrictEqual(asked.changes.find((x) => x.field.en === 'value'), { field: { en: 'value', ar: 'القيمة' }, value: { en: '10', ar: '١٠' } });
+  assert.ok(asked.changes.some((x) => x.field.ar === 'النوع' && x.value.en === 'percent off' && x.value.ar === 'نسبة خصم'), 'codes read as words');
   await call(`/api/admin/approvals/${c.json.approval.id}/approve`, 'POST', {}, owner);
   assert.ok((await call('/api/admin/coupons', 'GET', undefined, owner)).json.coupons.some((x) => x.code === 'FIN10'));
   // A change that fails when approved (the code was taken meanwhile) stays to decide: listed, counted, approvable again.
@@ -467,4 +468,10 @@ test('QA admin round, last wave: costs never wiped, wrong sign-ins logged, big r
   assert.strictEqual(ok.json.approval.status, 'approved', ok.text);
   assert.ok((await call('/api/admin/catalog/apron', 'GET', undefined, owner)).json.description.en.startsWith('Big xxx'));
   assert.ok(!fs.existsSync(path.join(dataDir, 'approvals', `${r.json.approval.id}.json`)), 'its file goes once applied');
+});
+
+test('QA admin round, final wave: an owner can\'t take over another owner (demote, set password, promote)', async () => {
+  const o = await addMember('owner26', ['owner']);
+  assert.strictEqual((await call(`/api/admin/staff/${o.id}`, 'PATCH', { roles: ['finance'] }, owner)).status, 200);
+  assert.strictEqual((await call(`/api/admin/staff/${o.id}/password`, 'PUT', { password: 'taken-over-12345' }, owner)).json.code, 'ownerPasswordLink');
 });

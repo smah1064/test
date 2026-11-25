@@ -259,6 +259,17 @@
     // Forms that change things: only for those who may (the shop's shipping cost: seen by all of Accounts).
     for (const [id, perm] of STATIC_PERMS) $(id).hidden = !can(perm);
     $('acc-ship-cost').disabled = !can('costs.edit');
+    // (Reset links are the owners': the team's help says who makes one.)
+    const prHelp = $('acc-prices-help');
+    if (prHelp) {
+      prHelp.dataset.i18n = can('prices.edit') ? 'acc.pricesHelp' : 'acc.pricesHelpTeam';
+      prHelp.textContent = t(prHelp.dataset.i18n);
+    }
+    const cuHelp = $('cu-help');
+    if (cuHelp) {
+      cuHelp.dataset.i18n = can('customers.contact') ? 'cu.help' : 'cu.helpTeam';
+      cuHelp.textContent = t(cuHelp.dataset.i18n);
+    }
     if (lastLibrary) renderLibRule();
     if (access && !access.owner) $('weak-pw').hidden = true;
     if (access && !AdminRoles.tabAllowed(access, tab)) {
