@@ -197,6 +197,7 @@
     $('tab-accounts').hidden = tab !== 'accounts';
     $('tab-coupons').hidden = tab !== 'coupons';
     $('tab-customers').hidden = tab !== 'customers';
+    $('tab-preview').hidden = tab !== 'preview';
   }
 
   const NEXT = {
@@ -905,41 +906,518 @@
       rerenderOrders();
     }
   });
-  // ---------- Ready-made designs ----------
+  // ---------- Ready-made designs: pause / show in the shop, delete / bring back ----------
+  // GET /api/admin/library: { categories, settings: { textOnlyLimited }, designs } (deleted ones too).
+  // The list is drawn again when a filter changes; after an action only the rows that changed are
+  // redrawn and stay where they are (a design shown again doesn't jump out of "Paused" while reviewing).
   let lastLibrary = null;
-  function renderLibrary(lib) {
+  const LIB = { view: 'all', q: '', cat: '', art: '', ids: [], html: new Map(), picked: new Set(), sig: '', drawn: false, ruleBusy: false, bulkBusy: false };
+  const libById = new Map();
+  const libHay = new Map();
+  const JSON_HEADERS = { 'Content-Type': 'application/json' };
+  /** live: in the shop; paused; deleted; none: not paused but on no product (see the row's note). */
+  const libState = (d) => (d.deleted ? 'deleted' : d.hidden ? 'paused' : Array.isArray(d.products) && !d.products.length ? 'none' : 'live');
+  const LIB_VIEWS = {
+    all: (d) => !d.deleted,
+    live: (d) => libState(d) === 'live',
+    paused: (d) => libState(d) === 'paused',
+    none: (d) => libState(d) === 'none',
+    deleted: (d) => Boolean(d.deleted),
+  };
+  // Search ignores case, Arabic short vowels and tatweel, the alef / yaa / taa marbuta spellings and digit styles (as /designs).
+  const libNorm = (s) => String(s || '').toLowerCase()
+    .replace(/[ً-ٰٟـ]/g, '')
+    .replace(/[أإآٱ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/ؤ/g, 'و').replace(/ئ/g, 'ي')
+    .replace(/[٠-٩]/g, (c) => String(c.charCodeAt(0) - 0x0660))
+    .replace(/[۰-۹]/g, (c) => String(c.charCodeAt(0) - 0x06F0))
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+  const libSig = (lib) => JSON.stringify([lib.settings || null, lib.categories.length, lib.designs.map((d) => [d.id, d.hidden, d.deleted, d.limited, d.product, d.color, (d.products || []).join(' ')])]);
+  const libWhat = (n) => POD.plural('rd.n', n);
+
+  function setLibrary(lib) {
+    lastLibrary = lib;
+    libById.clear();
+    libHay.clear();
+    for (const d of lib.designs) {
+      libById.set(d.id, d);
+      // Name in both languages, the code, and the words printed on the design.
+      const words = [d.id, d.name && d.name.en, d.name && d.name.ar, ...(d.items || []).filter((i) => i.kind === 'text').map((i) => String(i.text || '').replace(/\{[^{}]*\}/g, ' '))];
+      libHay.set(d.id, ` ${libNorm(words.join(' '))} `);
+    }
+  }
+  /**
+   * Draw the tab. On the 15-second refresh (auto) nothing is redrawn unless a design changed (then only
+   * the rows that changed); otherwise the list follows the filters again.
+   */
+  function renderLibrary(lib, { auto = false } = {}) {
+    const sig = libSig(lib);
+    const same = sig === LIB.sig;
+    setLibrary(lib);
+    LIB.sig = sig;
+    renderLibRule();
+    if (auto && LIB.drawn) {
+      if (!same) patchLibRows();
+      return;
+    }
     const sel = $('lib-cat');
     const keep = sel.value;
     sel.innerHTML = lib.categories.map((c) => `<option value="${esc(c.id)}">${esc(tr(c.name))}</option>`).join('');
     if (keep) sel.value = keep;
-    const catName = (id) => tr((lib.categories.find((c) => c.id === id) || {}).name || id);
-    $('lib-list').innerHTML = lib.designs.map((d) => `
-      <div class="queue-row lib-row ${d.hidden ? 'is-hidden' : ''}">
-        <div class="lib-thumb">${d.preview ? `<img src="${esc(d.preview)}" alt="" data-zoom="${esc(JSON.stringify([d.preview]))}">` : '<span>Aa</span>'}</div>
-        <div class="lib-info">
-          <strong dir="auto">${esc(tr(d.name))}</strong>
-          <div class="muted small">${esc(catName(d.category))} · ${esc(t(d.custom ? 'lib.yours' : 'lib.starter'))}${d.hidden ? ' · ' + esc(t('lib.hiddenNote')) : ''}</div>
-        </div>
-        <div class="lib-actions">
-          <a class="btn btn-sm" href="/design?id=${encodeURIComponent(d.id)}" target="_blank" rel="noopener">${esc(t('lib.open'))}</a>
-          <button class="btn btn-sm" data-lib-toggle="${esc(d.id)}" data-hidden="${d.hidden ? '1' : ''}">${esc(t(d.hidden ? 'lib.show' : 'lib.hide'))}</button>
-          ${d.custom ? `<button class="btn btn-sm btn-danger" data-lib-del="${esc(d.id)}">${esc(t('lib.delete'))}</button>` : ''}
-        </div>
-      </div>`).join('');
+    const fc = $('lib-fcat');
+    fc.innerHTML = `<option value="">${esc(t('rd.allCats'))}</option>` + lib.categories.map((c) => `<option value="${esc(c.id)}">${esc(tr(c.name))}</option>`).join('');
+    fc.value = LIB.cat;
+    if (fc.value !== LIB.cat) LIB.cat = '';
+    $('lib-fart').value = LIB.art;
+    renderLibRows();
+    // Product names for the rows' notes (the pictures need the catalogue too).
+    if (!libCatalog) {
+      POD.loadCatalog().then((c) => {
+        if (libCatalog) return;
+        libCatalog = c;
+        if (tab === 'library') patchLibRows();
+      }).catch(() => {});
+    }
   }
-  $('lib-list').addEventListener('click', async (e) => {
-    const tog = e.target.closest('[data-lib-toggle]');
-    const del = e.target.closest('[data-lib-del]');
+  function renderLibRule() {
+    const s = lastLibrary.settings;
+    $('lib-rule').hidden = !s;
+    if (!s) return;
+    if (!LIB.ruleBusy) $('lib-limit').checked = Boolean(s.textOnlyLimited);
+    const limited = lastLibrary.designs.filter((d) => d.limited && !d.deleted);
+    $('lib-rule-now').textContent = s.textOnlyLimited
+      ? t('rd.ruleNow', { limited: libWhat(limited.filter((d) => d.products.length).length), none: libWhat(limited.filter((d) => !d.products.length).length) })
+      : '';
+  }
+  /** The designs matching the search, category and artwork filters (the chips count within these). */
+  function libScoped() {
+    const terms = libNorm(LIB.q).split(' ').filter(Boolean);
+    return lastLibrary.designs.filter((d) => (!LIB.cat || d.category === LIB.cat)
+      && (!LIB.art || (LIB.art === 'yes') === Boolean(d.artwork))
+      && terms.every((w) => libHay.get(d.id).includes(w)));
+  }
+  function renderLibRows() {
+    if (!lastLibrary) return;
+    if (!LIB_VIEWS[LIB.view]) LIB.view = 'all';
+    const list = libScoped().filter(LIB_VIEWS[LIB.view]);
+    LIB.ids = list.map((d) => d.id);
+    const ids = new Set(LIB.ids);
+    for (const id of [...LIB.picked]) if (!ids.has(id)) LIB.picked.delete(id);
+    LIB.html.clear();
+    if (libIO) libIO.disconnect();
+    libWant.clear();
+    const box = $('lib-list');
+    box.innerHTML = list.length ? list.map((d) => {
+      const h = libRowHtml(d);
+      LIB.html.set(d.id, h);
+      return h;
+    }).join('') : libEmptyHtml();
+    LIB.drawn = true;
+    observeLibPics(box);
+    renderLibChips();
+    renderLibBar();
+  }
+  /** Redraw the rows on screen that changed; a deleted one leaves the list (and one brought back leaves Deleted). */
+  function patchLibRows() {
+    const box = $('lib-list');
+    const els = new Map([...box.querySelectorAll('[data-rd-row]')].map((el) => [el.dataset.rdRow, el]));
+    const keep = [];
+    for (const id of LIB.ids) {
+      const d = libById.get(id);
+      const el = els.get(id);
+      if (!d || (LIB.view === 'deleted') !== Boolean(d.deleted)) {
+        if (el) { if (libIO) libIO.unobserve(el); el.remove(); }
+        LIB.html.delete(id);
+        LIB.picked.delete(id);
+        libWant.delete(id);
+        continue;
+      }
+      keep.push(id);
+      if (el) patchLibRow(id, el);
+    }
+    LIB.ids = keep;
+    if (!keep.length) box.innerHTML = libEmptyHtml();
+    observeLibPics(box);
+    renderLibChips();
+    renderLibBar();
+  }
+  function patchLibRow(id, el = $('lib-list').querySelector(`[data-rd-row="${CSS.escape(id)}"]`)) {
+    const d = libById.get(id);
+    if (!el || !d) return;
+    const h = libRowHtml(d);
+    if (h === LIB.html.get(id)) return;
+    if (libIO) libIO.unobserve(el);
+    el.outerHTML = h;
+    LIB.html.set(id, h);
+    const now = $('lib-list').querySelector(`[data-rd-row="${CSS.escape(id)}"]`);
+    if (now && now.hasAttribute('data-rd-need')) observeLibPics(now.parentNode, now);
+  }
+
+  function renderLibChips() {
+    const scoped = libScoped();
+    const n = {};
+    for (const v of Object.keys(LIB_VIEWS)) n[v] = scoped.filter(LIB_VIEWS[v]).length;
+    // "On no product" only when there are some (designs not paused, but the rule or the catalogue leaves them nowhere).
+    $('lib-chips').innerHTML = ['all', 'live', 'paused', 'none', 'deleted'].filter((v) => v !== 'none' || n.none || LIB.view === 'none')
+      .map((v) => `<button type="button" class="chip rd-chip-${v} ${LIB.view === v ? 'active' : ''}" data-rd-filter="${v}" aria-pressed="${LIB.view === v}">${esc(t('rd.f.' + v))} <span class="rd-chip-n">${esc(POD.num(n[v]))}</span></button>`).join('');
+    const total = lastLibrary.designs.filter((d) => !d.deleted).length;
+    $('lib-count').textContent = LIB.view === 'deleted' ? t('rd.countDeleted', { what: libWhat(LIB.ids.length) }) : t('rd.count', { what: libWhat(LIB.ids.length), total: POD.num(total) });
+  }
+
+  // ---------- One row ----------
+  const libPill = (cls, text) => `<span class="rd-pill rd-pill-${cls}">${esc(text)}</span>`;
+  const libCatName = (id) => tr((lastLibrary.categories.find((c) => c.id === id) || {}).name || id);
+  /** The products a design is offered on, by name when the shop's catalogue is loaded (for the pictures). */
+  function libProductList(d) {
+    const names = libCatalog ? d.products.map((id) => (libCatalog.products.find((p) => p.id === id) || {}).name).filter(Boolean).map(tr) : [];
+    if (names.length !== d.products.length || !names.length) return POD.plural('rd.p', d.products.length);
+    const shown = names.slice(0, 3).join(POD.lang === 'ar' ? '، ' : ', ');
+    return names.length > 3 ? `${shown} ${t('rd.more', { n: POD.num(names.length - 3) })}` : shown;
+  }
+  function libNote(d, st) {
+    if (st === 'deleted') return t(d.hidden ? 'rd.backPaused' : 'rd.backLive');
+    if (st === 'none') return t(d.limited ? 'rd.noneLimited' : 'rd.noneSold');
+    if (st === 'paused' && d.limited && !d.products.length) return t('rd.pausedLimited');
+    if (st === 'live' && d.limited) return t('rd.limited', { list: libProductList(d) });
+    return '';
+  }
+  function libRowHtml(d) {
+    const st = libState(d);
+    const name = tr(d.name);
+    const note = libNote(d, st);
+    const id = esc(d.id);
+    const need = !d.preview && !libPicDone.has(libPicKey(d));
+    const acts = st === 'deleted'
+      ? `<button class="btn btn-sm btn-dark" type="button" data-rd-act="back" data-id="${id}">${esc(t('rd.back'))}</button>`
+      : `${st === 'live' ? `<a class="btn btn-sm" href="/design?id=${encodeURIComponent(d.id)}" target="_blank" rel="noopener">${esc(t('rd.open'))} ↗</a>` : ''}
+        ${st === 'paused'
+    ? `<button class="btn btn-sm rd-btn-show" type="button" data-rd-act="show" data-id="${id}">${esc(t('rd.show'))}</button>`
+    : `<button class="btn btn-sm" type="button" data-rd-act="pause" data-id="${id}">${esc(t('rd.pause'))}</button>`}
+        <button class="btn btn-sm btn-danger" type="button" data-rd-act="delete" data-id="${id}">${esc(t('rd.delete'))}</button>`;
+    return `<article class="card rd-row rd-is-${st}${LIB.picked.has(d.id) ? ' is-picked' : ''}" data-rd-row="${id}"${need ? ' data-rd-need' : ''}>
+        <input type="checkbox" class="rd-pick" data-rd-pick="${id}" ${LIB.picked.has(d.id) ? 'checked' : ''} aria-label="${esc(t('rd.pick', { name }))}">
+        <button type="button" class="rd-thumb" data-rd-view="${id}" aria-label="${esc(t('rd.bigger', { name }))}">${libPicHtml(d)}</button>
+        <div class="rd-main">
+          <div class="rd-title"><strong dir="auto">${esc(name)}</strong> <bdi class="rd-id" dir="ltr">${id}</bdi></div>
+          <div class="muted small">${esc(libCatName(d.category))} · ${esc(t(d.custom ? 'rd.yours' : 'rd.starter'))}</div>
+          <div class="rd-pills">${libPill(st, t('rd.st.' + st))}${d.artwork ? libPill('art', t('rd.withArt')) : libPill('text', t('rd.textOnly'))}</div>
+          ${note ? `<div class="small rd-note rd-note-${st}">${esc(note)}</div>` : ''}
+        </div>
+        <div class="rd-acts">${acts}</div>
+      </article>`;
+  }
+  function libEmptyHtml() {
+    const filtered = Boolean(LIB.q.trim() || LIB.cat || LIB.art);
+    return `<div class="card rd-empty"><p>${esc(t(LIB.view === 'deleted' && !filtered ? 'rd.noneDeleted' : 'rd.none'))}</p>${filtered ? `<button type="button" class="btn btn-sm" data-rd-clear>${esc(t('rd.clear'))}</button>` : ''}</div>`;
+  }
+
+  // ---------- Pictures ----------
+  // The owner's designs have a preview PNG. The starter ones are drawn here with the shop's own renderer
+  // (design-render.js, loaded the first time it's needed), only for the rows on screen, one at a time, and
+  // kept: a close-up for the row, and the close-up plus the whole product (as the shop shows it) to zoom.
+  let libCatalog = null;
+  let libRenderer = null;
+  function loadLibRenderer() {
+    if (window.POD_RENDER) return Promise.resolve();
+    if (!libRenderer) {
+      // The same version stamp as this page's own scripts, so a deploy never mixes old and new files.
+      const own = document.querySelector('script[src*="/js/admin.js"]');
+      const v = (own && (own.getAttribute('src').match(/[?&]v=([^&#]+)/) || [])[1]) || '';
+      const files = ['/vendor/fabric-5.3.0.min.js', '/js/fabric-ext.js', '/js/templates.js', '/js/stickers.js', '/js/photo-mockups.js', '/js/design-render.js'];
+      libRenderer = files.reduce((p, src) => p.then(() => (src.includes('fabric-5') && window.fabric ? null : new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = v ? `${src}?v=${encodeURIComponent(v)}` : src;
+        s.onload = resolve;
+        s.onerror = () => reject(new Error('script'));
+        document.head.appendChild(s);
+      }))), Promise.resolve()).catch((e) => {
+        libRenderer = null;
+        throw e;
+      });
+    }
+    return libRenderer;
+  }
+  const libPics = new Map(); // picture key -> promise of { thumb, crop, full } (URLs), or null
+  const libPicDone = new Map(); // the same, once drawn
+  // Where a design is shown can change with the text-only rule (product, colour).
+  const libPicKey = (d) => `${d.id}|${d.product}|${d.color}`;
+  const libShrink = (cv, size) => {
+    const k = Math.min(1, size / Math.max(cv.width, cv.height));
+    const out = document.createElement('canvas');
+    out.width = Math.max(1, Math.round(cv.width * k));
+    out.height = Math.max(1, Math.round(cv.height * k));
+    const ctx = out.getContext('2d');
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(cv, 0, 0, out.width, out.height);
+    return out;
+  };
+  const libBlobUrl = (cv) => new Promise((resolve, reject) => cv.toBlob((b) => (b ? resolve(URL.createObjectURL(b)) : reject(new Error('export'))), 'image/webp', 0.86));
+  async function drawLibPic(d) {
+    await loadLibRenderer();
+    if (!libCatalog) {
+      libCatalog = await POD.loadCatalog();
+      if (LIB.drawn && tab === 'library') patchLibRows(); // product names in the rows' notes
+    }
+    const products = libCatalog.products.filter((p) => !p.kind);
+    const product = products.find((p) => p.id === d.product) || products.find((p) => (d.products || []).includes(p.id));
+    if (product) {
+      try {
+        const color = product.colors.find((c) => c.id === d.color && POD.canPick(c)) || POD.firstPick(product.colors);
+        const st = await POD_RENDER.stage(d, product, product.sides[0], color);
+        try {
+          const a = st.R.trim;
+          const crop = POD_RENDER.picture(st, 420 / Math.min(POD_RENDER.W, POD_RENDER.H, Math.max(a.w, a.h) * 1.15), 1.15);
+          const full = await POD_RENDER.productPicture(st, 0.9);
+          return { thumb: await libBlobUrl(libShrink(crop, 144)), crop: await libBlobUrl(crop), full: await libBlobUrl(full) };
+        } finally {
+          st.canvas.dispose();
+        }
+      } catch (e) { /* the layout alone below */ }
+    }
+    // None of its products on sale (or the product picture failed): the layout alone, on white.
+    const url = await window.POD_DESIGN.templateThumb({ id: d.id, items: d.items, aspect: d.aspect });
+    return { thumb: url, crop: url, full: null };
+  }
+  function libPic(d) {
+    const key = libPicKey(d);
+    if (!libPics.has(key)) {
+      libPics.set(key, (d.kind === 'template' ? drawLibPic(d) : Promise.resolve(null)).catch(() => null).then((p) => {
+        libPicDone.set(key, p);
+        return p;
+      }));
+    }
+    return libPics.get(key);
+  }
+  const libZoomUrls = (d) => {
+    if (d.preview) return [d.preview];
+    const p = libPicDone.get(libPicKey(d));
+    return p ? [p.crop, p.full].filter(Boolean) : [];
+  };
+  function libPicHtml(d) {
+    if (d.preview) return `<img src="${esc(d.preview)}" alt="" loading="lazy" decoding="async" data-zoom="${esc(JSON.stringify([d.preview]))}">`;
+    const key = libPicKey(d);
+    if (!libPicDone.has(key)) return '<span class="rd-ph rd-ph-wait" aria-hidden="true"></span>';
+    const p = libPicDone.get(key);
+    return p ? `<img src="${esc(p.thumb)}" alt="" data-zoom="${esc(JSON.stringify(libZoomUrls(d)))}">` : '<span class="rd-ph" aria-hidden="true">Aa</span>';
+  }
+  // Rows waiting for a picture that are on screen (or nearly), drawn in the order they come.
+  const libWant = new Set();
+  const libIO = 'IntersectionObserver' in window ? new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (e.isIntersecting) libWant.add(e.target.dataset.rdRow);
+      else libWant.delete(e.target.dataset.rdRow);
+    }
+    pumpLibPics();
+  }, { rootMargin: '300px 0px' }) : null;
+  function observeLibPics(root, only) {
+    const rows = only ? [only] : root.querySelectorAll('[data-rd-row][data-rd-need]');
+    rows.forEach((el) => (libIO ? libIO.observe(el) : libWant.add(el.dataset.rdRow)));
+    if (!libIO) pumpLibPics();
+  }
+  let libPumping = false;
+  async function pumpLibPics() {
+    if (libPumping) return;
+    libPumping = true;
     try {
-      if (tog) {
-        await adminApi('/api/admin/library/' + encodeURIComponent(tog.dataset.libToggle), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hidden: !tog.dataset.hidden }) });
-      } else if (del) {
-        if (!confirm(t('lib.confirmDelete'))) return;
-        await adminApi('/api/admin/library/' + encodeURIComponent(del.dataset.libDel), { method: 'DELETE' });
-      } else return;
-      renderLibrary((lastLibrary = await adminApi('/api/admin/library')));
+      while (libWant.size) {
+        const id = libWant.values().next().value;
+        libWant.delete(id);
+        const d = libById.get(id);
+        if (!d) continue;
+        if (!libPicDone.has(libPicKey(d))) {
+          await libPic(d);
+          await new Promise((r) => setTimeout(r, 0)); // scrolling and clicks go in between
+        }
+        if (tab === 'library') patchLibRow(id);
+      }
+    } finally {
+      libPumping = false;
+    }
+  }
+  // A bigger picture (any screen; on a computer the picture also grows on hover).
+  let libViewer = null;
+  async function openLibViewer(id) {
+    const d = libById.get(id);
+    if (!d) return;
+    if (!libViewer) {
+      libViewer = document.createElement('dialog');
+      libViewer.className = 'rd-viewer';
+      libViewer.addEventListener('click', (e) => { if (e.target === libViewer || e.target.closest('[data-rd-close]')) libViewer.close(); });
+      document.body.appendChild(libViewer);
+    }
+    const draw = () => {
+      const urls = libZoomUrls(d);
+      const waiting = !d.preview && !libPicDone.has(libPicKey(d));
+      const st = libState(d);
+      libViewer.setAttribute('aria-label', tr(d.name));
+      libViewer.innerHTML = `<div class="rd-viewer-box">
+          <div class="rd-viewer-head"><strong dir="auto">${esc(tr(d.name))}</strong>${libPill(st, t('rd.st.' + st))}<button type="button" class="btn btn-sm" data-rd-close>${esc(t('rd.close'))}</button></div>
+          <div class="rd-viewer-pics${urls.length > 1 ? ' two' : ''}">${urls.length ? urls.map((u) => `<img src="${esc(u)}" alt="">`).join('') : `<p class="muted">${esc(t(waiting ? 'rd.loading' : 'rd.picFail'))}</p>`}</div>
+        </div>`;
+    };
+    libViewer.dataset.id = id;
+    draw();
+    if (!libViewer.open) libViewer.showModal();
+    if (!d.preview && !libPicDone.has(libPicKey(d))) {
+      await libPic(d);
+      if (libViewer.open && libViewer.dataset.id === id) draw();
+      patchLibRow(id);
+    }
+  }
+
+  // ---------- Several at once: the ticked ones, else all shown ----------
+  const LIB_BODY = { pause: { hidden: true }, show: { hidden: false }, delete: { deleted: true }, back: { deleted: false } };
+  /** Which of `list` an action changes. */
+  const libFor = (act, list) => list.filter((d) => (act === 'back' ? d.deleted : !d.deleted && (act === 'delete' || (act === 'pause') === !d.hidden)));
+  /**
+   * Next to the count: "Tick all shown" and the actions on all shown. Ticked rows get their own bar,
+   * kept at the bottom of the screen while the list scrolls.
+   */
+  function renderLibBar() {
+    const shown = LIB.ids.map((id) => libById.get(id)).filter(Boolean);
+    const picked = shown.filter((d) => LIB.picked.has(d.id));
+    const btn = (act, key, n, cls = '') => (n ? `<button type="button" class="btn btn-sm ${cls}" data-rd-bulk="${act}" ${LIB.bulkBusy ? 'disabled' : ''}>${esc(t(key, { n: POD.num(n) }))}</button>` : '');
+    $('lib-all').innerHTML = shown.length ? `<label class="check rd-pickall"><input type="checkbox" data-rd-pickall ${picked.length === shown.length ? 'checked' : ''}> ${esc(t('rd.pickAll'))}</label>
+      ${picked.length ? '' : `${btn('pause', 'rd.bulk.pause', libFor('pause', shown).length)}
+        ${btn('show', 'rd.bulk.show', libFor('show', shown).length, 'rd-btn-show')}
+        ${btn('back', 'rd.bulk.back', libFor('back', shown).length, 'btn-dark')}`}` : '';
+    const bar = $('lib-bar');
+    bar.hidden = !picked.length;
+    bar.innerHTML = picked.length ? `<span class="rd-bar-what">${esc(t('rd.picked', { what: libWhat(picked.length) }))}</span>
+      <div class="rd-bar-acts">
+        ${btn('pause', 'rd.pick.pause', libFor('pause', picked).length)}
+        ${btn('show', 'rd.pick.show', libFor('show', picked).length, 'rd-btn-show')}
+        ${btn('delete', 'rd.pick.delete', libFor('delete', picked).length, 'btn-danger')}
+        ${btn('back', 'rd.pick.back', libFor('back', picked).length, 'btn-dark')}
+        <button type="button" class="btn btn-sm" data-rd-bulk="unpick">${esc(t('rd.unpick'))}</button>
+      </div>` : '';
+  }
+  async function libBulk(act) {
+    const shown = LIB.ids.map((id) => libById.get(id)).filter(Boolean);
+    const picked = shown.filter((d) => LIB.picked.has(d.id));
+    const ids = libFor(act, picked.length ? picked : shown).map((d) => d.id);
+    if (!ids.length || !confirm(t(`rd.confirm.${act}.${ids.length === 1 ? 'one' : 'other'}`, { what: libWhat(ids.length) }))) return;
+    LIB.bulkBusy = true;
+    renderLibBar();
+    try {
+      const r = await adminApi('/api/admin/library', { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify({ ids, ...LIB_BODY[act] }) });
+      LIB.picked.clear();
+      renderLibrary(await adminApi('/api/admin/library'));
+      const none = act === 'show' ? ids.filter((id) => libById.has(id) && libState(libById.get(id)) === 'none').length : 0;
+      toast(none ? t('rd.done.showSomeNone', { what: libWhat(r.changed), none: POD.num(none) }) : t('rd.done.' + act, { what: libWhat(r.changed) }));
     } catch (err) {
-      POD.toast(err.message, 'error');
+      toast(err.message, 'error');
+    } finally {
+      LIB.bulkBusy = false;
+      renderLibBar();
+    }
+  }
+
+  // ---------- Events ----------
+  async function libAct(btn) {
+    const d = libById.get(btn.dataset.id);
+    const act = btn.dataset.rdAct;
+    if (!d || !LIB_BODY[act]) return;
+    const name = tr(d.name);
+    if (act === 'delete' && !confirm(t('rd.confirmDelete', { name }))) return;
+    btn.disabled = true;
+    try {
+      if (act === 'delete') await adminApi('/api/admin/library/' + encodeURIComponent(d.id), { method: 'DELETE' });
+      else await adminApi('/api/admin/library/' + encodeURIComponent(d.id), { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(LIB_BODY[act]) });
+      Object.assign(d, LIB_BODY[act]);
+      LIB.sig = libSig(lastLibrary);
+      patchLibRows();
+      toast(act === 'pause' ? t('rd.pausedOk', { name })
+        : act === 'show' ? t(libState(d) === 'none' ? 'rd.shownNone' : 'rd.shownOk', { name })
+          : act === 'delete' ? t('rd.deletedOk', { name })
+            : t(d.hidden ? 'rd.backOkPaused' : 'rd.backOkLive', { name }));
+    } catch (err) {
+      toast(err.message, 'error');
+      btn.disabled = false;
+    }
+    // Pausing or deleting a design with artwork can change where text-only designs go: read the list again.
+    adminApi('/api/admin/library').then((lib) => tab === 'library' && renderLibrary(lib, { auto: true })).catch(() => {});
+  }
+  $('lib-list').addEventListener('click', (e) => {
+    const view = e.target.closest('[data-rd-view]');
+    if (view) return void openLibViewer(view.dataset.rdView);
+    if (e.target.closest('[data-rd-clear]')) {
+      LIB.q = '';
+      LIB.cat = '';
+      LIB.art = '';
+      $('lib-q').value = '';
+      $('lib-fcat').value = '';
+      $('lib-fart').value = '';
+      renderLibRows();
+      return;
+    }
+    const btn = e.target.closest('[data-rd-act]');
+    if (btn) libAct(btn);
+  });
+  $('lib-list').addEventListener('change', (e) => {
+    const box = e.target.closest('[data-rd-pick]');
+    if (!box) return;
+    if (box.checked) LIB.picked.add(box.dataset.rdPick);
+    else LIB.picked.delete(box.dataset.rdPick);
+    box.closest('[data-rd-row]').classList.toggle('is-picked', box.checked);
+    renderLibBar();
+  });
+  /** Tick (or untick) every row shown. */
+  function libPickAll(on) {
+    LIB.picked = new Set(on ? LIB.ids : []);
+    $('lib-list').querySelectorAll('[data-rd-pick]').forEach((x) => { x.checked = on; x.closest('[data-rd-row]').classList.toggle('is-picked', on); });
+    renderLibBar();
+  }
+  ['lib-all', 'lib-bar'].forEach((box) => {
+    $(box).addEventListener('click', (e) => {
+      const b = e.target.closest('[data-rd-bulk]');
+      if (!b) return;
+      if (b.dataset.rdBulk === 'unpick') libPickAll(false);
+      else libBulk(b.dataset.rdBulk);
+    });
+    $(box).addEventListener('change', (e) => { if (e.target.matches('[data-rd-pickall]')) libPickAll(e.target.checked); });
+  });
+  $('lib-chips').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-rd-filter]');
+    if (!b || b.dataset.rdFilter === LIB.view) return;
+    LIB.view = b.dataset.rdFilter;
+    LIB.picked.clear();
+    renderLibRows();
+  });
+  let libTyping = null;
+  $('lib-q').addEventListener('input', () => {
+    clearTimeout(libTyping);
+    libTyping = setTimeout(() => {
+      LIB.q = $('lib-q').value.slice(0, 60);
+      if (lastLibrary) renderLibRows();
+    }, 200);
+  });
+  $('lib-fcat').addEventListener('change', (e) => {
+    LIB.cat = e.target.value;
+    if (lastLibrary) renderLibRows();
+  });
+  $('lib-fart').addEventListener('change', (e) => {
+    LIB.art = e.target.value;
+    if (lastLibrary) renderLibRows();
+  });
+  $('lib-limit').addEventListener('change', async (e) => {
+    const box = e.target;
+    const on = box.checked;
+    LIB.ruleBusy = true;
+    box.disabled = true;
+    $('lib-rule-now').textContent = t('rd.saving');
+    try {
+      await adminApi('/api/admin/library/settings', { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify({ textOnlyLimited: on }) });
+      LIB.ruleBusy = false;
+      renderLibrary(await adminApi('/api/admin/library'));
+      toast(t(on ? 'rd.ruleOn' : 'rd.ruleOff'));
+    } catch (err) {
+      box.checked = !on;
+      toast(err.message, 'error');
+    } finally {
+      LIB.ruleBusy = false;
+      box.disabled = false;
+      if (lastLibrary) renderLibRule();
     }
   });
   $('lib-add').addEventListener('submit', async (e) => {
@@ -958,7 +1436,7 @@
       $('lib-share').value = '';
       $('lib-name-ar').value = '';
       $('lib-name-en').value = '';
-      renderLibrary((lastLibrary = await adminApi('/api/admin/library')));
+      renderLibrary(await adminApi('/api/admin/library'));
     } catch (err) {
       msg.style.color = '#c92a2a';
       msg.textContent = err.message;
@@ -1026,12 +1504,13 @@
     else if (tab === 'accounts') await refreshAccounts({ auto: true });
     else if (tab === 'coupons') renderCoupons((couponData = await adminApi('/api/admin/coupons')));
     else if (tab === 'customers') await loadCustomers();
+    else if (tab === 'preview') await AdminPreview.show();
     else if (tab === 'film') {
       const items = (await adminApi('/api/admin/dtf-items')).items;
       await ensureOrders(items);
       renderFilm((lastFilm = items));
     }
-    else if (tab === 'library') renderLibrary((lastLibrary = await adminApi('/api/admin/library')));
+    else if (tab === 'library') renderLibrary(await adminApi('/api/admin/library'), { auto });
     else {
       // Don't redraw while the admin is typing in a shipping box.
       if (document.activeElement && document.activeElement.closest && document.activeElement.closest('.ship-box') && lastOrders) return;
@@ -1047,6 +1526,7 @@
   document.addEventListener('pod:langchange', () => {
     applyRole();
     if (tab === 'products' && window.AdminProducts) AdminProducts.onLang();
+    if (tab === 'preview' && window.AdminPreview) AdminPreview.onLang();
     if (tab === 'queue' && lastQueue) renderQueue(lastQueue);
     if (tab === 'orders' && lastOrders) { renderOrders(lastOrders); renderNotifyStatus(); }
     if (tab === 'review' && reviewData) renderReview();
@@ -2167,6 +2647,7 @@
   });
 
   AdminProducts.init({ api: adminApi, role: () => role });
+  AdminPreview.init({ api: adminApi });
   // Who is signed in first (a product manager's page must never call the owner's routes), then the tab.
   refresh().catch(() => {});
   setInterval(() => !document.hidden && token && refresh({ auto: true }).catch(() => {}), 15000);

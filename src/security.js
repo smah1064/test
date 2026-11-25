@@ -284,6 +284,8 @@ class AdminAuth {
     this.linkKey = crypto.createHmac('sha256', secret).update('print-house-links').digest();
     // Signs customers' sign-in cookies and password-reset links (independent of the admin password).
     this.customerKey = crypto.createHmac('sha256', secret).update('customer-sessions').digest();
+    // Signs the private-preview cookies (src/preview.js), independent of the admin password.
+    this.previewKey = crypto.createHmac('sha256', secret).update('private-preview').digest();
     this.sessions = new Map(); // revoked tokens when there is no store
     // Wrong passwords, counted for every copy of the app together (a file in the data folder).
     this.fails = limiter || (dataDir ? new SharedLimiter(path.join(dataDir, '.signin-limits.json')) : new RateLimiter());

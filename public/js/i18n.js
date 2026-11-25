@@ -88,7 +88,11 @@ window.POD_STRINGS = {
   'hm.a6': ['Start from a ready-made design or a template and change the words, or use the editor\'s AI help for slogans and logos.', 'ابدأ من تصميم جاهز أو قالب وغيّر الكلام، أو استخدم مساعدة الذكاء الاصطناعي في المحرر للجمل واللوجوهات.'],
   'home.search': ['Search products: t-shirt, mug, business cards…', 'دوّر على منتج: تيشيرت، مج، كروت شخصية…'],
   'home.searchLabel': ['Search products', 'دوّر على منتج'],
-  'home.found': ['{n} products for "{q}"', '{n} منتج لـ "{q}"'],
+  // Counted: POD.plural('home.found', n, { q }) picks one / two / few (Arabic 3–10) / many.
+  'home.found.one': ['1 product for "{q}"', 'منتج واحد لـ "{q}"'],
+  'home.found.two': ['2 products for "{q}"', 'منتجين لـ "{q}"'],
+  'home.found.few': ['{n} products for "{q}"', '{n} منتجات لـ "{q}"'],
+  'home.found.many': ['{n} products for "{q}"', '{n} منتج لـ "{q}"'],
   'home.noMatch': ['No products match "{q}"', 'مفيش منتجات بالاسم "{q}"'],
   'home.noMatchCat': ['No products here yet', 'مفيش منتجات هنا لسه'],
   'home.noMatchHint': ['Try another word, or look through all the products.', 'جرّب كلمة تانية، أو شوف كل المنتجات.'],
@@ -882,6 +886,10 @@ window.POD_STRINGS = {
   'checkout.title': ['Delivery details', 'بيانات التوصيل'],
   'checkout.name': ['Full name', 'الاسم بالكامل'],
   'checkout.phone': ['Mobile number', 'رقم الموبايل'],
+  // An example in the page's digits, grouped the way it is usually written. The marks after the Arabic
+  // groups (\u200e, invisible) keep them left to right: a placeholder doesn't follow the field's own
+  // left-to-right setting (styles.css, input[type=tel]), and on its own "٠١٠ ١٢٣٤ ٥٦٧٨" shows its groups the other way round.
+  'checkout.phonePh': ['010 1234 5678', '٠١٠\u200e ١٢٣٤\u200e ٥٦٧٨'],
   'checkout.email': ['Email (optional)', 'البريد الإلكتروني (اختياري)'],
   'checkout.governorate': ['Governorate', 'المحافظة'],
   'checkout.choose': ['Choose…', 'اختر…'],

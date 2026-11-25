@@ -57,7 +57,8 @@ const catalog = require('./catalog');
 const productsMod = require('./products');
 catalog.init(PRODUCTS, { embroidery: productsMod.EMBROIDERY, embroideryFor: productsMod.embroideryFor, scalePrice: productsMod.scalePrice });
 accounting.initPricing(PRODUCTS, EXTRA_SIDE_PRICE);
-const { Library, CATEGORIES: DESIGN_CATEGORIES, catalogChanged: libraryCatalogChanged } = require('./library');
+const { Library, CATEGORIES: DESIGN_CATEGORIES, catalogChanged: libraryCatalogChanged, usesArtwork } = require('./library');
+const preview = require('./preview');
 const security = require('./security');
 const books = require('./books');
 const cartoon = require('./cartoon');
@@ -430,6 +431,7 @@ const DEFAULT_LIMITS = {
   // WhatsApp/email alerts for the whole shop, so fake orders cannot flood the owner's phone.
   notify: [{ max: 30, ms: 3600e3 }, { max: 200, ms: 24 * 3600e3 }],
   couponTry: [{ max: 15, ms: 10 * 60e3 }, { max: 60, ms: 24 * 3600e3 }], // coupon codes that didn't work, per visitor
+  previewCode: [{ max: 10, ms: 15 * 60e3 }, { max: 40, ms: 24 * 3600e3 }], // private-preview codes that didn't work, per visitor
   notifyCustomer: [{ max: 5, ms: 3600e3 }, { max: 20, ms: 24 * 3600e3 }], // order confirmations to one email address
   notifyCustomerAll: [{ max: 500, ms: 24 * 3600e3 }],
   // Illustrator / EPS files turned into pictures for the editor.
@@ -438,6 +440,9 @@ const DEFAULT_LIMITS = {
   reorder: [{ max: 20, ms: 10 * 60e3 }, { max: 100, ms: 24 * 3600e3 }],
   reorderOrder: [{ max: 3, ms: 3600e3 }, { max: 6, ms: 24 * 3600e3 }], // per order
   reorderMB: 8000, // megabytes of files copied by "Order again", the whole shop, per day
+  // Megabytes of booklet PDFs kept (45 days each) for the whole shop per day, so a few visitors can't
+  // fill the disk (per visitor: the 'artwork' limit).
+  pdfPagesMB: Number(process.env.PDF_PAGES_DAILY_MB) || 6000,
   draftSave: [{ max: 200, ms: 10 * 60e3 }],
   // AI background removal (about 2 s of server time each).
   removeBg: [{ max: 20, ms: 10 * 60e3 }, { max: 80, ms: 24 * 3600e3 }],
@@ -455,7 +460,7 @@ const DEFAULT_LIMITS = {
   downloads: [{ max: 200, ms: 3600e3 }],
 };
 
-function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 3600e3, oauthConfig = {}, oauthFetch, importGet, requireApproval = true, captcha = captchaMod.fromEnv(), captchaFetch }) {
+function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 3600e3, oauthConfig = {}, oauthFetch, importGet, requireApproval = true, captcha = captchaMod.fromEnv(), captchaFetch, libraryOnce = [], previewStart = false }) {
   if (!adminPassword) throw new Error('adminPassword is required');
   const store = new Store(dataDir);
   const app = express();
@@ -535,6 +540,103 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       console.log(`[proxy] xff="${String(req.get('x-forwarded-for') || '').slice(0, 200)}" real="${String(req.get('x-real-ip') || '').slice(0, 60)}" socket=${req.socket.remoteAddress} ip=${req.ip}`);
     }
     next();
+  });
+
+  // ---------- Private preview (src/preview.js) ----------
+  // Until the shop opens to everyone, only invited people, the owner and staff get in.
+  // The real shop starts private the first time it runs with this (server.js: previewStart).
+  if (previewStart && !store.db.preview) store.mutate((db) => { db.preview ||= { on: true, people: [] }; });
+  const previewOn = () => Boolean(store.db.preview && store.db.preview.on);
+  const previewPeople = () => (store.db.preview && store.db.preview.people) || [];
+  /** Who this request is let in as ('owner', 's-<staff>', 'p-<person>'), or null. */
+  function previewWho(req) {
+    const token = security.bearer(req);
+    if (token && auth.verify(token)) return 'owner';
+    const staff = token && auth.verifyStaff(token, staffList());
+    if (staff) return `s-${staff.id}`;
+    const v = preview.verify(auth.previewKey, preview.cookieFrom(req));
+    if (!v) return null;
+    if (v.who === 'owner') return v.who;
+    if (v.who.startsWith('s-')) return staffList().some((u) => u.id === v.who.slice(2)) ? v.who : null;
+    if (v.who.startsWith('p-')) return previewPeople().some((x) => x.id === v.who.slice(2) && !x.off) ? v.who : null;
+    return null;
+  }
+  const previewCookie = (req, res, who) => res.append('Set-Cookie', preview.cookie(preview.sign(auth.previewKey, who), { secure: isHttps(req) }));
+  /** A person's last visit (saved at most every 10 minutes; a gap of 30 minutes starts a new visit). */
+  function previewSeen(who) {
+    if (!who.startsWith('p-')) return;
+    const p = previewPeople().find((x) => x.id === who.slice(2));
+    const last = p && p.lastSeen ? Date.parse(p.lastSeen) : 0;
+    if (!p || Date.now() - last < 10 * 60e3) return;
+    store.mutate((db) => {
+      const x = ((db.preview && db.preview.people) || []).find((y) => y.id === p.id);
+      if (!x) return;
+      if (Date.now() - (x.lastSeen ? Date.parse(x.lastSeen) : 0) > 30 * 60e3) x.visits = (x.visits || 0) + 1;
+      x.lastSeen = new Date().toISOString();
+    });
+  }
+  /** Too many wrong codes from this visitor for now. */
+  const previewWait = (req) => typeof limiter.check(`previewCode:${req.ip}`, LIMITS.previewCode) === 'number';
+  /** The person with this code who may come in, or null. */
+  const previewByCode = (code) => {
+    const c = preview.normCode(code);
+    return c ? previewPeople().find((x) => !x.off && x.code === c) || null : null;
+  };
+  /** The "Opening soon" page (or 403 for anything that isn't a page). */
+  function previewClosed(req, res) {
+    res.set('Cache-Control', 'no-store');
+    if (req.path.startsWith('/api/')) return res.status(403).json({ error: format('previewOnly', {}, langOf(req)) });
+    // (Only addresses of pages: a picture or file answers 403, whatever the browser accepts.)
+    const pageLike = !/\.[a-z0-9]{1,5}$/i.test(req.path) || /\.html$/i.test(req.path);
+    const html = (req.method === 'GET' || req.method === 'HEAD') && pageLike && req.accepts('html') && pageFor('coming-soon');
+    if (!html) return res.status(403).type('text').send('');
+    sendPage(res, 'coming-soon', html);
+  }
+  app.use((req, res, next) => {
+    if (!previewOn()) return next();
+    res.set('X-Robots-Tag', 'noindex, nofollow');
+    if (req.path === '/robots.txt') return res.type('text').send('User-agent: *\nDisallow: /\n');
+    // A personal link: https://<shop>/<any page>?invite=CODE
+    if (req.method === 'GET' && typeof req.query.invite === 'string') {
+      const rest = new URLSearchParams(req.query);
+      rest.delete('invite');
+      const back = `${req.path}${rest.toString() ? `?${rest}` : ''}`;
+      if (!previewWho(req)) {
+        if (previewWait(req)) return res.redirect(303, '/?code=wait');
+        const person = previewByCode(req.query.invite);
+        if (!person) {
+          limitHit('previewCode', req.ip);
+          return res.redirect(303, '/?code=wrong');
+        }
+        previewCookie(req, res, `p-${person.id}`);
+        previewSeen(`p-${person.id}`);
+      }
+      return res.redirect(303, back);
+    }
+    const who = previewWho(req);
+    if (who) {
+      // The owner or staff, signed in to the dashboard: their browser gets in too.
+      if (!preview.cookieFrom(req) && !who.startsWith('p-')) previewCookie(req, res, who);
+      previewSeen(who);
+      return next();
+    }
+    // (A path written with ".." or encoded slashes is never one of the open ones.)
+    if (!/(?:^|\/)\.\.?(?:\/|$)|%2e|%2f|%5c|\\/i.test(req.path) && preview.isOpen(req.path)) return next();
+    previewClosed(req, res);
+  });
+  // The code typed on the "Opening soon" page (a plain form: works without JavaScript).
+  app.post('/api/preview/enter', express.urlencoded({ extended: false, limit: '2kb' }), (req, res) => {
+    if (previewWait(req)) return res.redirect(303, '/?code=wait');
+    const person = previewOn() ? previewByCode((req.body || {}).code) : null;
+    if (previewOn() && !person) {
+      limitHit('previewCode', req.ip);
+      return res.redirect(303, '/?code=wrong');
+    }
+    if (person) {
+      previewCookie(req, res, `p-${person.id}`);
+      previewSeen(`p-${person.id}`);
+    }
+    res.redirect(303, '/');
   });
 
   // ---------- Product card pictures ----------
@@ -1452,6 +1554,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
 
   // ---------- Ready-made designs shop ----------
   const library = new Library(dataDir);
+  library.runOnce(libraryOnce); // one-time changes to the shop's list (server.js: the real shop only)
   const libraryCard = (d) => ({
     id: d.id, name: d.name, category: d.category, kind: d.kind, product: d.product, color: d.color,
     // Made for certain products only (laser designs: one tone, cut pieces joined up).
@@ -1464,8 +1567,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   });
   app.get('/api/library/:id', (req, res) => {
     const d = library.get(req.params.id);
-    if (!d || d.hidden) throw new HttpError(404, 'notFound');
-    const { hidden, ...pub } = d; // eslint-disable-line no-unused-vars
+    if (!d || d.hidden || d.deleted) throw new HttpError(404, 'notFound');
+    const { hidden, deleted, ...pub } = d; // eslint-disable-line no-unused-vars
     res.json(pub);
   });
   app.get('/api/library/:id/preview.png', (req, res) => {
@@ -1655,6 +1758,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       rateLimit(req, 'artwork');
       const clamp = (v, lo, hi, d) => Math.min(hi, Math.max(lo, Math.round(Number(v)) || d));
       const max = clamp(req.get('x-max-pages'), 1, 40, 32);
+      if (!takeShopBudget('pdfPagesMB', LIMITS.pdfPagesMB, Math.max(1, Math.ceil(buf.length / 1048576)))) throw new HttpError(429, 'tooManyWait', { min: 60 });
       let out;
       try {
         out = await artwork.pdfPages(buf, { max });
@@ -1670,7 +1774,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       fs.writeFileSync(path.join(pdfUploadsDir, `${pdfId}.pdf`), artwork.sniff(buf).data);
       fs.writeFileSync(path.join(pdfUploadsDir, `${pdfId}.json`), JSON.stringify({ boxes: out.boxes, count: out.count }));
       res.set('Cache-Control', 'no-store');
-      res.json({ pdfId, pages: out.pages.map((b) => `data:image/jpeg;base64,${b.toString('base64')}`), boxes: out.boxes, count: out.count, more: out.more });
+      res.json({ pdfId, pages: out.pages.map((b) => `data:image/jpeg;base64,${b.toString('base64')}`), pageNums: out.pageNums, boxes: out.boxes, count: out.count, more: out.more });
     } catch (e) {
       next(e);
     }
@@ -1741,9 +1845,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       fs.writeFileSync(shareFile(id, `${sd.id}.png`), png);
     }
     fs.writeFileSync(shareFile(id, 'editor.json'), JSON.stringify(editor));
+    // Its options (a booklet's binding...), so "Open a copy" starts from the same ones. Unknown ones are
+    // left out: a share is not an order.
+    const picked = cleanOptions(product, b.options);
     const share = {
       id, createdAt: new Date().toISOString(), productId: product.id,
       color: { id: color.id, name: color.name, hex: color.hex }, size: { id: size.id, label: size.label },
+      ...(picked.options ? { options: picked.options } : {}),
       sides: sides.map((sd) => ({ id: sd.id, name: sd.name })), feedback: [],
     };
     writeShare(share);
@@ -1759,7 +1867,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const sh = readShare(req.params.id);
     if (!sh) throw new HttpError(404, 'shareNotFound');
     const editor = JSON.parse(fs.readFileSync(shareFile(sh.id, 'editor.json'), 'utf8'));
-    res.json({ productId: sh.productId, color: sh.color.id, size: sh.size.id, editor });
+    res.json({ productId: sh.productId, color: sh.color.id, size: sh.size.id, options: sh.options || null, editor });
   });
   app.get('/api/shares/:id/preview/:side.png', (req, res) => {
     const sh = readShare(req.params.id);
@@ -2826,8 +2934,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         }
       }
     }
-    const subtotal = round2(items.reduce((n, i) => n + (i.price || 0), 0));
-    const lines = items.filter((i) => !i.gone).map((i) => couponLine(store.getDesign(i.designId), i.price));
+    // Only what can be ordered counts towards the subtotal, free shipping and coupons: an item the shop
+    // can't take right now (paused, stopped, sold out, more than is left) blocks the order until it is
+    // removed or saved for later, and is left out of the sums meanwhile.
+    const orderable = items.filter((i) => !i.gone && !i.unavailable);
+    const subtotal = round2(orderable.reduce((n, i) => n + (i.price || 0), 0));
+    const lines = orderable.map((i) => couponLine(store.getDesign(i.designId), i.price));
     const code = coupons.normCode((req.body || {}).couponCode);
     let coupon = null;
     let couponError = null;
@@ -3512,6 +3624,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     res.set('Cache-Control', 'no-store');
     // This browser is now known: a flood of wrong passwords from elsewhere won't lock the owner out of it.
     res.append('Set-Cookie', `pod-admin-device=${auth.deviceMark()}; Path=/api/admin/login; Max-Age=${180 * 24 * 3600}; HttpOnly; SameSite=Strict${isHttps(req) ? '; Secure' : ''}`);
+    // The private preview lets this browser in too (the owner and staff see the shop as customers will).
+    previewCookie(req, res, result.user ? `s-${result.user.id}` : 'owner');
     if (result.user) return res.json({ token: result.token, expiresAt: new Date(result.expiresAt).toISOString(), role: result.user.role, name: result.user.name });
     res.json({ token: result.token, expiresAt: new Date(result.expiresAt).toISOString(), weakPassword: auth.weak, role: 'owner' });
   });
@@ -3537,6 +3651,54 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     res.set('Cache-Control', 'no-store');
     next();
   };
+  // ---------- Private preview: on/off and the people invited (owner only) ----------
+  const previewView = (req) => ({ on: previewOn(), people: previewPeople().map((x) => preview.personRow(x, linkBase(req))) });
+  app.get('/api/admin/preview', requireAdmin, (req, res) => res.json(previewView(req)));
+  app.put('/api/admin/preview', requireAdmin, express.json({ limit: '1kb' }), (req, res) => {
+    if (typeof (req.body || {}).on !== 'boolean') throw new HttpError(400, 'badProductField', { field: 'on' });
+    store.mutate((db) => {
+      db.preview ||= { on: false, people: [] };
+      db.preview.on = req.body.on;
+    });
+    res.json(previewView(req));
+  });
+  app.post('/api/admin/preview/people', requireAdmin, express.json({ limit: '2kb' }), (req, res) => {
+    const name = preview.cleanName((req.body || {}).name);
+    if (!name) throw new HttpError(400, 'fieldRequired', { field: { en: 'Name', ar: 'الاسم' } });
+    const person = store.mutate((db) => {
+      db.preview ||= { on: false, people: [] };
+      if (db.preview.people.length >= 500) throw new HttpError(400, 'badProductField', { field: 'people' });
+      let code;
+      do code = preview.newCode(); while (db.preview.people.some((x) => x.code === code));
+      const p = { id: crypto.randomBytes(6).toString('hex'), name, code, createdAt: new Date().toISOString(), visits: 0 };
+      db.preview.people.push(p);
+      return p;
+    });
+    res.status(201).json(preview.personRow(person, linkBase(req)));
+  });
+  // { name } renames, { off: true|false } shuts them out / lets them in again.
+  app.patch('/api/admin/preview/people/:id', requireAdmin, express.json({ limit: '2kb' }), (req, res) => {
+    const b = req.body || {};
+    const name = b.name === undefined ? null : preview.cleanName(b.name);
+    if (b.name !== undefined && !name) throw new HttpError(400, 'fieldRequired', { field: { en: 'Name', ar: 'الاسم' } });
+    if (b.off !== undefined && typeof b.off !== 'boolean') throw new HttpError(400, 'badProductField', { field: 'off' });
+    const person = store.mutate((db) => {
+      const p = ((db.preview && db.preview.people) || []).find((x) => x.id === req.params.id);
+      if (!p) throw new HttpError(404, 'notFound');
+      if (name) p.name = name;
+      if (typeof b.off === 'boolean') p.off = b.off;
+      return p;
+    });
+    res.json(preview.personRow(person, linkBase(req)));
+  });
+  app.delete('/api/admin/preview/people/:id', requireAdmin, (req, res) => {
+    store.mutate((db) => {
+      const list = (db.preview && db.preview.people) || [];
+      if (!list.some((x) => x.id === req.params.id)) throw new HttpError(404, 'notFound');
+      db.preview.people = list.filter((x) => x.id !== req.params.id);
+    });
+    res.json(previewView(req));
+  });
   app.get('/api/admin/session', requireCatalog, (req, res) => res.json({ ok: true, role: req.adminWho.role, ...(req.adminWho.role === 'owner' ? { weakPassword: auth.weak } : { name: req.adminWho.name }) }));
 
   // ---------- Products (product manager) ----------
@@ -3821,8 +3983,18 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       next(e);
     }
   });
+  // Every design, deleted ones too (the admin filters): hidden = paused (out of the shop for now),
+  // deleted = out of the shop and the main list (can be brought back), artwork = drawn with the shop's
+  // own artwork files (not only text, shapes and icons).
   app.get('/api/admin/library', requireAdmin, (req, res) => {
-    res.json({ categories: DESIGN_CATEGORIES, designs: library.all().map((d) => ({ ...libraryCard(d), hidden: d.hidden, custom: d.kind === 'objects', createdAt: d.createdAt || null })) });
+    // settings.textOnlyLimited: text-only designs only on products with no artwork design in the shop;
+    // limited = this design is offered on fewer products because of it (`products` are the ones left).
+    res.json({ categories: DESIGN_CATEGORIES, settings: library.settings(), designs: library.all().map((d) => ({ ...libraryCard(d), hidden: d.hidden, deleted: d.deleted, custom: d.kind === 'objects', artwork: d.kind === 'objects' || usesArtwork(d), limited: Boolean(d.limited), createdAt: d.createdAt || null })) });
+  });
+  app.put('/api/admin/library/settings', requireAdmin, express.json({ limit: '1kb' }), (req, res) => {
+    const b = req.body || {};
+    if (typeof b.textOnlyLimited !== 'boolean') throw new HttpError(400, 'badProductField', { field: 'textOnlyLimited' });
+    res.json(library.setSettings({ textOnlyLimited: b.textOnlyLimited }));
   });
   // Publish a design made in the editor: the owner shares it, then pastes the link here.
   app.post('/api/admin/library', requireAdmin, express.json({ limit: '8kb' }), (req, res) => {
@@ -3854,12 +4026,35 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     });
     res.status(201).json(libraryCard(meta));
   });
+  /** { hidden: true|false } pauses / shows, { deleted: true|false } deletes / brings back (both may be given). */
+  const libraryFlags = (b) => {
+    const flags = {};
+    for (const key of ['hidden', 'deleted']) {
+      if (b[key] === undefined) continue;
+      if (typeof b[key] !== 'boolean') throw new HttpError(400, 'badProductField', { field: key });
+      flags[key] = b[key];
+    }
+    if (!Object.keys(flags).length) throw new HttpError(400, 'badProductField', { field: 'hidden' });
+    return flags;
+  };
+  // Several at once: { ids: [...], hidden?, deleted? }.
+  app.patch('/api/admin/library', requireAdmin, express.json({ limit: '64kb' }), (req, res) => {
+    const b = req.body || {};
+    if (!Array.isArray(b.ids) || !b.ids.length || b.ids.length > 2000) throw new HttpError(400, 'badProductField', { field: 'ids' });
+    const flags = libraryFlags(b);
+    res.json({ ok: true, changed: library.setFlags(b.ids.map(String), flags) });
+  });
   app.patch('/api/admin/library/:id', requireAdmin, express.json({ limit: '1kb' }), (req, res) => {
-    if (!library.setHidden(req.params.id, Boolean((req.body || {}).hidden))) throw new HttpError(404, 'notFound');
+    const b = req.body || {};
+    // (Older dashboards send { hidden } only, possibly not as a boolean.)
+    const flags = b.deleted === undefined && b.hidden !== undefined && typeof b.hidden !== 'boolean' ? { hidden: Boolean(b.hidden) } : libraryFlags(b);
+    if (!library.setFlags([req.params.id], flags)) throw new HttpError(404, 'notFound');
     res.json({ ok: true });
   });
+  // Delete: out of the shop and of the admin's main list, kept so it can be brought back (any design,
+  // the starter ones too). Its files stay; orders made from it never depended on them.
   app.delete('/api/admin/library/:id', requireAdmin, (req, res) => {
-    if (!library.removeCustom(req.params.id)) throw new HttpError(404, 'notFound');
+    if (!library.setFlags([req.params.id], { deleted: true })) throw new HttpError(404, 'notFound');
     res.json({ ok: true });
   });
   app.get('/api/admin/queue', requireAdmin, (req, res) => {

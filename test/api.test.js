@@ -714,9 +714,13 @@ test('ready-made designs: starter catalog, owner adds from a share link, hides a
   assert.strictEqual((await fetch(base + '/api/library/' + one.id)).status, 404);
   assert.ok((await (await admin('/api/admin/library')).json()).designs.find((d) => d.id === one.id).hidden);
   await admin(`/api/admin/library/${one.id}`, { method: 'PATCH', body: JSON.stringify({ hidden: false }) });
-  assert.strictEqual((await admin(`/api/admin/library/${one.id}`, { method: 'DELETE' })).status, 404); // starter designs can only be hidden
+  // Deleting (starter designs too) takes it out of the shop; it can be brought back.
+  assert.strictEqual((await admin('/api/admin/library/no-such-design', { method: 'DELETE' })).status, 404);
   assert.strictEqual((await admin(`/api/admin/library/${added.id}`, { method: 'DELETE' })).status, 200);
   assert.strictEqual((await fetch(base + '/api/library/' + added.id)).status, 404);
+  assert.ok((await (await admin('/api/admin/library')).json()).designs.find((d) => d.id === added.id).deleted);
+  await admin(`/api/admin/library/${added.id}`, { method: 'PATCH', body: JSON.stringify({ deleted: false }) });
+  assert.strictEqual((await fetch(base + '/api/library/' + added.id)).status, 200, 'brought back, with its own objects');
   assert.strictEqual((await fetch(base + '/api/library')).status, 200);
   assert.strictEqual((await fetch(base + '/api/admin/library')).status, 401);
   // A design that is only embroidery (the 'emb' layer) can be added too [QA 20:01].

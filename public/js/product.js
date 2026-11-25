@@ -84,7 +84,8 @@
 
   // The lifestyle photo (the product printed with a design, styled): shown first when there is one;
   // the plain product in the chosen colour next to it (public/img/lifestyle/index.json).
-  // Also the product printed with a ready design on light grey (public/img/designed/index.json), shown first.
+  // Also the product printed with a ready design on light grey (public/img/designed/index.json), after
+  // it, while that design is still offered on this product (a paused one isn't shown).
   const loadJson = async (url) => {
     try {
       const r = await fetch(url, { cache: 'no-cache' });
@@ -97,11 +98,12 @@
   // (Products the manager made from another one use that one's pictures.)
   const aid = POD.assetId(product);
   const life = (lifeAll[aid] && lifeAll[aid].file) ? lifeAll[aid] : null;
-  const designed = (designedAll[aid] && designedAll[aid].file) ? designedAll[aid] : null;
+  const offered = (id) => ((lib && lib.designs) || []).some((d) => d.id === id && (!d.products || d.products.includes(product.id) || d.products.includes(aid)));
+  const designed = (designedAll[aid] && designedAll[aid].file && (!designedAll[aid].design || offered(designedAll[aid].design))) ? designedAll[aid] : null;
   // The manager's own photos (admin → Products) come first, the chosen main one leading.
   const photos = (product.photos || []).filter((ph) => ph && ph.url);
   photos.sort((a, b) => (b.url === product.mainPhoto) - (a.url === product.mainPhoto));
-  let view = params.get('color') ? 'plain' : photos.length ? 'photo0' : designed ? 'designed' : life ? 'life' : 'plain';
+  let view = params.get('color') ? 'plain' : photos.length ? 'photo0' : life ? 'life' : designed ? 'designed' : 'plain';
   const plainUrl = () => `/api/thumbs/${encodeURIComponent(product.id)}/${encodeURIComponent(color.id)}.webp`;
   // The real photo can't be made (a colour only this product has): the drawn product instead.
   $('pp-img').addEventListener('error', () => {
@@ -113,7 +115,7 @@
   function renderPicture() {
     const views = [
       ...photos.map((ph, i) => [`photo${i}`, ph.url, tr(ph.alt) || tr(product.name)]),
-      designed && ['designed', designed.file, t('pp.viewDesigned')], life && ['life', life.file, t('pp.viewPrinted')], ['plain', plainUrl(), t('pp.viewPlain')],
+      life && ['life', life.file, t('pp.viewPrinted')], designed && ['designed', designed.file, t('pp.viewDesigned')], ['plain', plainUrl(), t('pp.viewPlain')],
     ].filter(Boolean);
     const cur = views.find((v) => v[0] === view) || views[views.length - 1];
     $('pp-img').src = cur[1];

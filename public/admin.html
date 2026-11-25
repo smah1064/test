@@ -15,6 +15,8 @@
   <link rel="stylesheet" href="/css/styles.css">
   <link rel="stylesheet" href="/css/review.css">
   <link rel="stylesheet" href="/css/admin-products.css">
+  <link rel="stylesheet" href="/css/admin-library.css">
+  <link rel="stylesheet" href="/css/admin-preview.css">
   <style>
     /* Orders: shipping, delivery and payment */
     .pill.delivered { background: #138a4a; color: #fff; }
@@ -99,6 +101,7 @@
           <button class="btn btn-sm" data-tab="coupons" data-i18n="cp.tab"></button>
           <button class="btn btn-sm" data-tab="customers" data-i18n="cu.tab"></button>
           <button class="btn btn-sm" data-tab="products" data-i18n="pm.tab"></button>
+          <button class="btn btn-sm" data-tab="preview" data-i18n="pv.tab"></button>
         </div>
       </div>
 
@@ -135,6 +138,13 @@
       </section>
 
       <section id="tab-library" hidden>
+        <div class="card rd-rule" id="lib-rule" hidden>
+          <label class="rd-switch">
+            <input type="checkbox" id="lib-limit" role="switch">
+            <span class="rd-switch-ui" aria-hidden="true"></span>
+            <span class="rd-switch-text"><b data-i18n="rd.rule"></b><span class="muted small" data-i18n="rd.ruleHelp"></span><span class="small rd-rule-now" id="lib-rule-now"></span></span>
+          </label>
+        </div>
         <form class="card lib-add" id="lib-add">
           <h2 style="font-size:16px;margin:0 0 4px" data-i18n="lib.addTitle"></h2>
           <p class="muted small" style="margin:0 0 10px;line-height:1.6" data-i18n="lib.addHelp"></p>
@@ -150,7 +160,22 @@
             <span class="small" id="lib-msg"></span>
           </div>
         </form>
-        <div class="queue-list" id="lib-list"></div>
+        <div class="card rd-top">
+          <h2 class="rd-h" data-i18n="rd.listTitle"></h2>
+          <p class="muted small rd-help" data-i18n="rd.listHelp"></p>
+          <div class="chips rd-chips" id="lib-chips" role="group" data-i18n-aria="rd.filter"></div>
+          <div class="rd-tools">
+            <input type="search" id="lib-q" autocomplete="off" maxlength="60" data-i18n-placeholder="rd.search" data-i18n-aria="rd.search">
+            <select id="lib-fcat" data-i18n-aria="rd.category"></select>
+            <select id="lib-fart" data-i18n-aria="rd.art"><option value="" data-i18n="rd.art.any"></option><option value="yes" data-i18n="rd.art.yes"></option><option value="no" data-i18n="rd.art.no"></option></select>
+          </div>
+        </div>
+        <div class="rd-shown">
+          <p class="muted small rd-count" id="lib-count" aria-live="polite"></p>
+          <div class="rd-shown-acts" id="lib-all"></div>
+        </div>
+        <div class="rd-list" id="lib-list"></div>
+        <div class="rd-bar" id="lib-bar" hidden></div>
       </section>
 
       <section id="tab-houses" hidden>
@@ -230,6 +255,8 @@
         </div>
       </section>
 
+      <section id="tab-preview" hidden></section>
+
       <section id="tab-coupons" hidden>
         <form class="card house-form" id="cp-form">
           <h2 style="font-size:16px;margin:0 0 4px" id="cp-form-title" data-i18n="cp.addTitle"></h2>
@@ -296,8 +323,11 @@
   <script src="/js/i18n-admin-shipping.js"></script>
   <script src="/js/i18n-review.js"></script>
   <script src="/js/i18n-admin-products.js"></script>
+  <script src="/js/i18n-admin-library.js"></script>
+  <script src="/js/i18n-admin-preview.js"></script>
   <script src="/js/common.js"></script>
   <script src="/js/admin-products.js"></script>
+  <script src="/js/admin-preview.js"></script>
   <script src="/js/admin.js"></script>
 </body>
 </html>

@@ -416,9 +416,31 @@ class Library {
     this.dir = path.join(dataDir, 'library');
     fs.mkdirSync(this.dir, { recursive: true });
     this.indexPath = path.join(this.dir, 'index.json');
-    this.index = { hidden: [], custom: [] };
+    this.index = { hidden: [], deleted: [], custom: [], done: [] };
     this.stamp = null;
     this.reload();
+  }
+  /**
+   * One-time changes to the shop's own list (each runs once per shop, then is remembered in the
+   * index): 'pause-no-artwork' pauses the starter designs made only of text, shapes and icons, so the
+   * shop shows only the ones drawn with real artwork (the owner shows any of them again from the admin).
+   * Run by server.js for the real shop, not by the tests.
+   */
+  runOnce(names) {
+    const want = (names || []).filter((n) => ONCE[n]);
+    if (!want.length) return;
+    this.reload();
+    if (want.every((n) => (this.index.done || []).includes(n))) return;
+    this.withLock(() => {
+      let changed = false;
+      for (const n of want) {
+        if ((this.index.done || []).includes(n)) continue;
+        ONCE[n](this.index);
+        this.index.done = [...(this.index.done || []), n];
+        changed = true;
+      }
+      if (changed) this.save();
+    });
   }
   /** Re-read the index if another copy of the app changed it. */
   reload() {
@@ -431,7 +453,7 @@ class Library {
     }
     if (stamp === this.stamp) return;
     try {
-      this.index = { hidden: [], custom: [], ...JSON.parse(fs.readFileSync(this.indexPath, 'utf8')) };
+      this.index = { hidden: [], deleted: [], custom: [], done: [], ...JSON.parse(fs.readFileSync(this.indexPath, 'utf8')) };
       this.stamp = stamp;
     } catch (e) { /* half-written; try next time */ }
   }
@@ -470,14 +492,33 @@ class Library {
       if (got) fs.rmSync(lock, { force: true });
     }
   }
-  /** Every design, newest custom ones first, with `hidden` set and the products it is offered on. */
+  /**
+   * Every design, newest custom ones first, with the products it is offered on and `hidden` (paused:
+   * out of the shop for now) / `deleted` (out of the shop and of the admin's main list; can be brought
+   * back) set. Nothing is really removed: a deleted design of the owner's keeps its files.
+   */
   all() {
     this.reload();
     const hidden = new Set(this.index.hidden);
-    return [...this.index.custom.slice().reverse(), ...SEED].map((d) => ({ ...d, products: productsFor(d), hidden: hidden.has(d.id) }));
+    const deleted = new Set(this.index.deleted || []);
+    const list = [...this.index.custom.slice().reverse(), ...SEED].map((d) => ({ ...d, products: productsFor(d), hidden: hidden.has(d.id), deleted: deleted.has(d.id) }));
+    return this.index.textOnlyLimited ? limitTextOnly(list) : list;
   }
+  /** What the shop shows: neither paused nor deleted (nor a text-only design left with no product). */
   visible() {
-    return this.all().filter((d) => !d.hidden);
+    return this.all().filter((d) => !d.hidden && !d.deleted && !(d.limited && !d.products.length));
+  }
+  /** The shop's settings for its designs: { textOnlyLimited } (see limitTextOnly). */
+  settings() {
+    this.reload();
+    return { textOnlyLimited: Boolean(this.index.textOnlyLimited) };
+  }
+  setSettings(next) {
+    return this.withLock(() => {
+      if (typeof next.textOnlyLimited === 'boolean') this.index.textOnlyLimited = next.textOnlyLimited;
+      this.save();
+      return this.settings();
+    });
   }
   get(id) {
     const d = this.all().find((x) => x.id === id);
@@ -510,11 +551,27 @@ class Library {
     return this.withLock(() => this.setHiddenNow(id, hidden));
   }
   setHiddenNow(id, hidden) {
-    if (!this.all().some((d) => d.id === id)) return false;
-    this.index.hidden = this.index.hidden.filter((x) => x !== id);
-    if (hidden) this.index.hidden.push(id);
+    return this.setFlagsNow([id], { hidden }) === 1;
+  }
+  /**
+   * Pause / show (`hidden`) and delete / bring back (`deleted`) several designs at once. Unknown ids
+   * are skipped; gives how many designs were found.
+   */
+  setFlags(ids, flags) {
+    return this.withLock(() => this.setFlagsNow(ids, flags));
+  }
+  setFlagsNow(ids, { hidden, deleted } = {}) {
+    const known = new Set(this.all().map((d) => d.id));
+    const list = [...new Set((ids || []).map(String))].filter((id) => known.has(id));
+    if (!list.length) return 0;
+    const set = (key, on) => {
+      const rest = (this.index[key] || []).filter((x) => !list.includes(x));
+      this.index[key] = on ? [...rest, ...list] : rest;
+    };
+    if (typeof hidden === 'boolean') set('hidden', hidden);
+    if (typeof deleted === 'boolean') set('deleted', deleted);
     this.save();
-    return true;
+    return list.length;
   }
   removeCustom(id) {
     return this.withLock(() => this.removeCustomNow(id));
@@ -530,4 +587,49 @@ class Library {
   }
 }
 
-module.exports = { Library, catalogChanged, CATEGORIES, SEED, FITS, productsFor, fitsColour, productShape };
+/** Whether a design is drawn with the shop's own artwork files (I(...) in the packs), not only text, shapes and icons. */
+const usesArtwork = (d) => (d.items || []).some((it) => it.kind === 'image');
+/** Designs with real artwork: the starter ones drawn with the shop's artwork files, and the owner's own. */
+const hasArtwork = (d) => d.kind === 'objects' || usesArtwork(d);
+/**
+ * The shop's rule "text-only designs only where there's no artwork" (index.textOnlyLimited): a starter
+ * design made only of text, shapes and icons is offered only on the products that have no design with
+ * real artwork in the shop (business cards, invitations, laser pieces...), and shown on one of those.
+ * `list`: designs with products / hidden / deleted set. Changed ones get `limited: true`.
+ */
+function limitTextOnly(list) {
+  const covered = new Set();
+  for (const d of list) if (!d.hidden && !d.deleted && hasArtwork(d)) for (const id of d.products) covered.add(id);
+  return list.map((d) => {
+    if (hasArtwork(d)) return d;
+    const left = d.products.filter((id) => !covered.has(id));
+    if (left.length === d.products.length) return d;
+    return { ...d, ...showOn(d, left), products: left, limited: true };
+  });
+}
+/** The product (and its colour closest to the design's) a design is shown on, out of `list`. */
+function showOn(d, list) {
+  if (!list.length || list.includes(d.product)) return {};
+  const id = ((FITS[d.category] || {}).shownOn || []).find((x) => list.includes(x)) || list[0];
+  const to = PRODUCTS.find((p) => p.id === id);
+  if (!to || !to.colors.length) return { product: id };
+  if (to.colors.some((c) => c.id === d.color)) return { product: id };
+  const fromP = PRODUCTS.find((p) => p.id === d.product);
+  const from = fromP && fromP.colors.find((c) => c.id === d.color);
+  return { product: id, color: from ? to.colors.reduce((best, c) => (distance(c.hex, from.hex) < distance(best.hex, from.hex) ? c : best)).id : to.colors[0].id };
+}
+const ONCE = {
+  // Only the designs with real artwork where there are some: the rule above on, and the text-only
+  // starter designs that would be left with no product paused (the owner can show them again).
+  'pause-no-artwork': (index) => {
+    index.textOnlyLimited = true;
+    const off = new Set([...(index.hidden || []), ...(index.deleted || [])]);
+    const covered = new Set();
+    for (const d of SEED) if (usesArtwork(d) && !off.has(d.id)) for (const id of productsFor(d)) covered.add(id);
+    const paused = new Set(index.hidden || []);
+    for (const d of SEED) if (!usesArtwork(d) && productsFor(d).every((id) => covered.has(id))) paused.add(d.id);
+    index.hidden = [...paused];
+  },
+};
+
+module.exports = { Library, catalogChanged, CATEGORIES, SEED, FITS, productsFor, fitsColour, productShape, usesArtwork };

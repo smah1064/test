@@ -60,6 +60,7 @@ const MESSAGES = {
   couponValueBad: { en: 'Check the discount amount and limits', ar: 'راجع قيمة الخصم والحدود' },
   couponDatesBad: { en: 'Check the dates (the end must be after the start)', ar: 'راجع التواريخ (النهاية لازم تكون بعد البداية)' },
   couponExists: { en: 'A coupon with this code already exists', ar: 'في كوبون بنفس الكود ده' },
+  previewOnly: { en: 'The shop is open to invited people only for now.', ar: 'المحل مفتوح للمدعوين بس دلوقتي.' },
   couponNotFound: { en: 'This coupon code is not valid', ar: 'كود الخصم ده غير صحيح' },
   couponNotYet: { en: 'This coupon starts on {date}', ar: 'الكوبون ده بيبدأ يوم {date}' },
   couponExpired: { en: 'This coupon has expired', ar: 'الكوبون ده انتهى' },

@@ -269,6 +269,16 @@
   function num(n) {
     return new Intl.NumberFormat(lang === 'ar' ? 'ar-EG' : 'en-GB', { maximumFractionDigits: 1 }).format(n);
   }
+  /**
+   * Which form of a counted word n takes: 'one', 'two', 'few' (3 to 10, also 103 to 110…) or 'many'
+   * (11 and up, and 0). Arabic has all four ("منتج واحد", "منتجين", "٣ منتجات", "١١ منتج");
+   * English uses the same words for few and many.
+   */
+  const pluralForm = (n) => (n === 1 ? 'one' : n === 2 ? 'two' : n % 100 >= 3 && n % 100 <= 10 ? 'few' : 'many');
+  /** t() for a count, from the keys base.one / .two / .few / .many; {n} is in the page's digits. */
+  function plural(base, n, params) {
+    return t(`${base}.${pluralForm(n)}`, { ...params, n: num(n) });
+  }
 
   // ---------- Products the shop doesn't sell right now ----------
   /*
@@ -510,6 +520,8 @@
     a.href = '/account';
     a.className = 'acct-link';
     a.setAttribute('data-account-link', '');
+    // Its name for screen readers (the word is hidden on phones), kept in the page's language by applyI18n.
+    a.setAttribute('data-i18n-aria', 'nav.account');
     a.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg><span data-i18n="nav.account"></span>';
     cartLink.before(a);
   }
@@ -531,13 +543,15 @@
     text.className = 'footer-text';
     text.append(...f.childNodes);
     f.append(text);
-    f.insertAdjacentHTML('afterbegin', '<a class="footer-logo" href="/" aria-label="إبداع · ebda3"><img class="for-ar" src="/img/logo-ar-white.svg" alt="" width="91" height="60"><img class="for-en" src="/img/logo-en-white.svg" alt="" width="147" height="60"></a>');
+    f.insertAdjacentHTML('afterbegin', '<a class="footer-logo" href="/" data-i18n-aria="brand"><img class="for-ar" src="/img/logo-ar-white.svg" alt="" width="91" height="60"><img class="for-en" src="/img/logo-en-white.svg" alt="" width="147" height="60"></a>');
   }
   function initChrome() {
     addAccountLink();
     addFooterLinks();
+    // The header logo's name for screen readers: the shop's name in the page's language (the pages say
+    // "إبداع · ebda3" in both), switched with the language like every other label.
+    document.querySelectorAll('.site-header .brand').forEach((a) => a.setAttribute('data-i18n-aria', 'brand'));
     applyI18n();
-    document.querySelectorAll('[data-account-link]').forEach((a) => a.setAttribute('aria-label', t('nav.account')));
     updateCartBadge();
     document.querySelectorAll('[data-lang-toggle]').forEach((btn) => {
       btn.addEventListener('click', () => setLang(lang === 'ar' ? 'en' : 'ar'));
@@ -1056,7 +1070,7 @@
     },
     t, tr, arabicDigits, setLang, applyI18n,
     loadCatalog, assetId, canPick, firstPick, comboOut, comboFew, sizeOk, colorOk, productPicture, thumbFallback, fillMockup, mockupUrl, svgDataUrl, luminance,
-    money, date, day, num, captcha,
+    money, date, day, num, plural, pluralForm, captcha,
     productState, backOnDay, backText, similarProducts, similarHref, similarLabel, productHref, showUnavailable,
     getCart, setCart, getSaved, setSaved, moveItem, designFor, putFile, updateCartBadge, toast, esc, api, drafts, forgetPersonal,
     sizedArea, sizeView, canvasEdges, drawPattern, wrapOffsets, fabricCm,

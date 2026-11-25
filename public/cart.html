@@ -100,7 +100,7 @@
         <h2 style="font-size:18px" data-i18n="checkout.title"></h2>
         <p class="small acct-note" id="acct-note"></p>
         <div class="field"><label for="name" data-i18n="checkout.name"></label><input type="text" id="name" name="name" autocomplete="name" maxlength="120" dir="auto" required></div>
-        <div class="field"><label for="phone" data-i18n="checkout.phone"></label><input type="tel" id="phone" name="phone" autocomplete="tel" maxlength="30" inputmode="tel" dir="ltr" placeholder="01xxxxxxxxx" required></div>
+        <div class="field"><label for="phone" data-i18n="checkout.phone"></label><input type="tel" id="phone" name="phone" autocomplete="tel" maxlength="30" inputmode="tel" dir="ltr" data-i18n-placeholder="checkout.phonePh" required></div>
         <div class="field"><label for="email" data-i18n="checkout.email"></label><input type="email" id="email" name="email" autocomplete="email" maxlength="200" dir="ltr" aria-describedby="email-why"><p class="field-hint" id="email-why" data-i18n="checkout.emailWhy"></p></div>
         <div class="field grid-2">
           <div><label for="governorate" data-i18n="checkout.governorate"></label><select id="governorate" name="governorate" required></select></div>
@@ -530,16 +530,20 @@
         if (focused && document.getElementById(focused)) document.getElementById(focused).focus();
         for (const item of cart) if (!proofs.has(item.designId) && !blocked.has(item.designId)) loadProof(item.designId);
         updateApproval();
-        const subtotal = Math.round(cart.reduce((s, i) => s + i.price, 0) * 100) / 100;
+        // Only what can be ordered counts, as in the shop's own sums: an item it can't make now (the shop's
+        // last answer) is left out of the subtotal, free shipping and the total until it is back, removed or saved for later.
+        const orderable = cart.filter((it) => !blocked.has(it.designId));
+        const subtotal = Math.round(orderable.reduce((s, i) => s + i.price, 0) * 100) / 100;
         const freeOver = quote ? quote.freeShippingOver : pricing.freeShippingOver;
         const applied = quote && quote.coupon && couponCode ? quote.coupon : null;
         const discount = applied ? applied.discount : 0;
         // The shop's own numbers when its answer is for exactly this cart (same items, same coupon);
         // until then the same rule as the shop's: free shipping goes by the subtotal before any discount.
         const fresh = quoteFits(cart) && Boolean(quote.coupon) === Boolean(applied);
+        // (Nothing that can be ordered: no shipping either.)
         const baseShipping = fresh && typeof quote.baseShipping === 'number' ? quote.baseShipping
-          : (applied && applied.freeShipping) || subtotal >= freeOver ? 0 : (quote ? quote.shippingFlat : pricing.shipping);
-        const expressNow = delivery === 'express' ? expressFee() : 0;
+          : !orderable.length || (applied && applied.freeShipping) || subtotal >= freeOver ? 0 : (quote ? quote.shippingFlat : pricing.shipping);
+        const expressNow = delivery === 'express' && orderable.length ? expressFee() : 0;
         const shipping = Math.round((baseShipping + expressNow) * 100) / 100;
         render.total = fresh && typeof quote.total === 'number' && quote.delivery && quote.delivery.speed === delivery
           ? quote.total : Math.round((subtotal - discount + shipping) * 100) / 100;
@@ -556,11 +560,11 @@
         document.getElementById('discount').textContent = applied ? (applied.freeShipping && !discount ? t('coupon.freeShipping') : '-' + money(discount)) : '';
         const msg = document.getElementById('coupon-msg');
         // A code the shop refused: its reason stays under the field (with the code) until the customer changes it.
-        const refused = couponCode && quote && quote.couponError ? quote.couponError : !couponCode && couponNote ? couponNote.msg : '';
+        const refusal = couponRefusal();
+        const refused = refusal ? refusalText(refusal) : '';
         msg.textContent = refused || (applied ? t('coupon.applied') : '');
         msg.classList.toggle('bad', Boolean(refused));
         markCoupon(Boolean(refused));
-        if (document.activeElement !== document.getElementById('coupon')) document.getElementById('coupon').value = couponCode || (couponNote ? couponNote.code : '');
         document.getElementById('subtotal').textContent = money(subtotal);
         document.getElementById('shipping').textContent = baseShipping ? money(baseShipping) : t('free');
         document.getElementById('express-line').hidden = !expressNow;
@@ -593,8 +597,50 @@
       // The coupon code the customer typed (kept for this visit).
       let couponCode = '';
       try { couponCode = sessionStorage.getItem('pod-coupon') || ''; } catch (e) { couponCode = ''; }
-      // A code the shop refused (its reason, and the code as typed), shown at the coupon field.
+      // A code the shop refused, shown at the coupon field: { code (as typed), msg (its reason), lang (of msg) }.
       let couponNote = null;
+      // The shop gives its reasons in the page's language. After a language switch a refusal is asked for
+      // again, once per wording (a refused code counts towards the shop's limit on coupon tries):
+      // "CODE\ntext" -> { ar, en }.
+      const couponWords = new Map();
+      /** The refusal shown at the coupon field: the code in use refused by today's prices (applied), or a code the shop refused. */
+      function couponRefusal() {
+        if (couponCode && quote && quote.couponError) return { code: couponCode, msg: quote.couponError, lang: quote.lang, applied: true };
+        return !couponCode && couponNote && couponNote.msg ? couponNote : null;
+      }
+      const wordsFor = (r) => couponWords.get(`${r.code}\n${r.msg}`) || {};
+      /** A refusal in the page's language (in the shop's first words until it has been asked again). */
+      const refusalText = (r) => (r.lang === POD.lang ? r.msg : wordsFor(r)[POD.lang] || r.msg);
+      const needsWords = (r) => Boolean(r) && r.lang !== POD.lang && !wordsFor(r)[POD.lang];
+      /** The same refusal in two languages: each wording finds the other. */
+      function learnWords(code, a, b) {
+        if (!a || !b || !b.msg || a.lang === b.lang) return;
+        const both = { ...wordsFor({ code, msg: a.msg }), [a.lang]: a.msg, [b.lang]: b.msg };
+        couponWords.set(`${code}\n${a.msg}`, both);
+        couponWords.set(`${code}\n${b.msg}`, both);
+      }
+      /** A refused code (not in use) in the page's language: the shop is asked about that code with the cart as it is. */
+      async function rewordNote() {
+        const note = couponNote;
+        const lang = POD.lang;
+        const cart = POD.getCart();
+        if (!note || !note.msg || !needsWords(note) || !cart.length) return;
+        let q;
+        try {
+          q = await POD.api('/api/cart/quote', quoteRequest(cart, note.code));
+        } catch (e) {
+          return; // offline, or too many tries: the reason stays in the words it has
+        }
+        if (couponNote !== note) return; // another code typed meanwhile
+        if (q && q.couponError) learnWords(note.code, note, { msg: q.couponError, lang });
+        else couponNote = { ...note, msg: '' }; // the shop takes it now: no reason left to show (the code stays in the field)
+        render();
+      }
+      /** The code in use, or the one the shop refused, in the field (left alone otherwise: what the customer is typing stays). */
+      function showCode() {
+        const el = document.getElementById('coupon');
+        if (document.activeElement !== el) el.value = couponCode || (couponNote ? couponNote.code : '');
+      }
       function markCoupon(bad) {
         const el = document.getElementById('coupon');
         if (bad) { el.setAttribute('aria-invalid', 'true'); el.setAttribute('aria-describedby', 'coupon-msg'); } else { el.removeAttribute('aria-invalid'); el.removeAttribute('aria-describedby'); }
@@ -603,12 +649,17 @@
         couponCode = code;
         try { if (code) sessionStorage.setItem('pod-coupon', code); else sessionStorage.removeItem('pod-coupon'); } catch (e) { /* private mode */ }
       };
+      /** The question for the shop's prices of these items, with this coupon code. */
+      const quoteRequest = (cart, code) => ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ designIds: cart.map((i) => i.designId), couponCode: code, delivery, sample: wantsSample(cart), phone: (document.getElementById('phone') || {}).value || undefined }) });
       async function refreshPrices({ announce = false } = {}) {
         const cart = POD.getCart();
         forgetRemoved(cart);
         if (!cart.length) { quote = null; return; }
+        // The shop answers in the page's language: kept with its answer (see couponRefusal).
+        const lang = POD.lang;
         try {
-          quote = await POD.api('/api/cart/quote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ designIds: cart.map((i) => i.designId), couponCode, delivery, sample: wantsSample(cart), phone: (document.getElementById('phone') || {}).value || undefined }) });
+          quote = await POD.api('/api/cart/quote', quoteRequest(cart, couponCode));
+          quote.lang = lang;
         } catch (e) {
           quote = null;
           return;
@@ -782,6 +833,8 @@
 
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
+        // The shop's refusals come in the language they were asked in.
+        const askedIn = POD.lang;
         const bad = checkFields();
         if (bad) return goToField(bad);
         if (blockedIn(POD.getCart()).length) {
@@ -807,7 +860,7 @@
           const codeBefore = couponCode;
           await refreshPrices();
           // The coupon no longer works (e.g. this phone already used it): say why, with the price without it, and order nothing.
-          if (codeBefore && quote && quote.couponError) throw Object.assign(new Error(quote.couponError), { code: 'couponRefused' });
+          if (codeBefore && quote && quote.couponError) throw Object.assign(new Error(quote.couponError), { code: 'couponRefused', lang: quote.lang });
           render();
           if (!POD.getCart().length) throw new Error(t('cart.emptyTitle'));
           // Sold out or hidden while the customer was filling in the form.
@@ -834,8 +887,10 @@
           // so the total shown is the one without it; the customer sees why before ordering again.
           const couponRefused = /^coupon/.test(err.code || '') && (couponCode || err.code === 'couponRefused');
           if (couponRefused) {
-            couponNote = { code: couponCode || (couponNote && couponNote.code) || '', msg: err.message };
+            couponNote = { code: couponCode || (couponNote && couponNote.code) || '', msg: err.message, lang: err.lang || askedIn };
             setCoupon('');
+            showCode();
+            rewordNote(); // the language was switched meanwhile
           }
           // A product, colour, size or side the shop stopped selling, or fewer pieces left than ordered (409):
           // the shop's message is shown and the cart asks for today's prices, which mark the items concerned.
@@ -930,10 +985,12 @@
         document.getElementById('coupon').blur();
         await refreshPrices();
         if (code && quote && quote.couponError) {
-          couponNote = { code, msg: quote.couponError };
+          couponNote = { code, msg: quote.couponError, lang: quote.lang };
           setCoupon('');
         }
         render();
+        showCode();
+        rewordNote(); // the language was switched while the shop was answering
       };
       document.getElementById('coupon-apply').addEventListener('click', applyCoupon);
       document.getElementById('coupon').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); applyCoupon(); } });
@@ -1008,6 +1065,7 @@
       });
 
       renderGovernorates();
+      showCode();
       render();
       prefillAccount();
       refreshSaved();
@@ -1017,8 +1075,18 @@
         renderGovernorates();
         render();
         renderAcctNote();
-        // The shop's messages about items it can't make now, in the new language.
-        if (blocked.size) refreshPrices().then(render);
+        // The shop's messages in the new language: about items it can't make now, and a coupon code it refused
+        // (the code in use is asked with today's prices; one refused before, on its own).
+        const refusal = couponRefusal();
+        const reword = refusal && refusal.applied && needsWords(refusal);
+        if (blocked.size || reword) {
+          refreshPrices().then(() => {
+            const now = couponRefusal();
+            if (reword && now && now.code === refusal.code) learnWords(refusal.code, refusal, now);
+            render();
+          });
+        }
+        rewordNote();
         if (savedBlocked.size) refreshSaved();
         // Errors under the fields, in the new language (the shop's own refusals by their code).
         for (const el of FIELDS) {

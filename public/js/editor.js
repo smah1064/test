@@ -96,6 +96,22 @@
     return instead;
   };
   const insteadOf = await missing(params.get('product'));
+  /** A saved or shared design's options ({ optionId: { id } }, the first choice left out) as the editor keeps them. */
+  const optionsFrom = (kept) => Object.fromEntries((st.product.options || []).map((o) => {
+    const id = kept && kept[o.id] && (kept[o.id].id || kept[o.id]);
+    return [o.id, o.choices.some((c) => c.id === id) ? id : o.choices[0].id];
+  }));
+  /**
+   * Booklets: the binding is chosen once, when the booklet is opened, from the shop's language then
+   * (English reads left to right: bound on the left; Arabic on the right). It stays as chosen: switching
+   * language later never changes what is ordered or how the cover is drawn.
+   */
+  function seedBinding(product = st.product) {
+    const bind = (product.options || []).find((o) => o.id === 'binding');
+    if (!bind || bind.choices.some((c) => c.id === (st.options || {}).binding)) return;
+    const left = POD.lang === 'en' && bind.choices.find((c) => c.id === 'left');
+    st.options = { ...(st.options || {}), binding: (left || bind.choices[0]).id };
+  }
 
   const st = {
     product: products.find((p) => p.id === params.get('product')) || insteadOf || products[0],
@@ -132,7 +148,7 @@
       st.sizeId = saved.size.id;
       st.sizePicked = true; // a saved design or cart item: its size was chosen
       if (saved.method === 'embroidery') st.method = 'embroidery'; // see below: older designs embroidered the front itself
-      if (saved.options) st.options = Object.fromEntries(Object.entries(saved.options).map(([k, v]) => [k, v.id]));
+      st.options = optionsFrom(saved.options);
       if (saved.quantities) st.qty = Object.fromEntries([...new Set(saved.quantities.map((l) => l.color.id))].map((c) => [c, Object.fromEntries(saved.quantities.filter((l) => l.color.id === c).map((l) => [l.size.id, l.qty]))]));
       if (saved.mergeList) st.mergeList = { columns: saved.mergeList.columns, rows: saved.mergeList.rows, total: saved.mergeList.rows.length, truncated: false, fileName: '' };
       // Designs from before embroidery was a layer: their stitched front is the embroidery layer now.
@@ -152,7 +168,8 @@
       // From the order page's "Edit the design and send it again": ?revise=<order id>.<item id>.
       const rv = /^([0-9a-f-]{36})\.([0-9a-f-]{36})$/i.exec(params.get('revise') || '');
       if (rv) st.revise = { orderId: rv[1], itemId: rv[2] };
-      if (!rv && params.get('cart') !== null && Number.isInteger(idx) && cart[idx] && cart[idx].designId === saved.id) {
+      // (A product the shop doesn't sell now opens another one: that is a new design, not this cart item.)
+      if (!rv && st.product.id === saved.productId && params.get('cart') !== null && Number.isInteger(idx) && cart[idx] && cart[idx].designId === saved.id) {
         st.editingCartIndex = idx;
         st.editingDesignId = saved.id;
       }
@@ -176,7 +193,9 @@
   if (!params.get('design') && /^[A-Za-z0-9_-]{12}$/.test(params.get('share') || '')) {
     try {
       const shared = await POD.api('/api/shares/' + encodeURIComponent(params.get('share')) + '/design');
-      st.product = products.find((p) => p.id === shared.productId) || st.product;
+      const instead = await missing(shared.productId);
+      st.product = products.find((p) => p.id === shared.productId) || instead || st.product;
+      if (st.product.id === shared.productId) st.options = optionsFrom(shared.options);
       st.colorId = shared.color;
       st.sizeId = shared.size; // (the size is still asked: the friend may not have chosen one)
       for (const [sideId, data] of Object.entries(shared.editor || {})) {
@@ -248,6 +267,7 @@
   // (and so does a restored draft of a ready-made design: the link carries the design's first colour).
   if (!params.get('design') && !(restoredDraft && st.libraryId) && canPick(st.product.colors.find((c) => c.id === params.get('color')))) st.colorId = params.get('color');
   st.colorId = canPick(st.product.colors.find((c) => c.id === st.colorId)) ? st.colorId : firstPick(st.product.colors).id;
+  seedBinding(); // a new booklet: bound on the side its language reads from
   if (!params.get('design') && canPick(st.product.sizes.find((z) => z.id === params.get('size')))) {
     st.sizeId = params.get('size');
     st.sizePicked = true;
@@ -1658,12 +1678,14 @@
         commit();
         canvas.discardActiveObject();
         await showSide(room[i].id);
+        seedHistory(); // the page as it was, so Undo takes the photo off again
       }
       await addImageFile(use[i]);
       commit();
     }
     renderSideTabs();
     refreshChrome();
+    tabInView();
     toast(tPg('ed.filesPlaced', { n: POD.num(use.length) }));
   });
   /** Every page of a PDF on the booklet's pages: page 1 on the cover, the last on the back cover. */
@@ -1686,12 +1708,18 @@
       return toast(e.message, 'error');
     }
     busy(false);
-    const n = got.pages.length;
-    // A size with room for every page (same number of copies), when the chosen one is too small or too big.
+    // Pages in the PDF. A long one comes back as its first pages and its last one (pageNums: which
+    // page of the PDF each picture is).
+    const n = got.count || got.pages.length;
+    const nums = Array.isArray(got.pageNums) && got.pageNums.length === got.pages.length ? got.pageNums : got.pages.map((_, i) => i);
+    // A size with room for every page (same number of copies), when the chosen one is too small or too
+    // big; for a PDF longer than every booklet, the biggest one.
     const copies = (id) => String(id).split('-')[1] || '';
     const cur = st.product.sizes.find((z) => z.id === st.sizeId);
+    const sameCopies = st.product.sizes.filter((z) => copies(z.id) === copies(st.sizeId) && canPick(z)).sort((a, b) => a.pages - b.pages);
+    const biggest = sameCopies[sameCopies.length - 1];
     if (n !== activeSides().length) {
-      const fits = st.product.sizes.filter((z) => z.pages >= n && copies(z.id) === copies(st.sizeId) && canPick(z)).sort((a, b) => a.pages - b.pages)[0];
+      const fits = sameCopies.find((z) => z.pages >= n) || (biggest && biggest.pages > cur.pages ? biggest : null);
       if (fits && fits.id !== st.sizeId && fits.pages !== cur.pages && window.confirm(tPg('ed.pdfSize', { n: POD.num(n), pages: POD.num(fits.pages), now: POD.num(cur.pages) }))) {
         st.sizePicked = true;
         await changeSize(fits.id);
@@ -1699,12 +1727,16 @@
       }
     }
     const pages = activeSides();
-    // In order: PDF page 1 on the cover, page 2 on page 2… When the PDF is longer than the booklet,
-    // its last page still goes on the back cover.
-    const targets = pages.slice(0, Math.min(n, pages.length));
-    const used = n > pages.length ? got.pages.slice(0, pages.length - 1).concat([got.pages[n - 1]]) : got.pages;
+    const k = pages.length;
+    // In order: PDF page 1 on the cover, page 2 on page 2… and the PDF's last page always on the back
+    // cover: a longer PDF loses the pages before its last one, a shorter one leaves blank pages before it.
+    const last = got.pages.length - 1;
+    const pick = n >= k ? [...Array(k - 1).keys(), n > k ? last : k - 1] : got.pages.map((_, i) => i); // pictures used
+    const at = n >= k || n < 2 ? pick.map((_, i) => i) : [...Array(n - 1).keys(), k - 1]; // booklet page of each
+    const targets = at.map((i) => pages[i]);
+    const used = pick.map((i) => got.pages[i]);
     // Which page of the PDF each one is: the print files use that page of the PDF itself, not the picture.
-    const srcIdx = used.map((_, i) => (n > pages.length && i === used.length - 1 ? n - 1 : i));
+    const srcIdx = pick.map((i) => nums[i]);
     busy(true, tPg('ed.pdfPlacing'));
     try {
       for (let i = 0; i < used.length && i < targets.length; i++) {
@@ -1713,6 +1745,7 @@
           commit();
           canvas.discardActiveObject();
           await showSide(page.id);
+          seedHistory(); // the page as it was, so Undo takes the PDF page off again
         }
         const fimg = await new Promise((resolve) => fabric.Image.fromURL(used[i], resolve));
         const r = rects(page.id).bleed;
@@ -1731,14 +1764,22 @@
     }
     renderSideTabs();
     refreshChrome();
-    if (got.more || n > pages.length) toast(tPg('ed.pdfTooMany', { n: POD.num(pages.length) }), 'error');
-    else toast(tPg('ed.pdfPlaced', { n: POD.num(Math.min(n, pages.length)) }));
+    tabInView();
+    if (n > k) {
+      // The biggest booklet, or the customer kept a smaller one.
+      const atMost = !biggest || biggest.pages <= k;
+      toast(tPg(atMost ? 'ed.pdfTooMany' : 'ed.pdfCut', { n: POD.num(n), k: POD.num(k), first: POD.num(k - 1) }), 'error');
+    } else if (n < k && n >= 2) {
+      toast(tPg('ed.pdfFewer', { n: POD.num(n), blank: POD.num(k - n) }));
+    } else toast(tPg('ed.pdfPlaced', { n: POD.num(Math.min(n, k)) }));
   }
   const PG_TEXT = {
     'ed.pdfReading': ['Reading the PDF pages…', 'بنقرا صفحات الـ PDF…'],
     'ed.pdfPlacing': ['Putting the pages in the booklet…', 'بنحط الصفحات في الكتيب…'],
     'ed.pdfPlaced': ['{n} pages placed in order, page 1 on the cover. Flip through them in the preview.', 'اتحطت الصفحات بالترتيب (عددها {n})، أول صفحة على الغلاف. قلّب فيهم من المعاينة.'],
-    'ed.pdfTooMany': ['The PDF has more pages than the biggest booklet ({n} pages). The first pages and the last one (back cover) were used.', 'الـ PDF فيه صفحات أكتر من أكبر كتيب (عدد صفحاته {n}). استخدمنا أول الصفحات وآخر صفحة للغلاف الخلفي.'],
+    'ed.pdfTooMany': ['The PDF has {n} pages, more than the biggest booklet ({k} pages). Its first {first} pages and its last one (on the back cover) were used.', 'صفحات الـ PDF (عددها {n}) أكتر من أكبر كتيب (عدد صفحاته {k}). استخدمنا أول صفحاته (عددها {first}) وآخر صفحة على الغلاف الخلفي.'],
+    'ed.pdfCut': ['The PDF has {n} pages and this booklet has {k}: its first {first} pages and its last one (on the back cover) were used. To use every page, pick a bigger booklet under Size.', 'صفحات الـ PDF عددها {n} وصفحات الكتيب ده {k}: استخدمنا أول صفحاته (عددها {first}) وآخر صفحة على الغلاف الخلفي. عشان تستخدم كل الصفحات، اختار كتيب أكبر من المقاس.'],
+    'ed.pdfFewer': ['{n} pages placed: page 1 on the cover and the last one on the back cover, with {blank} blank pages before it.', 'اتحطت الصفحات (عددها {n}): أول صفحة على الغلاف وآخر صفحة على الغلاف الخلفي، وقبلها صفحات فاضية (عددها {blank}).'],
     'ed.pdfSize': ['The PDF has {n} pages and this booklet has {now}. Switch to the {pages}-page booklet?', 'صفحات الـ PDF: {n}، وصفحات الكتيب ده: {now}. تحب تغيّر لكتيب عدد صفحاته {pages}؟'],
     'ed.filesPlaced': ['{n} photos placed, one on each page from this one on.', 'اتحطت الصور (عددها {n})، صورة في كل صفحة من الصفحة دي ورايح.'],
     'ed.filesSkipped': ['{n} files were left out (not enough pages after this one, or a PDF among photos).', 'سبنا {n} ملف (الصفحات اللي بعد دي مش كفاية، أو PDF وسط الصور).'],
@@ -3414,6 +3455,7 @@
     const next = products.find((p) => p.id === id);
     if (!next || next === st.product) return;
     st.options = {}; // options belong to a product
+    seedBinding(next);
     cancelCrop();
     commit();
     const prev = st.product;
@@ -3510,11 +3552,16 @@
     commit();
     canvas.discardActiveObject();
     await showSide(to.id);
+    seedHistory(); // as a click on the page's tab does: the first change on it can be undone
     renderSideTabs();
     refreshChrome();
-    const tab = $('side-tabs').querySelector(`[data-side="${to.id}"]`);
-    if (tab) tab.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    tabInView();
   });
+  /** The page being shown kept in view in the strip of pages (a phone shows only a few). */
+  function tabInView() {
+    const tab = $('side-tabs').querySelector(`[data-side="${hostOf()}"]`);
+    if (tab) tab.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
   $('page-prev').addEventListener('click', () => goPage(-1));
   $('page-next').addEventListener('click', () => goPage(1));
   // Page Up / Page Down turn the pages (not while typing).
@@ -3957,8 +4004,6 @@
   }
   /** Product options (business-card lamination…): what the chosen ones add to one piece of a size. */
   function chosenOption(opt) {
-    // Booklets: English shoppers start on the left binding (English reads left to right), Arabic on the right.
-    if (opt.id === 'binding' && st.options && st.options.binding == null && POD.lang === 'en' && opt.choices.some((c) => c.id === 'left')) st.options.binding = 'left';
     const id = st.options && st.options[opt.id];
     return opt.choices.find((c) => c.id === id) || opt.choices[0];
   }
@@ -4837,7 +4882,7 @@
   function designSignature() {
     const designs = {};
     for (const sd of allSides()) designs[sd.id] = sd.id === st.side ? serialize() : (st.designs[sd.id] || []);
-    return hashStr(JSON.stringify([designs, st.colorId, st.sizeId, st.offsets]));
+    return hashStr(JSON.stringify([designs, st.colorId, st.sizeId, st.offsets, st.options || {}]));
   }
   function readLastShare() {
     try { return JSON.parse(localStorage.getItem(shareKey()) || 'null'); } catch (e) { return null; }
@@ -4889,7 +4934,7 @@
       const share = await POD.api('/api/shares', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productId: st.product.id, color: st.colorId, size: st.sizeId, sides: sidesPayload, previews }),
+        body: JSON.stringify({ productId: st.product.id, color: st.colorId, size: st.sizeId, options: st.options || {}, sides: sidesPayload, previews }),
       });
       try { localStorage.setItem(shareKey(), JSON.stringify({ id: share.id, sig })); } catch (e) { /* private mode */ }
       openShareDialog(share);

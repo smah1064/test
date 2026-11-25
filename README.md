@@ -37,6 +37,7 @@ Requires Node 18+. There is no database to set up: data is stored under `data/` 
 | `GEMINI_VERTEX` | auto | `1` sends the key to Vertex AI, `0` to the Gemini API. Left unset, a key the Gemini API rejects (e.g. an `AQ.` key) is tried on Vertex AI automatically |
 | `CARTOON_DAILY_LIMIT` / `CARTOON_GLOBAL_DAILY_LIMIT` | `4` / `150` | Cartoon-face previews per visitor / for the whole shop per day |
 | `REDRAW_DAILY_PAGES` | `450` | Pages the AI may redraw per day (about 30 books); more wait until the next day |
+| `PREVIEW_LOCK` | (none) | `off`: a test copy that doesn't start private (see Private preview) |
 
 ## What's in it
 
@@ -60,7 +61,14 @@ Product cards, the editor and the cart thumbnails all show **real product photos
 
 **Share for approval**: the Share button makes a link (`/s/<id>`) with a picture of the design (WhatsApp shows it as a link preview). Friends tap "Looks great" or suggest a change; replies show on that page and in the editor's share window. "Open a copy in the editor" loads the design as a new draft. Shared designs are stored under `DATA_DIR/shares/`.
 
-**Ready-made designs shop (`/designs`)**: 29 starter designs (funny Egyptian phrases, Ramadan, football, Eid, love, birthday, family, Egypt, motivation) that customers buy without designing. They pick a design, then any product, colour and size, see it on the real product photo (plus the 3D and print-colour previews), and add it to the cart. "Change the words in the editor" opens it in the editor as a new draft. Starter designs are layouts in `src/library.js` that fit any product and switch to light or dark ink to suit the garment colour. `public/js/design-render.js` places a design on a product and makes the same print PNG, preview and SVG the editor does, so ready designs print exactly like custom ones. The owner adds their own designs in the dashboard's **Ready designs** tab by pasting a share link from the editor, and can hide starter designs or delete their own (stored in `DATA_DIR/library/`).
+**Ready-made designs shop (`/designs`)**: 29 starter designs (funny Egyptian phrases, Ramadan, football, Eid, love, birthday, family, Egypt, motivation) that customers buy without designing. They pick a design, then any product, colour and size, see it on the real product photo (plus the 3D and print-colour previews), and add it to the cart. "Change the words in the editor" opens it in the editor as a new draft. Starter designs are layouts in `src/library.js` that fit any product and switch to light or dark ink to suit the garment colour. `public/js/design-render.js` places a design on a product and makes the same print PNG, preview and SVG the editor does, so ready designs print exactly like custom ones. The owner adds their own designs in the dashboard's **Ready designs** tab by pasting a share link from the editor (stored in `DATA_DIR/library/`).
+
+The **Ready designs** tab manages every design, starter ones included:
+- **Pause** takes a design out of the shop for now; **Show in the shop** brings it back.
+- **Delete** takes it out of the shop and out of the main list. Nothing is really removed (the owner's own designs keep their files), and **Bring back** in the "Deleted" filter restores it as it was. Orders made from a design never depend on it.
+- Filters (in the shop, paused, deleted), category, search, "with artwork / text only", and pause or show every design in the current list at once (`PATCH /api/admin/library` with `ids`).
+- The switch **"Text-only designs only on products without artwork designs"** (`PUT /api/admin/library/settings`, `textOnlyLimited`). On products that have designs drawn with real artwork (the shop's artwork files, or the owner's own designs) only those are offered. Designs made only of text, shapes and icons stay on the other products (business cards, invitations, laser pieces…), and are shown on one of those.
+- The real shop turned that switch on once at its first start with this version (`server.js`: `libraryOnce: ['pause-no-artwork']`, remembered in `DATA_DIR/library/index.json`). It also paused the text-only starter designs that were left with no product. The owner can change both from the tab.
 
 **Order notifications**: for every new order the owner gets a WhatsApp message (CallMeBot) and an email (Brevo) with the items, total, customer and address, and the customer gets a confirmation email in the language they ordered in (when they gave an email). The order page has a "Confirm on WhatsApp" button that opens a chat with the shop's number with the order details filled in. Each channel switches on when its variables are set (see the table above). Sending happens after the order is saved and never blocks it; the result is shown per order in the dashboard's orders tab, which also lists which channels are set up and has a "Send me a test" button (`src/notify.js`).
 
@@ -172,6 +180,15 @@ Admin → **Products** changes the real products without touching the code (`src
 - **New product**: made from an existing one (its drawing, 3D model, print setup and ready designs), then changed. It starts out of the shop (paused) until it's published.
 - **Nothing is deleted**: products are paused or archived ("stop selling"), never deleted, so old orders, accounts and the change log keep naming them, and they can be sold again with everything as it was. Built-in products can also be reset to the original (the change log keeps what was changed).
 - **Staff**: the owner adds product managers (name, username, password ≥ 10 characters). They sign in on the admin page with "Staff sign-in" and see only the Products screen; every other admin route refuses their token. Changing their password signs them out everywhere. Every change is logged with who made it.
+
+## Private preview (before the shop opens)
+
+Until the owner opens the shop to everyone, only invited people get in (`src/preview.js`).
+- **Dashboard → Private preview** (owner only) holds a switch, *Open the shop to everyone* / *Make the shop private again*, and the list of invited people. Each person has a name, a personal code and link (`https://ebda3.me/?invite=CODE`), their last visit and number of visits. Buttons: copy link, send on WhatsApp, turn off / let in again, remove.
+- Opening the link, or typing the code on the "Opening soon" page, gives that browser a signed cookie for 60 days (`ebda3_preview`, HttpOnly). Turning a person off or removing them shuts them out at once. The owner and staff get the same cookie when they sign in to the dashboard, and the dashboard's own requests always get through.
+- Everyone else gets the bilingual **"Opening soon"** page (`public/coming-soon.html`) for any page address. Data, pictures and files answer 403. Only the files that page and the dashboard's sign-in need stay reachable: code, styles, fonts, the logo and icons, the link-preview picture, `/admin`, and the printing houses' signed `/dl/` links. While private, every answer says `X-Robots-Tag: noindex` and `robots.txt` disallows everything.
+- Wrong codes count per visitor: 10 in 15 minutes, 40 a day.
+- The real shop starts private the first time it runs with this (`server.js`: `previewStart`). **Test copies** (QA, local runs) start with `PREVIEW_LOCK=off`, for example `PREVIEW_LOCK=off PORT=3400 DATA_DIR=/tmp/qa/data ADMIN_PASSWORD=pw node server.js`. Tests that call `createApp` directly are not affected.
 
 ## Before going live
 

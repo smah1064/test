@@ -227,43 +227,53 @@ async function gsJob(job, timeoutMs) {
 
 /** The size of each page of a PDF in points (its crop box, else its media box): [{ w, h, x, y }]. */
 async function pdfInfo(buf, { max = 40, timeoutMs = 30000 } = {}) {
+  // The first `max` pages, and the last one when the PDF is longer (a booklet's back cover).
   const ps = `(in.pdf) (r) file runpdfbegin
+/pbox { dup (PAGE ) print =only ( ) print pdfgetpage dup /CropBox pget { exch pop } { /MediaBox pget pop } ifelse (BOX ) print == } def
 (COUNT ) print pdfpagecount ==
-1 1 pdfpagecount ${max} .min {
-  pdfgetpage dup /CropBox pget { exch pop } { /MediaBox pget pop } ifelse
-  (BOX ) print ==
-} for
+1 1 pdfpagecount ${max} .min { pbox } for
+pdfpagecount ${max} gt { pdfpagecount pbox } if
 `;
   const out = await gsJob({ inputs: { 'in.pdf': buf }, ps, device: 'nullpage' }, timeoutMs);
   const count = Number((/COUNT (\d+)/.exec(out.log) || [])[1]);
-  const boxes = [...out.log.matchAll(/BOX \[([-\d.\s]+)\]/g)].map((m) => {
-    const [x0, y0, x1, y1] = m[1].trim().split(/\s+/).map(Number);
-    return { x: Math.min(x0, x1), y: Math.min(y0, y1), w: Math.abs(x1 - x0), h: Math.abs(y1 - y0) };
+  // boxes[i]: page i + 1 (null for the pages in between that weren't asked for).
+  const found = [...out.log.matchAll(/PAGE (\d+) BOX \[([-\d.\s]+)\]/g)].map((m) => {
+    const [x0, y0, x1, y1] = m[2].trim().split(/\s+/).map(Number);
+    return { page: Number(m[1]) - 1, box: { x: Math.min(x0, x1), y: Math.min(y0, y1), w: Math.abs(x1 - x0), h: Math.abs(y1 - y0) } };
   });
-  if (!count || !boxes.length || boxes.some((b) => !(b.w > 0 && b.h > 0))) {
+  if (!count || !found.length || found.some((f) => !(f.box.w > 0 && f.box.h > 0) || !(f.page >= 0 && f.page < count))) {
     const err = new ArtworkError('failed');
     err.detail = out.log.slice(-600);
     throw err;
   }
+  const boxes = Array.from({ length: Math.max(...found.map((f) => f.page)) + 1 }, () => null);
+  for (const f of found) boxes[f.page] = f.box;
   return { count, boxes };
 }
 
 /**
  * Every page of a PDF as a JPEG for the editor (each page its own shape, about 200 DPI),
- * up to `max` pages. The pictures are only for the screen: the print files use the PDF itself.
- * Returns { pages: [Buffer], boxes: [{ w, h, x, y }], count, more }.
+ * up to `max` pages (a longer PDF: the first max - 1 and the last one). The pictures are only for
+ * the screen: the print files use the PDF itself.
+ * Returns { pages: [Buffer], pageNums: [PDF page index of each], boxes: [{ w, h, x, y } | null by
+ * PDF page index], count, more }.
  */
 async function pdfPages(buf, { max = 32, maxPx = 2400, timeoutMs = 90000 } = {}) {
   const found = sniff(buf);
   if (!found || found.kind !== 'pdf') throw new ArtworkError('type');
   const info = await pdfInfo(found.data, { max });
-  const biggest = Math.max(...info.boxes.map((b) => Math.max(b.w, b.h))) / 72;
+  // A PDF longer than `max`: its first max - 1 pages and its last one (a booklet's back cover).
+  const long = info.count > max && max >= 2;
+  const nums = long ? [...Array(max - 1).keys(), info.count - 1] : [...Array(Math.min(max, info.count)).keys()];
+  const shown = info.boxes.filter(Boolean);
+  const biggest = Math.max(...shown.map((b) => Math.max(b.w, b.h))) / 72;
   const dpi = Math.max(36, Math.min(200, Math.floor(maxPx / biggest)));
   const out = await gsJob({
     inputs: { 'in.pdf': found.data },
     device: 'png16m',
     dpi,
-    args: ['-dUseCropBox', '-dTextAlphaBits=4', '-dGraphicsAlphaBits=4', '-dMaxBitmap=200000000', '-dFirstPage=1', `-dLastPage=${Math.min(max, info.count)}`, 'in.pdf'],
+    args: ['-dUseCropBox', '-dTextAlphaBits=4', '-dGraphicsAlphaBits=4', '-dMaxBitmap=200000000',
+      ...(long ? [`-sPageList=1-${max - 1},${info.count}`] : ['-dFirstPage=1', `-dLastPage=${nums.length}`]), 'in.pdf'],
   }, timeoutMs);
   const list = (out.pngs || []).map((p) => Buffer.from(p.buffer, p.byteOffset, p.byteLength));
   if (!list.length) {
@@ -273,7 +283,8 @@ async function pdfPages(buf, { max = 32, maxPx = 2400, timeoutMs = 90000 } = {})
   }
   const pages = [];
   for (const png of list) pages.push(await sharp(png).flatten({ background: '#ffffff' }).jpeg({ quality: 86, mozjpeg: true }).toBuffer());
-  return { pages, boxes: info.boxes.slice(0, pages.length), count: info.count, more: info.count > max };
+  // pageNums[i]: which page of the PDF pages[i] is (0 = the first).
+  return { pages, pageNums: nums.slice(0, pages.length), boxes: info.boxes, count: info.count, more: info.count > max };
 }
 
 const psString = (s) => `(${String(s).replace(/[^\x20-\x7e]/g, '').replace(/[()\\]/g, (c) => `\\${c}`)})`;

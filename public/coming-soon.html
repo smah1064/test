@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>إبداع · قريبًا · ebda3 · Opening soon</title>
+  <link rel="icon" href="/favicon.svg?v=ebda3" type="image/svg+xml">
+  <link rel="icon" href="/favicon.ico?v=ebda3" sizes="any">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=ebda3">
+  <meta name="theme-color" content="#FAFAF7">
+  <meta property="og:site_name" content="إبداع · ebda3">
+  <meta property="og:title" content="إبداع · ebda3">
+  <meta property="og:description" content="قريبًا: اطبع تصميمك على تيشيرتات، مجات، كروت، هدايا وأكتر. · Opening soon.">
+  <meta property="og:image" content="https://ebda3.me/img/og-ebda3.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <!-- The page anyone sees while the shop is private (src/preview.js): both languages at once. -->
+  <script>(function(){var l;try{l=localStorage.getItem('pod-lang')}catch(e){}l=l==='en'?'en':'ar';var d=document.documentElement;d.lang=l;d.dir=l==='ar'?'rtl':'ltr'})()</script>
+  <link rel="stylesheet" href="/fonts/fonts.css">
+  <style>
+    :root { --ink: #16181d; --ink-2: #4a4f5a; --accent: #d9461f; --bg: #FAFAF7; --card: #ffffff; --line: #e6e4de; --bad: #b42318; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body {
+      min-height: 100vh; min-height: 100svh; display: grid; place-items: center; padding: 24px 16px;
+      background: radial-gradient(1200px 600px at 85% -10%, #ffe3d6 0%, transparent 60%), radial-gradient(900px 500px at -10% 110%, #fde9f3 0%, transparent 55%), var(--bg);
+      color: var(--ink); font-family: "Cairo", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Tahoma, Arial, sans-serif;
+    }
+    main { width: 100%; max-width: 460px; text-align: center; }
+    .logo { display: flex; justify-content: center; align-items: center; gap: 14px; margin-bottom: 28px; }
+    .logo img { height: 56px; width: auto; }
+    .logo .sep { width: 1px; height: 36px; background: var(--line); }
+    h1 { margin: 0 0 6px; font-size: 34px; line-height: 1.3; font-weight: 800; }
+    .en-title { margin: 0 0 18px; font-size: 18px; font-weight: 700; color: var(--ink-2); direction: ltr; }
+    p { margin: 0 auto 6px; max-width: 400px; line-height: 1.8; color: var(--ink-2); font-size: 15.5px; }
+    p.en { direction: ltr; font-size: 14px; }
+    .card { margin-top: 26px; padding: 20px; background: var(--card); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 10px 30px rgba(22, 24, 29, .06); text-align: start; }
+    label { display: block; font-weight: 700; font-size: 14.5px; margin-bottom: 8px; }
+    label .en { display: block; font-weight: 600; font-size: 12.5px; color: var(--ink-2); direction: ltr; text-align: start; }
+    html[dir="rtl"] label .en { text-align: end; }
+    .row { display: flex; gap: 8px; }
+    input {
+      flex: 1; min-width: 0; height: 48px; padding: 0 14px; border: 1.5px solid var(--line); border-radius: 12px; font: inherit; font-size: 18px;
+      letter-spacing: .12em; text-transform: uppercase; direction: ltr; text-align: center; background: #fff; color: var(--ink);
+    }
+    input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(217, 70, 31, .15); }
+    button { height: 48px; padding: 0 20px; border: 0; border-radius: 12px; background: var(--accent); color: #fff; font: inherit; font-weight: 800; font-size: 16px; cursor: pointer; white-space: nowrap; }
+    button:focus-visible { outline: 3px solid rgba(217, 70, 31, .35); outline-offset: 2px; }
+    .msg { margin: 12px 0 0; padding: 10px 12px; border-radius: 10px; background: #fdecea; color: var(--bad); font-size: 14px; line-height: 1.7; }
+    .msg .en { display: block; direction: ltr; font-size: 13px; }
+    .msg[hidden] { display: none; }
+    .note { margin-top: 18px; font-size: 13px; color: var(--ink-2); }
+    .note-en { display: block; }
+    @media (max-width: 380px) { h1 { font-size: 28px; } .row { flex-direction: column; } button { width: 100%; } }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="logo" aria-label="إبداع · ebda3">
+      <img src="/img/logo-ar.svg" alt="إبداع" width="86" height="56">
+      <span class="sep" aria-hidden="true"></span>
+      <img src="/img/logo-en.svg" alt="ebda3" width="137" height="56">
+    </div>
+    <h1>قريبًا… بنجهّز المحل</h1>
+    <p class="en-title" lang="en">Opening soon</p>
+    <p>إبداع لطباعة تصميمك على تيشيرتات، مجات، كروت، هدايا وأكتر. المحل مفتوح للمدعوين بس دلوقتي.</p>
+    <p class="en" lang="en">Print your own designs on T-shirts, mugs, cards, gifts and more. For now the shop is open to invited people only.</p>
+    <form class="card" method="post" action="/api/preview/enter">
+      <label for="code">معاك كود دعوة؟ اكتبه هنا<span class="en" lang="en">Have an invitation code? Enter it here</span></label>
+      <div class="row">
+        <input id="code" name="code" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" maxlength="24" required inputmode="text" aria-describedby="msg">
+        <button type="submit">ادخل · Enter</button>
+      </div>
+      <div class="msg" id="msg" role="alert" hidden></div>
+    </form>
+    <p class="note">لو وصلك لينك دعوة، افتحه على طول من الموبايل.<span class="note-en" lang="en" dir="ltr">Got an invitation link? Just open it.</span></p>
+  </main>
+  <script>
+    (function () {
+      // ?code=wrong (no such code, or turned off) / ?code=wait (too many tries): say so under the box.
+      var why = new URLSearchParams(location.search).get('code');
+      var text = why === 'wrong'
+        ? ['الكود ده مش صحيح أو مبقاش شغال. اتأكد منه أو اطلب لينك جديد.', 'That code is wrong or no longer works. Check it, or ask for a new link.']
+        : why === 'wait'
+          ? ['جربت كتير. استنى شوية وجرب تاني.', 'Too many tries. Please wait a little and try again.']
+          : null;
+      if (!text) return;
+      var box = document.getElementById('msg');
+      box.textContent = text[0];
+      var en = document.createElement('span');
+      en.className = 'en';
+      en.lang = 'en';
+      en.textContent = text[1];
+      box.appendChild(en);
+      box.hidden = false;
+      history.replaceState(null, '', location.pathname);
+      document.getElementById('code').focus();
+    })();
+  </script>
+</body>
+</html>
