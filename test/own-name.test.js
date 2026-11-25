@@ -68,7 +68,7 @@ const FLAGGED = {
   'lz-card-initial-name': [['A', 'initial'], ['AHMED HASSAN', 'name']],
   'lz-pen-name-en': [['Ahmed Hassan', 'name']],
   'lz-pen-name-ar': [['أحمد حسن', 'name']],
-  'lz-pen-monogram': [['AH', 'initials'], ['AHMED HASSAN', 'name']],
+  'lz-pen-monogram': [['A · H', 'initials']],
   'lz-wallet-monogram': [['AH', 'initials']],
   'lz-wallet-name-ar': [['أحمد حسن', 'name']],
   'lz-wallet-love-en': [['Ahmed', 'his']],

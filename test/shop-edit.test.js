@@ -116,6 +116,8 @@ test('printed without asking: an owner\'s at once; anyone else\'s waits for an o
   const card = list.find((x) => x.id === (held.json.approval || held.json).id);
   assert.ok(/Colour corrected only/.test(card.summary.en), card.summary.en);
   assert.ok(card.pics && card.pics.length === 2, JSON.stringify(card.pics));
+  // (The two versions are the pictures: no raw ids in the card's words. QA 25 Nov.)
+  assert.ok(!JSON.stringify(card.changes || []).match(/designId|baseDesignId|[0-9a-f]{8}-[0-9a-f]{4}-/), JSON.stringify(card.changes));
   const ok = await call(`/api/admin/approvals/${card.id}/approve`, 'POST', {}, owner);
   assert.strictEqual(ok.status, 200, ok.text);
   assert.strictEqual(ok.json.approval.status, 'approved', JSON.stringify(ok.json.approval));

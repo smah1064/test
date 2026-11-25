@@ -1076,8 +1076,15 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (b.proofHash && b.proofHash !== proofHashOf(d)) throw new HttpError(409, 'proofChanged', { designId: d.id });
       // A sample asked for at checkout stays asked for with the new approval.
       recordApproval(item, d, { via: 'proof-link', note: comment || null, sample: Boolean(item.sampleWanted || (item.approval && item.approval.sample)) });
-      item.status = 'queued';
-      item.review = { ...(item.review || { needed: false, reasons: [] }), status: 'done' };
+      if (d.preflight && d.preflight.status === 'fail') {
+        // A version whose automatic check failed ("nothing to print here") waits for the team, as the proof page says
+        // ("our team will check this before printing"): it went straight to the print queue. QA 25 Nov.
+        item.status = 'review';
+        item.review = { ...(item.review || {}), needed: true, reasons: [...new Set([...((item.review && item.review.reasons) || []), 'preflight'])], status: 'pending' };
+      } else {
+        item.status = 'queued';
+        item.review = { ...(item.review || { needed: false, reasons: [] }), status: 'done' };
+      }
     } else if (b.decision === 'reject') {
       // (What to change, in words: an empty or invisible-only comment gives the shop nothing to act on. QA 25 Nov.)
       if (!noteText(comment, 1000)) throw new HttpError(400, 'noteRequired');
@@ -5314,7 +5321,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     // (An expense as it will be saved: the amount read as a number, the category one of the list.)
     const body = a.action === 'POST /api/admin/expenses' && kept && typeof kept === 'object' ? accounting.cleanExpense(kept).expense || kept : kept;
     if (!body || typeof body !== 'object' || Array.isArray(body)) return [];
-    const all = Object.entries(body);
+    // (The shop's edit: its two versions are the pictures on the card, not their ids. QA 25 Nov.)
+    const all = Object.entries(body).filter(([k]) => !(/\/shop-edit/.test(a.action || '') && (k === 'designId' || k === 'baseDesignId')));
     // (A photo order or main photo: in words, the photos themselves are shown with the card, not their ids.)
     const photoOrder = a.method === 'PUT' && /^\/api\/admin\/catalog\/[^/?]+\/photos$/.test(a.path || '');
     const valueOf = (k, v) => {
@@ -6451,7 +6459,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const product = getProduct(design.productId);
     return { widthMm: Math.round(side.widthIn * 25.4 * 100) / 100, heightMm: Math.round(side.heightIn * 25.4 * 100) / 100, laser: (product && product.laser) || { kind: 'engrave' }, dpi: 254 };
   }
-  const SUFFIX = { 'png-mirror': '-mirrored', 'pdf-marks': '-cropmarks', tiff: '-cmyk', 'dtf-film': '-dtf-film', 'dtf-pdf': '-dtf-film', 'dtg-white': '-dtg-white-underbase', 'sheet-pdf': '-film-mirrored', 'sheet-pdf-plain': '', proof: '-proof' };
+  // (Laser files each their own name: the LightBurn file, the cut lines and the plain SVG were all "…-front.svg". QA 25 Nov.)
+  const SUFFIX = { 'png-mirror': '-mirrored', 'pdf-marks': '-cropmarks', tiff: '-cmyk', 'dtf-film': '-dtf-film', 'dtf-pdf': '-dtf-film', 'dtg-white': '-dtg-white-underbase', 'sheet-pdf': '-film-mirrored', 'sheet-pdf-plain': '', proof: '-proof', 'laser-svg': '-laser-lightburn', 'engrave-png': '-engrave', 'cut-svg': '-cut-lines' };
 
   /** Pieces of a customer's gang sheet, laid out exactly as they saw it. */
   async function gangSheetPdf(design, mirror) {

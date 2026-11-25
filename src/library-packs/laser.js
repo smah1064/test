@@ -483,22 +483,23 @@ const designs = [
     S('star', 0.15, 0.78, 0.5),
   ], 'blue'),
 
-  // ---------- Pen barrel (a long thin band, about 45 × 6.5 mm: one line, nothing thinner than 2 mm) ----------
+  // ---------- Pen barrel (a long thin band, about 45 × 6.4 mm, its safe zone under 5 mm tall: one line, text about
+  // 3 mm high; QA 25 Nov: bigger ones were over the safe edge, and a long second line came out under 6 pt) ----------
   pen('lz-pen-name-en', 'business', 'Pen: name in script', 'قلم بالاسم إنجليزي', [
-    T('Ahmed Hassan', 'Dancing Script', 0.095, 0.5, 0.5, { weight: 'bold', sampleName: 'name' }),
+    T('Ahmed Hassan', 'Dancing Script', 0.072, 0.5, 0.5, { weight: 'bold', sampleName: 'name' }),
   ]),
   pen('lz-pen-name-ar', 'business', 'Pen: name in Arabic calligraphy', 'قلم بالاسم بالخط العربي', [
-    T('أحمد حسن', 'Aref Ruqaa', 0.1, 0.5, 0.47, { weight: 'bold', sampleName: 'name' }),
+    T('أحمد حسن', 'Aref Ruqaa', 0.064, 0.5, 0.5, { weight: 'bold', sampleName: 'name' }),
   ]),
-  pen('lz-pen-monogram', 'business', 'Pen: initials and name', 'قلم بالحروف والاسم', [
-    T('AH', 'Playfair Display', 0.1, 0.13, 0.5, { weight: 'bold', sampleName: 'initials' }),
-    S('diamond', 0.025, 0.27, 0.5),
-    T('AHMED HASSAN', 'Montserrat', 0.05, 0.62, 0.5, { spacing: 250, weight: 'bold', sampleName: 'name' }),
+  pen('lz-pen-monogram', 'business', 'Pen: initials between diamonds', 'قلم بالحروف بين معيّنين', [
+    S('diamond', 0.025, 0.36, 0.5),
+    T('A · H', 'Playfair Display', 0.072, 0.5, 0.5, { weight: 'bold', sampleName: 'initials' }),
+    S('diamond', 0.025, 0.64, 0.5),
   ]),
   pen('lz-pen-teacher-ar', 'school', 'Pen: thank you, teacher', 'قلم شكراً يا أحلى مِس', [
-    S('heart', 0.03, 0.07, 0.5),
-    T('شكراً يا أحلى مِس', 'Aref Ruqaa', 0.095, 0.5, 0.46, { weight: 'bold' }),
-    S('heart', 0.03, 0.93, 0.5),
+    S('heart', 0.028, 0.1, 0.5),
+    T('شكراً يا أحلى مِس', 'Aref Ruqaa', 0.062, 0.5, 0.5, { weight: 'bold' }),
+    S('heart', 0.028, 0.9, 0.5),
   ], 'gold'),
 
   // ---------- Leather wallet front (about 7 × 4 cm) ----------

@@ -972,7 +972,10 @@
       const [sx, sy] = n.dataset.nudge.split(',').map(Number);
       const o = st.offsets[st.side] || { dx: 0, dy: 0 };
       const u = areaUnitsPerCm();
-      if (moveArea(o.dx + sx * u, o.dy + sy * u)) commit();
+      // (Counted in whole cm from the standard spot: adding 1 cm to a position rounded to the canvas each time crept,
+      // 4 taps said 4.5 cm and 16 said 17. QA 25 Nov.)
+      const to = (d, step) => (Math.round(d / u) + step) * u;
+      if (moveArea(to(o.dx, sx), to(o.dy, sy))) commit();
       return;
     }
     if (e.target.closest('#place-reset') && moveArea(0, 0)) commit();
@@ -1486,7 +1489,9 @@
     const tx = new fabric.IText(text, {
       name: 'Text',
       fontFamily: font,
-      fontSize: Math.round(area().w * p.size),
+      // (Sized to the area's width, but never taller than about half its height: on a pen's thin barrel a heading
+      // started over the edges. QA 25 Nov.)
+      fontSize: Math.round(Math.min(area().w * p.size, area().h * 0.5)),
       fontWeight: p.weight || 'normal',
       fontStyle: p.italic ? 'italic' : 'normal',
       charSpacing: arabic ? 0 : p.spacing || 0,
@@ -2402,16 +2407,21 @@
       }
     });
   }
+  // Group / Ungroup are one step in Undo: the pieces taken off and put back one by one each made a step of their own
+  // (the first Undo did nothing, the next emptied the side), and some with positions taken inside the selection
+  // before it was selected (Undo after Ungroup put the texts in the corner). QA 25 Nov.
   function groupSelected() {
     const sel = active();
     if (!sel || sel.type !== 'activeSelection') return;
     st.reselecting = true;
+    st.silent = true;
     const g = sel.toGroup();
     st.reselecting = false;
     g.set({ lockRatio: true });
     applyClips();
     applyRatioLock(g);
     canvas.setActiveObject(g);
+    st.silent = false;
     canvas.requestRenderAll();
     commit();
     renderProps();
@@ -2422,11 +2432,13 @@
     const g = active();
     if (!g || g.type !== 'group' || isSticker(g)) return;
     st.reselecting = true;
+    st.silent = true;
     const sel = g.toActiveSelection();
     st.reselecting = false;
     sel.getObjects().forEach(applyRatioLock);
     applyClips();
     canvas.setActiveObject(sel);
+    st.silent = false;
     canvas.requestRenderAll();
     commit();
     renderProps();
@@ -3558,6 +3570,9 @@
   function renderOptions() {
     const p = st.product;
     $('product-select').innerHTML = products.map((x) => `<option value="${x.id}" ${x === p ? 'selected' : ''}>${esc(tr(x.name))}</option>`).join('');
+    // (An order's item, changed by the shop or by the customer, stays the product ordered: the server refuses another
+    // one, but only after the note was typed and the files uploaded. QA 25 Nov.)
+    $('product-select').disabled = Boolean(st.shopEdit || st.revise);
     $('swatches').innerHTML = p.colors.map((c) => `<button class="swatch ${c.id === st.colorId ? 'active' : ''}${c.soldOut ? ' sold-out' : ''}" data-color="${c.id}"${c.soldOut ? ' aria-disabled="true"' : ''} title="${esc(tr(c.name))}${c.soldOut ? ` · ${esc(tEd('ed.soldOut'))}` : ''}" aria-label="${esc(tr(c.name))}${c.soldOut ? ` · ${esc(tEd('ed.soldOut'))}` : ''}" style="background:${c.hex}"></button>`).join('');
     $('color-name').textContent = tr(color().name);
     $('color-label').textContent = p.colorLabel ? `${tr(p.colorLabel)}:` : t('panel.colour');
@@ -3689,7 +3704,7 @@
     if (b.classList.contains('sold-out')) return toast(tEd('ed.soldOutPick'));
     // Booklets: fewer pages than are designed: say which won't print (their designs are kept).
     const lost = b.dataset.size !== st.sizeId ? designedBeyond(b.dataset.size) : [];
-    if (lost.length && !window.confirm(tPg('ed.pagesHidden', { pages: lost.map((sd) => tr(sd.name)).join('، ') }))) return;
+    if (lost.length && !window.confirm(tPg('ed.pagesHidden', { pages: lost.map((sd) => tr(sd.name)).join(POD.lang === 'ar' ? '، ' : ', ') }))) return;
     st.sizePicked = true;
     if (b.dataset.size !== st.sizeId) {
       const fromSize = st.sizeId;
@@ -4178,9 +4193,16 @@
     const issues = checkIssues();
     st.issues = issues;
     st.issueObjs = new Set(issues.map((i) => i.obj));
+    // What the other sides had to check when they were last open: this side being fine isn't "ready to print" while
+    // the back still has text outside its area (they are all checked again on "Add to cart"). QA 25 Nov.
+    st.sideIssues = { ...(st.sideIssues || {}), [st.side]: issues.length };
+    const elsewhere = Object.entries(st.sideIssues)
+      .filter(([id, n]) => id !== st.side && n > 0 && st.product.sides.some((sd) => sd.id === hostOf(id)) && (st.designs[id] || []).length)
+      .map(([id]) => tr(baseSide(hostOf(id)).name));
     const chip = $('check-chip');
-    chip.className = 'check-chip ' + (issues.length ? (issues.some((i) => i.level === 'error') ? 'bad' : 'warn') : 'ok');
-    chip.innerHTML = issues.length ? `⚠ <span>${esc(t('check.issues', { n: POD.num(issues.length) }))}</span>` : `✓ <span>${esc(t('check.ok'))}</span>`;
+    chip.className = 'check-chip ' + (issues.length ? (issues.some((i) => i.level === 'error') ? 'bad' : 'warn') : elsewhere.length ? 'warn' : 'ok');
+    chip.innerHTML = issues.length ? `⚠ <span>${esc(t('check.issues', { n: POD.num(issues.length) }))}</span>`
+      : elsewhere.length ? `⚠ <span>${esc(t('check.otherSide', { sides: elsewhere.join(POD.lang === 'ar' ? '، ' : ', ') }))}</span>` : `✓ <span>${esc(t('check.ok'))}</span>`;
     const R = rects();
     $('check-legend').innerHTML = `
       <li><i class="lg lg-trim"></i>${esc(t('check.legendTrim'))}</li>
@@ -4188,7 +4210,8 @@
       ${R.b ? `<li><i class="lg lg-bleed"></i>${esc(t('check.legendBleed'))}</li>` : ''}`;
     $('check-list').innerHTML = issues.length
       ? issues.map((i, k) => `<li class="${i.level}" data-issue="${k}"><span>${i.level === 'error' ? '⛔' : '⚠'}</span><span>${esc(t(i.key, { ...i.params, dpi: POD.num(i.params.dpi ?? 0), pt: POD.num(i.params.pt ?? 0) }))}</span></li>`).join('')
-      : `<li class="ok"><span>✓</span><span>${esc(t('check.allGood'))}</span></li>`;
+      : elsewhere.length ? `<li class="warn"><span>⚠</span><span>${esc(t('check.otherSideLong', { sides: elsewhere.join(POD.lang === 'ar' ? '، ' : ', ') }))}</span></li>`
+        : `<li class="ok"><span>✓</span><span>${esc(t('check.allGood'))}</span></li>`;
     canvas.requestRenderAll();
   }
   $('check-list').addEventListener('click', (e) => {
@@ -4525,6 +4548,13 @@
       st.sizePicked = true; // typed per size
       if (unpicked && z !== st.sizeId && g[c][z] > 0 && !(g[st.colorId] && g[st.colorId][st.sizeId])) {
         changeSize(z);
+        renderOptions();
+      }
+      // Packs: the one pack left in the boxes is the pack shown as chosen above (its chip lights up, and a tap on
+      // another chip moves it). The 25-card chip lit over a 10-card order saved the 25 pack with 10 cards. QA 25 Nov.
+      const only = qtyLines();
+      if (packs() && only.length === 1 && only[0].color === st.colorId && only[0].size !== st.sizeId) {
+        changeSize(only[0].size);
         renderOptions();
       }
     };
@@ -5551,10 +5581,14 @@
     $('shop-edit-print').textContent = t(owner ? 'shopEdit.print' : 'shopEdit.printTeam');
     $('shop-edit-msg').hidden = true;
     box.hidden = false;
+    // (The editing bar sat over the dialog's buttons on a phone with the keyboard open. QA 25 Nov.)
+    const bar = $('shop-edit-bar');
+    if (bar) bar.hidden = true;
     $('shop-edit-note').focus();
     return new Promise((resolve) => {
       const done = (v) => {
         box.hidden = true;
+        if (bar) bar.hidden = false;
         box.removeEventListener('click', onClick);
         document.removeEventListener('keydown', onKey);
         resolve(v);
@@ -5737,7 +5771,7 @@
       }
       if (problems.length) {
         busy(false);
-        if (!confirm(t(st.revise ? 'revise.confirm' : 'check.confirm', { list: problems.join('\n') }))) return;
+        if (!confirm(t(st.shopEdit ? 'shopEdit.confirm' : st.revise ? 'revise.confirm' : 'check.confirm', { list: problems.join('\n') }))) return;
         busy(true, t('busy.saving'));
       }
 
@@ -5750,11 +5784,15 @@
       });
       let done = 0;
       busy(true, t('busy.uploading', { n: 0, total: created.files.length }));
-      await Promise.all(created.files.map(async (name) => {
+      // (Every upload is let finish before an error is said: with the first failure thrown at once, the others still
+      // finishing put "Uploading 2/3" back over the page after it closed, and the editor stayed locked. QA 25 Nov.)
+      const sent = await Promise.allSettled(created.files.map(async (name) => {
         const res = await POD.putFile(`/api/designs/${created.id}/files/${encodeURIComponent(name)}`, created.uploadToken, files[name]);
         if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || t('msg.requestFailed', { status: res.status }));
         busy(true, t('busy.uploading', { n: ++done, total: created.files.length }));
       }));
+      const failedUpload = sent.find((r) => r.status === 'rejected');
+      if (failedUpload) throw failedUpload.reason;
       busy(true, t('busy.finishing'));
       const design = await POD.api(`/api/designs/${created.id}/complete`, { method: 'POST', headers: { 'x-upload-token': created.uploadToken } });
 
@@ -5822,8 +5860,10 @@
         await POD.drafts.remove(st.product.id);
         try { localStorage.removeItem('pod-rescue:' + st.product.id); } catch (err) { /* private mode */ }
       }
-      // (An item changed from the cart says "updated", not "added", QA 25 Nov.)
-      location.href = at >= 0 ? '/cart?updated=1' : '/cart?added=1';
+      // (An item changed from the cart says "updated", not "added", QA 25 Nov. And Back from the cart doesn't
+      // return to this editor address, which names the version before the change: the old text, no longer the cart's.)
+      if (at >= 0) location.replace('/cart?updated=1');
+      else location.href = '/cart?added=1';
     } catch (e) {
       await showSide(original).catch(() => {});
       setZoom(prevZoom);
@@ -6041,8 +6081,15 @@
     if ($('save-draft')) $('save-draft').hidden = true; // one way out: save the shop's edit
     const bar = document.createElement('div');
     bar.className = 'draft-bar revise-bar';
+    bar.id = 'shop-edit-bar';
     bar.setAttribute('role', 'status');
-    bar.innerHTML = `<span>${esc(t(adminToken() ? 'shopEdit.bar' : 'shopEdit.signIn'))}</span>`;
+    // (Closable, and drawn again in the page's language: it stayed in Arabic after switching. QA 25 Nov.)
+    const fillBar = () => {
+      bar.innerHTML = `<span>${esc(t(adminToken() ? 'shopEdit.bar' : 'shopEdit.signIn'))}</span><button type="button" class="fly-close" aria-label="${esc(t('draft.keep'))}">✕</button>`;
+      bar.querySelector('button').addEventListener('click', () => bar.remove());
+    };
+    fillBar();
+    document.addEventListener('pod:langchange', () => { if (bar.isConnected) fillBar(); });
     document.body.appendChild(bar);
     // (An owner prints without asking at once; anyone else asks an owner: the dialog says which.)
     if (adminToken()) {
@@ -6075,8 +6122,12 @@
       const bar = document.createElement('div');
       bar.className = 'draft-bar revise-bar';
       bar.setAttribute('role', 'status');
-      bar.innerHTML = `<span>${esc(note ? t(last.by === 'customer' ? 'revise.yourNote' : 'revise.shopNote', { note }) : t('revise.hint'))}</span><button type="button" class="fly-close" aria-label="${esc(t('draft.keep'))}">✕</button>`;
-      bar.querySelector('button').addEventListener('click', () => bar.remove());
+      const fillBar = () => {
+        bar.innerHTML = `<span>${esc(note ? t(last.by === 'customer' ? 'revise.yourNote' : 'revise.shopNote', { note }) : t('revise.hint'))}</span><button type="button" class="fly-close" aria-label="${esc(t('draft.keep'))}">✕</button>`;
+        bar.querySelector('button').addEventListener('click', () => bar.remove());
+      };
+      fillBar();
+      document.addEventListener('pod:langchange', () => { if (bar.isConnected) fillBar(); });
       document.body.appendChild(bar);
     }).catch((e) => {
       // An edit link already used (the new version was sent) or replaced by a newer one, or the order is gone: the

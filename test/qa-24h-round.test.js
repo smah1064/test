@@ -537,3 +537,22 @@ test('activity log pages: "more" and a "before" cursor reach the older lines, no
   // A bad cursor is the first page, not an error.
   assert.strictEqual((await call('/api/admin/activity?limit=2&before=nope', 'GET', undefined, owner)).status, 200);
 });
+
+test('a corrected file whose automatic check failed: the customer\'s approval sends it to the team, not to the press', async () => {
+  const o = await approvedMug();
+  const it = o.items[0];
+  assert.strictEqual((await call(`/api/admin/items/${it.id}/review`, 'POST', { action: 'reopen', note: 'Fix the file' }, owner)).status, 200);
+  // A file with nothing on it: the check fails ("nothing to print here").
+  const empty = await sharp({ create: { width: MUG.w, height: MUG.h, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } }).png().toBuffer();
+  const r = await fetch(`${base}/api/admin/items/${it.id}/replacement/front`, { method: 'PUT', headers: { Authorization: `Bearer ${owner}`, 'Content-Type': 'image/png', 'x-review-note': encodeURIComponent('New file') }, body: empty });
+  assert.strictEqual(r.status, 200, await r.text());
+  const rv = (await call('/api/admin/review', 'GET', undefined, owner)).json.items.find((x) => x.id === it.id);
+  assert.strictEqual(rv.preflight && rv.preflight.status, 'fail', JSON.stringify(rv.preflight));
+  const token = rv.proofLink.split('t=')[1];
+  const view = (await call(`/api/proofs/${token}`)).json;
+  const yes = await call(`/api/proofs/${token}`, 'POST', { decision: 'approve', proofHash: view.proof.proofHash });
+  assert.strictEqual(yes.status, 200, yes.text);
+  assert.strictEqual(yes.json.status, 'review', 'held for the team');
+  const pub = (await call(`/api/orders/${o.id}?k=${o.key}`)).json;
+  assert.strictEqual(pub.items[0].status, 'review');
+});

@@ -92,3 +92,17 @@ test('laser formats only exist for laser products', async () => {
   assert.strictEqual((await file(id, 'png')).status, 200);
   assert.strictEqual((await file(id, 'laser-svg')).status, 404);
 });
+
+test('laser downloads each have their own file name (LightBurn file, cut lines, engraving, plain SVG)', async () => {
+  const id = await design('engrpen', 'black', '1');
+  const names = {};
+  for (const f of ['laser-svg', 'cut-svg', 'engrave-png', 'svg', 'png']) {
+    const res = await file(id, f);
+    assert.strictEqual(res.status, 200, `${f}: ${await res.clone().text()}`);
+    names[f] = /filename="?([^";]+)"?/.exec(res.headers.get('content-disposition') || '')[1];
+  }
+  assert.strictEqual(new Set(Object.values(names)).size, 5, JSON.stringify(names));
+  assert.match(names['laser-svg'], /-laser-lightburn\.svg$/);
+  assert.match(names['cut-svg'], /-cut-lines\.svg$/);
+  assert.match(names['engrave-png'], /-engrave\.png$/);
+});

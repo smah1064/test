@@ -874,6 +874,8 @@ window.POD_STRINGS = {
   'check.legendTrim': ['Print edge', 'حافة الطباعة'],
   'check.legendSafe': ['Safe zone: keep text inside', 'المنطقة الآمنة: خلّي الكلام جوّاها'],
   'check.legendBleed': ['Bleed: extend backgrounds to here', 'هامش القص: مدّ الخلفيات لحد هنا'],
+  'check.otherSide': ['This side is fine · check: {sides}', 'الوجه ده تمام · راجع: {sides}'],
+  'check.otherSideLong': ['This side will print well. {sides} still has something to check: open it to see.', 'الوجه ده هيتطبع كويس. {sides} لسه فيه حاجة للمراجعة: افتحه عشان تشوفها.'],
   'check.allGood': ['Everything will print sharp and in full.', 'كل حاجة هتتطبع واضحة وكاملة.'],
   'check.outside': ['{name} is outside the print area and won’t be printed. Tap here to bring it back.', '{name} برّه منطقة الطباعة ومش هيتطبع. اضغط هنا عشان ترجّعه.'],
   'check.outsideList': ['{name} is outside the print area and won’t be printed.', '{name} برّه منطقة الطباعة ومش هيتطبع.'],
@@ -889,6 +891,7 @@ window.POD_STRINGS = {
   'revise.team': ['This is the customer’s own edit link: the team can’t send a new version with it. Use “Edit the design in the editor” in Review instead.', 'ده لينك التعديل بتاع العميل: الفريق مينفعش يبعت بيه نسخة جديدة. استخدم “عدّل التصميم في المحرر” في المراجعة.'],
   // The shop's own edit of a customer's design (from the dashboard's Review tab).
   'shopEdit.button': ['Save the shop’s edit', 'احفظ تعديل إبداع'],
+  'shopEdit.confirm': ['Please check before saving:\n\n{list}\n\nSave the shop’s edit anyway?', 'من فضلك راجع قبل ما تحفظ:\n\n{list}\n\nتحفظ تعديل إبداع برضه؟'],
   'shopEdit.bar': ['You’re editing the customer’s design for their order. When it’s right, tap “Save the shop’s edit”.', 'انت بتعدّل تصميم العميل بتاع الطلب. لما يبقى مظبوط دوس “احفظ تعديل إبداع”.'],
   'shopEdit.title': ['Save the shop’s edit', 'احفظ تعديل إبداع'],
   'shopEdit.help': ['Send it to the customer to approve (they see your note with the new proof), or print it without asking them.', 'ابعته للعميل يوافق عليه (هيشوف ملاحظتك مع البروفة الجديدة)، أو اطبعه من غير ما تسأله.'],
