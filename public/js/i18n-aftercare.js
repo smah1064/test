@@ -134,7 +134,7 @@
           <p class="muted small">${esc(t('device.note'))}</p>
           <ul>${list.map((o) => `
             <li><a href="${esc(o.link)}"><strong>${esc(t('order.title', { n: o.number }))}</strong></a>
-              <span class="muted small">${esc(when(o.date))}${o.total ? ` · ${esc(money(o.total))}` : ''}</span></li>`).join('')}
+              <span class="muted small">${esc(when(o.date))}${o.total ? `${window.POD.lang === 'ar' ? '، ' : ' · '}${esc(money(o.total))}` : ''}</span></li>`).join('')}
           </ul>
         </section>`;
     },
@@ -190,7 +190,7 @@
       const sizes = (g) => g.lines.map((l) => {
         const label = l.size ? tr(l.size.label) : '';
         return `<span class="qty-size" dir="ltr">${label ? `<bdi>${esc(label)}</bdi>` : ''}<span class="qty-x">×${esc(num(l.qty))}</span></span>`;
-      }).join('<span class="qty-sep"> · </span>');
+      }).join(`<span class="qty-sep">${window.POD.lang === 'ar' ? '، ' : ' · '}</span>`); // (in Arabic "·" next to ١٢٣ looks like ٠)
       const rows = groups.map((g) => {
         const hex = g.color && /^#[0-9a-f]{3,8}$/i.test(g.color.hex || '') ? g.color.hex : null;
         const name = g.color ? tr(g.color.name) : '';

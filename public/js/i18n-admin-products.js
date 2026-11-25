@@ -36,7 +36,7 @@ Object.assign(window.POD_STRINGS, {
   'pm.added': ['Added by us', 'إضافتنا'],
   'pm.addedFrom': ['made from {name}', 'معمول من {name}'],
   'pm.edited': ['Changed', 'متعدّل'],
-  'pm.lastChange': ['Last change: {who} · {when}', 'آخر تعديل: {who} · {when}'],
+  'pm.lastChange': ['Last change: {who} · {when}', 'آخر تعديل: {who}، {when}'],
   'pm.pause': ['Pause', 'إيقاف مؤقت'],
   'pm.stopSelling': ['Stop selling', 'وقف البيع'],
   'pm.show': ['Show in the shop', 'اظهره على الموقع'],
