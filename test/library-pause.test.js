@@ -27,8 +27,8 @@ const withServer = async (opts, fn) => {
 };
 const shopIds = async (base) => new Set((await (await fetch(`${base}/api/library`)).json()).designs.map((d) => d.id));
 
-test('the starter designs: 103 drawn with real artwork, the rest only text, shapes and icons', () => {
-  assert.strictEqual(SEED.filter(usesArtwork).length, 103);
+test('the starter designs: 113 drawn with real artwork, the rest only text, shapes and icons', () => {
+  assert.strictEqual(SEED.filter(usesArtwork).length, 113);
   assert.strictEqual(SEED.length - SEED.filter(usesArtwork).length, 410);
 });
 
