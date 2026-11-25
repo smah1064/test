@@ -360,18 +360,21 @@ class AdminAuth {
    * On a browser this person signed in from before (knownDevice), other people's wrong guesses (all staff
    * sign-ins, or this username from anywhere) don't lock them out; this address's own wrong tries still do.
    */
-  staffLockedFor(ip, username, { knownDevice = false } = {}) {
-    const keys = knownDevice ? [[`staff-ipuser:${ip}:${username}`, ADMIN_IP_RULES]] : [['staff:*', ADMIN_ALL_RULES], [`staff:${ip}`, ADMIN_IP_RULES], [`staff-user:${username}`, ADMIN_IP_RULES]];
+  staffLockedFor(ip, username, { knownDevice = false, deviceKey = null } = {}) {
+    // (A known browser counts its own wrong tries only: someone else at the same office address guessing this
+    // username doesn't lock it. QA 25 Nov.)
+    const own = deviceKey ? `staff-dev:${deviceKey}:${username}` : `staff-ipuser:${ip}:${username}`;
+    const keys = knownDevice ? [[own, ADMIN_IP_RULES]] : [['staff:*', ADMIN_ALL_RULES], [`staff:${ip}`, ADMIN_IP_RULES], [`staff-user:${username}`, ADMIN_IP_RULES]];
     for (const [key, rules] of keys) {
       const v = this.fails.check(key, rules);
       if (typeof v === 'number') return v;
     }
     return 0;
   }
-  staffLogin(ip, username, password, staffList, { knownDevice = null } = {}) {
+  staffLogin(ip, username, password, staffList, { knownDevice = null, deviceKey = null } = {}) {
     const name = String(username || '').trim().toLowerCase().slice(0, 40);
     const known = typeof knownDevice === 'function' ? knownDevice((staffList || []).find((u) => u.username === name)) : false;
-    const wait = this.staffLockedFor(ip, name, { knownDevice: known });
+    const wait = this.staffLockedFor(ip, name, { knownDevice: known, deviceKey: known ? deviceKey : null });
     if (wait) return { wait };
     const user = (staffList || []).find((u) => u.username === name);
     // Always hash once, so a wrong username takes as long as a wrong password.
@@ -382,12 +385,14 @@ class AdminAuth {
       this.fails.hit(`staff:${ip}`, ADMIN_IP_RULES);
       this.fails.hit(`staff-user:${name}`, ADMIN_IP_RULES);
       this.fails.hit(`staff-ipuser:${ip}:${name}`, ADMIN_IP_RULES);
+      if (known && deviceKey) this.fails.hit(`staff-dev:${deviceKey}:${name}`, ADMIN_IP_RULES);
       console.warn(`[admin] wrong staff sign-in from ${ip}`);
       return null;
     }
     this.fails.clear(`staff:${ip}`);
     this.fails.clear(`staff-user:${name}`);
     this.fails.clear(`staff-ipuser:${ip}:${name}`);
+    if (known && deviceKey) this.fails.clear(`staff-dev:${deviceKey}:${name}`);
     const expiresAt = Date.now() + SESSION_MS;
     const body = `${expiresAt.toString(36)}.${crypto.randomBytes(18).toString('base64url')}.${user.id}`;
     console.log(`[admin] staff ${user.username} signed in from ${ip}`);

@@ -180,7 +180,8 @@ window.AdminStaff = (() => {
     try {
       if (what === 'off' || what === 'on') {
         const r = await cfg.api(`/api/admin/staff/${encodeURIComponent(id)}`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify({ active: what === 'on' }) });
-        put((r && r.user) || { ...u, active: what === 'on' });
+        // (The row as the server has it now: a colleague's role change shows, and the next edit starts from it. QA 25 Nov.)
+        put((r && (r.user || (r.id ? r : null))) || { ...u, active: what === 'on' });
         S.msg[id] = { text: t(what === 'on' ? 'staff.onDone' : 'staff.offDone', { name: u.name }), ok: true };
       } else if (what === 'link') {
         const r = await cfg.api(`/api/admin/staff/${encodeURIComponent(id)}/setup-link`, { method: 'POST' });
@@ -230,7 +231,7 @@ window.AdminStaff = (() => {
     S.busy.add(id);
     try {
       const r = await cfg.api(`/api/admin/staff/${encodeURIComponent(id)}`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(body) });
-      put((r && r.user) || { ...u, ...body });
+      put((r && (r.user || (r.id ? r : null))) || { ...u, ...body });
       S.editing = null;
       S.msg[id] = { text: t('staff.saved'), ok: true };
     } catch (e) {

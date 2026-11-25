@@ -1093,7 +1093,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (replacingItems.has(item.id)) throw new HttpError(409, 'fileBeingReplaced');
       const d = store.getDesign(item.designId);
       const b = req.body || {};
-      const note = String(b.note || '').trim().slice(0, 2000);
+      // (Invisible marks only isn't a note: a required note has to say something. QA 25 Nov.)
+      const rawNote = String(b.note || '').trim().slice(0, 2000);
+      const note = /[\p{L}\p{N}\p{S}\p{P}]/u.test(rawNote.replace(/[\u00ad\u061c\u115f\u1160\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2069\u3164\ufeff\uffa0]/g, '')) ? rawNote : '';
       const now = new Date().toISOString();
       if (b.action === 'reopen') {
         // An item the customer approved, that can't be printed as it is (owner's request, 25 Nov): back to Review,
@@ -1185,6 +1187,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       // What the shop changed, for the customer (with the new proof, in the email and on the proof page).
       let changeNote = '';
       try { changeNote = decodeURIComponent(String(req.get('x-review-note') || '')).replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, ' ').trim().slice(0, 1000); } catch (e) { changeNote = ''; }
+      if (!/[\p{L}\p{N}\p{S}\p{P}]/u.test(changeNote.replace(/[\u00ad\u061c\u115f\u1160\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2069\u3164\ufeff\uffa0]/g, ''))) changeNote = '';
       // The old file stays, so every version that was ever approved can be found again.
       const v = d.version || 1;
       const cur = store.designFile(d.id, `${sd.id}-print.png`);
@@ -4027,7 +4030,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     // A team member's browser that signed in as them before: other people's wrong guesses don't lock them out.
     const staffMark = (/(?:^|;\s*)pod-staff-device=([^;]+)/.exec(req.get('cookie') || '') || [])[1];
     const result = username
-      ? auth.staffLogin(req.ip, username, (req.body || {}).password, staffList(), { knownDevice: (u) => Boolean(u && auth.knownDevice(staffMark, `staff-${u.id}`)) })
+      ? auth.staffLogin(req.ip, username, (req.body || {}).password, staffList(), { knownDevice: (u) => Boolean(u && auth.knownDevice(staffMark, `staff-${u.id}`)), deviceKey: staffMark ? crypto.createHash('sha256').update(staffMark).digest('hex').slice(0, 32) : null })
       : auth.login(req.ip, (req.body || {}).password, { knownDevice: auth.knownDevice(mark) });
     if (!result || result.wait) failedSignIn(req, username, Boolean(result && result.wait));
     if (!result) throw new HttpError(401, username ? 'wrongStaffLogin' : 'wrongPassword');
@@ -4214,6 +4217,22 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (!route.label || route.approve) return null;
     const b = req.body && !Buffer.isBuffer(req.body) && typeof req.body === 'object' ? req.body : {};
     const p = req.params || {};
+    // (A team member: by name and username, and what changed in words; the person as they were before, so a removed
+    // one is still named. QA 25 Nov.)
+    if (p.id && /^\/api\/admin\/staff\/[^/?]+/.test(req.originalUrl)) {
+      const u = req.staffBefore || staffAll().find((x) => x.id === p.id);
+      if (!u) return null;
+      const who = `\u2068${u.name} (${u.username})\u2069`;
+      const sep = (l) => (l === 'ar' ? '، ' : ', ');
+      const what = (l) => {
+        const out = [];
+        if (Array.isArray(b.roles)) out.push(`${l === 'ar' ? 'الأدوار' : 'roles'} ${b.roles.map((r) => (roles.ROLE_NAMES[r] || {})[l] || String(r).slice(0, 20)).join(sep(l))}`);
+        if (typeof b.active === 'boolean') out.push(b.active ? (l === 'ar' ? 'اتشغّل' : 'switched on') : (l === 'ar' ? 'اتقفل' : 'switched off'));
+        if (typeof b.name === 'string' && cleanStaffName(b.name) && cleanStaffName(b.name) !== u.name) out.push(`${l === 'ar' ? 'الاسم' : 'name'} \u2068${cleanStaffName(b.name)}\u2069`);
+        return out.join(sep(l));
+      };
+      return { en: [route.label.en, who, what('en')].filter(Boolean).join(': '), ar: [route.label.ar, who, what('ar')].filter(Boolean).join(': ') };
+    }
     const found = p.itemId ? store.findItem(p.itemId) : null;
     const order = found ? found.order : p.orderId ? store.getOrder(p.orderId) : null;
     if (!order && !Object.keys(b).length) return null;
@@ -4615,6 +4634,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     roles: roles.ROLES.map((id) => ({ id, name: roles.ROLE_NAMES[id], perms: roles.ROLE_PERMS[id] })),
   }));
   // { name, username, roles } -> a set-up link to send them; ({ password } sets it straight away instead).
+  // (The team member as they were before the change, for the activity line.)
+  app.use('/api/admin/staff/:id', (req, res, next) => {
+    if (req.method !== 'GET') req.staffBefore = staffAll().find((x) => x.id === req.params.id) || null;
+    next();
+  });
   app.post('/api/admin/staff', requireAdmin, express.json({ limit: '4kb' }), (req, res) => {
     const b = req.body || {};
     const name = cleanStaffName(b.name);

@@ -318,3 +318,42 @@ test('two waiting cost changes for one product, approved in turn, both stay (eac
   const same = { basePrice: now.basePrice, extraSidePrice: now.extraSidePrice, sizes: Object.fromEntries(now.sizes.map((z) => [z.id, z.surcharge])), costs: now.costs };
   assert.strictEqual((await call('/api/admin/pricing/cap', 'PUT', same, fin)).status, 400, 'nothing changed: nothing to approve');
 });
+
+test('team sign-in on a known browser: someone else at the same address guessing the username doesn\'t lock it out', async () => {
+  const add = await call('/api/admin/staff', 'POST', { name: 'Lock Known', username: 'lkknown', roles: ['operations'], password: 'known-browser-pass' }, owner);
+  assert.strictEqual(add.status, 201, add.text);
+  const first = await fetch(`${base}/api/admin/login`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': '10.7.7.7' }, body: JSON.stringify({ username: 'lkknown', password: 'known-browser-pass' }) });
+  assert.strictEqual(first.status, 200);
+  const mark = /pod-staff-device=([^;]+)/.exec(first.headers.get('set-cookie') || '')[1];
+  for (let i = 0; i < 7; i++) {
+    await fetch(`${base}/api/admin/login`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': '10.7.7.7' }, body: JSON.stringify({ username: 'lkknown', password: `wrong-guess-${i}` }) });
+  }
+  const mine = await fetch(`${base}/api/admin/login`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': '10.7.7.7', Cookie: `pod-staff-device=${mark}` }, body: JSON.stringify({ username: 'lkknown', password: 'known-browser-pass' }) });
+  assert.strictEqual(mine.status, 200, await mine.text());
+  // The known browser's own wrong tries still lock it.
+  for (let i = 0; i < 6; i++) {
+    await fetch(`${base}/api/admin/login`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': '10.7.7.7', Cookie: `pod-staff-device=${mark}` }, body: JSON.stringify({ username: 'lkknown', password: `my-typo-${i}` }) });
+  }
+  const locked = await fetch(`${base}/api/admin/login`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': '10.7.7.7', Cookie: `pod-staff-device=${mark}` }, body: JSON.stringify({ username: 'lkknown', password: 'known-browser-pass' }) });
+  assert.strictEqual(locked.status, 429);
+});
+
+test('a required note of invisible marks only is no note', async () => {
+  const o = await approvedMug();
+  const it = o.items[0];
+  const r = await call(`/api/admin/items/${it.id}/review`, 'POST', { action: 'reopen', note: '​‏ㅤ ' }, owner);
+  assert.strictEqual(r.status, 400, r.text);
+});
+
+test('activity: team changes name the person (even once removed) and what changed', async () => {
+  const add = await call('/api/admin/staff', 'POST', { name: 'Gone Person', username: 'gone24', roles: ['catalogue'] }, owner);
+  const id = add.json.user.id;
+  assert.strictEqual((await call(`/api/admin/staff/${id}`, 'PATCH', { active: false }, owner)).status, 200);
+  assert.strictEqual((await call(`/api/admin/staff/${id}`, 'PATCH', { roles: ['finance', 'catalogue'] }, owner)).status, 200);
+  assert.ok([200, 204].includes((await call(`/api/admin/staff/${id}`, 'DELETE', undefined, owner)).status));
+  const lines = (await call('/api/admin/activity', 'GET', undefined, owner)).json.entries.filter((e) => e.path === `/api/admin/staff/${id}`);
+  assert.strictEqual(lines.length, 3, JSON.stringify(lines.map((e) => e.summary)));
+  for (const e of lines) assert.ok(e.summary.en.includes('Gone Person (gone24)') && e.summary.ar.includes('Gone Person (gone24)'), JSON.stringify(e.summary));
+  assert.ok(lines.some((e) => /switched off/.test(e.summary.en)));
+  assert.ok(lines.some((e) => /roles Finance, Catalogue/.test(e.summary.en) && /الحسابات/.test(e.summary.ar)));
+});
