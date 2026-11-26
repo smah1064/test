@@ -1116,6 +1116,17 @@ window.POD_STRINGS = {
   'order.pageTitle': ['Your order · ebda3', 'طلبك · إبداع'],
   'order.thanks': ['Thanks for your order! Bookmark this page to follow each item through production.', 'شكرًا على طلبك! احفظ الصفحة دي عشان تتابع كل قطعة وهي بتتنفّذ.'],
   'order.title': ['Order no. {n}', 'طلب رقم {n}'],
+  // After a guest order: "Save your orders" on a new account (public/order.html), and why an account (public/account.html).
+  'offer.title': ['Save your orders on an account 🔒', 'احفظ طلباتك في حساب 🔒'],
+  'offer.text': ['Just pick a password: your mobile number is already here. Follow your orders from any phone, order again in one tap, and keep your saved designs.', 'اختار كلمة سر بس، ورقمك متسجّل خلاص. هتتابع طلباتك من أي موبايل، وتطلب تاني بضغطة، وتلاقي تصميماتك المحفوظة.'],
+  'offer.password': ['Choose a password (8 characters or more)', 'اختار كلمة سر (٨ حروف أو أكتر)'],
+  'offer.save': ['Save my account', 'احفظ حسابي'],
+  'offer.done': ['✓ Your account is ready, and this order is on it.', '✓ حسابك جاهز، والطلب ده متسجّل عليه.'],
+  'offer.toAccount': ['Go to my account', 'روح لحسابي'],
+  'acct.whyTitle': ['Why make an account?', 'ليه تعمل حساب؟'],
+  'acct.why1': ['Follow your orders from any phone or computer', 'تتابع طلباتك من أي موبايل أو كمبيوتر'],
+  'acct.why2': ['Order the same thing again in one tap', 'تطلب نفس الطلب تاني بضغطة'],
+  'acct.why3': ['Your saved designs, wherever you are', 'تصميماتك المحفوظة معاك في أي مكان'],
   // Counted: POD.plural('order.meta', n, { status, date }); the plain key reads right for any number.
   // {date} is when the order was placed, said as such (not "shipped, dated …": each step's own time is in the tracker).
   'order.meta': ['{status} · placed on {date} · items: {n}, each printed individually', '{status}، اتطلب يوم {date}، عدد المنتجات {n}، وكل منتج بيتطبع لوحده'],
