@@ -726,7 +726,11 @@ function buildNotebook(color, tex, renderer, product) {
   pctx.strokeStyle = '#e2ded3';
   for (let i = 0; i < 256; i += 4) { pctx.beginPath(); pctx.moveTo(0, i); pctx.lineTo(256, i); pctx.stroke(); }
   const pages = mat('paper', { map: texture(pagesCv, renderer) });
-  const back = mat('paper', { color });
+  // The back cover's own design when it has one (owner, 26 Nov), else plain in the cover colour.
+  const backSide = product.sides.find((s) => s.id === 'back');
+  const back = backSide && tex[backSide.id]
+    ? mat('paper', { map: texture(faceCanvas(color, designCrop(tex[backSide.id]), 1100, (1100 * h) / w), renderer) })
+    : mat('paper', { color });
   const box = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), [pages, pages, pages, pages, mat('paper', { map: cover }), back]);
   g.add(box);
   const ring = mat('metal', { color: '#a7abb3' });

@@ -450,10 +450,12 @@ const PRODUCTS = [
       { id: 'dotted', label: t('Dotted pages', 'صفحات منقّطة'), surcharge: 0 },
       { id: 'blank', label: t('Blank pages', 'صفحات سادة'), surcharge: 0 },
     ],
+    // The back cover can carry a design too (owner, 26 Nov), at the shop's price for a second side.
+    extraSidePrice: 50,
     sides: [
       {
         id: 'front',
-        name: t('Cover', 'الغلاف'),
+        name: t('Front cover', 'الغلاف الأمامي'),
         svg: sv(
           '<rect x="130" y="80" width="280" height="420" rx="6" fill="#000" opacity=".12"/>' +
             '<rect x="126" y="74" width="280" height="420" rx="6" fill="#ffffff" stroke="#c9ccd2" stroke-width="2"/>' +
@@ -461,6 +463,21 @@ const PRODUCTS = [
         ),
         overlay: sv(SPIRAL),
         printArea: { x: 140, y: 95, w: 255, h: 365 },
+        printWidthIn: 5.8,
+      },
+      {
+        // Seen from the back: the spiral on the other edge (the front drawn as in a mirror), the same print size.
+        id: 'back',
+        name: t('Back cover', 'الغلاف الخلفي'),
+        svg: sv(
+          `<g transform="translate(${MOCKUP_WIDTH} 0) scale(-1 1)">` +
+            '<rect x="130" y="80" width="280" height="420" rx="6" fill="#000" opacity=".12"/>' +
+            '<rect x="126" y="74" width="280" height="420" rx="6" fill="#ffffff" stroke="#c9ccd2" stroke-width="2"/>' +
+            '<rect x="120" y="70" width="280" height="420" rx="6" fill="{{C}}" stroke="{{L}}" stroke-width="3"/>' +
+            '</g>'
+        ),
+        overlay: sv(`<g transform="translate(${MOCKUP_WIDTH} 0) scale(-1 1)">${SPIRAL}</g>`),
+        printArea: { x: MOCKUP_WIDTH - 140 - 255, y: 95, w: 255, h: 365 },
         printWidthIn: 5.8,
       },
     ],
