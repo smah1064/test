@@ -140,8 +140,9 @@ test('computer: Escape and a click on the grey around the product take the selec
       await page.waitForSelector('#sec-product', { state: 'visible' });
       // Select again, then click the grey area beside the canvas.
       await page.evaluate(() => { const c = window.__editor.canvas; c.setActiveObject(c.getObjects()[0]); c.requestRenderAll(); });
+      // (Away from the panel docked beside the tools: stage 7.)
       const box = await page.locator('#stage').boundingBox();
-      await page.mouse.click(box.x + 12, box.y + box.height - 12);
+      await page.mouse.click(lang === 'ar' ? box.x + 12 : box.x + box.width - 12, box.y + box.height - 12);
       assert.strictEqual(await selected(), false, 'click on the grey');
       // The quantity table: every box inside the panel.
       const fits = await page.evaluate(() => {

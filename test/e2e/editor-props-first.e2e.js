@@ -6,7 +6,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { loadPlaywright, startServer, newContext } = require('./helpers');
 
-test('the selected text\'s settings come first in the side panel; the product settings again once nothing is selected', { timeout: 90000 }, async () => {
+test('the selected text\'s settings are in the docked panel; the product settings stay in the right-hand column', { timeout: 90000 }, async () => {
   const srv = await startServer();
   const browser = await loadPlaywright().chromium.launch();
   try {
@@ -21,22 +21,26 @@ test('the selected text\'s settings come first in the side panel; the product se
     await page.goto(`${srv.base}/editor?product=tshirt&library=${encodeURIComponent(ready.id)}&color=black`);
     await page.waitForFunction(() => window.__editor);
     await page.waitForTimeout(800);
+    // (Editor redesign stage 7, owner's go 26 Nov: on the computer the selected text's settings are in a panel docked
+    // beside the tools, so the right-hand column keeps the product and its settings in view the whole time.)
     const panel = () => page.evaluate(() => {
       const fill = document.getElementById('p-fill');
       const r = fill && fill.getBoundingClientRect();
-      return { first: document.querySelector('.panel-scroll').firstElementChild.id, fillInView: Boolean(r && r.top >= 0 && r.bottom <= innerHeight) };
+      return { first: document.querySelector('.panel-scroll').firstElementChild.id, fillInView: Boolean(r && r.width && r.top >= 0 && r.bottom <= innerHeight), inDock: Boolean(fill && fill.closest('#props-dock')) };
     });
     await page.click('[data-flyout="text"]');
     await page.locator('#text-presets button').first().click();
     await page.waitForTimeout(400);
-    assert.deepStrictEqual(await panel(), { first: 'sec-props', fillInView: true });
+    assert.deepStrictEqual(await panel(), { first: 'sec-product', fillInView: true, inDock: true });
+    assert.ok(await page.isVisible('#swatches'), 'the product colours stay in view');
     // The colour works from there.
     await page.click('[data-pal="fill"][data-c="#ff5a36"]');
     assert.strictEqual(await page.evaluate(() => window.__editor.canvas.getActiveObject().fill), '#ff5a36');
-    // Nothing selected: the product settings first again.
+    // Nothing selected: the dock shows the Text list again; the product column is unchanged.
     await page.evaluate(() => { const c = window.__editor.canvas; c.discardActiveObject(); c.requestRenderAll(); c.fire('selection:cleared'); });
     await page.waitForTimeout(300);
     assert.strictEqual((await panel()).first, 'sec-product');
+    assert.strictEqual(await page.isVisible('#props-dock'), false);
     assert.deepStrictEqual(errors, []);
     await ctx.close();
   } finally {

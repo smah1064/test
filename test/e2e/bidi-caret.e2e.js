@@ -156,10 +156,17 @@ async function setup(lang) {
         const o = window.__bidi.obj();
         const r = c.upperCanvasEl.getBoundingClientRect();
         const z = c.getZoom() * (r.width / (c.upperCanvasEl.width / c.getRetinaScaling()));
-        const s = Math.min(1, (0.8 * r.width) / (o.width * z));
+        // The part of the canvas on screen (the product now fills the design area, so the canvas can run past it, and
+        // a panel is docked beside the tools: editor redesign stages 3 and 7).
+        const stage = document.getElementById('stage');
+        const sr = stage.getBoundingClientRect();
+        const cs = getComputedStyle(stage);
+        const left = Math.max(r.left, sr.left + parseFloat(cs.paddingLeft));
+        const right = Math.min(r.right, sr.right - parseFloat(cs.paddingRight));
+        const s = Math.min(1, (0.8 * (right - left)) / (o.width * z));
         o.set({ scaleX: s, scaleY: s });
         const now = window.__bidi.toPage(0, 0);
-        o.set({ left: o.left + (r.left + r.width / 2 - now.x) / z });
+        o.set({ left: o.left + ((left + right) / 2 - now.x) / z });
         o.setCoords();
         c.requestRenderAll();
       });

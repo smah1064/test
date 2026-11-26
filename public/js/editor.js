@@ -59,6 +59,11 @@
   if (COARSE) Object.assign(fabric.Object.prototype, { cornerSize: 18, touchCornerSize: 48, padding: 8 });
   if (COARSE && fabric.Object.prototype.controls && fabric.Object.prototype.controls.mtr) fabric.Object.prototype.controls.mtr.offsetY = -46;
   const MOBILE = window.matchMedia('(max-width: 820px)');
+  // The computer layout of the editor redesign (stage 7): wide enough for the tools, a docked panel, the product
+  // and the right-hand column side by side.
+  // (From 1200 px: below that the docked panel left too little room for the product; those windows keep the earlier
+  // computer layout.)
+  const DESK = window.matchMedia('(min-width: 1200px)');
 
   // ---------- Load catalog and (optionally) a saved design ----------
   let catalog;
@@ -616,7 +621,7 @@
   }
   /** Room kept free above and below the product for the floating buttons (phones; stage 3 of the editor redesign). */
   // (Not while a settings sheet is open: the floating buttons step aside then, and the design keeps the room.)
-  const pillRoom = () => (MOBILE.matches && !st.product.paged && !st.sheet ? 56 : 0);
+  const pillRoom = () => (st.product.paged ? 0 : MOBILE.matches ? (st.sheet ? 0 : 56) : DESK.matches ? 64 : 0);
   function fit() {
     const stage = $('stage');
     // With the phone panel open there is little room: zoom in on the print area instead of the whole product.
@@ -632,18 +637,23 @@
     const raw = !focus ? productBox() : null;
     const prod = raw && { x: W / 2 + (raw.x - W / 2) * k, y: H / 2 + (raw.y - H / 2) * k, w: raw.w * k, h: raw.h * k };
     const room = pillRoom();
+    // (The room beside a docked panel only: the stage's padding makes way for it, stage 7.)
+    const scs = getComputedStyle(stage);
+    const padL = parseFloat(scs.paddingLeft) || 0;
+    const padR = parseFloat(scs.paddingRight) || 0;
+    const sw = stage.clientWidth - Math.max(0, padL + padR - 32);
     const base = focus
-      ? Math.min((stage.clientWidth - 16) / (a.w + 48), (stage.clientHeight - 16 - 2 * room) / (a.h + 48 + (zoneOf() ? 40 : 0))) / k
+      ? Math.min((sw - 16) / (a.w + 48), (stage.clientHeight - 16 - 2 * room) / (a.h + 48 + (zoneOf() ? 40 : 0))) / k
       : prod
-        ? Math.min((stage.clientWidth - 24) / prod.w, (stage.clientHeight - 24 - 2 * room) / prod.h, 2.6)
-        : Math.min((stage.clientWidth - 32) / W, (stage.clientHeight - 32 - 2 * room) / H, 1.6);
+        ? Math.min((sw - 24) / prod.w, (stage.clientHeight - 24 - 2 * room) / prod.h, 2.6)
+        : Math.min((sw - 32) / W, (stage.clientHeight - 32 - 2 * room) / H, 1.6);
     const z = Math.max(0.15, base) * st.zoom;
     canvas.setDimensions({ width: Math.round(W * z), height: Math.round(H * z) });
     canvas.setViewportTransform([z * k, 0, 0, z * k, (W * z * (1 - k)) / 2, (H * z * (1 - k)) / 2]);
     if (prod && !focus && st.zoom <= 1.01) {
       // The product in the middle of the room left between the buttons above and below it.
-      const pad = parseFloat(getComputedStyle(stage).paddingTop) || 0;
-      stage.scrollLeft = (prod.x + prod.w / 2) * z + pad - stage.clientWidth / 2;
+      const pad = parseFloat(scs.paddingTop) || 0;
+      stage.scrollLeft = (prod.x + prod.w / 2) * z - (stage.clientWidth - padL - padR) / 2;
       stage.scrollTop = (prod.y + prod.h / 2) * z + pad - stage.clientHeight / 2;
     }
     requestAnimationFrame(() => {
@@ -2281,8 +2291,58 @@
 
   // ---------- Flyouts ----------
   function closeFlyouts() {
-    document.querySelectorAll('.flyout').forEach((f) => (f.hidden = true));
+    document.querySelectorAll('.flyout').forEach((f) => { f.hidden = true; f.classList.remove('dock-default'); });
     document.querySelectorAll('.tool').forEach((x) => x.classList.remove('open'));
+    syncDock();
+  }
+  /**
+   * Computer (editor redesign stage 7): the chosen element's settings in a panel docked beside the tools (the right
+   * column keeps the product and the order); a tool's list docks in the same place. The product moves over to make
+   * room.
+   */
+  // (The panel's room is always kept on the computer, so choosing something never moves the product under the mouse:
+  // with nothing chosen and no tool open it shows the Text list.)
+  function syncDock() {
+    const dock = $('props-dock');
+    if (!dock) return;
+    const desk = DESK.matches;
+    const chosen = Boolean(canvas.getActiveObject() || crop);
+    const text = $('flyout-text');
+    if (desk && chosen && text && !text.hidden && text.classList.contains('dock-default')) {
+      text.hidden = true;
+      text.classList.remove('dock-default');
+      const b = document.querySelector('.tools .tool[data-flyout="text"]');
+      if (b) b.classList.remove('open');
+    }
+    let flyOpen = [...document.querySelectorAll('.flyout')].some((f) => !f.hidden);
+    if (desk && !chosen && !flyOpen && text && !st.product.paged) {
+      text.hidden = false;
+      text.classList.add('dock-default');
+      flyOpen = true;
+    }
+    if (!desk && text && text.classList.contains('dock-default')) { text.hidden = true; text.classList.remove('dock-default'); }
+    dock.hidden = !(desk && chosen && !flyOpen);
+    document.body.classList.toggle('dock-open', desk && !st.product.paged);
+  }
+  /** Computer or phone: the pieces that live in a different place on each are moved there. */
+  function placeDesk() {
+    const desk = DESK.matches;
+    const bar = document.querySelector('.stage-bar');
+    const move = (id, to) => { const e = $(id); if (e && to && e.parentElement !== to) to.appendChild(e); };
+    if (desk) {
+      move('undo', $('ed-hist'));
+      move('redo', $('ed-hist'));
+      move('share-open', $('ed-acts'));
+      move('preview-open', $('ed-acts'));
+      move('preview-toggle', document.querySelector('.zoom-group'));
+      move('sec-props', $('props-dock'));
+      move('sec-layers', $('layers-dock'));
+    } else {
+      ['undo', 'redo', 'preview-open', 'share-open', 'preview-toggle'].forEach((id) => move(id, bar));
+      if ($('sec-props') && $('sec-props').parentElement === $('props-dock')) $('sec-check').after($('sec-props'));
+      if ($('sec-layers') && $('sec-layers').parentElement === $('layers-dock')) $('sec-props').after($('sec-layers'));
+    }
+    syncDock();
   }
   let templatesRendered = false;
   function openFlyout(name) {
@@ -2292,15 +2352,19 @@
     closeFlyouts();
     fly.hidden = false;
     if (btn) btn.classList.add('open');
+    syncDock();
   }
   document.querySelectorAll('.tool[data-flyout]').forEach((btn) => {
     btn.addEventListener('click', () => {
       if (btn.dataset.flyout === 'text' && MOBILE.matches && !crop && $('flyout-text').hidden) { closeFlyouts(); quickText(); return; }
       const fly = $('flyout-' + btn.dataset.flyout);
+      // (The Text list shown by itself on the computer: a click on Text keeps it, now as the customer's choice.)
+      if (fly.classList.contains('dock-default')) { fly.classList.remove('dock-default'); btn.classList.add('open'); return; }
       const open = fly.hidden;
       closeFlyouts();
       fly.hidden = !open;
       btn.classList.toggle('open', open);
+      syncDock();
       if (open && btn.dataset.flyout === 'templates' && !templatesRendered) {
         templatesRendered = true;
         renderTemplates();
@@ -2308,6 +2372,8 @@
     });
   });
   canvas.on('mouse:down', closeFlyouts);
+  document.querySelectorAll('[data-proxy-clear]').forEach((b) => b.addEventListener('click', () => $('clear-side').click()));
+  DESK.addEventListener('change', placeDesk);
   document.querySelectorAll('.flyout .fly-close').forEach((b) => b.addEventListener('click', closeFlyouts));
   // Phones (editor redesign stage 4): the rarer tools in one "More" list, each with a line saying what it does.
   if ($('flyout-more')) {
@@ -2479,6 +2545,7 @@
   // ---------- Phone layout: slide-up panel ----------
   function syncSheetTitle() {
     if (typeof renderElBar === 'function') renderElBar();
+    if (typeof syncDock === 'function') syncDock();
     if (st.sheet) $('sheet-title').textContent = st.sheet === 'product' ? t('sheet.product') : st.sheet === 'check' ? t('check.title') : $('props-title').textContent;
   }
   function setSheet(mode) {
@@ -3164,6 +3231,7 @@
    */
   let propsFor = null;
   function placeProps(o) {
+    if (DESK.matches) { propsFor = o || null; return; } // (computer: in its own docked panel)
     const sec = $('sec-props');
     const prod = $('sec-product');
     const check = $('sec-check');
@@ -5122,6 +5190,7 @@
     const colourWord = colours.length > 1 ? t('buy.colours') : tr(c.name);
     const sizeWord = askSize ? '' : sizes.length > 1 ? t('buy.sizes') : p.sizes.length > 1 ? tr((p.sizes.find((z) => z.id === (sizes[0] || st.sizeId)) || {}).label || '') : '';
     const sep = POD.lang === 'ar' ? '، ' : ', ';
+    if ($('ed-dname')) $('ed-dname').textContent = tr(p.name);
     if ($('ed-prod-name')) {
       $('ed-prod-name').textContent = tr(p.name);
       $('ed-prod-sub').textContent = [colourWord, sizeWord].filter(Boolean).join(sep);
@@ -7061,6 +7130,7 @@
   renderPresets();
   renderShapes();
   renderStickers();
+  placeDesk();
   fit();
   await D.ensureFont('Cairo', 600); // print-area label
   await showSide(st.side);

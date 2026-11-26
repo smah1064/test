@@ -1743,3 +1743,71 @@ html[dir="rtl"] .more-chev { transform: scaleX(-1); }
   .float-bar button:hover { background: var(--bg); }
   .float-bar button.danger { color: var(--bad, #b42318); }
 }
+
+/* ---------- Editor redesign, stage 7 (owner's go 26 Nov): the computer layout ---------- */
+.ed-desk, .desk-only { display: none !important; }
+@media (min-width: 1200px) {
+  body.editor-page .site-header { display: none; }
+  .desk-only { display: flex !important; }
+  /* One 56 px bar: logo, product name and "Saved", undo / redo; Share and Live preview; account, cart, language. */
+  .ed-top { display: flex; align-items: center; gap: 10px; height: 56px; padding: 0 16px; background: #fff; border-bottom: 1px solid var(--line); flex: none; position: relative; z-index: 30; }
+  .ed-top .ed-prod, .ed-top .ed-more, .ed-top .ed-menu { display: none !important; }
+  .ed-top .ed-desk { display: inline-flex !important; align-items: center; gap: 8px; }
+  .ed-logo { display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: 10px; }
+  .ed-logo img { width: 34px; height: 34px; }
+  .ed-name b { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
+  .ed-saved { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: var(--ink-3); }
+  .ed-saved[hidden] { display: none; }
+  .ed-saved i { width: 7px; height: 7px; border-radius: 50%; background: var(--ok, #15803d); }
+  .ed-hist { padding-inline-start: 10px; margin-inline-start: 4px; border-inline-start: 1px solid var(--line); gap: 2px !important; }
+  .ed-hist .btn { border: 0; background: none; min-width: 40px; min-height: 40px; display: inline-grid; place-items: center; }
+  .ed-spacer { flex: 1; }
+  .ed-acts .btn { min-height: 40px; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; background: #fff; color: var(--ink); border: 1px solid var(--line); }
+  .ed-acts .btn .btn-label { display: inline !important; }
+  .ed-acts #preview-open svg { color: var(--ink); }
+  .ed-links { padding-inline-start: 12px; border-inline-start: 1px solid var(--line); gap: 4px !important; }
+  .ed-link { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 10px; border-radius: 10px; color: var(--ink-2); text-decoration: none; font-size: 14px; font-weight: 600; }
+  .ed-link:hover { background: var(--bg); color: var(--ink); }
+  .ed-links .btn { min-height: 40px; }
+  /* Rail: Layers at its foot. */
+  .tools .tool-layers { margin-top: auto; }
+  /* A tool's list, and the chosen element's settings, docked beside the rail; the product moves over. */
+  .stage-wrap .flyout, .props-dock { position: absolute; top: 0; bottom: 0; inset-inline-start: 0; width: 300px; max-height: none; margin: 0; border: 0; border-inline-end: 1px solid var(--line); border-radius: 0; box-shadow: none; background: #fff; z-index: 8; overflow-y: auto; padding: 16px; }
+  .props-dock[hidden] { display: none; }
+  .props-dock #sec-props { padding: 0; margin: 0; border: 0; }
+  .props-dock #sec-props > h3 { font-size: 15px; text-transform: none; letter-spacing: 0; color: var(--ink); margin-bottom: 12px; }
+  .flyout-layers .dock-clear { margin-top: 16px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+  .flyout-layers #sec-layers { padding: 0; margin: 0; border: 0; }
+  .flyout-layers #sec-layers > h3 { display: none; }
+  html[dir="rtl"] body.dock-open .stage { padding-right: 316px; }
+  html[dir="ltr"] body.dock-open .stage { padding-left: 316px; }
+  /* View controls as white pills on the design area: zoom and hide guides, Front / Back, the print check. */
+  .stage-bar:not(:has(.side-tabs.pages)) { position: absolute; inset: 0; z-index: 7; display: block; padding: 0; background: none; border: 0; pointer-events: none; }
+  .stage-bar:not(:has(.side-tabs.pages)) > * { pointer-events: auto; position: absolute; }
+  .stage-bar:not(:has(.side-tabs.pages)) #clear-side { display: none !important; }
+  .stage-bar:not(:has(.side-tabs.pages)) .spacer { display: none; }
+  .stage-bar:not(:has(.side-tabs.pages)) .zoom-group { bottom: 16px; inset-inline-start: 16px; background: #fff; border-radius: 999px; padding: 4px 8px; box-shadow: 0 2px 10px rgba(16,24,40,.12); }
+  .stage-bar:not(:has(.side-tabs.pages)) .zoom-group #preview-toggle { border: 0; background: none; padding: 0; width: 30px; height: 30px; display: inline-grid; place-items: center; }
+  .stage-bar:not(:has(.side-tabs.pages)) .zoom-group #preview-toggle.active { background: var(--ink); color: #fff; border-radius: 8px; }
+  .stage-bar:not(:has(.side-tabs.pages)) .zoom-group #preview-toggle .btn-label { display: none; }
+  .stage-bar:not(:has(.side-tabs.pages)) .side-tabs { top: 16px; inset-inline-start: 16px; background: #fff; border-radius: 999px; padding: 4px; box-shadow: 0 2px 10px rgba(16,24,40,.12); }
+  .stage-bar:not(:has(.side-tabs.pages)) .side-tab { border-radius: 999px; }
+  .stage-bar:not(:has(.side-tabs.pages)) .side-tab.active { background: var(--ink); color: #fff; box-shadow: none; }
+  .stage-bar:not(:has(.side-tabs.pages)) .side-tab.active .has { background: #fff; }
+  .stage-bar:not(:has(.side-tabs.pages)) .check-chip { top: 16px; inset-inline-end: 16px; border-radius: 999px; padding: 10px 16px; font-size: 13px; background: #fff; box-shadow: 0 2px 10px rgba(16,24,40,.12); }
+  .stage-bar:not(:has(.side-tabs.pages)) .check-chip.warn { background: #fff4e0; }
+  .stage-bar:not(:has(.side-tabs.pages)) .check-chip.bad { background: #fdecec; }
+  body.dock-open .stage-bar:not(:has(.side-tabs.pages)) .zoom-group { inset-inline-start: 332px; }
+  body.dock-open .stage-bar:not(:has(.side-tabs.pages)) .side-tabs { inset-inline-start: 332px; }
+  .overview { top: 76px; bottom: auto; }
+  body.dock-open .overview { inset-inline-start: 332px; }
+  /* The bubble beside the element: light. */
+  .float-bar { background: #fff; border: 1px solid var(--line); box-shadow: 0 6px 20px rgba(16,24,40,.16); }
+  .float-bar button { color: var(--ink); }
+  .float-bar button:hover { background: var(--bg); }
+  .float-bar button.danger { color: var(--bad, #b42318); }
+  /* Right column: the product and the order, never replaced. */
+  .panel { width: auto; }
+}
+@media (min-width: 1200px) { .props-dock .fx-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (min-width: 1200px) { .flyout.dock-default .fly-close { visibility: hidden; } }

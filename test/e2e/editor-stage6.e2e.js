@@ -62,7 +62,8 @@ test('phones: a chosen text has its own tools and short strips; the product stay
         assert.strictEqual((await obj(page)).size, before.size + 2);
         await page.click('#el-bar [data-el="format"]');
         await page.click('#el-strip [data-toggle="bold"]');
-        assert.notStrictEqual((await obj(page)).weight, before.weight);
+        // (Bold loads the font's bold letters first.)
+        await page.waitForFunction((w) => window.__editor.canvas.getActiveObject().fontWeight !== w, before.weight, { timeout: 5000 });
         // More: the full settings; Done: nothing chosen, the tool row back.
         await page.click('#el-bar [data-el="more"]');
         await page.waitForSelector('#p-text', { state: 'visible' });

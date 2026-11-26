@@ -887,6 +887,7 @@ window.POD_STRINGS = {
   'kind.line': ['Line of text', 'سطر نص'],
   'kind.all': ['Ready styles', 'أشكال جاهزة'],
   'more.tool': ['More', 'المزيد'],
+  'ed.clearNote': ['Removes everything from this side. It asks first, and Undo brings it back.', 'بيمسح كل حاجة من الوجه ده. بيسألك الأول، والتراجع بيرجّعها.'],
   'more.title': ['More tools', 'أدوات تانية'],
   'more.ai': ['AI help', 'المساعد الذكي'],
   'more.aiNote': ['Slogans and logos written for you', 'جمل وشعارات بيكتبهالك'],
