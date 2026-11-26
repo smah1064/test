@@ -1115,7 +1115,7 @@ window.POD_STRINGS = {
   // ---------- Order ----------
   'order.pageTitle': ['Your order · ebda3', 'طلبك · إبداع'],
   'order.thanks': ['Thanks for your order! Bookmark this page to follow each item through production.', 'شكرًا على طلبك! احفظ الصفحة دي عشان تتابع كل قطعة وهي بتتنفّذ.'],
-  'order.title': ['Order {n}', 'الطلب {n}'],
+  'order.title': ['Order no. {n}', 'طلب رقم {n}'],
   // Counted: POD.plural('order.meta', n, { status, date }); the plain key reads right for any number.
   // {date} is when the order was placed, said as such (not "shipped, dated …": each step's own time is in the tracker).
   'order.meta': ['{status} · placed on {date} · items: {n}, each printed individually', '{status}، اتطلب يوم {date}، عدد المنتجات {n}، وكل منتج بيتطبع لوحده'],

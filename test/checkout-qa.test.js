@@ -25,6 +25,7 @@ function fakePod(strings, lang) {
     esc: (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`),
     money: (n) => digits(`EGP ${n}`),
     num: (n) => digits(n),
+    orderNo: (n) => digits(String(n).replace(/^POD-/i, '')),
     date: (d) => String(d),
     api: async () => { throw new Error('no network'); },
     orderKey: (id, k) => k || '', orderHeaders: (k) => (k ? { 'x-order-key': k } : {}), orderPath: (p, id, k) => `/${p}?id=${encodeURIComponent(id)}${k ? `&k=${k}` : ''}`,

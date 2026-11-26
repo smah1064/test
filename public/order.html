@@ -111,7 +111,7 @@
           else if (A.pieces(it) > 1) parts.push(A.piecesText(A.pieces(it)));
           return `${POD.num(i + 1)}. ${parts.join(SEP())}`;
         }).join('\n');
-        const text = t('order.waMessage', { n: o.number, items, total: money(o.total), name: o.customer.name });
+        const text = t('order.waMessage', { n: POD.orderNo(o.number), items, total: money(o.total), name: o.customer.name });
         return `https://wa.me/${shopWa()}?text=${encodeURIComponent(text)}`;
       }
       /** When the order was placed, for the line under its number: "25 November 2026 at 10:18" / "٢٥ نوفمبر ٢٠٢٦ في ١٠:١٨ ص"
@@ -290,7 +290,7 @@
               </div>
               <p class="muted small">${esc(t('order.emailWhy'))}</p>
             </section>` : ''}
-            <h1>${esc(t('order.title', { n: o.number }))}</h1>
+            <h1>${esc(t('order.title', { n: POD.orderNo(o.number) }))}</h1>
             <p class="muted">${esc(listed(POD.plural('order.meta', o.items.length, { status: t('order.' + shownStatus(o)), date: placedOn(o.createdAt) })))}</p>
             ${isNew ? '' : arrives}
             ${team ? (money$ ? `<div class="order-actions"><a class="btn" href="/invoice?id=${encodeURIComponent(o.id)}&team=${encodeURIComponent(team)}">${esc(t('track.invoice'))}</a></div>` : '') : `
@@ -370,7 +370,7 @@
         }
       }
       /** WhatsApp with the order link typed in: the customer picks their own chat ("Message yourself"). */
-      const selfWhatsapp = (o) => `https://wa.me/?text=${encodeURIComponent(t('order.waSelf', { n: o.number, link: pageLink(o) }))}`;
+      const selfWhatsapp = (o) => `https://wa.me/?text=${encodeURIComponent(t('order.waSelf', { n: POD.orderNo(o.number), link: pageLink(o) }))}`;
       async function copyLink() {
         try {
           await navigator.clipboard.writeText(pageLink(order));

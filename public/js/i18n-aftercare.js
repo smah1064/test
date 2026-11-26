@@ -159,7 +159,7 @@
           <h2 id="device-orders-h">${esc(t('device.title'))}</h2>
           <p class="muted small">${esc(t('device.note'))}</p>
           <ul>${list.map((o) => `
-            <li><a href="${esc(o.link)}"><strong>${esc(t('order.title', { n: o.number }))}</strong></a>
+            <li><a href="${esc(o.link)}"><strong>${esc(t('order.title', { n: POD.orderNo(o.number) }))}</strong></a>
               <span class="muted small">${esc(when(o.date))}${o.total ? `${window.POD.lang === 'ar' ? '، ' : ' · '}${esc(money(o.total))}` : ''}</span></li>`).join('')}
           </ul>
         </section>`;

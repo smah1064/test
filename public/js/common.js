@@ -290,6 +290,14 @@
       return ymd;
     }
   }
+  /**
+   * The order number as customers see it: without the shop's own "POD-" (it means nothing to them), in the
+   * page's digits and never grouped: "١٠٠١" / "1001" (owner's OK, UX item 7, 26 Nov). The dashboard keeps the full number.
+   */
+  function orderNo(number) {
+    const n = String(number == null ? '' : number).replace(/^POD-/i, '');
+    return lang === 'ar' ? n.replace(/[0-9]/g, (d) => String.fromCharCode(0x0660 + Number(d))) : n;
+  }
   function num(n) {
     return new Intl.NumberFormat(lang === 'ar' ? 'ar-EG' : 'en-GB', { maximumFractionDigits: 1 }).format(n);
   }
@@ -1252,7 +1260,7 @@
     },
     t, tr, arabicDigits, latinDigits, sep, setLang, applyI18n,
     loadCatalog, assetId, canPick, firstPick, comboOut, comboFew, sizeOk, colorOk, productPicture, thumbFallback, fillMockup, mockupUrl, svgDataUrl, luminance,
-    money, date, day, num, plural, pluralForm, packCopies, packWord, captcha, fromPrice, sizeNote, firstName,
+    money, date, day, num, orderNo, plural, pluralForm, packCopies, packWord, captcha, fromPrice, sizeNote, firstName,
     productState, backOnDay, backText, similarProducts, similarHref, similarLabel, productHref, showUnavailable,
     getCart, setCart, getSaved, setSaved, moveItem, designFor, putFile, updateCartBadge, toast, esc, api, drafts, forgetPersonal,
     sizedArea, placedArea, sizeView, canvasEdges, drawPattern, wrapOffsets, fabricCm,

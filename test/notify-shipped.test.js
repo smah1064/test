@@ -50,7 +50,7 @@ test('sends the shipped email with the courier, tracking and links', async () =>
   assert.strictEqual(init.headers['api-key'], 'test-key');
   assert.deepStrictEqual(body.to, [{ email: 'mona@example.test' }]);
   assert.strictEqual(body.sender.email, 'shop@example.test');
-  assert.match(body.subject, /Your order POD-1001 is on its way/);
+  assert.match(body.subject, /Your order no\. 1001 is on its way/);
   for (const part of [body.htmlContent, body.textContent]) {
     assert.match(part, /Bosta/);
     assert.match(part, /BST-778899/);
@@ -90,7 +90,7 @@ test('Arabic orders get the Arabic email', async () => {
   const r = await notify.orderShipped(order({ lang: 'ar', payment: { method: 'cod', status: 'paid' } }), { siteUrl: 'https://shop.example.test' });
   assert.strictEqual(r.email, 'sent');
   const { body } = sent[0];
-  assert.match(body.subject, /طلبك POD-1001 في الطريق ليك/);
+  assert.match(body.subject, /طلبك رقم ١٠٠١ في الطريق ليك/);
   assert.match(body.htmlContent, /dir="rtl"/);
   assert.match(body.htmlContent, /lang="ar"/);
   assert.match(body.textContent, /أهلًا Mona/);
@@ -116,7 +116,7 @@ test('escapes customer and admin text in the HTML, and ignores unsafe tracking l
   assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
   assert.match(html, /Bad &amp; &lt;img/);
   assert.match(html, /&quot;&gt;&lt;svg/);
-  assert.match(html, /POD-1&lt;b&gt;/);
+  assert.match(html, /Order no\. 1&lt;b&gt;/); // (the customer sees the number without the shop's "POD-")
 });
 
 test('reports a failed send without throwing', async () => {

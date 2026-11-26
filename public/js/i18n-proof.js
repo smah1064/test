@@ -100,7 +100,7 @@ Object.assign(window.POD_STRINGS, {
   // ---------- /proof page ----------
   'proofPage.pageTitle': ['Check your proof · ebda3', 'راجع البروفة · إبداع'],
   'proofPage.title': ['Check your proof', 'راجع البروفة'],
-  'proofPage.for': ['Order {n} · item {pos}: {product}', 'الطلب {n}، المنتج {pos}: {product}'],
+  'proofPage.for': ['Order no. {n} · item {pos}: {product}', 'طلب رقم {n}، المنتج {pos}: {product}'],
   'proofPage.intro': ['Please check everything below. We print exactly this file.', 'من فضلك راجع كل حاجة تحت. إحنا بنطبع الملف ده بالظبط.'],
   'proofPage.note': ['Message from our team', 'رسالة من فريقنا'],
   'proofPage.decide': ['Your decision', 'قرارك'],
