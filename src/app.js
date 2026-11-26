@@ -1841,7 +1841,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     }
     const editorOf = (id, name) => {
       const s = sides[id] || {};
-      if (!s.editor || typeof s.editor !== 'object' || !Array.isArray(s.editor.objects) || s.editor.objects.length === 0) {
+      // (A side whose only texts were emptied prints nothing: it isn't a printed side, nor priced as one. QA 26 Nov.)
+      const blank = (o) => o && typeof o === 'object' && /text/i.test(String(o.type || '')) && !String(o.text == null ? '' : o.text).replace(/[\s\u200b-\u200f\u2060\ufeff]/g, '');
+      if (!s.editor || typeof s.editor !== 'object' || !Array.isArray(s.editor.objects) || s.editor.objects.length === 0 || s.editor.objects.every(blank)) {
         throw new HttpError(400, 'sideEmpty', { side: name });
       }
       return s.editor;

@@ -401,10 +401,14 @@
   const fileArt = new Map();
   /** The full-size original of an uploaded design (or of its copy without the words), used by print files. */
   const PRINT_SRC = /^\/library-art\/[0-9a-z-]{4,40}\/(?:nowords-)?print\.(png|jpg)$/;
+  /** A light ink (the white copy of one-colour artwork goes with it): dark product colours. */
+  const lightInk = (ink) => /^#[0-9a-f]{6}$/i.test(ink || '') && parseInt(ink.slice(1, 3), 16) + parseInt(ink.slice(3, 5), 16) + parseInt(ink.slice(5, 7), 16) > 384;
   async function makeImage(i, ink) {
     // A white copy of one-colour artwork (`dark`) for dark product colours (light ink).
-    const light = i.dark && /^#[0-9a-f]{6}$/i.test(ink || '') && parseInt(ink.slice(1, 3), 16) + parseInt(ink.slice(3, 5), 16) + parseInt(ink.slice(5, 7), 16) > 384;
+    const light = Boolean(i.dark) && lightInk(ink);
     const src = String((light ? i.dark : i.src) || '');
+    // (Both copies are remembered, so the editor can swap them when the product's colour changes. QA 26 Nov.)
+    const both = (o) => { if (o && i.dark && i.src) o.set({ artSrc: String(i.src), artDark: String(i.dark), artLight: light }); return o; };
     // The shop's own artwork files, and designs uploaded in the admin (published, or still being reviewed).
     const uploaded = /^\/library-(?:art\/[0-9a-z-]{4,40}\/(?:nowords-)?web|upload\/[0-9a-f]{16,40}\/[0-9a-f]{8,40})\.png$/.test(src);
     if (!uploaded && !/^\/img\/art\/[\w/-]+\.(svg|png|webp|jpg)$/.test(src)) return null;
@@ -414,14 +418,14 @@
       if (!text) return null;
       const o = await new Promise((resolve) => fabric.loadSVGFromString(text, (objects, options) => resolve(objects && objects.length ? fabric.util.groupSVGElements(objects, options) : null)));
       if (o) o.set({ name: 'art:' + src.split('/').pop().replace(/\.svg$/, '') });
-      return o;
+      return both(o);
     }
     return new Promise((resolve) => fabric.Image.fromURL(src, (img, failed) => {
       if (failed || !img) return resolve(null);
       img.set({ name: uploaded ? (i.name || 'Design') : 'art:' + src.split('/').pop().replace(/\.\w+$/, '') });
       // An uploaded design shows a light copy; its print files use the full-size original (see POD_PRINTSRC).
       if (uploaded && PRINT_SRC.test(String(i.printSrc || ''))) img.set({ printSrc: i.printSrc, printPx: Array.isArray(i.printPx) ? i.printPx.slice(0, 2).map(Number) : null });
-      resolve(img);
+      resolve(both(img));
     }));
   }
   /**
@@ -859,5 +863,5 @@
     return changed ? { ...design, items } : design;
   }
 
-  window.POD_DESIGN = { FONTS, BUNDLED, ARABIC_RE, ARABIC_FOR, wordFill, ACCENT, SHAPES, TEXT_PRESETS, TEMPLATES, ensureFont, ensureFontsFor, buildTemplate, readyArea, templateThumb, usePrintSources, inlineSvgImages, NAME_ROLES, sampleNames, cleanName, withNames, wordsTexts, ensureWordsFonts };
+  window.POD_DESIGN = { FONTS, BUNDLED, ARABIC_RE, ARABIC_FOR, wordFill, lightInk, artImage: makeImage, ACCENT, SHAPES, TEXT_PRESETS, TEMPLATES, ensureFont, ensureFontsFor, buildTemplate, readyArea, templateThumb, usePrintSources, inlineSvgImages, NAME_ROLES, sampleNames, cleanName, withNames, wordsTexts, ensureWordsFonts };
 })();

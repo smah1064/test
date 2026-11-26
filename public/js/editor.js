@@ -19,7 +19,7 @@
   const MAX_VECTOR_BYTES = 40 * 1024 * 1024;
   const HISTORY_LIMIT = 60;
   const SNAP_PX = 7;
-  const EXTRA_PROPS = ['name', 'selectable', 'evented', 'curve', 'mask', 'maskBorder', 'maskBorderColor', 'lockRatio', 'bgShape', 'textFx', 'fxBase', 'boosted', 'importSource', 'mergeFit', 'pdfSrc', 'printSrc', 'printPx', 'wordsFill'];
+  const EXTRA_PROPS = ['name', 'selectable', 'evented', 'curve', 'mask', 'maskBorder', 'maskBorderColor', 'lockRatio', 'bgShape', 'textFx', 'fxBase', 'boosted', 'importSource', 'mergeFit', 'pdfSrc', 'printSrc', 'printPx', 'wordsFill', 'artSrc', 'artDark', 'artLight', 'fitFrom', 'fitAt'];
   const $ = (id) => document.getElementById(id);
   const { esc, money, toast, t, tr } = POD;
   const D = window.POD_DESIGN;
@@ -80,6 +80,8 @@
   const canPick = (x) => x && !x.soldOut;
   const ED_TEXT = {
     'ed.soldOut': ['Sold out', 'خلصان'],
+    'ed.qtyColoursGone': ['This product doesn\'t come in some of the colours you had quantities for: they were taken out. Check the quantities below.', 'المنتج ده مش متاح في بعض الألوان اللي كنت كاتب لها كميات، فشلناها. راجع الكميات تحت.'],
+    'ed.fieldThere': ['{field} is already on the design: it is selected. Add another one by typing it in a text.', '{field} موجود على التصميم بالفعل، واخترناهولك. لو عايزه تاني اكتبه جوه نص.'],
     'ed.sizeSwitched': ['That size is sold out in this colour, so we picked the next size.', 'المقاس ده خلصان في اللون ده، فاخترنالك المقاس اللي بعده.'],
     'ed.soldOutPick': ['This one is sold out right now. Please pick another.', 'ده خلصان دلوقتي. اختار غيره.'],
     'ed.designGone': ['This ready design isn\'t in the shop right now. Pick another one, or start your own.', 'التصميم الجاهز ده مش متاح دلوقتي. اختار تصميم تاني أو ابدأ تصميمك.'],
@@ -378,7 +380,10 @@
   /** The product side a layer is on (the embroidery: its side). */
   const hostOf = (id = st.side) => (id === EMB && emb() ? emb().side : id);
   /** Does the design have embroidery? */
-  const usesEmb = () => Boolean(emb()) && (st.side === EMB ? canvas.getObjects().length : (st.designs[EMB] || []).length) > 0;
+  /** Something that shows: an emptied (or spaces-only) text prints nothing, so it costs nothing and sends no side (QA 26 Nov). */
+  const shows = (o) => Boolean(o) && !(/text/i.test(o.type || '') && !String(o.text == null ? '' : o.text).replace(/[\s\u200b-\u200f\u2060\ufeff]/g, ''));
+  const shownOn = (id) => (id === st.side ? canvas.getObjects() : st.designs[id] || []).filter(shows).length;
+  const usesEmb = () => Boolean(emb()) && shownOn(EMB) > 0;
   if (params.get('method') === 'embroidery' && emb()) st.side = EMB;
   else if (!st.product.sides.some((s) => (st.designs[s.id] || []).length) && (st.designs[EMB] || []).length && emb()) st.side = EMB;
 
@@ -555,7 +560,12 @@
     const z = Math.max(0.15, base) * st.zoom;
     canvas.setDimensions({ width: Math.round(W * z), height: Math.round(H * z) });
     canvas.setViewportTransform([z * k, 0, 0, z * k, (W * z * (1 - k)) / 2, (H * z * (1 - k)) / 2]);
-    requestAnimationFrame(() => typeof positionFloatBar === 'function' && positionFloatBar());
+    requestAnimationFrame(() => {
+      if (typeof positionFloatBar === 'function') positionFloatBar();
+      // The sample-text note placed again for where the design is now (the phone panel opening moved it under the
+      // note: QA 26 Nov).
+      if (st.issues && typeof paintSampleNote === 'function') paintSampleNote(st.issues);
+    });
     if (focus) {
       const vt = canvas.viewportTransform;
       stage.scrollLeft = (a.x + a.w / 2) * vt[0] + vt[4] - stage.clientWidth / 2;
@@ -1456,6 +1466,8 @@
     }
     await loadObjects(snap.o);
     st.designs[st.side] = snap.o;
+    // A drawing of that step in the copy for another colour: the one for this colour (QA 26 Nov).
+    await swapArtCopies({ record: false });
     renderPlacement();
     // The step as it stands now (its ink swapped, or anything the canvas normalised) is the history's: otherwise the
     // next Undo's commit() saw a difference, cut the history there and pushed it again, so Undo got stuck (QA 25 Nov).
@@ -1500,18 +1512,22 @@
     const maxW = a.w * 0.92;
     const maxH = a.h * 0.92;
     if (o.initDimensions) o.initDimensions();
-    const w = o.getScaledWidth();
-    const h = o.getScaledHeight();
+    // (As it stands on the product: text turned sideways measured along the area's height. QA 26 Nov.)
+    const box = o.getBoundingRect(true, true);
+    const w = box.width;
+    const h = box.height;
     if (!w || !h) return;
     // Text made smaller to fit grows back towards the size it had before (a long line replaced by "Hi"), never past
-    // it (QA 26 Nov). A size changed by hand since (handles, size box) is the one kept.
-    if (o.__fit && Math.abs(o.scaleX - o.__fit.at) > 1e-6) o.__fit = null;
-    const from = o.__fit ? o.__fit.from : o.scaleX;
+    // it (QA 26 Nov); remembered with the design (drafts, Undo, the cart). A size changed by hand since (handles, size
+    // box) is the one kept.
+    const fitted = typeof o.fitFrom === 'number' && typeof o.fitAt === 'number' && Math.abs(o.scaleX - o.fitAt) < 1e-6;
+    const from = fitted ? o.fitFrom : o.scaleX;
     const k = Math.min(maxW / w, maxH / h, from / o.scaleX);
-    if (Math.abs(k - 1) < 1e-3 || (k > 1 && !o.__fit)) return;
+    if (Math.abs(k - 1) < 1e-3 || (k > 1 && !fitted)) return;
     const c = o.getCenterPoint();
     o.set({ scaleX: o.scaleX * k, scaleY: o.scaleY * k });
-    o.__fit = Math.abs(o.scaleX - from) < 1e-6 ? null : { from, at: o.scaleX };
+    if (Math.abs(o.scaleX - from) < 1e-6) o.set({ fitFrom: undefined, fitAt: undefined });
+    else o.set({ fitFrom: from, fitAt: o.scaleX });
     o.setPositionByOrigin(c, 'center', 'center');
     o.setCoords();
     canvas.requestRenderAll();
@@ -3848,6 +3864,7 @@
       canvas.requestRenderAll();
     }
     if (oldInk !== newInk && !laser()) swapInk(oldInk, newInk);
+    if (oldInk !== newInk) await swapArtCopies();
     retoneAll();
     schedulePatternPreview(0);
   }));
@@ -3871,6 +3888,81 @@
     }
     canvas.requestRenderAll();
     if (changed) commit();
+  }
+  // ---------- A ready design's one-colour drawing: its white copy on dark colours, the normal one on light (QA 26 Nov) ----------
+  function leafColours(o) {
+    const kids = o && (o._objects || o.objects);
+    if (Array.isArray(kids) && kids.length) return kids.flatMap(leafColours);
+    return o ? [o.fill, o.strokeWidth ? o.stroke : null].filter((c) => typeof c === 'string' && c && c !== 'none' && c !== 'transparent') : [];
+  }
+  /** Still as made (not recoloured by hand): every colour in it dark (the normal copy) or light (the white copy). */
+  function artAsMade(o) {
+    if (o.type === 'image') return true;
+    return leafColours(o).every((c) => {
+      let l;
+      try { l = POD.luminance('#' + new fabric.Color(c).toHex()); } catch (e) { return false; }
+      return o.artLight ? l > 0.75 : l < 0.25;
+    });
+  }
+  /** The colours single words or letters were given ("colour one word"): their fill, and their outline where it has one. */
+  function styleColours(o) {
+    const out = [];
+    for (const line of Object.values((o && o.styles) || {})) {
+      for (const ch of Object.values(line || {})) {
+        if (ch && typeof ch.fill === 'string') out.push(ch.fill);
+        if (ch && typeof ch.stroke === 'string' && (ch.strokeWidth || o.strokeWidth)) out.push(ch.stroke);
+      }
+    }
+    return out;
+  }
+  const artToSwap = (o, light) => o && typeof o.artSrc === 'string' && typeof o.artDark === 'string' && Boolean(o.artLight) !== light && artAsMade(o);
+  /** The other copy of a drawing (a fabric object or saved JSON), at the same place, size and turn. */
+  async function artCopy(o, ink) {
+    const n = D.artImage ? await D.artImage({ src: o.artSrc, dark: o.artDark }, ink) : null;
+    if (!n || !n.width || !n.height) return null;
+    const keep = {};
+    for (const k of ['originX', 'originY', 'left', 'top', 'angle', 'flipX', 'flipY', 'skewX', 'skewY', 'opacity', 'visible', 'selectable', 'evented', 'lockRatio', 'name', 'lockMovementX', 'lockMovementY', 'lockRotation']) if (o[k] !== undefined) keep[k] = o[k];
+    n.set({ ...keep, scaleX: ((o.scaleX || 1) * (o.width || n.width)) / n.width, scaleY: ((o.scaleY || 1) * (o.height || n.height)) / n.height });
+    n.setCoords();
+    return n;
+  }
+  /** Every such drawing (every side) as the copy for the product's ink now: after a colour change, or an older step back. */
+  async function swapArtCopies({ record = true } = {}) {
+    if (laser()) return;
+    const ink = inkFor(surfaceHex());
+    const light = D.lightInk ? D.lightInk(ink) : false;
+    let changed = false;
+    const was = st.silent;
+    st.silent = true;
+    try {
+      for (const o of canvas.getObjects().slice()) {
+        if (!artToSwap(o, light)) continue;
+        const n = await artCopy(o, ink);
+        const at = canvas.getObjects().indexOf(o);
+        if (!n || at < 0) continue;
+        const active = canvas.getActiveObject() === o;
+        canvas.remove(o);
+        canvas.insertAt(n, at, false);
+        if (active) canvas.setActiveObject(n);
+        changed = true;
+      }
+      for (const s of allSides()) {
+        const list = st.designs[s.id];
+        if (s.id === st.side || !Array.isArray(list) || !list.some((o) => artToSwap(o, light))) continue;
+        st.designs[s.id] = await Promise.all(list.map(async (o) => {
+          if (!artToSwap(o, light)) return o;
+          const n = await artCopy(o, ink);
+          return n ? n.toObject(EXTRA_PROPS) : o;
+        }));
+        changed = true;
+      }
+    } finally {
+      st.silent = was;
+    }
+    if (!changed) return;
+    canvas.requestRenderAll();
+    if (record) commit();
+    else st.designs[st.side] = JSON.parse(snapshot()).o;
   }
   $('sizes').addEventListener('click', (e) => {
     const b = e.target.closest('[data-size]');
@@ -3984,7 +4076,18 @@
     st.designs = mapped;
     st.offsets = {}; // the new product starts at its standard print position
     st.history = {};
-    if (!canPick(next.colors.find((c) => c.id === st.colorId))) st.colorId = firstPick(next.colors).id;
+    if (!canPick(next.colors.find((c) => c.id === st.colorId))) {
+      // The quantities typed for the colour shown follow to the colour the new product starts on (they were dropped
+      // to one piece without a word: QA 26 Nov). Other colours the new product doesn't have go, and that is said.
+      const was = st.colorId;
+      st.colorId = firstPick(next.colors).id;
+      if (st.qty && st.qty[was] && !st.qty[st.colorId]) {
+        st.qty = { ...st.qty, [st.colorId]: st.qty[was] };
+        delete st.qty[was];
+      }
+      const gone = Object.entries(st.qty || {}).filter(([c, row]) => !next.colors.some((x) => x.id === c) && Object.values(row || {}).some((n) => n > 0));
+      if (gone.length) toast(tEd('ed.qtyColoursGone'));
+    }
     st.sizeId = nextSize;
     st.pattern = normPattern(next, st.pattern);
     st.side = wasEmb && next.embroidery ? EMB : next.sides.find((s) => s.id === hostOf(st.side))?.id || next.sides[0].id;
@@ -4001,6 +4104,7 @@
     // Another colour (white → a black hoodie): text and shapes in the default ink follow it, as when the colour is picked.
     const newInk = inkFor(surfaceHex());
     if (oldInk !== newInk && !laser()) swapInk(oldInk, newInk);
+    if (oldInk !== newInk) await swapArtCopies();
     refreshChrome();
     renderProps();
   }
@@ -4020,7 +4124,7 @@
   // ---------- Sides ----------
   function renderSideTabs() {
     if (heldOff('side-tabs', renderSideTabs)) return;
-    const n = (id) => (id === st.side ? canvas.getObjects().length : (st.designs[id] || []).length);
+    const n = shownOn;
     // Booklets: a strip of numbered pages (Cover, 2, 3… Back) that scrolls sideways.
     $('side-tabs').classList.toggle('pages', Boolean(st.product.paged));
     // Booklets: previous / next page buttons either side of the strip.
@@ -4311,15 +4415,22 @@
           return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
         };
         const ratio = (a, b) => { const x = lin(a); const y = lin(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+        const hexOf = (c) => { try { return '#' + new fabric.Color(c).toHex(); } catch (e) { return null; } };
         for (const o of objs) {
-          if (!isText(o)) continue;
-          const ink = typeof o.fill === 'string' && o.fill !== 'transparent' ? o.fill : typeof o.stroke === 'string' ? o.stroke : null;
-          if (!ink) continue;
-          let hex;
-          try { hex = new fabric.Color(ink).toHex(); } catch (e) { continue; }
-          const outline = o.stroke && o.strokeWidth > 0 && typeof o.stroke === 'string' && o.fill !== 'transparent' ? new fabric.Color(o.stroke).toHex() : null;
-          const lost = garments.find((g) => ratio('#' + hex, g.hex) < 1.6 && !(outline && ratio('#' + outline, g.hex) >= 1.6));
-          if (lost) issues.push({ level: 'warn', key: 'check.inkOnColour', obj: o, params: { name: layerName(o), colour: tr(lost.name) } });
+          if (isText(o)) {
+            const ink = typeof o.fill === 'string' && o.fill !== 'transparent' ? o.fill : typeof o.stroke === 'string' ? o.stroke : null;
+            if (!ink) continue;
+            const outline = o.stroke && o.strokeWidth > 0 && typeof o.stroke === 'string' && o.fill !== 'transparent' ? hexOf(o.stroke) : null;
+            // The text's own colour, and any word coloured on its own (one near-black word on a black shirt. QA 26 Nov).
+            const inks = [ink, ...styleColours(o).filter((c) => c !== 'transparent')].map(hexOf).filter(Boolean);
+            const lost = garments.find((g) => inks.some((h) => ratio(h, g.hex) < 1.6) && !(outline && ratio(outline, g.hex) >= 1.6));
+            if (lost) issues.push({ level: 'warn', key: 'check.inkOnColour', obj: o, params: { name: layerName(o), colour: tr(lost.name) } });
+          } else if (o.type === 'group') {
+            // A drawing all of one colour (a ready design's): lost on the garment as a whole (QA 26 Nov: black on black).
+            const cs = [...new Set(leafColours(o).map(hexOf).filter(Boolean))];
+            const lost = cs.length > 0 && garments.find((g) => cs.every((h) => ratio(h, g.hex) < 1.6));
+            if (lost) issues.push({ level: 'warn', key: 'check.inkOnColour', obj: o, params: { name: layerName(o), colour: tr(lost.name) } });
+          }
         }
       }
     }
@@ -4348,7 +4459,8 @@
         if (o.type === 'image') issues.push({ level: 'warn', key: 'check.embPhoto', obj: o, params: { name } });
         const paint = (o.type === 'group' ? o.getObjects() : [o]);
         for (const x of paint) {
-          for (const c of [x.fill, x.strokeWidth ? x.stroke : null]) {
+          // (Words coloured one by one are threads too. QA 26 Nov.)
+          for (const c of [x.fill, x.strokeWidth ? x.stroke : null, ...styleColours(x)]) {
             if (c && typeof c === 'object' && c.colorStops) issues.push({ level: 'warn', key: 'check.embGradient', obj: o, params: { name } });
             else if (typeof c === 'string' && c && c !== 'transparent' && !/^rgba?\([^)]*,\s*0\s*\)$/.test(c)) colours.add(new fabric.Color(c).toHex());
           }
@@ -4414,9 +4526,11 @@
     if (blank && !elsewhere.length && !issues.length) elsewhere.push(null);
     const chip = $('check-chip');
     chip.className = 'check-chip ' + (issues.length ? (issues.some((i) => i.level === 'error') ? 'bad' : 'warn') : elsewhere.length ? 'warn' : 'ok');
-    chip.innerHTML = issues.length ? `⚠ <span>${esc(t('check.issues', { n: POD.num(issues.length) }))}</span>`
-      : elsewhere.filter(Boolean).length ? `⚠ <span>${esc(t('check.otherSide', { sides: elsewhere.filter(Boolean).join(POD.lang === 'ar' ? '، ' : ', ') }))}</span>`
-        : blank ? `⚠ <span>${esc(t('check.issues', { n: POD.num(1) }))}</span>` : `✓ <span>${esc(t('check.ok'))}</span>`;
+    // (The blank pages' line counts as one to check, as the list shows it. QA 26 Nov.)
+    const named = elsewhere.filter(Boolean);
+    chip.innerHTML = issues.length ? `⚠ <span>${esc(t('check.issues', { n: POD.num(issues.length + (blank ? 1 : 0)) }))}</span>`
+      : named.length && !blank ? `⚠ <span>${esc(t('check.otherSide', { sides: named.join(POD.lang === 'ar' ? '، ' : ', ') }))}</span>`
+        : blank ? `⚠ <span>${esc(t('check.issues', { n: POD.num(1 + (named.length ? 1 : 0)) }))}</span>` : `✓ <span>${esc(t('check.ok'))}</span>`;
     const R = rects();
     $('check-legend').innerHTML = `
       <li><i class="lg lg-trim"></i>${esc(t('check.legendTrim'))}</li>
@@ -4461,8 +4575,13 @@
       const cr = canvas.upperCanvasEl.getBoundingClientRect();
       const sr = stage ? stage.getBoundingClientRect() : { top: 0 };
       const br = hit.obj.getBoundingRect();
-      objTop = cr.top - sr.top + br.top;
-      objBottom = objTop + br.height;
+      // With the handles round it when chosen: the corners, and the turn handle above it (QA 26 Nov: on a 360px phone
+      // the note covered the top of the words, the turn handle and the top corners).
+      const o = hit.obj;
+      const corner = (o.cornerSize || 13) / 2 + (o.padding || 0) + 4;
+      const turn = o.hasControls !== false && o.controls && o.controls.mtr && o.controls.mtr.visible !== false ? Math.abs(o.controls.mtr.offsetY || 40) + (o.cornerSize || 13) : 0;
+      objTop = cr.top - sr.top + br.top - Math.max(corner, turn);
+      objBottom = cr.top - sr.top + br.top + br.height + corner;
     } catch (e) { /* not on the canvas yet */ }
     const floatBar = $('float-bar');
     const fb = floatBar && !floatBar.hidden && stage ? floatBar.getBoundingClientRect() : null;
@@ -4518,7 +4637,7 @@
 
   // ---------- Price & chrome ----------
   function designedSides() {
-    return allSides().filter((s) => (s.id === st.side ? canvas.getObjects().length : (st.designs[s.id] || []).length) > 0);
+    return allSides().filter((s) => shownOn(s.id) > 0);
   }
   /** How many sides of the product carry something (the embroidery counts as the side it is on), as the shop prices it. */
   const decoratedCount = () => new Set(designedSides().map((s) => hostOf(s.id))).size;
@@ -4612,6 +4731,12 @@
   function qtyFollow(fromColor, fromSize) {
     const lines = qtyLines();
     if (lines.length === 1 && lines[0].color === fromColor && lines[0].size === fromSize) st.qty = { [st.colorId]: { [st.sizeId]: lines[0].qty } };
+    // One colour with several sizes typed (White M 3, L 2): the whole row follows a new colour, as one piece does
+    // (it stayed White while Black was shown and picked. QA 26 Nov).
+    else if (st.colorId !== fromColor && lines.length > 1 && lines.every((l) => l.color === fromColor)
+      && lines.every((l) => sizeOk(st.product, st.colorId, st.product.sizes.find((z) => z.id === l.size)))) {
+      st.qty = { [st.colorId]: Object.fromEntries(lines.map((l) => [l.size, l.qty])) };
+    }
     // The boxes drawn again at once: with nothing designed yet they kept the old colour's row, so a number typed there
     // ordered the old colour (QA 26 Nov: black picked, "White · M" in the cart).
     renderQty({ force: true });
@@ -4939,6 +5064,12 @@
         st.qty = g;
         refreshChrome();
         renderQty();
+        // The colour shown was the one taken out: the product shows a colour still ordered (QA 26 Nov).
+        const left = Object.keys(g).find((c) => Object.values(g[c] || {}).some((n) => n > 0));
+        if (del.dataset.qdel === st.colorId && left) {
+          const sw = $('swatches').querySelector(`[data-color="${CSS.escape(left)}"]`);
+          if (sw) sw.click();
+        }
       }
     });
   }
@@ -5197,6 +5328,15 @@
       o.selectionStart = o.selectionEnd = o.selectionStart + token.length;
       canvas.requestRenderAll();
       commit();
+      return;
+    }
+    // That field is already a text of its own on this side (added with the list): it is chosen, not stacked again on
+    // the same spot, which printed the name twice on top of itself (QA 26 Nov).
+    const there = canvas.getObjects().find((x) => isText(x) && String(srcText(x)).trim() === token);
+    if (there) {
+      canvas.setActiveObject(there);
+      canvas.requestRenderAll();
+      toast(tEd('ed.fieldThere', { field: token }));
       return;
     }
     const sample = L ? L.rows.map((r) => r[col]).find(Boolean) || '' : '';
