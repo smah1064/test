@@ -111,3 +111,22 @@ test('computer: the T-shirt fills the design area (print area much bigger than b
     await srv.close();
   }
 });
+
+test('phones: booklets, business cards and a mug stay inside the screen (no sideways scroll, no wider page)', { timeout: 120000 }, async () => {
+  const srv = await startServer();
+  const browser = await loadPlaywright().chromium.launch();
+  try {
+    for (const product of ['booklets', 'bizcards', 'mug', 'hoodie']) {
+      for (const viewport of [{ width: 412, height: 839 }, { width: 360, height: 740 }]) {
+        const { ctx, page, errors } = await open(browser, srv.base, { lang: 'ar', viewport, product });
+        const w = await page.evaluate(() => ({ inner: innerWidth, scroll: document.documentElement.scrollWidth }));
+        assert.deepStrictEqual(w, { inner: viewport.width, scroll: viewport.width }, `${product} ${viewport.width}`);
+        assert.deepStrictEqual(errors, []);
+        await ctx.close();
+      }
+    }
+  } finally {
+    await browser.close();
+    await srv.close();
+  }
+});

@@ -1608,6 +1608,7 @@ html[dir="ltr"] .hm-tile-link span { display: inline-block; transform: scaleX(-1
   .panel-foot { padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); gap: 12px; }
   .panel-foot .amount { font-size: 18px; line-height: 1.2; }
   .panel-foot .qty-chip, .panel-foot #save-draft, .panel-foot #preview-open-m { display: none !important; }
+  .panel-foot .price-line > div { min-width: 0; }
   .buy-sum { display: block; max-width: 100%; border: 0; background: none; padding: 2px 0; margin: 0; font: inherit; font-size: 12px; color: var(--ink-3); text-align: start; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; position: relative; }
   .buy-sum::after { content: ""; position: absolute; inset: -14px -4px -10px; }
   .buy-sum.ask { color: var(--accent); font-weight: 700; }

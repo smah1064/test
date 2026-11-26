@@ -4894,7 +4894,9 @@
       const pieces = p.merge && st.mergeList ? t('buy.names', { n: POD.num(mergeCount()) }) : copies != null ? POD.plural(packWordHere(), copies) : plural('qty.unitPieces', qtyTotal());
       sum.classList.toggle('ask', askSize);
       sum.hidden = p.kind === 'book';
-      sum.textContent = askSize ? `${colourWord}${sep}${t('buy.pickSize')}` : [colourWord, sizeWord, pieces].filter(Boolean).join(sep);
+      // (Packs: the pack is the size, "100 cards"; the count only when more than one pack is ordered.)
+      const many = packs() && !(p.merge && st.mergeList) ? (qtyTotal() > 1 ? `× ${POD.num(qtyTotal())}` : '') : pieces;
+      sum.textContent = askSize ? `${colourWord}${sep}${t('buy.pickSize')}` : [colourWord, sizeWord, many].filter(Boolean).join(sep);
     }
   }
   function refreshChrome() {
