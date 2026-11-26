@@ -75,7 +75,7 @@
     paint($(id));
   }
   document.addEventListener('pod:langchange', () => msgPaint.forEach((paint, id) => { if (!$(id).hidden && $(id).textContent.trim()) paint($(id)); }));
-  const SERVER_WORDS = { acctWrongCurrent: 'acct.wrongCurrent', acctPasswordShort: 'acct.passwordShort' };
+  const SERVER_WORDS = { acctWrongCurrent: 'acct.wrongCurrent', acctPasswordShort: 'acct.passwordShort', acctPasswordCommon: 'acct.passwordCommon', acctPasswordPersonal: 'acct.passwordPersonal' };
   function serverMsg(err) {
     const key = err && SERVER_WORDS[err.code];
     let first = true;

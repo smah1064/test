@@ -361,7 +361,7 @@ Admin → **Coupons**: create codes for a percentage off (optionally capped), an
 
 **Delete my account** (Account › Password): with the password (or, for an account with none, ticking that they're sure), `POST /api/account/delete` deletes the account at once: name, mobile, email, password, address, Google / Facebook links, and its folder (the account's cart and saved designs). Orders already placed stay for delivery and the shop's accounts as guest orders, still opened from their links. The privacy page says so (owner's decision, 25 Nov; app stores ask for it too).
 
-Customers can create an account at `/account` (name, mobile number, optional email, password of 8+ characters) or from the "Account" link in the header, and sign in with their mobile number or email.
+Customers can create an account at `/account` (name, mobile number, optional email, password of 8+ characters that isn't a common one such as 12345678 and isn't their own mobile number, email or name: checked at sign-up, password change and reset, `src/passwords.js`, the same list as the team's; accounts made before keep signing in) or from the "Account" link in the header, and sign in with their mobile number or email.
 
 - **My orders**: every order placed while signed in, with its status (received, printing, shipped) and a link to the order page.
 - **Details & address**: name, email and a delivery address. Checkout fills them in for signed-in customers; the address of the first order is saved if the account has none.
@@ -443,7 +443,7 @@ On any item in the print queue, **Send to printing house** opens a small form: t
 Admin → **Accounts** tab:
 
 - **Prices & costs**: for every product, the selling price, the price of each extra side and per-size price additions (these change the shop right away; saved in `db.pricing` over the defaults in `src/products.js`), and what a piece costs you: the blank product (plus extra per size), printing for the first side and for each extra side, and packaging/other. Shows the profit and margin per piece.
-- **Profit & orders**: for this month, last month, this year, all time or chosen dates: sales, product + printing costs, shipping cost (a usual cost per order, changeable per order), gross profit and margin, expenses, net profit, and what was shipped (cash due/collected) vs not shipped yet. Profit by product and by order. Any item's real cost can be entered on the order. Export to CSV for Excel.
+- **Profit & orders**: for this month, last month, this year, all time or chosen dates: sales, product + printing costs, shipping cost (a usual cost per order, changeable per order), gross profit and margin, expenses, net profit, and what was shipped (cash due/collected) vs not shipped yet. Profit by product and by order. Any item's real cost can be entered on the order. Export to CSV for Excel, in the dashboard's language (column titles, states, kinds of expense, product names; the amounts plain numbers in 0-9).
 - **Expenses**: rent, ads, salaries… by date and type, counted in net profit.
 
 Each new order item keeps a copy of its costs on the order day, so changing costs later does not rewrite past profit.

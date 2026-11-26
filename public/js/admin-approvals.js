@@ -31,6 +31,9 @@ window.AdminApprovals = (() => {
 
   const owner = () => Boolean(cfg && cfg.access() && cfg.access().owner);
   const inLang = (v) => AdminRoles.inLang(v);
+  // (Values someone typed come in isolates: their digits stay as typed, and a line that starts with one still reads
+  // in its own words' direction, which dir="auto" would take from the typed value.)
+  const dirOf = (text) => POD.textDir(text);
   const when = (iso) => AdminRoles.cairoTime(iso);
   const roleNames = (roles) => (roles || []).filter((r) => AdminRoles.ROLES.includes(r)).map((r) => t('role.' + r)).join(POD.lang === 'ar' ? '، ' : ', ');
   /** Waiting ones first, then the newest. */
@@ -57,7 +60,7 @@ window.AdminApprovals = (() => {
         <p class="small ap-decided">${esc(line)}</p>
         ${a.note ? `<p class="small ap-note" dir="auto">${esc(t('ap.ownerNote', { note: `\u2068${inLang(a.note)}\u2069` }))}</p>` : ''}
         ${a.error ? `<p class="small ap-error" dir="auto">${esc(t('ap.error', { error: `\u2068${inLang(a.error)}\u2069` }))}</p>` : ''}
-        ${a.detail ? `<p class="small ap-detail" dir="auto">${esc(inLang(a.detail))}</p>` : ''}
+        ${a.detail ? `<p class="small ap-detail" dir="${dirOf(inLang(a.detail))}">${esc(inLang(a.detail))}</p>` : ''}
       </div>`;
   }
   function decideHtml(a) {
@@ -78,7 +81,7 @@ window.AdminApprovals = (() => {
     const mine = !owner();
     // The values asked for, field by field (server: changes); older answers: the details text.
     const changes = Array.isArray(a.changes) && a.changes.length
-      ? `<dl class="ap-changes">${a.changes.map((c) => `<dt>${esc(inLang(c.field))}</dt><dd dir="auto">${esc(inLang(c.value))}</dd>`).join('')}</dl>` : '';
+      ? `<dl class="ap-changes">${a.changes.map((c) => `<dt>${esc(inLang(c.field))}</dt><dd dir="${dirOf(inLang(c.value))}">${esc(inLang(c.value))}</dd>`).join('')}</dl>` : '';
     const details = changes ? '' : inLang(a.details);
     const m = S.msg[a.id];
     const roles = roleNames(a.roles);
@@ -89,12 +92,12 @@ window.AdminApprovals = (() => {
           ${mine ? '' : `<b dir="auto">${esc((a.by && a.by.name) || '')}</b>${roles ? `<span class="muted small">${esc(roles)}</span>` : ''}`}
           <span class="muted small ap-when">${esc(t('ap.sentAt', { when: when(a.at) }))}</span>
         </div>
-        <p class="ap-summary" dir="auto">${esc(inLang(a.summary) || a.action || '')}</p>
+        <p class="ap-summary" dir="${dirOf(inLang(a.summary) || a.action || '')}">${esc(inLang(a.summary) || a.action || '')}</p>
         ${a.changedSince && open(a) ? `<p class="small ap-changed" role="note">⚠ ${esc(t('ap.changedSince'))}</p>` : ''}
         ${a.thumb && /^data:image\/webp;base64,/.test(a.thumb) ? `<button type="button" class="ap-thumb-btn" data-ap-zoom aria-pressed="false" title="${esc(t('ap.photoZoom'))}"><img class="ap-thumb" src="${esc(a.thumb)}" alt="${esc(t('ap.photoAlt'))}" loading="lazy"></button>` : ''}
         ${Array.isArray(a.pics) && a.pics.length ? `<div class="ap-pics">${a.pics.filter((p) => p && /^\/(library-upload|api\/shares|catalog-photos|files\/designs)\//.test(p.url)).map((p) => `<figure class="ap-pic"><img src="${esc(p.url)}" alt="${esc(inLang(p.name) || t('ap.photoAlt'))}" loading="lazy"><figcaption dir="auto">${esc(inLang(p.name) || '')}</figcaption></figure>`).join('')}</div>` : ''}
         ${changes ? `<div class="ap-details"><div class="muted small">${esc(t('ap.details'))}</div>${changes}</div>` : ''}
-        ${details ? `<div class="ap-details"><div class="muted small">${esc(t('ap.details'))}</div><div class="ap-details-text" dir="auto">${esc(details)}</div></div>` : ''}
+        ${details ? `<div class="ap-details"><div class="muted small">${esc(t('ap.details'))}</div><div class="ap-details-text" dir="${dirOf(details)}">${esc(details)}</div></div>` : ''}
         ${st !== 'pending' ? decidedHtml(a) : ''}
         ${!open(a) ? '' : mine ? `<div class="ap-btns"><button class="btn btn-sm" type="button" data-ap-act="cancel" data-ap-id="${esc(a.id)}" ${S.busy.has(a.id) ? 'disabled' : ''}>${esc(t('ap.cancel'))}</button></div>` : decideHtml(a)}
         ${m ? `<p class="ro-msg ${m.ok ? 'ok' : 'bad'}" aria-live="polite">${esc(m.text)}</p>` : ''}

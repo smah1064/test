@@ -25,18 +25,71 @@
 
   // Arabic pages never mix digits: the shop's own texts (labels, product data, messages) show
   // numbers as ١٢٣. Codes stay as they are (A5, 3D, 2XL, links, colours), and so does anything
-  // the customer typed (only the shop's texts go through here).
+  // the customer typed (only the shop's texts go through here). A value someone typed that sits inside
+  // the shop's words (a tracking number, a coupon code, a printing house's name) comes wrapped in
+  // first-strong isolates, U+2068 … U+2069 (invisible): its digits stay as typed, nested ones too.
   const AR_DIGITS = '٠١٢٣٤٥٦٧٨٩';
   const LATIN_NUM = /(?<![A-Za-z0-9_\-/@:#=?&%"'.])\d+(?:[.,]\d+)*(?![A-Za-z0-9_\-/@:%"']|[.,]\d)/g;
   // A number in English words stays as written ("iPhone 16 Pro", "Class of 2025", "30 and fabulous").
   const LATIN_BEFORE = /[A-Za-z][A-Za-z'’]*\s+$/;
   const LATIN_AFTER = /^\s+[A-Za-z]/;
+  /**
+   * The parts of a text inside an FSI … PDI span, as [start, end] (the FSI's and its PDI's places). Isolates
+   * nest (LRI U+2066 and RLI U+2067 open one too; a PDI closes the last one open), and one never closed
+   * ends with its line, as the Unicode bidi rules read them. null: no FSI in the text.
+   */
+  function typedSpans(str) {
+    if (str.indexOf('\u2068') < 0) return null;
+    const spans = [];
+    let open = [];
+    let start = -1;
+    const close = (at) => {
+      if (start >= 0) spans.push([start, at]);
+      start = -1;
+    };
+    for (let i = 0; i < str.length; i++) {
+      const c = str.charCodeAt(i);
+      if (c >= 0x2066 && c <= 0x2068) {
+        open.push(c);
+        if (c === 0x2068 && start < 0) start = i;
+      } else if (c === 0x2069 && open.length) {
+        open.pop();
+        if (start >= 0 && !open.includes(0x2068)) close(i);
+      } else if (c === 0x0a || c === 0x0d || c === 0x85 || c === 0x2029) {
+        close(i);
+        open = [];
+      }
+    }
+    close(str.length);
+    return spans;
+  }
   function arabicDigits(s) {
     const str = String(s);
+    const kept = typedSpans(str);
     return str.replace(LATIN_NUM, (m, at) => {
+      if (kept && kept.some(([a, b]) => at > a && at < b)) return m;
       if (LATIN_BEFORE.test(str.slice(Math.max(0, at - 40), at)) || LATIN_AFTER.test(str.slice(at + m.length, at + m.length + 4))) return m;
       return m.replace(/\d/g, (d) => AR_DIGITS[d]).replace(/\./g, '٫').replace(/,/g, '٬');
     });
+  }
+  /**
+   * The direction a text reads in, as dir="auto" finds it but skipping what's inside isolates (U+2066 … U+2069:
+   * a typed value set in the shop's words), as the Unicode bidi rules do: its first letter outside them, else the
+   * page's direction. "BST-1234 اتشحن" with the code isolated reads right to left (dir="auto" would go by the B).
+   */
+  const RTL_SCRIPT = /[\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Syriac}\p{Script=Thaana}\p{Script=Nko}]/u;
+  function textDir(s) {
+    let depth = 0;
+    for (const ch of String(s == null ? '' : s)) {
+      const c = ch.codePointAt(0);
+      if (c >= 0x2066 && c <= 0x2068) depth++;
+      else if (c === 0x2069) depth = Math.max(0, depth - 1);
+      else if (depth) continue;
+      else if (c === 0x200f || c === 0x061c) return 'rtl';
+      else if (c === 0x200e) return 'ltr';
+      else if (/\p{L}/u.test(ch)) return RTL_SCRIPT.test(ch) ? 'rtl' : 'ltr';
+    }
+    return lang === 'ar' ? 'rtl' : 'ltr';
   }
   /**
    * What goes between the parts of a line ("100 cards · 200 cards"): in Arabic the Arabic comma, because a
@@ -1298,7 +1351,7 @@
     get lang() {
       return lang;
     },
-    t, tr, arabicDigits, latinDigits, sep, setLang, applyI18n,
+    t, tr, arabicDigits, latinDigits, sep, setLang, applyI18n, textDir,
     loadCatalog, assetId, canPick, firstPick, comboOut, comboFew, sizeOk, colorOk, productPicture, thumbFallback, fillMockup, mockupUrl, svgDataUrl, luminance,
     money, date, day, num, orderNo, plural, pluralForm, packCopies, packWord, captcha, fromPrice, sizeNote, firstName,
     productState, backOnDay, backText, similarProducts, similarHref, similarLabel, productHref, showUnavailable,

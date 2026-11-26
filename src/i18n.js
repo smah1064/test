@@ -52,6 +52,8 @@ const MESSAGES = {
   acctName: { en: 'Please enter your name', ar: 'اكتب اسمك من فضلك' },
   acctPasswordShort: { en: 'The password needs at least 8 characters', ar: 'كلمة المرور لازم تكون 8 حروف أو أكتر' },
   acctPasswordLong: { en: 'That password is too long', ar: 'كلمة المرور طويلة جدًا' },
+  acctPasswordCommon: { en: 'That password is too easy to guess (numbers in a row, one letter repeated, or a common one like password1). Please choose another.', ar: 'كلمة المرور دي سهلة التخمين (أرقام ورا بعض، أو حرف متكرر، أو كلمة مشهورة زي password1). اختار واحدة تانية من فضلك.' },
+  acctPasswordPersonal: { en: 'Your password can\'t be your mobile number, email or name. Please choose something only you know.', ar: 'كلمة المرور مينفعش تكون رقم موبايلك أو إيميلك أو اسمك. اختار حاجة إنت بس اللي تعرفها.' },
   acctPhoneTaken: { en: 'There is already an account with this mobile number. Sign in instead.', ar: 'في حساب بالرقم ده. سجّل دخول بدل كده.' },
   acctEmailTaken: { en: 'There is already an account with this email', ar: 'في حساب بالإيميل ده' },
   reviseNotNeeded: { en: 'This item doesn\'t need changes any more (refresh the page).', ar: 'القطعة دي مش محتاجة تعديل دلوقتي (حدّث الصفحة).' },
@@ -302,9 +304,40 @@ const LATIN_NUM = /(?<![A-Za-z0-9_\-/@:#=?&%"'.])\d+(?:[.,]\d+)*(?![A-Za-z0-9_\-
 // (A number in English words stays as written: "iPhone 16 Pro", "Class of 2025"; as on the pages.)
 const LATIN_BEFORE = /[A-Za-z][A-Za-z'’]*\s+$/;
 const LATIN_AFTER = /^\s+[A-Za-z]/;
+/**
+ * The parts of a text inside an FSI … PDI span (U+2068 … U+2069: a value someone typed, set inside the shop's
+ * words), as [start, end]. Their digits stay as typed. Isolates nest (LRI U+2066 and RLI U+2067 open one too; a
+ * PDI closes the last one open); one never closed ends with its line. The same rule as public/js/common.js.
+ */
+function typedSpans(str) {
+  if (str.indexOf('\u2068') < 0) return null;
+  const spans = [];
+  let open = [];
+  let start = -1;
+  const close = (at) => {
+    if (start >= 0) spans.push([start, at]);
+    start = -1;
+  };
+  for (let i = 0; i < str.length; i++) {
+    const c = str.charCodeAt(i);
+    if (c >= 0x2066 && c <= 0x2068) {
+      open.push(c);
+      if (c === 0x2068 && start < 0) start = i;
+    } else if (c === 0x2069 && open.length) {
+      open.pop();
+      if (start >= 0 && !open.includes(0x2068)) close(i);
+    } else if (c === 0x0a || c === 0x0d || c === 0x85 || c === 0x2029) {
+      close(i);
+      open = [];
+    }
+  }
+  close(str.length);
+  return spans;
+}
 const arabicDigits = (s) => {
   const str = String(s);
-  return str.replace(LATIN_NUM, (m, at) => (LATIN_BEFORE.test(str.slice(Math.max(0, at - 40), at)) || LATIN_AFTER.test(str.slice(at + m.length, at + m.length + 4))
+  const kept = typedSpans(str);
+  return str.replace(LATIN_NUM, (m, at) => ((kept && kept.some(([a, b]) => at > a && at < b)) || LATIN_BEFORE.test(str.slice(Math.max(0, at - 40), at)) || LATIN_AFTER.test(str.slice(at + m.length, at + m.length + 4))
     ? m
     : m.replace(/\d/g, (d) => AR_DIGITS[d]).replace(/\./g, '٫').replace(/,/g, '٬')));
 };

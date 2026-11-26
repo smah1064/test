@@ -342,25 +342,56 @@ function report({ orders, costs, expenses, settings, from, to }) {
   return { from, to, totals: t, orders: rows, products, expenses: exp };
 }
 
-/** The report's orders as CSV (opens in Excel; UTF-8 with BOM so Arabic names show). */
-function reportCsv(r, nameOf) {
+/**
+ * The words of the Accounts CSV in each dashboard language: the dashboard's own words (Accounts tab) for the
+ * columns, an order's state and the kinds of expense, so a file downloaded from the Arabic dashboard reads in
+ * Arabic. Amounts, days and order numbers stay plain numbers in 0-9 (Excel adds them up and sorts them).
+ */
+const CSV_WORDS = {
+  en: {
+    orders: ['Order', 'Date', 'Customer', 'Status', 'Items', 'Products', 'Sales', 'Discount', 'Coupon', 'Shipping charged', 'Total', 'Item cost', 'Shipping cost', 'Profit'],
+    expenses: ['Expenses', 'Date', 'Category', 'Description', 'Amount'],
+    totals: { discounts: 'Discounts', revenue: 'Revenue', itemCost: 'Item cost', shippingCost: 'Shipping cost', grossProfit: 'Gross profit', expenses: 'Expenses', netProfit: 'Net profit' },
+    status: { shipped: 'shipped', open: 'not shipped yet' },
+    category: { materials: 'Materials & blanks', printing: 'Printing', shipping: 'Shipping', marketing: 'Marketing & ads', rent: 'Rent & bills', salaries: 'Salaries', equipment: 'Equipment', other: 'Other' },
+  },
+  ar: {
+    orders: ['الطلب', 'التاريخ', 'العميل', 'الحالة', 'عدد المنتجات', 'المنتجات', 'المبيعات', 'الخصم', 'الكوبون', 'الشحن اللي دفعه العميل', 'الإجمالي', 'تكلفة المنتجات والطباعة', 'تكلفة الشحن', 'الربح'],
+    expenses: ['المصروفات', 'التاريخ', 'النوع', 'الوصف', 'المبلغ'],
+    totals: { discounts: 'الخصومات', revenue: 'المبيعات (شامل الشحن)', itemCost: 'تكلفة المنتجات والطباعة', shippingCost: 'تكلفة الشحن', grossProfit: 'إجمالي الربح', expenses: 'المصروفات', netProfit: 'صافي الربح' },
+    status: { shipped: 'اتشحن', open: 'لسه ماتشحنش' },
+    category: { materials: 'خامات ومنتجات', printing: 'طباعة', shipping: 'شحن', marketing: 'تسويق وإعلانات', rent: 'إيجار وفواتير', salaries: 'مرتبات', equipment: 'معدات', other: 'أخرى' },
+  },
+};
+
+/**
+ * The report's orders as CSV (opens in Excel; UTF-8 with BOM so Arabic shows, commas between the cells, as the
+ * activity log's CSV). `lang` ('ar' | 'en', the dashboard's: the request's x-lang) sets the words: column titles,
+ * an order's state, the kind of each expense and the products' names. Numbers stay numbers in 0-9, with no
+ * currency, in every language. (nameOf: a product name ({ en, ar }) as text when `lang` has none.)
+ */
+function reportCsv(r, nameOf, { lang = 'en' } = {}) {
+  const L = lang === 'ar' ? 'ar' : 'en';
+  const W = CSV_WORDS[L];
+  const productName = (v) => (v && typeof v === 'object' && v[L]) || (nameOf ? nameOf(v) : v && typeof v === 'object' ? v.en : v) || '';
   // Numbers stay numbers (Excel adds them up); text that could start a formula gets a ' in front.
+  // (Quoted when it holds a ; too: Excel in some countries splits cells there.)
   const q = (v) => {
     if (typeof v === 'number') return Number.isFinite(v) ? String(v) : '';
     let s = String(v == null ? '' : v);
     if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
-    return /[",\r\n]/.test(s) || s.startsWith("'") ? `"${s.replace(/"/g, '""')}"` : s;
+    return /[",;\r\n]/.test(s) || s.startsWith("'") ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const lines = [['Order', 'Date', 'Customer', 'Status', 'Items', 'Products', 'Sales', 'Discount', 'Coupon', 'Shipping charged', 'Total', 'Item cost', 'Shipping cost', 'Profit'].join(',')];
+  const lines = [W.orders.map(q).join(',')];
   for (const o of r.orders) {
-    lines.push([o.number, localDay(o.createdAt), o.customer, o.status, o.items.length, o.items.map((i) => nameOf(i.productName)).join(' + '), o.subtotal, o.discount, o.coupon || '', o.shipping, o.total, o.itemCost, o.shippingCost, o.profit].map(q).join(','));
+    lines.push([o.number, localDay(o.createdAt), o.customer, W.status[o.status] || o.status, o.items.length, o.items.map((i) => productName(i.productName)).join(' + '), o.subtotal, o.discount, o.coupon || '', o.shipping, o.total, o.itemCost, o.shippingCost, o.profit].map(q).join(','));
   }
   lines.push('');
-  lines.push(['Expenses', 'Date', 'Category', 'Description', 'Amount'].join(','));
-  for (const e of r.expenses) lines.push(['', e.date, e.category, e.description, e.amount].map(q).join(','));
+  lines.push(W.expenses.map(q).join(','));
+  for (const e of r.expenses) lines.push(['', e.date, W.category[e.category] || e.category, e.description, e.amount].map(q).join(','));
   lines.push('');
   const t = r.totals;
-  for (const [k, v] of [['Discounts', t.discounts], ['Revenue', t.revenue], ['Item cost', t.itemCost], ['Shipping cost', t.shippingCost], ['Gross profit', t.grossProfit], ['Expenses', t.expenses], ['Net profit', t.netProfit]]) lines.push([k, v].map(q).join(','));
+  for (const k of ['discounts', 'revenue', 'itemCost', 'shippingCost', 'grossProfit', 'expenses', 'netProfit']) lines.push([W.totals[k], t[k]].map(q).join(','));
   return '﻿' + lines.join('\r\n');
 }
 

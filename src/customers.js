@@ -14,6 +14,7 @@
  */
 const crypto = require('crypto');
 const { normalizeEgyptMobile } = require('./egypt');
+const { customerPasswordProblem } = require('./passwords');
 
 const COOKIE = 'pod_c';
 const SESSION_DAYS = 60;
@@ -119,14 +120,18 @@ function cleanSignup(body) {
   if (name.length < 2 || !/[\p{L}\p{N}]/u.test(name.replace(/\u0640/g, ''))) return { error: 'acctName' };
   if (!phone) return { error: 'badPhone' };
   if (email && (email.length > 200 || !EMAIL_RE.test(email))) return { error: 'badEmail' };
-  const weak = passwordProblem(password);
+  const weak = passwordProblem(password, { name, phone, email });
   if (weak) return { error: weak };
   return { fields: { name, phone, email, password } };
 }
-function passwordProblem(password) {
-  if (password.length < 8) return 'acctPasswordShort';
-  if (password.length > 200) return 'acctPasswordLong';
-  return null;
+/**
+ * Why a new password won't do (a message key), or null: 8 to 200 characters, not a common one ("12345678",
+ * "password1"; the team's list, src/passwords.js), and not the customer's own mobile number (any spelling),
+ * email or name. `who`: the account, or the sign-up's { name, phone, email }. Only when a password is chosen
+ * (sign-up, change, reset): signing in with an older one still works.
+ */
+function passwordProblem(password, who) {
+  return customerPasswordProblem(password, who);
 }
 /** Phone or email typed at sign-in, as stored. */
 function loginKey(login) {
