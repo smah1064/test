@@ -253,3 +253,15 @@ function decodePng(buf) {
 }
 
 module.exports.decodePng = decodePng;
+
+/**
+ * The editor shows a − 1 + counter for one piece (phones, and computers since the owner's go of 26 Nov); the
+ * size-and-colour table is one click away ("Another size too"). Tests that type into the table open it first.
+ */
+async function openQtyTable(page) {
+  await page.waitForSelector('#qty-field .qty-in, #qty-field [data-qgrid]', { timeout: 15000 });
+  const more = await page.$('#qty-field [data-qgrid]');
+  if (more) await more.click();
+  await page.waitForSelector('#qty-field .qty-in', { timeout: 15000 });
+}
+module.exports.openQtyTable = openQtyTable;

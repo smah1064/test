@@ -68,6 +68,7 @@ test('Editor, no size chosen yet: no size box holds the 1; a number typed under 
   try {
     const ctx = await newContext(browser);
     const page = await openEditor(ctx, srv.base, 'tshirt', '&color=white');
+    await require('./helpers').openQtyTable(page); // (the table is one click away: owner's go 26 Nov)
     await page.waitForSelector('#qty-field .qty-in[data-qz="M"]');
     const values = await page.$$eval('#qty-field .qty-in', (els) => els.map((e) => [e.dataset.qz, e.value]));
     assert.ok(values.every(([, v]) => v === ''), JSON.stringify(values));
@@ -103,6 +104,7 @@ test('Editor: several pictures chosen at once all go on the design; a second col
     ]);
     await page.waitForFunction(() => window.__editor.canvas.getObjects().filter((o) => o.type === 'image').length >= 3, null, { timeout: 30000 });
     // Quantities: no size chosen, a second colour.
+    await require('./helpers').openQtyTable(page);
     await page.waitForSelector('#qty-add');
     const second = await page.$eval('#qty-add', (el) => [...el.options].map((o) => o.value).find(Boolean));
     await page.selectOption('#qty-add', second);
