@@ -735,7 +735,9 @@
       const qtyMin = (c) => (c.unit === 'piece' ? 1 : c.step);
       /** Digits as typed (Arabic ones too) to a number of the counter's steps, kept between its least and most. */
       function qtyClamp(c, v) {
-        const n = Number(String(v).replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[^\d]/g, ''));
+        // (Arabic and Persian digits; a decimal mark is one: "2.5" is 2, not 25. QA 26 Nov.)
+        const n = Math.floor(Number(String(v).replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d))
+          .replace(/[٫,]/g, '.').replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1')));
         if (!Number.isFinite(n) || n < 1) return qtyMin(c);
         return Math.min(Math.floor(c.max / c.step) * c.step, Math.max(qtyMin(c), Math.ceil(n / c.step) * c.step));
       }

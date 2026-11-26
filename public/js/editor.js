@@ -5736,9 +5736,14 @@
       if (unpicked && !(c === st.colorId && z === st.sizeId) && g[st.colorId]) delete g[st.colorId][st.sizeId];
       g[c] ||= {};
       // (Typed in Arabic or Persian digits too: a number box would drop those.)
-      const n = String(v || '').replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).replace(/\D/g, '');
+      // (A decimal mark is read as one: "2.5" is 2, not 25 with the mark dropped. QA 26 Nov.)
+      const n = latinNumber(v || '').replace(/-/g, '');
       const asked = Math.floor(Number(n) || 0);
       g[c][z] = Math.max(0, Math.min(1000, asked));
+      if (/[.٫,]/.test(String(v || ''))) {
+        const box = $('qty-field') && $('qty-field').querySelector(`.qty-in[data-qc="${CSS.escape(c)}"][data-qz="${CSS.escape(z)}"]`);
+        if (box) box.value = g[c][z] ? String(Math.min(1000, asked)) : '';
+      }
       // (More than 1,000 in one box: said, with the number put back to 1,000, not changed silently. QA 26 Nov.)
       if (asked > 1000) {
         toast(t('qty.max', { n: POD.num(1000) }), 'error');
