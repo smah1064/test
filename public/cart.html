@@ -67,6 +67,54 @@
       body.has-cart-bar { padding-bottom: 64px; }
       body.has-cart-bar #toast-root { bottom: calc(76px + env(safe-area-inset-bottom)); }
     }
+    /* An item: its price next to its name; "Edit design", "Remove" and a "⋯" menu (Another copy, Save for later) */
+    #items .cart-item { grid-template-columns: 110px minmax(0, 1fr); }
+    .item-head { display: flex; align-items: baseline; justify-content: space-between; gap: 2px 12px; flex-wrap: wrap; margin-bottom: 4px; }
+    .item-head h3 { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+    .item-head .price { margin-inline-start: auto; text-align: end; white-space: nowrap; }
+    #items .cart-item .actions { align-items: center; }
+    .more-wrap { position: relative; }
+    .more-btn { position: relative; min-width: 36px; padding-inline: 6px; font-weight: 800; letter-spacing: 1px; }
+    .more-btn::after { content: ''; position: absolute; inset: -6px -4px; } /* a 44px tap target */
+    .more-menu { position: absolute; top: calc(100% + 6px); inset-inline-end: 0; z-index: 30; display: grid; min-width: 180px; padding: 6px; background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 28px rgba(20, 24, 33, .14); }
+    .more-menu[hidden] { display: none; }
+    .more-menu.flip { inset-inline-end: auto; inset-inline-start: 0; }
+    .more-item { display: flex; align-items: center; min-height: 44px; padding: 0 12px; border: 0; border-radius: 8px; background: none; color: var(--ink); font: inherit; font-size: 14px; font-weight: 600; text-align: start; text-decoration: none; cursor: pointer; white-space: nowrap; }
+    .more-item:hover, .more-item:focus-visible { background: #f3f4f7; }
+    .more-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    @media (max-width: 640px) {
+      #items .cart-item { grid-template-columns: 80px minmax(0, 1fr); gap: 12px; }
+      #items .cart-item .actions .btn-sm:not(.more-btn) { padding-inline: 9px; }
+    }
+    /* A proof not approved yet: a short card, the whole proof one tap away */
+    .proof-short { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 12px; align-items: center; }
+    .proof-short-pic { width: 72px; height: 72px; object-fit: contain; background: #f1f3f6; border-radius: 10px; }
+    .proof-short-text { display: grid; gap: 2px; min-width: 0; justify-items: start; }
+    .proof-short-st { margin: 0; font-size: 14.5px; font-weight: 800; color: var(--ok); }
+    .proof-short-spec { margin: 0; font-size: 13px; color: var(--ink-3); line-height: 1.5; }
+    .proof-more { font-size: 14px; font-weight: 700; padding: 8px 0; min-height: 36px; text-align: start; justify-self: start; }
+    /* "Place order" pressed too early: the box to tick, outlined, with a note */
+    .approve-box.nudge { border-top: 0; padding: 12px; border-radius: 12px; outline: 3px solid #f59e0b; box-shadow: 0 0 0 7px rgba(245, 158, 11, .2); background: #fffdf7; }
+    .nudge-note { display: grid; gap: 2px; margin: 0; padding: 10px 12px; border: 1px solid #f8d28a; border-radius: 10px; background: #fff4dc; color: #7a4a00; font-size: 13.5px; line-height: 1.5; }
+    .nudge-note strong { font-size: 15px; color: #6b3d00; }
+    /* Free shipping: what is left, with a bar (filling from the start side), or "ships free" */
+    .free-ship { margin: 8px 0 0; }
+    .free-ship p { margin: 0; }
+    .free-msg { font-size: 13.5px; color: var(--ink-2); line-height: 1.5; }
+    .free-msg b { color: var(--accent); }
+    .free-bar { height: 8px; margin: 6px 0 2px; border-radius: 999px; background: #eceef2; overflow: hidden; }
+    .free-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
+    .free-more { display: inline-block; padding: 6px 0; font-size: 13.5px; font-weight: 700; color: var(--accent); }
+    .free-done { font-size: 14px; font-weight: 700; color: var(--ok); }
+    /* My saved designs, under the items: one line that opens in place */
+    #items + .saved-box { margin-top: 12px; }
+    .saved-box.saved-compact { padding: 14px 16px; }
+    .saved-line { display: flex; align-items: center; justify-content: space-between; gap: 10px 12px; }
+    .saved-line-text { min-width: 0; }
+    .saved-line .saved-title { margin: 0; }
+    .saved-sum { margin: 2px 0 0; overflow-wrap: anywhere; }
+    .saved-open { flex: none; min-height: 40px; }
+    .saved-list { margin-top: 10px; }
     /* "Removed from your cart. Undo" */
     .toast-undo { display: flex; align-items: center; gap: 14px; white-space: nowrap; }
     .toast-undo button { background: none; border: 0; padding: 6px 4px; margin: -6px -4px; color: #fff; font: inherit; font-weight: 800; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
@@ -103,6 +151,9 @@
     <div class="cart-layout" id="cart-layout" hidden>
       <div>
         <div class="card" id="items"></div>
+        <!-- My saved designs: ones kept out of this order and ones not finished yet (public/js/saved-designs.js).
+             Under the items as one short line that opens in place; with an empty cart it moves above, open. -->
+        <section class="card saved-box" id="saved" hidden></section>
         <p class="muted small" style="margin-top:12px" id="cart-note" data-i18n-html="cart.note"></p>
       </div>
 
@@ -142,16 +193,14 @@
         <div class="line"><span data-i18n="checkout.shipping"></span><span id="shipping"></span></div>
         <div class="line" id="express-line" hidden><span data-i18n="delivery.expressFee"></span><span id="express-fee"></span></div>
         <div class="line total"><span data-i18n="checkout.total"></span><span id="total"></span></div>
-        <p class="muted small" id="free-note" style="margin:6px 0 0"></p>
+        <!-- Free shipping: how much is left (with a bar), or that the order ships free -->
+        <div class="free-ship" id="free-note" hidden></div>
         <div class="pay-box"><strong data-i18n="checkout.cod"></strong><span data-i18n="checkout.codText"></span></div>
         <div class="captcha-box" id="cap-order"></div>
         <p class="approve-status" id="approve-status" aria-live="polite"></p>
-        <button class="btn btn-primary btn-lg btn-block" id="place-order" type="submit" data-i18n="checkout.place" disabled aria-describedby="approve-status"></button>
+        <button class="btn btn-primary btn-lg btn-block" id="place-order" type="submit" data-i18n="checkout.place" aria-describedby="approve-status"></button>
       </form>
     </div>
-
-    <!-- My saved designs: ones kept out of this order and ones not finished yet (public/js/saved-designs.js) -->
-    <section class="card saved-box" id="saved" hidden></section>
   </main>
 
   <!-- Phones: the total and the way to the order form, always at hand on a long cart -->
@@ -437,6 +486,45 @@
         updateApproval();
         return entry.promise;
       }
+      // The item whose approval box "Place order" pointed to (pressed before every proof was approved).
+      let nudged = null;
+      /** "White، 325 ml، Sublimation": the proof's colour and size (or its pieces), and how it is printed. */
+      function proofSpecLine(proof) {
+        const lines = Array.isArray(proof.quantities) ? proof.quantities.filter((l) => l && Number(l.qty) > 0) : [];
+        const parts = [];
+        if (lines.length > 1) {
+          const copies = POD.packCopies(lines);
+          parts.push(copies != null ? POD.plural(POD.packWord(lines), copies) : piecesText(PODProof.pieces(proof)));
+        } else {
+          const one = lines[0];
+          const color = (one && one.color) || proof.color || {};
+          const size = (one && one.size) || proof.size || {};
+          if (tr(color.name)) parts.push(tr(color.name));
+          if (tr(size.label)) parts.push(tr(size.label));
+        }
+        // (The same ways of printing as the full proof lists.)
+        const procs = [...new Set([proof.method === 'embroidery' ? 'embroidery' : proof.process, ...(proof.sides || []).map((s) => s.process)].filter(Boolean))]
+          .map((p) => 'proof.process.' + p).filter((k) => t(k) !== k);
+        if (procs.length) parts.push(procs.map((k) => t(k)).join(' + '));
+        return parts.map(esc).join(SEP());
+      }
+      /** An unapproved proof, short: picture, the checks' verdict (a warning or problem in full), spec line, "See proof details". */
+      function shortProofHtml(proof, item, i) {
+        const pf = proof.preflight || {};
+        const status = ['warn', 'fail'].includes(pf.status) ? pf.status : 'pass';
+        const plain = status === 'pass' && !(proof.review && proof.review.needed);
+        const spec = proofSpecLine(proof);
+        return `
+              <div class="proof-short">
+                <img class="proof-short-pic" src="${esc(item.previewUrl)}" alt="" loading="lazy">
+                <div class="proof-short-text">
+                  ${plain ? `<p class="proof-short-st">✓ ${esc(t('proof.st.pass'))}</p>` : ''}
+                  ${spec ? `<p class="proof-short-spec">${spec}</p>` : ''}
+                  <button class="link-btn proof-toggle proof-more" type="button" id="tog-${i}" data-proof-toggle="${esc(item.designId)}" aria-expanded="false">${esc(t('cart.proofDetails'))}</button>
+                </div>
+              </div>
+              ${plain ? '' : PODProof.checksHtml(proof)}`;
+      }
       function proofSlot(item, i) {
         const id = item.designId;
         const st = proofs.get(id);
@@ -453,6 +541,19 @@
           const sample = Boolean(a && a.sample);
           const photos = Array.isArray(proof.photos);
           const sampleBy = sample && quote && quote.delivery && quote.delivery.sampleDays ? quote.delivery.by : null;
+          // "Tick this first": Place order was pressed while this proof wasn't approved (cleared once it is).
+          const nudge = nudged === id && !ok;
+          const nudgeNote = nudge ? `<p class="nudge-note" role="alert"><strong>${esc(t('cart.tickFirst'))}</strong><span>${esc(t('cart.tickFirstText'))}</span></p>` : '';
+          const approveBox = (note) => `
+              <div class="approve-box${nudge ? ' nudge' : ''}">
+                ${nudgeNote}
+                ${note}
+                <label class="approve-check" for="ok-${i}"><input type="checkbox" id="ok-${i}" data-approve="${esc(id)}"${ok ? ' checked' : ''}><span>${esc(t(photos ? 'proof.okPhotos' : 'proof.ok'))}</span></label>
+                ${PODProof.pieces(proof) > 1 && !photos ? `<label class="approve-check sample" for="sample-${i}"><input type="checkbox" id="sample-${i}" data-sample="${esc(id)}"${sample ? ' checked' : ''}><span>${esc(t('proof.sample'))}</span></label>` : ''}
+                ${sampleBy ? `<p class="sample-date" role="status">${esc(t('cart.sampleDate', { date: POD.day(sampleBy) }))}</p>` : ''}
+                ${ok ? `<button class="btn btn-sm proof-toggle" type="button" id="tog-${i}" data-proof-toggle="${esc(id)}" aria-expanded="true">${esc(t('proof.hide'))}</button>` : ''}
+              </div>`;
+          const changedNote = changed.has(id) ? `<p class="approve-changed" role="alert">${esc(t('proof.changed'))}</p>` : '';
           if (ok && !expanded.has(id)) {
             // Checked: one line (the box stays here to untick; the proof opens on demand).
             body = `
@@ -461,17 +562,19 @@
                 ${sample ? `<span class="item-sample">${esc(t('item.sampleFirst'))}</span>` : ''}
                 <button class="btn btn-sm proof-toggle" type="button" id="tog-${i}" data-proof-toggle="${esc(id)}" aria-expanded="false">${esc(t('proof.show'))}</button>
               </div>`;
+          } else if (!ok && !photos && !expanded.has(id)) {
+            // Not approved yet: a short card (picture, the checks' verdict, colour · size · printing), the whole
+            // proof one tap away. A warning or a problem is never folded away: its box is shown here in full.
+            body = `
+              ${changedNote}
+              ${shortProofHtml(proof, item, i)}
+              ${approveBox(PODProof.screenNote())}`;
           } else {
             body = `
-              ${changed.has(id) ? `<p class="approve-changed" role="alert">${esc(t('proof.changed'))}</p>` : ''}
+              ${changedNote}
+              ${!ok && !photos ? `<button class="link-btn proof-toggle proof-more" type="button" id="tog-${i}" data-proof-toggle="${esc(id)}" aria-expanded="true">${esc(t('cart.proofDetailsHide'))}</button>` : ''}
               ${photos ? photoProofHtml(proof, cartItemOf(id)) : PODProof.html(proof)}
-              <div class="approve-box">
-                ${photos ? photoNote() : PODProof.screenNote()}
-                <label class="approve-check" for="ok-${i}"><input type="checkbox" id="ok-${i}" data-approve="${esc(id)}"${ok ? ' checked' : ''}><span>${esc(t(photos ? 'proof.okPhotos' : 'proof.ok'))}</span></label>
-                ${PODProof.pieces(proof) > 1 && !photos ? `<label class="approve-check sample" for="sample-${i}"><input type="checkbox" id="sample-${i}" data-sample="${esc(id)}"${sample ? ' checked' : ''}><span>${esc(t('proof.sample'))}</span></label>` : ''}
-                ${sampleBy ? `<p class="sample-date" role="status">${esc(t('cart.sampleDate', { date: POD.day(sampleBy) }))}</p>` : ''}
-                ${ok ? `<button class="btn btn-sm proof-toggle" type="button" id="tog-${i}" data-proof-toggle="${esc(id)}" aria-expanded="true">${esc(t('proof.hide'))}</button>` : ''}
-              </div>`;
+              ${approveBox(photos ? photoNote() : PODProof.screenNote())}`;
           }
         }
         const folded = ok && st && st.state === 'ok' && !expanded.has(id);
@@ -492,7 +595,8 @@
         if (meta) meta.innerHTML = itemMeta(cart[i]);
         if (focused && document.getElementById(focused)) document.getElementById(focused).focus({ preventScroll: true });
       }
-      /** "Place order" only once every item's current proof is approved. */
+      /** The order is placed only once every item's current proof is approved ("Place order" always looks ready: pressed
+          too early, it points to the box to tick). It is truly disabled only while an order is being placed. */
       function updateApproval() {
         const cart = POD.getCart();
         const stuck = blockedIn(cart);
@@ -500,7 +604,7 @@
         const done = orderable.filter((it) => isApproved(it.designId)).length;
         const all = cart.length > 0 && !stuck.length && done === cart.length;
         const btn = document.getElementById('place-order');
-        if (!placing) btn.disabled = !all;
+        if (!placing) btn.disabled = false;
         const status = document.getElementById('approve-status');
         status.classList.toggle('done', all);
         status.classList.toggle('blocked', stuck.length > 0);
@@ -524,6 +628,19 @@
         if (b) b.focus({ preventScroll: true });
         return true;
       }
+      /** "Place order" pressed with a proof not approved yet: its box is shown, outlined, with "Tick this first", and focused. */
+      function nudgeProof() {
+        const next = POD.getCart().find((it) => !blocked.has(it.designId) && !isApproved(it.designId));
+        if (!next || !proofOf(next.designId)) return goToNextProof(); // (still loading, or failed: its own message)
+        nudged = next.designId;
+        paintProof(next.designId);
+        const slot = slotOf(next.designId);
+        const box = slot && slot.querySelector('.approve-box');
+        const tick = slot && slot.querySelector('[data-approve]');
+        if (!box || !tick) return goToNextProof();
+        box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        tick.focus({ preventScroll: true });
+      }
       function goToNextProof() {
         const cart = POD.getCart();
         const next = cart.find((it) => !isApproved(it.designId));
@@ -538,7 +655,13 @@
 
       /** "My saved designs" under the cart (also when the cart itself is empty): kept out of this order, or not finished yet. */
       function renderSaved() {
-        PODSaved.render(document.getElementById('saved'), {
+        // Right under the cart's items, as one line that opens in place; with an empty cart, the whole list where the cart was.
+        const box = document.getElementById('saved');
+        const full = POD.getCart().length > 0;
+        const home = document.getElementById(full ? 'items' : 'device-orders');
+        if (home.nextElementSibling !== box) home.after(box);
+        PODSaved.render(box, {
+          compact: full,
           meta: itemMeta,
           price: itemPrice,
           unavailable: (it) => savedBlocked.get(it.designId) || '',
@@ -575,6 +698,68 @@
         if (changed || before !== JSON.stringify([...savedBlocked])) renderSaved();
       }
 
+      /**
+       * "Edit design" and "Remove" on the item; "Another copy" and "Save for later" in its "⋯" menu (only what applies;
+       * no menu when nothing does). An item the shop can't make now keeps "Save for later" in sight: it is the way on.
+       */
+      function itemActions(item, i) {
+        const editable = item.productId !== 'dtfsheet' && item.productId !== 'photoprints';
+        const edit = !editable ? '' : item.bookId
+          ? `<a class="btn btn-sm" href="/book?b=${encodeURIComponent(item.bookId)}&cart=${i}">${esc(t('cart.edit'))}</a>`
+          : `<a class="btn btn-sm" href="/editor?design=${encodeURIComponent(item.designId)}&cart=${i}">${esc(t('cart.edit'))}</a>`;
+        const later = `<button class="btn btn-sm" type="button" data-later="${esc(item.designId)}">${esc(t('cart.saveLater'))}</button>`;
+        const stuck = blocked.has(item.designId);
+        const menu = [
+          editable && !item.bookId ? `<a class="more-item" href="/editor?design=${encodeURIComponent(item.designId)}">${esc(t('cart.duplicate'))}</a>` : '',
+          stuck ? '' : `<button class="more-item" type="button" data-later="${esc(item.designId)}">${esc(t('cart.saveLater'))}</button>`,
+        ].filter(Boolean);
+        const open = openMenu === item.designId && menu.length > 0;
+        return `
+              <div class="actions">
+                ${edit}
+                ${stuck ? later : ''}
+                <button class="btn btn-sm btn-danger" type="button" id="rm-${i}" data-remove="${i}">${esc(t('cart.remove'))}</button>
+                ${menu.length ? `<div class="more-wrap">
+                  <button class="btn btn-sm more-btn" type="button" id="more-${i}" data-more="${esc(item.designId)}" aria-label="${esc(t('cart.more'))}" aria-haspopup="true" aria-expanded="${open}" aria-controls="more-menu-${i}"><span aria-hidden="true">⋯</span></button>
+                  <div class="more-menu" id="more-menu-${i}"${open ? '' : ' hidden'}>${menu.join('')}</div>
+                </div>` : ''}
+              </div>`;
+      }
+      // The item whose "⋯" menu is open (kept open when the cart is drawn again, e.g. today's prices arriving).
+      let openMenu = null;
+      /** Open one item's "⋯" menu (null: close it); `focus` the first choice, or back on the "⋯" button when closing. */
+      function setMenu(id, { focus = false } = {}) {
+        const was = openMenu;
+        openMenu = id;
+        document.querySelectorAll('[data-more]').forEach((b) => {
+          const on = b.dataset.more === id;
+          b.setAttribute('aria-expanded', String(on));
+          const menu = document.getElementById(b.getAttribute('aria-controls'));
+          if (!menu) return;
+          menu.hidden = !on;
+          menu.classList.remove('flip');
+          if (on) {
+            // Kept on the screen: opens towards the other side when it would stick out.
+            const r = menu.getBoundingClientRect();
+            if (r.left < 8 || r.right > document.documentElement.clientWidth - 8) menu.classList.add('flip');
+            if (focus) { const first = menu.querySelector('.more-item'); if (first) first.focus(); }
+          } else if (focus && b.dataset.more === was) b.focus();
+        });
+      }
+      document.addEventListener('click', (e) => {
+        if (openMenu && !e.target.closest('.more-wrap')) setMenu(null);
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape' || !openMenu) return;
+        const inside = document.activeElement && document.activeElement.closest && document.activeElement.closest('.more-wrap');
+        setMenu(null, { focus: Boolean(inside) });
+      });
+      // Tabbing out of an open menu closes it.
+      document.getElementById('items').addEventListener('focusout', (e) => {
+        const wrap = e.target.closest && e.target.closest('.more-wrap');
+        if (wrap && openMenu && e.relatedTarget && !wrap.contains(e.relatedTarget)) setMenu(null);
+      });
+
       function render() {
         renderSaved();
         const cart = POD.getCart();
@@ -590,22 +775,17 @@
           <div class="cart-item">
             <img src="${esc(item.previewUrl)}" alt="${esc(t('cart.preview', { product: tr(item.productName) }))}">
             <div>
-              <h3>${esc(tr(item.productName))}${blocked.has(item.designId) ? ` <span class="saved-state blocked">${esc(t('cart.blocked'))}</span>` : ''}</h3>
+              <div class="item-head"><h3>${esc(tr(item.productName))}${blocked.has(item.designId) ? ` <span class="saved-state blocked">${esc(t('cart.blocked'))}</span>` : ''}</h3><div class="price">${itemPrice(item)}</div></div>
               <div class="meta" data-meta-for="${esc(item.designId)}">${itemMeta(item)}</div>
               ${blocked.has(item.designId) ? `<div class="cart-unavail" role="alert"><strong>${esc(blocked.get(item.designId))}</strong> ${(outOfShop.get(item.designId) || {}).similar
     ? `<a class="cart-similar" href="${esc(outOfShop.get(item.designId).similar)}">${esc(POD.similarLabel(outOfShop.get(item.designId).similar))}</a>`
     : `<span>${(outOfShop.get(item.designId) || {}).backOn ? `${esc(t('avail.backOnLong', { date: POD.backOnDay(outOfShop.get(item.designId).backOn) }))} ` : ''}${esc(t(cart.some((x) => !blocked.has(x.designId)) ? 'cart.blockedHint' : 'cart.blockedHintOnly'))}</span>`}</div>` : ''}
-              <div class="actions">
-                ${item.productId === 'dtfsheet' || item.productId === 'photoprints' ? '' : item.bookId ? `<a class="btn btn-sm" href="/book?b=${encodeURIComponent(item.bookId)}&cart=${i}">${esc(t('cart.edit'))}</a>` : `<a class="btn btn-sm" href="/editor?design=${encodeURIComponent(item.designId)}&cart=${i}">${esc(t('cart.edit'))}</a>
-                ${item.bookId ? '' : `<a class="btn btn-sm" href="/editor?design=${encodeURIComponent(item.designId)}">${esc(t('cart.duplicate'))}</a>`}`}
-                <button class="btn btn-sm" data-later="${esc(item.designId)}">${esc(t('cart.saveLater'))}</button>
-                <button class="btn btn-sm btn-danger" id="rm-${i}" data-remove="${i}">${esc(t('cart.remove'))}</button>
-              </div>
+              ${itemActions(item, i)}
             </div>
-            <div class="price">${itemPrice(item)}</div>
           </div>
           ${blocked.has(item.designId) ? '' : proofSlot(item, i)}
           </div>`).join('');
+        if (openMenu) setMenu(cart.some((it) => it.designId === openMenu) ? openMenu : null);
         if (focused && document.getElementById(focused)) document.getElementById(focused).focus();
         for (const item of cart) if (!proofs.has(item.designId) && !blocked.has(item.designId)) loadProof(item.designId);
         updateApproval();
@@ -652,7 +832,34 @@
         document.getElementById('bar-total').textContent = money(render.total);
         updateBar();
         document.getElementById('total').textContent = money(render.total);
-        document.getElementById('free-note').textContent = baseShipping ? t('checkout.freeOver', { price: money(freeOver) }) : '';
+        renderFreeShip(orderable.length > 0, subtotal, freeOver, baseShipping);
+      }
+      /** Free shipping: "EGP 1,250 more for free shipping 🚚" with a bar and "Add another item", or "✓ Your order ships free". */
+      function renderFreeShip(any, subtotal, freeOver, baseShipping) {
+        const box = document.getElementById('free-note');
+        const over = Number(freeOver) || 0;
+        const left = Math.round((over - subtotal) * 100) / 100;
+        if (!any) {
+          // Nothing that can be ordered: no shipping to speak of.
+          box.hidden = true;
+          box.innerHTML = '';
+        } else if (!baseShipping) {
+          box.hidden = false;
+          box.innerHTML = `<p class="free-done">${esc(t('cart.freeDone'))}</p>`;
+        } else if (over > 0 && left > 0) {
+          const share = Math.max(0, Math.min(100, (subtotal / over) * 100));
+          const MARK = '\u0001';
+          const text = t('cart.freeLeft', { amount: money(left) });
+          box.hidden = false;
+          box.innerHTML = `
+            <p class="free-msg">${esc(t('cart.freeLeft', { amount: MARK })).replace(MARK, `<b>${esc(money(left))}</b>`)}</p>
+            <div class="free-bar" role="progressbar" aria-label="${esc(t('cart.freeBar'))}" aria-valuemin="0" aria-valuemax="${over}" aria-valuenow="${Math.min(subtotal, over)}" aria-valuetext="${esc(text)}"><span style="width:${share.toFixed(1)}%"></span></div>
+            <a class="free-more" href="/#products">${esc(t('cart.freeMore'))}</a>`;
+        } else {
+          // Shipping charged although the subtotal reaches the free-shipping amount (the shop's own answer): its rule as it is.
+          box.hidden = !over;
+          box.innerHTML = over ? `<p class="muted small">${esc(t('checkout.freeOver', { price: money(over) }))}</p>` : '';
+        }
       }
 
       // Today's prices from the shop (the cart keeps the price from when an item was added).
@@ -800,7 +1007,10 @@
         if (box.dataset.approve) a.ok = box.checked;
         else a.sample = box.checked;
         approvals.set(id, a);
-        if (box.dataset.approve && box.checked) changed.delete(id);
+        if (box.dataset.approve && box.checked) {
+          changed.delete(id);
+          if (nudged === id) nudged = null;
+        }
         saveApprovals();
         updateApproval();
         if (box.dataset.approve) {
@@ -821,6 +1031,12 @@
         if (e.target.closest('[data-next-blocked]')) goToBlocked();
       });
       document.getElementById('items').addEventListener('click', (e) => {
+        const more = e.target.closest('[data-more]');
+        if (more) {
+          setMenu(openMenu === more.dataset.more ? null : more.dataset.more, { focus: e.detail === 0 });
+          return;
+        }
+        if (e.target.closest('.more-item')) openMenu = null;
         const tog = e.target.closest('[data-proof-toggle]');
         if (tog) {
           const id = tog.dataset.proofToggle;
@@ -977,16 +1193,15 @@
         e.preventDefault();
         // The shop's refusals come in the language they were asked in.
         const askedIn = POD.lang;
-        const bad = checkFields();
-        if (bad) return goToField(bad);
+        if (placing) return;
+        // As the phones' bar: items that can't be ordered now, then proofs left to approve, then the form's fields.
         if (blockedIn(POD.getCart()).length) {
           goToBlocked();
           return POD.toast(blocked.get(blockedIn(POD.getCart())[0].designId), 'error');
         }
-        if (!POD.getCart().every((it) => isApproved(it.designId))) {
-          goToNextProof();
-          return POD.toast(t('checkout.approvalRequired'), 'error');
-        }
+        if (!POD.getCart().every((it) => isApproved(it.designId))) return nudgeProof();
+        const bad = checkFields();
+        if (bad) return goToField(bad);
         const btn = document.getElementById('place-order');
         placing = true;
         btn.disabled = true;
