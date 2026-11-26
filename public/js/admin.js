@@ -413,7 +413,10 @@
   function address(c) {
     if (c.governorate || c.address) {
       // City and governorate with the page's comma: "Dokki, Giza" / «الدقي، الجيزة» (not "Dokki، Giza" in English).
-      return [c.name, c.address, [c.city, tr(c.governorateName)].filter(Boolean).join(POD.lang === 'ar' ? '، ' : ', '), c.notes ? `(${c.notes})` : ''].filter(Boolean).map(line).join('<br>');
+      // (Only the city typed by the customer is isolated: «Maadi، القاهرة» reads city then governorate in Arabic too,
+      // as on the invoice. QA 26 Nov.)
+      const place = [c.city ? line(c.city) : '', c.governorateName ? esc(tr(c.governorateName)) : ''].filter(Boolean).join(POD.lang === 'ar' ? '، ' : ', ');
+      return [...[c.name, c.address].filter(Boolean).map(line), place, ...(c.notes ? [line(`(${c.notes})`)] : [])].filter(Boolean).join('<br>');
     }
     // Orders placed before the Egypt checkout.
     return [c.name, c.address1, c.address2, [c.city, c.region, c.postalCode].filter(Boolean).join(' '), c.country].filter(Boolean).map(line).join('<br>');

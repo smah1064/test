@@ -19,7 +19,10 @@ async function guestOrder(base) {
   await fetch(`${base}/api/designs/${d.id}/complete`, { method: 'POST', headers: { 'x-upload-token': d.uploadToken } });
   const q = await post('/api/cart/quote', { designIds: [d.id] });
   const approvals = { [d.id]: { proofHash: (await (await fetch(`${base}/api/designs/${d.id}/proof`)).json()).proofHash } };
-  return post('/api/orders', { customer: { name: 'سارة محمود', phone: '01055556666', governorate: 'giza', city: 'الدقي', address: '٥ شارع النيل' }, designIds: [d.id], expectedTotal: q.total, approvals, orderKey: `cart-${Date.now()}` });
+  const r = await fetch(`${base}/api/orders`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customer: { name: 'سارة محمود', phone: '01055556666', governorate: 'giza', city: 'الدقي', address: '٥ شارع النيل' }, designIds: [d.id], expectedTotal: q.total, approvals, orderKey: `cart-${Date.now()}` }) });
+  // (The browser it was placed from keeps this cookie: only there is "Save your orders" offered.)
+  const here = (r.headers.getSetCookie() || []).map((c) => c.split(';')[0]).find((c) => c.startsWith('pod_orders='));
+  return { ...(await r.json()), here: here ? here.slice('pod_orders='.length) : '' };
 }
 
 test('"Save your orders" on the order page makes the account with a password only; the account page says why', { timeout: 120000 }, async () => {
@@ -28,7 +31,18 @@ test('"Save your orders" on the order page makes the account with a password onl
   try {
     const order = await guestOrder(srv.base);
     assert.ok(order.id && order.key, JSON.stringify(order));
+    // Someone the order link was shared with (another browser): the order opens, with no offer and no mobile.
+    const other = await newContext(browser);
+    const op = await other.newPage();
+    await op.goto(`${srv.base}/order?id=${order.id}&k=${order.key}`);
+    await op.waitForSelector('h1');
+    await op.waitForTimeout(800);
+    assert.strictEqual(await op.locator('.acct-offer').count(), 0, 'no "Save your orders" for whoever has the link');
+    await other.close();
+
+    // The customer's own browser (the one the order was placed from).
     const ctx = await newContext(browser);
+    await ctx.addCookies([{ name: 'pod_orders', value: order.here, domain: new URL(srv.base).hostname, path: '/api/orders' }]);
     await ctx.addInitScript(() => { try { localStorage.setItem('pod-lang', 'ar'); } catch (e) { /* none */ } });
     const page = await ctx.newPage();
     const errors = [];

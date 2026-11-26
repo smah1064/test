@@ -3999,11 +3999,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
 
   // ---------- After a guest order: keep it on a new account (owner's OK, UX item 8, 26 Nov) ----------
   // The order page offers "Save your orders": the order's own name, mobile and email, and a password typed there.
-  /** The guest who placed this order: with its link's key or on the browser it was ordered from (not an old number-only link). */
+  /**
+   * The guest who placed this order: on the browser it was ordered from only. The order's link alone isn't enough: the
+   * order page invites sharing it ("send me the order link on WhatsApp"), and whoever had it could make the
+   * customer's account with their mobile and lock them out of it. (QA 26 Nov.)
+   */
   function guestOwnerOf(req, order) {
     if (!order || order.customerId || !order.linkKey || !order.customer || !order.customer.phone) return false;
-    const k = String(req.get('x-order-key') || '');
-    if (LINK_KEY_RE.test(k) && sameSecret(k, order.linkKey)) return true;
     return ordersHere(req).some(([id, key]) => id === order.id && sameSecret(key, order.linkKey));
   }
   /** The offer, when it applies: a guest's order, nobody signed in here, and no account with that mobile yet. */

@@ -714,7 +714,7 @@ window.POD_STRINGS = {
   'share.copied': ['Link copied', 'الرابط اتنسخ'],
   'share.more': ['Share…', 'مشاركة…'],
   'share.refresh': ['Check replies', 'تحديث الردود'],
-  'share.message': ['What do you think of my design? 👕 {url}', 'إيه رأيك في تصميمي؟ 👕 {url}'],
+  'share.message': ['What do you think of my design? ✨ {url}', 'إيه رأيك في تصميمي؟ ✨ {url}'],
   'share.creating': ['Making your link…', 'بنعمل الرابط…'],
   'share.loaded': ['Opened a copy of the shared design.', 'اتفتحت نسخة من التصميم المشارَك.'],
   'ai.tool': ['AI', 'ذكاء'],

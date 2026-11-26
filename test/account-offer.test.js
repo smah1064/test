@@ -2,7 +2,8 @@
 
 // After a guest order, the order page offers "Save your orders": a new account from the order's own name and
 // mobile, with a password typed there; the order (and this browser's other guest orders from that mobile) go on
-// it (owner's OK, UX item 8, 26 Nov). Only with the order's key, never for a mobile that already has an account.
+// it (owner's OK, UX item 8, 26 Nov). Only on the browser the order was placed from (the order's shared link alone
+// isn't enough: QA 26 Nov), never for a mobile that already has an account.
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -57,19 +58,21 @@ async function makeDesign(headers = {}) {
   assert.strictEqual(done.status, 200);
   return id;
 }
-async function placeOrder(headers = {}) {
+async function placeOrder(headers = {}, customer = CUSTOMER) {
   const ids = [await makeDesign(headers), await makeDesign(headers)];
   const q = (await call('/api/cart/quote', 'POST', { designIds: ids })).json;
-  const o = await call('/api/orders', 'POST', { customer: CUSTOMER, designIds: ids, expectedTotal: q.total, orderKey: `cart-${Date.now()}-${Math.random().toString(36).slice(2, 10)}` }, null, headers);
+  const o = await call('/api/orders', 'POST', { customer, designIds: ids, expectedTotal: q.total, orderKey: `cart-${Date.now()}-${Math.random().toString(36).slice(2, 10)}` }, null, headers);
   assert.strictEqual(o.status, 201, o.text);
-  return o.json;
+  // (The browser the order was placed from: its pod_orders cookie.)
+  const here = (o.headers.getSetCookie() || []).map((c) => c.split(';')[0]).find((c) => c.startsWith('pod_orders='));
+  return { ...o.json, here };
 }
 
 const cookieFrom = (r) => (r.headers.getSetCookie() || []).map((c) => c.split(';')[0]).find((c) => /^pod_c(ust)?[a-z_]*=/.test(c) && !c.endsWith('='));
 
 test('a guest order offers an account; the password alone makes it, the order is on it, and the offer is gone', async () => {
   const order = await placeOrder();
-  const key = { 'x-order-key': order.key };
+  const key = { Cookie: order.here };
   const seen = await call(`/api/orders/${order.id}`, 'GET', undefined, null, key);
   assert.strictEqual(seen.status, 200, seen.text);
   assert.deepStrictEqual(seen.json.accountOffer, { phone: '01033334444' });
@@ -100,9 +103,21 @@ test('a guest order offers an account; the password alone makes it, the order is
 
 test('a mobile that already has an account: no offer, and no second account', async () => {
   const order = await placeOrder();
-  const key = { 'x-order-key': order.key };
+  const key = { Cookie: order.here };
   assert.strictEqual((await call(`/api/orders/${order.id}`, 'GET', undefined, null, key)).json.accountOffer, undefined);
   const again = await call(`/api/orders/${order.id}/account`, 'POST', { password: 'another-long-pass' }, null, key);
   assert.strictEqual(again.status, 409);
   assert.strictEqual(again.json.code, 'acctPhoneTaken');
+});
+
+test('the order\'s link alone (shared on WhatsApp, opened elsewhere): the order shows, but no offer and no account', async () => {
+  const order = await placeOrder({}, { ...CUSTOMER, phone: '01077778888', email: '' });
+  const link = { 'x-order-key': order.key };
+  const seen = await call(`/api/orders/${order.id}`, 'GET', undefined, null, link);
+  assert.strictEqual(seen.status, 200, seen.text);
+  assert.strictEqual(seen.json.accountOffer, undefined, 'no offer and no mobile for whoever has the link');
+  const made = await call(`/api/orders/${order.id}/account`, 'POST', { password: 'someone-elses-pass' }, null, link);
+  assert.strictEqual(made.status, 403);
+  // The customer, on their own browser, still can.
+  assert.ok((await call(`/api/orders/${order.id}`, 'GET', undefined, null, { Cookie: order.here })).json.accountOffer);
 });

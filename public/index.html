@@ -453,10 +453,14 @@
       // pink, burgundy for maroon (both نبيتي).
       const COLOR_SAME = ['أسود سوداء سودا', 'أبيض بيضاء بيضا', 'أحمر حمراء حمرا', 'أخضر خضراء خضرا', 'أزرق زرقاء زرقا', 'أصفر صفراء صفرا',
         'grey gray رمادي رصاصي', 'sand beige بيج', 'دهبي ذهبي', 'pink وردي بمبي بينك', 'maroon burgundy نبيتي'];
+      // One way only: a navy product is found by "blue" (a blue one isn't found by "navy").
+      const COLOR_ALSO = [['navy كحلي', 'blue أزرق زرقاء زرقا ازرق dark غامق']];
       const colorWords = (p) => {
         const names = (p.colors || []).flatMap((c) => [c.name && c.name.en, c.name && c.name.ar]).filter(Boolean).map((n) => n.split(/[(:,،]/)[0]).join(' ');
         const ws = ` ${norm(names)} `;
-        return [names, ...COLOR_SAME.filter((g) => norm(g).split(' ').some((w) => ws.includes(` ${w} `)))].join(' ');
+        // (Navy is a blue: "blue t-shirt", "تيشرت ازرق", "dark blue hoodie" find the navy ones too. QA 26 Nov.)
+        const also = COLOR_ALSO.filter(([from]) => norm(from).split(' ').some((w) => ws.includes(` ${w} `))).map(([, add]) => add);
+        return [names, ...COLOR_SAME.filter((g) => norm(g).split(' ').some((w) => ws.includes(` ${w} `))), ...also].join(' ');
       };
       const hay = new Map(products.map((p) => {
         const name = `${p.name.en} ${p.name.ar}`;

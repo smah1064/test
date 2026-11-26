@@ -195,7 +195,7 @@ test('thread colours are counted: لون خيط واحد، لونين خيط، �
 // ---------- The address comma ----------
 test("the admin's address joins city and governorate with the page's comma", () => {
   const src = ADMIN.match(/function address\(c\) \{[\s\S]*?\n  \}/)[0];
-  const run = (lang) => vm.runInNewContext(`${src}\naddress`, { POD: { lang }, tr: (v) => (v && typeof v === 'object' ? v[lang] : v), line: (v) => v });
+  const run = (lang) => vm.runInNewContext(`${src}\naddress`, { POD: { lang }, tr: (v) => (v && typeof v === 'object' ? v[lang] : v), line: (v) => v, esc: (v) => v });
   const c = { name: 'Ali', address: '5 Road 9', city: 'Dokki', governorate: 'giza', governorateName: { en: 'Giza', ar: 'الجيزة' } };
   assert.strictEqual(run('en')(c), 'Ali<br>5 Road 9<br>Dokki, Giza');
   assert.strictEqual(run('ar')({ ...c, city: 'الدقي' }), 'Ali<br>5 Road 9<br>الدقي، الجيزة');

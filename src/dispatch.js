@@ -126,6 +126,8 @@ const METHOD_NAMES = {
   canvas: { en: 'Canvas printing', ar: 'طباعة كانفاس' },
   textile: { en: 'Textile roll printing', ar: 'طباعة أقمشة (رول)' },
   embroidery: { en: 'Embroidery', ar: 'تطريز' },
+  engrave: { en: 'Laser engraving', ar: 'حفر بالليزر' },
+  lasercut: { en: 'Laser cutting', ar: 'قص بالليزر' },
   photo: { en: 'Photo prints (photo paper)', ar: 'طباعة صور (ورق فوتوغرافي)' },
   book: { en: 'Printed book', ar: 'كتاب مطبوع' },
 };
