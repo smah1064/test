@@ -3809,6 +3809,17 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const all = store.db.coupons || [];
     return all.find((c) => c.code === n) || (looseCode(n).length >= 3 && all.find((c) => looseCode(c.code) === looseCode(n))) || null;
   };
+  /**
+   * A code already saved, or one that differs from a saved one only by its dashes or underscores, is refused: the cart
+   * takes "EID2026" for EID-2026, so EID2026 saved beside it gave a different discount (Tester 2, 26 Nov). A code kept
+   * as it was (`was`, two made before this check) can still be edited.
+   */
+  const couponClash = (list, code, { id = null, was = null } = {}) => {
+    if (list.some((c) => c.id !== id && c.code === code)) throw new HttpError(409, 'couponExists');
+    if (code === was) return;
+    const alike = list.find((c) => c.id !== id && looseCode(c.code) === looseCode(code));
+    if (alike) throw new HttpError(409, 'couponAlike', { code: alike.code });
+  };
   const couponLine = (design, price) => {
     const product = design && getProduct(design.productId);
     return { productId: design ? design.productId : '', category: product ? product.category : '', price: price || 0 };
@@ -6213,9 +6224,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     'POST /api/admin/coupons': (req) => {
       const { coupon, error } = coupons.cleanCoupon(req.body, { products: PRODUCTS, categories: CATEGORIES });
       if (error) throw new HttpError(400, error);
-      if ((store.db.coupons || []).some((c) => c.code === coupon.code)) throw new HttpError(409, 'couponExists');
+      couponClash(store.db.coupons || [], coupon.code);
       // (A second request for a code already waiting would only fail when approved.)
-      if (approvalsAll().some((a) => (a.status === 'pending' || a.status === 'failed') && a.action === 'POST /api/admin/coupons' && a.body && coupons.normCode(a.body.code) === coupon.code)) throw new HttpError(409, 'couponWaiting');
+      if (approvalsAll().some((a) => (a.status === 'pending' || a.status === 'failed') && a.action === 'POST /api/admin/coupons' && a.body && looseCode(coupons.normCode(a.body.code)) === looseCode(coupon.code))) throw new HttpError(409, 'couponWaiting');
     },
     'PUT /api/admin/coupons/:id': (req) => {
       const cur = (store.db.coupons || []).find((c) => c.id === req.params.id);
@@ -6223,7 +6234,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       // (Only the changed fields come: checked as they'd be merged onto the coupon. See saveCoupon.)
       const { coupon, error } = coupons.cleanCoupon({ ...cur, ...(req.body && typeof req.body === 'object' ? req.body : {}) }, { products: PRODUCTS, categories: CATEGORIES, saved: cur });
       if (error) throw new HttpError(400, error);
-      if ((store.db.coupons || []).some((c) => c.code === coupon.code && c.id !== req.params.id)) throw new HttpError(409, 'couponExists');
+      couponClash(store.db.coupons || [], coupon.code, { id: req.params.id, was: cur.code });
       // (Only the fields a coupon is made of: its id, dates and counts are the shop's own.)
       const own = ['code', 'type', 'value', 'minOrder', 'maxDiscount', 'maxUses', 'perCustomer', 'startsOn', 'endsOn', 'active', 'auto', 'products', 'categories', 'note'];
       req.body = Object.fromEntries(Object.entries(req.body || {}).filter(([k]) => own.includes(k)));
@@ -7465,7 +7476,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (error) throw new HttpError(400, error);
     return store.mutate((db) => {
       db.coupons ||= [];
-      if (db.coupons.some((c) => c.code === coupon.code && c.id !== id)) throw new HttpError(409, 'couponExists');
+      couponClash(db.coupons, coupon.code, { id, was: cur ? cur.code : null });
       if (id) {
         const cur = db.coupons.find((c) => c.id === id);
         if (!cur) throw new HttpError(404, 'couponGone');

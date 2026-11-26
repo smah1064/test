@@ -324,6 +324,7 @@
     st.libraryId = typeof draft.library === 'string' ? draft.library : null;
     st.libraryNames = typeof draft.libraryNames === 'string' ? draft.libraryNames : null;
     st.colorId = draft.colorId;
+    st.openedColor = typeof draft.openedColor === 'string' ? draft.openedColor : null;
     st.sizeId = draft.sizeId;
     // Drafts from before embroidery was a layer: their stitched front is the embroidery layer now.
     const host = st.product.embroidery && st.product.embroidery.side;
@@ -351,10 +352,14 @@
   // (The draft's colour and size, before the link's: its one piece follows them below.)
   const draftColor = st.colorId;
   const draftSize = st.sizeId;
-  // A colour picked on the product page (?color=) wins over the draft's; a saved design keeps its own
-  // (and so does a restored draft of a ready-made design: the link carries the design's first colour).
-  if (!params.get('design') && !(restoredDraft && st.libraryId) && canPick(st.product.colors.find((c) => c.id === params.get('color')))) st.colorId = params.get('color');
+  // A colour picked on the product page (?color=) wins over the draft's; a saved design keeps its own, and so does a
+  // restored draft of a ready-made design whose colour the customer changed in the editor (the link carries the
+  // design's first colour). One only opened has no colour of its own, and a colour chosen on the design's page just
+  // now (&pick=1) wins too: the editor opened on white after Black was shown there. Tester 2, 26 Nov.
+  const draftOwnColour = restoredDraft && st.libraryId && params.get('pick') !== '1' && !(st.openedColor && st.colorId === st.openedColor);
+  if (!params.get('design') && !draftOwnColour && canPick(st.product.colors.find((c) => c.id === params.get('color')))) st.colorId = params.get('color');
   st.colorId = canPick(st.product.colors.find((c) => c.id === st.colorId)) ? st.colorId : firstPick(st.product.colors).id;
+  if (libraryDesign) st.openedColor = st.colorId; // (the colour a ready design was opened in: see above)
   seedBinding(); // a new booklet: bound on the side its language reads from
   // A ready design no longer in the shop: said only when the customer's own version of it isn't here.
   if (libraryError && !restoredDraft) toast(libraryError.status === 404 ? tEd('ed.designGone') : libraryError.message, 'error');
@@ -373,6 +378,7 @@
   if (!params.get('design') && (params.has('color') || params.has('size'))) {
     const url = new URL(location.href);
     url.searchParams.delete('color');
+    url.searchParams.delete('pick');
     url.searchParams.delete('size');
     history.replaceState(history.state, '', url);
   }
@@ -694,6 +700,9 @@
       stage.scrollTop = (a.y + a.h / 2 + (zoneOf() ? 20 : 0)) * vt[3] + vt[5] - stage.clientHeight / 2;
     }
     $('zoom-label').textContent = POD.num(Math.round(st.zoom * 100)) + '%';
+    // At 800% and 50% the button that can't go further is off (it stayed clickable and did nothing. Tester 2, 26 Nov).
+    $('zoom-in').disabled = st.zoom >= 8 - 1e-6;
+    $('zoom-out').disabled = st.zoom <= 0.5 + 1e-6;
     canvas.requestRenderAll();
   }
   new ResizeObserver(() => fit()).observe($('stage'));
@@ -4666,8 +4675,12 @@
     const from = (sid) => sideDef(sid).printArea; // where the customer had moved it
     const nextSize = canPick(next.sizes.find((z) => z.id === st.sizeId)) ? st.sizeId : firstPick(next.sizes).id;
     const to = (s) => areaFor(next, s.id, nextSize, null);
+    // Sides of the same name match first (a T-shirt's back stays the hoodie's back), but a product with one side has
+    // only its face: the phone case's one side is called "back", and its design went on a T-shirt's back, the front
+    // left empty. Tester 2, 26 Nov.
+    const sameNames = prev.sides.length > 1;
     for (const s of next.sides) {
-      if (pending.includes(s.id)) {
+      if (sameNames && pending.includes(s.id)) {
         mapped[s.id] = remap(st.designs[s.id], from(s.id), to(s));
         pending.splice(pending.indexOf(s.id), 1);
       }
@@ -4715,7 +4728,7 @@
     }
     st.sizeId = nextSize;
     st.pattern = normPattern(next, st.pattern);
-    st.side = wasEmb && next.embroidery ? EMB : next.sides.find((s) => s.id === hostOf(st.side))?.id || next.sides[0].id;
+    st.side = wasEmb && next.embroidery ? EMB : (sameNames && next.sides.find((s) => s.id === hostOf(st.side))?.id) || next.sides.find((s) => (mapped[s.id] || []).length)?.id || next.sides[0].id;
     const url = new URL(location.href);
     url.searchParams.set('product', next.id);
     history.replaceState(null, '', url);
@@ -5049,7 +5062,32 @@
         };
         const ratio = (a, b) => { const x = lin(a); const y = lin(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
         const hexOf = (c) => { try { return '#' + new fabric.Color(c).toHex(); } catch (e) { return null; } };
+        // What a text or drawing sits on instead of the garment: its own background colour (a pill, ticket or banner), or
+        // a filled shape, panel or photo under most of it. Those are not compared with the garment: white words on their
+        // own pink pill were "hard to see on White" (24 of the shop's own designs. Tester 2, 26 Nov).
+        const solid = (c) => (typeof c === 'string' && c && c !== 'transparent' && c !== 'none' ? hexOf(c) : null);
+        const leaves = (x) => { const k = x._objects || x.objects; return Array.isArray(k) && k.length ? k.flatMap(leaves) : [x]; };
+        const sitsOnSomething = (o) => {
+          if (isText(o) && solid(o.backgroundColor)) return true;
+          const r = absRect(o);
+          const under = (u) => {
+            const q = absRect(u);
+            const ix = Math.max(0, Math.min(r.left + r.width, q.left + q.width) - Math.max(r.left, q.left));
+            const iy = Math.max(0, Math.min(r.top + r.height, q.top + q.height) - Math.max(r.top, q.top));
+            return ix * iy >= 0.8 * r.width * r.height;
+          };
+          for (let i = objs.indexOf(o) - 1; i >= 0; i--) {
+            const u = objs[i];
+            if ((u.opacity == null ? 1 : u.opacity) < 0.9 || !under(u)) continue;
+            if (u.type === 'image') return true;
+            if (isText(u)) { if (solid(u.backgroundColor)) return true; continue; }
+            // (A drawing counts where one of its filled parts is under the words, not a wreath drawn round them.)
+            if (leaves(u).some((k) => solid(k.fill) && (k === u || under(k)))) return true;
+          }
+          return false;
+        };
         for (const o of objs) {
+          if (sitsOnSomething(o)) continue;
           if (isText(o)) {
             const ink = typeof o.fill === 'string' && o.fill !== 'transparent' ? o.fill : typeof o.stroke === 'string' ? o.stroke : null;
             if (!ink) continue;
@@ -5824,6 +5862,10 @@
       const i = e.target.closest('.qty-in');
       if (i) {
         setCell(i.dataset.qc, i.dataset.qz, i.value);
+        // The 1 put back in the last box is shown there once the customer has finished with it (0, "abc" or nothing
+        // stayed showing while the order was 1 piece. Tester 2, 26 Nov).
+        const kept = Number((st.qty[i.dataset.qc] || {})[i.dataset.qz]) || 0;
+        if (kept > 0 && !(Math.floor(Number(latinNumber(i.value || '').replace(/-/g, '')) || 0) > 0)) i.value = String(kept);
         // (After the tap that moved the focus has landed: a box being typed in is then never drawn
         // again under the finger; the boxes are drawn once the focus leaves them.)
         setTimeout(() => {
@@ -6955,7 +6997,7 @@
     for (const s of keptSides()) designs[s.id] = s.id === st.side ? serialize() : (st.designs[s.id] || []);
     const empty = !Object.values(designs).some((o) => o.length);
     const productId = st.product.id;
-    const meta = { productId, colorId: st.colorId, sizeId: st.sizeId, side: st.side, offsets: { ...st.offsets }, areas: placedAreas(), ...(st.pattern ? { pattern: { ...st.pattern } } : {}), method: st.method, options: st.options || {}, mergeList: st.mergeList || null, qty: st.qty || null, library: st.libraryId || null, libraryNames: st.libraryNames || null, sizePicked: Boolean(st.sizePicked), view: viewOk(st.view) ? st.view : null };
+    const meta = { productId, colorId: st.colorId, sizeId: st.sizeId, side: st.side, offsets: { ...st.offsets }, areas: placedAreas(), ...(st.pattern ? { pattern: { ...st.pattern } } : {}), method: st.method, options: st.options || {}, mergeList: st.mergeList || null, qty: st.qty || null, library: st.libraryId || null, libraryNames: st.libraryNames || null, openedColor: st.openedColor || null, sizePicked: Boolean(st.sizePicked), view: viewOk(st.view) ? st.view : null };
     let preview = null;
     if (!empty && !quick) {
       try {
@@ -7021,7 +7063,7 @@
       if (!Object.values(designs).some((o) => o.length)) return;
       let acct = '';
       try { const v = localStorage.getItem('pod-acct'); acct = v && v !== '1' ? v : ''; } catch (e) { /* private mode */ }
-      const json = JSON.stringify({ at: Date.now(), acct, productId: st.product.id, colorId: st.colorId, sizeId: st.sizeId, side: st.side, offsets: st.offsets, areas: placedAreas(), pattern: st.pattern || null, method: st.method, options: st.options || {}, qty: st.qty || null, library: st.libraryId || null, libraryNames: st.libraryNames || null, sizePicked: Boolean(st.sizePicked), designs });
+      const json = JSON.stringify({ at: Date.now(), acct, productId: st.product.id, colorId: st.colorId, sizeId: st.sizeId, side: st.side, offsets: st.offsets, areas: placedAreas(), pattern: st.pattern || null, method: st.method, options: st.options || {}, qty: st.qty || null, library: st.libraryId || null, libraryNames: st.libraryNames || null, openedColor: st.openedColor || null, sizePicked: Boolean(st.sizePicked), designs });
       // Pictures live in the browser's memory only while the page is open: those designs rely on the real save.
       if (json.includes('"blob:') || json.length > 1500000) return;
       localStorage.setItem('pod-rescue:' + st.product.id, json);

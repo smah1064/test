@@ -83,6 +83,7 @@ const MESSAGES = {
   couponMaxMin: { en: 'The maximum discount must be at least EGP 1 (discounts are in whole pounds)', ar: 'أقصى خصم لازم يكون ١ ج.م. على الأقل (الخصم بالجنيه الكامل)' },
   couponDatesBad: { en: 'Check the dates (the end must be after the start)', ar: 'راجع التواريخ (النهاية لازم تكون بعد البداية)' },
   couponExists: { en: 'A coupon with this code already exists', ar: 'في كوبون بنفس الكود ده' },
+  couponAlike: { en: 'Too close to the coupon {code}: the same code without its dashes or underscores, and customers typing one would get the other. Pick another code.', ar: 'الكود ده قريب أوي من كوبون {code}: نفس الكود من غير الشَرطة أو الـ _، والعميل اللي يكتب واحد ممكن ياخد التاني. اختار كود تاني.' },
   zipBad: { en: 'That file isn\'t a zip we can open. Make a new zip of the design pictures and try again.', ar: 'الملف ده مش zip نقدر نفتحه. اعمل zip جديد للصور وجرب تاني.' },
   zipTooBig: { en: 'The zip is too big once opened. Split the designs into smaller zips.', ar: 'الـ zip كبير أوي بعد ما يتفتح. قسّم التصميمات على كذا zip أصغر.' },
   zipTooMany: { en: 'Too many files in one zip. Split the designs into smaller zips (up to 300 files each).', ar: 'ملفات كتير أوي في zip واحد. قسّمها على كذا zip (لحد ٣٠٠ ملف في كل واحد).' },

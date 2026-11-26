@@ -102,6 +102,9 @@
   }
   $('dp').hidden = false;
   const state = { product: null, color: null, size: null };
+  // A colour the customer chose here: the editor opens in it, even over their own saved copy of this design (which
+  // otherwise keeps the colour it was saved in. Tester 2, 26 Nov).
+  let colourChosen = false;
   // The design's own colour (a design for a black T-shirt: white ink), for products without that colour id.
   const isDark = (hex) => POD.luminance(hex) < 0.45;
   const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
@@ -346,7 +349,7 @@
   }
   /** The editor, on this product, colour and size, with the names typed here. */
   function editHref() {
-    return `/editor?library=${encodeURIComponent(design.id)}&product=${state.product.id}&color=${state.color.id}${sizeParam()}${nameParams()}`;
+    return `/editor?library=${encodeURIComponent(design.id)}&product=${state.product.id}&color=${state.color.id}${colourChosen ? '&pick=1' : ''}${sizeParam()}${nameParams()}`;
   }
   /** Why the product in the link isn't shown: paused (back soon, or the day), stopped selling, or just not available. */
   function goneText() {
@@ -387,6 +390,7 @@
     }
     const b = e.target.closest('[data-color]');
     if (!b || b.dataset.color === state.color.id) return;
+    colourChosen = true;
     const moved = choose(state.product.id, b.dataset.color);
     // When the size shown is sold out in this colour: clothes, the customer's size is un-picked ("pick another"), or,
     // with none picked yet, the first one left is used without a word; other products: the next size, said.

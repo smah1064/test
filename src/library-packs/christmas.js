@@ -32,7 +32,9 @@ const CARD_GOLD = '#a78a43';
 const CARD_WORDS = [
   { text: 'MERRY', font: 'Playfair Display', size: 0.058, x: 0.5008, y: 0.0828, w: 0.1728, spacing: -85, fill: CARD_GOLD },
   { text: 'Christmas', font: 'Great Vibes', size: 0.1615, x: 0.4959, y: 0.141, w: 0.5108, fill: CARD_GOLD },
-  { text: 'MAY YOUR HEART BE FILLED WITH LOVE,\nYOUR HOME WITH JOY\nAND YOUR DAYS WITH PEACE.', font: 'Playfair Display', size: 0.0305, x: 0.4998, y: 0.8832, w: 0.7364, spacing: 137, lineHeight: 1.522, fill: CARD_GOLD },
+  // (The wish a little wider and closer set than the drawn one: at 74% of the card with wide spacing it came out at
+  // 5 pt on the A6 card, under the editor's 6 pt minimum, and the shop's own cards asked "add anyway?". Tester 2, 26 Nov.)
+  { text: 'MAY YOUR HEART BE FILLED WITH LOVE,\nYOUR HOME WITH JOY\nAND YOUR DAYS WITH PEACE.', font: 'Playfair Display', size: 0.0305, x: 0.4998, y: 0.8832, w: 0.82, spacing: 70, lineHeight: 1.45, fill: CARD_GOLD },
 ];
 
 const cards = [

@@ -218,7 +218,7 @@ const designs = [
   D('ev-shella-trip', 'friends', 'Friends trip (place & year)', 'رحلة الشلة', [
     A('fluent-emoji-flat:beach-with-umbrella', 0.3, 0.5, 0.2),
     T('رحلة الشلة', 'Lalezar', 0.2, 0.5, 0.48),
-    T('  دهب ٢٠٢٥  ', 'Lemonada', 0.1, 0.5, 0.68, { weight: 'bold', fill: WHITE, bg: TEAL, bgShape: 'ticket' }),
+    T('  دهب ٢٠٢٦  ', 'Lemonada', 0.1, 0.5, 0.68, { weight: 'bold', fill: WHITE, bg: TEAL, bgShape: 'ticket' }),
     T('FRIENDS TRIP', 'Montserrat', 0.06, 0.5, 0.86, { weight: 'bold', spacing: 300 }),
   ]),
   D('ev-squad-est', 'friends', 'The squad est. year', 'The Squad من سنة', [
