@@ -127,6 +127,9 @@
       const off = {
         '.site-header nav .nav-books': !list.some((p) => p.category === 'kids'),
         '.site-header nav a[href="/photos"]': !list.some((p) => p.kind === 'photoset'),
+        // (the T-shirts and Mugs chips of the phone menu: their product pages)
+        '.site-header [data-chip="tshirt"]': !list.some((p) => p.id === 'tshirt'),
+        '.site-header [data-chip="mug"]': !list.some((p) => p.id === 'mug'),
       };
       for (const [sel, hide] of Object.entries(off)) document.querySelectorAll(sel).forEach((a) => a.classList.toggle('nav-off', hide));
     };
@@ -619,6 +622,42 @@
     a.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg><span data-i18n="nav.account"></span>';
     cartLink.before(a);
   }
+  /**
+   * The phone menu (the row of chips under the logo): the chip of the page you're on is dark, and is swiped
+   * into view when it starts off screen (Mugs on the mug's page).
+   */
+  function markNavChip() {
+    const row = document.querySelector('.site-header .nav-chips');
+    if (!row) return;
+    const params = new URLSearchParams(location.search);
+    const path = location.pathname.replace(/\.html$/, '').replace(/\/+$/, '') || '/';
+    const id = params.get('id');
+    const here = {
+      '/': params.get('cat') === 'kids' ? 'books' : 'products',
+      '/index': params.get('cat') === 'kids' ? 'books' : 'products',
+      '/designs': 'designs',
+      '/design': 'designs',
+      '/photos': 'photos',
+      '/book': 'books',
+      '/product': id === 'tshirt' || id === 'mug' ? id : 'products',
+    }[path] || '';
+    row.querySelectorAll('[data-chip]').forEach((a) => {
+      const on = a.dataset.chip === here;
+      a.classList.toggle('active', on);
+      if (on) a.setAttribute('aria-current', 'page');
+      else a.removeAttribute('aria-current');
+    });
+    const reveal = () => {
+      const on = row.querySelector('.active');
+      if (!on || !row.clientWidth) return; // (the row only shows on phones)
+      const r = row.getBoundingClientRect();
+      const c = on.getBoundingClientRect();
+      if (c.left < r.left || c.right > r.right) row.scrollLeft += (c.left + c.width / 2) - (r.left + r.width / 2);
+    };
+    reveal();
+    // (again once the fonts are in: the chips get wider with them)
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(reveal).catch(() => {});
+  }
   /** Footer: a link to the rights / takedown page. */
   function addFooterLinks() {
     const f = document.querySelector('.site-footer .container');
@@ -678,6 +717,7 @@
     // "إبداع · ebda3" in both), switched with the language like every other label.
     document.querySelectorAll('.site-header .brand').forEach((a) => a.setAttribute('data-i18n-aria', 'brand'));
     applyI18n();
+    markNavChip(); // (after the labels are in: it measures them)
     updateCartBadge();
     document.querySelectorAll('[data-lang-toggle]').forEach((btn) => {
       btn.addEventListener('click', () => setLang(lang === 'ar' ? 'en' : 'ar'));
