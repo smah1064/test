@@ -466,6 +466,12 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 .check-list li.ok { background: #e7f6ee; color: var(--ok); cursor: default; }
 .check-list li.warn { background: #fff8eb; color: #7a4a00; }
 .check-list li.error { background: #fdecec; color: #8a1c1c; }
+.sample-note { position: absolute; inset-inline: 12px; z-index: 20; display: flex; gap: 10px; align-items: flex-start; background: #fff8eb; color: #7a4a00; border: 1px solid #f3c77a; border-radius: 12px; padding: 10px 12px; font-size: 13px; line-height: 1.5; box-shadow: 0 6px 18px rgba(0, 0, 0, .08); }
+.sample-note > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.sample-note > span:first-child { flex: none; }
+.sample-note strong { display: block; font-size: 14px; }
+.sample-note button { border: 0; background: none; color: #c2410c; font: inherit; font-weight: 700; text-decoration: underline; padding: 6px 2px; margin: -6px 0; cursor: pointer; }
+.sample-note button:focus-visible { outline: 2px solid #1d1a18; outline-offset: 2px; }
 
 /* ---------- Live preview ---------- */
 .pv-modal { position: fixed; inset: 0; background: rgba(15, 17, 22, .55); z-index: 60; display: grid; place-items: center; padding: 20px; }
