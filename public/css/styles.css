@@ -1695,3 +1695,8 @@ html[dir="rtl"] .more-chev { transform: scaleX(-1); }
   html.tools-bottom .panel { order: 3; }
   html.tools-bottom .stage-wrap { order: 1; }
 }
+
+/* The share window's view-only link (flip through, no replies). */
+.view-share { display: grid; gap: 10px; }
+.view-share-title { margin: 0; font-size: 15px; }
+.view-share + #opinion-share { margin-top: 14px; }

@@ -64,6 +64,7 @@ const productsMod = require('./products');
 catalog.init(PRODUCTS, { embroidery: productsMod.EMBROIDERY, embroideryFor: productsMod.embroideryFor, scalePrice: productsMod.scalePrice });
 accounting.initPricing(PRODUCTS, EXTRA_SIDE_PRICE);
 const { Library, CATEGORIES: DESIGN_CATEGORIES, catalogChanged: libraryCatalogChanged, hasArtwork, SEED: LIBRARY_SEED } = require('./library');
+const { Views, ViewError } = require('./views');
 const preview = require('./preview');
 const { Backups } = require('./backup');
 // Zip uploads of designs (admin): loaded when first used.
@@ -518,6 +519,7 @@ const DEFAULT_LIMITS = {
   bookSaves: [{ max: 40, ms: 10 * 60e3 }, { max: 300, ms: 24 * 3600e3 }], // kids-book changes (each redraws pages)
   orders: [{ max: 5, ms: 10 * 60e3 }, { max: 20, ms: 24 * 3600e3 }],
   shares: [{ max: 10, ms: 60e3 }, { max: 60, ms: 24 * 3600e3 }],
+  views: [{ max: 30, ms: 60e3 }, { max: 300, ms: 24 * 3600e3 }], // view-only links, made and updated (every save)
   // AI cartoon faces for book previews (one image each): per visitor and for the whole shop.
   cartoon: [{ max: Number(process.env.CARTOON_DAILY_LIMIT) || 4, ms: 24 * 3600e3 }],
   cartoonAll: [{ max: Number(process.env.CARTOON_GLOBAL_DAILY_LIMIT) || 150, ms: 24 * 3600e3 }],
@@ -2472,6 +2474,72 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     writeShare(share);
     res.status(201).json(publicShare(share));
   });
+  // ---------- View-only links: flip through a booklet, or see both sides (owner's decision, 26 Nov) ----------
+  // Whoever has the link only looks (no approval, comments, prices or customer details); it shows the latest version
+  // the customer saved (the editor sends the pictures again with the link's own key) and stops 60 days after that.
+  const views = new Views(dataDir);
+  const viewable = (p) => Boolean(p) && p.kind !== 'book' && (Boolean(p.paged) || p.sides.length >= 2);
+  const viewErr = (e) => (e instanceof ViewError ? new HttpError(e.status, e.code) : e);
+  /** The pictures and how a booklet turns (an Arabic one, bound on the right, unless the left binding was chosen). */
+  function viewPictures(product, b) {
+    try {
+      return { pics: views.clean(b.pages, product.sides.map((sd) => ({ id: sd.id, name: sd.name }))), kind: product.paged ? 'pages' : 'sides', rtl: Boolean(product.paged) && !(b.options && b.options.binding === 'left') };
+    } catch (e) {
+      throw viewErr(e);
+    }
+  }
+  app.post('/api/views', (req, res, next) => { rateLimit(req, 'views'); next(); }, express.json({ limit: '40mb' }), (req, res) => {
+    const b = req.body || {};
+    const product = getProduct(b.productId);
+    if (!viewable(product)) throw new HttpError(400, 'viewProduct');
+    const { pics, kind, rtl } = viewPictures(product, b);
+    const { view, key } = views.create({ productId: product.id, kind, rtl, pics });
+    res.set('Cache-Control', 'no-store');
+    res.status(201).json({ id: view.id, key, url: `/view?id=${view.id}` });
+  });
+  // The customer's newer version (with the link's key): the same link shows it.
+  app.put('/api/views/:id', (req, res, next) => { rateLimit(req, 'views'); next(); }, express.json({ limit: '40mb' }), (req, res) => {
+    let v;
+    try { v = views.owned(req.params.id, req.get('x-view-key')); } catch (e) { throw viewErr(e); }
+    const b = req.body || {};
+    const product = getProduct(b.productId);
+    if (!viewable(product)) throw new HttpError(400, 'viewProduct');
+    const { pics, kind, rtl } = viewPictures(product, b);
+    Object.assign(v, { productId: product.id, kind, rtl });
+    views.put(v, pics);
+    res.set('Cache-Control', 'no-store');
+    res.json({ id: v.id, url: `/view?id=${v.id}`, updatedAt: v.updatedAt });
+  });
+  app.delete('/api/views/:id', (req, res) => {
+    try { views.owned(req.params.id, req.get('x-view-key')); } catch (e) { throw viewErr(e); }
+    views.remove(req.params.id);
+    res.json({ ok: true });
+  });
+  app.get('/api/views/:id', (req, res) => {
+    const v = views.read(req.params.id);
+    if (!v) throw new HttpError(404, 'viewNotFound');
+    if (!views.live(v)) throw new HttpError(410, 'viewExpired');
+    const product = getProduct(v.productId);
+    res.set('Cache-Control', 'no-store');
+    res.json({
+      id: v.id,
+      productId: v.productId,
+      productName: product ? product.name : { en: v.productId, ar: v.productId },
+      kind: v.kind,
+      rtl: Boolean(v.rtl),
+      pages: v.pages.map((p, n) => ({ name: p.name, url: `/api/views/${v.id}/page/${n}.${p.file.split('.').pop()}?v=${v.version}`, w: p.w, h: p.h })),
+      updatedAt: v.updatedAt,
+      makeOwn: `/product?id=${encodeURIComponent(v.productId)}`,
+    });
+  });
+  app.get('/api/views/:id/page/:n.:ext', (req, res) => {
+    const v = views.read(req.params.id);
+    const p = v && views.live(v) && /^\d{1,2}$/.test(req.params.n) && v.pages[Number(req.params.n)];
+    if (!p || p.file.split('.').pop() !== req.params.ext) throw new HttpError(404, 'viewNotFound');
+    res.set('Cache-Control', 'public, max-age=86400, no-transform');
+    res.type(req.params.ext === 'png' ? 'png' : 'jpeg').send(fs.readFileSync(views.file(v.id, p.file)));
+  });
+
   app.get('/api/shares/:id', (req, res) => {
     const sh = readShare(req.params.id);
     if (!sh) throw new HttpError(404, 'shareNotFound');
@@ -4326,7 +4394,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const d = rec && UUID_RE.test(rec.designId || '') && store.getDesign(rec.designId);
       if (!d || d.orderId || (d.status && d.status !== 'ready')) continue;
       if (d.kind === 'book' && !rec.editToken) continue;
-      items.push({ ...cartEntry(d, rec.editToken, rec.listKey), addedAt: rec.addedAt || c.updatedAt || new Date().toISOString(), ...(rec.later ? { later: true } : {}), ...(rec.movedAt ? { movedAt: rec.movedAt } : {}) });
+      items.push({ ...cartEntry(d, rec.editToken, rec.listKey), ...(rec.view ? { view: rec.view } : {}), addedAt: rec.addedAt || c.updatedAt || new Date().toISOString(), ...(rec.later ? { later: true } : {}), ...(rec.movedAt ? { movedAt: rec.movedAt } : {}) });
     }
     return { items, updatedAt: c.updatedAt };
   }
@@ -4356,7 +4424,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const at = when(it.addedAt) || new Date().toISOString();
       // "Saved for later" (kept out of the order), and when it last moved between cart and saved.
       const moved = when(it.movedAt);
-      items.push({ designId: it.designId, addedAt: at, ...(it.later === true ? { later: true } : {}), ...(moved ? { movedAt: moved } : {}), ...(d.kind === 'book' && BOOK_TOKEN_RE.test(it.editToken || '') ? { editToken: it.editToken } : {}), ...(d.merge && LIST_KEY_RE.test(it.listKey || '') ? { listKey: it.listKey } : {}) });
+      items.push({ designId: it.designId, addedAt: at, ...(it.later === true ? { later: true } : {}), ...(moved ? { movedAt: moved } : {}), ...(d.kind === 'book' && BOOK_TOKEN_RE.test(it.editToken || '') ? { editToken: it.editToken } : {}), ...(d.merge && LIST_KEY_RE.test(it.listKey || '') ? { listKey: it.listKey } : {}), ...(it.view && typeof it.view === 'object' && /^[A-Za-z0-9_-]{12}$/.test(it.view.id || '') && /^[A-Za-z0-9_-]{32}$/.test(it.view.key || '') ? { view: { id: it.view.id, key: it.view.key } } : {}) });
     }
     // With `base` (the ids this device last agreed with the account): merged with what the account has
     // now, so a device with an old page open can't drop items added elsewhere or bring back removed ones.
@@ -7739,6 +7807,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         }
       }
       if (due.length) console.log(`[cleanup] removed the child's photo from ${due.length} shipped book(s)`);
+      const goneViews = views.cleanup();
+      if (goneViews) console.log(`[cleanup] removed ${goneViews} view-only link(s) not updated for 60 days`);
       return security.cleanup({ store, sharesDir });
     } catch (e) {
       console.error('[cleanup]', e.message);

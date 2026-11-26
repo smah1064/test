@@ -76,6 +76,8 @@ function isOpen(p) {
     || /^\/admin(?:\.html)?\/?$/i.test(p) // the dashboard: its own password, however the address is written
     || p.startsWith('/api/admin/')
     || p === '/api/preview/enter'
+    // View-only links the customers send (owner's OK, 26 Nov): the page and that link's own pictures, nothing else.
+    || /^\/view(?:\.html)?$/.test(p) || /^\/api\/views\/[A-Za-z0-9_-]{12}(?:\/page\/\d{1,2}\.(?:jpg|png))?$/.test(p)
     || p.startsWith('/dl/');
 }
 

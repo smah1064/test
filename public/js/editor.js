@@ -145,6 +145,7 @@
     method: 'print', // (older drafts) 'embroidery': the front was embroidered; now the embroidery is its own layer, st.designs.emb
     editingCartIndex: null,
     revise: null, // { orderId, itemId }: a new version of an ordered item the shop sent back for changes
+    view: null, // { id, key }: this design's view-only link (it follows every save)
     shopEdit: null, // { orderId, itemId, baseDesignId, owner }: the shop's own edit of an ordered item (dashboard, Review)
     editingDesignId: null,
     preview: false,
@@ -172,6 +173,8 @@
         ...(params.get('shopEdit') && adminToken() ? { Authorization: `Bearer ${adminToken()}` } : {}),
       };
       const saved = await POD.api('/api/designs/' + encodeURIComponent(params.get('design')), { headers: listHeaders });
+      // (A cart item's view-only link: updating the item updates what the link shows.)
+      if (own && own.view && /^[A-Za-z0-9_-]{12}$/.test(own.view.id || '') && /^[A-Za-z0-9_-]{32}$/.test(own.view.key || '')) st.view = { id: own.view.id, key: own.view.key };
       const instead = await missing(saved.productId);
       st.product = products.find((p) => p.id === saved.productId) || instead || st.product;
       st.colorId = saved.color.id;
@@ -293,6 +296,8 @@
   }
   if (libraryDesign) { st.libraryId = params.get('library'); st.libraryNames = typedNames; }
   if (draft) {
+    // (Its view-only link, so the next saves update it.)
+    if (draft.view && /^[A-Za-z0-9_-]{12}$/.test(draft.view.id || '') && /^[A-Za-z0-9_-]{32}$/.test(draft.view.key || '')) st.view = { id: draft.view.id, key: draft.view.key };
     st.libraryId = typeof draft.library === 'string' ? draft.library : null;
     st.libraryNames = typeof draft.libraryNames === 'string' ? draft.libraryNames : null;
     st.colorId = draft.colorId;
@@ -6187,13 +6192,145 @@
     $('share-wa').href = 'https://wa.me/?text=' + encodeURIComponent(t('share.message', { url }));
     $('share-native').hidden = !navigator.share;
     renderShareReplies(share);
+    $('view-share').hidden = true;
+    $('opinion-share').hidden = false;
     $('share-dialog').hidden = false;
   }
+  // ---------- View-only link: flip through the pages / see the sides, no replies (owner's decision, 26 Nov) ----------
+  // The link's own key is kept with the design (its draft, its cart item, the account's cart): every save sends the
+  // latest pages to the same link.
+  const VIEW_ID_RE = /^[A-Za-z0-9_-]{12}$/;
+  const VIEW_KEY_RE = /^[A-Za-z0-9_-]{32}$/;
+  const viewable = () => st.product.kind !== 'book' && (Boolean(st.product.paged) || st.product.sides.length >= 2);
+  const viewOk = (v) => Boolean(v) && VIEW_ID_RE.test(v.id || '') && VIEW_KEY_RE.test(v.key || '');
+  const viewUrl = (v) => `${location.origin}/view?id=${v.id}`;
+  /** A picture (a canvas, or a Blob) as a JPEG on white, at most `max` px on its longer side. */
+  async function jpegOf(source, max = 1400) {
+    const pic = source instanceof Blob ? await createImageBitmap(source) : source;
+    const k = Math.min(1, max / Math.max(pic.width, pic.height));
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(pic.width * k));
+    c.height = Math.max(1, Math.round(pic.height * k));
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.drawImage(pic, 0, 0, c.width, c.height);
+    return c.toDataURL('image/jpeg', 0.86);
+  }
+  /** The pages as the person with the link sees them: a booklet's every page as printed (blank ones plain paper), or each designed side on the product. */
+  async function viewPages() {
+    const original = st.side;
+    const out = [];
+    canvas.discardActiveObject();
+    const prevZoom = st.zoom;
+    if (st.zoom !== 1) setZoom(1);
+    const wasPreview = st.preview;
+    if (wasPreview) togglePreview();
+    try {
+      if (st.product.paged) {
+        for (const sd of activeSides()) {
+          const has = shownOn(sd.id) > 0;
+          if (has && sd.id !== st.side) await showSide(sd.id);
+          const r = rects(sd.id).trim;
+          const k = 2;
+          const pg = document.createElement('canvas');
+          pg.width = Math.round(r.w * k);
+          pg.height = Math.round(r.h * k);
+          const ctx = pg.getContext('2d');
+          ctx.fillStyle = color().hex;
+          ctx.fillRect(0, 0, pg.width, pg.height);
+          if (has) ctx.drawImage(exportDesignLayer(k), r.x * k, r.y * k, r.w * k, r.h * k, 0, 0, pg.width, pg.height);
+          out.push({ side: sd.id, image: await jpegOf(pg) });
+        }
+      } else {
+        for (const sd of st.product.sides) {
+          if (!(shownOn(sd.id) > 0)) continue;
+          if (sd.id !== st.side) await showSide(sd.id);
+          out.push({ side: sd.id, image: await jpegOf(await exportPreview()) });
+        }
+      }
+    } finally {
+      if (st.side !== original) await showSide(original).catch(() => {});
+      if (st.zoom !== prevZoom) setZoom(prevZoom);
+      if (wasPreview && !st.preview) togglePreview();
+      canvas.requestRenderAll();
+    }
+    return out;
+  }
+  /** Makes the link, or sends the latest pages to the one this design has. Returns st.view, or null when there is nothing to show. */
+  async function sendView() {
+    if (!viewable() || !designedSides().length) return null;
+    const pages = await viewPages();
+    if (!pages.length) return null;
+    const body = JSON.stringify({ productId: st.product.id, options: st.options || {}, pages });
+    if (viewOk(st.view)) {
+      try {
+        await POD.api('/api/views/' + encodeURIComponent(st.view.id), { method: 'PUT', headers: { 'Content-Type': 'application/json', 'x-view-key': st.view.key }, body });
+        return st.view;
+      } catch (e) {
+        if (![403, 404, 410].includes(e.status)) throw e; // (gone, or made on another device: a new one below)
+      }
+    }
+    const made = await POD.api('/api/views', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+    st.view = { id: made.id, key: made.key };
+    return st.view;
+  }
+  /** After a save: the link (if this design has one) shows the latest version. Never stops the save. */
+  async function refreshView() {
+    if (!viewOk(st.view) || !viewable()) return;
+    try {
+      busy(true, t('viewShare.updating'));
+      await sendView();
+    } catch (e) { /* the link keeps the version before; the next save tries again */ } finally {
+      busy(false);
+    }
+  }
+  function openViewDialog(v) {
+    const url = viewUrl(v);
+    $('view-url').value = url;
+    $('view-wa').href = 'https://wa.me/?text=' + encodeURIComponent(t('viewShare.message', { url }));
+    $('view-mail').href = `mailto:?subject=${encodeURIComponent(t('viewShare.subject'))}&body=${encodeURIComponent(t('viewShare.message', { url }))}`;
+    $('view-open').href = url;
+    $('view-share').hidden = false;
+    $('opinion-share').hidden = true;
+    $('share-dialog').hidden = false;
+  }
+  $('view-copy').addEventListener('click', async () => {
+    const input = $('view-url');
+    try {
+      await navigator.clipboard.writeText(input.value);
+    } catch (e) {
+      input.select();
+      document.execCommand('copy');
+    }
+    toast(t('share.copied'));
+  });
+  $('view-ask').addEventListener('click', () => makeOpinionShare());
+
   $('share-open').addEventListener('click', serial(async () => {
     cancelCrop();
     commit();
+    if (!designedSides().length) return toast(t('msg.addFirst'), 'error');
+    if (!viewable()) return opinionShareNow();
+    busy(true, t('viewShare.making'));
+    try {
+      const v = await sendView();
+      if (!v) return toast(t('msg.addFirst'), 'error');
+      // (Kept with the draft right away: the link follows this design's later saves.)
+      if (draftMode) saveDraft({ quick: true });
+      openViewDialog(v);
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      busy(false);
+    }
+  }));
+  /** The link where friends approve or suggest a change (a copy as it is now). */
+  async function opinionShareNow() {
     const sides = designedSides();
     if (!sides.length) return toast(t('msg.addFirst'), 'error');
+    $('view-share').hidden = true;
+    $('opinion-share').hidden = false;
     const sig = designSignature();
     const last = readLastShare();
     if (last && last.sig === sig) {
@@ -6233,7 +6370,10 @@
       if (st.zoom !== prevZoom) setZoom(prevZoom);
       canvas.requestRenderAll();
     }
-  }));
+  }
+  // (From the view-only window's button: one action at a time, as the others. Inside "Share" itself, called directly:
+  // the queue would wait for itself.)
+  const makeOpinionShare = serial(opinionShareNow);
   $('share-close').addEventListener('click', () => { $('share-dialog').hidden = true; });
   $('share-dialog').addEventListener('click', (e) => { if (e.target === $('share-dialog')) $('share-dialog').hidden = true; });
   $('share-copy').addEventListener('click', async () => {
@@ -6275,7 +6415,7 @@
     for (const s of keptSides()) designs[s.id] = s.id === st.side ? serialize() : (st.designs[s.id] || []);
     const empty = !Object.values(designs).some((o) => o.length);
     const productId = st.product.id;
-    const meta = { productId, colorId: st.colorId, sizeId: st.sizeId, side: st.side, offsets: { ...st.offsets }, areas: placedAreas(), ...(st.pattern ? { pattern: { ...st.pattern } } : {}), method: st.method, options: st.options || {}, mergeList: st.mergeList || null, qty: st.qty || null, library: st.libraryId || null, libraryNames: st.libraryNames || null, sizePicked: Boolean(st.sizePicked) };
+    const meta = { productId, colorId: st.colorId, sizeId: st.sizeId, side: st.side, offsets: { ...st.offsets }, areas: placedAreas(), ...(st.pattern ? { pattern: { ...st.pattern } } : {}), method: st.method, options: st.options || {}, mergeList: st.mergeList || null, qty: st.qty || null, library: st.libraryId || null, libraryNames: st.libraryNames || null, sizePicked: Boolean(st.sizePicked), view: viewOk(st.view) ? st.view : null };
     let preview = null;
     if (!empty && !quick) {
       try {
@@ -6647,6 +6787,8 @@
         return;
       }
 
+      // Its view-only link shows this version now.
+      await refreshView();
       const entry = {
         designId: design.id,
         productId: design.productId,
@@ -6659,6 +6801,7 @@
         ...(design.quantities ? { quantities: design.quantities } : {}),
         ...(design.merge ? { merge: { count: design.merge.count } } : {}),
         ...(design.merge && created.listKey ? { listKey: created.listKey } : {}),
+        ...(viewOk(st.view) ? { view: { id: st.view.id, key: st.view.key } } : {}),
         previewUrl: design.previewUrl,
         addedAt: new Date().toISOString(),
       };
@@ -6813,6 +6956,8 @@
     busy(false);
     if (!ok) return toast(t('draft.saveFailed'), 'error');
     st.dirty = false;
+    // Its view-only link (if it has one) shows this version now.
+    await refreshView();
     // The customer stays in the editor (it sent them to the home page without a word: editor redesign stage 2).
     setSavedMark('saved');
     toast(t('draft.savedHere'));
