@@ -153,9 +153,14 @@ test('links to a product, a ready design, a kids book and a shared design previe
     // The child's name isn't known yet: "Your child in Space", never "{name} in Space".
     assert.ok(!meta(book, 'og:title')[0].includes('{name}') && meta(book, 'og:title')[0].includes('طفلك في الفضاء') && meta(book, 'og:title')[0].includes('Your child in Space'), meta(book, 'og:title')[0]);
     // A ready design drawn from words and shapes has no picture of its own here: the shop's card, not a blank product.
-    const tpl = lib.designs.find((x) => x.kind === 'template');
+    // (One with a picture of its own (a PNG drawing) shows that picture: tester 1, 26 Nov.)
+    const raster = (x) => (x.items || []).some((i) => i && i.kind === 'image' && /\.(png|jpe?g|webp)$/i.test(i.src || ''));
+    const tpl = lib.designs.find((x) => x.kind === 'template' && !raster(x));
     const tplPage = await (await fetch(`${base}/design?id=${encodeURIComponent(tpl.id)}`)).text();
     assert.match(meta(tplPage, 'og:image')[0], /og-ebda3\.png$/);
+    const pic = lib.designs.find((x) => x.kind === 'template' && raster(x));
+    const picPage = await (await fetch(`${base}/design?id=${encodeURIComponent(pic.id)}`)).text();
+    assert.match(meta(picPage, 'og:image')[0], /\/img\/art\/.+\.(png|jpe?g|webp)$/);
     // Unknown ids and other pages keep the general card; nothing typed in the address is echoed.
     const odd = await (await fetch(`${base}/product?id=%22%3E%3Cscript%3E`)).text();
     assert.match(meta(odd, 'og:image')[0], /og-ebda3\.png$/);
