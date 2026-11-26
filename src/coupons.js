@@ -103,12 +103,13 @@ function apply(coupon, { lines, orders = [], phone = null, shipping = null }) {
   if (coupon.maxUses && usesOf(orders, coupon) >= coupon.maxUses) return { ok: false, reason: 'couponUsedUp' };
   if (phone && coupon.perCustomer && usesBy(orders, coupon, phone) >= coupon.perCustomer) return { ok: false, reason: 'couponUsedByYou' };
   const subtotal = round2(lines.reduce((n, l) => n + l.price, 0));
-  if (coupon.minOrder && subtotal < coupon.minOrder) return { ok: false, reason: 'couponMinOrder', params: { amount: coupon.minOrder } };
   const limited = coupon.products.length || coupon.categories.length;
   const fits = lines.map((l) => !limited || coupon.products.includes(l.productId) || coupon.categories.includes(l.category));
   const eligible = round2(lines.filter((l, i) => fits[i]).reduce((n, l) => n + l.price, 0));
-  // Limited to some products: the cart must have one of them (free shipping too).
+  // Limited to some products: the cart must have one of them (free shipping too). Said before the minimum, so a cart
+  // without them isn't first sent to spend more on things the coupon doesn't cover (QA 26 Nov).
   if (!eligible && (coupon.type !== 'freeship' || limited)) return { ok: false, reason: 'couponNoItems' };
+  if (coupon.minOrder && subtotal < coupon.minOrder) return { ok: false, reason: 'couponMinOrder', params: { amount: coupon.minOrder } };
   // Which lines the discount came off (by index), so reports can charge it to those products only.
   const lineIdx = fits.map((f, i) => (f ? i : -1)).filter((i) => i >= 0);
   const freeShipping = coupon.type === 'freeship';

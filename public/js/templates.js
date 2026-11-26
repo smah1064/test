@@ -443,6 +443,20 @@
    * The text objects of `words` on a picture drawn in `box` ({ cx, cy, w, h, angle?, flipX?, flipY? }: its centre,
    * drawn size and turn on the canvas).
    */
+  /**
+   * A word's colour on this product: its own, except near-black words on a dark product, which take the product's
+   * light ink (QA 26 Nov: the sloths' and the coffee animals' black words all but vanished on black and navy).
+   */
+  const lumOf = (hex) => {
+    const n = parseInt(hex.slice(1), 16);
+    return (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
+  };
+  function wordFill(fill, ink) {
+    const hex = /^#[0-9a-f]{6}$/i;
+    if (typeof fill !== 'string' || !fill) return ink;
+    if (hex.test(fill) && typeof ink === 'string' && hex.test(ink) && lumOf(fill) < 0.2 && lumOf(ink) > 0.6) return ink;
+    return fill;
+  }
   function wordsTexts(words, box, ink) {
     const rad = ((box.angle || 0) * Math.PI) / 180;
     const cos = Math.cos(rad);
@@ -455,7 +469,7 @@
         fontFamily: BUNDLED.has(t.font) ? t.font : 'Montserrat',
         fontSize: Math.max(4, Math.round(box.w * (Number(t.size) || 0.08))),
         fontWeight: t.weight || 'normal',
-        fill: t.fill || ink,
+        fill: wordFill(t.fill, ink),
         textAlign: 'center',
         lineHeight: Number(t.lineHeight) || 1.16,
         charSpacing: arabic ? 0 : Number(t.spacing) || 0,

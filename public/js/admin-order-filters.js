@@ -72,7 +72,8 @@
   const defaultState = (o) => (isDelivered(o) ? 'delivered' : o.status);
   const isPaid = (o) => Boolean(o.payment && o.payment.status === 'paid');
   const speedOf = (o) => (o.delivery && o.delivery.speed === 'express' ? 'express' : 'standard');
-  const dueOf = (o) => (o.delivery && YMD.test(o.delivery.by || '') ? o.delivery.by : '');
+  // (The day the shop set, when it set one: the date the customer sees on their order page. QA 26 Nov.)
+  const dueOf = (o) => (o.shipment && YMD.test(String(o.shipment.eta || '').slice(0, 10)) ? String(o.shipment.eta).slice(0, 10) : o.delivery && YMD.test(o.delivery.by || '') ? o.delivery.by : '');
   const couponOf = (o) => (typeof o.coupon === 'string' ? o.coupon : o.coupon && typeof o.coupon.code === 'string' ? o.coupon.code : '');
   const both = (v) => (v && typeof v === 'object' ? [v.en, v.ar] : [v]);
   /** The governorate an order goes to: its id (older orders: the name as written). */

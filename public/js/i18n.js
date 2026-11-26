@@ -1085,15 +1085,16 @@ window.POD_STRINGS = {
   'admin.expressBy': ['⚡ Express · deliver by {date}', '⚡ سريع · يوصل لحد {date}'],
   'admin.samplePill': ['🧪 Sample first', '🧪 عينة الأول'],
   'admin.sampleHelp': ['The customer asked for one sample first: print one piece, check it (send them a photo), then print the rest.', 'العميل طالب عينة الأول: اطبع قطعة واحدة، راجعها (وابعتله صورتها)، وبعدين اطبع الباقي.'],
-  // Admin → Review: how many jobs wait (POD.plural; the tab's badge title and the notice on the print queue).
-  'rv.count.one': ['1 job waiting for review', 'طلب واحد مستني مراجعة'],
-  'rv.count.two': ['2 jobs waiting for review', 'طلبين مستنيين مراجعة'],
-  'rv.count.few': ['{n} jobs waiting for review', '{n} طلبات مستنية مراجعة'],
-  'rv.count.many': ['{n} jobs waiting for review', '{n} طلب مستني مراجعة'],
-  'rv.queueNotice.one': ['1 job is waiting for review or for the customer and cannot be printed yet.', 'فيه طلب واحد مستني مراجعة أو موافقة العميل ومينفعش يتطبع لسه.'],
-  'rv.queueNotice.two': ['2 jobs are waiting for review or for the customer and cannot be printed yet.', 'فيه طلبين مستنيين مراجعة أو موافقة العميل ومينفعش يتطبعوا لسه.'],
-  'rv.queueNotice.few': ['{n} jobs are waiting for review or for the customer and cannot be printed yet.', 'فيه {n} طلبات مستنية مراجعة أو موافقة العميل ومينفعش تتطبع لسه.'],
-  'rv.queueNotice.many': ['{n} jobs are waiting for review or for the customer and cannot be printed yet.', 'فيه {n} طلب مستني مراجعة أو موافقة العميل ومينفعش يتطبع لسه.'],
+  // Admin → Review: how many jobs wait (POD.plural; the tab's badge title and the notice on the print queue). Jobs, not
+  // orders, in Arabic too: "شغلانة" (19 jobs in 15 orders said "١٩ طلب". QA 26 Nov).
+  'rv.count.one': ['1 job waiting for review', 'شغلانة واحدة مستنية مراجعة'],
+  'rv.count.two': ['2 jobs waiting for review', 'شغلانتين مستنيين مراجعة'],
+  'rv.count.few': ['{n} jobs waiting for review', '{n} شغلانات مستنية مراجعة'],
+  'rv.count.many': ['{n} jobs waiting for review', '{n} شغلانة مستنية مراجعة'],
+  'rv.queueNotice.one': ['1 job is waiting for review or for the customer and cannot be printed yet.', 'فيه شغلانة واحدة مستنية مراجعة أو موافقة العميل ومينفعش تتطبع لسه.'],
+  'rv.queueNotice.two': ['2 jobs are waiting for review or for the customer and cannot be printed yet.', 'فيه شغلانتين مستنيين مراجعة أو موافقة العميل ومينفعش يتطبعوا لسه.'],
+  'rv.queueNotice.few': ['{n} jobs are waiting for review or for the customer and cannot be printed yet.', 'فيه {n} شغلانات مستنية مراجعة أو موافقة العميل ومينفعش تتطبع لسه.'],
+  'rv.queueNotice.many': ['{n} jobs are waiting for review or for the customer and cannot be printed yet.', 'فيه {n} شغلانة مستنية مراجعة أو موافقة العميل ومينفعش تتطبع لسه.'],
   'rv.replaceNamesNote': ['Name-list items have no replacement upload: use “Ask for changes” with a note, and the customer edits the design and sends the new version from their order page.', 'منتجات قوائم الأسماء مالهاش رفع ملف بديل: اختار “اطلب تعديل” واكتب ملاحظة، والعميل يعدّل التصميم ويبعت النسخة الجديدة من صفحة الطلب.'],
   'checkout.freeOver': ['Free shipping on orders of {price} or more', 'شحن مجاني للطلبات من {price} أو أكتر'],
   // Cart (owner's UX changes, 26 Nov): short proof, "tick this first", free-shipping bar, the "⋯" menu, saved designs card.

@@ -320,3 +320,12 @@ test('every text in English and Egyptian Arabic; "صاحب الموقع" not "م
     if (k !== 'of.countAll') assert.strictEqual(holes(S[k][1]), holes(S[k][0]), `${k} placeholders`);
   }
 });
+
+// QA 26 Nov: the day the shop set (shipment.eta, the date the customer's order page shows) counts for "Late", not
+// the day first promised.
+test('"Late" goes by the expected day the shop set, as the customer sees it', () => {
+  const moved = order({ delivery: { speed: 'standard', by: '2026-11-24' }, shipment: { eta: '2026-11-30' } });
+  const due = order({ delivery: { speed: 'standard', by: '2026-11-24' } });
+  const late = ids(run([moved, due], { chip: 'late' }).list);
+  assert.deepStrictEqual(late, [due.number]);
+});

@@ -1201,7 +1201,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         if (filmMaking.has(item.id)) throw new HttpError(409, 'filmBeingMade');
         if (!note) throw new HttpError(400, 'noteRequired');
         const warnings = [];
-        for (const sd of (item.sends || []).filter((x) => x.status === 'sent' || x.status === 'opened').slice(-3)) warnings.push({ kind: 'house', house: sd.houseName, at: sd.at });
+        // One warning per printing house (its latest send): the same house sent the job twice was told twice (QA 26 Nov).
+        const byHouse = new Map();
+        for (const sd of (item.sends || []).filter((x) => x.status === 'sent' || x.status === 'opened')) byHouse.set(sd.houseId || sd.houseName, sd);
+        for (const sd of [...byHouse.values()].slice(-3)) warnings.push({ kind: 'house', house: sd.houseName, at: sd.at });
         if (item.filmBatch) warnings.push({ kind: 'film', film: item.filmBatch.id, at: item.filmBatch.at });
         item.status = 'review';
         // (The printing house or film to stop stays with the job, on its Review card: it was only a 5-second toast.)

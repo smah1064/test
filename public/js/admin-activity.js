@@ -28,6 +28,12 @@ window.AdminActivity = (() => {
   // ---------- Drawing ----------
   // The shared password's sign-in reads as the owner's emergency login, not its id.
   const nameOf = (w) => (!w ? '—' : w.id === 'owner' ? t('me.emergencyName') : [w.name || w.id || '—', w.username && w.username !== w.name ? `(${w.username})` : ''].filter(Boolean).join(' '));
+  /** The name and the username each in its own direction ("مدير منتجات Hany" (hany.pm), not "Hany (hany.pm) مدير منتجات"). QA 26 Nov. */
+  function whoHtml(w) {
+    if (!w || w.id === 'owner') return esc(nameOf(w));
+    const name = `<bdi>${esc(w.name || w.id || '—')}</bdi>`;
+    return w.username && w.username !== w.name ? `${name} <bdi dir="ltr">(${esc(w.username)})</bdi>` : name;
+  }
   function rowHtml(e, own) {
     // (outcome 'failed': an approval whose change couldn't be applied.)
     const res = e.outcome === 'failed' ? 'failed' : AdminRoles.resultOf(e.status);
@@ -39,7 +45,7 @@ window.AdminActivity = (() => {
     return `
       <tr class="act-row act-${res}">
         <td data-label="${esc(t('act.col.when'))}"><span class="act-when">${esc(AdminRoles.cairoTime(e.at))}</span></td>
-        ${own ? `<td data-label="${esc(t('act.col.who'))}"><b dir="auto">${esc(nameOf(e.who))}</b>${e.roles && e.roles.length ? `<div class="muted small">${esc(roleNames(e.roles))}</div>` : ''}</td>` : ''}
+        ${own ? `<td data-label="${esc(t('act.col.who'))}"><b>${whoHtml(e.who)}</b>${e.roles && e.roles.length ? `<div class="muted small">${esc(roleNames(e.roles))}</div>` : ''}</td>` : ''}
         <td data-label="${esc(t('act.col.what'))}"><span dir="${POD.textDir(what)}">${esc(what)}</span>${by ? `<div class="muted small" dir="auto">${esc(by)}</div>` : ''}</td>
         <td data-label="${esc(t('act.col.result'))}"><span class="ro-pill act-pill-${res}">${esc(t('act.res.' + res))}</span>${e.approvalId ? ` <span class="ro-pill act-pill-approval">${esc(t('act.approval'))}</span>` : ''}${e.emergency ? ` <span class="ro-pill act-pill-emergency">${esc(t('act.emergency'))}</span>` : ''}</td>
       </tr>`;

@@ -182,3 +182,17 @@ test('one word made bold (B next to the chosen word): only that word', { timeout
     await ctx.close();
   }
 });
+
+test('a ready design\'s near-black words take the light ink on a black T-shirt (the sloths, the coffee animals)', { timeout: 60000 }, async () => {
+  const ctx = await newContext(browser);
+  try {
+    const page = await openEditor(ctx, srv.base, 'tshirt', '&library=sq-error-404-sloth-beanie&color=black&size=M');
+    await page.waitForFunction(() => window.__editor.canvas.getObjects().some((o) => o.text && /ERROR/.test(o.text)), null, { timeout: 30000 });
+    const fills = await page.evaluate(() => window.__editor.canvas.getObjects().filter((o) => o.text && /ERROR|NOT FOUND/.test(o.text)).map((o) => String(o.fill).toLowerCase()));
+    assert.ok(fills.length >= 2, String(fills));
+    assert.ok(fills.every((f) => f !== '#111111'), `light on black: ${fills}`);
+    assert.deepStrictEqual(page.errors, []);
+  } finally {
+    await ctx.close();
+  }
+});

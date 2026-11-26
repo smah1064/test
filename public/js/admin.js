@@ -1014,6 +1014,8 @@
    * Courier · tracking number · delivered / expected day, each part in its own direction (QA 25 Nov: in one <bdi>
    * "Bosta بوسطة", "7788-AB" and the date ran into each other: "AB · Delivered … 11:15-٧٧٨٨ · Bosta بوسطة").
    */
+  /** The day the customer expects it: the one the shop set (as their order page shows it), else the promised one (QA 26 Nov). */
+  const dueDay = (o) => (o.shipment && /^\d{4}-\d{2}-\d{2}/.test(o.shipment.eta || '') && !(o.shipment && o.shipment.deliveredAt) ? o.shipment.eta : o.delivery ? o.delivery.by : '');
   function shipNote(o) {
     const sh = o.shipment || {};
     const bits = [];
@@ -1081,7 +1083,7 @@
     $('orders-total-col').hidden = !totals;
     $('orders').innerHTML = shown.length ? shown.map((o) => `
       <tr class="order-row ${shipOpen.has(o.id) ? 'open' : ''}">
-        <td data-label="${col('order')}"><strong>${esc(o.number)}</strong>${o.delivery && o.delivery.speed === 'express' ? ` <span class="pill dlv-express-pill">${esc(t('delivery.express'))}</span>` : ''}<div class="muted small">${esc(POD.date(o.createdAt))}</div>${o.delivery ? `<div class="muted small">${esc(t('delivery.by', { date: POD.day(o.delivery.by) }))}</div>` : ''}</td>
+        <td data-label="${col('order')}"><strong>${esc(o.number)}</strong>${o.delivery && o.delivery.speed === 'express' ? ` <span class="pill dlv-express-pill">${esc(t('delivery.express'))}</span>` : ''}<div class="muted small">${esc(POD.date(o.createdAt))}</div>${dueDay(o) ? `<div class="muted small">${esc(t('delivery.by', { date: POD.day(dueDay(o)) }))}</div>` : ''}</td>
         <td data-label="${col('customer')}">${line(o.customer.name)}<div class="muted small"><bdi dir="ltr">${esc(o.customer.phone || o.customer.email || '')}</bdi></div><div class="muted small">${esc(tr(o.customer.governorateName) || '')}</div></td>
         <td data-label="${col('items')}"><div class="mini-items">${o.items.map((i) => IN_REVIEW.has(i.status)
           ? `<span class="rv-mini" title="${esc(tr(i.productName))}: ${esc(t('admin.status.' + i.status))}"><img src="${esc(i.sides[0].previewUrl)}" alt="" ${zoomAttr(i)}><span class="rv-mini-flag" aria-hidden="true">!</span></span>`
