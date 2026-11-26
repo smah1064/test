@@ -1058,8 +1058,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       ...(d.kind === 'photoset' ? { photos: d.photos.map((p) => ({ n: p.n, size: p.size, copies: p.copies, orientation: p.orientation, dpi: p.dpi, url: `/files/designs/${d.id}/photos/${p.n}.jpg?v=${d.version || 1}` })), options: d.options || null } : {}),
       preflight: d.preflight ? { status: d.preflight.status, checks: d.preflight.checks } : { status: 'pass', checks: [] },
       review: { needed: reviewReasons(d).length > 0, reasons: reviewReasons(d) },
+      // A ready design added as it is: taken as approved at checkout, no tick (see readyDesign).
+      ...(readyDesign(d) ? { ready: true } : {}),
     };
   }
+  /** A ready design from the shop's library, unchanged (POST /api/designs marks it `readyFrom`) and not changed since. */
+  const readyDesign = (d) => Boolean(d && d.readyFrom && (d.version || 1) === 1 && !d.kind && !d.merge);
   app.get('/api/designs/:id/proof', async (req, res, next) => {
     try {
       const d = UUID_RE.test(req.params.id) && store.getDesign(req.params.id);
@@ -1968,6 +1972,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     // Pictures imported from other sites: the customer must confirm they may print them.
     const imported = [...new Set(Object.values(editor).flatMap((e) => e.objects.map((o) => (o && typeof o.importSource === 'string' && /^https?:\/\/[^\s"'<>]+$/i.test(o.importSource.trim()) ? o.importSource.trim().slice(0, 500) : null)).filter(Boolean)))].slice(0, 10);
     if (imported.length && (req.body || {}).rightsConfirmed !== true) throw new HttpError(400, 'rightsRequired');
+    // A ready design from the shop's library added as it is (the ready-design page, no name typed in: every side says
+    // which design and none says `named`): nothing of the customer's own to check, so its proof needs no tick at
+    // checkout and the order takes it as approved (owner, 26 Nov). The editor never marks a design so.
+    const libIds = [...new Set(sideIds.map((id) => sides[id] && sides[id].editor && sides[id].editor.library))];
+    const readyFrom = libIds.length === 1 && typeof libIds[0] === 'string' && !mergeList && !emb && !imported.length
+      && !sideIds.some((id) => sides[id].editor.named) && library.shown(libIds[0]) ? libIds[0] : null;
 
     const token = crypto.randomBytes(24).toString('hex');
     const design = {
@@ -1998,6 +2008,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       orderId: null,
       ...(imported.length ? { imports: imported, rightsConfirmedAt: new Date().toISOString() } : {}),
       ...(pattern ? { pattern } : {}),
+      ...(readyFrom ? { readyFrom } : {}),
     };
     design.price = designPrice({ ...design, status: 'ready' });
     if (design.price == null) throw new HttpError(400, 'unknownSize');
@@ -4127,7 +4138,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     }
 
     // Every item approved by the customer against its current proof (see /api/designs/:id/proof).
-    const approvals = body.approvals && typeof body.approvals === 'object' ? body.approvals : {};
+    const approvals = body.approvals && typeof body.approvals === 'object' && !Array.isArray(body.approvals) ? { ...body.approvals } : {};
+    // A ready design added as it is is taken as approved, and recorded the same way as a ticked one (its sample wish
+    // kept); the customer's own designs still need theirs (owner, 26 Nov).
+    for (const d of designs) {
+      if (!readyDesign(d)) continue;
+      const a = approvals[d.id];
+      approvals[d.id] = { proofHash: proofHashOf(d), ...(a && typeof a === 'object' && a.sample === true ? { sample: true } : {}) };
+    }
     for (const d of designs) {
       const a = approvals[d.id];
       if (!a) {

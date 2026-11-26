@@ -35,7 +35,7 @@ async function openCart(ctx, base, items) {
   await page.goto(`${base}/cart`);
   await page.evaluate((list) => POD.setCart(list), items);
   await page.goto(`${base}/cart`);
-  await page.waitForSelector('[data-approve]');
+  await page.waitForSelector('#proof-ok:not([hidden])');
   return { page, errors };
 }
 
@@ -64,24 +64,21 @@ test('cart (Arabic, 360px): short proof, "Place order" points to the box, free-s
     await page.click('#tog-0');
     await page.waitForSelector('[data-proof-for] >> nth=0 >> .proof-short');
 
-    // #3: "Place order" looks ready; pressed too early it orders nothing and points to the first box to tick.
+    // #3: "Place order" looks ready; pressed too early it orders nothing and points to the tick right by it (one tick
+    // for both of the customer's own designs since the owner's change of 26 Nov; test/e2e/checkout-ux.e2e.js).
     assert.strictEqual(await page.isDisabled('#place-order'), false);
     let ordered = 0;
     page.on('request', (r) => { if (/\/api\/orders$/.test(r.url()) && r.method() === 'POST') ordered += 1; });
     await page.click('#place-order');
-    await page.waitForSelector('[data-proof-for] >> nth=0 >> .approve-box.nudge');
-    assert.match(await page.textContent('.nudge-note'), /علّم هنا الأول/);
-    assert.match(await page.textContent('.nudge-note'), /تأكيد الطلب/);
-    assert.strictEqual(await page.evaluate(() => document.activeElement.id), 'ok-0');
-    assert.match(await page.textContent('#approve-status'), /\S/, 'the status line above the button stays');
-    await page.check('#ok-0');
-    await page.waitForFunction(() => !document.querySelector('.approve-box.nudge'));
-    await page.click('#place-order');
-    await page.waitForSelector('[data-proof-for] >> nth=1 >> .approve-box.nudge');
-    assert.strictEqual(await page.evaluate(() => document.activeElement.id), 'ok-1');
+    await page.waitForSelector('#proof-ok.nudge');
+    assert.match(await page.textContent('#proof-ok .nudge-note'), /علّم هنا الأول/);
+    assert.match(await page.textContent('#proof-ok .nudge-note'), /تأكيد الطلب/);
+    assert.strictEqual(await page.evaluate(() => document.activeElement.id), 'proof-ok-box');
+    assert.strictEqual(await page.locator('[data-proof-for] [data-approve]').count(), 0, 'no box on the items');
     assert.strictEqual(ordered, 0);
-    await page.check('#ok-1');
-    await page.waitForFunction(() => !document.querySelector('.approve-box.nudge'));
+    await page.check('#proof-ok-box');
+    await page.waitForFunction(() => !document.querySelector('#proof-ok.nudge'));
+    assert.strictEqual(await page.locator('[data-proof-for].ok').count(), 2, 'both approved by the one tick');
 
     // #4: how much is left for free shipping, with a bar.
     const bar = page.locator('#free-note [role="progressbar"]');

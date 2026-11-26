@@ -129,6 +129,8 @@ test('cart: a coupon code in Arabic letters is told so in the page\'s language, 
   try {
     await page.click('#dp-add');
     await page.waitForURL(/\/cart\?added=1/, { timeout: 60000 });
+    // (The field opens from "Have a discount code?": owner, 26 Nov.)
+    await page.click('#coupon-open');
     await page.waitForSelector('#coupon');
     let asked = 0;
     page.on('request', (r) => { if (/\/api\/cart\/quote/.test(r.url()) && /عيد/.test(r.postData() || '')) asked += 1; });
@@ -160,6 +162,8 @@ test('cart: "Apply" with no answer from the shop says there is no connection, an
   try {
     await page.click('#dp-add');
     await page.waitForURL(/\/cart\?added=1/, { timeout: 60000 });
+    // (The field opens from "Have a discount code?": owner, 26 Nov.)
+    await page.click('#coupon-open');
     await page.waitForSelector('#coupon');
     let release;
     const held = new Promise((r) => { release = r; });

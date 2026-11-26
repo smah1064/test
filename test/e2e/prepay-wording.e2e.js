@@ -67,7 +67,7 @@ function pages(srv, order, designId) {
   return [
     { name: 'home', url: '/', ready: () => document.querySelectorAll('#product-grid > *').length > 0 && Boolean(document.querySelector('[data-i18n="hm.b3.title"]').textContent) },
     { name: 'design', url: `/design?id=${encodeURIComponent(designId)}`, ready: () => !document.getElementById('dp-spin') || document.getElementById('dp-spin').hidden },
-    { name: 'cart', url: '/cart', ready: () => Boolean(document.querySelector('[data-approve]')) && Boolean(document.querySelector('[data-i18n="checkout.cod"]').textContent) },
+    { name: 'cart', url: '/cart', ready: () => Boolean(document.querySelector('#proof-ok:not([hidden])')) && Boolean(document.querySelector('[data-i18n="checkout.cod"]').textContent) },
     { name: 'order', url: `/order?id=${order.id}&k=${order.key}`, ready: () => Boolean(document.querySelector('.pay-box')) },
     { name: 'invoice', url: `/invoice?id=${order.id}&k=${order.key}`, ready: () => Boolean(document.querySelector('.inv-pay-status')) },
     { name: 'photos', url: '/photos', ready: () => document.querySelectorAll('#ph-terms li').length > 0 },

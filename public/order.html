@@ -31,9 +31,20 @@
     /* Just ordered: the delivery day and the way back to this page come first. */
     .placed { margin-bottom: 16px; padding: 16px 18px; border-color: #9fd6b6; background: #f6fbf8; }
     .placed h2 { font-size: 19px; margin: 0 0 6px; }
-    /* "Save your orders" (a guest's order kept on a new account). */
-    .acct-offer { margin-bottom: 16px; padding: 16px 18px; }
-    .acct-offer h2 { font-size: 17px; margin: 0 0 6px; }
+    /* "Save your orders" (a guest's order kept on a new account): under the order, one line that opens on a tap. */
+    .acct-offer { margin: 16px 0; padding: 0; }
+    .acct-offer h2 { font-size: 16px; margin: 0; }
+    .acct-offer-open { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 52px; padding: 12px 18px; border: 0; border-radius: inherit; background: none; color: var(--ink); font: inherit; font-weight: 800; text-align: start; cursor: pointer; }
+    .acct-offer-open:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .acct-offer-chev { flex: none; width: 9px; height: 9px; border-right: 2.5px solid currentColor; border-bottom: 2.5px solid currentColor; transform: translateY(-2px) rotate(45deg); }
+    .acct-offer-open[aria-expanded="true"] .acct-offer-chev { transform: translateY(2px) rotate(-135deg); }
+    #acct-offer-body { padding: 0 18px 16px; }
+    #acct-offer-body[hidden] { display: none; }
+    .acct-offer > .acct-offer-ok { padding: 16px 18px; }
+    /* Just ordered: the order's number and total first, in the thank-you box. */
+    .placed .placed-sum { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 14px; margin: 0 0 4px; font-size: 16px; }
+    .placed .placed-sum strong { font-size: 18px; }
+    .placed .placed-sum b { font-size: 18px; }
     .acct-offer p { margin: 0 0 10px; line-height: 1.6; }
     .acct-offer form { display: grid; gap: 6px; }
     .acct-offer label { font-size: 14px; font-weight: 700; }
@@ -314,6 +325,7 @@
             ${isNew ? `
             <section class="card placed" aria-labelledby="placed-h">
               <h2 id="placed-h">${esc(t('order.placedTitle'))}</h2>
+              <p class="placed-sum"><strong>${esc(t('order.title', { n: POD.orderNo(o.number) }))}</strong>${money$ ? `<span>${esc(t('checkout.total'))}: <b>${esc(money(o.total))}</b></span>` : ''}</p>
               ${arrives}
               <p>${esc(t('order.keepLink'))}</p>
               <div class="placed-actions">
@@ -322,7 +334,6 @@
               </div>
               <p class="muted small">${esc(t('order.emailWhy'))}</p>
             </section>` : ''}
-            ${!team && (o.accountOffer || offerDone) ? '<div id="acct-offer-slot"></div>' : ''}
             <h1>${esc(t('order.title', { n: POD.orderNo(o.number) }))}</h1>
             <p class="muted">${esc(listed(POD.plural('order.meta', o.items.length, { status: t('order.' + shownStatus(o)), date: placedOn(o.createdAt) })))}</p>
             ${isNew ? '' : arrives}
@@ -373,6 +384,7 @@
             <p class="muted small" style="margin-bottom:0;overflow-wrap:anywhere">${deliverTo}</p>
           </div>
           ${POD.payment.prepayOnly && !team ? guaranteeHtml(o) : ''}
+          ${!team && (o.accountOffer || offerDone) ? '<div id="acct-offer-slot"></div>' : ''}
           ${shopWa() && !team ? `<div class="order-wa"><p>${esc(t('order.waText'))}</p><a class="btn btn-whatsapp" id="order-wa" target="_blank" rel="noopener" href="${esc(whatsappLink(o))}">${esc(t('order.waButton'))}</a></div>` : ''}`;
         placeOffer(o);
       }
@@ -396,7 +408,9 @@
         if (offerDone) {
           return `<p class="acct-offer-ok" role="status">${esc(t('offer.done'))} <a href="/account">${esc(t('offer.toAccount'))}</a></p>`;
         }
-        return `<h2 id="acct-offer-h">${esc(t('offer.title'))}</h2>
+        // One line under the order until tapped; then why, and the password to choose (owner, 26 Nov).
+        return `<h2 id="acct-offer-h"><button type="button" class="acct-offer-open" id="acct-offer-open" aria-expanded="false" aria-controls="acct-offer-body"><span>${esc(t('offer.title'))}</span><span class="acct-offer-chev" aria-hidden="true"></span></button></h2>
+          <div id="acct-offer-body" hidden>
           <p>${esc(t('offer.text'))}</p>
           <form id="acct-offer-form" novalidate>
             <label for="offer-phone">${esc(t('checkout.phone'))}</label>
@@ -405,14 +419,31 @@
             <input id="offer-pass" type="password" autocomplete="new-password" minlength="8" required aria-describedby="offer-err">
             <p class="acct-offer-err" id="offer-err" role="alert"></p>
             <button class="btn btn-primary btn-block" type="submit">${esc(t('offer.save'))}</button>
-          </form>`;
+          </form>
+          </div>`;
       }
+      /** "Save your orders" opened (true) or folded to its one line. */
+      function openOffer(el, open) {
+        const btn = el.querySelector('#acct-offer-open');
+        const body = el.querySelector('#acct-offer-body');
+        if (!btn || !body) return;
+        body.hidden = !open;
+        btn.setAttribute('aria-expanded', String(open));
+      }
+      document.addEventListener('click', (e) => {
+        const btn = e.target.closest && e.target.closest('#acct-offer-open');
+        if (!btn || !offerEl) return;
+        const open = btn.getAttribute('aria-expanded') !== 'true';
+        openOffer(offerEl, open);
+        if (open) offerEl.querySelector('#offer-pass').focus();
+      });
       function placeOffer(o) {
         const slot = document.getElementById('acct-offer-slot');
         if (!slot) return;
         const lang = POD.lang;
         if (!offerEl || offerEl.dataset.lang !== lang || (offerDone && !offerEl.querySelector('.acct-offer-ok'))) {
           const typed = offerEl && offerEl.querySelector('#offer-pass') ? offerEl.querySelector('#offer-pass').value : '';
+          const wasOpen = Boolean(offerEl && offerEl.querySelector('#acct-offer-open[aria-expanded="true"]'));
           offerEl = document.createElement('section');
           offerEl.className = 'card acct-offer';
           offerEl.setAttribute('aria-labelledby', 'acct-offer-h');
@@ -420,6 +451,8 @@
           offerEl.innerHTML = offerHtml(o);
           const pass = offerEl.querySelector('#offer-pass');
           if (pass) pass.value = typed;
+          // (A language switch keeps it open, as what is typed is kept.)
+          openOffer(offerEl, wasOpen || Boolean(typed));
         }
         const focused = offerEl.contains(document.activeElement) ? document.activeElement : null;
         slot.replaceWith(offerEl);

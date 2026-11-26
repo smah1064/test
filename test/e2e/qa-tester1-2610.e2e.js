@@ -64,6 +64,7 @@ test('cart: a typed code beaten by the automatic offer stays typed; with a phone
   const { ctx, page } = await cartWith(cartEntry(d));
   try {
     await page.waitForFunction(() => document.getElementById('coupon-code').textContent === 'ONCE30', null, { timeout: 15000 });
+    await page.click('#coupon-open'); // (the field behind "Have a discount code?": owner, 26 Nov)
     await page.fill('#coupon', 'MINE10');
     await page.click('#coupon-apply');
     await page.waitForFunction(() => /ONCE30/.test(document.getElementById('coupon-msg').textContent), null, { timeout: 15000 });

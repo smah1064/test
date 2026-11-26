@@ -250,6 +250,8 @@
   async function addToCart({ design, product, color, size, onProgress = () => {} }) {
     // A pair whose second piece costs nothing extra (couple mugs): the design goes on both pieces.
     const printSides = product.extraSidePrice === 0 && product.sides.length > 1 ? product.sides : [product.sides[0]];
+    // A name typed in (POD_DESIGN.withNames marks the texts it changed): the customer's own words, checked at checkout.
+    const named = (design.items || []).some((it) => it && it.fitTo);
     const files = {};
     const sidesBody = {};
     for (const side of printSides) {
@@ -264,6 +266,7 @@
       // carried across if the product's print area moves later (POD.placedArea).
       const a = st.side.printArea;
       sidesBody[side.id] = { editor: { version: fabric.version, objects: serialize(st), library: design.id, area: { x: a.x, y: a.y, w: a.w, h: a.h } } };
+      if (named) sidesBody[side.id].editor.named = true;
     }
     onProgress('upload');
     const created = await POD.api('/api/designs', {

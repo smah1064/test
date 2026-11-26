@@ -67,6 +67,7 @@ test('cart: too many coupon tries from here: the code comes off with the reason,
     await page.goto(`${srv.base}/cart`);
     await page.waitForFunction(() => document.getElementById('coupon-code').textContent === 'AUTO20', null, { timeout: 30000 });
     const total = await page.textContent('#total');
+    await page.click('#coupon-open'); // (the field behind "Have a discount code?": owner, 26 Nov)
     await page.fill('#coupon', 'MYCODE');
     await page.click('#coupon-apply');
     await page.waitForFunction(() => document.getElementById('coupon-msg').textContent.trim() !== '' && !document.getElementById('coupon-apply').disabled, null, { timeout: 15000 });
