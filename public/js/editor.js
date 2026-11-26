@@ -5509,22 +5509,31 @@
     const list = Object.values(next).flatMap((row) => Object.entries(row).map(([z, n]) => `${POD.num(n)} × ${tr(sizeById(z).label)}`));
     toast(t('qty.packSwitched', { list: [...new Set(list)].join(POD.lang === 'ar' ? '، ' : ', '), save: money(before - after) }));
     renderOptions();
+    // …and when a few more copies cost less still (900 envelopes → 1,000), that too.
+    const gs = packGroups(qtyLines());
+    if (gs) hintMoreCopies(gs, after);
   }
   /**
    * A few single copies that cost more than a bigger pack (9 menus for 1,170 when 10 are 250): said, with the pack to
    * pick (nothing is changed: the customer may want exactly these). QA 26 Nov.
    */
-  function hintBiggerPack(lines, before) {
-    const p = st.product;
-    // Each colour (or finish) is its own pack: 5 matte + 4 glossy bookmarks need two 10-packs, not one (QA 26 Nov).
+  /** The lines by colour and kind of pack: [{ color, family, lines }], or null for a size the product doesn't have. */
+  function packGroups(lines) {
     const groups = [];
     for (const l of lines) {
       const z = sizeById(l.size);
-      if (!z) return;
+      if (!z) return null;
       let g = groups.find((x) => x.color === l.color && x.family === z.family);
       if (!g) groups.push((g = { color: l.color, family: z.family, lines: [] }));
       g.lines.push(l);
     }
+    return groups;
+  }
+  function hintBiggerPack(lines, before) {
+    const p = st.product;
+    // Each colour (or finish) is its own pack: 5 matte + 4 glossy bookmarks need two 10-packs, not one (QA 26 Nov).
+    const groups = packGroups(lines);
+    if (!groups) return;
     let after = 0;
     const picks = [];
     for (const g of groups) {
@@ -5535,7 +5544,7 @@
       after += best ? best.cost : now;
       if (best) picks.push({ color: g.color, z: best.z });
     }
-    if (!picks.length || !(after < before - 0.5)) return;
+    if (!picks.length || !(after < before - 0.5)) return hintMoreCopies(groups, before);
     const word = packWordHere();
     const typed = POD.plural(word, copiesIn(lines));
     if (groups.length === 1) {
@@ -5546,6 +5555,40 @@
     const name = (cid) => tr((p.colors.find((c) => c.id === cid) || {}).name || '');
     const list = picks.map((x) => t('qty.packOf', { copies: POD.plural(word, x.z.copies), color: name(x.color) })).join(' + ');
     toast(t(picks.length > 1 ? 'qty.packCheaperEach' : 'qty.packCheaperMix', { list, price: money(after), typed, now: money(before) }));
+  }
+  /**
+   * No single bigger pack is cheaper, but a few more copies are (900 envelopes as 500 + 4 × 100 for 2,450, while 1,000
+   * are two 500s for 2,100): said, as the cart says it (owner, 26 Nov). One colour and kind of pack only.
+   */
+  function hintMoreCopies(groups, before) {
+    if (groups.length !== 1) return;
+    const p = st.product;
+    const g = groups[0];
+    const fam = p.sizes.filter((z) => counted(z) && z.family === g.family && sizeOk(p, g.color, z));
+    if (!fam.length) return;
+    const copies = copiesIn(g.lines);
+    const step = Math.min(...fam.map((z) => z.copies));
+    const biggest = Math.max(...fam.map((z) => z.copies));
+    const costOf = (c) => {
+      if (mix().sizes) {
+        const m = cheapestPacks(c, fam);
+        return m ? [...m].reduce((a, [id, n]) => a + unitPrice(id) * n, 0) : Infinity;
+      }
+      let best = Infinity;
+      for (const z of fam) {
+        const n = c / z.copies;
+        if (Number.isInteger(n) && n >= 1 && n <= 1000) best = Math.min(best, unitPrice(z.id) * n);
+      }
+      return best;
+    };
+    for (let k = 1, c = copies + step; k <= 40 && c <= 10000 && c <= copies * 2 + biggest; k++, c += step) {
+      const cost = costOf(c);
+      if (cost < before - 0.5) {
+        const word = packWordHere();
+        toast(t('qty.packCheaper', { copies: POD.plural(word, c), price: money(cost), typed: POD.plural(word, copies), now: money(before) }));
+        return;
+      }
+    }
   }
   let qtyRedraw = false;
   let qtyPressAt = 0;
