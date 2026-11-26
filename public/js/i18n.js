@@ -874,6 +874,7 @@ window.POD_STRINGS = {
   'buy.names': ['{n} names', '{n} اسم'],
   'ed.saved': ['Saved', 'اتحفظ'],
   'el.done': ['Done', 'تم'],
+  'check.nothing': ['Nothing to check yet', 'لسه مفيش حاجة تتفحص'],
   'el.font': ['Font', 'الخط'],
   'el.size': ['Size', 'الحجم'],
   'el.colour': ['Colour', 'اللون'],
@@ -1069,9 +1070,9 @@ window.POD_STRINGS = {
   'pv.proofFailed': ['Could not create the colour preview.', 'معرفناش نعمل معاينة الألوان.'],
 
   // Text presets
-  'preset.heading': ['Add a heading', 'أضف عنوانًا'],
-  'preset.subheading': ['Add a subheading', 'أضف عنوانًا فرعيًا'],
-  'preset.body': ['Add a line of body text', 'أضف سطرًا من النص'],
+  'preset.heading': ['Add a heading', 'ضيف عنوان'],
+  'preset.subheading': ['Add a subheading', 'ضيف عنوان فرعي'],
+  'preset.body': ['Add a line of body text', 'ضيف سطر كلام'],
   'preset.headingText': ['Your Text', 'نصك هنا'],
   'preset.subheadingText': ['Subheading', 'عنوان فرعي'],
   'preset.bodyText': ['A little bit of body text', 'سطر صغير من الكلام'],

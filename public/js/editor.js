@@ -888,7 +888,9 @@
     // Print edge: a quiet grey dashed line (the accent orange is kept for what the customer acts on).
     ctx.setLineDash([6 * px, 4 * px]);
     ctx.lineWidth = 1.25 * px;
-    ctx.strokeStyle = 'rgba(70, 74, 82, .6)';
+    // (Light on a dark product: the grey line could not be seen on a black cap. UX review 26 Nov.)
+    const darkSurface = POD.luminance(surfaceHex()) < 0.3;
+    ctx.strokeStyle = darkSurface ? 'rgba(255, 255, 255, .8)' : 'rgba(70, 74, 82, .6)';
     pathRect(ctx, a);
     ctx.stroke();
     // Elements with print problems get a red outline.
@@ -973,7 +975,7 @@
     }
     const s = sideDef();
     ctx.font = `600 ${11 * px}px Cairo, system-ui, sans-serif`;
-    ctx.fillStyle = '#5b6069';
+    ctx.fillStyle = POD.luminance(surfaceHex()) < 0.3 ? '#f1f2f4' : '#5b6069';
     const dims = { w: POD.num(s.printWidthIn * 2.54), h: POD.num(s.printHeightIn * 2.54) };
     const stitched = embHere() || st.method === 'embroidery';
     let label = t(stitched ? 'embArea' : 'printArea', dims);
@@ -5005,12 +5007,14 @@
     const blank = blankPages();
     if (blank && !elsewhere.length && !issues.length) elsewhere.push(null);
     const chip = $('check-chip');
-    chip.className = 'check-chip ' + (issues.length ? (issues.some((i) => i.level === 'error') ? 'bad' : 'warn') : elsewhere.length ? 'warn' : 'ok');
+    // Nothing designed yet: no "Ready to print" (UX review 26 Nov): a neutral "Nothing to check yet".
+    const nothing = !issues.length && !elsewhere.length && !designedSides().length;
+    chip.className = 'check-chip ' + (nothing ? 'idle' : issues.length ? (issues.some((i) => i.level === 'error') ? 'bad' : 'warn') : elsewhere.length ? 'warn' : 'ok');
     // (The blank pages' line counts as one to check, as the list shows it. QA 26 Nov.)
     const named = elsewhere.filter(Boolean);
     chip.innerHTML = issues.length ? `⚠ <span>${esc(t('check.issues', { n: POD.num(issues.length + (blank ? 1 : 0)) }))}</span>`
       : named.length && !blank ? `⚠ <span>${esc(t('check.otherSide', { sides: named.join(POD.lang === 'ar' ? '، ' : ', ') }))}</span>`
-        : blank ? `⚠ <span>${esc(t('check.issues', { n: POD.num(1 + (named.length ? 1 : 0)) }))}</span>` : `✓ <span>${esc(t('check.ok'))}</span>`;
+        : blank ? `⚠ <span>${esc(t('check.issues', { n: POD.num(1 + (named.length ? 1 : 0)) }))}</span>` : nothing ? `<span>${esc(t('check.nothing'))}</span>` : `✓ <span>${esc(t('check.ok'))}</span>`;
     const R = rects();
     $('check-legend').innerHTML = `
       <li><i class="lg lg-trim"></i>${esc(t('check.legendTrim'))}</li>
