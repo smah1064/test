@@ -465,6 +465,18 @@
         originY: 'center',
       });
       if (t.w > 0 && !o.curve) o.scaleToWidth(box.w * t.w);
+      // Painted lettering: an outline (stroke, its width a fraction of the font size) and a shadow ({ color, x, y,
+      // blur }, also fractions of the font size; blur 0 is a solid offset copy, the editor's "Extrude"/"Retro"). `fx`
+      // names the editor's effect, so its chip shows as chosen.
+      const fs = o.fontSize;
+      if (typeof t.stroke === 'string' && /^#[0-9a-f]{6}$/i.test(t.stroke) && t.strokeW > 0) {
+        o.set({ stroke: t.stroke, strokeWidth: fs * Math.abs(o.scaleX || 1) * Math.min(0.2, Number(t.strokeW)), strokeUniform: true, paintFirst: 'stroke', strokeLineJoin: 'round' });
+      }
+      const sh = t.shadow && typeof t.shadow === 'object' ? t.shadow : null;
+      if (sh && typeof sh.color === 'string' && /^(#[0-9a-f]{6}|rgba?\([\d\s.,]+\))$/i.test(sh.color)) {
+        o.set({ shadow: new fabric.Shadow({ color: sh.color, blur: fs * Math.max(0, Math.min(0.5, Number(sh.blur) || 0)), offsetX: fs * Math.max(-0.3, Math.min(0.3, Number(sh.x) || 0)), offsetY: fs * Math.max(-0.3, Math.min(0.3, Number(sh.y) || 0)) }) });
+      }
+      if (typeof t.fx === 'string' && /^(shadow|extrude|retro|outline|sticker)$/.test(t.fx)) o.set({ textFx: t.fx });
       let dx = ((Number.isFinite(+t.x) ? +t.x : 0.5) - 0.5) * box.w;
       let dy = ((Number.isFinite(+t.y) ? +t.y : 0.5) - 0.5) * box.h;
       if (box.flipX) dx = -dx;

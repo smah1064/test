@@ -143,37 +143,39 @@ const WORDS = {
     { text: 'DON\'T BE A', font: 'Kalam', size: 0.1054, x: 0.4961, y: 0.0622, w: 0.5585 },
     { text: 'SNAILBRAIN', font: 'Chewy', size: 0.201, x: 0.5002, y: 0.904, w: 0.99 },
   ],
+  // (The colour pictures' painted lettering: a brush font, a thin dark outline and the coloured offset shadow the
+  // artist painted behind the letters, as the editor's Retro / Extrude effects, which the customer can change.)
   'error-404-sloth-pillows': [
-    { text: 'ERROR', font: 'Chewy', size: 0.2219, x: 0.3014, y: 0.1192, w: 0.5634, angle: -8, fill: '#12aaaa' },
-    { text: '404:', font: 'Chewy', size: 0.2048, x: 0.8021, y: 0.1096, w: 0.3862, fill: '#f86c0c' },
-    { text: 'MOTIVATION', font: 'Anton', size: 0.222, x: 0.4921, y: 0.8134, w: 0.9746, fill: '#111111' },
+    { text: 'ERROR', font: 'Chewy', size: 0.2219, x: 0.3014, y: 0.1192, w: 0.5634, angle: -8, fill: '#12aaaa', stroke: '#16181d', strokeW: 0.03, shadow: { color: '#f86c0c', x: -0.045, y: 0.045 }, fx: 'retro' },
+    { text: '404:', font: 'Chewy', size: 0.2048, x: 0.8021, y: 0.1096, w: 0.3862, fill: '#f86c0c', stroke: '#16181d', strokeW: 0.03, shadow: { color: '#12aaaa', x: -0.045, y: 0.045 }, fx: 'retro' },
+    { text: 'MOTIVATION', font: 'Permanent Marker', size: 0.2, x: 0.4921, y: 0.8134, w: 0.9746, fill: '#111111', shadow: { color: '#f86c0c', x: -0.05, y: 0.05 }, fx: 'extrude' },
     { text: 'NOT', font: 'Caprasimo', size: 0.1304, x: 0.24, y: 0.9459, w: 0.3006, fill: '#0cacac' },
     { text: 'FOUND', font: 'Caprasimo', size: 0.1193, x: 0.6592, y: 0.9421, w: 0.4633, fill: '#111111' },
   ],
   'error-404-sloth-nope-sign': [
-    { text: 'ERROR 404:', font: 'Anton', size: 0.2131, x: 0.4992, y: 0.1278, w: 0.9193, fill: '#111111' },
-    { text: 'MOTIVATION', font: 'Anton', size: 0.2094, x: 0.4994, y: 0.3658, curve: 16, fill: '#f8680c' },
+    { text: 'ERROR 404:', font: 'Anton', size: 0.2131, x: 0.4992, y: 0.1278, w: 0.9193, fill: '#111111', shadow: { color: '#12aaaa', x: -0.035, y: 0.035 }, fx: 'extrude' },
+    { text: 'MOTIVATION', font: 'Anton', size: 0.2094, x: 0.4994, y: 0.3658, curve: 16, fill: '#f8680c', stroke: '#16181d', strokeW: 0.03, shadow: { color: '#16181d', x: -0.035, y: 0.035 }, fx: 'retro' },
     { text: 'not\nfound', font: 'Kalam', weight: 'bold', size: 0.1076, x: 0.7948, y: 0.5021, w: 0.2673, angle: -6, lineHeight: 0.775, fill: '#111111' },
   ],
   'error-404-sloth-branch': [
     { text: 'ERROR 404:', font: 'Kalam', weight: 'bold', size: 0.1569, x: 0.5127, y: 0.1295, curve: 32, angle: -3.7, fill: '#111111' },
-    { text: 'MOTIVATION', font: 'Anton', size: 0.2202, x: 0.5, y: 0.775, w: 0.9663, fill: '#f86c50' },
+    { text: 'MOTIVATION', font: 'Permanent Marker', size: 0.2, x: 0.5, y: 0.775, w: 0.9663, fill: '#f86c50', stroke: '#2a1a16', strokeW: 0.03, shadow: { color: '#2a1a16', x: -0.035, y: 0.035 }, fx: 'retro' },
     { text: 'not found', font: 'Kalam', weight: 'bold', size: 0.1224, x: 0.5099, y: 0.9391, w: 0.5291, fill: '#111111' },
   ],
   'error-404-sloth-beanie': [
     { text: 'ERROR 404:', font: 'Kalam', weight: 'bold', size: 0.1721, x: 0.5045, y: 0.1121, w: 0.9002, angle: 2, fill: '#111111' },
-    { text: 'MOTIVATION', font: 'Anton', size: 0.2249, x: 0.4977, y: 0.7958, w: 0.9858, fill: '#0cb4b8' },
+    { text: 'MOTIVATION', font: 'Permanent Marker', size: 0.2, x: 0.4977, y: 0.7958, w: 0.9858, angle: -3, fill: '#0cb4b8', shadow: { color: '#f86c0c', x: 0.045, y: 0.035 }, fx: 'extrude' },
     { text: 'NOT FOUND', font: 'Kalam', weight: 'bold', size: 0.1157, x: 0.499, y: 0.9592, w: 0.6126, fill: '#111111' },
   ],
   'life-begins-after-coffee-cow': [
     { text: 'LIFE BEGINS AFTER', font: 'Smokum', size: 0.1338, x: 0.5084, y: 0.1129, curve: 34, fill: '#110d0a' },
-    { text: 'Coffee', font: 'Lobster', size: 0.4287, x: 0.4983, y: 0.7961, w: 0.9416, fill: '#110d0a' },
+    { text: 'Coffee', font: 'Lobster', size: 0.4287, x: 0.4983, y: 0.7961, w: 0.9416, fill: '#110d0a', stroke: '#e3c68a', strokeW: 0.035, fx: 'sticker' },
   ],
   'came-saw-needed-coffee-frog': [
     { text: 'I CAME, I SAW,', font: 'Ultra', size: 0.0765, x: 0.4796, y: 0.1008, curve: 29, fill: '#1c2624' },
     { text: 'I NEEDED', font: 'Ultra', size: 0.0653, x: 0.4892, y: 0.1453, w: 0.3754, fill: '#e4500f' },
-    { text: 'COFFEE', font: 'Ultra', size: 0.1512, x: 0.4968, y: 0.2327, w: 0.6566, spacing: -60, fill: '#1c2624' },
-    { text: 'So I left', font: 'Pacifico', size: 0.2229, x: 0.498, y: 0.8818, w: 0.8152, fill: '#4f520e' },
+    { text: 'COFFEE', font: 'Ultra', size: 0.1512, x: 0.4968, y: 0.2327, w: 0.6566, spacing: -60, fill: '#1c2624', shadow: { color: '#c8a06a', x: 0.03, y: 0.03 }, fx: 'extrude' },
+    { text: 'So I left', font: 'Yesteryear', size: 0.2229, x: 0.498, y: 0.8818, w: 0.8152, angle: -4, fill: '#6b7015', stroke: '#3e4108', strokeW: 0.02, shadow: { color: '#3e4108', x: 0.025, y: 0.03 }, fx: 'retro' },
   ],
 };
 const words = (id, src, dark) => (WORDS[id] ? { words: { src, ...(dark ? { dark } : {}), texts: WORDS[id] } } : {});
