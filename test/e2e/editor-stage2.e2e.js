@@ -21,8 +21,10 @@ async function openPhone(browser, base, lang, viewport = { width: 412, height: 8
   return { ctx, page, errors };
 }
 async function addName(page, words) {
-  await page.click('[data-flyout="text"]');
-  await page.locator('#text-presets button').first().click();
+  await page.click('.tools [data-flyout="text"]');
+  // (Phones, editor redesign stage 5: Text adds a heading at once; the computer opens the list of styles.)
+  if (await page.isVisible('#flyout-text')) await page.locator('#text-presets button').first().click();
+  await page.waitForSelector('#p-text');
   await page.waitForSelector('#p-text');
   await page.fill('#p-text', words);
   await page.dispatchEvent('#p-text', 'input');
@@ -57,6 +59,11 @@ test('phones: top bar with the product button and ⋯ menu; buy bar says what is
         await page.click('#ed-prod');
         await page.waitForSelector('#sizes [data-size="M"]', { state: 'visible' });
         await page.click('#sizes [data-size="M"]');
+        // A colour shows in the bar at once (QA 26 Nov: it lagged one step behind).
+        const second = await page.$eval('#swatches [data-color]:nth-child(2)', (b) => b.getAttribute('aria-label'));
+        await page.click('#swatches [data-color]:nth-child(2)');
+        await page.waitForFunction((w) => document.getElementById('ed-prod-sub').textContent.includes(w), second);
+        await page.click('#swatches [data-color]:nth-child(1)');
         await page.click('#sheet-close');
         assert.match(await page.textContent('#ed-prod-sub'), /M/);
         assert.match(await page.textContent('#buy-sum'), lang === 'ar' ? /M.*قطعة واحدة/ : /M.*1 piece/);
@@ -116,8 +123,10 @@ test('phones: the print check opens its own short sheet', { timeout: 90000 }, as
   const browser = await loadPlaywright().chromium.launch();
   try {
     const { ctx, page, errors } = await openPhone(browser, srv.base, 'ar');
-    await page.click('[data-flyout="text"]');
-    await page.locator('#text-presets button').first().click(); // the sample words, left as they are
+    await page.click('.tools [data-flyout="text"]');
+    // (Phones, editor redesign stage 5: Text adds a heading at once; the computer opens the list of styles.)
+    if (await page.isVisible('#flyout-text')) await page.locator('#text-presets button').first().click();
+    await page.waitForSelector('#p-text');
     await page.waitForTimeout(500);
     await page.evaluate(() => { document.activeElement && document.activeElement.blur(); const c = window.__editor.canvas; c.discardActiveObject(); c.requestRenderAll(); c.fire('selection:cleared'); });
     await page.waitForFunction(() => /warn|bad/.test(document.getElementById('check-chip').className));

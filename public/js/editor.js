@@ -59,6 +59,11 @@
   if (COARSE) Object.assign(fabric.Object.prototype, { cornerSize: 18, touchCornerSize: 48, padding: 8 });
   if (COARSE && fabric.Object.prototype.controls && fabric.Object.prototype.controls.mtr) fabric.Object.prototype.controls.mtr.offsetY = -46;
   const MOBILE = window.matchMedia('(max-width: 820px)');
+  // The computer layout of the editor redesign (stage 7): wide enough for the tools, a docked panel, the product
+  // and the right-hand column side by side.
+  // (From 1200 px: below that the docked panel left too little room for the product; those windows keep the earlier
+  // computer layout.)
+  const DESK = window.matchMedia('(min-width: 1200px)');
 
   // ---------- Load catalog and (optionally) a saved design ----------
   let catalog;
@@ -621,7 +626,7 @@
   }
   /** Room kept free above and below the product for the floating buttons (phones; stage 3 of the editor redesign). */
   // (Not while a settings sheet is open: the floating buttons step aside then, and the design keeps the room.)
-  const pillRoom = () => (MOBILE.matches && !st.product.paged && !st.sheet ? 56 : 0);
+  const pillRoom = () => (st.product.paged ? 0 : MOBILE.matches ? (st.sheet ? 0 : 56) : DESK.matches ? 64 : 0);
   function fit() {
     const stage = $('stage');
     // With the phone panel open there is little room: zoom in on the print area instead of the whole product.
@@ -637,18 +642,24 @@
     const raw = !focus ? productBox() : null;
     const prod = raw && { x: W / 2 + (raw.x - W / 2) * k, y: H / 2 + (raw.y - H / 2) * k, w: raw.w * k, h: raw.h * k };
     const room = pillRoom();
+    // (The room beside a docked panel only: the stage's padding makes way for it, stage 7.)
+    const scs = getComputedStyle(stage);
+    const padL = parseFloat(scs.paddingLeft) || 0;
+    const padR = parseFloat(scs.paddingRight) || 0;
+    const sw = stage.clientWidth - Math.max(0, padL + padR - 32);
     const base = focus
-      ? Math.min((stage.clientWidth - 16) / (a.w + 48), (stage.clientHeight - 16 - 2 * room) / (a.h + 48 + (zoneOf() ? 40 : 0))) / k
+      ? Math.min((sw - 16) / (a.w + 48), (stage.clientHeight - 16 - 2 * room) / (a.h + 48 + (zoneOf() ? 40 : 0))) / k
       : prod
-        ? Math.min((stage.clientWidth - 24) / prod.w, (stage.clientHeight - 24 - 2 * room) / prod.h, 2.6)
-        : Math.min((stage.clientWidth - 32) / W, (stage.clientHeight - 32 - 2 * room) / H, 1.6);
+        ? Math.min((sw - 24) / prod.w, (stage.clientHeight - 24 - 2 * room) / prod.h, 2.6)
+        : Math.min((sw - 32) / W, (stage.clientHeight - 32 - 2 * room) / H, 1.6);
     const z = Math.max(0.15, base) * st.zoom;
     canvas.setDimensions({ width: Math.round(W * z), height: Math.round(H * z) });
     canvas.setViewportTransform([z * k, 0, 0, z * k, (W * z * (1 - k)) / 2, (H * z * (1 - k)) / 2]);
+    if (!focus && st.zoom > 1.01 && typeof centerOnPrint === 'function') requestAnimationFrame(centerOnPrint); // (QA 26 Nov)
     if (prod && !focus && st.zoom <= 1.01) {
       // The product in the middle of the room left between the buttons above and below it.
-      const pad = parseFloat(getComputedStyle(stage).paddingTop) || 0;
-      stage.scrollLeft = (prod.x + prod.w / 2) * z + pad - stage.clientWidth / 2;
+      const pad = parseFloat(scs.paddingTop) || 0;
+      stage.scrollLeft = (prod.x + prod.w / 2) * z - (stage.clientWidth - padL - padR) / 2;
       stage.scrollTop = (prod.y + prod.h / 2) * z + pad - stage.clientHeight / 2;
     }
     requestAnimationFrame(() => {
@@ -672,13 +683,31 @@
     fit();
   };
   /** Scroll so the middle of the print area is in the middle of the screen. */
+  /**
+   * The part of the design area the customer sees, on screen: on the computer the docked panel covers its start
+   * (the stage's padding makes way for it), so zooming and centring use the room beside it (QA 26 Nov).
+   */
+  function viewRect() {
+    const stage = $('stage');
+    const s = stage.getBoundingClientRect();
+    const cs = getComputedStyle(stage);
+    // (Only a wide padding is the panel's room; the few pixels round the product on a phone are part of the view.)
+    const padL = parseFloat(cs.paddingLeft) > 100 ? parseFloat(cs.paddingLeft) : 0;
+    const padR = parseFloat(cs.paddingRight) > 100 ? parseFloat(cs.paddingRight) : 0;
+    const left = s.left + stage.clientLeft + padL;
+    const top = s.top + stage.clientTop;
+    const w = Math.max(80, stage.clientWidth - padL - padR);
+    const h = stage.clientHeight;
+    return { left, top, w, h, right: left + w, bottom: top + h };
+  }
   function centerOnPrint() {
     const stage = $('stage');
     const a = area();
     const vt = canvas.viewportTransform;
     const r = canvas.wrapperEl.getBoundingClientRect();
     const s = stage.getBoundingClientRect();
-    stage.scrollLeft += r.left + (a.x + a.w / 2) * vt[0] + vt[4] - (s.left + stage.clientWidth / 2);
+    const v = viewRect();
+    stage.scrollLeft += r.left + (a.x + a.w / 2) * vt[0] + vt[4] - (v.left + v.w / 2);
     stage.scrollTop += r.top + (a.y + a.h / 2) * vt[3] + vt[5] - (s.top + stage.clientHeight / 2);
   }
   /** Zoom so the print area fills most of the screen (small prints: chest embroidery, a polo's chest...). */
@@ -687,7 +716,7 @@
     const a = area();
     const now = canvas.viewportTransform[0] || 1; // screen pixels per unit now
     // About half the screen: big enough to work on, with the product round it still in view.
-    const want = Math.min(((stage.clientWidth - 48) * 0.5) / a.w, ((stage.clientHeight - 48) * 0.5) / a.h);
+    const want = Math.min(((viewRect().w - 48) * 0.5) / a.w, ((stage.clientHeight - 48) * 0.5) / a.h);
     setZoom((st.zoom * want) / now);
     centerOnPrint();
   }
@@ -701,10 +730,11 @@
     const a = area();
     const vt = canvas.viewportTransform;
     const now = vt[0] || 1;
-    const short = Math.min(stage.clientWidth, stage.clientHeight);
+    const vw = viewRect().w;
+    const short = Math.min(vw, stage.clientHeight);
     // (The product now fills the screen, so only really small print areas, a chest logo, are zoomed onto: stage 3.)
     if (Math.max(a.w * vt[0], a.h * vt[3]) >= short * (productBox() ? 0.15 : 0.22)) return;
-    const want = Math.min(((stage.clientWidth - 48) * 0.3) / a.w, ((stage.clientHeight - 48) * 0.3) / a.h);
+    const want = Math.min(((vw - 48) * 0.3) / a.w, ((stage.clientHeight - 48) * 0.3) / a.h);
     setZoom(Math.min(3, (st.zoom * want) / now));
     centerOnPrint();
   }
@@ -725,9 +755,10 @@
     const stage = $('stage');
     const r = canvas.wrapperEl.getBoundingClientRect();
     const s = stage.getBoundingClientRect();
-    const x = Math.max(0, s.left + stage.clientLeft - r.left);
+    const v = viewRect(); // (beside the docked panel on the computer)
+    const x = Math.max(0, v.left - r.left);
     const y = Math.max(0, s.top + stage.clientTop - r.top);
-    return { x, y, w: Math.min(canvas.getWidth() - x, stage.clientWidth), h: Math.min(canvas.getHeight() - y, stage.clientHeight) };
+    return { x, y, w: Math.max(0, Math.min(canvas.getWidth(), v.right - r.left) - x), h: Math.min(canvas.getHeight() - y, stage.clientHeight) };
   }
   function overviewFrame() {
     const box = $('overview');
@@ -883,7 +914,9 @@
     // Print edge: a quiet grey dashed line (the accent orange is kept for what the customer acts on).
     ctx.setLineDash([6 * px, 4 * px]);
     ctx.lineWidth = 1.25 * px;
-    ctx.strokeStyle = 'rgba(70, 74, 82, .6)';
+    // (Light on a dark product: the grey line could not be seen on a black cap. UX review 26 Nov.)
+    const darkSurface = POD.luminance(surfaceHex()) < 0.3;
+    ctx.strokeStyle = darkSurface ? 'rgba(255, 255, 255, .8)' : 'rgba(70, 74, 82, .6)';
     pathRect(ctx, a);
     ctx.stroke();
     // Elements with print problems get a red outline.
@@ -924,7 +957,8 @@
     // Movable print area: a handle under the box (and the allowed zone while dragging).
     st.handleRect = null;
     const zone = zoneOf();
-    if (zone && !crop) {
+    // (Not while something is chosen: its own bubble sits there then, editor redesign stage 6.)
+    if (zone && !crop && (!canvas.getActiveObject() || st.movingArea)) {
       if (st.movingArea) {
         ctx.setLineDash([2 * px, 4 * px]);
         ctx.lineWidth = 1 * px;
@@ -967,7 +1001,7 @@
     }
     const s = sideDef();
     ctx.font = `600 ${11 * px}px Cairo, system-ui, sans-serif`;
-    ctx.fillStyle = '#5b6069';
+    ctx.fillStyle = POD.luminance(surfaceHex()) < 0.3 ? '#f1f2f4' : '#5b6069';
     const dims = { w: POD.num(s.printWidthIn * 2.54), h: POD.num(s.printHeightIn * 2.54) };
     const stitched = embHere() || st.method === 'embroidery';
     let label = t(stitched ? 'embArea' : 'printArea', dims);
@@ -1468,8 +1502,9 @@
     scheduleCheck();
     // Phones: a newly added element opens its settings; tapping an existing
     // one shows the floating bar, which has a button for the settings.
-    if (MOBILE.matches && st.openSheetOnSelect) setSheet('props');
+    if (MOBILE.matches && st.openSheetOnSelect && st.typeOnAdd) setSheet('props');
     st.openSheetOnSelect = false;
+    st.typeOnAdd = false;
     renderFloatBar();
   }));
   let lastCleared = null;
@@ -1685,7 +1720,24 @@
   $('text-presets').addEventListener('click', serial(async (e) => {
     const btn = e.target.closest('[data-i]');
     if (!btn) return;
-    const p = D.TEXT_PRESETS[Number(btn.dataset.i)];
+    await addPreset(Number(btn.dataset.i));
+  }));
+  /** The look of a text preset (font, size for this print area, weight), for a new text or to restyle one. */
+  function presetLook(p, text) {
+    const font = typeof p.font === 'object' ? p.font[POD.lang] : p.font;
+    const arabic = D.ARABIC_RE.test(text);
+    return {
+      fontFamily: font,
+      // (Sized to the area's width, but never taller than about half its height: on a pen's thin barrel a heading
+      // started over the edges. QA 25 Nov.)
+      fontSize: Math.round(Math.min(area().w * p.size, area().h * 0.5)),
+      fontWeight: p.weight || 'normal',
+      fontStyle: p.italic ? 'italic' : 'normal',
+      charSpacing: arabic ? 0 : p.spacing || 0,
+    };
+  }
+  async function addPreset(i) {
+    const p = D.TEXT_PRESETS[i];
     const font = typeof p.font === 'object' ? p.font[POD.lang] : p.font;
     const text = p.text ? t(p.text) : p.sample;
     const arabic = D.ARABIC_RE.test(text);
@@ -1708,8 +1760,44 @@
       textAlign: 'center',
     });
     tx.placeholder = text; // typing replaces it (not saved with the design)
+    tx.kind = i;
     addObject(tx);
-  }));
+    return tx;
+  }
+
+  /**
+   * Phones (editor redesign stage 5): Text puts a heading straight onto the product, chosen, with its words selected
+   * in the box at the top of its settings and the keyboard open, so typing replaces the sample. Heading, subheading
+   * and a line of text are one tap above it; the full list of ready styles is one more tap.
+   * (The keyboard only opens from the tap itself: a hidden box takes the focus at once, and the text's box takes it
+   * over once the text is there.)
+   */
+  const quickText = serial(async () => {
+    const catcher = $('type-catch');
+    if (catcher) { try { catcher.focus({ preventScroll: true }); } catch (e) { /* none */ } }
+    st.typeOnAdd = true;
+    const tx = await addPreset(0);
+    st.freshText = tx;
+    renderProps();
+    requestAnimationFrame(() => {
+      const f = $('p-text');
+      if (f && active() === tx) { try { f.focus({ preventScroll: true }); f.select(); } catch (e) { /* none */ } } else if (catcher) catcher.blur();
+    });
+  });
+  const KINDS = [0, 1, 2];
+  async function setKind(o, i) {
+    const p = D.TEXT_PRESETS[i];
+    const sample = p.text ? t(p.text) : p.sample;
+    const keep = !stillPlaceholder(o);
+    const look = presetLook(p, keep ? o.text : sample);
+    await D.ensureFont(look.fontFamily, look.fontWeight, look.fontStyle);
+    if (!keep) { o.set({ text: sample }); o.placeholder = sample; }
+    o.kind = i;
+    o.set({ scaleX: 1, scaleY: 1 });
+    setProp(look, { commitNow: true });
+    renderProps();
+    requestAnimationFrame(() => { const f = $('p-text'); if (f) { try { f.focus({ preventScroll: true }); if (!keep) f.select(); } catch (e) { /* none */ } } });
+  }
   // The example words of a new text ("Your Text"): selected when the customer starts typing, so typing replaces them.
   const stillPlaceholder = (o) => Boolean(o && o.placeholder && o.text === o.placeholder);
   canvas.on('text:editing:entered', (e) => {
@@ -2231,17 +2319,95 @@
 
   // ---------- Flyouts ----------
   function closeFlyouts() {
-    document.querySelectorAll('.flyout').forEach((f) => (f.hidden = true));
+    document.querySelectorAll('.flyout').forEach((f) => { f.hidden = true; f.classList.remove('dock-default'); });
     document.querySelectorAll('.tool').forEach((x) => x.classList.remove('open'));
+    syncDock();
+  }
+  /**
+   * Computer (editor redesign stage 7): the chosen element's settings in a panel docked beside the tools (the right
+   * column keeps the product and the order); a tool's list docks in the same place. The product moves over to make
+   * room.
+   */
+  // (The panel's room is always kept on the computer, so choosing something never moves the product under the mouse:
+  // with nothing chosen and no tool open it shows the Text list.)
+  // (Booklets and other products with pages keep the earlier layout: their pages and page tabs need the room. QA 26 Nov.)
+  const docked = () => DESK.matches && !(st.product && st.product.paged);
+  function syncDock() {
+    const dock = $('props-dock');
+    if (!dock) return;
+    const desk = docked();
+    const chosen = Boolean(canvas.getActiveObject() || crop);
+    const text = $('flyout-text');
+    // (Another tool's list opened: the Text list shown by itself steps aside, it was drawn over Templates and Layers.)
+    const other = [...document.querySelectorAll('.flyout')].some((f) => f !== text && !f.hidden);
+    if (text && text.classList.contains('dock-default') && !text.hidden && ((desk && chosen) || other)) {
+      text.hidden = true;
+      text.classList.remove('dock-default');
+      const b = document.querySelector('.tools .tool[data-flyout="text"]');
+      if (b) b.classList.remove('open');
+    }
+    let flyOpen = [...document.querySelectorAll('.flyout')].some((f) => !f.hidden);
+    if (desk && !chosen && !flyOpen && text) {
+      text.hidden = false;
+      text.classList.add('dock-default');
+      flyOpen = true;
+    }
+    if (!desk && text && text.classList.contains('dock-default')) { text.hidden = true; text.classList.remove('dock-default'); }
+    dock.hidden = !(desk && chosen && !flyOpen);
+    document.body.classList.toggle('dock-open', desk);
+  }
+  /** Computer or phone: the pieces that live in a different place on each are moved there. */
+  // (Each piece goes back exactly where it was when the window gets narrower again: a mark is left in its place.)
+  const deskSlots = {};
+  function placeDesk() {
+    const desk = DESK.matches;
+    const dock = docked();
+    const move = (id, to) => {
+      const e = $(id);
+      if (!e || !to || e.parentElement === to) return;
+      if (!deskSlots[id]) { deskSlots[id] = document.createComment(id); e.before(deskSlots[id]); }
+      to.appendChild(e);
+    };
+    const back = (id) => { const e = $(id); if (e && deskSlots[id] && deskSlots[id].nextSibling !== e) deskSlots[id].after(e); };
+    // (Booklets: their layers stay in the right column, so the rail's Layers button is not shown.)
+    document.body.classList.toggle('paged-ed', Boolean(st.product && st.product.paged));
+    if (desk) {
+      move('undo', $('ed-hist'));
+      move('redo', $('ed-hist'));
+      move('share-open', $('ed-acts'));
+      move('preview-open', $('ed-acts'));
+    } else ['undo', 'redo', 'share-open', 'preview-open'].forEach(back);
+    if (dock) {
+      move('preview-toggle', document.querySelector('.zoom-group'));
+      move('sec-props', $('props-dock'));
+      move('sec-layers', $('layers-dock'));
+    } else {
+      ['preview-toggle', 'sec-props', 'sec-layers'].forEach(back);
+      placeProps(propsFor); // (the chosen element's settings above the product again)
+    }
+    syncDock();
   }
   let templatesRendered = false;
+  function openFlyout(name) {
+    const btn = document.querySelector(`.tools .tool[data-flyout="${name}"]`);
+    const fly = $('flyout-' + name);
+    if (!fly) return;
+    closeFlyouts();
+    fly.hidden = false;
+    if (btn) btn.classList.add('open');
+    syncDock();
+  }
   document.querySelectorAll('.tool[data-flyout]').forEach((btn) => {
     btn.addEventListener('click', () => {
+      if (btn.dataset.flyout === 'text' && MOBILE.matches && !crop && $('flyout-text').hidden) { closeFlyouts(); quickText(); return; }
       const fly = $('flyout-' + btn.dataset.flyout);
+      // (The Text list shown by itself on the computer: a click on Text keeps it, now as the customer's choice.)
+      if (fly.classList.contains('dock-default')) { fly.classList.remove('dock-default'); btn.classList.add('open'); return; }
       const open = fly.hidden;
       closeFlyouts();
       fly.hidden = !open;
       btn.classList.toggle('open', open);
+      syncDock();
       if (open && btn.dataset.flyout === 'templates' && !templatesRendered) {
         templatesRendered = true;
         renderTemplates();
@@ -2249,6 +2415,8 @@
     });
   });
   canvas.on('mouse:down', closeFlyouts);
+  document.querySelectorAll('[data-proxy-clear]').forEach((b) => b.addEventListener('click', () => $('clear-side').click()));
+  DESK.addEventListener('change', placeDesk);
   document.querySelectorAll('.flyout .fly-close').forEach((b) => b.addEventListener('click', closeFlyouts));
   // Phones (editor redesign stage 4): the rarer tools in one "More" list, each with a line saying what it does.
   if ($('flyout-more')) {
@@ -2419,6 +2587,8 @@
 
   // ---------- Phone layout: slide-up panel ----------
   function syncSheetTitle() {
+    if (typeof renderElBar === 'function') renderElBar();
+    if (typeof syncDock === 'function') syncDock();
     if (st.sheet) $('sheet-title').textContent = st.sheet === 'product' ? t('sheet.product') : st.sheet === 'check' ? t('check.title') : $('props-title').textContent;
   }
   function setSheet(mode) {
@@ -2426,6 +2596,7 @@
     document.body.classList.toggle('sheet-props', mode === 'props');
     document.body.classList.toggle('sheet-product', mode === 'product');
     document.body.classList.toggle('sheet-check', mode === 'check');
+    if (typeof renderElBar === 'function') renderElBar();
     document.querySelectorAll('[data-sheet]').forEach((b) => b.classList.toggle('open', b.dataset.sheet === mode));
     syncSheetTitle();
     requestAnimationFrame(() => {
@@ -2770,6 +2941,136 @@
     ungroup: '<rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/>',
   };
   const fbIcon = (k) => `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${FB[k]}</svg>`;
+  // ---------- Phones: the selected element's own tools and one short strip (editor redesign stage 6) ----------
+  const EL = { tool: null };
+  const elSvg = (d) => `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+  const EL_ICON = {
+    font: elSvg('<path d="M4 20 10 4h1l6 16M6.5 14h8"/><path d="M17 20h4"/>'),
+    size: elSvg('<path d="M3 7V5h11v2M8.5 5v14M6 19h5"/><path d="M15 13v-1h6v1M18 12v7M16.5 19h3"/>'),
+    colour: elSvg('<circle cx="12" cy="12" r="8" fill="currentColor" stroke="none"/>'),
+    fx: elSvg('<path d="m4 20 10-10M14 4v2M14 10v2M10 6H8M20 6h-2M17 3l-1 1M11 3l1 1M17 9l-1-1"/>'),
+    format: elSvg('<path d="M4 6h16M7 10h10M4 14h16M7 18h10"/>'),
+    crop: elSvg('<path d="M6 2v14a2 2 0 0 0 2 2h14M2 6h14a2 2 0 0 1 2 2v14"/>'),
+    shape: elSvg('<circle cx="12" cy="12" r="8"/><path d="M8 12h8"/>'),
+    removebg: elSvg('<path d="M4 4h4M16 4h4M4 20h4M16 20h4M4 4v4M20 4v4M4 16v4M20 16v4"/><circle cx="12" cy="11" r="3"/><path d="M7 18c1-2.5 3-3.5 5-3.5s4 1 5 3.5"/>'),
+    more: elSvg('<circle cx="5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="19" cy="12" r="1.6" fill="currentColor"/>'),
+  };
+  function elItems(o) {
+    if (isText(o)) return ['done', 'font', 'size', 'colour', 'fx', 'format', 'more'];
+    if (o.type === 'image') return ['done', 'crop', 'shape', 'removebg', 'more'];
+    if (o.type === 'activeSelection' || o.type === 'group' || isSticker(o) || laser()) return ['done', 'more'];
+    return ['done', 'colour', 'more'];
+  }
+  const EL_WORD = { font: 'el.font', size: 'el.size', colour: 'el.colour', fx: 'el.fx', format: 'el.format', crop: 'props.crop', shape: 'props.photoShape', removebg: 'el.removeBg', more: 'more.tool' };
+  function renderElBar() {
+    const bar = $('el-bar');
+    const strip = $('el-strip');
+    if (!bar || !strip) return;
+    const o = active();
+    // Cropping a photo: Cancel, Free / Square and Apply in the same place (QA 26 Nov: the photo bar's Crop left no way
+    // out on a phone).
+    if (MOBILE.matches && crop && st.sheet !== 'props') {
+      document.body.classList.add('el-on');
+      bar.hidden = false;
+      strip.hidden = true;
+      strip.innerHTML = '';
+      bar.innerHTML = `<button type="button" class="el-done" data-el="crop-cancel">${esc(t('props.cropCancel'))}</button>`
+        + ['free', 'square'].map((k) => `<button type="button" class="el-btn${(k === 'square') === Boolean(crop.square) ? ' active' : ''}" data-el="crop-${k}" aria-pressed="${(k === 'square') === Boolean(crop.square)}"><span>${esc(t(k === 'free' ? 'props.cropFree' : 'props.cropSquare'))}</span></button>`).join('')
+        + `<button type="button" class="el-done el-apply" data-el="crop-apply">${esc(t('props.cropApply'))}</button>`;
+      return;
+    }
+    const on = Boolean(MOBILE.matches && o && !crop && !st.preview && !st.exporting && st.sheet !== 'product' && st.sheet !== 'check');
+    document.body.classList.toggle('el-on', on);
+    bar.hidden = !on;
+    if (!on) { strip.hidden = true; strip.innerHTML = ''; EL.tool = null; return; }
+    const items = elItems(o);
+    if (!items.includes(EL.tool)) EL.tool = null;
+    bar.innerHTML = items.map((k) => (k === 'done'
+      ? `<button type="button" class="el-done" data-el="done">${esc(t('el.done'))}</button>`
+      : `<button type="button" class="el-btn${EL.tool === k || (k === 'more' && st.sheet === 'props') ? ' active' : ''}" data-el="${k}" aria-pressed="${EL.tool === k || (k === 'more' && st.sheet === 'props')}"${k === 'colour' ? ` style="--dot:${esc(typeof o.fill === 'string' && o.fill !== 'transparent' ? o.fill : '#16181d')}"` : ''}>${EL_ICON[k]}<span>${esc(t(EL_WORD[k]))}</span></button>`)).join('');
+    renderStrip(o);
+  }
+  function renderStrip(o) {
+    const strip = $('el-strip');
+    if (!strip) return;
+    if (!EL.tool || st.sheet === 'props') { strip.hidden = true; strip.innerHTML = ''; return; }
+    let html = '';
+    if (EL.tool === 'font') {
+      const arabic = D.ARABIC_RE.test(o.text);
+      const word = String(o.text || '').trim().split(/\s+/)[0].slice(0, 8) || (arabic ? 'أبجد' : 'Abc');
+      const list = arabic ? [...D.FONTS.arabic, ...D.FONTS.english] : [...D.FONTS.english, ...D.FONTS.arabic];
+      html = `<div class="strip-scroll">${list.map((f) => `<button type="button" class="font-card${f === o.fontFamily ? ' active' : ''}" data-font="${esc(f)}" aria-pressed="${f === o.fontFamily}" aria-label="${esc(f)}"><span style="font-family:'${esc(f)}'">${esc(word)}</span><small>${esc(f)}</small></button>`).join('')}</div>`;
+    } else if (EL.tool === 'size') {
+      const v = Math.round(o.fontSize);
+      html = `<div class="strip-row strip-size"><input type="range" data-strip-size min="8" max="300" step="1" value="${v}" aria-label="${esc(t('props.size'))}"><div class="num-step" dir="ltr"><button type="button" class="btn btn-sm" data-strip-step="-2" aria-label="${esc(t('props.less'))}">${ICON.minus}</button><span class="strip-num" aria-live="polite">${esc(POD.num(v))}</span><button type="button" class="btn btn-sm" data-strip-step="2" aria-label="${esc(t('props.more'))}">${ICON.plus}</button></div></div>`;
+    } else if (EL.tool === 'colour') {
+      const now = typeof o.fill === 'string' ? toHex(o.fill) : '';
+      html = `<div class="strip-scroll strip-dots">${PALETTE.map((c) => `<button type="button" class="pal${now === c ? ' active' : ''}" data-pal="fill" data-c="${c}" style="background:${c}" aria-label="${c}" aria-pressed="${now === c}"></button>`).join('')}<button type="button" class="strip-more" data-el="more-colours" aria-label="${esc(t('el.moreColours'))}">${ICON.plus}</button></div>`;
+    } else if (EL.tool === 'fx') {
+      const sample = D.ARABIC_RE.test(o.text) ? 'أبج' : 'Abc';
+      html = `<div class="strip-scroll">${TEXT_FX.map((id) => `<button type="button" class="fx-chip${(o.textFx || 'none') === id ? ' active' : ''}" data-fx="${id}" aria-pressed="${(o.textFx || 'none') === id}"><span class="fx-sample fx-${id}" style="font-family:'${esc(o.fontFamily)}'">${sample}</span><small>${esc(t('fx.' + id))}</small></button>`).join('')}</div>`;
+    } else if (EL.tool === 'format') {
+      const b = o.fontWeight === 'bold' || Number(o.fontWeight) >= 600;
+      html = `<div class="strip-row strip-format"><div class="btn-group">${['bold', 'italic', 'underline'].map((k) => { const on = k === 'bold' ? b : k === 'italic' ? o.fontStyle === 'italic' : o.underline; return `<button type="button" class="btn btn-sm${on ? ' active' : ''}" data-toggle="${k}" aria-pressed="${Boolean(on)}" aria-label="${esc(t('props.' + k))}">${{ bold: '<b>B</b>', italic: '<i>I</i>', underline: '<u>U</u>' }[k]}</button>`; }).join('')}</div><div class="btn-group" dir="ltr">${['left', 'center', 'right'].map((al) => `<button type="button" class="btn btn-sm${o.textAlign === al ? ' active' : ''}" data-align="${al}" aria-pressed="${o.textAlign === al}" aria-label="${esc(t('props.align' + al[0].toUpperCase() + al.slice(1)))}">${ICON['al' + al]}</button>`).join('')}</div></div>`;
+    } else if (EL.tool === 'shape') {
+      html = `<div class="strip-scroll">${MASKS.map((m) => `<button type="button" class="mask-btn${(o.mask || 'none') === m ? ' active' : ''}" data-mask="${m}" aria-pressed="${(o.mask || 'none') === m}"><span class="mask-icon mask-${m}"></span><small>${esc(t('mask.' + m))}</small></button>`).join('')}</div>`;
+    }
+    strip.innerHTML = html;
+    strip.hidden = !html;
+    const cur = strip.querySelector('.active');
+    if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }
+  if ($('el-bar')) {
+    $('el-bar').addEventListener('click', serial(async (e) => {
+      const b = e.target.closest('[data-el]');
+      if (b && crop && /^crop-/.test(b.dataset.el)) {
+        const c = b.dataset.el;
+        if (c === 'crop-apply') applyCrop();
+        if (c === 'crop-cancel') cancelCrop();
+        if (c === 'crop-free') setCropSquare(false);
+        if (c === 'crop-square') setCropSquare(true);
+        renderElBar();
+        return;
+      }
+      const o = active();
+      if (!b || !o) return;
+      const k = b.dataset.el;
+      if (k === 'done') { deselectAll(); return; }
+      if (k === 'more') { EL.tool = null; setSheet(st.sheet === 'props' ? null : 'props'); return; }
+      if (k === 'crop') { EL.tool = null; startCrop(o); renderElBar(); return; }
+      if (k === 'removebg') { await removeImageBackground(o); return; }
+      EL.tool = EL.tool === k ? null : k;
+      if (st.sheet === 'props') setSheet(null);
+      renderElBar();
+    }));
+    $('el-strip').addEventListener('click', (e) => {
+      const o = active();
+      if (!o) return;
+      if (e.target.closest('[data-el="more-colours"]')) {
+        EL.tool = null;
+        openGroups.add('colours');
+        setSheet('props');
+        renderProps();
+        return;
+      }
+      const step = e.target.closest('[data-strip-step]');
+      if (step) {
+        setProp({ fontSize: Math.max(8, Math.min(300, Math.round(o.fontSize) + Number(step.dataset.stripStep))) }, { commitNow: true });
+        renderProps();
+      }
+    });
+    $('el-strip').addEventListener('input', (e) => {
+      const o = active();
+      if (!o || !e.target.matches('[data-strip-size]')) return;
+      setProp({ fontSize: Number(e.target.value) });
+      const n = $('el-strip').querySelector('.strip-num');
+      if (n) n.textContent = POD.num(Number(e.target.value));
+      const f = $('p-size');
+      if (f) f.value = e.target.value;
+    });
+    $('el-strip').addEventListener('change', (e) => { if (e.target.matches('[data-strip-size]')) { commit(); renderProps(); } });
+    MOBILE.addEventListener('change', () => renderElBar());
+  }
   function hideFloatBar() {
     const bar = $('float-bar');
     if (bar) bar.hidden = true;
@@ -2783,10 +3084,10 @@
     const multi = o.type === 'activeSelection';
     const items = [];
     if (isText(o)) items.push(['edit-text', 'edit', 'fb.editText', true]);
-    if (MOBILE.matches) items.push(['open-props', 'style', multi ? 'fb.arrange' : 'fb.style', true]);
     if (multi) items.push(['group', 'group', 'group.make', false]);
     if (o.type === 'group' && !isSticker(o)) items.push(['ungroup', 'ungroup', 'group.ungroup', false]);
-    if (!multi) items.push(['duplicate', 'dup', 'props.duplicate', false], ['up', 'up', 'props.forward', false], ['down', 'down', 'props.backward', false]);
+    // (Phones: forward / backward are in the element's More; the bubble keeps copy and delete.)
+    if (!multi) items.push(['duplicate', 'dup', 'props.duplicate', false], ...(MOBILE.matches ? [] : [['up', 'up', 'props.forward', false], ['down', 'down', 'props.backward', false]]));
     items.push(['delete', 'del', multi ? 'props.deleteSelected' : 'props.delete', false]);
     bar.innerHTML = items.map(([act, icon, key, label]) =>
       `<button type="button" data-fb="${act}" class="${act === 'delete' ? 'danger' : ''}" title="${esc(t(key))}" aria-label="${esc(t(key))}">${fbIcon(icon)}${label ? `<span>${esc(t(key))}</span>` : ''}</button>`).join('');
@@ -2802,7 +3103,9 @@
     const r = o.getBoundingRect();
     const cv = canvas.upperCanvasEl.getBoundingClientRect();
     const wrap = bar.parentElement.getBoundingClientRect();
-    const stage = $('stage').getBoundingClientRect();
+    const sr = $('stage').getBoundingClientRect();
+    const v = viewRect(); // (kept beside the docked panel, it slid under it: QA 26 Nov)
+    const stage = { left: v.left, right: v.right, top: sr.top, bottom: sr.bottom };
     const bw = bar.offsetWidth;
     const bh = bar.offsetHeight;
     const gap = COARSE ? 30 : 18;
@@ -2831,15 +3134,20 @@
     const wrap = btn.parentElement.getBoundingClientRect();
     const w = a.w * vt[0];
     const h = a.h * vt[3];
-    btn.style.width = `${Math.max(120, Math.round(w - 16))}px`;
-    btn.style.maxHeight = `${Math.max(64, Math.round(h - 16))}px`;
+    btn.classList.toggle('on-dark', POD.luminance(surfaceHex()) < 0.3);
+    btn.classList.toggle('short', h < 150);
+    btn.classList.toggle('tiny', h < 96 || w < 110);
+    btn.style.width = `${Math.max(56, Math.round(w - 12))}px`;
+    btn.style.maxHeight = `${Math.max(48, Math.round(h - 12))}px`;
     const bw = btn.offsetWidth;
     const bh = btn.offsetHeight;
     const x = cv.left + a.x * vt[0] + vt[4] + w / 2 - bw / 2;
     const y = cv.top + a.y * vt[3] + vt[5] + h / 2 - bh / 2;
     btn.style.transform = `translate(${Math.round(x - wrap.left)}px, ${Math.round(y - wrap.top)}px)`;
   }
-  if ($('start-here')) $('start-here').addEventListener('click', () => { const tool = document.querySelector('.tools [data-flyout="text"]'); if (tool) tool.click(); });
+  // (A heading ready to type on every screen: on the computer it only clicked Text, whose list was already showing.
+  // QA 26 Nov.)
+  if ($('start-here')) $('start-here').addEventListener('click', () => { closeFlyouts(); quickText(); });
   $('stage').addEventListener('scroll', () => { positionFloatBar(); positionStartHere(); }, { passive: true });
   window.addEventListener('resize', () => requestAnimationFrame(positionFloatBar));
   $('float-bar').addEventListener('click', (e) => {
@@ -2866,6 +3174,8 @@
 
   // ---------- Properties panel ----------
   const props = $('props');
+  /** The element's settings react the same in the sheet and in the phone's short strip (editor redesign stage 6). */
+  const onProps = (type, fn, opts) => { props.addEventListener(type, fn, opts); if ($('el-strip')) $('el-strip').addEventListener(type, fn, opts); };
   const PALETTE = ['#16181d', '#ffffff', '#ff5a36', '#e03131', '#f783ac', '#fcc419', '#e0a526', '#2f9e44', '#1c7ed6', '#22304f', '#7048e8', '#8d6e63'];
   const MASKS = ['none', 'circle', 'rounded', 'heart', 'star', 'hexagon', 'arch'];
   // (Colours folded on phones, where the text's colour now sits under its size; the computer's side panel has room for
@@ -2881,7 +3191,7 @@
     type: 'linear', gradientUnits: 'percentage', coords: { x1: 0, y1: 0, x2: 0, y2: 1 },
     colorStops: [{ offset: 0, color: c1 }, { offset: 1, color: c2 }],
   });
-  props.addEventListener('toggle', (e) => {
+  onProps('toggle', (e) => {
     const d = e.target;
     if (d.dataset && d.dataset.group) d.open ? openGroups.add(d.dataset.group) : openGroups.delete(d.dataset.group);
   }, true);
@@ -2992,6 +3302,7 @@
    */
   let propsFor = null;
   function placeProps(o) {
+    if (docked()) { propsFor = o || null; return; } // (computer: in its own docked panel)
     const sec = $('sec-props');
     const prod = $('sec-product');
     const check = $('sec-check');
@@ -3058,7 +3369,9 @@
 
     if (text) {
       const arabic = D.ARABIC_RE.test(o.text);
-      html += group('text', t('grp.text'), `
+      // A text just added on a phone: heading, subheading or a line of text, and the full list of ready styles.
+      const kinds = o === st.freshText && MOBILE.matches ? `<div class="text-kinds" role="group" aria-label="${esc(t('kind.title'))}">${KINDS.map((i) => `<button type="button" class="chip ${o.kind === i ? 'active' : ''}" data-kind="${i}" aria-pressed="${o.kind === i}">${esc(t(['kind.heading', 'kind.sub', 'kind.line'][i]))}</button>`).join('')}<button type="button" class="chip kind-all" data-kind="all">${esc(t('kind.all'))}</button></div>` : '';
+      html += group('text', t('grp.text'), `${kinds}
         <div class="field"><textarea id="p-text" rows="2" dir="auto">${esc(o.text)}</textarea></div>
         <div class="field">${fontPicker(o)}</div>
         <div class="field row size-row">
@@ -3124,6 +3437,7 @@
     box.innerHTML = html;
     if (image) updateQuality();
     syncSheetTitle();
+    renderElBar();
   }
 
   /** Laser products: one tone, so instead of colour pickers a word on how it will look. */
@@ -3560,7 +3874,7 @@
   // Arabic keyboard count ("٨٠" is 80; a number box would drop them, QA 25 Nov). Arrow keys still step.
   const latinNumber = (v) => String(v).replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d))
     .replace(/[٫,]/g, '.').replace(/[−–]/g, '-').replace(/[^\d.-]/g, '');
-  props.addEventListener('keydown', (e) => {
+  onProps('keydown', (e) => {
     const box = e.target;
     if (!box.classList || !box.classList.contains('num-in') || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
     e.preventDefault();
@@ -3572,7 +3886,7 @@
     box.dispatchEvent(new Event('input', { bubbles: true }));
     box.dispatchEvent(new Event('change', { bubbles: true }));
   });
-  props.addEventListener('input', (e) => {
+  onProps('input', (e) => {
     const o = active();
     if (!o || crop) return;
     const v = e.target.classList && e.target.classList.contains('num-in') ? latinNumber(e.target.value) : e.target.value;
@@ -3656,7 +3970,7 @@
     const nf = $('p-text');
     if (nf && pos !== null) { nf.focus(); nf.setSelectionRange(pos, pos); }
   }
-  props.addEventListener('change', (e) => {
+  onProps('change', (e) => {
     const o = active();
     if (!o || crop) return;
     const id = e.target.id;
@@ -3685,7 +3999,7 @@
     // the next box keeps its focus, QA 25 Nov.)
     if (['p-wcm', 'p-hcm', 'p-xcm', 'p-ycm'].includes(id)) refreshCmBoxes(o, e.target);
   });
-  props.addEventListener('click', serial(async (e) => {
+  onProps('click', serial(async (e) => {
     if (crop) {
       const act = e.target.closest('[data-act]')?.dataset.act;
       if (act === 'crop-apply') applyCrop();
@@ -3696,6 +4010,17 @@
     }
     const o = active();
     if (!o) return;
+    const kindBtn = e.target.closest('[data-kind]');
+    if (kindBtn) {
+      if (kindBtn.dataset.kind === 'all') {
+        // The full list: the sample just added makes room for the style picked there.
+        if (stillPlaceholder(o)) { st.freshText = null; canvas.remove(o); canvas.discardActiveObject(); canvas.requestRenderAll(); commit(); setSheet(null); }
+        openFlyout('text');
+        return;
+      }
+      await setKind(o, Number(kindBtn.dataset.kind));
+      return;
+    }
     const numStep = e.target.closest('[data-numstep]');
     if (numStep) {
       const box = $(numStep.dataset.for);
@@ -3961,6 +4286,7 @@
   // ---------- Product options ----------
   function renderOptions() {
     const p = st.product;
+    requestAnimationFrame(() => { if (typeof renderTopBar === 'function') renderTopBar(); }); // (the new colour at once, QA 26 Nov)
     $('product-select').innerHTML = products.map((x) => `<option value="${x.id}" ${x === p ? 'selected' : ''}>${esc(tr(x.name))}</option>`).join('');
     // (An order's item, changed by the shop or by the customer, stays the product ordered: the server refuses another
     // one, but only after the note was typed and the files uploaded. QA 25 Nov.)
@@ -4319,6 +4645,7 @@
     history.replaceState(null, '', url);
     renderOptions();
     await Promise.all([applyMockup(), loadObjects(st.designs[st.side])]);
+    placeDesk(); // (a booklet keeps the earlier layout on the computer)
     st.zoom = 1;
     fit();
     autoFocusPrint();
@@ -4421,7 +4748,11 @@
   function togglePreview() {
     st.preview = !st.preview;
     $('preview-toggle').classList.toggle('active', st.preview);
-    if ($('ed-guides')) $('ed-guides').setAttribute('aria-pressed', String(st.preview));
+    if ($('ed-guides')) {
+      $('ed-guides').setAttribute('aria-pressed', String(st.preview));
+      const word = $('ed-guides').querySelector('[data-i18n]');
+      if (word) { word.dataset.i18n = st.preview ? 'bar.showGuides' : 'bar.preview'; word.textContent = t(word.dataset.i18n); }
+    }
     positionStartHere();
     if (st.preview) canvas.discardActiveObject();
     applyClips();
@@ -4751,12 +5082,14 @@
     const blank = blankPages();
     if (blank && !elsewhere.length && !issues.length) elsewhere.push(null);
     const chip = $('check-chip');
-    chip.className = 'check-chip ' + (issues.length ? (issues.some((i) => i.level === 'error') ? 'bad' : 'warn') : elsewhere.length ? 'warn' : 'ok');
+    // Nothing designed yet: no "Ready to print" (UX review 26 Nov): a neutral "Nothing to check yet".
+    const nothing = !issues.length && !elsewhere.length && !designedSides().length;
+    chip.className = 'check-chip ' + (nothing ? 'idle' : issues.length ? (issues.some((i) => i.level === 'error') ? 'bad' : 'warn') : elsewhere.length ? 'warn' : 'ok');
     // (The blank pages' line counts as one to check, as the list shows it. QA 26 Nov.)
     const named = elsewhere.filter(Boolean);
     chip.innerHTML = issues.length ? `⚠ <span>${esc(t('check.issues', { n: POD.num(issues.length + (blank ? 1 : 0)) }))}</span>`
       : named.length && !blank ? `⚠ <span>${esc(t('check.otherSide', { sides: named.join(POD.lang === 'ar' ? '، ' : ', ') }))}</span>`
-        : blank ? `⚠ <span>${esc(t('check.issues', { n: POD.num(1 + (named.length ? 1 : 0)) }))}</span>` : `✓ <span>${esc(t('check.ok'))}</span>`;
+        : blank ? `⚠ <span>${esc(t('check.issues', { n: POD.num(1 + (named.length ? 1 : 0)) }))}</span>` : nothing ? `<span>${esc(t('check.nothing'))}</span>` : `✓ <span>${esc(t('check.ok'))}</span>`;
     const R = rects();
     $('check-legend').innerHTML = `
       <li><i class="lg lg-trim"></i>${esc(t('check.legendTrim'))}</li>
@@ -4853,7 +5186,7 @@
   document.addEventListener('focusout', (e) => { if (e.target.id === 'p-text') setTimeout(() => paintSampleNote(st.issues), 0); });
   canvas.on('text:editing:entered', () => paintSampleNote(st.issues));
   canvas.on('text:editing:exited', () => paintSampleNote(st.issues));
-  canvas.on('selection:cleared', () => paintSampleNote(st.issues));
+  canvas.on('selection:cleared', () => { st.freshText = null; paintSampleNote(st.issues); });
   canvas.on('selection:updated', () => paintSampleNote(st.issues));
   canvas.on('selection:created', () => paintSampleNote(st.issues));
   $('check-list').addEventListener('click', (e) => {
@@ -4936,6 +5269,7 @@
     const colourWord = colours.length > 1 ? t('buy.colours') : tr(c.name);
     const sizeWord = askSize ? '' : sizes.length > 1 ? t('buy.sizes') : p.sizes.length > 1 ? tr((p.sizes.find((z) => z.id === (sizes[0] || st.sizeId)) || {}).label || '') : '';
     const sep = POD.lang === 'ar' ? '، ' : ', ';
+    if ($('ed-dname')) { $('ed-dname').textContent = tr(p.name); $('ed-dname').title = tr(p.name); }
     if ($('ed-prod-name')) {
       $('ed-prod-name').textContent = tr(p.name);
       $('ed-prod-sub').textContent = [colourWord, sizeWord].filter(Boolean).join(sep);
@@ -5181,6 +5515,8 @@
     toast(t(picks.length > 1 ? 'qty.packCheaperEach' : 'qty.packCheaperMix', { list, price: money(after), typed, now: money(before) }));
   }
   let qtyRedraw = false;
+  let qtyPressAt = 0;
+  if ($('qty-field')) $('qty-field').addEventListener('pointerdown', (e) => { if (e.target.closest && e.target.closest('.qty-in')) qtyPressAt = performance.now(); }, true);
   function renderQty({ force = false } = {}) {
     const box = $('qty-field');
     if (!box) return;
@@ -5188,8 +5524,12 @@
     // just tapped: they're drawn once the focus leaves them, QA 25 Nov. The price is kept up to date.
     // A new colour row asked for is drawn at once: force.)
     const typing = document.activeElement;
-    if (!force && typing && typing.classList && typing.classList.contains('qty-in') && box.contains(typing)) {
+    // (Also just as a quantity box is pressed, before it has the focus: the words box losing the focus redrew the
+    // table under the click and the number typed next was lost. QA 26 Nov.)
+    const pressing = performance.now() - qtyPressAt < 600;
+    if (!force && (pressing || (typing && typing.classList && typing.classList.contains('qty-in') && box.contains(typing)))) {
       qtyRedraw = true;
+      if (pressing) setTimeout(redrawQtyIfLeft, 700);
       return;
     }
     qtyRedraw = false;
@@ -7015,6 +7355,7 @@
   renderPresets();
   renderShapes();
   renderStickers();
+  placeDesk();
   fit();
   await D.ensureFont('Cairo', 600); // print-area label
   await showSide(st.side);

@@ -55,7 +55,9 @@ test('phones: bigger print area, floating buttons clear of it and of each other'
         assert.ok(start.shown, `start prompt, ${label}`);
         assert.ok(start.l >= p.l - 1 && start.r <= p.r + 1 && start.t >= p.t - 1 && start.b <= p.b + 1, `start prompt inside the print area, ${label}`);
         await page.click('#start-here');
-        await page.waitForSelector('#flyout-text:not([hidden])');
+        // (Stage 5: on a phone it puts a heading straight onto the product, its words ready to type over.)
+        await page.waitForFunction(() => window.__editor.canvas.getObjects().length === 1);
+        await page.waitForSelector('#p-text', { state: 'visible' });
         assert.strictEqual(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `sideways, ${label}`);
         assert.deepStrictEqual(errors, []);
         await ctx.close();
@@ -72,8 +74,10 @@ test('phones: share, zoom, hide guides and clear the side from the ⋯ menu', { 
   const browser = await loadPlaywright().chromium.launch();
   try {
     const { ctx, page, errors } = await open(browser, srv.base, { lang: 'ar' });
-    await page.click('[data-flyout="text"]');
-    await page.locator('#text-presets button').first().click();
+    await page.click('.tools [data-flyout="text"]');
+    // (Phones, editor redesign stage 5: Text adds a heading at once; the computer opens the list of styles.)
+    if (await page.isVisible('#flyout-text')) await page.locator('#text-presets button').first().click();
+    await page.waitForSelector('#p-text');
     await page.waitForTimeout(400);
     await page.click('#sheet-close');
     await page.click('#ed-more');

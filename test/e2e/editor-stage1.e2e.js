@@ -22,8 +22,10 @@ async function openEditor(browser, base, { lang = 'ar', viewport = { width: 412,
   return { ctx, page, errors };
 }
 async function addText(page) {
-  await page.click('[data-flyout="text"]');
-  await page.locator('#text-presets button').first().click();
+  await page.click('.tools [data-flyout="text"]');
+  // (Phones, editor redesign stage 5: Text adds a heading at once; the computer opens the list of styles.)
+  if (await page.isVisible('#flyout-text')) await page.locator('#text-presets button').first().click();
+  await page.waitForSelector('#p-text');
   await page.waitForSelector('#p-text');
   await page.evaluate(() => document.activeElement && document.activeElement.blur());
   await page.waitForTimeout(300);
@@ -138,8 +140,9 @@ test('computer: Escape and a click on the grey around the product take the selec
       await page.waitForSelector('#sec-product', { state: 'visible' });
       // Select again, then click the grey area beside the canvas.
       await page.evaluate(() => { const c = window.__editor.canvas; c.setActiveObject(c.getObjects()[0]); c.requestRenderAll(); });
+      // (Away from the panel docked beside the tools: stage 7.)
       const box = await page.locator('#stage').boundingBox();
-      await page.mouse.click(box.x + 12, box.y + box.height - 12);
+      await page.mouse.click(lang === 'ar' ? box.x + 12 : box.x + box.width - 12, box.y + box.height - 12);
       assert.strictEqual(await selected(), false, 'click on the grey');
       // The quantity table: every box inside the panel.
       const fits = await page.evaluate(() => {
