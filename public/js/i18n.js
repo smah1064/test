@@ -1157,6 +1157,13 @@ window.POD_STRINGS = {
   'pf.photoLowRes.two': ['2 photos are low resolution for their print size and may look blurry (photos no. {photos}).', 'صورتين دقتهم قليلة على مقاسهم، وممكن يطلعوا مش واضحين (صورة رقم {photos}).'],
   'pf.photoLowRes.few': ['{count} photos are low resolution for their print size and may look blurry (photos no. {photos}).', '{count} صور دقتها قليلة على مقاسها، وممكن تطلع مش واضحة (صور رقم {photos}).'],
   'pf.photoLowRes.many': ['{count} photos are low resolution for their print size and may look blurry (photos no. {photos}).', '{count} صورة دقتها قليلة على مقاسها، وممكن تطلع مش واضحة (صور رقم {photos}).'],
+  // Booklet pages with nothing on them, and Arabic in an English-only font (src/preflight.js; proof, cart and the
+  // dashboard alike). {pages} is "2–8" or "2–4، 6" in the page's digits (proof-ui.js / admin.js).
+  'pf.blankPages': ['Pages {pages} of {total} have nothing on them and will print blank (page 1 is the front cover, page {total} the back cover). That’s fine if it’s on purpose.', 'الصفحات {pages} من {total} مفيش عليها تصميم وهتطلع فاضية (صفحة ١ هي الغلاف الأمامي وصفحة {total} الغلاف الخلفي). لو ده مقصود، مفيش مشكلة.'],
+  'pf.blankPages.one': ['Page {pages} of {total} has nothing on it and will print blank (page 1 is the front cover, page {total} the back cover). That’s fine if it’s on purpose.', 'صفحة {pages} من {total} مفيش عليها تصميم وهتطلع فاضية (صفحة ١ هي الغلاف الأمامي وصفحة {total} الغلاف الخلفي). لو ده مقصود، مفيش مشكلة.'],
+  'pf.fontNoArabic': ['The text “{name}” is in {font}, a font with no Arabic letters, so it will print in a different font. Choose an Arabic font, such as {suggest}.', 'الكلام «{name}» مكتوب بخط {font}، والخط ده مفيهوش حروف عربي، فهيتطبع بخط تاني. اختار خط عربي، زي {suggest}.'],
+  // The editor's own check list, for the same thing (public/js/editor.js checkIssues).
+  'check.fontNoArabic': ['{name} is in {font}, which has no Arabic letters: it would print in a different font. Pick an Arabic font, such as {suggest}.', '{name} مكتوب بخط {font}، والخط ده مفيهوش حروف عربي، فهيتطبع بخط تاني. اختار خط عربي، زي {suggest}.'],
 
   // ---------- Order ----------
   'order.pageTitle': ['Your order · ebda3', 'طلبك · إبداع'],

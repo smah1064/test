@@ -799,7 +799,8 @@
     return (letters[max] !== ' ' && space > 0 ? kept.slice(0, space) : kept).join('').trim();
   }
   // The English-only fonts have no Arabic letters: an Arabic name typed over an English sample is set in an
-  // Arabic font of the same feel (the editor does the same when Arabic is typed in such a font).
+  // Arabic font of the same feel (the editor does the same when Arabic is typed in such a font). The file check suggests
+  // the same fonts (src/preflight.js keeps a copy of this list: test/qa-tester1-2603.test.js checks they match).
   const ARABIC_FOR = {
     'Dancing Script': 'Aref Ruqaa', Pacifico: 'Aref Ruqaa', Lobster: 'Aref Ruqaa', Caveat: 'Aref Ruqaa',
     'Playfair Display': 'El Messiri', 'Abril Fatface': 'El Messiri', 'Roboto Slab': 'El Messiri',

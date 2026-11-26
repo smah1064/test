@@ -5,10 +5,11 @@
  * preflight(design, { readFile, product }) -> { status, checks }
  *   checks: [ { id, level: 'info'|'warn'|'fail', side?, params } ]
  * Check ids and params follow the shared proof contract (resolution, exportSize,
- * empty, outsideSafe, semiTransparent; fontFallback, lowResImage, tinyText and
- * fileType come from the editor through mergeClientChecks).
+ * empty, outsideSafe, semiTransparent, blankPages, fontNoArabic; fontFallback,
+ * lowResImage, tinyText and fileType come from the editor through mergeClientChecks).
  */
 const sharp = require('sharp');
+const { pageSides } = require('./products');
 
 const DPI_FAIL = 100;
 const DPI_WARN = 150;
@@ -282,6 +283,101 @@ async function checkSide(design, side, { readFile, product }) {
   return checks;
 }
 
+// ---------- Booklets: pages with nothing on them ----------
+/** "2–4, 6, 8–9" from sorted page numbers. */
+function pageRanges(nums) {
+  const parts = [];
+  for (let i = 0; i < nums.length; i++) {
+    let j = i;
+    while (j + 1 < nums.length && nums[j + 1] === nums[j] + 1) j++;
+    parts.push(j > i ? `${nums[i]}\u2013${nums[j]}` : String(nums[i]));
+    i = j;
+  }
+  return parts.join(', ');
+}
+
+/**
+ * 7. A booklet prints every page its size has (front cover = page 1, back cover = the last page). The editor sends
+ * only the pages with something on them, and the others print as blank paper: a warning, not a problem (a blank
+ * page can be on purpose). QA tester 1, 26 Nov: an 8-page booklet with only its cover said "Ready to print".
+ * Params: pages ("2–8", in reading order), count (how many), total (pages printed).
+ */
+function blankPages(design, product) {
+  if (!product || !product.paged || !Array.isArray(product.sides) || !product.sides.length || !Array.isArray(product.sizes)) return null;
+  const order = pageSides(product, design.size && design.size.id);
+  const designed = new Set((design.sides || []).map((sd) => sd && sd.id));
+  const blank = [];
+  order.forEach((sd, i) => {
+    if (!designed.has(sd.id)) blank.push(i + 1);
+  });
+  if (!blank.length || blank.length === order.length) return null; // (no pages at all is the `empty` failure)
+  return { id: 'blankPages', level: 'warn', params: { pages: pageRanges(blank), count: blank.length, total: order.length } };
+}
+
+// ---------- Arabic text in a font without Arabic letters ----------
+/*
+ * The editor's English fonts (public/js/templates.js FONTS.english) have no Arabic letters: public/fonts/fonts.css
+ * has only their Latin files. Arabic typed in one is drawn by the browser in some other font, so the print is not
+ * the font the customer picked, and the SVG print file names a font that can't draw it. Each one with the Arabic
+ * font of the same feel the editor uses for it (templates.js ARABIC_FOR; test/qa-tester1-2603.test.js keeps the
+ * two lists the same).
+ */
+const ARABIC_FOR = {
+  'Dancing Script': 'Aref Ruqaa', Pacifico: 'Aref Ruqaa', Lobster: 'Aref Ruqaa', Caveat: 'Aref Ruqaa',
+  'Playfair Display': 'El Messiri', 'Abril Fatface': 'El Messiri', 'Roboto Slab': 'El Messiri',
+  Anton: 'Lalezar', Bungee: 'Lalezar', 'Bebas Neue': 'Lalezar', Oswald: 'Lalezar', Righteous: 'Lalezar', 'Permanent Marker': 'Lalezar',
+  Montserrat: 'Cairo',
+  'Great Vibes': 'Aref Ruqaa', Cookie: 'Aref Ruqaa', Yesteryear: 'Aref Ruqaa', Kalam: 'Marhey',
+  'Irish Grover': 'Lemonada', Julee: 'Marhey', Chewy: 'Lemonada', 'Lilita One': 'Lalezar', Caprasimo: 'Lalezar',
+  'League Gothic': 'Lalezar', 'Six Caps': 'Lalezar', Ultra: 'Lalezar', Smokum: 'Rakkas',
+};
+// Arabic letters and digits (not the Arabic comma, question mark or direction marks alone, nor U+FEFF).
+const ARABIC_LETTER_RE = /[\u0620-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFC]/;
+const MAX_FONT_CHECKS = 10;
+const familyOf = (f) => (typeof f === 'string' ? f.split(',')[0].replace(/["']/g, '').trim() : '');
+/** A text as the layers list names it: spaces joined, cut by whole characters with "…". */
+function textName(s) {
+  const all = Array.from(String(s).replace(/\s+/g, ' ').trim());
+  return all.length > 28 ? `${all.slice(0, 27).join('')}\u2026` : all.join('');
+}
+
+/**
+ * 8. Texts with Arabic letters in a font that has none, from the editor's layout (editor.json), per printed side.
+ * Sides the shop replaced with its own file are not drawn from these texts any more. Params: name (the text),
+ * font, suggest (an Arabic font of the same feel).
+ */
+async function arabicFontChecks(design, readFile) {
+  if (typeof readFile !== 'function') return [];
+  let editor;
+  try {
+    editor = JSON.parse(String(await readFile('editor.json')));
+  } catch (e) {
+    return []; // no layout kept (uploaded files, older designs): nothing to check
+  }
+  if (!editor || typeof editor !== 'object') return [];
+  const out = [];
+  const replaced = design.replaced || {};
+  const walk = (objs, sideId, depth) => {
+    if (!Array.isArray(objs) || depth > 20) return;
+    for (const o of objs) {
+      if (out.length >= MAX_FONT_CHECKS) return;
+      if (!o || typeof o !== 'object' || o.visible === false) continue;
+      if (Array.isArray(o.objects)) walk(o.objects, sideId, depth + 1);
+      if (typeof o.text !== 'string' || !/text/i.test(String(o.type || ''))) continue;
+      const font = familyOf(o.fontFamily);
+      if (!Object.prototype.hasOwnProperty.call(ARABIC_FOR, font) || !ARABIC_LETTER_RE.test(o.text)) continue;
+      const params = { name: textName(o.text), font, suggest: ARABIC_FOR[font] };
+      if (!out.some((c) => c.side === sideId && c.params.name === params.name && c.params.font === font)) out.push({ id: 'fontNoArabic', level: 'warn', side: sideId, params });
+    }
+  };
+  for (const side of Array.isArray(design.sides) ? design.sides : []) {
+    if (!side || replaced[side.id] || !Object.prototype.hasOwnProperty.call(editor, side.id)) continue;
+    const ed = editor[side.id];
+    walk(ed && ed.objects, side.id, 0);
+  }
+  return out;
+}
+
 /**
  * Checks every printed side of a saved design. Never throws for bad or
  * missing files: those come back as a failed `exportSize` check.
@@ -308,6 +404,14 @@ async function preflight(design, { readFile, product } = {}) {
   // 6. fileType: the design does not record converted PDF/AI/EPS artwork (the
   // editor converts it through /api/artwork without marking the object), so
   // it can only arrive from the editor via mergeClientChecks.
+  // 7. Booklet pages left blank, 8. Arabic in a font without Arabic letters (warnings: neither stops the order).
+  try {
+    const blank = blankPages(design, product);
+    if (blank) checks.push(blank);
+    checks.push(...(await arabicFontChecks(design, readFile)));
+  } catch (e) {
+    // (Only warnings: a layout that can't be read never fails the print files' own checks.)
+  }
   return { status: statusOf(checks), checks };
 }
 
@@ -385,5 +489,6 @@ module.exports = {
   dpiLimits,
   mergeClientChecks,
   statusOf,
+  ARABIC_FOR,
   THRESHOLDS: { DPI_FAIL, DPI_WARN, ASPECT_TOLERANCE, ALPHA_EMPTY, ALPHA_VISIBLE, ALPHA_SOLID, SEMI_WARN_PERCENT },
 };

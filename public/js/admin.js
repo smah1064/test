@@ -2965,8 +2965,11 @@
     const p = {};
     const n = (v) => (typeof v === 'number' ? Math.round(v * 10) / 10 : v);
     for (const [k, v] of Object.entries(c.params || {})) p[k] = Array.isArray(v) ? v.map((x) => (typeof x === 'number' ? POD.num(x) : x)).join(POD.lang === 'ar' ? '، ' : ', ') : n(v);
+    // Booklet pages left blank ("2–4, 6"): the page's digits and list commas, as on the proof; one page has its own sentence.
+    if (typeof p.pages === 'string') p.pages = p.pages.split(/\s*,\s*/).filter(Boolean).map((r) => r.replace(/\d+/g, (d) => POD.num(Number(d)))).join(POD.lang === 'ar' ? '، ' : ', ');
+    const one = c.id === 'blankPages' && (c.params || {}).count === 1;
     // (Touching the edge, 0 mm: said in words, as the proof page does, not "closer than 0 mm", QA 25 Nov.)
-    const key = c.id === 'outsideSafe' && !Number((c.params || {}).mm) ? ((c.params || {}).name ? 'pf.outsideSafe.named' : 'pf.outsideSafe.edge') : 'pf.' + c.id;
+    const key = one ? 'pf.blankPages.one' : c.id === 'outsideSafe' && !Number((c.params || {}).mm) ? ((c.params || {}).name ? 'pf.outsideSafe.named' : 'pf.outsideSafe.edge') : 'pf.' + c.id;
     return hasStr(key) ? t(key, p) : hasStr('pf.' + c.id) ? t('pf.' + c.id, p) : t('pf.unknown', { id: c.id });
   }
   function rvChecks(item) {

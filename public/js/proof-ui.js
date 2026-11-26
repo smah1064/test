@@ -31,18 +31,26 @@
       </div>`).join('')}</div>`;
   }
 
+  /** Page numbers and ranges from the checks ("2–4, 6") in the page's digits and list commas ("٢–٤، ٦"). */
+  const pageList = (s) => String(s).split(/\s*,\s*/).filter(Boolean)
+    .map((part) => part.replace(/\d+/g, (d) => POD.num(Number(d)))).join(POD.lang === 'ar' ? '، ' : ', ');
   /** "3 names" with the Arabic counting forms (2 / 3–10 / the rest). */
   const namesText = (n) => t(n === 2 ? 'proof.names.two' : n % 100 >= 3 && n % 100 <= 10 ? 'proof.names.few' : 'proof.names.many', { n: POD.num(n) });
   function checkText(c, sideNames) {
     const params = { ...(c.params || {}) };
     // The customer's own text keeps its own direction inside the sentence (mixed Arabic / English).
     if (typeof params.name === 'string') params.name = `\u2068${params.name.replace(/^“([\s\S]*)”$/, '$1')}\u2069`;
+    // (Font names too: "Lilita One" inside an Arabic sentence.)
+    for (const k of ['font', 'suggest']) if (typeof params[k] === 'string') params[k] = `\u2068${params[k]}\u2069`;
     let key = 'pf.' + c.id;
     if (c.id === 'exportSize' && params.error) key = 'pf.exportSize.error';
     if (c.id === 'outsideSafe' && !Number(params.mm)) key = params.name ? 'pf.outsideSafe.named' : 'pf.outsideSafe.edge';
     if (Array.isArray(params.fonts)) params.fonts = params.fonts.join(POD.lang === 'ar' ? '، ' : ', ');
     // Photo numbers ("4, 8, 12") in the page's digits and list commas.
     if (typeof params.photos === 'string') params.photos = params.photos.split(/\s*,\s*/).filter(Boolean).map((n) => POD.num(Number(n))).join(POD.lang === 'ar' ? '، ' : ', ');
+    // Booklet pages ("2–4, 6") the same way; one page has its own sentence.
+    if (typeof params.pages === 'string') params.pages = pageList(params.pages);
+    if (c.id === 'blankPages' && params.count === 1 && t('pf.blankPages.one') !== 'pf.blankPages.one') key = 'pf.blankPages.one';
     // Low-resolution photos: Arabic counts (1 / 2 / 3–10 / more), English one / many.
     if (c.id === 'photoLowRes' && typeof params.count === 'number') {
       const n = params.count;
@@ -50,7 +58,7 @@
       if (t(`pf.photoLowRes.${form}`) !== `pf.photoLowRes.${form}`) key = `pf.photoLowRes.${form}`;
     }
     if (typeof params.count === 'number') params.count = POD.num(params.count);
-    for (const k of ['dpi', 'mm', 'percent', 'pt', 'widthPx', 'heightPx', 'expectedW', 'expectedH', 'minDpi', 'n', 'max']) {
+    for (const k of ['dpi', 'mm', 'percent', 'pt', 'widthPx', 'heightPx', 'expectedW', 'expectedH', 'minDpi', 'n', 'max', 'total']) {
       if (typeof params[k] === 'number') params[k] = POD.num(params[k]);
     }
     let msg = t(key, params);
