@@ -21,7 +21,7 @@
 
   function goneHtml(text) {
     return `
-      <div class="card empty" role="alert">
+      <div class="card empty" role="alert" style="margin:40px auto;max-width:560px">
         <h1 style="font-size:22px">${esc(t('proofPage.gone'))}</h1>
         <p class="muted">${esc(text || t('proofPage.goneText'))}</p>
         <a class="btn" href="/">${esc(t('proofPage.home'))}</a>

@@ -19,7 +19,7 @@
   const MAX_VECTOR_BYTES = 40 * 1024 * 1024;
   const HISTORY_LIMIT = 60;
   const SNAP_PX = 7;
-  const EXTRA_PROPS = ['name', 'selectable', 'evented', 'curve', 'mask', 'maskBorder', 'maskBorderColor', 'lockRatio', 'bgShape', 'textFx', 'fxBase', 'boosted', 'importSource', 'mergeFit', 'pdfSrc', 'printSrc', 'printPx', 'wordsFill', 'artSrc', 'artDark', 'artLight', 'fitFrom', 'fitAt'];
+  const EXTRA_PROPS = ['name', 'selectable', 'evented', 'curve', 'mask', 'maskBorder', 'maskBorderColor', 'lockRatio', 'bgShape', 'textFx', 'fxBase', 'boosted', 'importSource', 'mergeFit', 'pdfSrc', 'printSrc', 'printPx', 'wordsFill', 'artSrc', 'artDark', 'artLight', 'fitFrom', 'fitAt', 'photoShare'];
   const $ = (id) => document.getElementById(id);
   const { esc, money, toast, t, tr } = POD;
   const D = window.POD_DESIGN;
@@ -82,6 +82,7 @@
     'ed.soldOut': ['Sold out', 'خلصان'],
     'ed.qtyColoursGone': ['This product doesn\'t come in some of the colours you had quantities for: they were taken out. Check the quantities below.', 'المنتج ده مش متاح في بعض الألوان اللي كنت كاتب لها كميات، فشلناها. راجع الكميات تحت.'],
     'ed.fieldThere': ['{field} is already on the design: it is selected. Add another one by typing it in a text.', '{field} موجود على التصميم بالفعل، واخترناهولك. لو عايزه تاني اكتبه جوه نص.'],
+    'ed.listAgain': ['This design\'s name list isn\'t on this device. Upload your list again to fill in the names.', 'قايمة الأسامي بتاعة التصميم ده مش على الجهاز ده. ارفع القايمة تاني عشان الأسامي تتملا.'],
     'ed.sizeSwitched': ['That size is sold out in this colour, so we picked the next size.', 'المقاس ده خلصان في اللون ده، فاخترنالك المقاس اللي بعده.'],
     'ed.soldOutPick': ['This one is sold out right now. Please pick another.', 'ده خلصان دلوقتي. اختار غيره.'],
     'ed.designGone': ['This ready design isn\'t in the shop right now. Pick another one, or start your own.', 'التصميم الجاهز ده مش متاح دلوقتي. اختار تصميم تاني أو ابدأ تصميمك.'],
@@ -160,7 +161,17 @@
 
   if (params.get('design')) {
     try {
-      const saved = await POD.api('/api/designs/' + encodeURIComponent(params.get('design')));
+      // The name list's key kept with the cart item, the order's key or edit link, or the team's sign-in: the names
+      // are only sent to who may read them (owner's OK, 26 Nov).
+      const own = [...POD.getCart(), ...(POD.getSaved ? POD.getSaved() : [])].find((it) => it && it.designId === params.get('design'));
+      const rvOrder = /^([0-9a-f-]{36})\./i.exec(params.get('revise') || '');
+      const listHeaders = {
+        ...(own && typeof own.listKey === 'string' ? { 'x-list-key': own.listKey } : {}),
+        ...(rvOrder ? POD.orderHeaders(POD.orderKey(rvOrder[1], params.get('k'))) : {}),
+        ...(/^[A-Za-z0-9_-]{20,40}$/.test(params.get('rt') || '') ? { 'x-revise-token': params.get('rt') } : {}),
+        ...(params.get('shopEdit') && adminToken() ? { Authorization: `Bearer ${adminToken()}` } : {}),
+      };
+      const saved = await POD.api('/api/designs/' + encodeURIComponent(params.get('design')), { headers: listHeaders });
       const instead = await missing(saved.productId);
       st.product = products.find((p) => p.id === saved.productId) || instead || st.product;
       st.colorId = saved.color.id;
@@ -170,6 +181,7 @@
       st.options = optionsFrom(saved.options);
       if (saved.quantities) st.qty = Object.fromEntries([...new Set(saved.quantities.map((l) => l.color.id))].map((c) => [c, Object.fromEntries(saved.quantities.filter((l) => l.color.id === c).map((l) => [l.size.id, l.qty]))]));
       if (saved.mergeList) st.mergeList = { columns: saved.mergeList.columns, rows: saved.mergeList.rows, total: saved.mergeList.rows.length, truncated: false, fileName: '' };
+      else if (saved.mergeLocked) setTimeout(() => toast(tEd('ed.listAgain'), 'error'), 600);
       // Designs from before embroidery was a layer: their stitched front is the embroidery layer now.
       const host = st.product.embroidery && st.product.embroidery.side;
       const editorSides = { ...saved.editor };
@@ -1882,7 +1894,11 @@
       // A file with several artboards: the first is used (said, so the customer isn't surprised).
       const boards = Number(res.headers.get('x-artwork-pages')) || 1;
       if (boards > 1) toast(plural('msg.firstArtboard', boards));
-      return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.png', { type: 'image/png' });
+      const out = new File([blob], file.name.replace(/\.[^.]+$/, '') + '.png', { type: 'image/png' });
+      // A photo inside the file with fewer pixels than the picture made from it: the print check counts its own.
+      const real = /^(\d{1,5})x(\d{1,5})$/.exec(res.headers.get('x-artwork-photo-px') || '');
+      if (real) out.photoPx = [Number(real[1]), Number(real[2])];
+      return out;
     } finally {
       busy(false);
     }
@@ -1900,12 +1916,14 @@
   }
   async function addImageFile(file, { source } = {}) {
     if (!file) return;
+    let photoPx = null;
     if (isVectorFile(file)) {
       const real = await pictureInside(file);
       if (real) file = new File([file], file.name.replace(/\.[^.]+$/, '') + real.ext, { type: real.type });
       else {
         try {
           file = await convertVectorFile(file);
+          photoPx = file.photoPx || null;
         } catch (e) {
           return toast(e.message, 'error');
         }
@@ -1925,10 +1943,12 @@
       c.width = Math.round(img.naturalWidth * scale);
       c.height = Math.round(img.naturalHeight * scale);
       c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      // The photo's own pixels for each pixel of the picture (below 1: a small photo drawn bigger), kept when cropped.
+      const photoShare = photoPx && photoPx[0] > 0 && photoPx[0] < c.width ? Math.round((photoPx[0] / c.width) * 1e4) / 1e4 : null;
       const jpeg = file.type === 'image/jpeg' || (!file.type && /\.jpe?g$/i.test(file.name || ''));
       const blob = await new Promise((r) => c.toBlob(r, jpeg ? 'image/jpeg' : 'image/png', 0.92));
       const fimg = await new Promise((resolve) => fabric.Image.fromURL(URL.createObjectURL(blob), resolve));
-      fimg.set({ name: file.name.replace(/\.[^.]+$/, '').slice(0, 40) || 'Image', ...(source ? { importSource: source } : {}) });
+      fimg.set({ name: file.name.replace(/\.[^.]+$/, '').slice(0, 40) || 'Image', ...(source ? { importSource: source } : {}), ...(photoShare ? { photoShare } : {}) });
       const a = area();
       fimg.scale(Math.min((a.w * 0.8) / fimg.width, (a.h * 0.8) / fimg.height));
       addObject(fimg, { behindText: true });
@@ -2169,7 +2189,9 @@
     const s = sideDef(sideId);
     const widthIn = ((o.width * Math.abs(o.scaleX || 1)) / s.printArea.w) * s.printWidthIn;
     // An uploaded design prints from its full-size original (printPx), not the screen copy.
-    const px = o.printSrc && Array.isArray(o.printPx) && o.printPx[0] > o.width && !o.printSwapped ? o.printPx[0] : o.width;
+    let px = o.printSrc && Array.isArray(o.printPx) && o.printPx[0] > o.width && !o.printSwapped ? o.printPx[0] : o.width;
+    // A photo from a PDF / EPS has only its own pixels, however big the picture made from it (QA 26 Nov).
+    if (typeof o.photoShare === 'number' && o.photoShare > 0 && o.photoShare < 1) px = Math.min(px, o.width * o.photoShare);
     return Math.round(px / widthIn);
   }
 
@@ -5207,6 +5229,21 @@
     qtyRedraw = false;
     renderQty();
   }
+  /** Packs: no more than MAX_COPIES copies of the design online; the box just typed is lowered to fit, and that is said. */
+  const MAX_COPIES = 10000; // (owner, 26 Nov; more on WhatsApp. The server says the same.)
+  function capCopies(g, c, z) {
+    if (!packs() || !g[c]) return false;
+    const k = (id) => { const sz = st.product.sizes.find((x) => x.id === id); return sz && sz.copies > 0 ? sz.copies : 1; };
+    let total = 0;
+    for (const row of Object.values(g)) for (const [zz, n] of Object.entries(row || {})) total += (Number(n) || 0) * k(zz);
+    if (total <= MAX_COPIES) return false;
+    const others = total - (g[c][z] || 0) * k(z);
+    g[c][z] = Math.max(0, Math.floor((MAX_COPIES - others) / k(z)));
+    toast(t('qty.maxCopies', { n: POD.num(MAX_COPIES) }), 'error');
+    const box = $('qty-field') && $('qty-field').querySelector(`.qty-in[data-qc="${CSS.escape(c)}"][data-qz="${CSS.escape(z)}"]`);
+    if (box) box.value = g[c][z] ? String(g[c][z]) : '';
+    return true;
+  }
   if ($('qty-field')) {
     const setCell = (c, z, v) => {
       // No size picked yet: the one piece kept for the first size isn't the customer's. A number typed under another
@@ -5226,6 +5263,7 @@
         const box = $('qty-field') && $('qty-field').querySelector(`.qty-in[data-qc="${CSS.escape(c)}"][data-qz="${CSS.escape(z)}"]`);
         if (box) box.value = '1000';
       }
+      capCopies(g, c, z);
       // Only a few left of this colour and size: no more than there are (the cart would refuse it).
       const few = POD.comboFew(st.product, c, z);
       if (few && g[c][z] > few) {
@@ -5305,6 +5343,8 @@
         const g = qtyGrid();
         const now = (g[st.colorId] && g[st.colorId][st.sizeId]) || 0;
         st.qty = { [st.colorId]: { [st.sizeId]: Math.max(1, Math.min(1000, now + Number(step.dataset.qstep))) } };
+        capCopies(st.qty, st.colorId, st.sizeId);
+        if (!st.qty[st.colorId][st.sizeId]) st.qty[st.colorId][st.sizeId] = 1;
         packSwitch();
         refreshChrome();
         renderQty();
@@ -6591,6 +6631,7 @@
         ...(design.copies > 1 ? { copies: design.copies } : {}),
         ...(design.quantities ? { quantities: design.quantities } : {}),
         ...(design.merge ? { merge: { count: design.merge.count } } : {}),
+        ...(design.merge && created.listKey ? { listKey: created.listKey } : {}),
         previewUrl: design.previewUrl,
         addedAt: new Date().toISOString(),
       };

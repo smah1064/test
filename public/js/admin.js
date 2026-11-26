@@ -2041,7 +2041,7 @@
           <strong>${line(c.name)}</strong>
           ${c.linked.google ? '<span class="pill">Google</span>' : ''}${c.linked.facebook ? '<span class="pill">Facebook</span>' : ''}${c.hasPassword ? '' : `<span class="pill queued">${esc(t('cu.noPassword'))}</span>`}
           <div class="muted small"><bdi dir="ltr">${esc(c.phone || '—')}</bdi>${SEP()}<bdi dir="ltr">${esc(c.email || '—')}</bdi>${SEP()}${esc(t('cu.since', { date: POD.date(c.createdAt) }))}</div>
-          <div class="small">${esc(listed(AdminRoles.isAmount(c.spent) ? t('cu.orders', { n: POD.num(c.orders), total: money(c.spent) }) : t('role.cuOrders', { n: POD.num(c.orders) })))}${c.lastOrder ? `${SEP()}${esc(t('cu.last', { date: POD.date(c.lastOrder) }))}` : ''}</div>
+          <div class="small">${esc(listed(AdminRoles.isAmount(c.spent) ? t('cu.orders', { n: POD.plural('cu.orderCount', c.orders), total: money(c.spent) }) : POD.plural('cu.orderCount', c.orders)))}${c.lastOrder ? `${SEP()}${esc(t('cu.last', { date: POD.date(c.lastOrder) }))}` : ''}</div>
           ${link ? `<div class="cu-link small"><div class="muted">${esc(t('cu.linkReady'))}</div><input type="text" readonly dir="ltr" value="${esc(link.url)}" data-cu-copy="${esc(c.id)}">
             <div class="row" style="gap:6px;margin-top:6px;flex-wrap:wrap">
               <button class="btn btn-sm" type="button" data-cu-copybtn="${esc(c.id)}">${esc(t('cu.copy'))}</button>

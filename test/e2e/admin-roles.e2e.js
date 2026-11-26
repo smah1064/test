@@ -228,7 +228,7 @@ test('Operations: its own tabs, no amounts anywhere, shipping work without "Mark
     await openTab(page, 'customers', '#cu-list .cu-row');
     text = await page.textContent('#cu-list');
     assert.doesNotMatch(text, /EGP|ج\.م|NaN|undefined/, 'no amounts for customers');
-    assert.match(text, lang === 'en' ? /2 orders · last/ : /٢ طلب، آخر/, 'the orders counted, no total');
+    assert.match(text, lang === 'en' ? /2 orders · last/ : /طلبين، آخر/, 'the orders counted, no total');
     // (A customer's password-reset link is the owners' alone: whoever holds it can sign in as the customer.)
     assert.strictEqual(await page.locator('[data-cu-reset]').count(), 0, 'no reset links for Operations');
     // Printing houses: Operations changes them (houses.edit).

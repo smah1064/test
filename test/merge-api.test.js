@@ -70,8 +70,9 @@ test('name list design: one copy per row, priced per copy, print files for every
 
   const res = await post('/api/designs', { productId: 'invitations', color: 'matte', size: '13x18', sides, merge });
   assert.strictEqual(res.status, 201, await res.clone().text());
-  const { id, uploadToken, files } = await res.json();
+  const { id, uploadToken, files, listKey } = await res.json();
   assert.ok(files.includes('front-merge-base.png') && files.includes('front-merge.bin'));
+  assert.match(listKey, /^[A-Za-z0-9_-]{20,40}$/, 'a key for reading the list back');
   const put = (name, body) => fetch(`${base}/api/designs/${id}/files/${name}`, { method: 'PUT', headers: { 'x-upload-token': uploadToken }, body });
   const print = await solid(W, H, { r: 250, g: 240, b: 220, alpha: 1 });
   const pics = await Promise.all(ROWS.map((_, i) => solid(BOX.w, BOX.h, { r: 40 * i, g: 20, b: 120, alpha: 0.9 })));
@@ -92,9 +93,20 @@ test('name list design: one copy per row, priced per copy, print files for every
   assert.strictEqual(d.merge.count, 3);
   assert.strictEqual(d.price, 105); // 35 per card x 3
 
-  // Reopening the design brings the list back.
-  const again = await (await fetch(`${base}/api/designs/${id}`)).json();
+  // Reopening the design with its key (kept with the cart item) brings the list back; its id alone doesn't
+  // (the names are customers' data; the id is in public picture links. Owner's OK, 26 Nov).
+  const again = await (await fetch(`${base}/api/designs/${id}`, { headers: { 'x-list-key': listKey } })).json();
   assert.deepStrictEqual(again.mergeList.rows, ROWS);
+  const bare = await (await fetch(`${base}/api/designs/${id}`)).json();
+  assert.strictEqual(bare.mergeList, undefined);
+  assert.strictEqual(bare.mergeLocked, true);
+  assert.ok(!JSON.stringify(bare).includes(ROWS[0][0]), 'no name in the answer');
+  assert.strictEqual(bare.listKeyHash, undefined);
+  const proofBare = await (await fetch(`${base}/api/designs/${id}/proof`)).json();
+  assert.ok(!JSON.stringify(proofBare).includes(ROWS[0][0]), 'nor in the proof');
+  const proofOwn = await (await fetch(`${base}/api/designs/${id}/proof`, { headers: { 'x-list-key': listKey } })).json();
+  assert.ok(JSON.stringify(proofOwn).includes(ROWS[0][0]), 'the proof shows the first names to its owner');
+  assert.strictEqual((await (await fetch(`${base}/api/designs/${id}`, { headers: { 'x-list-key': 'x'.repeat(24) } })).json()).mergeList, undefined, 'a wrong key');
 
   // Cart and order: every copy is paid for.
   const q = await (await post('/api/cart/quote', { designIds: [id] })).json();
@@ -104,6 +116,17 @@ test('name list design: one copy per row, priced per copy, print files for every
   const order = await o.json();
   assert.strictEqual(order.items[0].copies, 3);
   assert.strictEqual(order.items[0].price, 105);
+  // Ordered: the order's own link opens the names (an "edit and send again" for this order needs them).
+  const okey = order.key || order.linkKey;
+  if (okey) assert.deepStrictEqual((await (await fetch(`${base}/api/designs/${id}`, { headers: { 'x-order-key': okey } })).json()).mergeList.rows, ROWS);
+  // Order again: the copy has its own key, kept with its new cart item.
+  if (okey) {
+    const again2 = await (await fetch(`${base}/api/orders/${order.id}/reorder`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-order-key': okey }, body: '{}' })).json();
+    const item = (again2.items || [])[0];
+    assert.ok(item && /^[A-Za-z0-9_-]{20,40}$/.test(item.listKey || ''), JSON.stringify(again2).slice(0, 300));
+    assert.deepStrictEqual((await (await fetch(`${base}/api/designs/${item.designId}`, { headers: { 'x-list-key': item.listKey } })).json()).mergeList.rows, ROWS);
+    assert.strictEqual((await (await fetch(`${base}/api/designs/${item.designId}`, { headers: { 'x-list-key': listKey } })).json()).mergeList, undefined, 'not with the first design\'s key');
+  }
 
   // Print files: one PDF with a page per copy, one PDF per copy in a ZIP, the list.
   const pdfRes = await admin(`/api/admin/files/${id}/front?format=merge-pdf`);

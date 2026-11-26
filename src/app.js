@@ -508,6 +508,8 @@ async function drawnThumb(svgTpl, hex) {
 const MERGE_MAX_ROWS = 1000;
 /** Pieces of one design (one artwork in several sizes / colours). */
 const MAX_PIECES = 1000;
+/** Products sold in packs (cards, flyers, booklets): the most copies of one design online; more on WhatsApp (owner, 26 Nov). */
+const MAX_PACK_COPIES = 10000;
 
 /** Per-visitor limits; tests and special setups can override them. */
 const DEFAULT_LIMITS = {
@@ -1016,7 +1018,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const d = UUID_RE.test(req.params.id) && store.getDesign(req.params.id);
       if (!d || (d.status && d.status !== 'ready')) throw new HttpError(404, 'designNotFound');
       res.set('Cache-Control', 'no-store');
-      res.json(await proofFor(d));
+      const proof = await proofFor(d);
+      // (The first names of a name list only for who may read the list.)
+      if (proof.merge && proof.merge.sample && !listOpenFor(req, d)) proof.merge = { ...proof.merge, sample: [] };
+      res.json(proof);
     } catch (e) {
       next(e);
     }
@@ -1054,6 +1059,24 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     return o ? `/editor?design=${item.designId}&revise=${o.id}.${item.id}&rt=${item.reviseToken}` : null;
   }
   const sameSecret = (a, b) => typeof a === 'string' && typeof b === 'string' && a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+  const LIST_KEY_RE = /^[A-Za-z0-9_-]{20,40}$/;
+  /**
+   * Who may read a design's name list (customers' names): the key kept with its cart item (x-list-key), the team
+   * (signed in), the order's own link or account, or the item's "edit and send again" link. Not the design's id alone,
+   * which is in public picture links (owner's OK, 26 Nov, from the security review).
+   */
+  function listOpenFor(req, design) {
+    if (!design || !design.merge) return false;
+    const k = String(req.get('x-list-key') || '');
+    if (design.listKeyHash && LIST_KEY_RE.test(k) && sameSecret(sha(k), design.listKeyHash)) return true;
+    const tok = security.bearer(req);
+    if (tok && (auth.verify(tok) || auth.verifyStaff(tok, staffList()))) return true;
+    const order = design.orderId && store.getOrder(design.orderId);
+    if (order && order.linkKey && orderOpenFor(req, order)) return true;
+    const rt = String(req.get('x-revise-token') || '');
+    if (order && rt && order.items.some((it) => it.designId === design.id && it.reviseToken && sameSecret(rt, it.reviseToken))) return true;
+    return false;
+  }
   function findByProofToken(token) {
     if (!/^[A-Za-z0-9_-]{20,40}$/.test(String(token || ''))) return null;
     for (const order of store.listOrders()) {
@@ -1649,6 +1672,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       total += qty;
     }
     if (total > MAX_PIECES) throw new HttpError(400, 'qtyTooMany', { max: MAX_PIECES });
+    // Packs: the copies count (1,000 packs of 100 booklets was 100,000 copies on cash on delivery. QA 26 Nov).
+    const copies = [...merged.values()].reduce((n, l) => n + l.qty * (l.sz.pack && l.sz.copies > 0 ? l.sz.copies : 1), 0);
+    if ([...merged.values()].some((l) => l.sz.pack) && copies > MAX_PACK_COPIES) throw new HttpError(400, 'qtyTooManyCopies', { max: MAX_PACK_COPIES.toLocaleString('en-US') });
     if (total === 1 && merged.size === 1) {
       const only = [...merged.values()][0];
       if (only.co.id === colorDef.id && only.sz.id === sizeDef.id) return null; // just one, as chosen
@@ -1886,6 +1912,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     // Name list: one printed copy per row, the {Column} fields filled in per copy.
     const mergeIn = (req.body || {}).merge;
     const mergeList = mergeIn ? cleanMerge(product, mergeIn, storedSides, { emb, pattern, colorDef, sizeDef }) : null;
+    const listKey = mergeList ? crypto.randomBytes(18).toString('base64url') : null;
     // One artwork, many pieces: several of the same, or the same artwork in other sizes / colours.
     const lines = mergeList ? mergeList.lines : cleanQuantities(product, (req.body || {}).quantities, colorDef, sizeDef);
     // Pictures imported from other sites: the customer must confirm they may print them.
@@ -1898,6 +1925,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       createdAt: new Date().toISOString(),
       status: 'uploading',
       uploadTokenHash: sha(token),
+      // A name list's names are customers' data: read back only with this key (kept with the cart item), the team's
+      // sign-in, or the order's own link (owner's OK, 26 Nov, from the security review).
+      ...(listKey ? { listKeyHash: sha(listKey) } : {}),
       productId: product.id,
       productName: product.name,
       process: emb ? 'embroidery' : product.process,
@@ -1945,7 +1975,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (mergeList) for (const sd of Object.keys(mergeList.sides)) files.push(`${sd}-merge-base.png`, `${sd}-merge.bin`);
     design.expectedFiles = files;
     store.createDesign(design, { 'editor.json': editorJson, ...pdfCopies, ...(mergeList ? { 'merge.json': JSON.stringify({ columns: mergeList.columns, rows: mergeList.rows }) } : {}) });
-    res.status(201).json({ id: design.id, uploadToken: token, files });
+    res.status(201).json({ id: design.id, uploadToken: token, files, ...(listKey ? { listKey } : {}) });
   });
 
   // Designs whose files are being checked (/complete): no more uploads until it is done (a file swapped in the
@@ -1982,7 +2012,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       // the same token gets the finished set again instead of an error.
       const prior = UUID_RE.test(req.params.id) && store.getDesign(req.params.id);
       if (prior && prior.kind === 'photoset' && prior.status === 'ready' && prior.doneTokenHash && prior.doneTokenHash === sha(req.get('x-upload-token') || '')) {
-        const { uploadTokenHash, doneTokenHash, ...pub } = prior; // eslint-disable-line no-unused-vars
+        const { uploadTokenHash, doneTokenHash, listKeyHash, ...pub } = prior; // eslint-disable-line no-unused-vars
         return res.json({ ...pub, previewUrl: `/files/designs/${prior.id}/front-preview.png` });
       }
       const design = uploadingDesign(req);
@@ -1995,7 +2025,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         design.doneTokenHash = design.uploadTokenHash;
         delete design.uploadTokenHash;
         store.save();
-        const { uploadTokenHash, doneTokenHash, ...pub } = design; // eslint-disable-line no-unused-vars
+        const { uploadTokenHash, doneTokenHash, listKeyHash, ...pub } = design; // eslint-disable-line no-unused-vars
         return res.json({ ...pub, previewUrl: `/files/designs/${design.id}/front-preview.png` });
       }
       if (design.kind === 'gangsheet') {
@@ -2013,7 +2043,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         design.status = 'ready';
         delete design.uploadTokenHash;
         store.save();
-        const { uploadTokenHash, ...pub } = design; // eslint-disable-line no-unused-vars
+        const { uploadTokenHash, listKeyHash, ...pub } = design; // eslint-disable-line no-unused-vars
         return res.json({ ...pub, previewUrl: `/files/designs/${design.id}/front-preview.png` });
       }
       const checked = new Map(); // side -> the print file as checked
@@ -2057,7 +2087,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       design.status = 'ready';
       delete design.uploadTokenHash;
       store.save();
-      const { uploadTokenHash, ...pub } = design; // eslint-disable-line no-unused-vars
+      const { uploadTokenHash, listKeyHash, ...pub } = design; // eslint-disable-line no-unused-vars
       res.json({ ...pub, previewUrl: `/files/designs/${design.id}/${design.sides[0].id}-preview.png` });
     } catch (e) {
       next(e);
@@ -2169,6 +2199,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   // ---------- Photo quality boost ----------
   // Enlarge a low-resolution photo (Lanczos) and sharpen it, so it prints crisper.
   const enhanceHits = new Map();
+  /**
+   * A real photo file by its own first bytes (PNG, JPEG or WebP), whatever type the request says: the AI photo tools
+   * never get an SVG, PDF or anything else to decode (owner's OK, 26 Nov, from the security review).
+   */
+  const isPhotoFile = (b) => b.length >= 12 && (
+    (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47)
+    || (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff)
+    || (b.toString('latin1', 0, 4) === 'RIFF' && b.toString('latin1', 8, 12) === 'WEBP'));
   app.post('/api/enhance', express.raw({ type: ['image/png', 'image/jpeg', 'image/webp'], limit: '15mb' }), async (req, res, next) => {
     try {
       const now = Date.now();
@@ -2177,7 +2215,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       enhanceHits.set(req.ip, [...hits, now]);
       if (enhanceHits.size > 5000) enhanceHits.clear();
       const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
-      if (buf.length < 32) throw new HttpError(400, 'enhanceBad');
+      if (buf.length < 32 || !isPhotoFile(buf)) throw new HttpError(400, 'enhanceBad');
       const want = Math.min(4, Math.max(1, Number(req.get('x-scale')) || 2));
       const out = await printfiles.enhancePhoto(buf, want).catch(() => { throw new HttpError(400, 'enhanceBad'); });
       res.set('X-Scale', String(out.scale));
@@ -2193,7 +2231,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   app.post('/api/remove-bg', express.raw({ type: ['image/png', 'image/jpeg', 'image/webp'], limit: '15mb' }), async (req, res, next) => {
     try {
       const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
-      if (buf.length < 32) throw new HttpError(400, 'enhanceBad');
+      if (buf.length < 32 || !isPhotoFile(buf)) throw new HttpError(400, 'enhanceBad');
       rateLimit(req, 'removeBg');
       rateLimit(req, 'removeBgAll', '*');
       const t0 = Date.now();
@@ -2300,6 +2338,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       }
       // Several artboards (a logo "master" .ai): the first is drawn, and the editor says so.
       if (out.pages > 1) res.set('X-Artwork-Pages', String(Math.min(out.pages, 999)));
+      // A photo saved as PDF / EPS, drawn bigger than its own pixels: how many real pixels it has, for the print
+      // check (QA 26 Nov: a 300 x 200 photo passed as "ready to print").
+      if (out.photoPx && out.photoPx.w > 0 && out.photoPx.h > 0) res.set('X-Artwork-Photo-Px', `${Math.round(out.photoPx.w)}x${Math.round(out.photoPx.h)}`);
       res.type('image/png').send(out.png);
     } catch (e) {
       next(e);
@@ -2506,10 +2547,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     // A design id is in public picture links: it must not lead to the order (and the customer) it is in.
     // Nor to what was paid: the editor works prices out itself (the team sees design ids, and the
     // amounts are only for people allowed to see them).
-    const { uploadTokenHash, orderId, revisionOf, price, unitPrice, ...pub } = design; // eslint-disable-line no-unused-vars
+    const { uploadTokenHash, listKeyHash, orderId, revisionOf, price, unitPrice, ...pub } = design; // eslint-disable-line no-unused-vars
     if (Array.isArray(pub.quantities)) pub.quantities = withoutLinePrices(pub.quantities);
-    const list = design.merge ? readMergeList(design) : null;
-    res.json({ ...pub, editor, ...(list ? { mergeList: list } : {}) });
+    // The names only for who may read them (else the editor asks for the list again).
+    const list = design.merge && listOpenFor(req, design) ? readMergeList(design) : null;
+    res.set('Cache-Control', 'no-store');
+    res.json({ ...pub, editor, ...(list ? { mergeList: list } : design.merge ? { mergeLocked: true } : {}) });
   });
 
   // Mockup previews are public (design ids are unguessable); print files are admin-only.
@@ -3612,7 +3655,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   app.post('/api/cart/quote', express.json({ limit: '20kb' }), (req, res) => {
     // Coupon codes that don't work count per visitor (codes can't be guessed by trying thousands);
     // a working code re-checked on every cart visit doesn't.
-    const tryingCode = typeof (req.body || {}).couponCode === 'string' && req.body.couponCode.trim() !== '';
+    // (Any code the coupon check reads counts as a try: a number too, which it takes since this morning. QA 26 Nov.)
+    const tryingCode = coupons.normCode((req.body || {}).couponCode) !== '';
     if (tryingCode) limitCheck(req, 'couponTry');
     const ids = Array.isArray((req.body || {}).designIds) ? req.body.designIds.slice(0, MAX_ITEMS_PER_ORDER) : [];
     const items = ids.map((id) => {
@@ -4189,14 +4233,19 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     delete copy.uploadTokenHash;
     delete copy.orderedAt;
     if (copy.kind === 'book') copy.uploadTokenHash = sha(token); // the book page edits with this token
+    // A name list: the copy's own key, kept with its new cart item.
+    const listKey = copy.merge ? crypto.randomBytes(18).toString('base64url') : null;
+    if (listKey) copy.listKeyHash = sha(listKey);
+    else delete copy.listKeyHash;
     fs.cpSync(store.designDir(src.id), store.designDir(copy.id), { recursive: true, filter: (from) => !STALE_COPY.test(path.basename(from)) });
     store.createDesign(copy, {});
-    return { design: copy, token };
+    return { design: copy, token, listKey };
   }
   /** What the cart keeps for a design (the same as the editor and book page put there). */
-  const cartEntry = (d, token) => ({
+  const cartEntry = (d, token, listKey = null) => ({
     designId: d.id,
     ...(d.kind === 'book' ? { bookId: d.bookId, editToken: token } : {}),
+    ...(d.merge && listKey ? { listKey } : {}),
     productId: d.productId,
     productName: d.productName,
     colorName: d.color.name,
@@ -4238,7 +4287,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         skipped.push({ position: i + 1, productName: it.productName, reason });
         return;
       }
-      const { design, token } = copyDesign(d);
+      const { design, token, listKey } = copyDesign(d);
       const price = d.kind === 'gangsheet' ? d.price : designPrice({ ...design, orderId: null, status: 'ready' });
       if (price == null) {
         skipped.push({ position: i + 1, productName: it.productName, reason: 'productGone' });
@@ -4247,7 +4296,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       design.price = price;
       if (product && d.kind !== 'photoset') Object.assign(design, pieceInfo(product, design));
       store.save();
-      items.push(cartEntry(design, token));
+      items.push(cartEntry(design, token, listKey));
     });
     res.json({ items, skipped });
   });
@@ -4275,7 +4324,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const d = rec && UUID_RE.test(rec.designId || '') && store.getDesign(rec.designId);
       if (!d || d.orderId || (d.status && d.status !== 'ready')) continue;
       if (d.kind === 'book' && !rec.editToken) continue;
-      items.push({ ...cartEntry(d, rec.editToken), addedAt: rec.addedAt || c.updatedAt || new Date().toISOString(), ...(rec.later ? { later: true } : {}), ...(rec.movedAt ? { movedAt: rec.movedAt } : {}) });
+      items.push({ ...cartEntry(d, rec.editToken, rec.listKey), addedAt: rec.addedAt || c.updatedAt || new Date().toISOString(), ...(rec.later ? { later: true } : {}), ...(rec.movedAt ? { movedAt: rec.movedAt } : {}) });
     }
     return { items, updatedAt: c.updatedAt };
   }
@@ -4305,7 +4354,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const at = when(it.addedAt) || new Date().toISOString();
       // "Saved for later" (kept out of the order), and when it last moved between cart and saved.
       const moved = when(it.movedAt);
-      items.push({ designId: it.designId, addedAt: at, ...(it.later === true ? { later: true } : {}), ...(moved ? { movedAt: moved } : {}), ...(d.kind === 'book' && BOOK_TOKEN_RE.test(it.editToken || '') ? { editToken: it.editToken } : {}) });
+      items.push({ designId: it.designId, addedAt: at, ...(it.later === true ? { later: true } : {}), ...(moved ? { movedAt: moved } : {}), ...(d.kind === 'book' && BOOK_TOKEN_RE.test(it.editToken || '') ? { editToken: it.editToken } : {}), ...(d.merge && LIST_KEY_RE.test(it.listKey || '') ? { listKey: it.listKey } : {}) });
     }
     // With `base` (the ids this device last agreed with the account): merged with what the account has
     // now, so a device with an old page open can't drop items added elsewhere or bring back removed ones.
