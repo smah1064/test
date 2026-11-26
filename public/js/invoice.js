@@ -20,7 +20,8 @@
   /** A calendar date (no time) in the page's language. */
   const day = (iso) => {
     const d = iso ? new Date(iso) : null;
-    return d && !isNaN(d) ? d.toLocaleDateString(POD.lang === 'ar' ? 'ar-EG' : 'en-GB', { dateStyle: 'long' }) : '';
+    // (In Cairo time, as the shop's accounts, coupons and delivery dates: an order at 00:08 in Cairo is on that day.)
+    return d && !isNaN(d) ? d.toLocaleDateString(POD.lang === 'ar' ? 'ar-EG' : 'en-GB', { dateStyle: 'long', timeZone: 'Africa/Cairo' }) : '';
   };
   /** Latin identifiers (order numbers, links, phone numbers) keep their direction inside Arabic text. */
   const ltr = (s) => `<bdi dir="ltr">${esc(s)}</bdi>`;

@@ -63,7 +63,11 @@
   let design;
   let categories = [];
   try {
+    // No design named (/design, /design?id=): "this design isn't available", as for an unknown one (an empty id asked
+    // the server for the whole list and showed a blank, orderable T-shirt. QA 26 Nov).
+    if (!(params.get('id') || '').trim()) throw new Error('no design');
     [catalog, design, { categories }] = await loadOrRetry($('dp-net'), () => Promise.all([POD.loadCatalog(), POD.api('/api/library/' + encodeURIComponent(params.get('id') || '')), POD.api('/api/library')]));
+    if (!design || !design.id || !Array.isArray(design.items)) throw new Error('no design');
   } catch (e) {
     $('dp-missing').hidden = false;
     return;

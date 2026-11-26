@@ -66,6 +66,26 @@
   // The CAPTCHA of each form starts when the customer starts filling it in.
   const caps = { 'f-in': POD.captcha($('cap-in')), 'f-up': POD.captcha($('cap-up')), 'f-forgot': POD.captcha($('cap-fg')) };
   for (const [id, cap] of Object.entries(caps)) $(id).addEventListener('focusin', () => cap.prepare(), { once: true });
+  // Messages under a form are drawn by a function, so a language switch draws them again in the new language
+  // (they stayed in the old one. QA 26 Nov). A message from the server is shown in our words when we have them,
+  // otherwise it goes on a switch (it would stay in the old language).
+  const msgPaint = new Map();
+  function showMsg(id, paint) {
+    msgPaint.set(id, paint);
+    paint($(id));
+  }
+  document.addEventListener('pod:langchange', () => msgPaint.forEach((paint, id) => { if (!$(id).hidden && $(id).textContent.trim()) paint($(id)); }));
+  const SERVER_WORDS = { acctWrongCurrent: 'acct.wrongCurrent', acctPasswordShort: 'acct.passwordShort' };
+  function serverMsg(err) {
+    const key = err && SERVER_WORDS[err.code];
+    let first = true;
+    return (el) => {
+      if (key) el.textContent = t(key);
+      else if (first) el.textContent = err.message;
+      else { el.textContent = ''; el.hidden = true; }
+      first = false;
+    };
+  }
   async function submit(form, fn) {
     busy(form, true);
     const cap = caps[form.id];
@@ -100,8 +120,11 @@
     e.preventDefault();
     submit($('f-forgot'), async (cap) => {
       const r = await POD.api('/api/account/forgot', json('POST', { login: $('fg-login').value, ...cap }));
-      const wa = r.whatsapp ? `https://wa.me/${r.whatsapp}?text=${encodeURIComponent(t('acct.waReset', { login: $('fg-login').value }))}` : '';
-      $('fg-msg').innerHTML = `${esc(t(r.byEmail ? 'acct.linkSent' : 'acct.noEmail'))}${wa ? ` <a class="btn btn-sm btn-whatsapp" target="_blank" rel="noopener" href="${esc(wa)}">${esc(t('acct.askWhatsApp'))}</a>` : ''}`;
+      const login = $('fg-login').value;
+      showMsg('fg-msg', (el) => {
+        const wa = r.whatsapp ? `https://wa.me/${r.whatsapp}?text=${encodeURIComponent(t('acct.waReset', { login }))}` : '';
+        el.innerHTML = `${esc(t(r.byEmail ? 'acct.linkSent' : 'acct.noEmail'))}${wa ? ` <a class="btn btn-sm btn-whatsapp" target="_blank" rel="noopener" href="${esc(wa)}">${esc(t('acct.askWhatsApp'))}</a>` : ''}`;
+      });
     });
   });
   $('f-reset').addEventListener('submit', (e) => {
@@ -325,10 +348,13 @@
     b.disabled = true;
     try {
       const r = await POD.api('/api/account/forgot', json('POST', { login: me.email || me.phone }));
-      const wa = r.whatsapp ? `https://wa.me/${r.whatsapp}?text=${encodeURIComponent(t('acct.waReset', { login: me.phone || me.email }))}` : '';
-      $('pw-forgot-msg').innerHTML = me.email && r.byEmail
-        ? esc(t('acct.linkSentTo', { email: me.email }))
-        : `${esc(t('acct.noEmail'))}${wa ? ` <a class="btn btn-sm btn-whatsapp" target="_blank" rel="noopener" href="${esc(wa)}">${esc(t('acct.askWhatsApp'))}</a>` : ''}`;
+      const { email, phone } = me;
+      showMsg('pw-forgot-msg', (el) => {
+        const wa = r.whatsapp ? `https://wa.me/${r.whatsapp}?text=${encodeURIComponent(t('acct.waReset', { login: phone || email }))}` : '';
+        el.innerHTML = email && r.byEmail
+          ? esc(t('acct.linkSentTo', { email }))
+          : `${esc(t('acct.noEmail'))}${wa ? ` <a class="btn btn-sm btn-whatsapp" target="_blank" rel="noopener" href="${esc(wa)}">${esc(t('acct.askWhatsApp'))}</a>` : ''}`;
+      });
     } catch (err) {
       POD.toast(err.message, 'error');
     } finally {
@@ -346,9 +372,9 @@
   $('del-cancel').addEventListener('click', () => { $('del-box').hidden = true; $('del-pw').value = ''; $('del-sure').checked = false; });
   $('del-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const say = (m) => { $('del-msg').textContent = m; $('del-msg').hidden = false; };
-    if (!$('del-sure').checked) return say(t('acct.deleteTick'));
-    if (me.hasPassword && !$('del-pw').value) return say(t('acct.deleteNeedPw'));
+    const say = (paint) => showMsg('del-msg', (el) => { el.hidden = false; paint(el); });
+    if (!$('del-sure').checked) return say((el) => { el.textContent = t('acct.deleteTick'); });
+    if (me.hasPassword && !$('del-pw').value) return say((el) => { el.textContent = t('acct.deleteNeedPw'); });
     $('del-go').disabled = true;
     try {
       await POD.api('/api/account/delete', json('POST', me.hasPassword ? { password: $('del-pw').value } : { confirm: true }));
@@ -356,7 +382,8 @@
       alert(t('acct.deleted'));
       location.href = '/';
     } catch (err) {
-      say(err.message);
+      const paint = serverMsg(err);
+      say((el) => paint(el));
     } finally {
       $('del-go').disabled = false;
     }

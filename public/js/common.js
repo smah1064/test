@@ -563,6 +563,12 @@
     const el = document.createElement('div');
     el.className = 'toast' + (type === 'error' ? ' error' : '');
     el.textContent = message;
+    // A bar kept at the bottom of the screen (the editor's price and Add to cart bar on phones) stays readable: the
+    // messages go just above it (they covered the price and Save. QA 26 Nov).
+    const bar = document.querySelector('[data-toast-above]');
+    const r = bar && bar.offsetParent !== null ? bar.getBoundingClientRect() : null;
+    const vh = window.innerHeight || 0;
+    root.style.bottom = r && r.height && r.bottom >= vh - 2 && r.top > vh / 2 ? `${Math.round(vh - r.top + 10)}px` : '';
     root.appendChild(el);
     // (A longer message stays long enough to read, up to 10 seconds: four lines on a phone went in 2.8. QA 25 Nov.)
     setTimeout(() => el.remove(), Math.min(10000, Math.max(type === 'error' ? 5000 : 2800, String(message || '').length * 60)));

@@ -33,7 +33,7 @@ const normCode = (c) => String(c == null ? '' : c)
 const isDay = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && new Date(`${d}T00:00:00Z`).toISOString().slice(0, 10) === d;
 
 /** Checks a coupon from the admin form; returns { coupon } or { error }. */
-function cleanCoupon(body, { products, categories }) {
+function cleanCoupon(body, { products, categories, saved = null }) {
   const b = body && typeof body === 'object' ? body : {};
   const code = normCode(b.code);
   if (!/^[A-Z0-9_-]{3,24}$/.test(code)) return { error: 'couponCodeBad' };
@@ -48,7 +48,9 @@ function cleanCoupon(body, { products, categories }) {
   // Discounts are whole pounds (see discountOf): an amount off or a cap under 1 EGP would take nothing off.
   if (type === 'fixed' && value != null && value < 1) return { error: 'couponFixedMin' };
   // (An amount off is whole pounds, as every discount is: 7.5 took 8 off. QA 25 Nov.)
-  if (type === 'fixed' && value != null && !Number.isInteger(value)) return { error: 'couponFixedWhole' };
+  // (A coupon saved with such an amount before the rule keeps it while other things change, e.g. pausing it. QA 26 Nov.)
+  const keptAmount = saved && saved.type === 'fixed' && type === 'fixed' && Number(saved.value) === value;
+  if (type === 'fixed' && value != null && !Number.isInteger(value) && !keptAmount) return { error: 'couponFixedWhole' };
   if (value === null || value === undefined || (type === 'percent' && value < 0.01)) return { error: 'couponValueBad' };
   const maxDiscount = num(b.maxDiscount);
   if (maxDiscount != null && maxDiscount < 1) return { error: 'couponMaxMin' };

@@ -5529,7 +5529,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const cur = (store.db.coupons || []).find((c) => c.id === req.params.id);
       if (!cur) throw new HttpError(404, 'couponGone');
       // (Only the changed fields come: checked as they'd be merged onto the coupon. See saveCoupon.)
-      const { coupon, error } = coupons.cleanCoupon({ ...cur, ...(req.body && typeof req.body === 'object' ? req.body : {}) }, { products: PRODUCTS, categories: CATEGORIES });
+      const { coupon, error } = coupons.cleanCoupon({ ...cur, ...(req.body && typeof req.body === 'object' ? req.body : {}) }, { products: PRODUCTS, categories: CATEGORIES, saved: cur });
       if (error) throw new HttpError(400, error);
       if ((store.db.coupons || []).some((c) => c.code === coupon.code && c.id !== req.params.id)) throw new HttpError(409, 'couponExists');
       // (Only the fields a coupon is made of: its id, dates and counts are the shop's own.)
@@ -6731,7 +6731,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const input = cur && req.body && typeof req.body === 'object' && !Array.isArray(req.body)
       ? (({ id: x, createdAt, updatedAt, ...rest }) => rest)({ ...cur, ...req.body }) // eslint-disable-line no-unused-vars
       : req.body;
-    const { coupon, error } = coupons.cleanCoupon(input, { products: PRODUCTS, categories: CATEGORIES });
+    const { coupon, error } = coupons.cleanCoupon(input, { products: PRODUCTS, categories: CATEGORIES, saved: cur || null });
     if (error) throw new HttpError(400, error);
     return store.mutate((db) => {
       db.coupons ||= [];

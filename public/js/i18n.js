@@ -590,6 +590,8 @@ window.POD_STRINGS = {
   'acct.deleteGo': ['Delete my account', 'امسح حسابي'],
   'acct.deleteTick': ['Tick that you’re sure first.', 'علّم إنك متأكد الأول.'],
   'acct.deleteNeedPw': ['Enter your password.', 'اكتب كلمة المرور.'],
+  'acct.wrongCurrent': ['Your current password is not right', 'كلمة المرور الحالية مش صحيحة'],
+  'acct.passwordShort': ['The password needs at least 8 characters', 'كلمة المرور لازم تكون 8 حروف أو أكتر'],
   'acct.deleted': ['Your account is deleted.', 'حسابك اتمسح.'],
   'acct.changeNote': ['Other phones and computers will be signed out.', 'هيتم تسجيل الخروج من الأجهزة التانية.'],
   'acct.checkoutAs': ['Ordering as {name}: this order will be in your account.', 'بتطلب باسم {name}: الطلب هيتحفظ في حسابك.'],

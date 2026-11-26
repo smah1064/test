@@ -154,6 +154,8 @@ body.editor-page main { display: flex; min-height: 0; }
   background: rgba(22, 24, 29, .82); color: #fff; font-size: 13px; line-height: 1.5; padding: 8px 14px; border-radius: 12px; text-align: center; pointer-events: none; z-index: 3; }
 @media (max-width: 380px) { #preview-open-m span { display: none; } }
 body.sheet-product .stage-hint, body.sheet-props .stage-hint { display: none; }
+/* While a message shows, the canvas hint steps aside (the empty-design message sat on top of it. QA 26 Nov). */
+body.editor-page:has(#toast-root .toast) .stage-hint { display: none; }
 .stage-bar { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #fff; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .stage-bar .spacer { flex: 1; }
 .side-tabs { display: flex; background: var(--bg); padding: 3px; border-radius: 10px; gap: 2px; }
