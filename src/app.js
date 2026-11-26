@@ -7677,6 +7677,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   // eslint-disable-next-line no-unused-vars
   app.use((err, req, res, next) => {
     const lang = langOf(req);
+    // A field sent as an object where text belongs ({"login": {"toString": 1}}) can't be turned into text: the request
+    // is wrong, not the server (QA 26 Nov: a 500 from sign-in, password reset, the cart quote, shares, name lists...).
+    if (err instanceof TypeError && /Cannot convert object to primitive value/.test(err.message || '')) err = Object.assign(new HttpError(400, 'badRequest'), { cause: err });
     const status = err.status || err.statusCode || 500;
     if (status >= 500) console.error(err);
     let key = err.key;

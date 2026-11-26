@@ -481,7 +481,10 @@
       renderButtons();
       renderThumbs();
       showPage(state.page);
-      if (matchMedia('(max-width: 900px)').matches) window.scrollTo({ top: $('bk-img').getBoundingClientRect().top + window.scrollY - 80, behavior: 'smooth' });
+      // (Below the sticky header, however tall it is: 109px on a phone hid the child's name on the cover. QA 26 Nov.)
+      const header = document.querySelector('header.site-header, .site-header, header');
+      const below = (header && getComputedStyle(header).position.match(/sticky|fixed/) ? header.getBoundingClientRect().height : 0) + 12;
+      if (matchMedia('(max-width: 900px)').matches) window.scrollTo({ top: $('bk-img').getBoundingClientRect().top + window.scrollY - Math.max(80, below), behavior: 'smooth' });
       return true;
     } catch (e) {
       POD.toast(e.message, 'error');

@@ -478,6 +478,8 @@
         originX: 'center',
         originY: 'center',
       });
+      // (The word's own colour, kept so a later colour change can follow the same rule: wordFill.)
+      if (typeof t.fill === 'string' && t.fill) o.wordsFill = t.fill;
       if (t.w > 0 && !o.curve) o.scaleToWidth(box.w * t.w);
       // Painted lettering: an outline (stroke, its width a fraction of the font size) and a shadow ({ color, x, y,
       // blur }, also fractions of the font size; blur 0 is a solid offset copy, the editor's "Extrude"/"Retro"). `fx`
@@ -857,5 +859,5 @@
     return changed ? { ...design, items } : design;
   }
 
-  window.POD_DESIGN = { FONTS, BUNDLED, ARABIC_RE, ARABIC_FOR, ACCENT, SHAPES, TEXT_PRESETS, TEMPLATES, ensureFont, ensureFontsFor, buildTemplate, readyArea, templateThumb, usePrintSources, inlineSvgImages, NAME_ROLES, sampleNames, cleanName, withNames, wordsTexts, ensureWordsFonts };
+  window.POD_DESIGN = { FONTS, BUNDLED, ARABIC_RE, ARABIC_FOR, wordFill, ACCENT, SHAPES, TEXT_PRESETS, TEMPLATES, ensureFont, ensureFontsFor, buildTemplate, readyArea, templateThumb, usePrintSources, inlineSvgImages, NAME_ROLES, sampleNames, cleanName, withNames, wordsTexts, ensureWordsFonts };
 })();

@@ -637,7 +637,9 @@
   function drawOverview() {
     const box = $('overview');
     // (Not on a phone while a panel is open: the canvas is small then and shows the print area close up.)
-    const show = zoomedIn() && !st.preview && !(MOBILE.matches && st.sheet);
+    // (Nor on a phone while the empty design's hint shows: it covered the hint's first words. QA 26 Nov.)
+    const hint = $('stage-hint');
+    const show = zoomedIn() && !st.preview && !(MOBILE.matches && st.sheet) && !(MOBILE.matches && hint && !hint.hidden);
     box.hidden = !show;
     if (!show) return;
     const max = MOBILE.matches ? 96 : 150;
@@ -1479,6 +1481,26 @@
   }
 
   // ---------- Adding things ----------
+  /**
+   * Text typed in the side box that grew wider (or taller) than the print area: made smaller round its middle, as a
+   * new text is fitted (QA 26 Nov: "فريق Ebda3 2026" printed as "يق Ebda3 202"). Never made bigger.
+   */
+  function fitTextToArea(o) {
+    if (!o || !isText(o)) return;
+    const a = area();
+    const maxW = a.w * 0.92;
+    const maxH = a.h * 0.92;
+    if (o.initDimensions) o.initDimensions();
+    const w = o.getScaledWidth();
+    const h = o.getScaledHeight();
+    if (!(w > maxW || h > maxH) || !w || !h) return;
+    const c = o.getCenterPoint();
+    const k = Math.min(maxW / w, maxH / h);
+    o.set({ scaleX: o.scaleX * k, scaleY: o.scaleY * k });
+    o.setPositionByOrigin(c, 'center', 'center');
+    o.setCoords();
+    canvas.requestRenderAll();
+  }
   function addObject(obj, { select = true, shrinkToFit = true, behindText = false } = {}) {
     if (select) st.openSheetOnSelect = true;
     cancelCrop();
@@ -3343,6 +3365,7 @@
           if (o.text !== v) o.set({ text: v }); // (lines and anything else: as typed)
           setProp({ text: o.text });
         } else setProp({ text: v });
+        fitTextToArea(o);
         renderLayers();
         if (wasArabic !== D.ARABIC_RE.test(v)) renderPropsKeepFocus();
         else refreshWordChips(o); // (the "colour one word" buttons follow the new words)
@@ -3568,7 +3591,9 @@
     if (isText(o)) {
       // (Cut by whole characters, with "…" when it's longer: "100%" isn't shown as "1". QA 25 Nov.)
       const all = Array.from(o.text.replace(/\s+/g, ' '));
-      return `“${all.length > 28 ? `${all.slice(0, 27).join('')}…` : all.join('')}”`;
+      // (In its own direction, between isolates: "Happy Birthday 2026!" kept its "!" at its end on the Arabic page, and
+      // a cut Arabic line its "…" at its own end on the English one. QA 26 Nov.)
+      return `“\u2068${all.length > 28 ? `${all.slice(0, 27).join('')}…` : all.join('')}\u2069”`;
     }
     // (A ready design's picture: "Design picture", not its file name "art:trees-holly-plaid". Owner, 26 Nov.)
     if (/^art:/.test(o.name || '')) return t('layer.art');
@@ -3793,6 +3818,20 @@
     renderOptions();
     await applyMockup();
     if (oldInk !== newInk && !laser()) swapInk(oldInk, newInk);
+    // A ready design's near-black words on a product that became dark (or back): its own rule, as when the design is
+    // opened on that colour; a word the customer recoloured stays as they chose (QA 26 Nov).
+    if (oldInk !== newInk && !laser() && D.wordFill) {
+      canvas.getObjects().forEach((o) => {
+        if (typeof o.wordsFill !== 'string' || !isText(o)) return;
+        const was = D.wordFill(o.wordsFill, oldInk);
+        const now = D.wordFill(o.wordsFill, newInk);
+        if (now !== was && typeof o.fill === 'string' && o.fill.toLowerCase() === String(was).toLowerCase()) {
+          o.set({ fill: now });
+          o.dirty = true;
+        }
+      });
+      canvas.requestRenderAll();
+    }
     retoneAll();
     schedulePatternPreview(0);
   }));
@@ -4319,6 +4358,26 @@
     issues.sort((x, y) => (x.level === y.level ? 0 : x.level === 'error' ? -1 : 1));
     return issues.map((i) => ({ ...i, side: sd }));
   }
+  /**
+   * A booklet's pages with nothing on them (the page on screen as it is now), as the file check counts them: "2–8"
+   * with the total, or null when every page has something or none has yet. QA 26 Nov: "Ready to print" with only the
+   * cover designed.
+   */
+  function blankPages() {
+    if (!st.product.paged) return null;
+    const pages = activeSides();
+    const has = (sd) => (sd.id === st.side ? canvas.getObjects().some((o) => o.name !== '__cropper' && o.name !== 'Background') : (st.designs[sd.id] || []).length > 0);
+    const empty = pages.map((sd, i) => (has(sd) ? 0 : i + 1)).filter(Boolean);
+    if (!empty.length || empty.length === pages.length) return null;
+    const runs = [];
+    for (const n of empty) {
+      const last = runs[runs.length - 1];
+      if (last && n === last[1] + 1) last[1] = n;
+      else runs.push([n, n]);
+    }
+    const text = runs.map(([a, b]) => (a === b ? POD.num(a) : `${POD.num(a)}–${POD.num(b)}`)).join(POD.lang === 'ar' ? '، ' : ', ');
+    return t(empty.length === 1 ? 'pf.blankPages.one' : 'pf.blankPages', { pages: text, total: POD.num(pages.length) });
+  }
   let checkFrame = 0;
   function scheduleCheck() {
     if (checkFrame) return;
@@ -4335,20 +4394,24 @@
     const elsewhere = Object.entries(st.sideIssues)
       .filter(([id, n]) => id !== st.side && n > 0 && st.product.sides.some((sd) => sd.id === hostOf(id)) && (st.designs[id] || []).length)
       .map(([id]) => tr(baseSide(hostOf(id)).name));
+    const blank = blankPages();
+    if (blank && !elsewhere.length && !issues.length) elsewhere.push(null);
     const chip = $('check-chip');
     chip.className = 'check-chip ' + (issues.length ? (issues.some((i) => i.level === 'error') ? 'bad' : 'warn') : elsewhere.length ? 'warn' : 'ok');
     chip.innerHTML = issues.length ? `⚠ <span>${esc(t('check.issues', { n: POD.num(issues.length) }))}</span>`
-      : elsewhere.length ? `⚠ <span>${esc(t('check.otherSide', { sides: elsewhere.join(POD.lang === 'ar' ? '، ' : ', ') }))}</span>` : `✓ <span>${esc(t('check.ok'))}</span>`;
+      : elsewhere.filter(Boolean).length ? `⚠ <span>${esc(t('check.otherSide', { sides: elsewhere.filter(Boolean).join(POD.lang === 'ar' ? '، ' : ', ') }))}</span>`
+        : blank ? `⚠ <span>${esc(t('check.issues', { n: POD.num(1) }))}</span>` : `✓ <span>${esc(t('check.ok'))}</span>`;
     const R = rects();
     $('check-legend').innerHTML = `
       <li><i class="lg lg-trim"></i>${esc(t('check.legendTrim'))}</li>
       <li><i class="lg lg-safe"></i>${esc(t('check.legendSafe'))}</li>
       ${R.b ? `<li><i class="lg lg-bleed"></i>${esc(t('check.legendBleed'))}</li>` : ''}`;
     paintSampleNote(issues);
+    const blankLi = blank ? `<li class="warn"><span>⚠</span><span>${esc(blank)}</span></li>` : '';
     $('check-list').innerHTML = issues.length
-      ? issues.map((i, k) => `<li class="${i.level}" data-issue="${k}"><span>${i.level === 'error' ? '⛔' : '⚠'}</span><span>${esc(t(i.key, { ...i.params, dpi: POD.num(i.params.dpi ?? 0), pt: POD.num(i.params.pt ?? 0) }))}</span></li>`).join('')
-      : elsewhere.length ? `<li class="warn"><span>⚠</span><span>${esc(t('check.otherSideLong', { sides: elsewhere.join(POD.lang === 'ar' ? '، ' : ', ') }))}</span></li>`
-        : `<li class="ok"><span>✓</span><span>${esc(t('check.allGood'))}</span></li>`;
+      ? issues.map((i, k) => `<li class="${i.level}" data-issue="${k}"><span>${i.level === 'error' ? '⛔' : '⚠'}</span><span>${esc(t(i.key, { ...i.params, dpi: POD.num(i.params.dpi ?? 0), pt: POD.num(i.params.pt ?? 0) }))}</span></li>`).join('') + blankLi
+      : elsewhere.filter(Boolean).length ? `<li class="warn"><span>⚠</span><span>${esc(t('check.otherSideLong', { sides: elsewhere.filter(Boolean).join(POD.lang === 'ar' ? '، ' : ', ') }))}</span></li>${blankLi}`
+        : blankLi || `<li class="ok"><span>✓</span><span>${esc(t('check.allGood'))}</span></li>`;
     canvas.requestRenderAll();
   }
   /**
@@ -4533,6 +4596,9 @@
   function qtyFollow(fromColor, fromSize) {
     const lines = qtyLines();
     if (lines.length === 1 && lines[0].color === fromColor && lines[0].size === fromSize) st.qty = { [st.colorId]: { [st.sizeId]: lines[0].qty } };
+    // The boxes drawn again at once: with nothing designed yet they kept the old colour's row, so a number typed there
+    // ordered the old colour (QA 26 Nov: black picked, "White · M" in the cart).
+    renderQty({ force: true });
   }
   /** What a second printed side adds to one piece of a size (small packs: their share of it, as the server's sidePriceFor). */
   function sidePrice(p, size) {
@@ -5937,6 +6003,9 @@
       const mergeSidesPayload = {};
       const files = {};
       const problems = [];
+      // (Booklet pages left blank: said before ordering, as the cart's file check says it.)
+      const blankBefore = blankPages();
+      if (blankBefore) problems.push(`• ${blankBefore}`);
       const clientChecks = []; // the same checks, kept with the design for the proof and the shop
       let overlapAt = null; // print and embroidery on top of each other: not sent
       for (const s of sides) {
@@ -6208,6 +6277,8 @@
     if (st.editingCartIndex !== null || st.revise) return $('add-to-cart').click();
     // Drafts are off here (the browser blocks site data, or a shared design): say so, keep the customer here.
     if (!draftMode) return toast(t('draft.saveOff'), 'error');
+    // Nothing on it yet: nothing to keep (it said "saved in My saved designs", and nothing was there. QA 26 Nov).
+    if (!designedSides().length) return toast(t('msg.addFirst'), 'error');
     busy(true, t('busy.saving'));
     let ok = await saveDraft({ force: true }); // (asked for: saved even when nothing was changed)
     // Signed in: wait for the copy on the account too (a few seconds at most), so it opens on the other device.

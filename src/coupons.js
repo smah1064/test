@@ -24,7 +24,9 @@ const today = () => DAY_FMT.format(new Date());
  * letters and digits ("ＥＩＤ２０") count as the English ones, and invisible direction marks (pasted
  * from a chat) are left out. "eid٢٠" and " E I D ２ ０ " are "EID20".
  */
-const normCode = (c) => String(c == null ? '' : c)
+// (Only text or a number is a code: ["X"] became "X" and slipped past the wrong-guess limit, which counts text codes.
+// QA 26 Nov.)
+const normCode = (c) => String(typeof c === 'string' || typeof c === 'number' ? c : '')
   .replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 0x0660))
   .replace(/[\u06f0-\u06f9]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
   .replace(/[\uff01-\uff5e]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0))
