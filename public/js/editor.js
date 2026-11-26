@@ -919,7 +919,8 @@
     // Movable print area: a handle under the box (and the allowed zone while dragging).
     st.handleRect = null;
     const zone = zoneOf();
-    if (zone && !crop) {
+    // (Not while something is chosen: its own bubble sits there then, editor redesign stage 6.)
+    if (zone && !crop && (!canvas.getActiveObject() || st.movingArea)) {
       if (st.movingArea) {
         ctx.setLineDash([2 * px, 4 * px]);
         ctx.lineWidth = 1 * px;
@@ -1463,8 +1464,9 @@
     scheduleCheck();
     // Phones: a newly added element opens its settings; tapping an existing
     // one shows the floating bar, which has a button for the settings.
-    if (MOBILE.matches && st.openSheetOnSelect) setSheet('props');
+    if (MOBILE.matches && st.openSheetOnSelect && st.typeOnAdd) setSheet('props');
     st.openSheetOnSelect = false;
+    st.typeOnAdd = false;
     renderFloatBar();
   }));
   let lastCleared = null;
@@ -1735,6 +1737,7 @@
   const quickText = serial(async () => {
     const catcher = $('type-catch');
     if (catcher) { try { catcher.focus({ preventScroll: true }); } catch (e) { /* none */ } }
+    st.typeOnAdd = true;
     const tx = await addPreset(0);
     st.freshText = tx;
     renderProps();
@@ -2475,6 +2478,7 @@
 
   // ---------- Phone layout: slide-up panel ----------
   function syncSheetTitle() {
+    if (typeof renderElBar === 'function') renderElBar();
     if (st.sheet) $('sheet-title').textContent = st.sheet === 'product' ? t('sheet.product') : st.sheet === 'check' ? t('check.title') : $('props-title').textContent;
   }
   function setSheet(mode) {
@@ -2482,6 +2486,7 @@
     document.body.classList.toggle('sheet-props', mode === 'props');
     document.body.classList.toggle('sheet-product', mode === 'product');
     document.body.classList.toggle('sheet-check', mode === 'check');
+    if (typeof renderElBar === 'function') renderElBar();
     document.querySelectorAll('[data-sheet]').forEach((b) => b.classList.toggle('open', b.dataset.sheet === mode));
     syncSheetTitle();
     requestAnimationFrame(() => {
@@ -2826,6 +2831,115 @@
     ungroup: '<rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/>',
   };
   const fbIcon = (k) => `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${FB[k]}</svg>`;
+  // ---------- Phones: the selected element's own tools and one short strip (editor redesign stage 6) ----------
+  const EL = { tool: null };
+  const elSvg = (d) => `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+  const EL_ICON = {
+    font: elSvg('<path d="M4 20 10 4h1l6 16M6.5 14h8"/><path d="M17 20h4"/>'),
+    size: elSvg('<path d="M3 7V5h11v2M8.5 5v14M6 19h5"/><path d="M15 13v-1h6v1M18 12v7M16.5 19h3"/>'),
+    colour: elSvg('<circle cx="12" cy="12" r="8" fill="currentColor" stroke="none"/>'),
+    fx: elSvg('<path d="m4 20 10-10M14 4v2M14 10v2M10 6H8M20 6h-2M17 3l-1 1M11 3l1 1M17 9l-1-1"/>'),
+    format: elSvg('<path d="M4 6h16M7 10h10M4 14h16M7 18h10"/>'),
+    crop: elSvg('<path d="M6 2v14a2 2 0 0 0 2 2h14M2 6h14a2 2 0 0 1 2 2v14"/>'),
+    shape: elSvg('<circle cx="12" cy="12" r="8"/><path d="M8 12h8"/>'),
+    removebg: elSvg('<path d="M4 4h4M16 4h4M4 20h4M16 20h4M4 4v4M20 4v4M4 16v4M20 16v4"/><circle cx="12" cy="11" r="3"/><path d="M7 18c1-2.5 3-3.5 5-3.5s4 1 5 3.5"/>'),
+    more: elSvg('<circle cx="5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="19" cy="12" r="1.6" fill="currentColor"/>'),
+  };
+  function elItems(o) {
+    if (isText(o)) return ['done', 'font', 'size', 'colour', 'fx', 'format', 'more'];
+    if (o.type === 'image') return ['done', 'crop', 'shape', 'removebg', 'more'];
+    if (o.type === 'activeSelection' || o.type === 'group' || isSticker(o) || laser()) return ['done', 'more'];
+    return ['done', 'colour', 'more'];
+  }
+  const EL_WORD = { font: 'el.font', size: 'el.size', colour: 'el.colour', fx: 'el.fx', format: 'el.format', crop: 'props.crop', shape: 'props.photoShape', removebg: 'el.removeBg', more: 'more.tool' };
+  function renderElBar() {
+    const bar = $('el-bar');
+    const strip = $('el-strip');
+    if (!bar || !strip) return;
+    const o = active();
+    const on = Boolean(MOBILE.matches && o && !crop && !st.preview && !st.exporting && st.sheet !== 'product' && st.sheet !== 'check');
+    document.body.classList.toggle('el-on', on);
+    bar.hidden = !on;
+    if (!on) { strip.hidden = true; strip.innerHTML = ''; EL.tool = null; return; }
+    const items = elItems(o);
+    if (!items.includes(EL.tool)) EL.tool = null;
+    bar.innerHTML = items.map((k) => (k === 'done'
+      ? `<button type="button" class="el-done" data-el="done">${esc(t('el.done'))}</button>`
+      : `<button type="button" class="el-btn${EL.tool === k || (k === 'more' && st.sheet === 'props') ? ' active' : ''}" data-el="${k}" aria-pressed="${EL.tool === k || (k === 'more' && st.sheet === 'props')}"${k === 'colour' ? ` style="--dot:${esc(typeof o.fill === 'string' && o.fill !== 'transparent' ? o.fill : '#16181d')}"` : ''}>${EL_ICON[k]}<span>${esc(t(EL_WORD[k]))}</span></button>`)).join('');
+    renderStrip(o);
+  }
+  function renderStrip(o) {
+    const strip = $('el-strip');
+    if (!strip) return;
+    if (!EL.tool || st.sheet === 'props') { strip.hidden = true; strip.innerHTML = ''; return; }
+    let html = '';
+    if (EL.tool === 'font') {
+      const arabic = D.ARABIC_RE.test(o.text);
+      const word = String(o.text || '').trim().split(/\s+/)[0].slice(0, 8) || (arabic ? 'أبجد' : 'Abc');
+      const list = arabic ? [...D.FONTS.arabic, ...D.FONTS.english] : [...D.FONTS.english, ...D.FONTS.arabic];
+      html = `<div class="strip-scroll">${list.map((f) => `<button type="button" class="font-card${f === o.fontFamily ? ' active' : ''}" data-font="${esc(f)}" aria-pressed="${f === o.fontFamily}" aria-label="${esc(f)}"><span style="font-family:'${esc(f)}'">${esc(word)}</span><small>${esc(f)}</small></button>`).join('')}</div>`;
+    } else if (EL.tool === 'size') {
+      const v = Math.round(o.fontSize);
+      html = `<div class="strip-row strip-size"><input type="range" data-strip-size min="8" max="300" step="1" value="${v}" aria-label="${esc(t('props.size'))}"><div class="num-step" dir="ltr"><button type="button" class="btn btn-sm" data-strip-step="-2" aria-label="${esc(t('props.less'))}">${ICON.minus}</button><span class="strip-num" aria-live="polite">${esc(POD.num(v))}</span><button type="button" class="btn btn-sm" data-strip-step="2" aria-label="${esc(t('props.more'))}">${ICON.plus}</button></div></div>`;
+    } else if (EL.tool === 'colour') {
+      const now = typeof o.fill === 'string' ? toHex(o.fill) : '';
+      html = `<div class="strip-scroll strip-dots">${PALETTE.map((c) => `<button type="button" class="pal${now === c ? ' active' : ''}" data-pal="fill" data-c="${c}" style="background:${c}" aria-label="${c}" aria-pressed="${now === c}"></button>`).join('')}<button type="button" class="strip-more" data-el="more-colours" aria-label="${esc(t('el.moreColours'))}">${ICON.plus}</button></div>`;
+    } else if (EL.tool === 'fx') {
+      const sample = D.ARABIC_RE.test(o.text) ? 'أبج' : 'Abc';
+      html = `<div class="strip-scroll">${TEXT_FX.map((id) => `<button type="button" class="fx-chip${(o.textFx || 'none') === id ? ' active' : ''}" data-fx="${id}" aria-pressed="${(o.textFx || 'none') === id}"><span class="fx-sample fx-${id}" style="font-family:'${esc(o.fontFamily)}'">${sample}</span><small>${esc(t('fx.' + id))}</small></button>`).join('')}</div>`;
+    } else if (EL.tool === 'format') {
+      const b = o.fontWeight === 'bold' || Number(o.fontWeight) >= 600;
+      html = `<div class="strip-row strip-format"><div class="btn-group">${['bold', 'italic', 'underline'].map((k) => { const on = k === 'bold' ? b : k === 'italic' ? o.fontStyle === 'italic' : o.underline; return `<button type="button" class="btn btn-sm${on ? ' active' : ''}" data-toggle="${k}" aria-pressed="${Boolean(on)}" aria-label="${esc(t('props.' + k))}">${{ bold: '<b>B</b>', italic: '<i>I</i>', underline: '<u>U</u>' }[k]}</button>`; }).join('')}</div><div class="btn-group" dir="ltr">${['left', 'center', 'right'].map((al) => `<button type="button" class="btn btn-sm${o.textAlign === al ? ' active' : ''}" data-align="${al}" aria-pressed="${o.textAlign === al}" aria-label="${esc(t('props.align' + al[0].toUpperCase() + al.slice(1)))}">${ICON['al' + al]}</button>`).join('')}</div></div>`;
+    } else if (EL.tool === 'shape') {
+      html = `<div class="strip-scroll">${MASKS.map((m) => `<button type="button" class="mask-btn${(o.mask || 'none') === m ? ' active' : ''}" data-mask="${m}" aria-pressed="${(o.mask || 'none') === m}"><span class="mask-icon mask-${m}"></span><small>${esc(t('mask.' + m))}</small></button>`).join('')}</div>`;
+    }
+    strip.innerHTML = html;
+    strip.hidden = !html;
+    const cur = strip.querySelector('.active');
+    if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }
+  if ($('el-bar')) {
+    $('el-bar').addEventListener('click', serial(async (e) => {
+      const b = e.target.closest('[data-el]');
+      const o = active();
+      if (!b || !o) return;
+      const k = b.dataset.el;
+      if (k === 'done') { deselectAll(); return; }
+      if (k === 'more') { EL.tool = null; setSheet(st.sheet === 'props' ? null : 'props'); return; }
+      if (k === 'crop') { EL.tool = null; startCrop(o); renderElBar(); return; }
+      if (k === 'removebg') { await removeImageBackground(o); return; }
+      EL.tool = EL.tool === k ? null : k;
+      if (st.sheet === 'props') setSheet(null);
+      renderElBar();
+    }));
+    $('el-strip').addEventListener('click', (e) => {
+      const o = active();
+      if (!o) return;
+      if (e.target.closest('[data-el="more-colours"]')) {
+        EL.tool = null;
+        openGroups.add('colours');
+        setSheet('props');
+        renderProps();
+        return;
+      }
+      const step = e.target.closest('[data-strip-step]');
+      if (step) {
+        setProp({ fontSize: Math.max(8, Math.min(300, Math.round(o.fontSize) + Number(step.dataset.stripStep))) }, { commitNow: true });
+        renderProps();
+      }
+    });
+    $('el-strip').addEventListener('input', (e) => {
+      const o = active();
+      if (!o || !e.target.matches('[data-strip-size]')) return;
+      setProp({ fontSize: Number(e.target.value) });
+      const n = $('el-strip').querySelector('.strip-num');
+      if (n) n.textContent = POD.num(Number(e.target.value));
+      const f = $('p-size');
+      if (f) f.value = e.target.value;
+    });
+    $('el-strip').addEventListener('change', (e) => { if (e.target.matches('[data-strip-size]')) { commit(); renderProps(); } });
+    MOBILE.addEventListener('change', () => renderElBar());
+  }
   function hideFloatBar() {
     const bar = $('float-bar');
     if (bar) bar.hidden = true;
@@ -2839,10 +2953,10 @@
     const multi = o.type === 'activeSelection';
     const items = [];
     if (isText(o)) items.push(['edit-text', 'edit', 'fb.editText', true]);
-    if (MOBILE.matches) items.push(['open-props', 'style', multi ? 'fb.arrange' : 'fb.style', true]);
     if (multi) items.push(['group', 'group', 'group.make', false]);
     if (o.type === 'group' && !isSticker(o)) items.push(['ungroup', 'ungroup', 'group.ungroup', false]);
-    if (!multi) items.push(['duplicate', 'dup', 'props.duplicate', false], ['up', 'up', 'props.forward', false], ['down', 'down', 'props.backward', false]);
+    // (Phones: forward / backward are in the element's More; the bubble keeps copy and delete.)
+    if (!multi) items.push(['duplicate', 'dup', 'props.duplicate', false], ...(MOBILE.matches ? [] : [['up', 'up', 'props.forward', false], ['down', 'down', 'props.backward', false]]));
     items.push(['delete', 'del', multi ? 'props.deleteSelected' : 'props.delete', false]);
     bar.innerHTML = items.map(([act, icon, key, label]) =>
       `<button type="button" data-fb="${act}" class="${act === 'delete' ? 'danger' : ''}" title="${esc(t(key))}" aria-label="${esc(t(key))}">${fbIcon(icon)}${label ? `<span>${esc(t(key))}</span>` : ''}</button>`).join('');
@@ -2922,6 +3036,8 @@
 
   // ---------- Properties panel ----------
   const props = $('props');
+  /** The element's settings react the same in the sheet and in the phone's short strip (editor redesign stage 6). */
+  const onProps = (type, fn, opts) => { props.addEventListener(type, fn, opts); if ($('el-strip')) $('el-strip').addEventListener(type, fn, opts); };
   const PALETTE = ['#16181d', '#ffffff', '#ff5a36', '#e03131', '#f783ac', '#fcc419', '#e0a526', '#2f9e44', '#1c7ed6', '#22304f', '#7048e8', '#8d6e63'];
   const MASKS = ['none', 'circle', 'rounded', 'heart', 'star', 'hexagon', 'arch'];
   // (Colours folded on phones, where the text's colour now sits under its size; the computer's side panel has room for
@@ -2937,7 +3053,7 @@
     type: 'linear', gradientUnits: 'percentage', coords: { x1: 0, y1: 0, x2: 0, y2: 1 },
     colorStops: [{ offset: 0, color: c1 }, { offset: 1, color: c2 }],
   });
-  props.addEventListener('toggle', (e) => {
+  onProps('toggle', (e) => {
     const d = e.target;
     if (d.dataset && d.dataset.group) d.open ? openGroups.add(d.dataset.group) : openGroups.delete(d.dataset.group);
   }, true);
@@ -3182,6 +3298,7 @@
     box.innerHTML = html;
     if (image) updateQuality();
     syncSheetTitle();
+    renderElBar();
   }
 
   /** Laser products: one tone, so instead of colour pickers a word on how it will look. */
@@ -3618,7 +3735,7 @@
   // Arabic keyboard count ("٨٠" is 80; a number box would drop them, QA 25 Nov). Arrow keys still step.
   const latinNumber = (v) => String(v).replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d))
     .replace(/[٫,]/g, '.').replace(/[−–]/g, '-').replace(/[^\d.-]/g, '');
-  props.addEventListener('keydown', (e) => {
+  onProps('keydown', (e) => {
     const box = e.target;
     if (!box.classList || !box.classList.contains('num-in') || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
     e.preventDefault();
@@ -3630,7 +3747,7 @@
     box.dispatchEvent(new Event('input', { bubbles: true }));
     box.dispatchEvent(new Event('change', { bubbles: true }));
   });
-  props.addEventListener('input', (e) => {
+  onProps('input', (e) => {
     const o = active();
     if (!o || crop) return;
     const v = e.target.classList && e.target.classList.contains('num-in') ? latinNumber(e.target.value) : e.target.value;
@@ -3714,7 +3831,7 @@
     const nf = $('p-text');
     if (nf && pos !== null) { nf.focus(); nf.setSelectionRange(pos, pos); }
   }
-  props.addEventListener('change', (e) => {
+  onProps('change', (e) => {
     const o = active();
     if (!o || crop) return;
     const id = e.target.id;
@@ -3743,7 +3860,7 @@
     // the next box keeps its focus, QA 25 Nov.)
     if (['p-wcm', 'p-hcm', 'p-xcm', 'p-ycm'].includes(id)) refreshCmBoxes(o, e.target);
   });
-  props.addEventListener('click', serial(async (e) => {
+  onProps('click', serial(async (e) => {
     if (crop) {
       const act = e.target.closest('[data-act]')?.dataset.act;
       if (act === 'crop-apply') applyCrop();
