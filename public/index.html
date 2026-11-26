@@ -65,6 +65,14 @@
       <div class="hm-hero-art" id="hero-art" aria-hidden="true"></div>
     </section>
 
+    <!-- Why order here, right under the banner (owner's OK, UX item B, 26 Nov) -->
+    <ul class="hm-trust" aria-label="" data-i18n-aria="hm.trustLabel">
+      <li><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7z"/><circle cx="7" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/></svg><span><strong data-i18n="hm.trust.deliveryT"></strong><small data-i18n="hm.trust.deliveryS"></small></span></li>
+      <li><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span><strong data-i18n="hm.trust.proofT"></strong><small data-i18n="hm.trust.proofS"></small></span></li>
+      <li><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M11 9l2-1.5V16"/></svg><span><strong data-i18n="hm.trust.oneT"></strong><small data-i18n="hm.trust.oneS"></small></span></li>
+      <li><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><span><strong data-i18n="hm.trust.payT"></strong><small data-i18n="hm.trust.payS"></small></span></li>
+    </ul>
+
     <!-- Three picture tiles -->
     <section class="hm-tiles" id="hm-tiles" aria-label="" data-i18n-aria="hm.tilesLabel"></section>
 
@@ -127,6 +135,10 @@
       let cat = new URLSearchParams(location.search).get('cat') || 'all';
       // Search (?q=): product names, descriptions and categories, both languages.
       let q = (new URLSearchParams(location.search).get('q') || '').slice(0, 60);
+      // "All products" starts with the first 8; "Show all" shows the rest (kept for Back). A search shows everything it
+      // finds (owner's OK, UX item D, 26 Nov).
+      const FIRST = 8;
+      let showAll = Boolean(history.state && typeof history.state === 'object' && history.state.homeAll);
       // The "how it works" step numbers in the page's digits (also while the products can't load).
       const stepNums = () => document.querySelectorAll('.hm-num').forEach((el, i) => { el.textContent = POD.num(i + 1); });
       stepNums();
@@ -506,15 +518,28 @@
       const lifeOf = (p) => life[POD.assetId(p)];
       const designedOf = (p) => designed[POD.assetId(p)];
       const hrefOf = (p) => (p.kind === 'book' ? `/book?b=${encodeURIComponent(p.book)}` : p.kind === 'photoset' ? '/photos' : `/product?id=${encodeURIComponent(p.id)}`);
+      // The shop's photos at about the size they are shown (owner's OK, UX item D, 26 Nov): the server makes smaller
+      // copies (/img-w/, src/app.js); the browser picks one by the screen's size and sharpness. Sizes per place:
+      const SIZES = {
+        card: '(max-width: 600px) 46vw, (max-width: 1100px) 30vw, 260px', // the rows and "All products"
+        tile: '(max-width: 600px) 92vw, 33vw', // the three picture tiles
+        hero: '(max-width: 900px) 92vw, 50vw',
+      };
+      const sizedOk = (file) => /^\/img\/(lifestyle|designed)\/[A-Za-z0-9_-][A-Za-z0-9_.-]*\.(webp|jpe?g|png)$/i.test(String(file || ''));
+      const sizedUrl = (file, w) => `/img-w/${w}/${file.slice(5)}`;
+      /** src (and srcset when the photo can be sized) for one of the shop's photos. */
+      const photoSrc = (file, where) => (sizedOk(file)
+        ? `src="${esc(sizedUrl(file, 480))}" srcset="${[320, 480, 800, 1200].map((w) => `${esc(sizedUrl(file, w))} ${w}w`).join(', ')}" sizes="${SIZES[where] || SIZES.card}"`
+        : `src="${esc(file)}"`);
       /** The card picture: a saved draft, else the manager's photo, else the lifestyle photo, else the product photo. */
       function cardPicture(p, eager) {
         const d = drafts[p.id];
         if (d && d.url) return `<img alt="" src="${d.url}"><span class="saved-badge">${esc(t('draft.badge'))}</span>`;
         if (p.mainPhoto) return thumbImg(p, POD.firstPick(p.colors), eager);
         const l = lifeOf(p);
-        if (l && l.file) return `<img class="hm-life" alt="${esc(tr(l.alt) || tr(p.name))}" ${eager ? '' : 'loading="lazy" '}decoding="async" src="${esc(l.file)}">`;
+        if (l && l.file) return `<img class="hm-life" alt="${esc(tr(l.alt) || tr(p.name))}" ${eager ? '' : 'loading="lazy" '}decoding="async" ${photoSrc(l.file, 'card')}>`;
         const g = designedOf(p);
-        if (g && g.file) return `<img class="hm-designed" alt="${esc(tr(p.name))}" ${eager ? '' : 'loading="lazy" '}decoding="async" src="${esc(g.file)}">`;
+        if (g && g.file) return `<img class="hm-designed" alt="${esc(tr(p.name))}" ${eager ? '' : 'loading="lazy" '}decoding="async" ${photoSrc(g.file, 'card')}>`;
         return thumbImg(p, POD.firstPick(p.colors), eager);
       }
       /** "From 250 EGP" and, for products sold in quantities, the smallest pack ("A5 × 100"). */
@@ -548,9 +573,9 @@
         if (d && d.url) return `<img alt="" src="${d.url}"><span class="saved-badge">${esc(t('draft.badge'))}</span>`;
         if (p.mainPhoto) return thumbImg(p, POD.firstPick(p.colors));
         const l = lifeOf(p);
-        if (l && l.file) return `<img class="hm-life" alt="${esc(tr(l.alt) || tr(p.name))}" loading="lazy" decoding="async" src="${esc(l.file)}">`;
+        if (l && l.file) return `<img class="hm-life" alt="${esc(tr(l.alt) || tr(p.name))}" loading="lazy" decoding="async" ${photoSrc(l.file, 'card')}>`;
         const g = designedOf(p);
-        if (g && g.file) return `<img class="hm-designed" alt="${esc(tr(p.name))}" loading="lazy" decoding="async" src="${esc(g.file)}">`;
+        if (g && g.file) return `<img class="hm-designed" alt="${esc(tr(p.name))}" loading="lazy" decoding="async" ${photoSrc(g.file, 'card')}>`;
         return thumbImg(p, POD.firstPick(p.colors));
       }
       const editorHref = (p) => (p.kind === 'book' ? `/book?b=${encodeURIComponent(p.book)}` : p.kind === 'photoset' ? '/photos' : `/editor?product=${encodeURIComponent(p.id)}`);
@@ -591,11 +616,11 @@
         // The shop's own pictures (hero-2, hero-3) first; else a product the shop sells now (hidden ones are not in the list).
         const pic = (key, ids, cat) => {
           const l = life[key];
-          if (l && l.file) return `<img alt="" loading="lazy" decoding="async" src="${esc(l.file)}">`;
+          if (l && l.file) return `<img alt="" loading="lazy" decoding="async" ${photoSrc(l.file, 'tile')}>`;
           const p = ids.map(byId).find(Boolean) || products.find((x) => x.category === cat && !x.kind);
           if (!p) return '';
           const pl = !p.mainPhoto && lifeOf(p);
-          return pl && pl.file ? `<img alt="" loading="lazy" decoding="async" src="${esc(pl.file)}">` : thumbImg(p, POD.firstPick(p.colors));
+          return pl && pl.file ? `<img alt="" loading="lazy" decoding="async" ${photoSrc(pl.file, 'tile')}>` : thumbImg(p, POD.firstPick(p.colors));
         };
         const has = (c) => products.some((p) => p.category === c);
         const tiles = [
@@ -648,6 +673,8 @@
           return;
         }
         // Catalogue cards: the product with a design on, the name, the price, "Start designing" and "Details".
+        const total = list.length;
+        if (!searching && !showAll && total > FIRST + 2) list = list.slice(0, FIRST);
         grid.innerHTML = list.map((p) => `
           <div class="hm-gcard" data-place="${esc(p.id)}">
             <a class="hm-gpic" href="${hrefOf(p)}" tabindex="-1" aria-hidden="true">${gridPicture(p)}</a>
@@ -655,7 +682,11 @@
             <div class="hm-meta">${priceLine(p)}</div>
             <a class="btn btn-primary hm-gstart" href="${editorHref(p)}">${esc(t(p.kind ? 'hm.open' : 'home.start'))}</a>
             <a class="btn hm-gdetails" href="${hrefOf(p)}">${esc(t('hm.details'))}</a>
-          </div>`).join('');
+          </div>`).join('') + (list.length < total ? `
+          <div class="hm-showall">
+            <button type="button" class="btn btn-lg" data-show-all>${esc(t('home.showAll', { n: POD.num(total) }))}</button>
+            <span class="muted small">${esc(t('home.showing', { n: POD.num(list.length), total: POD.num(total) }))}</span>
+          </div>` : '');
       }
       document.getElementById('cats').addEventListener('click', (e) => {
         const b = e.target.closest('[data-cat]');
@@ -693,6 +724,15 @@
         qInput.blur(); // closes the phone keyboard so the results show
       });
       grid.addEventListener('click', (e) => {
+        if (e.target.closest('[data-show-all]')) {
+          showAll = true;
+          try { history.replaceState({ ...(history.state && typeof history.state === 'object' ? history.state : {}), homeAll: true }, ''); } catch (err) { /* not kept */ }
+          render();
+          // On to the first of the products that just came in.
+          const next = grid.querySelectorAll('.hm-gcard h3 a')[FIRST];
+          if (next) next.focus({ preventScroll: true });
+          return;
+        }
         if (e.target.closest('[data-clear-q]')) {
           q = '';
           qInput.value = '';
@@ -726,7 +766,7 @@
       // The hero: the big lifestyle picture of many printed products; until there is one, three product photos.
       const hero = document.getElementById('hero-art');
       hero.innerHTML = life['hero-1'] && life['hero-1'].file
-        ? `<img class="hm-hero-photo" alt="" src="${esc(life['hero-1'].file)}" fetchpriority="high">`
+        ? `<img class="hm-hero-photo" alt="" ${photoSrc(life['hero-1'].file, 'hero')} fetchpriority="high">`
         : `<div class="hm-hero-trio">${trio()}</div>`;
 
       render();

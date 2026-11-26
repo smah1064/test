@@ -1308,6 +1308,17 @@ html[dir="ltr"] .hm-tile-link span { display: inline-block; transform: scaleX(-1
 /* All products: catalogue cards (the product with a design on, light grey), two buttons. */
 .product-grid:has(.hm-gcard) { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 28px 20px; }
 .hm-gcard { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+/* "All products": the first 8, then "Show all" across the whole grid. */
+.hm-showall { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 10px 0 4px; }
+.hm-showall .btn { min-width: min(260px, 100%); }
+/* Why order here: four points under the home banner (2 × 2 on phones, one row on wide screens). */
+.hm-trust { list-style: none; margin: 16px 0 22px; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.hm-trust li { display: flex; align-items: center; gap: 10px; min-width: 0; background: #fff; border: 1px solid #eceae7; border-radius: 14px; padding: 10px 12px; }
+.hm-trust svg { flex: none; color: var(--accent, #c2410c); }
+.hm-trust span { display: flex; flex-direction: column; min-width: 0; line-height: 1.35; }
+.hm-trust strong { font-size: 13.5px; }
+.hm-trust small { font-size: 12.5px; color: #5f6368; }
+@media (min-width: 900px) { .hm-trust { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .hm-gpic { display: block; aspect-ratio: 4 / 3; border-radius: 14px; overflow: hidden; background: #ececec; margin-bottom: 6px; }
 .hm-gpic img { width: 100%; height: 100%; display: block; object-fit: cover; transition: transform .35s ease; }
 .hm-gpic img.photo-thumb { object-fit: contain; padding: 7%; box-sizing: border-box; mix-blend-mode: multiply; }

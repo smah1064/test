@@ -78,6 +78,20 @@ window.POD_STRINGS = {
   'hm.a1': ['Clothes, mugs and gifts, cards and paper, stickers and labels, signs and banners, laser-engraved wood and acrylic, kids\' books and photo prints. Search above or browse the rows.', 'هدوم ومجات وهدايا، كروت وورق، ستيكرات وليبلز، لوحات وبانرات، حفر ليزر على خشب وأكريليك، كتب أطفال وطباعة صور. دوّر فوق أو اتفرج على الأقسام.'],
   'hm.q2': ['How fast is delivery?', 'التوصيل بياخد قد إيه؟'],
   'hm.a2': ['Express delivery within 2 business days.', 'توصيل سريع خلال يومين عمل.'],
+  // Why order here: four short points under the home banner (owner's OK, UX item B, 26 Nov). No payment method is
+  // named: cash on delivery during the preview, payment in advance from launch.
+  'hm.trustLabel': ['Why order from ebda3', 'ليه تطلب من إبداع'],
+  'hm.trust.deliveryT': ['Delivery all over Egypt', 'توصيل لكل محافظات مصر'],
+  'hm.trust.deliveryS': ['Express in 2 business days', 'وسريع خلال يومين عمل'],
+  'hm.trust.proofT': ['You see the proof', 'بتشوف البروفة'],
+  'hm.trust.proofS': ['before we print', 'قبل ما نطبع'],
+  'hm.trust.oneT': ['From one piece', 'من قطعة واحدة'],
+  'hm.trust.oneS': ['to thousands', 'لحد آلاف'],
+  'hm.trust.payT': ['Safe payment', 'دفع آمن'],
+  'hm.trust.payS': ['and a clear price up front', 'والسعر واضح من الأول'],
+  // "All products": the first 8, then the rest on request (owner's OK, UX item D, 26 Nov).
+  'home.showAll': ['Show all {n} products', 'اعرض كل المنتجات ({n})'],
+  'home.showing': ['Showing {n} of {total}', 'عارضين {n} من {total} منتج'],
   'hm.q3': ['Will I see my design before it\'s printed?', 'هشوف التصميم قبل ما يتطبع؟'],
   'hm.a3': ['Yes. You see the print file and how it looks on the product, and we only print what you approved.', 'أيوه. بتشوف ملف الطباعة وشكله على المنتج، ومش بنطبع غير اللي وافقت عليه.'],
   'hm.q4': ['How do I pay?', 'بدفع إزاي؟'],
