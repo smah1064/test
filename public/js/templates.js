@@ -793,6 +793,10 @@
     'Playfair Display': 'El Messiri', 'Abril Fatface': 'El Messiri', 'Roboto Slab': 'El Messiri',
     Anton: 'Lalezar', Bungee: 'Lalezar', 'Bebas Neue': 'Lalezar', Oswald: 'Lalezar', Righteous: 'Lalezar', 'Permanent Marker': 'Lalezar',
     Montserrat: 'Cairo',
+    // (The fonts of the ready designs' words.)
+    'Great Vibes': 'Aref Ruqaa', Cookie: 'Aref Ruqaa', Yesteryear: 'Aref Ruqaa', Kalam: 'Marhey',
+    'Irish Grover': 'Lemonada', Julee: 'Marhey', Chewy: 'Lemonada', 'Lilita One': 'Lalezar', Caprasimo: 'Lalezar',
+    'League Gothic': 'Lalezar', 'Six Caps': 'Lalezar', Ultra: 'Lalezar', Smokum: 'Rakkas',
   };
   /** Right to left when the first letter is Arabic (as the editor's text box shows it): "Omar & عمر" stays left to right. */
   function textDirection(s) {

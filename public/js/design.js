@@ -323,7 +323,8 @@
     $('dp-price').textContent = money(product.basePrice + size.surcharge);
     $('dp-edit').href = editHref();
     // A design that is one picture (no words to change): "Make it yours in the editor".
-    const hasWords = (design.items || []).some((i) => i.kind === 'text') || (design.objects || []).some((o) => /text/i.test(o.type || ''));
+    // (A picture whose words are live text counts: "Change the words".)
+    const hasWords = (design.items || []).some((i) => i.kind === 'text' || (i.kind === 'image' && i.words && Array.isArray(i.words.texts) && i.words.texts.length)) || (design.objects || []).some((o) => /text/i.test(o.type || ''));
     // Places for the customer's details: no "Add to cart"; the way to the editor is the main button.
     $('dp-add').hidden = hasFields;
     $('dp-fill').hidden = !hasFields;
