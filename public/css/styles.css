@@ -1934,3 +1934,5 @@ html[dir="rtl"] .more-chev { transform: scaleX(-1); }
   .site-header .inner > nav > .lang-toggle { margin-inline-start: 4px; }
 }
 /* (end of Thumb-size buttons, step 1) */
+/* A product with one side: no lone "Front" pill on computers either (tester 1, 26 Nov). */
+.stage-bar .side-tabs:not(.pages):not(:has(.side-tab + .side-tab)) { display: none; }

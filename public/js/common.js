@@ -638,7 +638,15 @@
     const bar = document.querySelector('[data-toast-above]');
     const r = bar && bar.offsetParent !== null ? bar.getBoundingClientRect() : null;
     const vh = window.innerHeight || 0;
-    root.style.bottom = r && r.height && r.bottom >= vh - 2 && r.top > vh / 2 ? `${Math.round(vh - r.top + 10)}px` : '';
+    let top = r && r.height && r.bottom >= vh - 2 && r.top > vh / 2 ? r.top : null;
+    // (And above buttons floating just over that bar: the editor's Undo / Redo and Live preview on phones. Tester 1, 26 Nov.)
+    if (top != null) {
+      document.querySelectorAll('[data-toast-clear]').forEach((b) => {
+        const q = b.offsetParent !== null ? b.getBoundingClientRect() : null;
+        if (q && q.height && q.top > vh / 2 && q.bottom <= top + 2 && getComputedStyle(b).visibility !== 'hidden' && getComputedStyle(b).opacity !== '0') top = Math.min(top, q.top);
+      });
+    }
+    root.style.bottom = top != null ? `${Math.round(vh - top + 10)}px` : '';
     root.appendChild(el);
     // (A longer message stays long enough to read, up to 10 seconds: four lines on a phone went in 2.8. QA 25 Nov.)
     setTimeout(() => el.remove(), Math.min(10000, Math.max(type === 'error' ? 5000 : 2800, String(message || '').length * 60)));
