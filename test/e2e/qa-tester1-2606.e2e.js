@@ -69,6 +69,14 @@ test('a ready design on black, then Undo: its words keep the light ink, and foll
     await page.click('#swatches [data-color="black"]');
     await page.waitForFunction(() => window.__editor.st.colorId === 'black');
     await page.waitForTimeout(400);
+    // A change to undo (opening the design itself can't be undone since tester 1's 4 pm report: it emptied the product).
+    await page.evaluate(() => {
+      const ed = window.__editor;
+      const o = ed.canvas.getObjects().find((x) => x.text && /ERROR/.test(x.text));
+      o.set({ left: o.left + 6 });
+      ed.canvas.fire('object:modified', { target: o });
+    });
+    await page.waitForFunction(() => !document.getElementById('undo').disabled);
     await page.click('#undo');
     await page.waitForTimeout(400);
     const after = await fills();

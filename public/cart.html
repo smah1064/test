@@ -746,8 +746,10 @@
         // A word from the last change, else the shop's lasting tip: a few more copies that cost less (owner, 26 Nov:
         // "900 for this price while 1000 is cheaper?!").
         const word = (x) => POD.plural(c.unit === 'packPiece' ? 'qty.unitPieces' : 'qty.copies', x);
-        const note = qtyNotes.get(item.designId) || (c.cheaper && !qtyDraft.has(item.designId)
-          ? { text: t('cart.qtyCheaper', { copies: word(c.cheaper.copies), price: money(c.cheaper.price) }), take: c.cheaper.copies } : null);
+        // (Both when both: packs just taken for less AND more copies costing less still. QA 26 Nov: the tip was hidden.)
+        const tip = c.cheaper && !qtyDraft.has(item.designId)
+          ? { text: t('cart.qtyCheaper', { copies: word(c.cheaper.copies), price: money(c.cheaper.price) }), take: c.cheaper.copies } : null;
+        const notes = [qtyNotes.get(item.designId), tip].filter(Boolean);
         const label = t(c.unit === 'copy' ? 'cart.qtyCopies' : c.unit === 'packPiece' ? 'cart.qtyPieces' : 'cart.qty');
         return `
               <div class="cart-qty" data-qty-for="${esc(item.designId)}">
@@ -757,7 +759,7 @@
                   <input class="qty-n" id="qty-n-${i}" data-qin="${esc(item.designId)}" type="text" inputmode="numeric" autocomplete="off" value="${esc(POD.num(n))}" aria-labelledby="qty-l-${i}">
                   <button type="button" class="btn btn-sm" id="qty-more-${i}" data-qstep="1" data-qid="${esc(item.designId)}" aria-label="${esc(t('props.more'))}"${n + c.step > c.max ? ' disabled' : ''}>${QTY_PLUS}</button>
                 </div>
-                ${note ? `<p class="cart-qty-note${note.error ? ' bad' : ''}" role="${note.error ? 'alert' : 'status'}">${esc(note.text)}${note.take ? ` <button type="button" class="link-btn" data-qtake="${esc(item.designId)}" data-qn="${note.take}">${esc(t('cart.qtyTake', { copies: POD.plural(c.unit === 'packPiece' ? 'qty.unitPieces' : 'qty.copies', note.take) }))}</button>` : ''}</p>` : ''}
+                ${notes.map((note) => `<p class="cart-qty-note${note.error ? ' bad' : ''}" role="${note.error ? 'alert' : 'status'}">${esc(note.text)}${note.take ? ` <button type="button" class="link-btn" data-qtake="${esc(item.designId)}" data-qn="${note.take}">${esc(t('cart.qtyTake', { copies: POD.plural(c.unit === 'packPiece' ? 'qty.unitPieces' : 'qty.copies', note.take) }))}</button>` : ''}</p>`).join('')}
               </div>`;
       }
       /** The counter's number on screen and its − / + (without drawing the whole cart again, so typing goes on). */
@@ -1401,7 +1403,8 @@
           // A number just changed in the cart: sent before anything else (the price then shown is the one to pay).
           const seenTotal = render.total;
           await flushQty();
-          if (Math.abs(render.total - seenTotal) > 0.009) throw Object.assign(new Error(t('cart.pricesUpdated')), { code: 'priceChanged' });
+          // (The customer's own new quantity changed the total: said as that, not as "prices updated". QA 26 Nov.)
+          if (Math.abs(render.total - seenTotal) > 0.009) throw Object.assign(new Error(t('cart.qtyTotalChanged')), { code: 'priceChanged' });
           // An earlier try may have reached the shop although its answer got lost: show that order.
           if (await showPlacedOrder()) return;
           const customer = Object.fromEntries(new FormData(form));

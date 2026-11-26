@@ -773,22 +773,34 @@
     const pics = [];
     const walk = (list) => list.forEach((o) => { if (o.type === 'group' && o._objects) walk(o._objects); else if (o.type === 'image' && o.printSrc && !o.printSwapped) pics.push(o); });
     walk(canvas.getObjects());
+    const load = (src) => new Promise((resolve) => {
+      const im = new Image();
+      im.onload = () => resolve(im.naturalWidth ? im : null);
+      im.onerror = () => resolve(null);
+      im.src = src;
+    });
     await Promise.all(pics.map(async (o) => {
       if (!PRINT_SRC.test(String(o.printSrc))) return;
       if (!originals.has(o.printSrc)) {
-        originals.set(o.printSrc, new Promise((resolve) => {
-          const im = new Image();
-          im.onload = () => resolve(im);
-          im.onerror = () => resolve(null);
-          im.src = o.printSrc;
-        }));
+        // (Tried twice: a print must not quietly come from the small screen copy. QA 26 Nov.)
+        originals.set(o.printSrc, load(o.printSrc).then((im) => im || load(`${o.printSrc}${o.printSrc.includes('?') ? '&' : '?'}r=${Date.now()}`)));
       }
       const im = await originals.get(o.printSrc);
-      if (!im || !im.naturalWidth) return;
+      if (!im) {
+        originals.delete(o.printSrc);
+        throw Object.assign(new Error('The full-size picture could not be loaded'), { code: 'printSource' });
+      }
+      // The crop is in the screen copy's pixels: the same part of the original (QA 26 Nov: a cropped picture printed
+      // whole, squeezed into the cropped box).
+      const el = o.getElement();
+      const kx = im.naturalWidth / ((el && (el.naturalWidth || el.width)) || im.naturalWidth);
+      const ky = im.naturalHeight / ((el && (el.naturalHeight || el.height)) || im.naturalHeight);
       const shownW = o.width * o.scaleX;
       const shownH = o.height * o.scaleY;
-      o.setElement(im);
-      o.set({ scaleX: shownW / im.naturalWidth, scaleY: shownH / im.naturalHeight, printSwapped: true });
+      const box = { cropX: (o.cropX || 0) * kx, cropY: (o.cropY || 0) * ky, width: o.width * kx, height: o.height * ky };
+      o.setElement(im, box);
+      o.set({ ...box, scaleX: shownW / box.width, scaleY: shownH / box.height, printSwapped: true });
+      if (o.filters && o.filters.length) o.applyFilters();
       o.setCoords();
     }));
   }

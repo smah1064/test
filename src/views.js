@@ -94,12 +94,14 @@ class Views {
   put(v, pics) {
     const ver = (v.version || 0) + 1;
     for (const [n, p] of pics.entries()) fs.writeFileSync(this.file(v.id, `page-${ver}-${n}.${p.ext}`), p.data);
-    for (const f of fs.readdirSync(path.join(this.dir, v.id))) {
-      const m = /^page-(\d+)-\d+\.(jpg|png)$/.exec(f);
-      if (m && Number(m[1]) !== ver) fs.rmSync(this.file(v.id, f), { force: true });
-    }
+    // The new list first, then the older pictures go (another copy of the app reading the link meanwhile gets the new
+    // version, or a 404 for an old picture: never a missing file. QA 26 Nov).
     Object.assign(v, { version: ver, updatedAt: new Date().toISOString(), pages: pics.map((p, n) => ({ side: p.side, name: p.name, file: `page-${ver}-${n}.${p.ext}`, w: p.w, h: p.h })) });
     this.write(v);
+    for (const f of fs.readdirSync(path.join(this.dir, v.id))) {
+      const m = /^page-(\d+)-\d+\.(jpg|png)$/.exec(f);
+      if (m && Number(m[1]) < ver) fs.rmSync(this.file(v.id, f), { force: true });
+    }
     return v;
   }
   /** A new link: { view, key }. */

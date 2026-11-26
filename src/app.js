@@ -2571,8 +2571,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const v = views.read(req.params.id);
     const p = v && views.live(v) && /^\d{1,2}$/.test(req.params.n) && v.pages[Number(req.params.n)];
     if (!p || p.file.split('.').pop() !== req.params.ext) throw new HttpError(404, 'viewNotFound');
+    let data;
+    try {
+      data = fs.readFileSync(views.file(v.id, p.file));
+    } catch (e) {
+      throw new HttpError(404, 'viewNotFound'); // (a newer version replaced it just now, from another copy of the app)
+    }
     res.set('Cache-Control', 'public, max-age=86400, no-transform');
-    res.type(req.params.ext === 'png' ? 'png' : 'jpeg').send(fs.readFileSync(views.file(v.id, p.file)));
+    res.type(req.params.ext === 'png' ? 'png' : 'jpeg').send(data);
   });
 
   app.get('/api/shares/:id', (req, res) => {
