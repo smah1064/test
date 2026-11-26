@@ -53,6 +53,8 @@ for (const lang of ['en', 'ar']) {
     try {
       await page.goto(`${srv.base}/`, { waitUntil: 'load' });
       await page.waitForSelector('#product-grid .hm-gcard');
+      // "All products" starts with 8: the whole catalogue after "Show all" (UX item D), kept for Back.
+      await page.click('[data-show-all]');
       const cards = page.locator('#product-grid .hm-gcard');
       assert.ok((await cards.count()) > 45, 'the whole catalogue is listed');
       const card = cards.nth(40);
