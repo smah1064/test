@@ -354,7 +354,7 @@
     $('design-grid').innerHTML = list.map((d) => {
       const on = shownOn(d);
       const src = d.preview && on.id === d.product ? d.preview : ready.get(`${d.id}:${on.id}`);
-      return `<a class="card product-card design-card" href="/design?id=${encodeURIComponent(d.id)}${extra}">
+      return `<a class="card product-card design-card" href="/design?id=${encodeURIComponent(d.id)}${extra}" data-place="${esc(d.id)}">
         <div class="thumb"><img alt="${esc(tr(d.name))}" data-design="${esc(d.id)}"${src ? ` src="${esc(src)}"` : ''}></div>
         <div class="body">
           <h3 dir="auto">${esc(tr(d.name))}</h3>
@@ -463,9 +463,35 @@
     $('design-product').value = state.product;
   });
 
+  // ---------- Back to the same place ----------
+  // Back from a design: the same place in the list. The browser can't put it back itself: the cards are drawn once the
+  // designs have come, after it has tried (the page was still short, so it stayed at the top). So, as the product page
+  // does for its ready designs, the place is kept in this history entry when a link is followed: where the page was,
+  // and the design followed and its height on the screen, so the place holds even if what is above it is a little
+  // taller or shorter by then. The search, the category and the product are in the address. (QA 26 Nov.)
+  const back = (history.state && typeof history.state === 'object' && history.state.designs) || null;
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest('a[href]');
+    if (!a) return;
+    const card = a.closest('[data-place]');
+    const designs = { y: Math.round(window.scrollY), ...(card ? { place: card.dataset.place, top: Math.round(card.getBoundingClientRect().top) } : {}) };
+    try { history.replaceState({ ...(history.state && typeof history.state === 'object' ? history.state : {}), designs }, ''); } catch (err) { /* not kept */ }
+  });
+  /** Once the cards are drawn: back to the design that was followed, at the same height, else to the same scroll. */
+  function backToPlace() {
+    if (!back || !(back.y > 0)) return;
+    if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+    requestAnimationFrame(() => {
+      const card = typeof back.place === 'string' && [...document.querySelectorAll('#design-grid [data-place]')].find((el) => el.dataset.place === back.place);
+      const y = card && Number.isFinite(back.top) ? window.scrollY + card.getBoundingClientRect().top - back.top : back.y;
+      window.scrollTo(0, Math.max(0, Math.min(Math.round(y), document.documentElement.scrollHeight)));
+    });
+  }
+
   renderProducts();
   render();
   showActiveChip();
+  backToPlace();
   document.addEventListener('pod:langchange', () => {
     renderProducts();
     render();

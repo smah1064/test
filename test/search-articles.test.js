@@ -2,8 +2,9 @@
 
 // Arabic words with "the" / "for (the)" in front (الأم, للأب, لأمي), Valentine's / Teacher's Day and a new baby
 // (QA 25 Nov), the home page's sizes ("tshirt xl", "A5 flyers") and colours ("تيشيرت أبيض", "black hoodie"), its order
-// (كوب: the mugs before كوبونات) and more of the shop's words (مصلية, فنجان, قميص). The search block and the home page's
-// lines are run as they are.
+// (كوب: the mugs before كوبونات) and more of the shop's words (مصلية, فنجان, قميص). QA 26 Nov: colours in the feminine
+// (شنطة سوداء), gray, رصاصي, beige; keyring, سلسلة مفاتيح, leaflets, a calendar with a year; "hat" not "that"; كتيب before
+// كتب. The search block and the home page's lines are run as they are.
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -88,10 +89,12 @@ function home() {
   const to = page.indexOf('// Real product photos');
   assert.ok(from > 0 && to > from, 'index.html has the product text');
   const block = page.slice(from, to);
-  for (const name of ['sizeWords', 'colorWords', 'hay', 'isColor', 'found']) assert.match(block, new RegExp(`const ${name} = `));
+  const names = ['sizeWords', 'colorWords', 'hay', 'isColor', 'forYear', 'inText', 'found'];
+  for (const name of names) assert.match(block, new RegExp(`const ${name} = `));
   const { PRODUCTS, CATEGORIES } = require('../src/products');
   const ctx = { products: PRODUCTS, categories: CATEGORIES, ALIASES, SEARCH: S, norm: S.norm, loose: S.loose, POD: { assetId: (p) => p.base || p.id } };
-  const { hay, isColor, found } = vm.runInNewContext(`${block}\n({ hay, isColor, found })`, ctx);
+  const lines = vm.runInNewContext(`${block}\n({ ${names.join(', ')} })`, ctx);
+  const { hay, found } = lines;
   // The page's own ordering line, run as it is: names first, whole words before words that only start with it.
   const rankLine = page.match(/const rank = \(p\) => [^\n]+;/);
   assert.ok(rankLine, 'index.html has rank');
@@ -99,10 +102,10 @@ function home() {
   const find = (q) => {
     const ts = S.norm(q).split(' ').filter(Boolean);
     const qs = S.query(q);
-    const rank = vm.runInNewContext(`${rankLine[0]}\nrank`, { hay, ts, qs, SEARCH: S, loose: S.loose, isColor });
+    const rank = vm.runInNewContext(`${rankLine[0]}\nrank`, { ...lines, ts, qs, SEARCH: S, loose: S.loose });
     return PRODUCTS.filter((p) => found(p, qs)).map((p, i) => [rank(p), i, p.id]).sort((x, y) => x[0] - y[0] || x[1] - y[1]).map((x) => x[2]);
   };
-  return { S, PRODUCTS, find };
+  return { S, PRODUCTS, find, hay };
 }
 
 test('home search: a product with a size or a quantity ("tshirt xl", "A5 flyers") finds it', () => {
@@ -260,4 +263,103 @@ test('home search: colours alone list the products in them, and make no other wo
     assert.ok(at > got.indexOf('bizcards') && at > got.indexOf('giftvouchers') && at > got.indexOf('folders') && got.indexOf('folders') >= 0, `${q}: ${got.join(', ')}`);
   }
   assert.ok(byId.calendar.colors.some((c) => /card/i.test(c.name.en)), 'the calendar is still on card (else this check says nothing)');
+});
+
+// ---------- QA 26 Nov: colours said other ways, more of the shop's words, years, words inside words, spelling ----------
+test('home search: a colour in the feminine (سوداء / سودا, بيضا, حمرا…), gray, رصاصي and beige find what the colour finds', () => {
+  const { PRODUCTS, find } = home();
+  const byId = Object.fromEntries(PRODUCTS.map((p) => [p.id, p]));
+  // Every way of saying the colour lists the same products, in the same order, as the shop's own name for it.
+  const same = (q, as) => {
+    const want = find(as);
+    assert.ok(want.length, `"${as}" finds something (else this check says nothing)`);
+    assert.deepStrictEqual(find(q), want, `"${q}" lists what "${as}" lists`);
+  };
+  const colours = { 'اسود': ['سوداء', 'سودا', 'السوداء', 'السودا'], 'ابيض': ['بيضاء', 'بيضا', 'البيضا'], 'احمر': ['حمراء', 'حمرا'], 'اخضر': ['خضراء', 'خضرا'], 'ازرق': ['زرقاء', 'زرقا'], 'اصفر': ['صفراء', 'صفرا'] };
+  const norm = (s) => s.replace(/[أإآ]/g, 'ا');
+  for (const [masc, fem] of Object.entries(colours)) {
+    // Alone: every product that comes in the colour (a description that says أبيض is still found by أبيض only).
+    const comesIn = PRODUCTS.filter((p) => p.colors.some((c) => norm(c.name.ar.split(/[(:,،]/)[0]).split(' ').includes(masc))).map((p) => p.id);
+    assert.ok(comesIn.length, masc);
+    for (const f of fem) {
+      const got = find(f);
+      for (const id of comesIn) assert.ok(got.includes(id), `"${f}" finds ${id}, which comes in ${masc} (got ${got.join(', ') || 'nothing'})`);
+      for (const id of got) assert.ok(find(masc).includes(id), `"${f}": ${id} is found by ${masc} too`);
+    }
+    // With a product that comes in it, as the QA typed them: the same list as the shop's name for the colour.
+    for (const product of ['تيشيرت', 'تيشرت', 'شنطة', 'مج', 'كاب']) if (find(`${product} ${masc}`).length) for (const f of fem) same(`${product} ${f}`, `${product} ${masc}`);
+  }
+  same('شنطة سوداء', 'شنطة اسود');
+  same('شنطة سودا', 'شنطة اسود');
+  assert.strictEqual(find('شنطة سوداء')[0], 'tote');
+  assert.deepStrictEqual(find('تيشرت بيضا').slice(0, 4), ['tshirt', 'kidstee', 'polo', 'oversized']);
+  assert.strictEqual(find('تيشيرت سودا')[0], 'tshirt');
+  // Grey: gray in English, رصاصي in Arabic.
+  same('gray hoodie', 'grey hoodie');
+  same('gray t-shirt', 'grey t-shirt');
+  same('gray', 'grey');
+  same('هودي رصاصي', 'هودي رمادي');
+  same('رصاصي', 'رمادي');
+  assert.deepStrictEqual(find('gray hoodie'), ['hoodie', 'ziphoodie', 'kidshoodie']);
+  assert.strictEqual(find('gray t-shirt')[0], 'tshirt');
+  // Beige: the shop's Sand (بيج).
+  assert.ok(byId.cap.colors.some((c) => c.id === 'sand' && /بيج/.test(c.name.ar)), 'the cap comes in Sand (بيج)');
+  for (const q of ['beige cap', 'sand cap', 'كاب بيج', 'cap beige']) assert.deepStrictEqual(find(q), ['cap'], q);
+  same('beige', 'sand');
+  // Words that are not colours stay as they were: "mat" is not the matte cards, ورد not the pink products.
+  assert.ok(!find('mat').includes('bizcards'));
+  assert.ok(!find('ورد').includes('mug'));
+  // A colour the product doesn't come in still finds none of it (no hoodie is white).
+  for (const q of ['هودي بيضا', 'هودي بيضاء']) for (const id of ['hoodie', 'ziphoodie', 'kidshoodie']) assert.ok(!find(q).includes(id), `${q}: ${find(q).join(', ')}`);
+});
+
+test('home search: سلسلة مفاتيح / keyring find the keychain, leaflets the flyers, a calendar with a year the calendars', () => {
+  const { find } = home();
+  for (const q of ['سلسلة مفاتيح', 'سلسله مفاتيح', 'ميدالية مفاتيح', 'keyring', 'keyrings', 'key ring', 'key chain', 'keychain']) assert.strictEqual(find(q)[0], 'keychain', `${q}: ${find(q).join(', ') || 'nothing'}`);
+  for (const q of ['leaflet', 'leaflets', 'Leaflets']) assert.strictEqual(find(q)[0], 'flyers', `${q}: ${find(q).join(', ') || 'nothing'}`);
+  // A year doesn't stop a calendar match (any year, typed before or after, in Arabic digits too).
+  const calendars = find('calendar');
+  assert.deepStrictEqual(calendars, ['calendar', 'deskcalendar']);
+  for (const q of ['calendar 2026', 'calendar 2027', '2027 calendar', 'calendars 2027', 'نتيجة 2027', 'نتيجه ٢٠٢٧', 'نتيجة مكتب 2027']) {
+    const got = find(q);
+    assert.ok(got.length && got.every((id) => calendars.includes(id)), `${q}: ${got.join(', ') || 'nothing'}`);
+  }
+  assert.deepStrictEqual(find('calendar 2027'), calendars);
+  assert.deepStrictEqual(find('نتيجة 2027'), calendars);
+  assert.strictEqual(find('نتيجة مكتب 2027')[0], 'deskcalendar');
+  // A year is for the calendars only: not a mug "2027"; and a number that isn't a year doesn't count as one.
+  assert.deepStrictEqual(find('mug 2027'), []);
+  assert.deepStrictEqual(find('calendar 1234'), []);
+});
+
+test('home search: "hat" is the cap, not the "that" of a description; English words in descriptions count from the start of a word', () => {
+  const { find } = home();
+  assert.deepStrictEqual(find('hat'), ['cap']);
+  assert.deepStrictEqual(find('hats'), ['cap']);
+  // Inside a word of a description: "sign" is not "design", "pen" not "opens", "tee" not "steel", "bed" not "combed".
+  assert.deepStrictEqual(find('sign'), ['sign', 'weddingsign', 'doorsign']);
+  assert.deepStrictEqual(find('pen'), ['engrpen', 'pencilcase']);
+  assert.ok(!find('tee').includes('bottle') && find('tee').includes('tshirt'));
+  assert.deepStrictEqual(find('bed'), ['bedsheet']);
+  // From the start of a word it still counts ("print": printed, "cotton"), and names keep words inside words
+  // (postcards for "card", the notebook for "book", the keychain for "chain").
+  assert.ok(find('printed').includes('tshirt') && find('cotton').includes('tshirt'));
+  assert.ok(find('card').includes('postcards') && find('book').includes('notebook') && find('chain').includes('keychain'));
+  // Two words that may name one thing still count across the name and the description, as before.
+  for (const id of ['bizcards', 'certificates', 'menus']) assert.ok(find('business cards').includes(id), `business cards: ${find('business cards').join(', ')}`);
+  // Arabic in descriptions as before: a word after و / ب (وطباعة) is found.
+  assert.ok(find('طباعة').includes('tshirt'));
+});
+
+test('home search: كتيب lists the booklets (كتيبات) before the bookmarks (فواصل كتب), كتب the other way round', () => {
+  const { find } = home();
+  for (const q of ['كتيب', 'كتيبات', 'الكتيب']) {
+    const got = find(q);
+    assert.strictEqual(got[0], 'booklets', `${q}: ${got.join(', ')}`);
+    assert.ok(got.indexOf('bookmarks') > got.indexOf('booklets'), `${q}: ${got.join(', ')}`);
+  }
+  const books = find('كتب');
+  assert.ok(books.indexOf('bookmarks') >= 0 && books.indexOf('bookmarks') < books.indexOf('booklets'), `كتب: ${books.join(', ')}`);
+  // A name spelt another way still comes before the rest: تيشرت (without the ي) lists the T-shirts first.
+  assert.deepStrictEqual(find('تيشرت'), ['tshirt', 'kidstee', 'polo', 'oversized', 'jersey', 'sweatshirt']);
 });
