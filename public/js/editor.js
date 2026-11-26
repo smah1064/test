@@ -5472,11 +5472,12 @@
   }
   /** "1 piece in total", "6 قطع", "12 قطعة" (Arabic: 3–10 take the plural). */
   /** A count with its Arabic form: key.one / key.two / key.few when the strings have them, else key. */
+  // (And key.many for 11 and up when the strings have it: "11 pieces" read "qty.unitPieces". Tester 2, 26 Nov.)
   function plural(key, n, params = {}) {
     const k = n % 100;
-    const form = n === 1 ? 'one' : n === 2 ? 'two' : k >= 3 && k <= 10 ? 'few' : null;
-    const v = form ? t(`${key}.${form}`, { ...params, n: POD.num(n) }) : null;
-    return v && v !== `${key}.${form}` ? v : t(key, { ...params, n: POD.num(n) });
+    const form = n === 1 ? 'one' : n === 2 ? 'two' : k >= 3 && k <= 10 ? 'few' : 'many';
+    const v = t(`${key}.${form}`, { ...params, n: POD.num(n) });
+    return v !== `${key}.${form}` ? v : t(key, { ...params, n: POD.num(n) });
   }
   /** A place for the customer's details the shop's designs use ({Name}, {الاسم}…) still in a text. Only the shop's
    * own places count (the server's list): "{ return love; }" or "I ❤ {JS}" is just text (QA 25 Nov). */

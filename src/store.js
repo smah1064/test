@@ -187,6 +187,19 @@ class Store {
     }
   }
 
+  /**
+   * Run `fn` while no other copy of the app saves (files kept beside the data, such as an account's cart or its
+   * saved designs' list, read, changed and written in one go). `fn` must not call mutate().
+   */
+  exclusive(fn) {
+    const locked = this.lock();
+    try {
+      return fn();
+    } finally {
+      if (locked) fs.rmSync(this.lockPath, { force: true });
+    }
+  }
+
   /** Run `fn` with the latest data, then save; nothing else can save in between. */
   mutate(fn) {
     const locked = this.lock();

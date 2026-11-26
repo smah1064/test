@@ -1165,6 +1165,14 @@
         } catch (e) {
           quote = null;
           quoteFailed = e || new Error('');
+          // Too many coupon tries from here: the code comes off (its reason stays at the field) and the prices are
+          // asked again without it, so the automatic offer and the shop's own total come back; kept, every price
+          // check failed and the order was sent with the cart's own sum (tester 2, 26 Nov).
+          if (couponCode && e && e.status === 429) {
+            couponNote = { code: couponCode, msg: e.message || t('msg.network'), lang: e.lang || lang };
+            setCoupon('');
+            return refreshPrices({ announce });
+          }
           return;
         }
         const gone = [];

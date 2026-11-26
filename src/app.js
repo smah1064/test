@@ -3557,7 +3557,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const fallback = prof.email ? prof.email.split('@')[0] : 'Customer';
       c = {
         id: crypto.randomUUID(),
-        name: (prof.name || fallback).replace(/\s+/g, ' ').slice(0, 120).padEnd(2, '.'),
+        // (Without hidden direction marks, as a typed name: "\u202Eevil\u202C" read backwards in the greeting and the
+        // dashboard. Tester 2, 26 Nov.)
+        name: (String(prof.name || '').replace(/[\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/g, '').trim() || fallback).replace(/\s+/g, ' ').slice(0, 120).padEnd(2, '.'),
         phone: '',
         email: prof.email,
         ...(prof.email ? { emailVerified: true } : {}),
@@ -3790,6 +3792,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (e.phones.size >= 3) return false;
     e.phones.add(phone);
     return true;
+  }
+  /** A phone this visitor ordered with (all their details, the order's own checks): its prices may be asked for. */
+  function allowPhoneCheck(ip, phone) {
+    phoneCheckAllowed(ip, phone);
+    const e = phoneChecks.get(ip);
+    if (e) e.phones.add(phone);
   }
   app.post('/api/cart/quote', express.json({ limit: '20kb' }), (req, res) => {
     // Coupon codes that don't work count per visitor (codes can't be guessed by trying thousands);
@@ -4171,6 +4179,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const total = round2(subtotal - discount + shipping);
     // The customer must have seen this total: if a price changed since, show them the new one first.
     if (expectedTotal !== undefined && !(Math.abs(Number(expectedTotal) - total) <= 0.009)) {
+      // (An offer this phone has had already: the cart's next price check may use this phone, past the few a visitor
+      // can have checked a day, or it kept showing the offer and every order ended here. Tester 2, 26 Nov: customers
+      // on one mobile-network address share that limit. This answer already says the price differs for the phone.)
+      if (c.phone) allowPhoneCheck(req.ip, c.phone);
       throw new HttpError(409, 'priceChanged', { total });
     }
     // Only orders that passed every check (coupon, prices) count towards the limit,
@@ -4708,26 +4720,30 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     // now, so a device with an old page open can't drop items added elsewhere or bring back removed ones.
     // Kept: in both, or added on this device since; added elsewhere since: kept too.
     const baseIds = Array.isArray((req.body || {}).base) ? new Set(req.body.base.filter((x) => typeof x === 'string').slice(0, 200)) : null;
-    let result = items;
-    if (baseIds) {
-      const stored = readAccountCart(me).items.filter((r) => r && UUID_RE.test(r.designId || ''));
-      const mine = new Set(items.map((r) => r.designId));
-      const theirs = new Map(stored.map((r) => [r.designId, r]));
-      // In both: saved-for-later or not as moved last (on whichever device).
-      const latest = (r) => {
-        const o = theirs.get(r.designId);
-        if (!o || String(o.movedAt || '') <= String(r.movedAt || '')) return r;
-        const { later, movedAt, ...rest } = r;
-        return { ...rest, ...(o.later ? { later: true } : {}), movedAt: o.movedAt };
-      };
-      result = [
-        ...items.filter((r) => theirs.has(r.designId) || !baseIds.has(r.designId)).map(latest),
-        ...stored.filter((r) => !mine.has(r.designId) && !baseIds.has(r.designId)),
-      ].slice(0, MAX_CART);
-    }
-    fs.mkdirSync(path.dirname(cartFile(me)), { recursive: true });
-    const updatedAt = new Date().toISOString();
-    writeFileAtomic(cartFile(me), JSON.stringify({ items: result, updatedAt }));
+    // (Read, merged and written while no other copy of the app writes it: two devices saving at the same moment on
+    // two copies lost an item. Tester 2, 26 Nov.)
+    store.exclusive(() => {
+      let result = items;
+      if (baseIds) {
+        const stored = readAccountCart(me).items.filter((r) => r && UUID_RE.test(r.designId || ''));
+        const mine = new Set(items.map((r) => r.designId));
+        const theirs = new Map(stored.map((r) => [r.designId, r]));
+        // In both: saved-for-later or not as moved last (on whichever device).
+        const latest = (r) => {
+          const o = theirs.get(r.designId);
+          if (!o || String(o.movedAt || '') <= String(r.movedAt || '')) return r;
+          const { later, movedAt, ...rest } = r;
+          return { ...rest, ...(o.later ? { later: true } : {}), movedAt: o.movedAt };
+        };
+        result = [
+          ...items.filter((r) => theirs.has(r.designId) || !baseIds.has(r.designId)).map(latest),
+          ...stored.filter((r) => !mine.has(r.designId) && !baseIds.has(r.designId)),
+        ].slice(0, MAX_CART);
+      }
+      fs.mkdirSync(path.dirname(cartFile(me)), { recursive: true });
+      const updatedAt = new Date().toISOString();
+      writeFileAtomic(cartFile(me), JSON.stringify({ items: result, updatedAt }));
+    });
     res.set('X-Account', me.id);
     res.json(accountCartEntries(me));
   });
@@ -4809,30 +4825,36 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     writeFileAtomic(path.join(dir, `${product.id}.json`), JSON.stringify(draft));
     if (preview) writeFileAtomic(path.join(dir, `${product.id}.png`), preview);
     else fs.rmSync(path.join(dir, `${product.id}.png`), { force: true });
-    const idx = draftIndex(me);
-    const id40 = (v) => (typeof v === 'string' ? v.slice(0, 40) : '');
-    idx[product.id] = { savedAt, colorId: id40(b.colorId), sizeId: id40(b.sizeId), preview: Boolean(preview) };
-    // Keep the newest drafts only, and none older than DRAFT_DAYS.
-    const cutoff = new Date(Date.now() - DRAFT_DAYS * 86400e3).toISOString();
-    const sorted = Object.entries(idx).sort((x, y) => String(y[1].savedAt).localeCompare(String(x[1].savedAt)));
-    const old = [...sorted.slice(MAX_DRAFTS), ...sorted.slice(0, MAX_DRAFTS).filter(([, m]) => String(m.savedAt) < cutoff)];
-    for (const [pid] of old) {
-      delete idx[pid];
-      for (const ext of ['json', 'png']) fs.rmSync(path.join(dir, `${pid}.${ext}`), { force: true });
-    }
-    writeFileAtomic(path.join(dir, 'index.json'), JSON.stringify(idx));
+    // (The list of saved designs is read, changed and written while no other copy of the app writes it: 20 saved
+    // as 10 pairs at once showed 17. Tester 2, 26 Nov.)
+    store.exclusive(() => {
+      const idx = draftIndex(me);
+      const id40 = (v) => (typeof v === 'string' ? v.slice(0, 40) : '');
+      idx[product.id] = { savedAt, colorId: id40(b.colorId), sizeId: id40(b.sizeId), preview: Boolean(preview) };
+      // Keep the newest drafts only, and none older than DRAFT_DAYS.
+      const cutoff = new Date(Date.now() - DRAFT_DAYS * 86400e3).toISOString();
+      const sorted = Object.entries(idx).sort((x, y) => String(y[1].savedAt).localeCompare(String(x[1].savedAt)));
+      const old = [...sorted.slice(MAX_DRAFTS), ...sorted.slice(0, MAX_DRAFTS).filter(([, m]) => String(m.savedAt) < cutoff)];
+      for (const [pid] of old) {
+        delete idx[pid];
+        for (const ext of ['json', 'png']) fs.rmSync(path.join(dir, `${pid}.${ext}`), { force: true });
+      }
+      writeFileAtomic(path.join(dir, 'index.json'), JSON.stringify(idx));
+    });
     res.json({ savedAt });
   });
   app.delete('/api/account/drafts/:productId', (req, res) => {
     const me = signedIn(req);
     const product = draftProduct(req);
     const dir = draftDir(me);
-    const idx = draftIndex(me);
-    if (idx[product.id]) {
-      delete idx[product.id];
-      fs.mkdirSync(dir, { recursive: true });
-      writeFileAtomic(path.join(dir, 'index.json'), JSON.stringify(idx));
-    }
+    store.exclusive(() => {
+      const idx = draftIndex(me);
+      if (idx[product.id]) {
+        delete idx[product.id];
+        fs.mkdirSync(dir, { recursive: true });
+        writeFileAtomic(path.join(dir, 'index.json'), JSON.stringify(idx));
+      }
+    });
     for (const ext of ['json', 'png']) fs.rmSync(path.join(dir, `${product.id}.${ext}`), { force: true });
     res.status(204).end();
   });

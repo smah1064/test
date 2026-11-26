@@ -34,7 +34,9 @@
 }
 @supports (height: 100svh) { .vw-stage { --vw-maxh: max(260px, calc(100svh - 236px)); } }
 .vw-zoomed .vw-stage { touch-action: auto; }
-.vw-view { width: 100%; display: flex; justify-content: center; }
+/* (The cover alone is shifted to the middle by a quarter of the open book: its empty half must not make the page
+   scroll sideways. Tester 2, 26 Nov.) */
+.vw-view { width: 100%; display: flex; justify-content: center; overflow-x: clip; }
 
 .vw-frame {
   position: relative; width: min(100%, calc(var(--vw-maxh) * var(--ar, .75)));
