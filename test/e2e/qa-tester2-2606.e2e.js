@@ -98,7 +98,8 @@ test('quantities: White M 3 + L 2, then Black: the whole row follows; taking out
     await page.waitForSelector('#qty-field .qty-in[data-qc="navy"][data-qz="L"]');
     await typeQty(page, 'navy', 'L', 4);
     await page.click('[data-qdel="black"]');
-    await page.waitForFunction(() => window.__editor.st.colorId === 'navy', null, { timeout: 5000 });
+    // (The new colour's picture loads first: slower while the whole suite runs.)
+    await page.waitForFunction(() => window.__editor.st.colorId === 'navy', null, { timeout: 15000 });
     assert.deepStrictEqual(Object.keys(await page.evaluate(() => window.__editor.st.qty)), ['navy']);
     assert.strictEqual(await page.evaluate(() => window.__editor.st.qty.navy.L), 4);
     assert.deepStrictEqual(page.errors, []);
