@@ -790,6 +790,43 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     }
   });
 
+  // ---------- The shop's photos at the size they are shown (owner's OK, UX item D, 26 Nov) ----------
+  // /img-w/480/lifestyle/mug.webp: public/img/lifestyle/mug.webp at most 480 px wide. The photos are 960–1600 px and
+  // the home page shows them at 150–350 px, so phones downloaded ~14 MB of photos. Each copy is made once (kept in
+  // the data folder, left out of backups) and made again when the photo itself changes.
+  const SIZED_WIDTHS = new Set([320, 480, 800, 1200]);
+  const SIZED_DIRS = new Set(['lifestyle', 'designed']);
+  const sizedDir = path.join(dataDir, 'img-sized');
+  const sizing = new Map();
+  app.get('/img-w/:w/:dir/:file', async (req, res, next) => {
+    try {
+      const w = Number(req.params.w);
+      const { dir, file } = req.params;
+      if (!SIZED_WIDTHS.has(w) || !SIZED_DIRS.has(dir) || !/^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,100}\.(webp|jpe?g|png)$/i.test(file) || file.includes('..')) throw new HttpError(404, 'notFound');
+      const src = path.join(__dirname, '..', 'public', 'img', dir, file);
+      let st;
+      try { st = fs.statSync(src); } catch (e) { throw new HttpError(404, 'notFound'); }
+      if (!st.isFile()) throw new HttpError(404, 'notFound');
+      const out = path.join(sizedDir, String(w), dir, `${file.replace(/\.[^.]+$/, '')}-${Math.round(st.mtimeMs)}-${st.size}.webp`);
+      if (!fs.existsSync(out)) {
+        if (!sizing.has(out)) {
+          sizing.set(out, (async () => {
+            const buf = await sharp()(src).resize({ width: w, withoutEnlargement: true }).webp({ quality: 78 }).toBuffer();
+            fs.mkdirSync(path.dirname(out), { recursive: true });
+            const tmp = `${out}.${process.pid}.tmp`;
+            fs.writeFileSync(tmp, buf);
+            fs.renameSync(tmp, out);
+          })().finally(() => sizing.delete(out)));
+        }
+        await sizing.get(out);
+      }
+      res.set('Cache-Control', 'public, max-age=86400, no-transform');
+      res.type('image/webp').sendFile(out);
+    } catch (e) {
+      next(e);
+    }
+  });
+
   // ---------- Catalog ----------
   // CAPTCHA (Cloudflare Turnstile, see src/captcha.js): the site key for the forms, null when off.
   app.get('/api/captcha', (req, res) => {
