@@ -31,6 +31,8 @@ window.AdminActivity = (() => {
   function rowHtml(e, own) {
     // (outcome 'failed': an approval whose change couldn't be applied.)
     const res = e.outcome === 'failed' ? 'failed' : AdminRoles.resultOf(e.status);
+    // (Values someone typed come in isolates: their digits stay as typed, and a line that starts with one still
+    // reads in its own words' direction, which dir="auto" would take from the typed value.)
     const what = AdminRoles.inLang(e.summary) || e.action || '';
     // (Who approved a change made by someone else; the method and address only go in the CSV.)
     const by = e.approvedByEmergency ? t('act.approvedBy', { name: t('me.emergencyName') }) : e.approvedBy ? t('act.approvedBy', { name: e.approvedBy }) : '';
@@ -38,7 +40,7 @@ window.AdminActivity = (() => {
       <tr class="act-row act-${res}">
         <td data-label="${esc(t('act.col.when'))}"><span class="act-when">${esc(AdminRoles.cairoTime(e.at))}</span></td>
         ${own ? `<td data-label="${esc(t('act.col.who'))}"><b dir="auto">${esc(nameOf(e.who))}</b>${e.roles && e.roles.length ? `<div class="muted small">${esc(roleNames(e.roles))}</div>` : ''}</td>` : ''}
-        <td data-label="${esc(t('act.col.what'))}"><span dir="auto">${esc(what)}</span>${by ? `<div class="muted small" dir="auto">${esc(by)}</div>` : ''}</td>
+        <td data-label="${esc(t('act.col.what'))}"><span dir="${POD.textDir(what)}">${esc(what)}</span>${by ? `<div class="muted small" dir="auto">${esc(by)}</div>` : ''}</td>
         <td data-label="${esc(t('act.col.result'))}"><span class="ro-pill act-pill-${res}">${esc(t('act.res.' + res))}</span>${e.approvalId ? ` <span class="ro-pill act-pill-approval">${esc(t('act.approval'))}</span>` : ''}${e.emergency ? ` <span class="ro-pill act-pill-emergency">${esc(t('act.emergency'))}</span>` : ''}</td>
       </tr>`;
   }

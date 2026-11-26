@@ -1263,8 +1263,8 @@ test('customer accounts: sign up, sign in, orders, address, password', async () 
   // Profile update; password change signs out the other device.
   r = await call('/api/account', { name: 'Mona A.', email: '', address: { governorate: 'giza', city: 'Dokki', address: 'X st' } }, c2, 'PUT');
   assert.strictEqual((await r.json()).customer.address.city, 'Dokki');
-  assert.strictEqual((await call('/api/account/password', { current: 'wrong', password: 'newpassword9' }, c2)).status, 401);
-  r = await call('/api/account/password', { current: 'longenough1', password: 'newpassword9' }, c2);
+  assert.strictEqual((await call('/api/account/password', { current: 'wrong', password: 'new-river-pass9' }, c2)).status, 401);
+  r = await call('/api/account/password', { current: 'longenough1', password: 'new-river-pass9' }, c2);
   assert.strictEqual(r.status, 200);
   const c3 = cookieOf(r);
   assert.strictEqual((await (await fetch(base + '/api/account', { headers: { cookie: c1 } })).json()).customer, null, 'old device signed out');
@@ -1334,7 +1334,7 @@ test('sign in with Google: redirect, callback, account linking', async () => {
     // Add a mobile number and set a password (no current password needed).
     r = await fetch(B + '/api/account', { method: 'PUT', headers: { 'Content-Type': 'application/json', cookie: session }, body: JSON.stringify({ name: 'Nour Hassan', email: 'nour@example.com', phone: '01234567890' }) });
     assert.strictEqual((await r.json()).customer.phone, '01234567890');
-    r = await fetch(B + '/api/account/password', { method: 'POST', headers: { 'Content-Type': 'application/json', cookie: session }, body: JSON.stringify({ password: 'newpassword1' }) });
+    r = await fetch(B + '/api/account/password', { method: 'POST', headers: { 'Content-Type': 'application/json', cookie: session }, body: JSON.stringify({ password: 'new-river-pass1' }) });
     assert.strictEqual(r.status, 200);
     // The same Google account next time: the same customer.
     r = await get('/auth/google');
@@ -1370,7 +1370,7 @@ test('sign in with Google: redirect, callback, account linking', async () => {
     const malLink = require('../src/customers').resetToken(ckey, { id: mal.customer.id, pv: 1, email: 'mallory@example.com' }, 1, 'e');
     r = await fetch(B + '/api/account', { method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: malCookie }, body: JSON.stringify({ name: 'Mallory', email: 'victim@example.com' }) });
     assert.strictEqual(r.status, 200, await r.clone().text());
-    r = await fetch(B + '/api/account/reset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: malLink, password: 'newpassword9' }) });
+    r = await fetch(B + '/api/account/reset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: malLink, password: 'new-river-pass9' }) });
     assert.notStrictEqual(r.status, 200, 'the old link must not work after the email changed');
     r = await get('/auth/google');
     let stV = new URL(r.headers.get('location')).searchParams.get('state');
@@ -1383,7 +1383,7 @@ test('sign in with Google: redirect, callback, account linking', async () => {
     const lailaId = (await r.json()).customer.id;
     // The link the shop emails (made here with the shop's own key).
     const emailed = require('../src/customers').resetToken(ckey, { id: lailaId, pv: 1, email: 'laila@example.com' }, 1, 'e');
-    r = await fetch(B + '/api/account/reset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: emailed, password: 'newpassword9' }) });
+    r = await fetch(B + '/api/account/reset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: emailed, password: 'new-river-pass9' }) });
     assert.strictEqual(r.status, 200);
     r = await get('/auth/google');
     st3 = new URL(r.headers.get('location')).searchParams.get('state');

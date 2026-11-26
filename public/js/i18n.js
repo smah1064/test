@@ -616,6 +616,8 @@ window.POD_STRINGS = {
   'acct.deleteNeedPw': ['Enter your password.', 'اكتب كلمة المرور.'],
   'acct.wrongCurrent': ['Your current password is not right', 'كلمة المرور الحالية مش صحيحة'],
   'acct.passwordShort': ['The password needs at least 8 characters', 'كلمة المرور لازم تكون 8 حروف أو أكتر'],
+  'acct.passwordCommon': ['That password is too easy to guess (numbers in a row, one letter repeated, or a common one like password1). Please choose another.', 'كلمة المرور دي سهلة التخمين (أرقام ورا بعض، أو حرف متكرر، أو كلمة مشهورة زي password1). اختار واحدة تانية من فضلك.'],
+  'acct.passwordPersonal': ['Your password can’t be your mobile number, email or name. Please choose something only you know.', 'كلمة المرور مينفعش تكون رقم موبايلك أو إيميلك أو اسمك. اختار حاجة إنت بس اللي تعرفها.'],
   'acct.deleted': ['Your account is deleted.', 'حسابك اتمسح.'],
   'acct.changeNote': ['Other phones and computers will be signed out.', 'هيتم تسجيل الخروج من الأجهزة التانية.'],
   'acct.checkoutAs': ['Ordering as {name}: this order will be in your account.', 'بتطلب باسم {name}: الطلب هيتحفظ في حسابك.'],
