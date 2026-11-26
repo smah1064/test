@@ -1480,6 +1480,14 @@ window.POD_STRINGS = {
   'book.zoom': ['Zoom', 'تكبير'],
   'book.cropHint': ['Drag and zoom so the face fills the oval: hairline at the top, chin at the bottom, eyes on the dotted line.', 'اسحب وكبّر لحد ما الوش يملأ البيضاوي: أول الشعر فوق، والدقن تحت، والعينين على الخط المنقّط.'],
   'book.badPhoto': ['Please choose a JPG or PNG photo.', 'من فضلك اختار صورة JPG أو PNG.'],
+  // The face in the oval has too few of the photo's own pixels for the size it prints in the book (as the photo prints
+  // page warns). The customer can keep it or pick another photo.
+  'book.lowRes': [
+    'The face in this photo is small, so it may print blurry in the book. A closer or sharper photo of your child will look much better (photos sent on WhatsApp are often small: the original from the camera is best).',
+    'الوش في الصورة دي صغير، فممكن يطلع مش واضح في الكتاب. صورة أقرب أو أوضح لطفلك هتطلع أحلى بكتير (الصور اللي بتيجي على واتساب غالبًا بتبقى صغيرة، فالأحسن الصورة الأصلية من الكاميرا).',
+  ],
+  'book.lowResPick': ['Choose another photo', 'اختار صورة تانية'],
+  'book.lowResKeep': ['Use this one anyway', 'كمّل بالصورة دي'],
   'book.aiTitle': ['Draw my child as a cartoon (recommended)', 'ارسم طفلي كرتون (موصى به)'],
   'book.aiText': ["Your child's photo is sent to Google's AI service to draw their face in the book's style. After you order, every page is redrawn with your child. Google doesn't use it to train its models, and we delete the photo 30 days after the book is shipped.", 'صورة طفلك بتتبعت لخدمة الذكاء الاصطناعي من Google عشان ترسم وشه بنفس ستايل الكتاب، وبعد الطلب كل صفحة بتترسم من جديد بطفلك. Google ما بتستخدمهاش لتدريب نماذجها، واحنا بنمسح الصورة بعد 30 يوم من شحن الكتاب.'],
   'book.drawing': ['Drawing your child into the cover… (about 30 seconds)', 'بنرسم طفلك على الغلاف… (حوالي 30 ثانية)'],
@@ -1501,6 +1509,9 @@ window.POD_STRINGS = {
   'admin.redraw.again': ['Redraw pages', 'ارسم الصفحات تاني'],
   'admin.redraw.started': ['Redrawing the pages…', 'جاري رسم الصفحات…'],
   'book.cover': ['Cover', 'الغلاف'],
+  // A cover sold out (admin → Products, the book's sizes): shown crossed out with "Sold out", as in the editor.
+  'book.coverSoldOut': ['{cover} is sold out right now. Please choose another cover.', '{cover} خلصان دلوقتي. اختار غلاف تاني من فضلك.'],
+  'book.coverMoved': ['{cover} is sold out right now, so we picked {to}.', '{cover} خلصان دلوقتي، فاخترنالك {to}.'],
   'book.make': ['Show my book', 'اعرض كتابي'],
   'book.update': ['Update my book', 'حدّث الكتاب'],
   'book.updated': ['Book is up to date ✓', 'الكتاب محدّث ✓'],

@@ -99,6 +99,14 @@
               <label class="btn btn-sm" for="bk-file" data-i18n="book.photoChange"></label>
             </div>
             <p class="muted small" data-i18n="book.cropHint"></p>
+            <!-- The face is too small to print sharply: said, never blocking (keep it or pick another photo). -->
+            <div class="bk-lowres" id="bk-lowres" role="status" hidden>
+              <p data-i18n="book.lowRes"></p>
+              <div class="bk-lowres-actions">
+                <label class="btn btn-sm" for="bk-file" data-i18n="book.lowResPick"></label>
+                <button type="button" class="btn btn-sm" id="bk-lowres-ok" data-i18n="book.lowResKeep"></button>
+              </div>
+            </div>
           </div>
           <div class="bk-photo-saved muted small" id="bk-photo-saved" hidden>✓ <span data-i18n="book.photoSaved"></span> <label class="btn btn-sm" for="bk-file" data-i18n="book.photoChange"></label></div>
           <input type="file" id="bk-file" accept="image/jpeg,image/png,image/webp" hidden>

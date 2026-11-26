@@ -723,6 +723,10 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 .bk-crop-tools { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
 .bk-crop-tools input[type=range] { flex: 1; }
 .bk-photo-saved { display: flex; align-items: center; gap: 8px; }
+.bk-lowres { margin: 10px 0 0; padding: 10px 12px; border: 1px solid #f3d9a4; border-radius: 10px; background: #fff6e5; color: #7a4a00; font-size: 13.5px; line-height: 1.6; }
+.bk-lowres[hidden] { display: none; }
+.bk-lowres p { margin: 0 0 8px; }
+.bk-lowres-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .bk-pics { gap: 6px; }
 .bk-pics .chip { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 8px; min-width: 64px; }
 .bk-pics .chip img { width: 40px; height: 40px; object-fit: contain; }
