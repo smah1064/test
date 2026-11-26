@@ -58,6 +58,31 @@ class CartoonError extends Error {
 
 const jpeg = (buf, max = 1024) => sharp(buf).resize(max, max, { fit: 'inside', withoutEnlargement: true }).flatten({ background: '#ffffff' }).jpeg({ quality: 90 }).toBuffer();
 
+/**
+ * One generateContent request with GEMINI_API_KEY, on the Gemini API or Vertex AI (see above): the SDK's
+ * answer, or its error as thrown. Also used by src/words.js, so both share the key and what was learnt about it.
+ */
+async function callGemini(request) {
+  try {
+    const res = await ai().models.generateContent(request);
+    if (useVertex === null) useVertex = vertexWanted();
+    return res;
+  } catch (e) {
+    const canSwitch = !process.env.GEMINI_VERTEX && useVertex === null && keyRejected(e);
+    if (!canSwitch) throw e;
+    useVertex = true; // try the same key on Vertex AI
+    try {
+      const res = await ai().models.generateContent(request);
+      console.log('[cartoon] GEMINI_API_KEY works on Vertex AI; using it from now on');
+      return res;
+    } catch (e2) {
+      useVertex = null; // neither worked; try both again next time
+      if (keyRejected(e2)) console.warn(`[cartoon] key rejected by Gemini API (${e.message}) and Vertex AI (${e2.message})`);
+      throw keyRejected(e2) ? e : e2;
+    }
+  }
+}
+
 /** One image-generation request; returns the image bytes or throws CartoonError. */
 async function generate({ prompt, images, aspectRatio = '1:1', imageSize = '1K', timeout = 120000 }) {
   if (!enabled()) throw new CartoonError('off', 'AI illustration is not set up');
@@ -70,22 +95,7 @@ async function generate({ prompt, images, aspectRatio = '1:1', imageSize = '1K',
   };
   let res;
   try {
-    try {
-      res = await ai().models.generateContent(request);
-      if (useVertex === null) useVertex = vertexWanted();
-    } catch (e) {
-      const canSwitch = !process.env.GEMINI_VERTEX && useVertex === null && keyRejected(e);
-      if (!canSwitch) throw e;
-      useVertex = true; // try the same key on Vertex AI
-      try {
-        res = await ai().models.generateContent(request);
-        console.log('[cartoon] GEMINI_API_KEY works on Vertex AI; using it from now on');
-      } catch (e2) {
-        useVertex = null; // neither worked; try both again next time
-        if (keyRejected(e2)) console.warn(`[cartoon] key rejected by Gemini API (${e.message}) and Vertex AI (${e2.message})`);
-        throw keyRejected(e2) ? e : e2;
-      }
-    }
+    res = await callGemini(request);
   } catch (e) {
     const status = e.status || e.code;
     throw new CartoonError(status === 429 ? 'busy' : keyRejected(e) ? 'key' : 'failed', e.message);
@@ -142,4 +152,4 @@ async function redrawPage(page, face, kind) {
   return generate({ prompt, images: [page, face], aspectRatio: '1:1', imageSize: '2K', timeout: 180000 });
 }
 
-module.exports = { enabled, MODEL, cartoonFace, redrawPage, CartoonError, STYLE_REFS: { story: path.join(__dirname, 'book-assets', 'space', 'cover.jpg'), coloring: path.join(__dirname, 'book-assets', 'dreams', 'astronaut.png') } };
+module.exports = { enabled, MODEL, callGemini, keyRejected, cartoonFace, redrawPage, CartoonError, STYLE_REFS: { story: path.join(__dirname, 'book-assets', 'space', 'cover.jpg'), coloring: path.join(__dirname, 'book-assets', 'dreams', 'astronaut.png') } };

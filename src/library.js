@@ -646,6 +646,181 @@ class Library {
     this.save();
     return true;
   }
+
+  // ---------- Editable words in uploaded designs (src/words.js does the work) ----------
+  // Each uploaded design keeps, in its own entry of the index:
+  //   wordsStatus  'queued' | 'working' | 'ready' | 'none' | 'failed' | 'kept' | 'off' (none yet: not looked at)
+  //   wordsError   why it failed (or why the last try failed), wordsAt when the status last changed (ISO)
+  //   wordsTries   tries for the current request, wordsBy the copy of the app working on it, wordsNext
+  //                not to be tried again before (ISO), wordsKept the words put aside when the owner keeps the
+  //                original lettering (so "make the words editable" needs no new AI call).
+  // When ready, the picture item has `words` (see public/js/templates.js, wordsArt): the picture without its
+  // words (nowords-web.png, nowords-print.*) in artDir(id) and the words as text.
+
+  /** The uploaded designs' words: { designs: { id: { status, error, at } }, usage: { day, n } | null }. */
+  wordsState() {
+    this.reload();
+    const designs = {};
+    for (const d of this.index.custom) {
+      if (d.uploaded) designs[d.id] = { status: d.wordsStatus || null, error: d.wordsError || null, at: d.wordsAt || null };
+    }
+    return { designs, usage: this.index.wordsUsage || null };
+  }
+  /**
+   * Uploaded designs waiting for their words, best first: the ones asked for (published, "try again"), oldest
+   * request first, then the ones from before (no status yet), newest design first. `stale(d)` says whether a
+   * 'working' one was left by a copy of the app that stopped. Read without the lock (a quick look).
+   */
+  wordsWaiting({ now = Date.now(), stale = () => false } = {}) {
+    this.reload();
+    const deleted = new Set(this.index.deleted || []);
+    const asked = [];
+    const before = [];
+    for (const d of this.index.custom) {
+      if (!d.uploaded || deleted.has(d.id) || !wordsPicture(d)) continue;
+      const st = d.wordsStatus;
+      if (!st) before.push(d);
+      else if ((st === 'queued' || st === 'off') && !(d.wordsNext && Date.parse(d.wordsNext) > now)) asked.push(d);
+      else if (st === 'working' && stale(d)) asked.push(d);
+    }
+    asked.sort((a, b) => String(a.wordsAt || '').localeCompare(String(b.wordsAt || '')));
+    before.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+    return [...asked, ...before];
+  }
+  /**
+   * Take the next uploaded design to work on (see wordsWaiting): marked 'working' by `token`, its tries counted,
+   * and one more picture counted for `day` (at most `max` a day, every copy of the app together). Gives
+   * { design } (a copy), { capped: true } when today's pictures are used up, or {} when nothing waits. A design
+   * left 'working' that has had `maxTries` already fails ('stopped').
+   */
+  claimWords({ token, day, max, maxTries = 3, now = Date.now(), stale = () => false }) {
+    if (!this.wordsWaiting({ now, stale }).length) return {};
+    return this.withLock(() => {
+      const list = this.wordsWaiting({ now, stale });
+      let changed = false;
+      let out = {};
+      for (const d of list) {
+        if (d.wordsStatus === 'working' && (d.wordsTries || 0) >= maxTries) {
+          setWords(d, { wordsStatus: 'failed', wordsError: 'stopped', wordsAt: new Date(now).toISOString(), wordsBy: undefined, wordsTries: undefined, wordsNext: undefined });
+          changed = true;
+          continue;
+        }
+        const used = this.index.wordsUsage && this.index.wordsUsage.day === day ? this.index.wordsUsage.n : 0;
+        if (used >= max) {
+          out = { capped: true };
+          break;
+        }
+        this.index.wordsUsage = { day, n: used + 1 };
+        setWords(d, { wordsStatus: 'working', wordsBy: token, wordsAt: new Date(now).toISOString(), wordsTries: (d.wordsStatus === 'working' || d.wordsStatus === 'queued' ? d.wordsTries || 0 : 0) + 1, wordsNext: undefined });
+        changed = true;
+        out = { design: JSON.parse(JSON.stringify(d)) };
+        break;
+      }
+      if (changed) this.save();
+      return out;
+    });
+  }
+  /**
+   * The work on a design's words ended (only for the copy that took it, `token`):
+   *   { status: 'ready', words } the words are editable; { status: 'none' } no words in the picture;
+   *   { status: 'failed', error }; { status: 'queued', error, next } try again after `next` (ISO).
+   * If the owner kept the original lettering meanwhile, ready words are put aside for later (wordsKept).
+   * Gives the status now, or null when the design is gone or someone else has it.
+   */
+  wordsDone(id, token, outcome, now = Date.now()) {
+    return this.withLock(() => {
+      const d = this.index.custom.find((x) => x.id === id && x.uploaded);
+      if (!d) return null;
+      const at = new Date(now).toISOString();
+      if (d.wordsStatus !== 'working' || d.wordsBy !== token) {
+        if (d.wordsStatus === 'kept' && d.wordsBy === token) {
+          if (outcome.status === 'ready' && outcome.words) d.wordsKept = outcome.words;
+          setWords(d, { wordsBy: undefined, wordsTries: undefined });
+          this.save();
+        }
+        return null;
+      }
+      const pic = wordsPicture(d);
+      if (outcome.status === 'ready' && pic && outcome.words) {
+        pic.words = outcome.words;
+        setWords(d, { wordsStatus: 'ready', wordsError: undefined, wordsAt: at, wordsBy: undefined, wordsTries: undefined, wordsNext: undefined, wordsKept: undefined });
+      } else if (outcome.status === 'none') {
+        if (pic) delete pic.words;
+        setWords(d, { wordsStatus: 'none', wordsError: undefined, wordsAt: at, wordsBy: undefined, wordsTries: undefined, wordsNext: undefined, wordsKept: undefined });
+      } else if (outcome.status === 'queued') {
+        setWords(d, { wordsStatus: 'queued', wordsError: String(outcome.error || 'failed'), wordsAt: d.wordsAt, wordsBy: undefined, wordsNext: outcome.next || undefined });
+      } else {
+        setWords(d, { wordsStatus: 'failed', wordsError: String(outcome.error || 'failed'), wordsAt: at, wordsBy: undefined, wordsTries: undefined, wordsNext: undefined });
+      }
+      this.save();
+      return d.wordsStatus;
+    });
+  }
+  /**
+   * The admin's choice for one uploaded design (or the publish route's `queue`):
+   *   'queue'  a newly published design waits for its words ('off' without the AI key);
+   *   'retry'  try again (after a failure, "no words found", or with the original lettering kept);
+   *   'keep'   keep the original lettering: the picture as uploaded, words put aside;
+   *   'use'    back to the editable words (put back at once when they were put aside, else made again).
+   * Gives { status, error } (the design's state now), { refused: code } (an i18n key), or null when the
+   * design isn't an uploaded one. `enabled`: whether the AI key is set.
+   */
+  wordsAction(id, action, { enabled = false, now = Date.now() } = {}) {
+    return this.withLock(() => {
+      const d = this.index.custom.find((x) => x.id === id && x.uploaded);
+      if (!d) return null;
+      const pic = wordsPicture(d);
+      if (!pic) return { refused: 'wordsNotUploaded' };
+      const at = new Date(now).toISOString();
+      const st = d.wordsStatus || null;
+      const queue = () => {
+        if (!enabled) return { refused: 'wordsOff' };
+        if (st === 'working') return { refused: 'wordsWorking' };
+        delete pic.words;
+        setWords(d, { wordsStatus: 'queued', wordsError: undefined, wordsAt: at, wordsBy: undefined, wordsTries: undefined, wordsNext: undefined, wordsKept: undefined });
+        return null;
+      };
+      let refused = null;
+      if (action === 'queue') {
+        if (!st || st === 'off') {
+          if (enabled) refused = queue();
+          else setWords(d, { wordsStatus: 'off', wordsAt: at });
+        }
+      } else if (action === 'retry') {
+        if (st !== 'ready' && st !== 'queued') refused = queue();
+      } else if (action === 'keep') {
+        if (pic.words) d.wordsKept = pic.words;
+        delete pic.words;
+        // (Still being worked on: what comes back is put aside, see wordsDone.)
+        setWords(d, { wordsStatus: 'kept', wordsError: undefined, wordsAt: at, wordsNext: undefined, ...(st === 'working' ? {} : { wordsBy: undefined, wordsTries: undefined }) });
+      } else if (action === 'use') {
+        if (st === 'kept' && d.wordsKept && fs.existsSync(path.join(this.artDir(id), path.basename(String(d.wordsKept.src || 'x'))))) {
+          pic.words = d.wordsKept;
+          setWords(d, { wordsStatus: 'ready', wordsError: undefined, wordsAt: at, wordsBy: undefined, wordsTries: undefined, wordsKept: undefined });
+        } else if (st === 'kept' && d.wordsBy) {
+          // (Kept while still being worked on: that work goes on and its words are used.)
+          setWords(d, { wordsStatus: 'working' });
+        } else if (st !== 'ready' && st !== 'queued') {
+          refused = queue();
+        }
+      } else {
+        return { refused: 'badRequest' };
+      }
+      if (refused) return refused;
+      this.save();
+      return { status: d.wordsStatus || null, error: d.wordsError || null };
+    });
+  }
+}
+
+/** The picture of an uploaded design (its one image item), whose words can be made editable. */
+const wordsPicture = (d) => (Array.isArray(d.items) ? d.items.find((i) => i && i.kind === 'image' && typeof i.printSrc === 'string') : null) || null;
+/** Set (or, with undefined, remove) a design's words fields. */
+function setWords(d, fields) {
+  for (const [k, v] of Object.entries(fields)) {
+    if (v === undefined) delete d[k];
+    else d[k] = v;
+  }
 }
 
 /** Whether a design is drawn with the shop's own artwork files (I(...) in the packs), not only text, shapes and icons. */

@@ -69,6 +69,13 @@
 .rd-pill-text { background: #eef1f6; color: var(--ink-2); }
 .rd-note { color: var(--ink-2); line-height: 1.5; }
 .rd-note-none, .rd-note-paused { color: var(--rd-warn); }
+/* An uploaded design's words: editable, being worked on, none, failed, original kept, off. */
+.rd-words { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 4px; line-height: 1.5; color: var(--ink-2); }
+.rd-words-ready { color: var(--rd-live); font-weight: 600; }
+.rd-words-failed { color: var(--rd-warn); }
+.rd-words-queued, .rd-words-working, .rd-words-none, .rd-words-kept, .rd-words-off { color: var(--ink-3); }
+.rd-words bdi { unicode-bidi: isolate; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.rd-words-btn { font-weight: 600; }
 .rd-acts { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; max-width: 330px; }
 .rd-btn-show { border-color: #b7e2c8; color: var(--rd-live); }
 .rd-btn-show:hover { background: var(--rd-live-bg); border-color: #8fd0aa; }

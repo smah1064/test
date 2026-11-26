@@ -92,6 +92,10 @@ const MESSAGES = {
   blankPicture: { en: 'The picture is empty (one plain colour)', ar: 'الصورة فاضية (لون واحد بس)' },
   badPicture: { en: 'The picture can\'t be read', ar: 'الصورة مش بتتقري' },
   uploadGone: { en: 'This upload is gone (published or discarded).', ar: 'الرفع ده مبقاش موجود (اتنشر أو اتلغى).' },
+  // Editable words in uploaded designs (src/words-routes.js).
+  wordsOff: { en: 'Making the words editable needs the site\'s AI key (GEMINI_API_KEY), and it isn\'t set.', ar: 'عشان الكلام يبقى بيتعدّل محتاجين مفتاح الذكاء الاصطناعي بتاع الموقع (GEMINI_API_KEY)، وهو مش متحط.' },
+  wordsWorking: { en: 'The words of this design are being worked on right now. Try again in a minute.', ar: 'بنشتغل على كلام التصميم ده دلوقتي. جرّب تاني كمان دقيقة.' },
+  wordsNotUploaded: { en: 'Only designs uploaded in a zip get editable words.', ar: 'الكلام بيبقى بيتعدّل في التصميمات المرفوعة بملف zip بس.' },
   pickProducts: { en: 'Pick at least one product for this design.', ar: 'اختار منتج واحد على الأقل للتصميم ده.' },
   pdfBudget: { en: 'Booklet PDFs can\'t be taken any more today. Please try again tomorrow, or send the pages as pictures.', ar: 'مش هينفع نستقبل ملفات PDF للكتيبات تاني النهارده. جرب بكرة، أو ابعت الصفحات كصور.' },
   pdfLocked: { en: 'This PDF is locked with a password. Save it again without a password, then upload it.', ar: 'الـ PDF ده مقفول بكلمة سر. احفظه تاني من غير كلمة سر وارفعه.' },

@@ -120,6 +120,9 @@ const ROUTES = {
   'GET /api/admin/library/uploads/:batch': { perm: 'uploads' },
   'DELETE /api/admin/library/uploads/:batch': { perm: 'uploads', label: L('Removed an upload', 'شال رفع') },
   'POST /api/admin/library/uploads/:batch/publish': { perm: 'uploads', approve: true, limit: '256kb', label: L('Publish uploaded designs', 'نشر التصميمات المرفوعة') },
+  // Editable words in uploaded designs (src/words-routes.js): where each one is; try again, keep the original lettering.
+  'GET /api/admin/library/words': { perm: 'library.view' },
+  'POST /api/admin/library/:id/words': { perm: 'uploads', limit: '1kb', label: L('Words of an uploaded design', 'كلام تصميم مرفوع') },
 
   // Money
   'GET /api/admin/coupons': { perm: 'coupons.view' },

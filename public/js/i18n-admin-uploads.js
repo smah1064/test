@@ -139,6 +139,23 @@ Object.assign(window.POD_STRINGS, {
   'rd.sort.new': ['Newest first', 'الأحدث الأول'],
   'rd.sort.old': ['Oldest first', 'الأقدم الأول'],
   'rd.sort.name': ['By name', 'بالاسم'],
+  // The words drawn in an uploaded design, made editable text (src/words.js)
+  'rd.words.ready': ['Words editable ✓', 'الكلام بقى بيتعدّل ✓'],
+  'rd.words.keep': ['Keep the original lettering', 'سيب الكتابة الأصلية'],
+  'rd.words.working': ['Working on the words…', 'بنجهّز الكلام عشان يتعدّل…'],
+  'rd.words.waitDay': ['Waiting to make the words editable: today\'s limit is reached, it carries on tomorrow', 'مستني دوره عشان الكلام يتعدّل: حد النهارده خلص، وهيكمّل بكرة'],
+  'rd.words.none': ['No words found to make editable', 'ملقيناش فيه كلام يتعدّل'],
+  'rd.words.failed': ['Couldn\'t make the words editable', 'معرفناش نخلّي الكلام يتعدّل'],
+  'rd.words.retry': ['Try again', 'جرّب تاني'],
+  'rd.words.kept': ['Original lettering kept', 'سايبين الكتابة الأصلية'],
+  'rd.words.use': ['Make the words editable', 'خلّي الكلام يتعدّل'],
+  'rd.words.off': ['Editable words are off (no AI key: {key})', 'الكلام اللي بيتعدّل مقفول (مفيش مفتاح ذكاء اصطناعي: {key})'],
+  'rd.words.why.key': ['the AI key was refused', 'مفتاح الذكاء الاصطناعي اترفض'],
+  'rd.words.why.busy': ['the AI was busy', 'الذكاء الاصطناعي كان مشغول'],
+  'rd.words.why.picture': ['the picture couldn\'t be read', 'الصورة مش بتتقري'],
+  'rd.words.keptOk': ['“{name}”: the original lettering is kept.', '«{name}»: هنسيب الكتابة الأصلية.'],
+  'rd.words.readyOk': ['“{name}”: the words are editable again.', '«{name}»: الكلام رجع يتعدّل.'],
+  'rd.words.workingOk': ['“{name}”: working on the words…', '«{name}»: بنجهّز الكلام عشان يتعدّل…'],
 
   // Why one design wasn't published
   'up.code.pickProducts': ['Pick at least one product.', 'علّم على منتج واحد على الأقل.'],
