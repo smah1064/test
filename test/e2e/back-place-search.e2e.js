@@ -116,8 +116,10 @@ for (const lang of ['en', 'ar']) {
       await page.goto(`${srv.base}/designs`, { waitUntil: 'load' });
       await page.waitForSelector('#design-grid .design-card');
       const cards = page.locator('#design-grid .design-card');
+      // 24 designs at a time (owner, 26 Nov): "Show more" once for the 40th; Back keeps it shown.
+      await page.click('#design-more button');
+      await page.waitForFunction(() => document.querySelectorAll('#design-grid .design-card').length === 48);
       const total = await cards.count();
-      assert.ok(total > 100, `${total} designs`);
       const card = cards.nth(39);
       const id = await card.getAttribute('data-place');
       assert.ok(id, 'the card names its design');
@@ -125,14 +127,14 @@ for (const lang of ['en', 'ar']) {
       await card.scrollIntoViewIfNeeded();
       await page.evaluate(() => window.scrollBy(0, -120));
       const y = await page.evaluate(() => window.scrollY);
-      assert.ok(y > 5000, `scrolled down the designs (${y})`);
+      assert.ok(y > 3000, `scrolled down the designs (${y})`);
       const before = await onScreen(page, sel);
       await card.click();
       await page.waitForURL(/\/design\?id=/);
       await page.goBack();
       await page.waitForSelector(sel);
       await page.waitForFunction((want) => Math.abs(window.scrollY - want) < 80, y, { timeout: 10000 });
-      assert.strictEqual(await cards.count(), total, 'every design is listed again');
+      assert.strictEqual(await cards.count(), total, 'as many designs as were shown (Show more kept)');
       const after = await onScreen(page, sel);
       assert.ok(after.seen && Math.abs(after.top - before.top) < 80, `the design is where it was (${before.top} → ${JSON.stringify(after)})`);
       await page.waitForTimeout(800);
@@ -150,6 +152,8 @@ test('/designs (360 px): Back keeps a search and a product, and the place in the
     await page.goto(`${srv.base}/designs?product=tshirt`, { waitUntil: 'load' });
     await page.waitForSelector('#design-grid .design-card');
     const cards = page.locator('#design-grid .design-card');
+    await page.click('#design-more button'); // (24 at a time)
+    await page.waitForFunction(() => document.querySelectorAll('#design-grid .design-card').length > 24);
     const n = await cards.count();
     assert.ok(n > 30, `${n} designs on the T-shirt`);
     const card = cards.nth(29);
