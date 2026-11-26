@@ -41,8 +41,11 @@ test('booklets: the size is the page count, so a design is never mixed with othe
 
   const sides = { front: { editor: { objects: [{ type: 'i-text', text: 'Cover' }] } } };
   const order = (quantities) => post('/api/designs', { productId: 'booklets', color: 'matte', size: '8-50', sides, quantities });
-  // Another page count (32 pages × 100 copies) or the same pages in another number of copies: refused.
-  for (const size of ['32-100', '16-50', '8-100']) {
+  // Another page count (32 pages × 100 copies): refused. (The same pages in another pack (8 pages × 100) mix: owner,
+  // 26 Nov.)
+  const mixed = await order([{ color: 'matte', size: '8-50', qty: 1 }, { color: 'matte', size: '8-100', qty: 1 }]);
+  assert.strictEqual(mixed.status, 201, await mixed.clone().text());
+  for (const size of ['32-100', '16-50']) {
     const r = await order([{ color: 'matte', size: '8-50', qty: 1 }, { color: 'matte', size, qty: 1 }]);
     assert.strictEqual(r.status, 400, size);
     assert.strictEqual((await r.json()).code, 'qtyOnePageCount');

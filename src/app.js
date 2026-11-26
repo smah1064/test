@@ -1710,7 +1710,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const qty = Number(line && line.qty);
       if (!co || !sz || !Number.isInteger(qty) || qty < 1 || qty > MAX_PIECES) throw new HttpError(400, 'qtyBad');
       if (co.id !== colorDef.id && !(product.mix && product.mix.colors)) throw new HttpError(400, 'qtyNoColors');
-      if (sz.id !== sizeDef.id && !(product.mix && product.mix.sizes)) throw new HttpError(400, product.paged ? 'qtyOnePageCount' : 'qtyNoSizes');
+      // (Packs of one family (the same paper size or page count: one print file) mix on every product: 11 menus are a
+      // 10-pack and a single, not 11 singles. Owner, 26 Nov.)
+      const samePrint = sz.pack && sizeDef.pack && sz.copies > 0 && sizeDef.copies > 0 && sz.family === sizeDef.family;
+      if (sz.id !== sizeDef.id && !(product.mix && product.mix.sizes) && !samePrint) throw new HttpError(400, product.paged ? 'qtyOnePageCount' : 'qtyNoSizes');
       const key = `${co.id}|${sz.id}`;
       merged.set(key, { co, sz, qty: (merged.get(key) || { qty: 0 }).qty + qty });
       total += qty;
@@ -4471,7 +4474,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const colour = product.colors.find((c) => c.id === colourId);
     const sizes = lines.map((l) => product.sizes.find((z) => z.id === (l.size && l.size.id)));
     if (!colour || sizes.some((z) => !z)) return null;
-    if (lines.length > 1 && !(product.mix && product.mix.sizes && sizes.every((z) => counted(z) && z.family === sizes[0].family))) return null;
+    // (Packs of one family mix on every product: owner, 26 Nov.)
+    if (lines.length > 1 && !sizes.every((z) => counted(z) && z.family === sizes[0].family)) return null;
     const copies = lines.reduce((n, l, i) => n + (Number(l.qty) || 1) * packSize(sizes[i]), 0);
     return { lines, sizes, colour, size: sizes[0], copies };
   }
@@ -4481,22 +4485,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   /** One pack of each size of the family for this design (its sides, options, embroidery), or null when it can't be had. */
   const packPrices = (d, colour, family) => new Map(family.map((z) => [z.id, designPrice({ ...d, orderId: null, status: 'ready', quantities: [{ color: { id: colour.id }, size: { id: z.id }, qty: 1 }] })]));
   /**
-   * The cheapest packs that make exactly `copies`: [{ size, qty }] and their price, or null. Products that mix sizes
-   * take any mix of the family's packs (as the editor does); the others one size (the owner's choice, 25 Nov).
+   * The cheapest packs that make exactly `copies`: [{ size, qty }] and their price, or null: any mix of the family's
+   * packs (one print file), on every product (owner, 26 Nov: 11 menus were 11 singles at 1,430 instead of a 10-pack and
+   * a single at about 380; until then only products that mix sizes did).
    */
   function bestPacks(product, family, prices, copies) {
     const usable = family.filter((z) => prices.get(z.id) != null);
     if (!usable.length || copies < 1) return null;
-    if (!(product.mix && product.mix.sizes)) {
-      let best = null;
-      for (const z of usable) {
-        const n = copies / packSize(z);
-        if (!Number.isInteger(n) || n < 1 || n > MAX_PIECES) continue;
-        const price = round2(prices.get(z.id) * n);
-        if (!best || price < best.price - 0.5) best = { picks: [{ size: z, qty: n }], price };
-      }
-      return best;
-    }
     // Any mix: the cheapest way to exactly `copies` (in steps of the packs' common size).
     const gcd = (a, b) => (b ? gcd(b, a % b) : a);
     const g = usable.reduce((a, z) => gcd(a, packSize(z)), 0);

@@ -2385,8 +2385,9 @@ export function mount(container, { product, color, textures, spin = true, viewSc
     o.position.sub(center);
     const sh = o.userData.shadow;
     scene.add(sh ? contactShadow(sh[0], -size.y / 2 - 0.05, sh[1]) : contactShadow(Math.max(size.x, size.z) * 1.6, -size.y / 2 - 0.05));
-    // A smaller size of the product (viewScale < 1) stays as far away as the biggest one: it looks smaller.
-    const vs = Math.max(0.3, Math.min(1, viewScale || 1));
+    // A smaller size of the product (viewScale < 1) stays as far away as the biggest one: it looks smaller. (Never
+    // below 60% of the view: a 20 cm window sticker was drawn at 30% of the 70 cm one, too small to see. Owner, 26 Nov.)
+    const vs = Math.max(0.6, Math.min(1, viewScale || 1));
     radius = (Math.max(size.x, size.y, size.z) * 0.62) / vs;
     wide = o.userData.fitWidth ? size.clone().multiplyScalar(0.5 / vs) : null;
     if (o.userData.viewDir) viewDir = o.userData.viewDir;

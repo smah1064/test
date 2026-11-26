@@ -5421,6 +5421,13 @@
 
   // ---------- Pieces: one artwork, several identical items, sizes or colours ----------
   const mix = () => st.product.mix || { colors: false, sizes: false };
+  /** A pack of the chosen size's family (the same paper size or page count: one print file): mixes on every product
+   *  (owner, 26 Nov: 11 menus are a 10-pack and a single, not 11 singles). */
+  const samePrintPack = (id) => {
+    const z = st.product.sizes.find((x) => x.id === id);
+    const cur = st.product.sizes.find((x) => x.id === st.sizeId);
+    return Boolean(z && cur && z.pack && cur.pack && z.copies > 0 && cur.copies > 0 && z.family === cur.family);
+  };
   /** The grid { colorId: { sizeId: n } }, starting with one piece in the chosen colour and size. */
   function qtyGrid() {
     const p = st.product;
@@ -5432,7 +5439,7 @@
       if (mix().colors) clean[c] ||= {}; // a colour set to 0 for now keeps its row (not deleted under the customer's finger)
       for (const [z, n] of Object.entries(row || {})) {
         const v = Math.max(0, Math.min(1000, Math.floor(Number(n) || 0)));
-        if (p.sizes.some((x) => x.id === z) && (mix().sizes || z === st.sizeId) && v > 0) (clean[c] ||= {})[z] = v;
+        if (p.sizes.some((x) => x.id === z) && (mix().sizes || z === st.sizeId || samePrintPack(z)) && v > 0) (clean[c] ||= {})[z] = v;
       }
     }
     if (!Object.values(clean).some((row) => Object.keys(row).length)) (clean[st.colorId] ||= {})[st.sizeId] = 1;
@@ -5545,7 +5552,9 @@
     const fits = (c, z) => sizeOk(p, c, z) && !(POD.comboFew(p, c, z.id) > 0);
     let next = null;
     let size = st.sizeId;
-    if (mix().sizes) {
+    // (Any mix of a family's packs, on every product: owner, 26 Nov. A product that doesn't mix sizes keeps its size
+    // as the pack when one pack size is enough.)
+    if (mix().sizes || counted(sizeById(st.sizeId))) {
       next = {};
       for (const c of [...new Set(lines.map((l) => l.color))]) {
         const mine = lines.filter((l) => l.color === c);
@@ -5555,21 +5564,14 @@
           for (const [z, n] of best || typed.map((l) => [l.size, l.qty])) (next[c] ||= {})[z] = (next[c][z] || 0) + n;
         }
       }
-    } else {
-      const cur = sizeById(st.sizeId);
-      if (!counted(cur)) return;
-      let bestCost = before;
-      for (const z of p.sizes.filter((x) => counted(x) && x.family === cur.family && x.id !== cur.id)) {
-        const rows = lines.map((l) => ({ color: l.color, n: (l.qty * cur.copies) / z.copies }));
-        if (!rows.every((r) => Number.isInteger(r.n) && r.n >= 1 && r.n <= 1000 && fits(r.color, z))) continue;
-        const cost = rows.reduce((a, r) => a + unitPrice(z.id) * r.n, 0);
-        if (cost < bestCost - 0.5) {
-          bestCost = cost;
-          size = z.id;
-          next = Object.fromEntries(rows.map((r) => [r.color, { [z.id]: r.n }]));
-        }
+      // A product that doesn't mix sizes: its size is the pack when one pack size makes it (as before), else the
+      // biggest of the packs taken.
+      if (!mix().sizes) {
+        const used = [...new Set(Object.values(next).flatMap((row) => Object.keys(row)))];
+        if (used.length === 1) size = used[0];
+        else if (used.length && !used.includes(st.sizeId)) size = used.sort((a, b) => sizeById(b).copies - sizeById(a).copies)[0];
       }
-    }
+    } else return;
     if (!next) return hintBiggerPack(lines, before);
     const after = Object.values(next).reduce((a, row) => a + Object.entries(row).reduce((b, [z, n]) => b + unitPrice(z) * n, 0), 0);
     if (!(after < before - 0.5)) return hintBiggerPack(lines, before);
@@ -5695,13 +5697,17 @@
     // number typed under another size is that size only. QA 25 Nov. Not for packs: there the first pack is shown as
     // chosen, so its box says 1, as the total does.)
     const unpickedOne = !st.sizePicked && mix().sizes && !packs() && qtyLines().length === 1 && qtyTotal() === 1;
-    const sizes = mix().sizes ? p.sizes.filter((z) => canPick(z) || z.id === st.sizeId) : p.sizes.filter((z) => z.id === st.sizeId);
+    // (Packs of one family taken together on a product that doesn't mix sizes (a 10-pack and a single menu, from the
+    // cart or the cheaper mix): the table shows that family's packs. Owner, 26 Nov.)
+    const famMixed = !mix().sizes && new Set(qtyLines().map((l) => l.size)).size > 1;
+    const sizes = mix().sizes ? p.sizes.filter((z) => canPick(z) || z.id === st.sizeId)
+      : p.sizes.filter((z) => z.id === st.sizeId || (famMixed && samePrintPack(z.id) && (canPick(z) || Object.values(g).some((row) => row[z.id]))));
     const colors = p.colors.filter((c) => g[c.id]);
     const total = qtyTotal();
     const cell = (c, z) => (comboOut(p, c.id, z.id) && !(g[c.id] && g[c.id][z.id])
       ? `<span class="qty-out" title="${esc(tEd('ed.soldOut'))}">—</span>`
       : `<input type="text" inputmode="numeric" maxlength="4" autocomplete="off" class="qty-in${POD.comboFew(p, c.id, z.id) ? ' is-few' : ''}" data-qc="${c.id}" data-qz="${z.id}" value="${unpickedOne ? '' : (g[c.id] && g[c.id][z.id]) || ''}" placeholder="0" aria-label="${esc(`${tr(c.name)} ${tr(z.label)}`)}"${POD.comboFew(p, c.id, z.id) ? ` title="${esc(t('fewLeftCombo', { colour: tr(c.name), size: tr(z.label), n: POD.num(POD.comboFew(p, c.id, z.id)) }))}"` : ''}>`);
-    const simple = !mix().sizes && !mix().colors;
+    const simple = !mix().sizes && !mix().colors && !famMixed;
     // (Its line says how many: "type how many under it" pointed at boxes the counter doesn't have. Tester 1, 26 Nov.)
     // One colour in one size (the usual single piece): a − / + counter, with the size-and-colour table one tap away
     // (the table of zeros under the sizes read as a second size question: owner's go 26 Nov, editor redesign stage 1;

@@ -113,14 +113,15 @@ test('packs count copies: 10 single menus become one 10-pack; 9 say a pack costs
   assert.strictEqual(ten.entry.price < nine.entry.price, true, 'ten for less than nine');
   assert.strictEqual(ten.count.n, 10);
   assert.strictEqual(ten.count.step, 1, 'single copies still in the family');
-  // 11: no pack makes exactly 11, so 11 single ones (and the tip about the 25-pack).
+  // 11: a 10-pack and a single (packs of one paper size mix on every product: owner, 26 Nov; it was 11 singles).
   const eleven = await (await setQty(design.id, { copies: 11 }, key)).json();
-  assert.strictEqual(eleven.entry.quantities[0].size.id, 'A4-1');
-  assert.strictEqual(eleven.entry.quantities[0].qty, 11);
-  assert.strictEqual(eleven.switched, undefined, 'from the 10-pack back to single copies: not "cheaper as"');
-  // The order takes the design as it is now (same size for every colour line, as the menus need).
+  assert.deepStrictEqual(eleven.entry.quantities.map((l) => [l.size.id, l.qty]).sort(), [['A4-1', 1], ['A4-10', 1]]);
+  assert.ok(eleven.entry.price < nine.entry.price * 11 / 9, `${eleven.entry.price}: far less than 11 singles`);
+  assert.deepStrictEqual(eleven.switched && eleven.switched.map((x) => x.qty).sort(), [1, 1]);
+  assert.strictEqual(eleven.count.n, 11);
+  // The order takes the design as it is now (one paper size, A4, as the menus need).
   const proof = await (await fetch(`${base}/api/designs/${design.id}/proof`)).json();
-  assert.strictEqual(proof.size.id, 'A4-1');
+  assert.match(proof.size.id, /^A4-/);
   const order = await post('/api/orders', { customer: { name: 'Sara Ahmed', phone: '01012345678', governorate: 'giza', city: 'Dokki', address: '12 Tahrir St' }, designIds: [design.id] });
   assert.strictEqual(order.status, 201, await order.clone().text());
 });
