@@ -4212,7 +4212,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
 
   // ---------- After the order: order again, drafts on the account, shipping ----------
   // Derived files that carry the old order's number or are cheap to make again.
-  const STALE_COPY = /^(\.saving\.lock|book-print\.pdf|book-preview\.pdf|preview-v\d+\.pdf|merge-print(-marks)?\.pdf|merge-copies\.zip|photos-v\d+\.zip)$/;
+  // (Every PDF made for printing carries the order's number on its label and title: made again for the new order, not
+  // copied. QA 26 Nov: "Order again" printed POD-1011 on POD-1012's sheet.)
+  const STALE_COPY = /^(\.saving\.lock|book-print\.pdf|book-preview\.pdf|preview-v\d+\.pdf|merge-print(-marks)?\.pdf|merge-copies\.zip|photos-v\d+\.zip|.+-print(-marks)?\.pdf|.+-dtf-film\.pdf|booklet-(pdf|imposed)-v\d+\.pdf)$/;
   /** How many bytes a folder holds (its files, one level of sub-folders deep is plenty here). */
   function dirBytes(dir, depth = 0) {
     let n = 0;
@@ -7058,7 +7060,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   app.post('/api/admin/coupons', requireAdmin, express.json(), (req, res) => res.status(201).json(couponRow(saveCoupon(req))));
   app.put('/api/admin/coupons/:id', requireAdmin, express.json(), (req, res) => res.json(couponRow(saveCoupon(req, req.params.id))));
   app.delete('/api/admin/coupons/:id', requireAdmin, (req, res) => {
-    store.mutate((db) => { db.coupons = (db.coupons || []).filter((c) => c.id !== req.params.id); });
+    // (One already gone, deleted by someone else meanwhile: said, not "done". QA 26 Nov.)
+    store.mutate((db) => {
+      if (!(db.coupons || []).some((c) => c.id === req.params.id)) throw new HttpError(404, 'couponGone');
+      db.coupons = db.coupons.filter((c) => c.id !== req.params.id);
+    });
     res.json({ ok: true });
   });
 
@@ -7249,6 +7255,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   });
   app.delete('/api/admin/houses/:id', requireAdmin, (req, res) => {
     store.mutate((db) => {
+      if (!houses().some((h) => h.id === req.params.id)) throw new HttpError(404, 'houseNotFound');
       db.printHouses = houses().filter((h) => h.id !== req.params.id);
       for (const [pid, hid] of Object.entries(productHouses())) if (hid === req.params.id) delete db.productHouses[pid];
     });
