@@ -1934,3 +1934,36 @@ html[dir="rtl"] .more-chev { transform: scaleX(-1); }
   .site-header .inner > nav > .lang-toggle { margin-inline-start: 4px; }
 }
 /* (end of Thumb-size buttons, step 1) */
+
+/* ==========================================================================
+   Thumb-size buttons, step 2 (owner's go 26 Nov)
+   Phones and small tablets (820px and less), as step 1 above: each of these can be hit with a thumb, at least
+   44 x 44 px.
+   - Home page, the category chips above "All products" (#cats): 44 px tall (they were about 37), at least 48 px
+     wide, the label in the middle, as the size chips of step 1.
+   - The section chips under the site header on phones (600px and less: Products, Ready designs, Photo prints,
+     Kids' books...): 44 px tall (they were 40). The owner accepted a slightly taller header for this; it grows
+     only 2 px (109 -> 111 px): the row's 2 px above the chips go (the top row's 44 px boxes end 6 px above its
+     bottom edge, so nothing touches) and the 10 px under them stay. Links to a part of a page land 2 px lower
+     to match. (The editor shows its own top bar on phones, not this header, and its header has no chips.)
+   - The editor's own colour circles (#swatches, in the product sheet on phones): the circles keep their 34 px
+     and 12 px gaps; the invisible area around each becomes 44 x 44, centred on the circle (it was 42 x 42: the
+     -5 px was counted inside the circle's 1 px border). 46 px from centre to centre, so two neighbours' areas
+     never overlap. A sold-out circle keeps its stroke (::before) and takes its area from ::after, as in step 1.
+   Computers (821px and more) are not touched. Measured in test/e2e/thumb-buttons-2.e2e.js.
+   ========================================================================== */
+@media (max-width: 820px) {
+  #cats .chip { min-height: 44px; min-width: 48px; display: inline-flex; align-items: center; justify-content: center; padding-block: 0; }
+
+  #swatches .swatch:not(.sold-out)::before, #swatches .swatch.sold-out::after {
+    content: ""; position: absolute; display: block; border: 0; border-radius: 0; background: none;
+    inset: calc(50% - 22px);
+  }
+  #swatches .swatch.sold-out { overflow: visible; }
+}
+@media (max-width: 600px) {
+  html { scroll-padding-top: 118px; }
+  .site-header .nav-chips { padding-top: 0; }
+  .site-header .nav-chips a { min-height: 44px; }
+}
+/* (end of Thumb-size buttons, step 2) */

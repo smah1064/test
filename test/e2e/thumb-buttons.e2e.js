@@ -219,14 +219,15 @@ test('every page with the shared header: no taller than before, no sideways scro
   }
 });
 
-test('phones: today\'s header heights (109px with the chips row, 56px top row)', { timeout: 60000 }, async () => {
+// (Thumb-size buttons, step 2 made the header's chips 44 px tall: 109 -> 111 px. See thumb-buttons-2.e2e.js.)
+test('phones: today\'s header heights (111px with the chips row, 56px top row)', { timeout: 60000 }, async () => {
   for (const lang of ['ar', 'en']) {
     const ctx = await context(lang, PIXEL_7());
     try {
       const page = await open(ctx, '/');
       const h = await page.evaluate(readHeader);
       assert.strictEqual(Math.round(h.inner), 56, lang);
-      assert.strictEqual(Math.round(h.height), 109, lang);
+      assert.strictEqual(Math.round(h.height), 111, lang);
     } finally {
       await ctx.close();
     }
