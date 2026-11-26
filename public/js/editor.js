@@ -3800,9 +3800,9 @@
         <div class="chips">${opt.choices.map((c) => { const pr = choicePrice(c, st.sizeId); return `<button class="chip ${c === cur ? 'active' : ''}" data-opt="${esc(opt.id)}" data-choice="${esc(c.id)}">${esc(tr(c.name))}${pr ? ` <span style="opacity:.7">+${esc(money(pr))}</span>` : ''}</button>`; }).join('')}</div>
         ${opt.help ? `<p class="muted small" style="margin:6px 0 0;line-height:1.5">${esc(tr(opt.help))}</p>` : ''}</div>`;
     }).join('');
-    // Sizes that only cost more (2XL +50…): the extra on the label line, so the chips fit one row (they wrapped onto
-    // two: editor redesign stage 1). Packs keep each pack's own price on its chip.
-    const extras = !p.sizes.some((x) => (x.surcharge || 0) < 0) ? p.sizes.filter((x) => x.surcharge > 0 && sizeOk(p, st.colorId, x)) : [];
+    // Clothes sizes that only cost more (2XL +50…): the extra on the label line, so the chips fit one row (they wrapped
+    // onto two: editor redesign stage 1). Packs, mugs and the rest keep the price on each chip.
+    const extras = p.category === 'apparel' && !p.sizes.some((x) => (x.surcharge || 0) < 0) ? p.sizes.filter((x) => x.surcharge > 0 && sizeOk(p, st.colorId, x)) : [];
     const sizeNoteBox = $('size-note');
     if (sizeNoteBox) sizeNoteBox.textContent = extras.map((x) => t('size.extra', { size: tr(x.label), price: money(x.surcharge) })).join(POD.lang === 'ar' ? '، ' : ', ');
     $('sizes').innerHTML = p.sizes.map((s) => {
@@ -4882,7 +4882,7 @@
     // away (the table of zeros under the sizes read as a second size question: owner's go 26 Nov, editor redesign
     // stage 1). A bigger order, packs and the computer keep the table.
     const lines = qtyLines();
-    if (MOBILE.matches && mix().sizes && !packs() && !st.qtyGridOpen && lines.length === 1) {
+    if (MOBILE.matches && (mix().sizes || mix().colors) && !packs() && !st.qtyGridOpen && lines.length === 1) {
       const n = lines[0].qty;
       box.innerHTML = `
         <div class="qty-row">
@@ -4893,7 +4893,7 @@
             <button type="button" class="btn btn-sm" data-qstep="1" aria-label="${esc(t('props.more'))}" ${n >= 1000 ? 'disabled' : ''}>${ICON.plus}</button>
           </div>
         </div>
-        <button type="button" class="qty-more" data-qgrid="open">${ICON.plus}<span>${esc(t(mix().colors ? 'qty.moreSizesColours' : 'qty.moreSizes'))}</span></button>`;
+        <button type="button" class="qty-more" data-qgrid="open">${ICON.plus}<span>${esc(t(!mix().sizes ? 'qty.moreColours' : mix().colors ? 'qty.moreSizesColours' : 'qty.moreSizes'))}</span></button>`;
       return;
     }
     box.innerHTML = `

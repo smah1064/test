@@ -868,6 +868,7 @@ window.POD_STRINGS = {
   'props.more': ['More', 'أكتر'],
   'size.extra': ['{size} {price} more', '{size} بزيادة {price}'],
   'qty.moreSizes': ['Another size too', 'مقاس تاني كمان'],
+  'qty.moreColours': ['Another colour too', 'لون تاني كمان'],
   'qty.moreSizesColours': ['Another size or colour too', 'مقاس أو لون تاني كمان'],
   'props.curve': ['Curve', 'انحناء'],
   'props.straighten': ['Straighten', 'بدون انحناء'],
