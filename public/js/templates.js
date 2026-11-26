@@ -8,7 +8,7 @@
 
   const FONTS = {
     arabic: ['Cairo', 'Tajawal', 'Lalezar', 'Reem Kufi', 'El Messiri', 'Amiri', 'Aref Ruqaa', 'Rakkas', 'Changa', 'Marhey', 'Lemonada', 'Kufam', 'Jomhuria', 'Vibes'],
-    english: ['Montserrat', 'Bebas Neue', 'Oswald', 'Playfair Display', 'Roboto Slab', 'Pacifico', 'Lobster', 'Permanent Marker', 'Anton', 'Righteous', 'Dancing Script', 'Bungee', 'Abril Fatface', 'Caveat'],
+    english: ['Montserrat', 'Bebas Neue', 'Oswald', 'Playfair Display', 'Roboto Slab', 'Pacifico', 'Lobster', 'Permanent Marker', 'Anton', 'Righteous', 'Dancing Script', 'Bungee', 'Abril Fatface', 'Caveat', 'Great Vibes', 'Cookie', 'Irish Grover', 'Julee'],
   };
   const BUNDLED = new Set([...FONTS.arabic, ...FONTS.english]);
   const ARABIC_RE = /[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]/;
@@ -616,10 +616,14 @@
     built.forEach((o, idx) => fitName(o, tpl.items[idx], built, area, box));
     const objs = built.filter(Boolean);
     // The words of pictures, on top, where they were drawn.
+    const wordsOn = new Map(); // text → its picture
     (tpl.wordsOf || []).forEach((words, idx) => {
       const o = built[idx];
       if (!words || !o) return;
-      objs.push(...wordsTexts(words, { cx: o.left, cy: o.top, w: o.getScaledWidth(), h: o.getScaledHeight(), angle: o.angle || 0 }, ink));
+      for (const x of wordsTexts(words, { cx: o.left, cy: o.top, w: o.getScaledWidth(), h: o.getScaledHeight(), angle: o.angle || 0 }, ink)) {
+        objs.push(x);
+        wordsOn.set(x, o);
+      }
     });
     // Keep everything well inside the edges: a margin of 8% of the area's short side (at least
     // the product's safe zone, `inset`) all round. Too big: shrunk round the middle; then
@@ -627,7 +631,17 @@
     // (A design with an edge-to-edge picture keeps no margin.)
     if (tpl.items.some((i) => i.full && i.kind === 'image')) return objs;
     const bounds = () => {
-      const rs = objs.map((o) => o.getBoundingRect(true, true));
+      // (A picture's words count only inside the picture: a script line's own box reaches a little past the
+      // letters, and the whole design came out a few % smaller than the picture with its drawn words.)
+      const rs = objs.map((o) => {
+        const r = o.getBoundingRect(true, true);
+        const pic = wordsOn.get(o);
+        if (!pic) return r;
+        const p = pic.getBoundingRect(true, true);
+        const left = Math.max(r.left, p.left);
+        const top = Math.max(r.top, p.top);
+        return { left, top, width: Math.max(0, Math.min(r.left + r.width, p.left + p.width) - left), height: Math.max(0, Math.min(r.top + r.height, p.top + p.height) - top) };
+      });
       return { x0: Math.min(...rs.map((r) => r.left)), y0: Math.min(...rs.map((r) => r.top)), x1: Math.max(...rs.map((r) => r.left + r.width)), y1: Math.max(...rs.map((r) => r.top + r.height)) };
     };
     if (!objs.length) return objs;

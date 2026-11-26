@@ -70,6 +70,7 @@ const designUpload = new Proxy({}, { get: (t, k) => (designUploadMod ||= require
 const security = require('./security');
 const books = require('./books');
 const cartoon = require('./cartoon');
+const wordsRoutes = require('./words-routes');
 const captchaMod = require('./captcha');
 let sharpModule = null;
 const sharp = () => (sharpModule ||= require('sharp'));
@@ -6280,7 +6281,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   app.get('/library-art/:id/:file', (req, res) => {
     const id = String(req.params.id);
     const file = String(req.params.file);
-    if (!/^u-[0-9a-f]{12}$/.test(id) || !['web.png', 'print.png', 'print.jpg'].includes(file)) throw new HttpError(404, 'notFound');
+    if (!/^u-[0-9a-f]{12}$/.test(id) || !['web.png', 'print.png', 'print.jpg', 'nowords-web.png', 'nowords-print.png', 'nowords-print.jpg'].includes(file)) throw new HttpError(404, 'notFound');
     const d = library.get(id);
     const f = path.join(library.artDir(id), file);
     // A deleted design (taken down, e.g. after a rights complaint) is no longer public, its full-size original
@@ -6319,6 +6320,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     }
     return { plan, skipped };
   }
+  // Editable words in the designs published from a zip (src/words.js): made in the background after publishing.
+  const wordsJobs = wordsRoutes.mount(app, { library, guard: requireCatalog, HttpError });
   app.post('/api/admin/library/uploads/:batch/publish', requireCatalog, express.json({ limit: '256kb' }), (req, res) => {
     const b = readBatch(req.params.batch);
     if (!b) throw new HttpError(404, 'uploadGone');
@@ -6337,6 +6340,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         items: [{ kind: 'image', src: `/library-art/${designId}/web.png`, printSrc: `/library-art/${designId}/print.${it.printExt}`, printPx: it.printPx, fit: 0.92, x: 0.5, y: 0.5, w: 0.92 }],
         createdAt: new Date().toISOString(), by: req.adminWho.shown || req.adminWho.name,
       });
+      wordsJobs.enqueue(designId);
       published.push({ itemId: it.id, designId });
       done.add(it.id);
     }

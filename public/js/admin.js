@@ -1279,6 +1279,75 @@
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim();
   const libSig = (lib) => JSON.stringify([lib.settings || null, lib.categories.length, lib.designs.map((d) => [d.id, d.hidden, d.deleted, d.limited, d.product, d.color, (d.products || []).join(' '), d.addedOn])]);
+  // ---------- Editable words in uploaded designs ----------
+  // GET /api/admin/library/words: { enabled, dailyMax, usedToday, designs: { id: { status, error, at } } }, status
+  // 'queued' | 'working' | 'ready' | 'none' | 'failed' | 'kept' | 'off' (src/words.js). Read with the list; a row's
+  // line (and its picture, drawn with or without the words as text) is redrawn when its status changes.
+  const LIB_WORDS = { map: new Map(), info: null };
+  async function loadLibWords() {
+    if (!can('library.view')) return;
+    let w;
+    try {
+      w = await adminApi('/api/admin/library/words');
+    } catch (e) {
+      return; // (an older server: no line)
+    }
+    const before = LIB_WORDS.map;
+    LIB_WORDS.info = { enabled: Boolean(w.enabled), dailyMax: Number(w.dailyMax) || 0, usedToday: Number(w.usedToday) || 0 };
+    LIB_WORDS.map = new Map(Object.entries(w.designs || {}));
+    for (const [id, x] of LIB_WORDS.map) {
+      const was = before.get(id);
+      if (!was || was.status === x.status) continue;
+      // The picture shows the words as text (ready) or as drawn: draw it again.
+      for (const key of [...libPics.keys()].filter((k) => k.startsWith(id + '|'))) {
+        libPics.delete(key);
+        libPicDone.delete(key);
+      }
+    }
+    if (LIB.drawn && tab === 'library') patchLibRows();
+  }
+  const LIB_WORDS_WHY = { key: 'key', busy: 'busy', timeout: 'busy', badPicture: 'picture', tooBig: 'picture' };
+  function libWordsHtml(d) {
+    const w = d.uploaded && !d.deleted ? LIB_WORDS.map.get(d.id) : null;
+    if (!w || !w.status) return '';
+    const up = can('uploads');
+    const btn = (act, key) => (up ? `<button type="button" class="btn btn-sm rd-words-btn" data-rd-words="${act}" data-id="${esc(d.id)}">${esc(t(key))}</button>` : '');
+    const info = LIB_WORDS.info || {};
+    const capped = w.status === 'queued' && info.dailyMax > 0 && info.usedToday >= info.dailyMax;
+    const why = w.status === 'failed' && LIB_WORDS_WHY[w.error] ? ` (${esc(t('rd.words.why.' + LIB_WORDS_WHY[w.error]))})` : '';
+    const line = {
+      ready: [esc(t('rd.words.ready')), btn('keep', 'rd.words.keep')],
+      queued: [esc(t(capped ? 'rd.words.waitDay' : 'rd.words.working')), ''],
+      working: [esc(t('rd.words.working')), ''],
+      none: [esc(t('rd.words.none')), ''],
+      failed: [esc(t('rd.words.failed')) + why, btn('retry', 'rd.words.retry')],
+      kept: [esc(t('rd.words.kept')), btn('use', 'rd.words.use')],
+      // (The key's name is English in the Arabic line too.)
+      off: [esc(t('rd.words.off', { key: '\u0000' })).replace('\u0000', '<bdi dir="ltr">GEMINI_API_KEY</bdi>'), ''],
+    }[w.status];
+    if (!line) return '';
+    return `<div class="small rd-words rd-words-${esc(w.status)}"><span>${line[0]}</span>${line[1]}</div>`;
+  }
+  async function libWordsAct(btn) {
+    const d = libById.get(btn.dataset.id);
+    const action = btn.dataset.rdWords;
+    if (!d) return;
+    const name = tr(d.name);
+    btn.disabled = true;
+    try {
+      const r = await adminApi(`/api/admin/library/${encodeURIComponent(d.id)}/words`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ action }) });
+      toast(t(action === 'keep' ? 'rd.words.keptOk' : r.status === 'ready' ? 'rd.words.readyOk' : 'rd.words.workingOk', { name }));
+    } catch (err) {
+      toast(err.message, 'error');
+      btn.disabled = false;
+      return;
+    }
+    // The design's picture changed (with or without the words as text): the list, then the lines.
+    try {
+      renderLibrary(await adminApi('/api/admin/library'), { auto: true });
+    } catch (e) { /* the next refresh */ }
+    await loadLibWords();
+  }
   const libWhat = (n) => POD.plural('rd.n', n);
 
   function setLibrary(lib) {
@@ -1451,6 +1520,7 @@
           <div class="muted small">${esc([libCatName(d.category), d.uploaded ? t('rd.uploadedBy', { who: !d.by || d.by === 'owner' ? t('up.byOwner') : d.by }) : t(d.custom ? 'rd.yours' : 'rd.starter'), d.addedOn ? t('rd.added', { date: libAddedDay(d.addedOn) }) : ''].filter(Boolean).join(SEP()))}</div>
           <div class="rd-pills">${libPill(st, t('rd.st.' + st))}${d.artwork ? libPill('art', t('rd.withArt')) : libPill('text', t('rd.textOnly'))}</div>
           ${note ? `<div class="small rd-note rd-note-${st}">${esc(note)}</div>` : ''}
+          ${libWordsHtml(d)}
         </div>
         <div class="rd-acts">${acts}</div>
       </article>`;
@@ -1706,6 +1776,8 @@
       renderLibRows();
       return;
     }
+    const words = e.target.closest('[data-rd-words]');
+    if (words) return void libWordsAct(words);
     const btn = e.target.closest('[data-rd-act]');
     if (btn) libAct(btn);
   });
@@ -1900,6 +1972,7 @@
     }
     else if (tab === 'library') {
       renderLibrary(await adminApi('/api/admin/library'), { auto });
+      await loadLibWords();
       // Upload designs (zip): for those who may upload.
       if (can('uploads')) await AdminUploads.show({ auto }).catch((e) => { if (e.status === 401) throw e; });
       else $('lib-up').innerHTML = '';
@@ -3417,7 +3490,7 @@
     renderer: loadLibRenderer,
     categories: () => (lastLibrary ? lastLibrary.categories : []),
     // New designs published: the list below shows them.
-    published: () => adminApi('/api/admin/library').then((lib) => tab === 'library' && renderLibrary(lib)).catch(() => {}),
+    published: () => adminApi('/api/admin/library').then((lib) => tab === 'library' && renderLibrary(lib)).then(() => tab === 'library' && loadLibWords()).catch(() => {}),
   });
   // /admin#rights: the owner's WhatsApp / email alert for a rights request opens Rights requests (a product
   // manager is sent to their own tabs as usual once the page knows who is signed in).

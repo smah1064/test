@@ -124,6 +124,32 @@
       stepNums();
       document.addEventListener('pod:langchange', stepNums);
 
+      // ---------- Back to the same place ----------
+      // Back from a product (or wherever the page led): the same place on the page. The browser can't put it back
+      // itself: the rows and "All products" are drawn once the products have come, after it has tried (it kept the FAQ
+      // in view while the cards came in above it). So, as the product page does for its ready designs, the place is
+      // kept in this history entry when a link is followed: where the page was, and the card (or row) the link is in
+      // and its height on the screen, so the place holds even if what is above it is a little taller or shorter by then.
+      // The search and the category are in the address. (QA 26 Nov.)
+      const back = (history.state && typeof history.state === 'object' && history.state.home) || null;
+      document.addEventListener('click', (e) => {
+        const a = e.target.closest('a[href]');
+        if (!a) return;
+        const card = a.closest('[data-place]');
+        const home = { y: Math.round(window.scrollY), ...(card ? { place: card.dataset.place, top: Math.round(card.getBoundingClientRect().top) } : {}) };
+        try { history.replaceState({ ...(history.state && typeof history.state === 'object' ? history.state : {}), home }, ''); } catch (err) { /* not kept */ }
+      });
+      /** Once the cards are drawn: back to the card that was followed, at the same height, else to the same scroll. */
+      function backToPlace() {
+        if (!back || !(back.y > 0)) return;
+        if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+        requestAnimationFrame(() => {
+          const card = typeof back.place === 'string' && [...document.querySelectorAll('[data-place]')].find((el) => el.dataset.place === back.place);
+          const y = card && Number.isFinite(back.top) ? window.scrollY + card.getBoundingClientRect().top - back.top : back.y;
+          window.scrollTo(0, Math.max(0, Math.min(Math.round(y), document.documentElement.scrollHeight)));
+        });
+      }
+
       // ---------- No connection ----------
       // What the page needs didn't come (no signal, or the site busy): "No connection" and "Try again" in `box`, in the
       // page's language, until it does. A "not found" from the site is not a connection problem: thrown as it is.
@@ -198,12 +224,13 @@
         hoodie: 'hoody sweater هودى', ziphoodie: 'hoody zip jacket هودى جاكيت', kidshoodie: 'hoody هودى اطفال', sweatshirt: 'sweater سويت شيرت بلوفر',
         cap: 'hat قبعة طاقية', mug: 'cup coffee tea كوب كوباية مق', magicmug: 'cup كوب مق', couplemugs: 'cup كوب مق', tumbler: 'cup travel mug كوب',
         cushion: 'pillow مخدة وسادة', poster: 'frame picture صورة برواز', bottle: 'water flask زجاجة ازازة', tote: 'bag شنطة', phonecase: 'cover iphone samsung كفر',
-        notebook: 'كراسة دفتر', mousepad: 'mouse pad', deskmat: 'mouse pad', keychain: 'key ring ميداليه', stickersheet: 'stickers ستيكر لزق',
+        notebook: 'كراسة دفتر', mousepad: 'mouse pad', deskmat: 'mouse pad', keychain: 'key ring keyring key chain ميداليه ميدالية مفاتيح سلسلة مفاتيح', stickersheet: 'stickers ستيكر لزق',
+        flyers: 'flyer flier leaflet فلاير منشورات',
         bizcards: 'business cards visit كارت فيزيت', canvas: 'painting wall art لوحة', canvaswide: 'painting wall art لوحة', photoprints: 'photos pictures صور',
         storybook: 'kids book story كتاب قصة اطفال', coloringbook: 'kids book coloring تلوين اطفال', caketopper: 'cake topper تورتة', namepuzzle: 'puzzle بازل',
         engrpen: 'pen pens ballpoint قلم اقلام أقلام قلم جاف', engrwallet: 'wallet purse محفظة محفظه محافظ',
         calendar: 'calendar نتيجه نتيجة تقويم نتيجة حيطة', deskcalendar: 'calendar نتيجه نتيجة تقويم مكتب', labels: 'label sticker ليبل استيكر لاصق', banners: 'banner بانر يافطة فليكس لافتة',
-        menus: 'menu منيو قايمة طعام مطعم كافيه', brochures: 'brochure flyer بروشور مطوية', booklets: 'catalog catalogue booklet كتالوج كتيب', folders: 'folder فولدر ملف',
+        menus: 'menu منيو قايمة طعام مطعم كافيه', brochures: 'brochure flyer leaflet بروشور مطوية', booklets: 'catalog catalogue booklet كتالوج كتيب', folders: 'folder فولدر ملف',
         notepads: 'notepad pad بلوك نوت مفكرة', postcards: 'postcard thank you card بوستكارد كارت شكر', giftvouchers: 'voucher gift card كوبون قسيمة جيفت كارد',
         magnets: 'magnet fridge مغناطيس مغنطيس تلاجة ثلاجة', wrappingpaper: 'gift wrap ورق هدايا تغليف', windowstickers: 'window decal vinyl ستيكر فاترينة زجاج',
         photobook: 'album photo book البوم صور', tablenumbers: 'wedding table number ارقام ترابيزات فرح', placecards: 'wedding place name card كروت اسامي فرح معازيم', bookmarks: 'bookmark فاصل كتاب',
@@ -388,12 +415,23 @@
       const sizeWords = (p) => (p.sizes || []).filter((z) => z.id !== 'one').flatMap((z) => [z.id, z.label && z.label.en, z.label && z.label.ar]).filter(Boolean).join(' ');
       // Its colours in both languages: "white t-shirt", "هودي اسود", "مج ابيض" list the products that come in that colour.
       // Only the colour's name, not the note after it: the magic mug is black "(turns white when hot)", not a white mug.
-      const colorWords = (p) => (p.colors || []).flatMap((c) => [c.name && c.name.en, c.name && c.name.ar]).filter(Boolean).map((n) => n.split(/[(:,،]/)[0]).join(' ');
+      // With the other ways people say a colour (QA 26 Nov): the feminine (شنطة سوداء / سودا, تيشرت بيضا, حمرا, خضرا,
+      // زرقا, صفرا), gray for grey and رصاصي for رمادي, beige for the shop's Sand (بيج), ذهبي for دهبي, بمبي / بينك for
+      // pink, burgundy for maroon (both نبيتي).
+      const COLOR_SAME = ['أسود سوداء سودا', 'أبيض بيضاء بيضا', 'أحمر حمراء حمرا', 'أخضر خضراء خضرا', 'أزرق زرقاء زرقا', 'أصفر صفراء صفرا',
+        'grey gray رمادي رصاصي', 'sand beige بيج', 'دهبي ذهبي', 'pink وردي بمبي بينك', 'maroon burgundy نبيتي'];
+      const colorWords = (p) => {
+        const names = (p.colors || []).flatMap((c) => [c.name && c.name.en, c.name && c.name.ar]).filter(Boolean).map((n) => n.split(/[(:,،]/)[0]).join(' ');
+        const ws = ` ${norm(names)} `;
+        return [names, ...COLOR_SAME.filter((g) => norm(g).split(' ').some((w) => ws.includes(` ${w} `)))].join(' ');
+      };
       const hay = new Map(products.map((p) => {
         const name = `${p.name.en} ${p.name.ar}`;
-        const text = [p.id, name, p.description && p.description.en, p.description && p.description.ar, catName(p.category).en, catName(p.category).ar, ALIASES[p.id] || ALIASES[POD.assetId(p)] || '', sizeWords(p)].join(' ');
-        // (true: everything the shop's search found before is still found.)
-        return [p.id, { all: SEARCH.index(text, true), name: ` ${norm(name)} `, named: SEARCH.index(name, true), sized: SEARCH.index(sizeWords(p), true), colored: SEARCH.index(colorWords(p)) }];
+        const text = [p.id, name, catName(p.category).en, catName(p.category).ar, ALIASES[p.id] || ALIASES[POD.assetId(p)] || '', sizeWords(p)].join(' ');
+        const named = SEARCH.index(name, true);
+        // (true: everything the shop's search found before is still found.) The description on its own (see inText), and
+        // the name also as it is spelt, without the forgiving ي (see rank).
+        return [p.id, { all: SEARCH.index(text, true), about: SEARCH.index([p.description && p.description.en, p.description && p.description.ar].join(' '), true), name: ` ${norm(name)} `, named, spelt: { ...named, loose: '' }, sized: SEARCH.index(sizeWords(p), true), colored: SEARCH.index(colorWords(p)) }];
       }));
       // The search, on product text only: markup typed into the box ("<b>") is not a word.
       const typed = () => q.replace(/<[^<>]*>/g, ' ');
@@ -402,8 +440,17 @@
       // One of the product's colours: a whole word, as typed or in another form ("whites", "الأبيض"), and spelt as it is
       // (not without its ي), so "mat" is not the matte cards, "black" not the blackout curtains, ورد not pink (وردي).
       const isColor = (h, term) => [term.word, ...term.forms].some((f) => f && h.colored.text.includes(` ${f} `));
-      // Every word is in the product's text or is one of its colours.
-      const found = (p, qs) => { const h = hay.get(p.id); return qs.every((term) => SEARCH.match(h.all, [term]) || isColor(h, term)); };
+      // A year with a calendar ("calendar 2027", "نتيجة 2027"): the calendars are made for any year (QA 26 Nov).
+      const forYear = (h, term) => /^20\d\d$/.test(term.word) && h.all.concepts.has('calendar');
+      // The product's text: its id, names, category, the shop's words for it and its sizes, as before; in its description
+      // (sentences) an English word counts from the start of a word ("print": printed), not inside another: "hat" is not
+      // the "that" of the envelopes, the puzzle and the wallet, "sign" not "design", "pen" not "opens", "tee" not "steel"
+      // (QA 26 Nov). Arabic as before (و, ب, ف join the word after them). Two words that may name one thing ("business
+      // cards") also count each in either place, as when they were one text.
+      const inText = (h, term) => SEARCH.match(h.all, [term]) || SEARCH.match(h.about, [term], /[a-z]/.test(term.word || term.or[0].word) || undefined)
+        || Boolean(term.or && term.or.every((x) => inText(h, x)));
+      // Every word is in the product's text, is one of its colours, or is a year for a calendar.
+      const found = (p, qs) => { const h = hay.get(p.id); return qs.every((term) => inText(h, term) || isColor(h, term) || forYear(h, term)); };
 
       // Real product photos, recoloured on the server (small cached WebP);
       // the drawn mockup is the fallback if a picture can't load.
@@ -510,7 +557,7 @@
         document.getElementById('hm-rows').innerHTML = ROWS.map((row) => {
           const list = [...new Set(row.ids)].map(byId).filter(Boolean);
           if (list.length < 3) return '';
-          return `<section class="hm-section" aria-labelledby="hm-row-${row.key}">
+          return `<section class="hm-section" aria-labelledby="hm-row-${row.key}" data-place="row:${row.key}">
             <div class="hm-head">
               <div><h2 id="hm-row-${row.key}">${esc(t(`hm.row.${row.key}`))}</h2><p class="muted">${esc(t(`hm.row.${row.key}.sub`))}</p></div>
               <div class="hm-head-end">
@@ -571,11 +618,12 @@
         // Products whose name matches come first: names with the words as whole words, in another form or language
         // ("hoodies", "مجات", كوب: the mugs), then names with a word that only starts with them (كوبونات after the
         // mugs, للكابلز after the cap; at the start of a word, so "tshirt" puts T-shirts before the Sweatshirt), then
-        // names spelt another way, then the rest (description, category). A size or a colour typed with the product
-        // ("tshirt xl", "white t-shirt") is not looked for in the name, so the T-shirts still come before the Sweatshirt.
-        // (A colour only when another word is left: in "card 100" the calendar, in "Matte card" with 100 calendars, is not
-        // a card by name.)
-        const rank = (p) => { const h = hay.get(p.id); const tz = ts.filter((w) => ts.length < 2 || !SEARCH.match(h.sized, SEARCH.query(w))); const tc = tz.filter((w) => !SEARCH.query(w).every((term) => isColor(h, term))); const tw = tc.length ? tc : tz; const tq = tw.length === ts.length ? qs : SEARCH.query(tw.join(' ')); return SEARCH.match(h.named, tq, 'word') ? 0 : tw.every((w) => h.name.includes(` ${w}`)) ? 1 : tw.every((w) => loose(h.name).includes(` ${loose(w)}`)) ? 2 : SEARCH.match(h.named, tq, true) ? 3 : 4; };
+        // names spelt another way (a whole word without its ي too: كتيب is not the كتب of فواصل كتب, so the booklets come
+        // before the bookmarks; QA 26 Nov), then the rest (description, category). A size, a colour or a year typed with
+        // the product ("tshirt xl", "white t-shirt", "calendar 2027") is not looked for in the name, so the T-shirts still
+        // come before the Sweatshirt. (A colour only when another word is left: in "card 100" the calendar, in "Matte card"
+        // with 100 calendars, is not a card by name.)
+        const rank = (p) => { const h = hay.get(p.id); const tz = ts.filter((w) => ts.length < 2 || !SEARCH.match(h.sized, SEARCH.query(w))); const tc = tz.filter((w) => !SEARCH.query(w).every((term) => isColor(h, term) || forYear(h, term))); const tw = tc.length ? tc : tz; const tq = tw.length === ts.length ? qs : SEARCH.query(tw.join(' ')); return SEARCH.match(h.spelt, tq, 'word') ? 0 : tw.every((w) => h.name.includes(` ${w}`)) ? 1 : SEARCH.match(h.named, tq, 'word') || tw.every((w) => loose(h.name).includes(` ${loose(w)}`)) ? 2 : SEARCH.match(h.named, tq, true) ? 3 : 4; };
         if (ts.length) list = list.map((p, i) => [rank(p), i, p]).sort((x, y) => x[0] - y[0] || x[1] - y[1]).map((x) => x[2]);
         document.getElementById('home-count').textContent = searching && list.length ? POD.plural('home.found', list.length, { q: q.trim() }) : '';
         if (!list.length) {
@@ -593,7 +641,7 @@
         }
         // Catalogue cards: the product with a design on, the name, the price, "Start designing" and "Details".
         grid.innerHTML = list.map((p) => `
-          <div class="hm-gcard">
+          <div class="hm-gcard" data-place="${esc(p.id)}">
             <a class="hm-gpic" href="${hrefOf(p)}" tabindex="-1" aria-hidden="true">${gridPicture(p)}</a>
             <h3><a href="${hrefOf(p)}">${esc(tr(p.name))}</a></h3>
             <div class="hm-meta">${priceLine(p)}</div>
@@ -674,6 +722,7 @@
         : `<div class="hm-hero-trio">${trio()}</div>`;
 
       render();
+      backToPlace();
       document.addEventListener('pod:langchange', render);
     })();
   </script>
