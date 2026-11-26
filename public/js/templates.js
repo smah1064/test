@@ -8,7 +8,7 @@
 
   const FONTS = {
     arabic: ['Cairo', 'Tajawal', 'Lalezar', 'Reem Kufi', 'El Messiri', 'Amiri', 'Aref Ruqaa', 'Rakkas', 'Changa', 'Marhey', 'Lemonada', 'Kufam', 'Jomhuria', 'Vibes'],
-    english: ['Montserrat', 'Bebas Neue', 'Oswald', 'Playfair Display', 'Roboto Slab', 'Pacifico', 'Lobster', 'Permanent Marker', 'Anton', 'Righteous', 'Dancing Script', 'Bungee', 'Abril Fatface', 'Caveat'],
+    english: ['Montserrat', 'Bebas Neue', 'Oswald', 'Playfair Display', 'Roboto Slab', 'Pacifico', 'Lobster', 'Permanent Marker', 'Anton', 'Righteous', 'Dancing Script', 'Bungee', 'Abril Fatface', 'Caveat', 'Great Vibes', 'Cookie', 'Irish Grover', 'Julee'],
   };
   const BUNDLED = new Set([...FONTS.arabic, ...FONTS.english]);
   const ARABIC_RE = /[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]/;
