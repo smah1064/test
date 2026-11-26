@@ -47,3 +47,12 @@ test('text sent as an object ({"toString": 1}): 400, never 500', async () => {
   assert.strictEqual(q.status, 200);
   assert.strictEqual((await q.json()).coupon, null);
 });
+
+// Tester 2, 9 am Cairo: the hosting's CDN re-made the kids book's pictures as WebP (no "no-transform" on them).
+test('kids book pictures say no-transform (the CDN keeps them as sent)', async () => {
+  for (const url of ['/api/books/companion/cat.png', '/api/books/space-hero/sample/1.jpg?lang=en']) {
+    const r = await fetch(base + url);
+    assert.strictEqual(r.status, 200, url);
+    assert.match(r.headers.get('cache-control') || '', /no-transform/, url);
+  }
+});

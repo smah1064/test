@@ -1009,9 +1009,10 @@
       // not "1 cm higher" (QA 26 Nov).
       const to = (d, step) => {
         if (!step) return d;
-        // (A position a hair from a whole cm, 0.9999 after the canvas's rounding, counts as that cm.)
+        // (A position within the canvas's rounding of a whole cm counts as that cm: positions are whole canvas units,
+        // so 1 cm on a T-shirt (5.6 units) is kept as 6 units, 1.07 cm, and ↑ asked for "1 cm" again. QA 26 Nov.)
         const raw = d / u;
-        const cur = Math.abs(raw - Math.round(raw)) < 0.05 ? Math.round(raw) : raw;
+        const cur = Math.abs(raw - Math.round(raw)) < Math.max(0.05, 0.55 / u) ? Math.round(raw) : raw;
         return (step > 0 ? Math.floor(cur) + step : Math.ceil(cur) + step) * u;
       };
       if (moveArea(to(o.dx, sx), to(o.dy, sy))) commit();

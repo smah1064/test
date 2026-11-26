@@ -735,6 +735,18 @@
   const hasWordStyles = (o) => o.styles && Object.values(o.styles).some((line) => line && Object.keys(line).length);
   TP.toSVG = function (reviver) {
     if (!this.curve && !this.backgroundColor && !hasWordStyles(this)) return origTextSvg.call(this, reviver);
+    // Room round the picture for what reaches past the text's box (the dots under ي and ب, the tails of g and y, a
+    // box's round corners): a see-through shadow makes the picture bigger by that much, as a real shadow does, and is
+    // taken off again (QA 26 Nov: "اسمي" printed as "اسمى" in the SVG when one word was bold).
+    const room = !this.shadow;
+    if (room) this.shadow = new fabric.Shadow({ color: 'rgba(0,0,0,0)', blur: Math.ceil((this.fontSize || 20) * 0.4), offsetX: 0, offsetY: 0 });
+    try {
+      return imageSvg.call(this);
+    } finally {
+      if (room) this.shadow = null;
+    }
+  };
+  function imageSvg() {
     const r = this.getBoundingRect(true, true);
     const mult = Math.min(24, Math.max(2, 300 / (TP.svgUnitsPerInch || 50))); // 300 DPI at the product's real size
     let ex = 0;
@@ -772,7 +784,7 @@
     const url = this.toDataURL({ multiplier: mult, format: 'png', ...crop });
     const f = (v) => +v.toFixed(3);
     return `<image x="${f(r.left - ex)}" y="${f(r.top - ey)}" width="${f(r.width + 2 * ex)}" height="${f(r.height + 2 * ey)}"${fit} xlink:href="${url}" href="${url}"></image>\n`;
-  };
+  }
 
   // Right-to-left (Arabic) text: lay each line out ourselves with direction="rtl"
   // so the SVG matches the canvas exactly. The text stays real, editable text.

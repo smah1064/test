@@ -2228,7 +2228,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const id = String(req.params.id || '');
     const it = /^[a-z0-9-]{1,40}:[a-z0-9-]{1,80}$/.test(id) ? assets.get(id) : null;
     if (!it) throw new HttpError(404, 'notFound');
-    res.set('Cache-Control', 'public, max-age=86400');
+    res.set('Cache-Control', 'public, max-age=86400, no-transform');
     res.json(it);
   });
 
@@ -2250,7 +2250,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       rateLimit(req, 'importImage');
       const maxPx = Math.min(6000, Math.max(500, parseInt(req.get('x-max-px'), 10) || 4000));
       const img = await importer.fetchImage(String(req.query.url || ''), { maxPx, thumb: req.query.thumb ? 320 : 0 }, importGet);
-      res.set('Cache-Control', 'private, max-age=900');
+      res.set('Cache-Control', 'private, max-age=900, no-transform');
       res.set('X-Image-Size', `${img.width}x${img.height}`);
       res.type(img.type).send(img.body);
     } catch (e) {
@@ -2532,7 +2532,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (!design || design.kind === 'book' || !design.sides.some((s) => s.id === side)) throw new HttpError(404, 'notFound');
     const f = store.designFile(id, `${side}-proof.png`);
     if (!fs.existsSync(f)) throw new HttpError(404, 'notFound');
-    res.set('Cache-Control', 'public, max-age=300');
+    res.set('Cache-Control', 'public, max-age=300, no-transform');
     res.sendFile(f);
   });
 
@@ -2664,7 +2664,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const design = UUID_RE.test(req.params.id) && store.getDesign(req.params.id);
     const p = design && design.kind === 'photoset' && design.photos.find((x) => String(x.n) === req.params.n);
     if (!p || design.status !== 'ready') throw new HttpError(404, 'notFound');
-    res.set('Cache-Control', 'private, max-age=3600');
+    res.set('Cache-Control', 'private, max-age=3600, no-transform');
     res.sendFile(store.designFile(design.id, p.thumb));
   });
   /** The print shop's download: every photo, named by size and copies, sorted by size, with a list. */
@@ -2698,10 +2698,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   const bookFor = (id) => (Object.prototype.hasOwnProperty.call(books.BOOKS, id) ? books.BOOKS[id] : null);
   const bookProduct = (book) => PRODUCTS.find((p) => p.kind === 'book' && p.book === book.id);
   app.get('/api/books', (req, res) => res.json({ ai: cartoon.enabled(), books: Object.values(books.BOOKS).map(books.publicBook) }));
+  // (Pictures here and in the routes like it carry no-transform: the hosting's CDN re-made them as WebP for phones,
+  // as it shrank the design pictures. QA 26 Nov.)
   app.get('/api/books/companion/:id.png', (req, res) => {
     const file = books.companionPath(req.params.id);
     if (!file) throw new HttpError(404, 'notFound');
-    res.set('Cache-Control', 'public, max-age=86400');
+    res.set('Cache-Control', 'public, max-age=86400, no-transform');
     res.type('png').sendFile(file);
   });
   app.get('/api/books/:id', (req, res) => {
@@ -2723,7 +2725,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         const answers = { name: 'Your child', gender: 'boy', birthday: '2020-01-01', city: 'Cairo', father: 'Ahmed', mother: 'Mona', fruit: 'mango', animal: 'cat', friend: 'Omar', dedication: '' };
         samples.set(key, books.pageJpeg({ book, answers, lang }, n, 720).catch((e) => { samples.delete(key); throw e; }));
       }
-      res.set('Cache-Control', 'public, max-age=86400');
+      res.set('Cache-Control', 'public, max-age=86400, no-transform');
       res.type('jpeg').send(await samples.get(key));
     } catch (e) {
       next(e);
@@ -3032,7 +3034,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         if (pageCache.size > 120) pageCache.delete(pageCache.keys().next().value);
         pageCache.set(key, books.pageJpeg(bookData(design), n, 720).catch((e) => { pageCache.delete(key); throw e; }));
       }
-      res.set('Cache-Control', 'private, max-age=600');
+      res.set('Cache-Control', 'private, max-age=600, no-transform');
       res.type('jpeg').send(await pageCache.get(key));
     } catch (e) {
       next(e);
@@ -4377,7 +4379,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const product = draftProduct(req);
     const file = path.join(draftDir(me), `${product.id}.png`);
     if (!fs.existsSync(file)) throw new HttpError(404, 'notFound');
-    res.set('Cache-Control', 'private, max-age=60');
+    res.set('Cache-Control', 'private, max-age=60, no-transform');
     res.type('png').send(fs.readFileSync(file));
   });
   app.put('/api/account/drafts/:productId', (req, res, next) => {
@@ -5079,7 +5081,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (!m || !/^[a-z0-9][a-z0-9-]{0,39}$/.test(req.params.pid)) throw new HttpError(404, 'notFound');
     const file = path.join(photoDir(req.params.pid), `${m[1]}.webp`);
     if (!fs.existsSync(file)) throw new HttpError(404, 'notFound');
-    res.set('Cache-Control', 'public, max-age=86400');
+    res.set('Cache-Control', 'public, max-age=86400, no-transform');
     res.type('image/webp').send(fs.readFileSync(file));
   });
 
@@ -6443,7 +6445,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const b = readBatch(req.params.batch);
     const it = b && ITEM_RE.test(req.params.item) && b.items.find((x) => x.id === req.params.item);
     if (!it) throw new HttpError(404, 'notFound');
-    res.set('Cache-Control', 'private, max-age=3600');
+    res.set('Cache-Control', 'private, max-age=3600, no-transform');
     res.type('png').send(fs.readFileSync(path.join(batchDir(b.id), `${it.id}.png`)));
   });
   // Published ones: the screen copy and the full-size original (print files use it).
