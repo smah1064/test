@@ -1518,6 +1518,15 @@
       canvas.setActiveObject(crop.cropper);
       return;
     }
+    // A text emptied and left: taken away (it stayed as an invisible empty box that could still be chosen: tester 1,
+    // 26 Nov). Undo brings it back.
+    const empty = (e.deselected || []).filter((o) => isText(o) && !shows(o) && canvas.getObjects().includes(o) && !o.isEditing);
+    if (empty.length && !st.exporting && !st.preview) {
+      empty.forEach((o) => canvas.remove(o));
+      if (empty.includes(st.freshText)) st.freshText = null;
+      canvas.requestRenderAll();
+      commit();
+    }
     renderProps();
     renderLayers();
     scheduleCheck();
@@ -5144,7 +5153,10 @@
     $('check-list').innerHTML = issues.length
       ? issues.map((i, k) => `<li class="${i.level}" data-issue="${k}"><span>${i.level === 'error' ? '⛔' : '⚠'}</span><span>${esc(t(i.key, { ...i.params, dpi: POD.num(i.params.dpi ?? 0), pt: POD.num(i.params.pt ?? 0) }))}</span></li>`).join('') + blankLi
       : elsewhere.filter(Boolean).length ? `<li class="warn"><span>⚠</span><span>${esc(t('check.otherSideLong', { sides: elsewhere.filter(Boolean).join(POD.lang === 'ar' ? '، ' : ', ') }))}</span></li>${blankLi}`
-        : blankLi || `<li class="ok"><span>✓</span><span>${esc(t('check.allGood'))}</span></li>`;
+        : blankLi || (nothing
+          // (Nothing designed: the list says so too, not "Everything will print sharp" under "Nothing to check yet". Tester 1, 26 Nov.)
+          ? `<li class="idle"><span>·</span><span>${esc(t('check.nothing'))}</span></li>`
+          : `<li class="ok"><span>✓</span><span>${esc(t('check.allGood'))}</span></li>`);
     canvas.requestRenderAll();
   }
   /**
@@ -7499,6 +7511,7 @@
 
   // Re-render everything the shopper reads when the language changes.
   document.addEventListener('pod:langchange', () => {
+    closeEdMenu(); // (the phone's ⋯ menu stayed open after its language button: tester 1, 26 Nov)
     renderOptions();
     renderPresets();
     renderShapes();
@@ -7567,6 +7580,7 @@
       renderCheck();
     }
     draftChoice(lost.length);
+    setSavedMark('saved'); // (it is the saved draft: the phone's "Saved" mark showed only after a change, tester 1, 26 Nov)
   }
   if (fromShare) { toast(t('share.loaded')); scheduleDraft(); }
   /** What opens "send a new version": the order's key and/or the item's own edit link. */

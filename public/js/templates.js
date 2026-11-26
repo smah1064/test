@@ -813,6 +813,8 @@
   const EMBED_MAX = 12 * 2 ** 20;
   const embedded = new Map();
   const OWN_PIC = /^\/library-art\/[0-9a-z-]{4,40}\/(?:nowords-)?(?:print\.(?:png|jpg)|web\.png)$/;
+  const SHOP_ART = /^\/img\/art\/[a-z0-9-]{1,40}\/[A-Za-z0-9_-][A-Za-z0-9_.-]{0,100}\.(?:png|jpe?g)$/i;
+  const SHOP_ART_COPY = /^\/img-w\/\d{3,4}\/art\/([a-z0-9-]{1,40})\/([A-Za-z0-9_-][A-Za-z0-9_.-]{0,100}\.(?:png|jpe?g))$/i;
   async function picDataUrl(p) {
     try {
       let blob = await (await fetch(p)).blob();
@@ -831,8 +833,12 @@
   async function inlineSvgImages(svg) {
     const found = new Map();
     for (const m of svg.matchAll(/href="([^"]+)"/g)) {
-      const p = m[1].startsWith(location.origin + '/') ? m[1].slice(location.origin.length) : m[1];
-      if (OWN_PIC.test(p)) found.set(m[1], p);
+      let p = m[1].startsWith(location.origin + '/') ? m[1].slice(location.origin.length) : m[1];
+      // The shop's own artwork (/img/art/…) too: it was left as an empty picture in a ready design's SVG (tester 1,
+      // 26 Nov). A screen copy (/img-w/<w>/art/…) goes in as its original.
+      const copy = SHOP_ART_COPY.exec(p);
+      if (copy) p = `/img/art/${copy[1]}/${copy[2]}`;
+      if (OWN_PIC.test(p) || SHOP_ART.test(p)) found.set(m[1], p);
     }
     for (const [url, p] of found) {
       if (!embedded.has(p)) embedded.set(p, picDataUrl(p));
