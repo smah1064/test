@@ -3022,7 +3022,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const asked = product.sizes.find((z) => z.id === size);
     if (asked && catalog.unavailable(product, { sizeId: asked.id }) === 'sizeUnavailable') {
       // (The book's name in the page's language: the body's `lang` is the book's print language, always English.)
-      throw new HttpError(409, 'sizeUnavailable', { name: product.name[uiLang] || product.name.en });
+      throw new HttpError(409, 'bookCoverUnavailable', { name: product.name[uiLang] || product.name.en });
     }
     const sizeDef = asked || product.sizes.find((z) => !catalog.unavailable(product, { sizeId: z.id })) || product.sizes[0];
     design.size = { id: sizeDef.id, label: sizeDef.label };
@@ -3288,7 +3288,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (!d || d.kind === 'gangsheet') return null;
     const product = getProduct(d.productId);
     if (!product) return null;
-    if (d.kind === 'book') return catalog.unavailable(product, { sizeId: d.size && d.size.id }); // its cover (QA 26 Nov)
+    if (d.kind === 'book') {
+      // Its cover (QA 26 Nov): said as a cover, not a size (books have covers. QA 26 Nov, 3 pm).
+      const why = catalog.unavailable(product, { sizeId: d.size && d.size.id });
+      return why === 'sizeUnavailable' ? 'bookCoverUnavailable' : why;
+    }
     if (d.kind === 'photoset') return catalog.unavailable(product, { colorId: d.color && d.color.id });
     const lines = d.quantities && d.quantities.length ? d.quantities : [{ color: d.color, size: d.size }];
     for (const l of lines) {

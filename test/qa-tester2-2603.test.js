@@ -146,13 +146,15 @@ test('a sold-out cover (admin → Products) can\'t be chosen, saved or ordered',
   new Store(dir).mutate((db) => { db.catalog = { ...(db.catalog || {}), products: { ...((db.catalog || {}).products || {}), storybook: { sizes: { hard: { soldOut: true } } } } }; });
   const made = await send(B, 'POST', '/api/books/space-hero/designs', { answers: ANSWERS, face: await photo('#c99'), size: 'hard' });
   assert.strictEqual(made.status, 409);
-  assert.strictEqual((await made.json()).code, 'sizeUnavailable');
+  const madeBody = await made.json();
+  assert.strictEqual(madeBody.code, 'bookCoverUnavailable', 'said as a cover (QA 26 Nov, 3 pm)');
+  assert.match(madeBody.error, /cover|الغلاف/);
   const saved = await send(B, 'PUT', `/api/books/designs/${d.id}`, { answers: { ...ANSWERS, name: 'Again' }, size: 'hard' }, { 'x-edit-token': d.editToken });
   assert.strictEqual(saved.status, 409);
   assert.strictEqual(onDisk(d.id).answers.name, 'Yousef', 'not saved');
   const o = await order(B, d.id);
   assert.strictEqual(o.status, 409);
-  assert.strictEqual((await o.json()).code, 'sizeUnavailable');
+  assert.strictEqual((await o.json()).code, 'bookCoverUnavailable');
   // The softcover still sells; with no cover asked for, a book gets one that can be ordered.
   const soft = await send(A, 'PUT', `/api/books/designs/${d.id}`, { answers: ANSWERS, size: 'soft' }, { 'x-edit-token': d.editToken });
   assert.strictEqual(soft.status, 200);

@@ -240,6 +240,7 @@ const MESSAGES = {
   productRetired: { en: '{name} is no longer sold. Remove it from your cart or put your design on a similar product.', ar: '{name} مبقاش بيتباع. شيله من السلة أو حط تصميمك على منتج شبهه.' },
   colorUnavailable: { en: 'This colour of {name} is sold out right now. Please choose another colour.', ar: 'اللون ده من {name} خلصان دلوقتي. اختار لون تاني.' },
   sizeUnavailable: { en: 'This size of {name} is sold out right now. Please choose another size.', ar: 'المقاس ده من {name} خلصان دلوقتي. اختار مقاس تاني.' },
+  bookCoverUnavailable: { en: 'This cover of {name} is sold out right now. Open the book (Edit) and choose another cover.', ar: 'الغلاف ده من {name} خلصان دلوقتي. افتح الكتاب (تعديل) واختار غلاف تاني.' },
   sideUnavailable: { en: 'One side of {name} can\'t be printed right now. Remove the design from that side.', ar: 'وش من {name} مش متاح للطباعة دلوقتي. شيل التصميم من الوش ده.' },
   variantUnavailable: { en: 'This colour in this size of {name} is sold out right now. Please choose another colour or size.', ar: 'اللون ده بالمقاس ده من {name} خلصان دلوقتي. اختار لون أو مقاس تاني.' },
   notEnoughStock: { en: 'Only {left} of {name} left. Please order fewer pieces.', ar: 'فاضل {left} بس من {name}. اطلب عدد أقل.' },
