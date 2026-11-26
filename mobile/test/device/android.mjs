@@ -92,6 +92,19 @@ async function screenText(tries = 4) {
   return `(no screen text: ${error})`;
 }
 
+/** Waits until the screen's text matches every pattern (the web view fills in its text for the reader a moment
+ *  after it is first asked, so the first read can be empty). Returns the last text read. */
+async function screenShows(patterns, timeout = 20000) {
+  const end = Date.now() + timeout;
+  let text = '';
+  do {
+    text = await screenText(1);
+    if (patterns.every((re) => re.test(text))) return text;
+    await sleep(1000);
+  } while (Date.now() < end);
+  return text;
+}
+
 /** Runs fn in the page, waiting out a page that is still loading (its old document can vanish mid-call). */
 async function inPage(page, fn, tries = 6) {
   for (let i = 1; ; i++) {
@@ -183,8 +196,7 @@ try {
   await inPage(page, () => { setTimeout(() => { location.href = '/designs'; }, 0); });
   await waitUrl((u) => u.origin === 'https://localhost' && u.pathname === '/offline.html', 30000, 'the offline page', since);
   check(true, 'the "no connection" page is shown');
-  await sleep(1500);
-  const words = await screenText();
+  const words = await screenShows([/مفيش اتصال/, /No internet connection/]);
   check(/مفيش اتصال/.test(words) && /No internet connection/.test(words), 'it says so in Arabic and English (read from the screen)');
   shot('3-no-connection');
   since = Date.now();
