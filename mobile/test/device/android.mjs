@@ -22,64 +22,57 @@ function shot(name) {
   const png = execFileSync('adb', ['exec-out', 'screencap', '-p'], { maxBuffer: 64 * 1024 * 1024 });
   fs.writeFileSync(path.join(shotsDir, `android-${name}.png`), png);
 }
-// Which page is on screen. The app writes "Page shown: <address without query>" in its log (test builds), which is
-// the truth; Playwright's view of the page can go stale when the web view switches between the shop and the app's
-// own pages (another site), so it is only used to run things inside a page.
+// Which page is on screen: the app writes "Page shown: <address without query>" in its log (test builds, log tag
+// Ebda3Shell). That is the truth; Playwright's view of the page can go stale when the web view switches between the
+// shop and the app's own pages (another site), so Playwright is only used to run things inside a page, on a fresh
+// connection (connectPage).
 let context = null; // the web view's pages as Playwright sees them
 
-/** The newest page Playwright knows that is still open. */
-function livePage() {
-  const pages = context ? context.pages().filter((p) => !p.isClosed()) : [];
-  return pages[pages.length - 1] || null;
+async function connectPage() {
+  if (device) await device.close().catch(() => {});
+  [device] = await android.devices();
+  const webview = await device.webView({ pkg: PKG }, { timeout: 60000 });
+  const p = await webview.page();
+  context = p.context();
+  return p;
 }
 
-/** The addresses the app showed since its log was cleared, oldest first. */
+/** The pages the app showed, oldest first: [{ at (ms since 1970), url }]. */
 function shownPages() {
   try {
-    const out = adb('logcat', '-d', '-v', 'raw', '-s', 'Capacitor/Ebda3Shell:D');
-    return [...out.matchAll(/Page shown: (\S+)/g)].map((m) => m[1]);
+    const out = adb('logcat', '-d', '-v', 'epoch', '-s', 'Ebda3Shell:D');
+    return [...out.matchAll(/^\s*(\d+\.\d+)\s.*?Page shown: (\S+)/gm)].map((m) => ({ at: Number(m[1]) * 1000, url: m[2] }));
   } catch {
     return [];
   }
 }
 
-/** Waits until the page on screen passes `test` (polling: a page that fails to load mustn't end the wait). */
-async function waitUrl(test, timeout = 30000, what = 'the page') {
-  const end = Date.now() + timeout;
-  let seen = '';
-  while (Date.now() < end) {
-    const shown = shownPages().slice(-1)[0];
-    let live = '';
-    try {
-      live = livePage()?.url() || '';
-    } catch { /* the page is changing */ }
-    for (const url of [shown, live]) {
-      try {
-        if (url && test(new URL(url))) return url;
-      } catch { /* not an address */ }
-    }
-    seen = `app log: ${shown || '-'}; Playwright: ${live || '-'}`;
-    await sleep(400);
-  }
-  throw new Error(`Timed out waiting for ${what} (${seen})`);
+const shownList = (n = 8) => shownPages().slice(-n).map((p) => p.url).join(' → ') || '-';
+
+// The phone's clock against this computer's (the log's times are the phone's).
+let clockOffset = 0;
+function measureClock() {
+  try {
+    const raw = adb('shell', 'date', '+%s%3N').trim();
+    const ms = /^\d{13}$/.test(raw) ? Number(raw) : Number(adb('shell', 'date', '+%s').trim()) * 1000;
+    if (Number.isFinite(ms) && ms > 0) clockOffset = ms - Date.now();
+  } catch { /* assume the same clock */ }
 }
 
-/** A Playwright page that is on `test`'s address, for running things inside it (waits a little for it to show up). */
-async function pageAt(test, timeout = 15000) {
+/** Waits until a page the app showed after `since` (this computer's time, ms) is on screen and passes `test`. */
+async function waitUrl(test, timeout = 30000, what = 'the page', since = 0) {
   const end = Date.now() + timeout;
   while (Date.now() < end) {
-    const pages = context ? context.pages().filter((p) => !p.isClosed()) : [];
-    for (const p of pages.reverse()) {
+    const shown = shownPages();
+    const last = shown[shown.length - 1];
+    if (last && last.at >= since + clockOffset - 1500) {
       try {
-        if (!test(new URL(p.url()))) continue;
-        // A page Playwright lost track of may never answer: give it two seconds.
-        const ready = await Promise.race([p.evaluate(() => document.readyState).catch(() => null), sleep(2000).then(() => null)]);
-        if (ready) return p;
+        if (test(new URL(last.url))) return last.url;
       } catch { /* not an address */ }
     }
     await sleep(400);
   }
-  return null;
+  throw new Error(`Timed out waiting for ${what} (pages the app showed: ${shownList()})`);
 }
 
 /** The text on the phone's screen (Android's accessibility view, which includes the web view's text). */
@@ -116,7 +109,11 @@ try {
   adb('install', '-r', apk);
   adb('shell', 'pm', 'grant', PKG, 'android.permission.POST_NOTIFICATIONS');
   const started = Date.now();
+  try {
+    adb('logcat', '-G', '16M'); // room for the whole check (the emulator logs a lot)
+  } catch { /* keep the default size */ }
   adb('logcat', '-c');
+  measureClock();
   adb('shell', 'am', 'start', '-W', '-n', `${PKG}/.MainActivity`);
   // Up to 90 s: right after the emulator starts, its network may not be ready for the first try (the app then shows
   // its "no connection" page and comes back by itself).
@@ -129,11 +126,8 @@ try {
   check(true, 'the page glue runs (it asked for /app/config.json)');
 
   step('Look inside the web view');
-  [device] = await android.devices();
+  let page = await connectPage();
   check(!!device, 'Playwright sees the emulator');
-  const webview = await device.webView({ pkg: PKG }, { timeout: 60000 });
-  let page = await webview.page();
-  context = page.context();
   await page.waitForLoadState('load');
   const info = await page.evaluate(() => ({
     app: window.ebda3App && { isApp: window.ebda3App.isApp, platform: window.ebda3App.platform, build: window.ebda3App.build },
@@ -153,43 +147,43 @@ try {
   adb('shell', 'am', 'start', '-W', '-a', 'android.intent.action.VIEW', '-d',
     `me.ebda3.app://open?url=${encodeURIComponent(SITE + '/cart')}`, PKG);
   await shop.waitFor(/^\/cart/, 'android', { since, what: '/cart' });
-  await waitUrl((u) => u.pathname === '/cart', 20000, '/cart');
+  await waitUrl((u) => u.pathname === '/cart', 20000, '/cart', since);
   check(true, 'the cart page opened in the app');
   await sleep(1500);
   shot('2-cart-from-link');
 
   step('The Back button goes to the previous page');
+  since = Date.now();
   adb('shell', 'input', 'keyevent', 'KEYCODE_BACK');
-  await waitUrl((u) => u.pathname === '/', 20000, 'the home page');
+  await waitUrl((u) => u.pathname === '/', 20000, 'the home page', since);
   check(true, 'back on the home page');
 
   step('No connection: the app\'s own page, then back by itself');
   await shop.down();
-  page = livePage() || page;
+  since = Date.now();
   await page.evaluate(() => { setTimeout(() => { location.href = '/designs'; }, 0); });
-  await waitUrl((u) => u.origin === 'https://localhost' && u.pathname === '/offline.html', 30000, 'the offline page');
+  await waitUrl((u) => u.origin === 'https://localhost' && u.pathname === '/offline.html', 30000, 'the offline page', since);
   check(true, 'the "no connection" page is shown');
   await sleep(1500);
-  const offlinePage = await pageAt((u) => u.pathname === '/offline.html', 8000);
-  const text = offlinePage ? await offlinePage.textContent('body').catch(() => '') : '';
-  const words = text || screenText();
-  check(/No internet connection/.test(words), `it says so${/مفيش اتصال/.test(words) ? ' in Arabic and English' : ''} (read from ${text ? 'the page' : 'the screen'})`);
+  const words = screenText();
+  check(/مفيش اتصال/.test(words) && /No internet connection/.test(words), 'it says so in Arabic and English (read from the screen)');
   shot('3-no-connection');
   since = Date.now();
   await shop.up();
   await shop.waitFor(/^\/designs/, 'android', { since, timeout: 40000, what: '/designs after the connection came back' });
-  await waitUrl((u) => u.pathname === '/designs', 20000, '/designs');
+  await waitUrl((u) => u.pathname === '/designs', 20000, '/designs', since);
   check(true, 'back on the page by itself once the shop answered');
   await sleep(2500);
   shot('4-back-online');
 
   step('Back skips the "no connection" page');
+  since = Date.now();
   adb('shell', 'input', 'keyevent', 'KEYCODE_BACK');
-  await waitUrl((u) => u.pathname === '/', 20000, 'the home page');
+  await waitUrl((u) => u.pathname === '/', 20000, 'the home page', since);
   check(true, 'back went to the home page, not to the "no connection" page');
 
   step('Saving a file the page makes (the editor\'s names example)');
-  page = (await pageAt((u) => u.origin === SITE, 10000)) || livePage() || page;
+  page = await connectPage(); // a fresh view of the web view (see shownPages)
   await page.goto(`${SITE}/editor?product=namelabels`);
   const example = page.locator('[data-merge="example"]');
   await example.waitFor({ state: 'attached', timeout: 30000 });
@@ -212,8 +206,8 @@ try {
     a.click();
   });
   await sleep(3000);
-  const after = shownPages().slice(-1)[0] || page.url();
-  check(new URL(after).pathname === '/editor', 'the shop page stayed where it was');
+  const after = shownPages().filter((p) => p.at >= since + clockOffset - 1500).map((p) => new URL(p.url).pathname);
+  check(after.every((path) => path === '/editor'), `the shop page stayed where it was (pages shown since: ${after.join(', ') || 'none'})`);
   const resumed = (adb('shell', 'dumpsys', 'activity', 'activities').match(/topResumedActivity=.*|mResumedActivity: .*/) || ['?'])[0];
   console.log(`  (on screen now: ${resumed.trim()})`);
   shot('6-outside-link');
@@ -227,7 +221,7 @@ try {
   } catch { /* no screen */ }
   try {
     console.error(`Pages Playwright sees: ${context ? context.pages().map((p) => `${p.url()}${p.isClosed() ? ' (closed)' : ''}`).join(', ') : '-'}`);
-    console.error(`Pages the app showed: ${shownPages().slice(-8).join(' → ') || '-'}`);
+    console.error(`Pages the app showed: ${shownList()}`);
     console.error(`Text on the screen: ${screenText().slice(0, 800)}`);
   } catch { /* nothing more to tell */ }
   process.exitCode = 1;
