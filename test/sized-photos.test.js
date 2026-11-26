@@ -86,3 +86,38 @@ test('small text on the home cards is readable, and the price note shows on phon
   const css = fs.readFileSync(path.join(__dirname, '../public/css/styles.css'), 'utf8');
   assert.match(css, /\.hm-pack \{ color: var\(--ink-2\); font-size: 13\.5px; \}/);
 });
+
+test('the shop\'s artwork in small copies for the Templates list: transparent, far lighter, only real art files', async () => {
+  const file = 'trees-big-bows.png';
+  const original = fs.statSync(path.join(__dirname, '../public/img/art/christmas', file)).size;
+  const r = await fetch(`${base}/img-w/320/art/christmas/${file}`);
+  assert.strictEqual(r.status, 200);
+  assert.strictEqual(r.headers.get('content-type'), 'image/webp');
+  const buf = Buffer.from(await r.arrayBuffer());
+  const meta = await sharp(buf).metadata();
+  assert.ok(meta.width <= 320, `width ${meta.width}`);
+  assert.strictEqual(meta.hasAlpha, true, 'see-through parts kept');
+  assert.ok(buf.length < original / 20, `${buf.length} of ${original}`);
+  for (const url of [
+    '/img-w/320/art/christmas/nope.png',
+    '/img-w/320/art/..%2F..%2Fsrc/app.js',
+    '/img-w/320/art/Christmas!/trees-big-bows.png',
+    `/img-w/500/art/christmas/${file}`,
+    '/img-w/320/art/svg/x.svg',
+  ]) assert.strictEqual((await fetch(base + url)).status, 404, url);
+});
+
+test('the big artwork\'s real sizes, for the editor\'s print check (it shows a 1200 px copy)', async () => {
+  const r = await fetch(`${base}/api/art-sizes`);
+  assert.strictEqual(r.status, 200);
+  assert.match(r.headers.get('cache-control'), /max-age=3600/);
+  const sizes = await r.json();
+  const meta = await sharp(path.join(__dirname, '../public/img/art/christmas/trees-plaid-bows.png')).metadata();
+  assert.deepStrictEqual(sizes['christmas/trees-plaid-bows.png'], [meta.width, meta.height]);
+  assert.ok(Object.values(sizes).every(([w]) => w > 1400), 'only artwork worth a lighter copy');
+  assert.ok(Object.keys(sizes).every((k) => /^[a-z0-9-]+\/[^/]+\.(png|webp|jpe?g)$/i.test(k)));
+  // The copy the editor shows is there.
+  const copy = await fetch(`${base}/img-w/1200/art/christmas/trees-plaid-bows.png`);
+  assert.strictEqual(copy.status, 200);
+  assert.strictEqual((await sharp(Buffer.from(await copy.arrayBuffer())).metadata()).width, 1200);
+});

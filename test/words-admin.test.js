@@ -344,7 +344,8 @@ test('queue: published → working → editable words (files beside the original
   assert.strictEqual(item.words.texts.length, 2);
   // (The builder's patterns in public/js/templates.js accept these files.)
   const tpl = fs.readFileSync(path.join(__dirname, '../public/js/templates.js'), 'utf8');
-  assert.match(item.words.printSrc, new RegExp(tpl.match(/const PRINT_SRC = \/(.+)\/;/)[1]));
+  const rule = tpl.match(/const PRINT_SRC = \/(.+)\/([a-z]*);/);
+  assert.match(item.words.printSrc, new RegExp(rule[1], rule[2]));
   const dir = library.artDir('u-aaaaaaaaaaa1');
   const web = await sharp(path.join(dir, 'web.png')).metadata();
   const noWeb = await sharp(path.join(dir, 'nowords-web.png')).metadata();

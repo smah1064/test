@@ -2348,7 +2348,9 @@
       if (b) b.classList.remove('open');
     }
     let flyOpen = [...document.querySelectorAll('.flyout')].some((f) => !f.hidden);
-    if (desk && !chosen && !flyOpen && text) {
+    // (Not before the product is drawn: the list shows every lettering style in its own font, 26 font files that held
+    // up the product photo on the computer. Owner, 26 Nov.)
+    if (desk && !chosen && !flyOpen && text && bootDone) {
       text.hidden = false;
       text.classList.add('dock-default');
       flyOpen = true;
@@ -7077,6 +7079,7 @@
         sidesPayload[s.id] = { editor: { version: fabric.version, objects: await inlineImages(st.designs[s.id]), ...(st.offsets[s.id] ? { offset: st.offsets[s.id] } : {}), ...(st.pattern ? { pattern: { ...st.pattern } } : {}), area: xywh(baseArea(s.id)) } };
         const withFields = useMerge && mergeSides.some((x) => x.id === s.id);
         if (withFields) {
+          if (D.usePrintSources) await D.usePrintSources(canvas); // (full-size artwork in the name-list prints too)
           // The background and one picture of the names per row...
           const m = await exportMergeSide(s, (i, n) => busy(true, t('merge.preparing', { i: POD.num(i), n: POD.num(n) })));
           files[`${s.id}-merge-base.png`] = m.base;
@@ -7420,14 +7423,18 @@
   renderStickers();
   placeDesk();
   fit();
-  await D.ensureFont('Cairo', 600); // print-area label
+  // The product photo is fetched while the print-area label's font loads, not after it (it waited for the font,
+  // owner 26 Nov: slow photos on the computer); the label is drawn again once its font is there.
+  const labelFont = D.ensureFont('Cairo', 600);
   await showSide(st.side);
+  labelFont.then(() => canvas.requestRenderAll()).catch(() => {});
   seedHistory();
   refreshChrome();
   renderProps();
   renderCheck();
   autoFocusPrint();
   bootDone = true;
+  syncDock(); // the computer's Text list, now the product is on screen
   // Report the phone's real screen measurements once (sizes only) so the
   // layout can be fitted to phones that draw pages behind system bars.
   if (MOBILE.matches) {

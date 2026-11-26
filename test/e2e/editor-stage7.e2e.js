@@ -193,3 +193,62 @@ test('computer QA (26 Nov): booklets keep the earlier layout; the sample note an
     await srv.close();
   }
 });
+
+test('computer speed (owner, 26 Nov): the product photo is not held up by the lettering list; template pictures use small artwork copies', { timeout: 120000 }, async () => {
+  const srv = await startServer();
+  const browser = await loadPlaywright().chromium.launch();
+  try {
+    const ctx = await browser.newContext({ viewport: { width: 1366, height: 768 }, deviceScaleFactor: 1 });
+    await ctx.addInitScript(() => { try { localStorage.setItem('pod-lang', 'en'); } catch (e) { /* ignore */ } });
+    const page = await ctx.newPage();
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(String(e)));
+    const order = [];
+    page.on('request', (r) => {
+      const u = new URL(r.url()).pathname;
+      if (/^\/mockups\/photos\//.test(u)) order.push('photo');
+      else if (/^\/fonts\/files\//.test(u)) order.push('font');
+      else if (/^\/(img|img-w\/\d+)\/art\//.test(u)) order.push(u);
+    });
+    await page.goto(`${srv.base}/editor?product=tshirt`);
+    await page.waitForFunction(() => window.__editor && window.__editor.canvas.backgroundImage);
+    // At most the label's and the default lettering's fonts before the product photo is asked for.
+    const before = order.slice(0, order.indexOf('photo')).filter((x) => x === 'font').length;
+    assert.ok(before <= 4, `${before} fonts were asked for before the product photo`);
+    await page.waitForSelector('#flyout-text:not([hidden])'); // (then the Text list, as before)
+    await page.click('.tools .tool[data-flyout="templates"]');
+    await page.waitForFunction(() => [...document.querySelectorAll('#template-grid img')].filter((i) => i.src && i.complete).length >= 4, null, { timeout: 30000 });
+    const art = order.filter((x) => x.includes('/art/') && !x.endsWith('.svg'));
+    assert.ok(art.length > 0, 'artwork pictures were drawn');
+    assert.deepStrictEqual(art.filter((x) => !x.startsWith('/img-w/320/art/')), [], 'only small copies for the list');
+    // On the product: a 1200 px copy of big artwork; the print files are made from the original, at the same size,
+    // and the print check goes by the original's pixels.
+    order.length = 0;
+    await page.click('#template-grid .template-btn >> nth=0');
+    await page.waitForFunction(() => window.__editor.canvas.getObjects().some((o) => o.type === 'image'), null, { timeout: 30000 });
+    assert.ok(order.some((x) => /^\/img-w\/1200\/art\/.+\.(png|jpe?g|webp)$/.test(x)), `screen copy on the product: ${order.join(', ')}`);
+    const pic = await page.evaluate(async () => {
+      const ed = window.__editor;
+      const o = ed.canvas.getObjects().find((x) => x.type === 'image');
+      const shown = Math.round(o.width * o.scaleX * 1000);
+      const was = { src: new URL(o.getSrc()).pathname, px: o.getElement().naturalWidth, printSrc: o.printSrc, printPx: o.printPx, issues: ed.checkIssues().map((i) => i.key) };
+      const saved = o.toObject(['printSrc', 'printPx']);
+      await window.POD_DESIGN.usePrintSources(ed.canvas);
+      return { was, saved: { printSrc: saved.printSrc, printPx: saved.printPx }, now: { src: new URL(o.getSrc()).pathname, px: o.getElement().naturalWidth, same: Math.round(o.width * o.scaleX * 1000) === shown } };
+    });
+    assert.match(pic.was.src, /^\/img-w\/1200\/art\//);
+    assert.ok(pic.was.px <= 1200);
+    assert.strictEqual(pic.was.printSrc, pic.now.src);
+    assert.match(pic.now.src, /^\/img\/art\/[a-z0-9-]+\/[^/]+\.(png|jpe?g|webp)$/);
+    assert.strictEqual(pic.now.px, pic.was.printPx[0], 'the original, full size, for the print');
+    assert.ok(pic.now.px > 1400);
+    assert.strictEqual(pic.now.same, true, 'at the same size on the product');
+    assert.deepStrictEqual(pic.was.issues.filter((k) => /dpi|res|blur|quality/i.test(k)), [], 'no low-quality warning for the copy');
+    assert.deepStrictEqual(pic.saved, { printSrc: pic.was.printSrc, printPx: pic.was.printPx }, 'kept with the saved design');
+    assert.deepStrictEqual(errors, []);
+    await ctx.close();
+  } finally {
+    await browser.close();
+    await srv.close();
+  }
+});
