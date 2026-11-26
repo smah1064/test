@@ -713,7 +713,7 @@ window.POD_STRINGS = {
   'share.previewAlt': ['{product} design preview', 'معاينة تصميم {product}'],
   'share.button': ['Share', 'مشاركة'],
   'share.buttonTitle': ['Send this design to a friend for their opinion', 'ابعت التصميم لصاحبك ياخد رأيه'],
-  'share.dialogTitle': ['Ask a friend', 'خد رأي صاحبك'],
+  'share.dialogTitle': ['Ask someone you care about', 'خد رأي حد يهمك'],
   'share.dialogText': ['Send this link. Your friend sees the design and can approve it or suggest a change.', 'ابعت الرابط ده. صاحبك هيشوف التصميم ويقدر يوافق أو يقترح تعديل.'],
   'viewShare.title': ['To look at only', 'للمشاهدة بس'],
   'viewShare.text': ['Whoever opens this link can flip through your design: no prices, and nothing to approve. It shows your latest version each time you save.', 'اللي هيفتح اللينك ده هيقلّب في تصميمك بس: من غير أسعار ولا موافقة. وكل ما تحفظ، اللينك بيعرض آخر نسخة.'],

@@ -1160,6 +1160,18 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
   .design-cats::-webkit-scrollbar { display: none; }
   .design-cats .chip { flex: none; white-space: nowrap; }
 }
+/* Phones and tablets: smaller design cards, two in a row on a phone (one per row made the list ~300 screens tall:
+   owner, 26 Nov). Long names wrap (three lines at most), the price over the category. */
+@media (max-width: 820px) {
+  #design-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+  #design-grid .design-card .body { padding: 10px 10px 12px; gap: 4px; }
+  #design-grid .design-card h3 { font-size: 14px; line-height: 1.4; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  #design-grid .design-card .foot { flex-direction: column; align-items: flex-start; gap: 2px; margin-top: auto; padding-top: 4px; min-width: 0; }
+  #design-grid .design-card .foot > * { max-width: 100%; overflow-wrap: anywhere; }
+  #design-grid .design-card .price { font-size: 14px; }
+  #design-grid .design-card .foot .small { font-size: 12px; }
+  #design-grid .design-empty { padding: 32px 16px; }
+}
 @media (max-width: 640px) {
   .design-cats { margin-inline: -16px; padding-inline: 16px; }
   .design-search { flex-basis: 100%; max-width: none; }
@@ -1856,3 +1868,69 @@ html[dir="rtl"] .more-chev { transform: scaleX(-1); }
 .cart-qty-note { flex-basis: 100%; margin: 0; font-size: 13px; color: var(--ink-2, #444); }
 .cart-qty-note.bad { color: var(--danger, #b42318); }
 .cart-qty-note .link-btn { border: 0; background: none; padding: 0; font: inherit; font-weight: 700; color: var(--accent); text-decoration: underline; cursor: pointer; }
+
+/* Print | Embroidery on phones (owner's go 26 Nov, UX item 5): a second pill under Front / Back. */
+.method-pill[hidden] { display: none !important; }
+@media (min-width: 821px) { .method-pill { display: none !important; } }
+@media (max-width: 820px) {
+  .stage-bar:not(:has(.side-tabs.pages)) .method-pill { top: 60px; inset-inline-start: 8px; background: #fff; border-radius: 999px; padding: 0; box-shadow: 0 2px 10px rgba(16,24,40,.12); display: flex; }
+  .method-pill .side-tab { min-height: 44px; border-radius: 999px; white-space: nowrap; }
+  .method-pill .side-tab.active { background: var(--ink); color: #fff; }
+  .method-pill .mp-price { font-size: 12px; font-weight: 600; opacity: .75; }
+}
+@media (max-width: 820px) {
+  /* (The whole-item picture goes under the Print | Embroidery pill when that shows.) */
+  body:not(.sheet-props):not(.sheet-product):not(.sheet-check) .stage-wrap:has(.method-pill:not([hidden])) .overview { top: 112px; }
+}
+
+/* ==========================================================================
+   Thumb-size buttons, step 1 (owner's go 26 Nov)
+   Phones and small tablets (820px and less): each button below can be hit with a thumb, at least 44 x 44 px, the
+   way the editor does it for its own controls ("Every control a thumb can hit" above). The look stays: links
+   with no border get a 44 px box that shows nothing; the bordered language button and the colour circles get an
+   invisible hit area (a pseudo-element centred on them); the size / choice chips and the home grid buttons are
+   44 px tall, as the editor's chips are. The header keeps its height (its 56 px row holds a 44 px box).
+   Computers (821px and more) are not touched. Measured in test/e2e/thumb-buttons.e2e.js.
+   ========================================================================== */
+@media (max-width: 820px) {
+  /* Header: the account icon and Cart become 44 x 44 boxes (no border or background, so nothing shows). */
+  .site-header .acct-link, .site-header .cart-link { min-width: 44px; min-height: 44px; justify-content: center; }
+  /* The language button keeps its size; around it an invisible area 44 px tall (and at least 44 px wide). */
+  .site-header .lang-toggle { position: relative; }
+  .site-header .lang-toggle::before {
+    content: ""; position: absolute;
+    inset-block: calc(50% - 22px); inset-inline: min(0px, calc(50% - 22px));
+  }
+
+  /* Colour circles (product page, ready-design page): 40 px circles 8 px apart, each with a 44 x 44 hit area
+     centred on it, so two neighbours' areas never overlap (48 px from centre to centre). The chosen colour's ring
+     stays 5 px around its circle. A sold-out circle keeps its stroke (::before) and takes its hit area from
+     ::after, not clipped. (The editor's own circles keep their rules above.) */
+  #pp-swatches, #dp-colors { gap: 8px; }
+  #pp-swatches .swatch, #dp-colors .swatch { width: 40px; height: 40px; flex: none; }
+  #pp-swatches .swatch:not(.sold-out)::before, #dp-colors .swatch:not(.sold-out)::before,
+  #pp-swatches .swatch.sold-out::after, #dp-colors .swatch.sold-out::after {
+    content: ""; position: absolute; display: block; border: 0; border-radius: 0; background: none;
+    inset: calc(50% - 22px);
+  }
+  #pp-swatches .swatch.sold-out, #dp-colors .swatch.sold-out { overflow: visible; }
+
+  /* Size and choice chips: the ready-design sizes, the kids' book's Boy / Girl (and its other word choices) and its
+     cover. As in the editor: at least 44 px tall and 48 px wide, the label in the middle, 8 px apart.
+     (Choices with a drawing are already taller and keep their own layout.) */
+  #dp-sizes .chip, #bk-questions [data-choice]:not(.bk-pics) .chip, #bk-sizes .chip {
+    min-height: 44px; min-width: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding-inline: 12px;
+  }
+  #dp-sizes, #bk-questions [data-choice]:not(.bk-pics), #bk-sizes { gap: 8px; }
+
+  /* Home page, "All products": the two buttons under each product. */
+  .hm-gstart, .hm-gdetails { min-height: 44px; }
+}
+/* Phones (600px and less), the header's top row: the search, account and Cart boxes sit side by side without
+   overlapping (1 px between the search button's box and the account box), the language button a little apart. */
+@media (max-width: 600px) {
+  .site-header .inner > nav { gap: 6px; }
+  .site-header .inner > nav > .site-search-btn { margin-inline-end: -5px; }
+  .site-header .inner > nav > .lang-toggle { margin-inline-start: 4px; }
+}
+/* (end of Thumb-size buttons, step 1) */

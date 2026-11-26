@@ -42,11 +42,14 @@
       : { ...o, left: tcx + (o.left - fcx) * s, top: tcy + (o.top - fcy) * s, scaleX: (o.scaleX || 1) * s, scaleY: (o.scaleY || 1) * s }));
   }
 
-  /** The design's fabric objects, placed in a product side's print area. */
-  async function placeDesign(design, product, side, colorHex) {
+  /**
+   * The design's fabric objects, placed in a product side's print area.
+   * `thumb`: the shop's artwork as its small (320 px) copy, for small pictures in lists (/designs); never for print files.
+   */
+  async function placeDesign(design, product, side, colorHex, { thumb = false } = {}) {
     const surface = product.surface || colorHex;
     if (design.kind === 'template') {
-      return window.POD_DESIGN.buildTemplate({ id: design.id, items: design.items, aspect: design.aspect }, side.printArea, inkFor(surface), { inset: (side.safeIn || 0) * (side.printArea.w / side.printWidthIn) });
+      return window.POD_DESIGN.buildTemplate({ id: design.id, items: design.items, aspect: design.aspect }, side.printArea, inkFor(surface), { inset: (side.safeIn || 0) * (side.printArea.w / side.printWidthIn), thumb });
     }
     // Made on another product: in this one's ready-design zone (the calendar's top half, a folder's front), as templates are.
     const to = design.product && design.product !== product.id && design.product !== product.base ? window.POD_DESIGN.readyArea(side.printArea, null) : side.printArea;
@@ -86,14 +89,15 @@
    * A canvas holding the design on one side of a product, ready to export.
    * With a garment size, the design goes in that size's print box (the same
    * print in cm, so smaller on the photo of a bigger size), as in the editor.
+   * `opts.thumb`: small artwork copies, for list pictures only (see placeDesign).
    */
-  async function stage(design, product, side, color, sizeId) {
+  async function stage(design, product, side, color, sizeId, opts = {}) {
     // The size's print box (garments) and physical inches (posters, canvases: same shape, bigger print).
     const size = sizeId ? product.sizes.find((z) => z.id === sizeId) : null;
     const k = (size && size.printScale) || 1;
     const sized = sizeId ? { ...side, printArea: POD.sizedArea(product, side, sizeId), printWidthIn: side.printWidthIn * k, ...(side.printHeightIn ? { printHeightIn: side.printHeightIn * k } : {}) } : side;
     const canvas = new fabric.StaticCanvas(null, { width: W, height: H, enableRetinaScaling: false, renderOnAddRemove: false });
-    const objects = await placeDesign(design, product, sized, color.hex);
+    const objects = await placeDesign(design, product, sized, color.hex, { thumb: Boolean(opts && opts.thumb) });
     // Laser products: in the material's tone, cut text joined up (as the editor shows it).
     if (product.laser) {
       const ink = color.ink || '#000000';

@@ -31,7 +31,7 @@ test('nothing designed, black picked: the quantity boxes are black\'s, and the p
   const ctx = await newContext(browser);
   try {
     const page = await openEditor(ctx, srv.base, 'tshirt');
-    await page.waitForSelector('#qty-field .qty-in');
+    await require('./helpers').openQtyTable(page); // (the table is one click away: owner's go 26 Nov)
     await page.click('#swatches [data-color="black"]');
     await page.waitForFunction(() => window.__editor.st.colorId === 'black');
     const colours = await page.$$eval('#qty-field .qty-in', (xs) => [...new Set(xs.map((x) => x.dataset.qc))]);

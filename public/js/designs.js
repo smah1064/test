@@ -290,6 +290,11 @@
   };
   if (state.cat !== 'all' && !lib.categories.some((c) => c.id === state.cat)) state.cat = 'all';
   if (state.product && !fitting.has(state.product)) state.product = '';
+  // A first screenful of designs, then "Show more" (PAGE more at a time), as on the product page: all of them at once
+  // made a phone page ~300 screens tall and downloaded ~12 MB of artwork (owner, 26 Nov). A new search or filter
+  // starts again at PAGE; Back from a design keeps as many as were shown (see "Back to the same place" below).
+  const PAGE = 24;
+  let limit = PAGE;
   function saveUrl() {
     const u = new URLSearchParams();
     if (state.cat !== 'all') u.set('cat', state.cat);
@@ -297,6 +302,38 @@
     if (state.q.trim()) u.set('q', state.q.trim());
     const s = u.toString();
     history.replaceState(history.state, '', s ? `/designs?${s}` : '/designs');
+  }
+
+  // ---------- Order of "All" ----------
+  // "All" takes one design from each category in turn (it opened on 36 Christmas designs in a row: owner, 26 Nov),
+  // each category's own designs in their usual order. In the Christmas season (1 November to 7 January, Cairo's date:
+  // the Coptic Christmas is the 7th) the Christmas category has the first turn; after it, its usual turn.
+  // One category alone keeps its usual order.
+  function cairoDate(now) {
+    try {
+      const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: 'Africa/Cairo', month: 'numeric', day: 'numeric' }).formatToParts(now).map((x) => [x.type, x.value]));
+      return { m: Number(p.month), d: Number(p.day) };
+    } catch (e) {
+      return { m: now.getMonth() + 1, d: now.getDate() };
+    }
+  }
+  const christmasSeason = (now = new Date()) => {
+    const { m, d } = cairoDate(now);
+    return m >= 11 || (m === 1 && d <= 7);
+  };
+  function mixed(list) {
+    const ids = lib.categories.map((c) => c.id);
+    const groups = new Map(ids.map((id) => [id, []]));
+    for (const d of list) {
+      if (!groups.has(d.category)) groups.set(d.category, []);
+      groups.get(d.category).push(d);
+    }
+    // In the Christmas season the first two are Christmas designs, then every subject takes its turn (owner, 26 Nov).
+    const lead = christmasSeason() && groups.has('christmas') ? groups.get('christmas').splice(0, 2) : [];
+    const lists = [...groups.values()].filter((g) => g.length);
+    const out = [...lead];
+    for (let i = 0; out.length < list.length; i++) for (const g of lists) if (i < g.length) out.push(g[i]);
+    return out;
   }
 
   // ---------- Pictures ----------
@@ -312,7 +349,8 @@
         // Designs the owner added keep their objects on the server: fetch them to place on another product.
         const full = d.kind === 'objects' ? await POD.api('/api/library/' + encodeURIComponent(d.id)) : d;
         const color = product.colors.find((c) => c.id === d.color && POD.canPick(c)) || POD.firstPick(product.colors);
-        const st = await POD_RENDER.stage(full, product, product.sides[0], color);
+        // (The shop's artwork as its 320 px copy: the card is small. The design page and the editor use their own sizes.)
+        const st = await POD_RENDER.stage(full, product, product.sides[0], color, null, { thumb: true });
         // The whole product with the design, framed close round the product.
         const cv = await POD_RENDER.productPicture(st, 1.2);
         const blob = await new Promise((r) => cv.toBlob(r, 'image/webp', 0.88));
@@ -379,6 +417,7 @@
     $('design-cats').innerHTML = [{ id: 'all', name: null }, ...cats]
       .map((c) => `<button type="button" class="chip ${c.id === state.cat ? 'active' : ''}" data-cat="${c.id}" aria-pressed="${c.id === state.cat}">${esc(c.name ? tr(c.name) : t('cat.all'))}</button>`).join('');
     let list = forProduct.filter((d) => (state.cat === 'all' || d.category === state.cat) && (!terms.length || matches(d, terms)));
+    if (state.cat === 'all') list = mixed(list);
     // Designs made for the chosen product come first.
     if (productId) list = [...list.filter((d) => d.product === productId), ...list.filter((d) => d.product !== productId)];
 
@@ -386,6 +425,8 @@
     // (No count over the empty state: it says so itself.)
     $('design-count').textContent = !list.length ? '' : product ? t('designs.countOn', { count: countText(list.length), product: tr(product.name) }) : countText(list.length);
     const extra = productId ? `&product=${encodeURIComponent(productId)}` : '';
+    const all = list;
+    list = all.slice(0, limit);
     $('design-grid').innerHTML = list.map((d) => {
       const on = shownOn(d);
       const src = d.preview && on.id === d.product ? d.preview : ready.get(`${d.id}:${on.id}`);
@@ -397,6 +438,8 @@
         </div>
       </a>`;
     }).join('') || emptyState(terms);
+    // "Show more" (the product page's button, words and look).
+    $('design-more').innerHTML = all.length > list.length ? `<button type="button" class="btn">${esc(t('pp.moreDesigns', { n: POD.num(all.length - list.length) }))}</button>` : '';
     observe();
   }
 
@@ -420,10 +463,16 @@
   const io = 'IntersectionObserver' in window ? new IntersectionObserver((entries) => {
     entries.filter((e) => e.isIntersecting).forEach((e) => { io.unobserve(e.target); load(e.target); });
   }, { rootMargin: '300px' }) : null;
+  /** Whether a card is on the screen or near it (scrolled quickly past: drawn when it comes back instead). */
+  const near = (img) => {
+    const r = img.getBoundingClientRect();
+    return r.bottom > -600 && r.top < window.innerHeight + 600;
+  };
   function load(img) {
     const d = lib.designs.find((x) => x.id === img.dataset.design);
     queue = queue.then(async () => {
       if (!img.isConnected) return; // the list changed before its turn
+      if (io && !near(img)) { io.observe(img); return; }
       const url = await pictureFor(d, shownOn(d));
       if (url && img.isConnected) img.src = url;
     });
@@ -444,8 +493,10 @@
   }
 
   function update() {
+    limit = PAGE; // a new search or filter: a first screenful again
     saveUrl();
     render();
+    remember();
   }
 
   // ---------- Events ----------
@@ -477,6 +528,16 @@
     update();
     showActiveChip();
   });
+  $('design-more').addEventListener('click', (e) => {
+    if (!e.target.closest('button')) return;
+    const before = $('design-grid').querySelectorAll('.design-card').length;
+    limit += PAGE;
+    render();
+    remember();
+    // The button was replaced: the keyboard goes on at the first design just shown.
+    const next = $('design-grid').querySelectorAll('.design-card')[before];
+    if (next) next.focus({ preventScroll: true });
+  });
   $('design-grid').addEventListener('click', (e) => {
     const clear = e.target.closest('[data-clear]');
     const show = e.target.closest('[data-show-product]');
@@ -504,13 +565,21 @@
   // does for its ready designs, the place is kept in this history entry when a link is followed: where the page was,
   // and the design followed and its height on the screen, so the place holds even if what is above it is a little
   // taller or shorter by then. The search, the category and the product are in the address. (QA 26 Nov.)
+  // How many designs were shown ("Show more") is kept there too, as the product page does.
   const back = (history.state && typeof history.state === 'object' && history.state.designs) || null;
+  if (back && Number.isInteger(back.limit) && back.limit > PAGE && back.limit <= 5000) limit = back.limit;
+  /** Keep how many designs are shown (and, leaving the page, where it was) in this history entry. */
+  function remember(extra) {
+    try {
+      const was = history.state && typeof history.state === 'object' ? history.state : {};
+      history.replaceState({ ...was, designs: { ...(extra || {}), limit } }, '');
+    } catch (err) { /* not kept */ }
+  }
   document.addEventListener('click', (e) => {
     const a = e.target.closest('a[href]');
     if (!a) return;
     const card = a.closest('[data-place]');
-    const designs = { y: Math.round(window.scrollY), ...(card ? { place: card.dataset.place, top: Math.round(card.getBoundingClientRect().top) } : {}) };
-    try { history.replaceState({ ...(history.state && typeof history.state === 'object' ? history.state : {}), designs }, ''); } catch (err) { /* not kept */ }
+    remember({ y: Math.round(window.scrollY), ...(card ? { place: card.dataset.place, top: Math.round(card.getBoundingClientRect().top) } : {}) });
   });
   /** Once the cards are drawn: back to the design that was followed, at the same height, else to the same scroll. */
   function backToPlace() {

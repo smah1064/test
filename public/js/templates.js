@@ -716,13 +716,45 @@
 
   const thumbCache = new Map();
   /** Small PNG preview of a template on a white square. */
+  // ---------- Sample details for name-list blanks ({Name}, {الاسم}…) ----------
+  // Business-card templates showed raw blanks in their pictures and on the card, with a green "ready to print"
+  // (owner's go 26 Nov, UX item 2): a real-looking sample instead, which the print check flags until it's replaced.
+  // (A phone number without spaces, so it reads the right way round in Arabic text.)
+  const FIELD_SAMPLES = [
+    [/^(full ?)?name$/i, 'Sara Ahmed'], [/^(الاسم|اسم)$/, 'سارة أحمد'],
+    [/^(position|job( ?title)?|title|role)$/i, 'Graphic Designer'], [/^(الوظيفة|المسمى الوظيفي|الوظيفه)$/, 'مصممة جرافيك'],
+    [/^(phone|mobile|tel|phone number)$/i, '01001234567'], [/^(الموبايل|التليفون|الهاتف|رقم الموبايل|الموبيل)$/, '01001234567'],
+    [/^e-?mail$/i, 'sara@example.com'], [/^(الإيميل|الايميل|البريد|البريد الإلكتروني)$/, 'sara@example.com'],
+  ];
+  function fieldSample(key) {
+    const k = String(key || '').trim();
+    for (const [re, v] of FIELD_SAMPLES) if (re.test(k)) return /[A-Z]/.test(k) && k === k.toUpperCase() && k.length > 2 ? v.toUpperCase() : v;
+    return null;
+  }
+  /** Text with its known blanks filled with sample details (unknown blanks stay as they are). */
+  const withSamples = (s) => String(s == null ? '' : s).replace(/\{([^{}\n]{1,60})\}/g, (m, k) => fieldSample(k) || m);
+  /** Every sample detail, as written (for the print check). */
+  const FIELD_SAMPLE_TEXTS = [...new Set(FIELD_SAMPLES.flatMap(([, v]) => [v, v.toUpperCase()]))];
+  /** A template with its texts' blanks filled with samples; `fieldSrc` maps each sampled text back to its blanks. */
+  function sampledTemplate(tpl) {
+    const fieldSrc = new Map();
+    const items = ((tpl && tpl.items) || []).map((i) => {
+      if (!i || i.kind !== 'text' || typeof i.text !== 'string') return i;
+      const text = withSamples(i.text);
+      if (text === i.text) return i;
+      fieldSrc.set(text, i.text);
+      return { ...i, text };
+    });
+    return { tpl: { ...tpl, items }, fieldSrc };
+  }
+
   async function templateThumb(tpl, bg = '#ffffff') {
     const key = tpl.id + '|' + bg;
     if (thumbCache.has(key)) return thumbCache.get(key);
     const size = 160;
     const dark = (() => { const n = parseInt(bg.slice(1), 16); return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255 < 0.45; })();
     const sc = new fabric.StaticCanvas(null, { width: size, height: size, backgroundColor: bg, renderOnAddRemove: false });
-    const objs = await buildTemplate(tpl, { x: 12, y: 12, w: size - 24, h: size - 24 }, dark ? '#ffffff' : '#16181d', { thumb: true });
+    const objs = await buildTemplate(sampledTemplate(tpl).tpl, { x: 12, y: 12, w: size - 24, h: size - 24 }, dark ? '#ffffff' : '#16181d', { thumb: true });
     objs.forEach((o) => sc.add(o));
     sc.renderAll();
     const url = sc.toDataURL({ format: 'png' });
@@ -895,5 +927,5 @@
     return changed ? { ...design, items } : design;
   }
 
-  window.POD_DESIGN = { FONTS, BUNDLED, ARABIC_RE, ARABIC_FOR, wordFill, lightInk, artImage: makeImage, ACCENT, SHAPES, TEXT_PRESETS, TEMPLATES, ensureFont, ensureFontsFor, buildTemplate, readyArea, templateThumb, usePrintSources, inlineSvgImages, NAME_ROLES, sampleNames, cleanName, withNames, wordsTexts, ensureWordsFonts };
+  window.POD_DESIGN = { withSamples, sampledTemplate, FIELD_SAMPLE_TEXTS, FONTS, BUNDLED, ARABIC_RE, ARABIC_FOR, wordFill, lightInk, artImage: makeImage, ACCENT, SHAPES, TEXT_PRESETS, TEMPLATES, ensureFont, ensureFontsFor, buildTemplate, readyArea, templateThumb, usePrintSources, inlineSvgImages, NAME_ROLES, sampleNames, cleanName, withNames, wordsTexts, ensureWordsFonts };
 })();

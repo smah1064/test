@@ -120,7 +120,7 @@ test('a quantity over 1,000 is put back to 1,000 and said', { timeout: 60000 }, 
   try {
     const page = await openEditor(ctx, srv.base, 'tshirt', '&color=white&size=M');
     await addText(page, 'TEAM');
-    await page.waitForSelector('#qty-field .qty-in', { timeout: 15000 });
+    await require('./helpers').openQtyTable(page); // (the table is one click away: owner's go 26 Nov)
     const box = page.locator('#qty-field .qty-in').first();
     await box.fill('5000');
     await box.dispatchEvent('change');

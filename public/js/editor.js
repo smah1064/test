@@ -19,7 +19,7 @@
   const MAX_VECTOR_BYTES = 40 * 1024 * 1024;
   const HISTORY_LIMIT = 60;
   const SNAP_PX = 7;
-  const EXTRA_PROPS = ['name', 'selectable', 'evented', 'curve', 'mask', 'maskBorder', 'maskBorderColor', 'lockRatio', 'bgShape', 'textFx', 'fxBase', 'boosted', 'importSource', 'mergeFit', 'pdfSrc', 'printSrc', 'printPx', 'wordsFill', 'artSrc', 'artDark', 'artLight', 'fitFrom', 'fitAt', 'photoShare'];
+  const EXTRA_PROPS = ['name', 'selectable', 'evented', 'curve', 'mask', 'maskBorder', 'maskBorderColor', 'lockRatio', 'bgShape', 'textFx', 'fxBase', 'boosted', 'importSource', 'mergeFit', 'pdfSrc', 'printSrc', 'printPx', 'wordsFill', 'artSrc', 'artDark', 'artLight', 'fieldSrc', 'fitFrom', 'fitAt', 'photoShare'];
   const $ = (id) => document.getElementById(id);
   const { esc, money, toast, t, tr } = POD;
   const D = window.POD_DESIGN;
@@ -30,6 +30,8 @@
     if (!sampleTexts) {
       sampleTexts = new Set();
       const S = window.POD_STRINGS || {};
+      // (And the sample details shown for a template's blanks: Sara Ahmed, 01001234567…)
+      for (const x of D.FIELD_SAMPLE_TEXTS || []) sampleTexts.add(String(x).trim().toLowerCase());
       for (const p of D.TEXT_PRESETS || []) {
         if (p.sample) sampleTexts.add(p.sample.trim().toLowerCase());
         if (p.text && Array.isArray(S[p.text])) S[p.text].forEach((w) => sampleTexts.add(String(w).trim().toLowerCase()));
@@ -626,7 +628,8 @@
   }
   /** Room kept free above and below the product for the floating buttons (phones; stage 3 of the editor redesign). */
   // (Not while a settings sheet is open: the floating buttons step aside then, and the design keeps the room.)
-  const pillRoom = () => (st.product.paged ? 0 : MOBILE.matches ? (st.sheet ? 0 : 56) : DESK.matches ? 64 : 0);
+  // (Phones: a second row, Print | Embroidery, under Front / Back on products with embroidery: owner's go 26 Nov.)
+  const pillRoom = () => (st.product.paged ? 0 : MOBILE.matches ? (st.sheet ? 0 : st.product.embroidery ? 108 : 56) : DESK.matches ? 64 : 0);
   function fit() {
     const stage = $('stage');
     // With the phone panel open there is little room: zoom in on the print area instead of the whole product.
@@ -1945,8 +1948,12 @@
   /** Put a template's (or an AI logo's) elements on the product, selected together. */
   async function addTemplate(tpl) {
     cancelCrop();
-    const objs = await D.buildTemplate(tpl, area(), inkFor(surfaceHex()), { inset: rects().sf });
+    // Blanks ({Name}…) show sample details until a name list is loaded (owner's go 26 Nov): each such text keeps its
+    // blanks (fieldSrc), so a name list loaded later still fills it.
+    const sampled = !st.mergeList && D.sampledTemplate ? D.sampledTemplate(tpl) : null;
+    const objs = await D.buildTemplate(sampled ? sampled.tpl : tpl, area(), inkFor(surfaceHex()), { inset: rects().sf });
     if (!objs.length) return;
+    if (sampled) for (const o of objs) if (isText(o) && sampled.fieldSrc.has(o.text)) o.set({ fieldSrc: sampled.fieldSrc.get(o.text), placeholder: o.text });
     st.silent = true;
     canvas.discardActiveObject();
     objs.forEach((o) => canvas.add(o));
@@ -4341,11 +4348,15 @@
     }).join('');
     // Print or embroidery (garments, caps, totes, aprons).
     $('method-field').hidden = !p.embroidery;
+    $('method-pill').hidden = !p.embroidery || !MOBILE.matches;
     if (p.embroidery) {
       // Which layer of the front is being edited: its print or its embroidery (both can be used together).
       const now = st.side === EMB ? 'embroidery' : 'print';
       const hostName = tr(baseSide(p.embroidery.side).name);
       $('method-chips').innerHTML = ['print', 'embroidery'].map((m) => `<button class="chip ${m === now ? 'active' : ''}" data-method="${m}" aria-pressed="${m === now}">${esc(t('emb.' + m))}${m === 'embroidery' ? ` <span style="opacity:.7">+${esc(money(p.embroidery.surcharge))}</span>` : ''}</button>`).join('');
+      // Phones: the same choice as a pill on the design area (it was only in the product sheet, below colour, size and
+      // quantity, so embroidery went unseen: owner's go 26 Nov, UX item 5).
+      $('method-pill').innerHTML = ['print', 'embroidery'].map((m) => `<button type="button" class="side-tab ${m === now ? 'active' : ''}" data-method="${m}" aria-pressed="${m === now}">${esc(t('emb.' + m))}${m === 'embroidery' ? ` <span class="mp-price">+${esc(money(p.embroidery.surcharge))}</span>` : ''}</button>`).join('');
       $('method-note').textContent = st.side === EMB
         ? t('emb.noteN', { w: POD.num(Math.round(p.embroidery.widthIn * 25.4) / 10), h: POD.num(Math.round(p.embroidery.heightIn * 25.4) / 10), colours: POD.plural('emb.colours', p.embroidery.maxColors) }) + ' ' + t('emb.bothNote', { side: hostName })
         : t(usesEmb() ? 'emb.printNoteWith' : 'emb.printNote', { side: hostName });
@@ -4366,6 +4377,12 @@
     // The binding moves the staples on the cover drawing.
     if (b.dataset.opt === 'binding') applyMockup();
   });
+  $('method-pill').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-method]');
+    const same = b && $('method-chips').querySelector(`[data-method="${b.dataset.method}"]`);
+    if (same) same.click();
+  });
+  MOBILE.addEventListener('change', () => { if ($('method-pill')) $('method-pill').hidden = !st.product.embroidery || !MOBILE.matches; });
   $('method-chips').addEventListener('click', serial(async (e) => {
     const b = e.target.closest('[data-method]');
     if (!b || !st.product.embroidery) return;
@@ -5157,7 +5174,9 @@
     const pills = bar && getComputedStyle(bar).position === 'absolute' && !st.sheet;
     const tabs = $('side-tabs');
     const floating = bar && getComputedStyle(bar).position === 'absolute';
-    const top = (pills ? Math.max(tabs.offsetTop + tabs.offsetHeight, $('check-chip').offsetTop + $('check-chip').offsetHeight) : bar && !floating ? bar.offsetTop + bar.offsetHeight : 0) + 8;
+    const mp = $('method-pill');
+    const mpBottom = mp && !mp.hidden && mp.offsetHeight ? mp.offsetTop + mp.offsetHeight : 0; // (Print | Embroidery pill)
+    const top = (pills ? Math.max(tabs.offsetTop + tabs.offsetHeight, $('check-chip').offsetTop + $('check-chip').offsetHeight, mpBottom) : bar && !floating ? bar.offsetTop + bar.offsetHeight : 0) + 8;
     const bottomPills = pills ? $('undo').offsetHeight + 14 : 0;
     const noteH = note.offsetHeight;
     const stageH = stage ? stage.clientHeight : window.innerHeight;
@@ -5647,11 +5666,11 @@
       ? `<span class="qty-out" title="${esc(tEd('ed.soldOut'))}">—</span>`
       : `<input type="text" inputmode="numeric" maxlength="4" autocomplete="off" class="qty-in${POD.comboFew(p, c.id, z.id) ? ' is-few' : ''}" data-qc="${c.id}" data-qz="${z.id}" value="${unpickedOne ? '' : (g[c.id] && g[c.id][z.id]) || ''}" placeholder="0" aria-label="${esc(`${tr(c.name)} ${tr(z.label)}`)}"${POD.comboFew(p, c.id, z.id) ? ` title="${esc(t('fewLeftCombo', { colour: tr(c.name), size: tr(z.label), n: POD.num(POD.comboFew(p, c.id, z.id)) }))}"` : ''}>`);
     const simple = !mix().sizes && !mix().colors;
-    // Phones, one colour in one size (the usual single piece): a − / + counter, with the size-and-colour table one tap
-    // away (the table of zeros under the sizes read as a second size question: owner's go 26 Nov, editor redesign
-    // stage 1). A bigger order, packs and the computer keep the table.
+    // One colour in one size (the usual single piece): a − / + counter, with the size-and-colour table one tap away
+    // (the table of zeros under the sizes read as a second size question: owner's go 26 Nov, editor redesign stage 1;
+    // on computers too since the owner's go of 26 Nov, UX item 7). A bigger order and packs keep the table.
     const lines = qtyLines();
-    if (MOBILE.matches && (mix().sizes || mix().colors) && !packs() && !st.qtyGridOpen && lines.length === 1) {
+    if ((mix().sizes || mix().colors) && !packs() && !st.qtyGridOpen && lines.length === 1) {
       const n = lines[0].qty;
       box.innerHTML = `
         <div class="qty-row">
@@ -5662,6 +5681,7 @@
             <button type="button" class="btn btn-sm" data-qstep="1" aria-label="${esc(t('props.more'))}" ${n >= 1000 ? 'disabled' : ''}>${ICON.plus}</button>
           </div>
         </div>
+        ${MOBILE.matches ? '' : `<p class="small qty-sum">${esc(qtySumText())}</p>`}
         <button type="button" class="qty-more" data-qgrid="open">${ICON.plus}<span>${esc(t(!mix().sizes ? 'qty.moreColours' : mix().colors ? 'qty.moreSizesColours' : 'qty.moreSizes'))}</span></button>`;
       return;
     }
@@ -6063,6 +6083,7 @@
       endMergePreview();
       st.mergeList = { columns: data.columns, rows: data.rows, total: data.total, truncated: data.truncated, fileName: file.name.slice(0, 80) };
       st.mergeRow = 0;
+      restoreBlanks();
       mergeFontsDone.clear();
       // A design without fields yet: start one with the first column, ready to style.
       if (!mergeObjects().length && !designedSides().some((s) => s.id !== st.side && fieldSides().some((x) => x.id === s.id))) await addFieldText(0);
@@ -6071,6 +6092,22 @@
     } finally {
       busy(false);
     }
+  }
+  /** A template's sample details not changed by the customer go back to their blanks ({Name}…) for the name list. */
+  function restoreBlanks() {
+    const back = (o) => o && typeof o.fieldSrc === 'string' && D.withSamples && o.text === D.withSamples(o.fieldSrc);
+    let changed = false;
+    for (const o of canvas.getObjects()) {
+      if (!isText(o) || !back(o)) continue;
+      o.set({ text: o.fieldSrc, fieldSrc: undefined, placeholder: undefined });
+      o.setCoords();
+      changed = true;
+    }
+    for (const s of allSides()) {
+      if (s.id === st.side || !Array.isArray(st.designs[s.id])) continue;
+      st.designs[s.id] = st.designs[s.id].map((o) => (back(o) ? { ...o, text: o.fieldSrc, fieldSrc: undefined } : o));
+    }
+    if (changed) { canvas.requestRenderAll(); commit(); }
   }
   async function addFieldText(col) {
     const L = st.mergeList;

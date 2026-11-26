@@ -86,6 +86,7 @@ test('quantities: White M 3 + L 2, then Black: the whole row follows; taking out
   try {
     const page = await openEditor(ctx, srv.base, 'tshirt', '&color=white&size=M');
     await addText(page, 'TEAM');
+    await require('./helpers').openQtyTable(page); // (the table is one click away: owner's go 26 Nov)
     await page.waitForSelector('#qty-field .qty-in[data-qc="white"][data-qz="L"]', { timeout: 15000 });
     await typeQty(page, 'white', 'M', 3);
     await typeQty(page, 'white', 'L', 2);
@@ -116,6 +117,7 @@ test('T-shirt White M 2 + L 3, then Hoodie (no white): the 5 pieces follow to th
     await page.goto(`${srv.base}/editor?product=tshirt&color=white&size=M`);
     await page.waitForFunction(() => window.__editor && window.__editor.st && window.__editor.st.product);
     await addText(page, 'TEAM');
+    await require('./helpers').openQtyTable(page); // (the table is one click away: owner's go 26 Nov)
     await page.waitForSelector('#qty-field .qty-in[data-qc="white"][data-qz="L"]', { timeout: 15000 });
     await typeQty(page, 'white', 'M', 2);
     await typeQty(page, 'white', 'L', 3);
