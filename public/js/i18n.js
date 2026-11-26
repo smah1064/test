@@ -320,6 +320,7 @@ window.POD_STRINGS = {
   'pp.edit': ['Edit', 'عدّل'],
   'msg.printSource': ['The design\'s full-size picture didn\'t load, so nothing was added. Check your connection and try again.', 'صورة التصميم بحجمها الكامل ماتحمّلتش، فماضفناش حاجة. اتأكد من الإنترنت وجرّب تاني.'],
   'msg.network': ['No internet connection. Check your connection and try again.', 'مفيش اتصال بالإنترنت. اتأكد من الاتصال وحاول تاني.'],
+  'captcha.noLoad': ['The security check couldn\'t load. Check your connection or turn off any content blocker, then try again.', 'خطوة التحقق الأمني ماتحمّلتش. اتأكد من النت أو اقفل أي مانع إعلانات، وجرّب تاني.'],
   // A page whose products (or order) couldn't load: no signal, or the site busy for a moment.
   'net.title': ['No connection', 'مفيش اتصال'],
   'net.text': ['We couldn\'t load this page. Check your internet connection and try again.', 'مقدرناش نحمّل الصفحة. اتأكد من النت وجرّب تاني.'],

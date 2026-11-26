@@ -8005,7 +8005,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (!d) return null;
       // A picture of the design itself when the shop has one; else the shop's card (never a blank product, which
       // would look like the design is missing, QA 25 Nov).
-      const image = d.uploaded ? `${origin}/library-art/${d.id}/web.png` : d.kind === 'objects' && fs.existsSync(library.previewPath(d.id)) ? `${origin}/api/library/${d.id}/preview.png` : `${origin}/img/og-ebda3.png`;
+      // (The shop's own picture designs: their artwork, a PNG or JPG in the shop's files. Shown only as the logo
+      // before. Tester 1, 26 Nov.)
+      const art = d.kind === 'template' && (d.items || []).find((i) => i && i.kind === 'image' && /^\/img\/art\/[\w/-]+\.(png|jpe?g|webp)$/i.test(i.src || '')
+        && fs.existsSync(path.join(publicDir, i.src)));
+      const image = d.uploaded ? `${origin}/library-art/${d.id}/web.png` : d.kind === 'objects' && fs.existsSync(library.previewPath(d.id)) ? `${origin}/api/library/${d.id}/preview.png`
+        : art ? `${origin}${art.src}` : `${origin}/img/og-ebda3.png`;
       return { title: `${both(d.name)} · إبداع`, description: 'تصميم جاهز تطبعه على منتجك، أو تعدّله على ذوقك · A ready design to print as it is, or make it yours', image, url: `${origin}/design?id=${encodeURIComponent(d.id)}` };
     }
     if (name === 'book') {

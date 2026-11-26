@@ -1111,6 +1111,13 @@
     $('place-title').textContent = t(embHere() || st.method === 'embroidery' ? 'area.titleEmb' : 'area.title');
     $('place-info').textContent = parts.length ? t('area.moved', { v: parts.join(POD.lang === 'ar' ? ' و' : ', ') }) : t('area.standard');
     $('place-reset').disabled = !parts.length;
+    // (An arrow that can't move the area any further is off, as Reset is at the standard spot: ↓ stayed on at the
+    // zone's edge and did nothing. Tester 1, 26 Nov.)
+    for (const b of box.querySelectorAll('[data-nudge]')) {
+      const [sx, sy] = b.dataset.nudge.split(',').map(Number);
+      const next = clampOffset(o.dx + sx, o.dy + sy);
+      b.disabled = next.dx === clampOffset(o.dx, o.dy).dx && next.dy === clampOffset(o.dx, o.dy).dy;
+    }
   }
   {
     // Drag the handle under the print area (mouse and touch). Caught before Fabric sees it.
@@ -6769,6 +6776,7 @@
       const tok = await linkCap.token();
       return tok ? { captchaToken: tok } : {};
     } catch (e) {
+      if (e && e.code === 'captchaLoad') throw e; // said as that (tester 1, 26 Nov)
       return {};
     }
   }
@@ -7557,6 +7565,8 @@
     refreshChrome();
     renderProps();
     renderFloatBar(); // the floating bar's labels in the new language
+    // (The zoom's number in the new language's digits: "١٣٩%" stayed after English. Tester 1, 26 Nov.)
+    $('zoom-label').textContent = POD.num(Math.round(st.zoom * 100)) + '%';
     canvas.requestRenderAll();
   });
 

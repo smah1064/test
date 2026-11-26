@@ -348,7 +348,10 @@
       /** The token for the next request (waits for Cloudflare; null when the CAPTCHA is off). */
       async token() {
         const ts = await start();
-        if (!ts) return captchaKey ? '' : null;
+        if (!ts && !captchaKey) return null;
+        // (Cloudflare's check couldn't load (a blocked network, a content blocker): said as that, not "complete the
+        // security check" with nothing to complete. Tester 1, 26 Nov.)
+        if (!ts) throw Object.assign(new Error(t('captcha.noLoad')), { code: 'captchaLoad' });
         if (current) return current;
         return new Promise((resolve) => {
           waiting.push(resolve);

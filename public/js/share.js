@@ -17,7 +17,9 @@
 
   function when(iso) {
     try {
-      return new Intl.DateTimeFormat(POD.lang === 'ar' ? 'ar-EG' : 'en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso));
+      // (The month in words, as everywhere in the shop: «٢٦/١١/٢٠٢٦» in Arabic. Tester 1, 26 Nov.)
+      if (Number.isNaN(new Date(iso).getTime())) return iso;
+      return POD.date(iso);
     } catch (e) {
       return iso;
     }

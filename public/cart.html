@@ -761,7 +761,9 @@
         // (Both when both: packs just taken for less AND more copies costing less still. QA 26 Nov: the tip was hidden.)
         const tip = c.cheaper && !qtyDraft.has(item.designId)
           ? { text: t('cart.qtyCheaper', { copies: word(c.cheaper.copies), price: money(c.cheaper.price) }), take: c.cheaper.copies } : null;
-        const notes = [qtyNotes.get(item.designId), tip].filter(Boolean);
+        // (A note is written in the page's language when drawn; the shop's refusal only in the language it came in.
+        // Tester 1, 26 Nov: "Cheaper as 2 × 10 cards…" stayed English after switching to Arabic.)
+        const notes = [qtyNotes.get(item.designId), tip].filter((x) => x && (!x.lang || x.lang === POD.lang));
         const label = t(c.unit === 'copy' ? 'cart.qtyCopies' : c.unit === 'packPiece' ? 'cart.qtyPieces' : 'cart.qty');
         return `
               <div class="cart-qty" data-qty-for="${esc(item.designId)}">
@@ -771,7 +773,7 @@
                   <input class="qty-n" id="qty-n-${i}" data-qin="${esc(item.designId)}" type="text" inputmode="numeric" autocomplete="off" value="${esc(POD.num(n))}" aria-labelledby="qty-l-${i}">
                   <button type="button" class="btn btn-sm" id="qty-more-${i}" data-qstep="1" data-qid="${esc(item.designId)}" aria-label="${esc(t('props.more'))}"${n + c.step > c.max ? ' disabled' : ''}>${QTY_PLUS}</button>
                 </div>
-                ${notes.map((note) => `<p class="cart-qty-note${note.error ? ' bad' : ''}" role="${note.error ? 'alert' : 'status'}">${esc(note.text)}${note.take ? ` <button type="button" class="link-btn" data-qtake="${esc(item.designId)}" data-qn="${note.take}">${esc(t('cart.qtyTake', { copies: POD.plural(c.unit === 'packPiece' ? 'qty.unitPieces' : 'qty.copies', note.take) }))}</button>` : ''}</p>`).join('')}
+                ${notes.map((note) => `<p class="cart-qty-note${note.error ? ' bad' : ''}" role="${note.error ? 'alert' : 'status'}">${esc(note.say ? note.say() : note.text)}${note.take ? ` <button type="button" class="link-btn" data-qtake="${esc(item.designId)}" data-qn="${note.take}">${esc(t('cart.qtyTake', { copies: POD.plural(c.unit === 'packPiece' ? 'qty.unitPieces' : 'qty.copies', note.take) }))}</button>` : ''}</p>`).join('')}
               </div>`;
       }
       /** The counter's number on screen and its − / + (without drawing the whole cart again, so typing goes on). */
@@ -822,7 +824,7 @@
           });
         } catch (err) {
           qtyDraft.delete(id);
-          qtyNotes.set(id, { text: err.message, error: true });
+          qtyNotes.set(id, { text: err.message, error: true, lang: err.lang || POD.lang });
           render();
           return;
         }
@@ -850,7 +852,7 @@
         if (res.count) counts.set(nid, res.count);
         // Packs taken for less: said (the lasting tip about more copies comes with the counter itself).
         const packs = Array.isArray(res.switched) ? res.switched : res.switched ? [res.switched] : [];
-        if (packs.length) qtyNotes.set(nid, { text: t('cart.qtyPack', { pack: packs.map((x) => `${POD.num(x.qty)} × ${tr(x.label)}`).join(' + ') }) });
+        if (packs.length) qtyNotes.set(nid, { say: () => t('cart.qtyPack', { pack: packs.map((x) => `${POD.num(x.qty)} × ${tr(x.label)}`).join(' + ') }) });
         else qtyNotes.delete(nid);
         POD.setCart(cart);
         // The proof shows the pieces: asked again (a copy's proof loads as the cart is drawn).

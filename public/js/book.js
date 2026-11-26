@@ -367,7 +367,10 @@
     if (thumb && strip.scrollWidth > strip.clientWidth) {
       const s = strip.getBoundingClientRect();
       const r = thumb.getBoundingClientRect();
-      const dx = r.left < s.left ? r.left - s.left - 8 : r.right > s.right ? r.right - s.right + 8 : 0;
+      // (To the middle of the strip, where its scroll snapping puts a thumbnail: scrolled just into sight, the
+      // snapping pulled it back and the picked one stuck out past the edge, its frame cut. Tester 1, 26 Nov.)
+      const out = r.left < s.left + 2 || r.right > s.right - 2;
+      const dx = out ? (r.left + r.width / 2) - (s.left + s.width / 2) : 0;
       if (dx) strip.scrollBy({ left: dx, behavior: 'smooth' });
     }
     $('bk-sample').hidden = !!state.design;
