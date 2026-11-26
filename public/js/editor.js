@@ -4204,6 +4204,9 @@
       if (isText(o)) {
         const pt = Math.round(((o.fontSize * Math.abs(o.scaleY)) / R.u) * 72 * 0.7); // cap height ≈ 70% of font size
         if (pt < 6) issues.push({ level: 'warn', key: 'check.tiny', obj: o, params: { name, pt } });
+        // Arabic letters in an English-only font: the browser draws some other font (QA tester 1, 26 Nov).
+        const family = String(o.fontFamily || '').split(',')[0].replace(/["']/g, '').trim();
+        if (D.ARABIC_FOR && D.ARABIC_FOR[family] && D.ARABIC_RE.test(o.text || '')) issues.push({ level: 'warn', key: 'check.fontNoArabic', obj: o, params: { name, font: family, suggest: D.ARABIC_FOR[family] } });
       }
     }
     // Text covered by a picture above it (the picture is solid there): it would not show in print.
