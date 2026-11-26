@@ -790,16 +790,20 @@
       pathRect(ctx, R.bleed);
       ctx.stroke();
     }
-    // Safe zone: green dashed line inside the print edge.
-    ctx.setLineDash([3 * px, 3 * px]);
-    ctx.lineWidth = 1 * px;
-    ctx.strokeStyle = 'rgba(47, 158, 68, .9)';
-    pathRect(ctx, R.safe);
-    ctx.stroke();
-    // Print edge.
+    // Safe zone: green dashed line inside the print edge. On garments and gifts it shows only while something is
+    // moved or when the print check says something is too close to the edge; printed paper (with a bleed) keeps it
+    // (owner's go 26 Nov, editor redesign stage 1: the red and green lines at rest made the editor look busy).
+    if (R.b || st.dragging || st.movingArea || (st.issues || []).some((i) => i.key === 'check.safe')) {
+      ctx.setLineDash([3 * px, 3 * px]);
+      ctx.lineWidth = 1 * px;
+      ctx.strokeStyle = 'rgba(47, 158, 68, .9)';
+      pathRect(ctx, R.safe);
+      ctx.stroke();
+    }
+    // Print edge: a quiet grey dashed line (the accent orange is kept for what the customer acts on).
     ctx.setLineDash([6 * px, 4 * px]);
-    ctx.lineWidth = 1.5 * px;
-    ctx.strokeStyle = 'rgba(255, 90, 54, .9)';
+    ctx.lineWidth = 1.25 * px;
+    ctx.strokeStyle = 'rgba(70, 74, 82, .6)';
     pathRect(ctx, a);
     ctx.stroke();
     // Elements with print problems get a red outline.
@@ -870,18 +874,20 @@
       const hx = a.x + a.w / 2 - hw / 2;
       const hy = Math.min(a.y + a.h + 8 * px, H - hh - 2 * px);
       st.handleRect = { x: hx, y: hy, w: hw, h: hh };
-      ctx.fillStyle = st.movingArea ? '#a8320f' : '#ca3d1a';
+      // A white tag with a grey edge (it was a loud orange one: stage 1 of the editor redesign); dark while dragged.
+      ctx.fillStyle = st.movingArea ? '#16181d' : 'rgba(255, 255, 255, .95)';
       ctx.beginPath();
       if (ctx.roundRect) ctx.roundRect(hx, hy, hw, hh, hh / 2); else ctx.rect(hx, hy, hw, hh);
       ctx.fill();
-      ctx.fillStyle = '#fff';
+      if (!st.movingArea) { ctx.lineWidth = 1 * px; ctx.strokeStyle = 'rgba(70, 74, 82, .35)'; ctx.stroke(); }
+      ctx.fillStyle = st.movingArea ? '#fff' : '#3b3f46';
       ctx.textAlign = 'center';
       ctx.direction = POD.lang === 'ar' ? 'rtl' : 'ltr';
       ctx.fillText(label, hx + hw / 2, hy + 16 * px);
     }
     const s = sideDef();
     ctx.font = `600 ${11 * px}px Cairo, system-ui, sans-serif`;
-    ctx.fillStyle = '#ca3d1a';
+    ctx.fillStyle = '#5b6069';
     const dims = { w: POD.num(s.printWidthIn * 2.54), h: POD.num(s.printHeightIn * 2.54) };
     const stitched = embHere() || st.method === 'embroidery';
     let label = t(stitched ? 'embArea' : 'printArea', dims);
@@ -1400,7 +1406,17 @@
   });
   // Hide the floating bar while dragging, bring it back afterwards.
   ['object:moving', 'object:scaling', 'object:rotating'].forEach((ev) => canvas.on(ev, () => { st.dragging = true; hideFloatBar(); }));
-  canvas.on('mouse:up', () => { if (st.dragging) { st.dragging = false; renderFloatBar(); } });
+  canvas.on('mouse:up', () => { if (st.dragging) { st.dragging = false; renderFloatBar(); canvas.requestRenderAll(); } });
+  /** Nothing selected any more (Escape, or a click on the empty grey around the product). */
+  function deselectAll() {
+    if (!canvas.getActiveObject()) return;
+    canvas.discardActiveObject();
+    canvas.requestRenderAll();
+    renderProps();
+    renderFloatBar();
+  }
+  // A click on the grey area around the canvas takes the selection off, as a click on an empty part of the canvas does.
+  $('stage').addEventListener('pointerdown', (e) => { if (e.target === $('stage') && !crop) deselectAll(); });
   canvas.on('text:editing:entered', hideFloatBar);
   canvas.on('text:editing:exited', () => renderFloatBar());
   canvas.on('object:scaling', updateQuality);
@@ -2294,12 +2310,13 @@
 
   // ---------- Phone layout: slide-up panel ----------
   function syncSheetTitle() {
-    if (st.sheet) $('sheet-title').textContent = st.sheet === 'product' ? t('sheet.product') : $('props-title').textContent;
+    if (st.sheet) $('sheet-title').textContent = st.sheet === 'product' ? t('sheet.product') : st.sheet === 'check' ? t('check.title') : $('props-title').textContent;
   }
   function setSheet(mode) {
     st.sheet = mode;
     document.body.classList.toggle('sheet-props', mode === 'props');
     document.body.classList.toggle('sheet-product', mode === 'product');
+    document.body.classList.toggle('sheet-check', mode === 'check');
     document.querySelectorAll('[data-sheet]').forEach((b) => b.classList.toggle('open', b.dataset.sheet === mode));
     syncSheetTitle();
     requestAnimationFrame(() => {
@@ -2715,7 +2732,9 @@
   const props = $('props');
   const PALETTE = ['#16181d', '#ffffff', '#ff5a36', '#e03131', '#f783ac', '#fcc419', '#e0a526', '#2f9e44', '#1c7ed6', '#22304f', '#7048e8', '#8d6e63'];
   const MASKS = ['none', 'circle', 'rounded', 'heart', 'star', 'hexagon', 'arch'];
-  const openGroups = new Set(['text', 'fx', 'colours', 'photo']);
+  // (Colours folded on phones, where the text's colour now sits under its size; the computer's side panel has room for
+  // them open, with the one-word colours.)
+  const openGroups = new Set(['text', 'fx', 'photo', ...(MOBILE.matches ? [] : ['colours'])]);
   const group = (id, title, body) =>
     `<details class="pgroup" data-group="${id}" ${openGroups.has(id) ? 'open' : ''}><summary>${esc(title)}</summary><div class="pgroup-body">${body}</div></details>`;
   const palette = (target) =>
@@ -2745,7 +2764,20 @@
       </details>`;
   }
 
-  function fillControls(o) {
+  /**
+   * The text's colour right under its size, so the four things people change most (words, font, size, colour) are the
+   * first screen of the settings (owner's go 26 Nov, editor redesign stage 1). A gradient keeps its two pickers in the
+   * Colours group; a dot here makes the text one colour again.
+   */
+  function basicColour(o) {
+    const grad = isGradient(o.fill);
+    const hollow = !grad && (!o.fill || o.fill === 'transparent');
+    return `<div class="field basic-colour"><label>${esc(t('props.colour'))}</label><div class="color-row">${grad || hollow ? '' : `<input type="color" id="p-fill" value="${toHex(o.fill)}" aria-label="${esc(t('props.colourOwn'))}" title="${esc(t('props.colourOwn'))}">`}${palette('fill')}</div></div>`;
+  }
+  /** A number box with − and + beside it (44 px each on phones); the buttons step it as the arrow keys do. */
+  const numStepper = (id, input) => `<div class="num-step" dir="ltr"><button type="button" class="btn btn-sm" data-numstep="-1" data-for="${id}" aria-label="${esc(t('props.less'))}">${ICON.minus}</button>${input}<button type="button" class="btn btn-sm" data-numstep="1" data-for="${id}" aria-label="${esc(t('props.more'))}">${ICON.plus}</button></div>`;
+
+  function fillControls(o, { basics = false } = {}) {
     const grad = isGradient(o.fill);
     const hollow = !grad && (!o.fill || o.fill === 'transparent');
     const c1 = grad ? o.fill.colorStops[0].color : hollow ? '#ffffff' : o.fill;
@@ -2760,7 +2792,7 @@
       </div>
       ${grad
         ? `<div class="field row"><input class="shrink" type="color" id="p-grad1" value="${toHex(c1)}"><span class="grad-preview" style="background:linear-gradient(90deg, ${toHex(c1)}, ${toHex(c2)})"></span><input class="shrink" type="color" id="p-grad2" value="${toHex(c2)}"></div>`
-        : `<div class="field color-row"><input type="color" id="p-fill" value="${toHex(c1)}" aria-label="${esc(t('props.colour'))}">${palette('fill')}</div>`}
+        : basics ? '' : `<div class="field color-row"><input type="color" id="p-fill" value="${toHex(c1)}" aria-label="${esc(t('props.colour'))}">${palette('fill')}</div>`}
       <div class="field"><label class="check"><input type="checkbox" id="p-nofill" ${hollow ? 'checked' : ''}> ${esc(t(isText(o) ? 'props.hollow' : 'props.none'))}</label></div>`;
   }
 
@@ -2781,24 +2813,38 @@
       </div>
       <div class="field"><label class="check"><input type="checkbox" id="p-shadow" ${o.shadow ? 'checked' : ''}> ${esc(t('props.shadow'))}</label></div>
       <div class="grid-4" dir="ltr">
-        <button class="btn btn-sm" data-act="flip-x" title="${esc(t('props.flipH'))}">⇋</button>
-        <button class="btn btn-sm" data-act="flip-y" title="${esc(t('props.flipV'))}">⇵</button>
-        <button class="btn btn-sm" data-act="top" title="${esc(t('props.front'))}">⤒</button>
-        <button class="btn btn-sm" data-act="bottom" title="${esc(t('props.back'))}">⤓</button>
+        <button class="btn btn-sm" data-act="flip-x" title="${esc(t('props.flipH'))}" aria-label="${esc(t('props.flipH'))}">${ICON.flipX}</button>
+        <button class="btn btn-sm" data-act="flip-y" title="${esc(t('props.flipV'))}" aria-label="${esc(t('props.flipV'))}">${ICON.flipY}</button>
+        <button class="btn btn-sm" data-act="top" title="${esc(t('props.front'))}" aria-label="${esc(t('props.front'))}">${ICON.top}</button>
+        <button class="btn btn-sm" data-act="bottom" title="${esc(t('props.back'))}" aria-label="${esc(t('props.back'))}">${ICON.bottom}</button>
       </div>`);
   }
 
+  const svgI = (d, w = 18) => `<svg width="${w}" height="${w}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
   const ICON = {
+    minus: svgI('<path d="M5 12h14"/>'),
+    plus: svgI('<path d="M12 5v14M5 12h14"/>'),
+    alleft: svgI('<path d="M4 6h16M4 10h10M4 14h16M4 18h10"/>'),
+    alcenter: svgI('<path d="M4 6h16M7 10h10M4 14h16M7 18h10"/>'),
+    alright: svgI('<path d="M4 6h16M10 10h10M4 14h16M10 18h10"/>'),
+    centerH: svgI('<path d="M12 3v18M5 8h4v8H5zM15 8h4v8h-4z"/>'),
+    centerV: svgI('<path d="M3 12h18M8 5h8v4H8zM8 15h8v4H8z"/>'),
+    up: svgI('<rect x="8" y="3" width="13" height="13" rx="2" fill="currentColor" stroke="none"/><path d="M3 8v11a2 2 0 0 0 2 2h11"/>'),
+    down: svgI('<rect x="8" y="3" width="13" height="13" rx="2"/><path d="M3 8v11a2 2 0 0 0 2 2h11" stroke-dasharray="2 3"/>'),
+    flipX: svgI('<path d="M12 3v18M8 7 3 12l5 5V7zM16 7l5 5-5 5V7z"/>'),
+    flipY: svgI('<path d="M3 12h18M7 8l5-5 5 5H7zM7 16l5 5 5-5H7z"/>'),
+    top: svgI('<path d="M5 4h14M12 20V9M7 13l5-5 5 5"/>'),
+    bottom: svgI('<path d="M5 20h14M12 4v11M7 11l5 5 5-5"/>'),
     dup: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>',
     del: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
   };
   function quickActions() {
     return `<div class="quick-actions" dir="ltr">
       <button class="btn btn-sm" data-act="duplicate" title="${esc(t('props.duplicate'))}" aria-label="${esc(t('props.duplicate'))}">${ICON.dup}</button>
-      <button class="btn btn-sm" data-act="center-h" title="${esc(t('props.centerH'))}">↔</button>
-      <button class="btn btn-sm" data-act="center-v" title="${esc(t('props.centerV'))}">↕</button>
-      <button class="btn btn-sm" data-act="up" title="${esc(t('props.forward'))}">▲</button>
-      <button class="btn btn-sm" data-act="down" title="${esc(t('props.backward'))}">▼</button>
+      <button class="btn btn-sm" data-act="center-h" title="${esc(t('props.centerH'))}" aria-label="${esc(t('props.centerH'))}">${ICON.centerH}</button>
+      <button class="btn btn-sm" data-act="center-v" title="${esc(t('props.centerV'))}" aria-label="${esc(t('props.centerV'))}">${ICON.centerV}</button>
+      <button class="btn btn-sm" data-act="up" title="${esc(t('props.forward'))}" aria-label="${esc(t('props.forward'))}">${ICON.up}</button>
+      <button class="btn btn-sm" data-act="down" title="${esc(t('props.backward'))}" aria-label="${esc(t('props.backward'))}">${ICON.down}</button>
       <button class="btn btn-sm btn-danger" data-act="delete" title="${esc(t('props.delete'))}" aria-label="${esc(t('props.delete'))}">${ICON.del}</button>
     </div>`;
   }
@@ -2879,19 +2925,20 @@
       html += group('text', t('grp.text'), `
         <div class="field"><textarea id="p-text" rows="2" dir="auto">${esc(o.text)}</textarea></div>
         <div class="field">${fontPicker(o)}</div>
-        <div class="field row">
-          <input type="text" class="num-in" data-step="1" data-min="4" data-max="400" inputmode="numeric" autocomplete="off" id="p-size" value="${Math.round(o.fontSize)}" aria-label="${esc(t('props.size'))}" title="${esc(t('props.size'))}" style="max-width:84px">
+        <div class="field row size-row">
+          ${numStepper('p-size', `<input type="text" class="num-in" data-step="1" data-min="4" data-max="400" inputmode="numeric" autocomplete="off" id="p-size" value="${Math.round(o.fontSize)}" aria-label="${esc(t('props.size'))}" title="${esc(t('props.size'))}">`)}
           <div class="btn-group">
             <button class="btn btn-sm ${o.fontWeight === 'bold' || Number(o.fontWeight) >= 600 ? 'active' : ''}" data-toggle="bold" title="${esc(t('props.bold'))}"><b>B</b></button>
             <button class="btn btn-sm ${o.fontStyle === 'italic' ? 'active' : ''}" data-toggle="italic" title="${esc(t('props.italic'))}"><i>I</i></button>
             <button class="btn btn-sm ${o.underline ? 'active' : ''}" data-toggle="underline" title="${esc(t('props.underline'))}"><u>U</u></button>
           </div>
         </div>
+        ${laser() ? '' : basicColour(o)}
         <div class="field btn-group" dir="ltr">
-          ${['left', 'center', 'right'].map((al) => `<button class="btn btn-sm ${o.textAlign === al ? 'active' : ''}" data-align="${al}" title="${esc(t('props.align' + al[0].toUpperCase() + al.slice(1)))}">${{ left: '⇤', center: '↔', right: '⇥' }[al]}</button>`).join('')}
+          ${['left', 'center', 'right'].map((al) => `<button class="btn btn-sm ${o.textAlign === al ? 'active' : ''}" data-align="${al}" title="${esc(t('props.align' + al[0].toUpperCase() + al.slice(1)))}" aria-label="${esc(t('props.align' + al[0].toUpperCase() + al.slice(1)))}">${ICON['al' + al]}</button>`).join('')}
         </div>`);
       if (!laser()) html += textFxGroup(o);
-      html += group('colours', t(laser() ? 'laser.toneTitle' : 'grp.colours'), laser() ? laserNote() : fillControls(o) + `<div class="word-ctl">${wordControls(o)}</div>` + outlineControls(o, 12));
+      html += group('colours', t(laser() ? 'laser.toneTitle' : 'grp.colours'), laser() ? laserNote() : fillControls(o, { basics: true }) + `<div class="word-ctl">${wordControls(o)}</div>` + outlineControls(o, 12));
       html += group('effects', t('grp.effects'), `
         <div class="field">
           <label for="p-curve">${esc(t('props.curve'))}</label>
@@ -3513,6 +3560,19 @@
     }
     const o = active();
     if (!o) return;
+    const numStep = e.target.closest('[data-numstep]');
+    if (numStep) {
+      const box = $(numStep.dataset.for);
+      if (!box) return;
+      const step = Number(box.dataset.step) || 1;
+      let n = (Number(latinNumber(box.value)) || 0) + Number(numStep.dataset.numstep) * step * (box.id === 'p-size' ? 2 : 1);
+      if (box.dataset.min !== undefined) n = Math.max(Number(box.dataset.min), n);
+      if (box.dataset.max !== undefined) n = Math.min(Number(box.dataset.max), n);
+      box.value = String(Math.round(n / step) * step);
+      box.dispatchEvent(new Event('input', { bubbles: true }));
+      box.dispatchEvent(new Event('change', { bubbles: true }));
+      return;
+    }
     const fontBtn = e.target.closest('[data-font]');
     if (fontBtn) {
       const family = fontBtn.dataset.font;
@@ -3779,11 +3839,16 @@
         <div class="chips">${opt.choices.map((c) => { const pr = choicePrice(c, st.sizeId); return `<button class="chip ${c === cur ? 'active' : ''}" data-opt="${esc(opt.id)}" data-choice="${esc(c.id)}">${esc(tr(c.name))}${pr ? ` <span style="opacity:.7">+${esc(money(pr))}</span>` : ''}</button>`; }).join('')}</div>
         ${opt.help ? `<p class="muted small" style="margin:6px 0 0;line-height:1.5">${esc(tr(opt.help))}</p>` : ''}</div>`;
     }).join('');
+    // Clothes sizes that only cost more (2XL +50…): the extra on the label line, so the chips fit one row (they wrapped
+    // onto two: editor redesign stage 1). Packs, mugs and the rest keep the price on each chip.
+    const extras = p.category === 'apparel' && !p.sizes.some((x) => (x.surcharge || 0) < 0) ? p.sizes.filter((x) => x.surcharge > 0 && sizeOk(p, st.colorId, x)) : [];
+    const sizeNoteBox = $('size-note');
+    if (sizeNoteBox) sizeNoteBox.textContent = extras.map((x) => t('size.extra', { size: tr(x.label), price: money(x.surcharge) })).join(POD.lang === 'ar' ? '، ' : ', ');
     $('sizes').innerHTML = p.sizes.map((s) => {
       const out = !sizeOk(p, st.colorId, s);
       // (A garment whose size isn't chosen yet shows none as chosen: Add to cart asks for it, QA 25 Nov.)
       const askSize = p.category === 'apparel' && p.sizes.length > 1 && !st.sizePicked;
-      return `<button class="chip ${s.id === st.sizeId && !askSize ? 'active' : ''}${out ? ' sold-out' : ''}" data-size="${s.id}"${out ? ' aria-disabled="true"' : ''}>${esc(tr(s.label))}${out ? ` <span class="sold-tag">${esc(tEd('ed.soldOut'))}</span>` : POD.sizeNote(st.product, s) ? ` <span style="opacity:.7">${esc(POD.sizeNote(st.product, s))}</span>` : ''}</button>`;
+      return `<button class="chip ${s.id === st.sizeId && !askSize ? 'active' : ''}${out ? ' sold-out' : ''}" data-size="${s.id}"${out ? ' aria-disabled="true"' : ''}>${esc(tr(s.label))}${out ? ` <span class="sold-tag">${esc(tEd('ed.soldOut'))}</span>` : !extras.includes(s) && POD.sizeNote(st.product, s) ? ` <span style="opacity:.7">${esc(POD.sizeNote(st.product, s))}</span>` : ''}</button>`;
     }).join('');
     // Print or embroidery (garments, caps, totes, aprons).
     $('method-field').hidden = !p.embroidery;
@@ -4251,6 +4316,7 @@
     if (mod && key === 'z') { e.preventDefault(); serial(() => stepHistory(e.shiftKey ? 1 : -1))(); return; }
     if (mod && key === 'y') { e.preventDefault(); serial(() => stepHistory(1))(); return; }
     if (!o) return;
+    if (key === 'escape' && $('pv').hidden && $('size-ask').hidden) { e.preventDefault(); deselectAll(); return; }
     if (mod && key === 'd') { e.preventDefault(); duplicateSelected(); return; }
     if (key === 'delete' || key === 'backspace') { e.preventDefault(); removeSelected(); return; }
     const step = e.shiftKey ? 10 : 1;
@@ -4662,9 +4728,9 @@
   });
   $('check-chip').addEventListener('click', () => {
     if (MOBILE.matches) {
+      // Phones: the check in a short sheet of its own (it was at the foot of the long Product sheet: stage 2).
       canvas.discardActiveObject();
-      setSheet('product');
-      requestAnimationFrame(() => $('sec-check').scrollIntoView({ block: 'start' }));
+      setSheet(st.sheet === 'check' ? null : 'check');
     } else {
       $('sec-check').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
@@ -4703,6 +4769,8 @@
       chip.textContent = copies != null ? POD.plural(`${packWordHere()}Chip`, copies) : plural(p.merge && st.mergeList ? 'qty.chipNames' : 'qty.chip', pieces);
     }
   }
+  // Phones: the line under the price opens the product sheet (colour, size, how many).
+  if ($('buy-sum')) $('buy-sum').addEventListener('click', () => { if (!$('qty-chip').hidden) $('qty-chip').click(); else { canvas.discardActiveObject(); setSheet('product'); } });
   if ($('qty-chip')) {
     $('qty-chip').addEventListener('click', () => {
       if (st.product.merge && st.mergeList) return openNames(); // a name list: one copy per name
@@ -4710,6 +4778,35 @@
       setSheet('product');
       requestAnimationFrame(() => { const f = $('qty-field'); if (f) f.scrollIntoView({ block: 'start', behavior: 'smooth' }); });
     });
+  }
+  /**
+   * Phones (editor redesign, stage 2): the product button in the top bar (colour dot, name, colour and size) and the
+   * line under the price ("White, M, 1 piece", or "Choose a size" in the accent colour while none is picked).
+   */
+  function renderTopBar() {
+    const p = st.product;
+    const c = color();
+    const lines = p.kind === 'book' || (p.merge && st.mergeList) ? [] : qtyLines();
+    const colours = [...new Set(lines.map((l) => l.color))];
+    const sizes = [...new Set(lines.map((l) => l.size))];
+    const askSize = needsSize();
+    const colourWord = colours.length > 1 ? t('buy.colours') : tr(c.name);
+    const sizeWord = askSize ? '' : sizes.length > 1 ? t('buy.sizes') : p.sizes.length > 1 ? tr((p.sizes.find((z) => z.id === (sizes[0] || st.sizeId)) || {}).label || '') : '';
+    const sep = POD.lang === 'ar' ? '، ' : ', ';
+    if ($('ed-prod-name')) {
+      $('ed-prod-name').textContent = tr(p.name);
+      $('ed-prod-sub').textContent = [colourWord, sizeWord].filter(Boolean).join(sep);
+      $('ed-prod-dot').style.background = c.hex || '#fff';
+      $('ed-prod').disabled = false;
+    }
+    const sum = $('buy-sum');
+    if (sum) {
+      const copies = packs() && !(p.merge && st.mergeList) ? copiesIn(qtyLines()) : null;
+      const pieces = p.merge && st.mergeList ? t('buy.names', { n: POD.num(mergeCount()) }) : copies != null ? POD.plural(packWordHere(), copies) : plural('qty.unitPieces', qtyTotal());
+      sum.classList.toggle('ask', askSize);
+      sum.hidden = p.kind === 'book';
+      sum.textContent = askSize ? `${colourWord}${sep}${t('buy.pickSize')}` : [colourWord, sizeWord, pieces].filter(Boolean).join(sep);
+    }
   }
   function refreshChrome() {
     if (bootDone) scheduleDraft();
@@ -4733,6 +4830,7 @@
     $('undo').disabled = h.i <= 0;
     $('redo').disabled = h.i >= h.stack.length - 1;
     $('add-to-cart').textContent = t(st.shopEdit ? 'shopEdit.button' : st.revise ? 'revise.send' : st.editingCartIndex !== null ? 'cart.update' : 'cart.add');
+    renderTopBar();
     renderSideTabs();
     renderLayers();
     renderCheck();
@@ -4973,6 +5071,24 @@
       ? `<span class="qty-out" title="${esc(tEd('ed.soldOut'))}">—</span>`
       : `<input type="text" inputmode="numeric" maxlength="4" autocomplete="off" class="qty-in${POD.comboFew(p, c.id, z.id) ? ' is-few' : ''}" data-qc="${c.id}" data-qz="${z.id}" value="${unpickedOne ? '' : (g[c.id] && g[c.id][z.id]) || ''}" placeholder="0" aria-label="${esc(`${tr(c.name)} ${tr(z.label)}`)}"${POD.comboFew(p, c.id, z.id) ? ` title="${esc(t('fewLeftCombo', { colour: tr(c.name), size: tr(z.label), n: POD.num(POD.comboFew(p, c.id, z.id)) }))}"` : ''}>`);
     const simple = !mix().sizes && !mix().colors;
+    // Phones, one colour in one size (the usual single piece): a − / + counter, with the size-and-colour table one tap
+    // away (the table of zeros under the sizes read as a second size question: owner's go 26 Nov, editor redesign
+    // stage 1). A bigger order, packs and the computer keep the table.
+    const lines = qtyLines();
+    if (MOBILE.matches && (mix().sizes || mix().colors) && !packs() && !st.qtyGridOpen && lines.length === 1) {
+      const n = lines[0].qty;
+      box.innerHTML = `
+        <div class="qty-row">
+          <label id="qty-label">${esc(t('qty.title'))}</label>
+          <div class="qty-step" dir="ltr" role="group" aria-labelledby="qty-label">
+            <button type="button" class="btn btn-sm" data-qstep="-1" aria-label="${esc(t('props.less'))}" ${n <= 1 ? 'disabled' : ''}>${ICON.minus}</button>
+            <span class="qty-n" aria-live="polite">${esc(POD.num(n))}</span>
+            <button type="button" class="btn btn-sm" data-qstep="1" aria-label="${esc(t('props.more'))}" ${n >= 1000 ? 'disabled' : ''}>${ICON.plus}</button>
+          </div>
+        </div>
+        <button type="button" class="qty-more" data-qgrid="open">${ICON.plus}<span>${esc(t(!mix().sizes ? 'qty.moreColours' : mix().colors ? 'qty.moreSizesColours' : 'qty.moreSizes'))}</span></button>`;
+      return;
+    }
     box.innerHTML = `
       <label>${esc(t('qty.title'))}</label>
       ${simple ? `
@@ -4984,7 +5100,7 @@
         <div class="qty-grid-wrap"><table class="qty-grid">
           <thead><tr><th></th>${sizes.map((z) => `<th>${esc(tr(z.label))}</th>`).join('')}${colors.length > 1 ? '<th></th>' : ''}</tr></thead>
           <tbody>${colors.map((c) => `<tr>
-            <th><span class="qty-sw" style="background:${esc(c.hex)}"></span>${esc(tr(c.name))}</th>
+            <th${colors.length === 1 ? ` title="${esc(tr(c.name))}"` : ''}><span class="qty-sw" style="background:${esc(c.hex)}"></span>${colors.length === 1 ? `<span class="visually-hidden">${esc(tr(c.name))}</span>` : esc(tr(c.name))}</th>
             ${sizes.map((z) => `<td>${cell(c, z)}</td>`).join('')}
             ${colors.length > 1 ? `<td><button type="button" class="qty-x" data-qdel="${c.id}" aria-label="${esc(t('qty.removeColour', { c: tr(c.name) }))}">×</button></td>` : ''}
           </tr>`).join('')}</tbody>
@@ -5090,6 +5206,8 @@
       }
     });
     $('qty-field').addEventListener('focusout', () => setTimeout(redrawQtyIfLeft, 0));
+    // Turned between phone and computer width: counter or table.
+    MOBILE.addEventListener('change', () => renderQty({ force: true }));
     $('qty-field').addEventListener('input', (e) => {
       const i = e.target.closest('.qty-in');
       if (!i) return;
@@ -5099,6 +5217,13 @@
       if (sum) sum.textContent = qtySumText();
     });
     $('qty-field').addEventListener('click', (e) => {
+      if (e.target.closest('[data-qgrid]')) {
+        st.qtyGridOpen = true;
+        renderQty({ force: true });
+        const first = $('qty-field').querySelector('.qty-in');
+        if (first) first.scrollIntoView({ block: 'nearest' });
+        return;
+      }
       const step = e.target.closest('[data-qstep]');
       if (step) {
         const g = qtyGrid();
@@ -6036,7 +6161,19 @@
   function scheduleDraft() {
     if (!draftMode) return;
     clearTimeout(draftTimer);
-    draftTimer = setTimeout(saveDraft, 600);
+    draftTimer = setTimeout(() => { saveDraft().then((ok) => setSavedMark(ok ? 'saved' : 'failed')); }, 600);
+  }
+  /**
+   * The mark beside the logo on phones: "Saved" once the design is kept on this device (it saves itself a moment
+   * after each change). Not shown where nothing is kept as a draft (a cart item being changed, a shared design, the
+   * shop's own edit) or before anything is designed.
+   */
+  function setSavedMark(state) {
+    const mark = $('ed-saved');
+    if (!mark) return;
+    const show = draftMode && !st.shopEdit && !st.revise && st.editingCartIndex === null && designedSides().length > 0 && state !== 'failed';
+    mark.hidden = !show;
+    if (show) $('ed-saved-text').textContent = t('ed.saved');
   }
   // Leaving right after a change: save it now (quickly, without a new thumbnail), not after the short wait,
   // and keep a small copy in localStorage at once (written before the page goes; the real save may not finish).
@@ -6139,7 +6276,13 @@
     const n = lines.reduce((m, l) => m + l.qty, 0);
     $('size-ask-title').textContent = t('sizeAsk.title');
     $('size-ask-note').textContent = n > 1 ? t('sizeAsk.many', { n: POD.num(n) }) : t('sizeAsk.one');
-    $('size-ask-chips').innerHTML = st.product.sizes.filter((z) => sizeOk(st.product, st.colorId, z)).map((z) => `<button type="button" class="chip" data-ask-size="${esc(z.id)}">${esc(tr(z.label))}${POD.sizeNote(st.product, z) ? ` <span style="opacity:.7">${esc(POD.sizeNote(st.product, z))}</span>` : ''}</button>`).join('');
+    const p = st.product;
+    const extras = p.category === 'apparel' && !p.sizes.some((x) => (x.surcharge || 0) < 0) ? p.sizes.filter((x) => x.surcharge > 0 && sizeOk(p, st.colorId, x)) : [];
+    $('size-ask-chips').innerHTML = p.sizes.filter((z) => sizeOk(p, st.colorId, z)).map((z) => `<button type="button" class="chip" data-ask-size="${esc(z.id)}" aria-pressed="false">${esc(tr(z.label))}${!extras.includes(z) && POD.sizeNote(p, z) ? ` <span style="opacity:.7">${esc(POD.sizeNote(p, z))}</span>` : ''}</button>`).join('');
+    $('size-ask-extra').textContent = extras.map((x) => t('size.extra', { size: tr(x.label), price: money(x.surcharge) })).join(POD.lang === 'ar' ? '، ' : ', ');
+    $('size-ask-extra').hidden = !extras.length;
+    $('size-ask-ok').textContent = t(st.editingCartIndex !== null ? 'cart.update' : 'cart.add');
+    $('size-ask-ok').disabled = true;
     box.hidden = false;
     const first = box.querySelector('[data-ask-size]');
     if (first) first.focus();
@@ -6147,7 +6290,16 @@
   if ($('size-ask')) {
     $('size-ask').addEventListener('click', async (e) => {
       if (e.target.id === 'size-ask' || e.target.closest('#size-ask-cancel')) { $('size-ask').hidden = true; return; }
-      const b = e.target.closest('[data-ask-size]');
+      // A size is picked first, then confirmed (a tap on a size added to the cart at once, so a slip ordered the
+      // wrong size: editor redesign stage 2).
+      const pick = e.target.closest('[data-ask-size]');
+      if (pick) {
+        $('size-ask-chips').querySelectorAll('[data-ask-size]').forEach((x) => { x.classList.toggle('active', x === pick); x.setAttribute('aria-pressed', String(x === pick)); });
+        $('size-ask-ok').disabled = false;
+        return;
+      }
+      if (!e.target.closest('#size-ask-ok')) return;
+      const b = $('size-ask-chips').querySelector('[data-ask-size].active');
       if (!b) return;
       // Every colour keeps its number of pieces, all in the size picked.
       const perColour = {};
@@ -6520,8 +6672,29 @@
     busy(false);
     if (!ok) return toast(t('draft.saveFailed'), 'error');
     st.dirty = false;
-    location.href = '/?saved=' + encodeURIComponent(st.product.id) + '#products';
+    // The customer stays in the editor (it sent them to the home page without a word: editor redesign stage 2).
+    setSavedMark('saved');
+    toast(t('draft.savedHere'));
   }));
+  if ($('ed-save')) $('ed-save').addEventListener('click', () => { closeEdMenu(); $('save-draft').click(); });
+  // The ⋯ menu of the phone top bar: cart, account, products, language, save.
+  function closeEdMenu() {
+    if (!$('ed-menu') || $('ed-menu').hidden) return;
+    $('ed-menu').hidden = true;
+    $('ed-more').setAttribute('aria-expanded', 'false');
+  }
+  if ($('ed-more')) {
+    $('ed-more').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const open = $('ed-menu').hidden;
+      closeFlyouts();
+      $('ed-menu').hidden = !open;
+      $('ed-more').setAttribute('aria-expanded', String(open));
+      if (open) { const first = $('ed-menu').querySelector('a, button'); if (first) first.focus(); }
+    });
+    document.addEventListener('click', (e) => { if (!e.target.closest('#ed-menu')) closeEdMenu(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('ed-menu').hidden) { closeEdMenu(); $('ed-more').focus(); } });
+  }
 
   window.addEventListener('beforeunload', (e) => {
     if (draftMode && draftTimer) saveDraft();

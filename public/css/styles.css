@@ -461,7 +461,7 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 .check-legend { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--ink-2); }
 .check-legend li { display: flex; align-items: center; gap: 8px; }
 .lg { width: 22px; height: 0; flex: none; border-top: 2px dashed; }
-.lg-trim { border-color: rgba(255, 90, 54, .9); }
+.lg-trim { border-color: rgba(70, 74, 82, .6); }
 .lg-safe { border-top: 2px dotted rgba(47, 158, 68, .9); }
 .lg-bleed { border-top: 2px solid rgba(28, 126, 214, .85); }
 .check-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -1482,3 +1482,144 @@ html[dir="ltr"] .hm-tile-link span { display: inline-block; transform: scaleX(-1
 /* Product page: "Show more designs" under the ready designs. */
 .pp-more { display: flex; justify-content: center; margin: 18px 0 4px; }
 .pp-more:empty { display: none; }
+
+/* ---------- Editor redesign, stage 1 (owner's go 26 Nov): one look, the basics first, thumb-size controls ---------- */
+.visually-hidden { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+/* Font size with − and + beside it. */
+.num-step { display: inline-flex; align-items: stretch; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #fff; flex: none; }
+.num-step .btn { border: 0; border-radius: 0; min-width: 34px; padding: 0 6px; display: inline-grid; place-items: center; background: #fff; }
+.num-step .btn:hover { background: var(--bg); }
+.num-step input { width: 48px; border: 0; border-inline: 1px solid var(--line); border-radius: 0; text-align: center; font: inherit; font-weight: 700; padding: 6px 2px; background: #fff; }
+.size-row { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap; }
+.size-row .btn-group { flex: 1 1 120px; }
+.basic-colour .palette { gap: 6px; }
+.quick-actions .btn, .grid-4 .btn, [data-align] { display: inline-grid; place-items: center; }
+/* The usual single piece: a − / + counter (phones), the size-and-colour table one tap away. */
+.qty-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.qty-row label { margin: 0; font-size: 14px; color: var(--ink); }
+.qty-step { border: 1px solid var(--line); border-radius: 10px; gap: 0; background: #fff; }
+.qty-step .btn { border: 0; background: none; display: inline-grid; place-items: center; }
+.qty-step .btn:disabled { opacity: .3; cursor: default; }
+.qty-step .qty-n { min-width: 40px; text-align: center; font-weight: 700; font-size: 16px; font-variant-numeric: tabular-nums; }
+.qty-more { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; padding: 8px 0; margin-top: 4px; font: inherit; font-size: 14px; font-weight: 600; color: var(--ink); cursor: pointer; }
+.qty-more svg { width: 16px; height: 16px; }
+/* The quantity table fits the computer's side panel (it ran past its edge with six sizes). */
+.qty-grid th .qty-sw:only-child, .qty-grid th .qty-sw:first-child:nth-last-child(2) { margin-inline-end: 0; }
+.panel .qty-grid .qty-in { width: 38px; min-width: 34px; }
+.panel .qty-grid td { padding: 2px; }
+
+@media (max-width: 820px) {
+  /* Every control a thumb can hit: at least 44 x 44 px (the bar stays as tall as before: 44 + 3 + 3). */
+  .stage-bar { padding: 3px 8px; gap: 6px; }
+  .stage-bar .btn, .stage-bar .btn-icon { min-height: 44px; min-width: 44px; display: inline-flex; align-items: center; justify-content: center; }
+  .zoom-group { padding: 0; }
+  .zoom-group button { width: 44px; height: 44px; display: inline-grid; place-items: center; }
+  .side-tabs { padding: 0; }
+  .side-tab { min-height: 44px; min-width: 52px; justify-content: center; }
+  /* The print check says what it means, in words, on phones too. */
+  .stage-bar .check-chip { min-height: 44px; display: inline-flex; align-items: center; gap: 4px; padding: 0 12px; font-size: 13px; flex: none; white-space: nowrap; }
+  .stage-bar > *, .stage-bar .zoom-group { flex: none; }
+  .stage-bar .check-chip span { display: inline; }
+  .fly-close, #sheet-close { width: 44px; height: 44px; font-size: 15px; }
+  .panel-foot #add-to-cart, .panel-foot #save-draft, .panel-foot #preview-open-m { min-height: 48px; min-width: 48px; justify-content: center; }
+  .qty-chip { position: relative; }
+  .qty-chip::after { content: ""; position: absolute; inset: -12px -4px; }
+  /* Settings sheet */
+  details.pgroup > summary { min-height: 48px; padding: 12px; font-size: 14px; }
+  .quick-actions .btn, .grid-4 .btn, .btn-group .btn, #props .btn-sm, #sec-product .btn-sm, .align-row .btn { min-height: 44px; }
+  .num-step .btn { min-width: 44px; min-height: 44px; }
+  .color-row input[type=color] { width: 44px; height: 44px; padding: 2px; }
+  details.font-picker summary { min-height: 44px; }
+  .font-option { min-height: 44px; }
+  .pal { width: 32px; height: 32px; position: relative; }
+  .pal::after { content: ""; position: absolute; inset: -6px; }
+  .palette { gap: 10px; }
+  .swatches { gap: 12px; }
+  .swatch { width: 34px; height: 34px; }
+  .swatch::before { content: ""; position: absolute; inset: -5px; }
+  #sizes .chip, #prod-options .chip, #method-chips .chip, #size-ask-chips .chip { min-height: 44px; min-width: 48px; justify-content: center; padding: 0 12px; display: inline-flex; align-items: center; gap: 4px; }
+  .qty-step .btn { min-width: 44px; min-height: 44px; }
+  .qty-more { min-height: 44px; }
+  .qty-in { min-height: 44px; }
+  .layers li { min-height: 44px; }
+  .tpl-cat, .small-chips .chip, .lib-types .chip { min-height: 40px; }
+  .float-bar button { min-height: 44px; }
+  /* Text boxes at 16 px: an iPhone zooms the whole page into any smaller one. */
+  body.editor-page input[type="text"], body.editor-page input[type="search"], body.editor-page input[type="url"], body.editor-page input:not([type]),
+  body.editor-page textarea, body.editor-page select { font-size: 16px; }
+}
+/* Size label with the extra price of the bigger sizes on the same line. */
+.label-line { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.label-line label { margin: 0; }
+.size-note { font-size: 12px; color: var(--ink-3); }
+.size-note:empty { display: none; }
+/* Text settings: words, font, size and colour first; move, copy, order and delete under them. */
+#props { display: flex; flex-direction: column; }
+#props > .pgroup[data-group="text"] { order: -1; }
+#props > .quick-actions + .pgroup[data-group="text"] { margin-bottom: 12px; }
+@media (max-width: 820px) {
+  /* On phones the basics are the sheet itself: no "Text" heading to fold them away. */
+  #props > .pgroup[data-group="text"] { border: 0; margin-bottom: 4px; }
+  #props > .pgroup[data-group="text"] > summary { display: none; }
+  #props > .pgroup[data-group="text"] > .pgroup-body { padding: 0; }
+  #p-text { min-height: 48px; height: auto; field-sizing: content; max-height: 120px; }
+}
+
+/* ---------- Editor redesign, stage 2 (owner's go 26 Nov): top bar and buy bar on phones ---------- */
+.ed-top, .buy-sum { display: none; }
+#size-ask .size-ask-foot { justify-content: flex-end; gap: 8px; margin-top: 12px; }
+#size-ask .size-ask-extra { margin: 0; }
+#size-ask .size-ask-extra[hidden] { display: none; }
+#size-ask-chips .chip.active { border-color: var(--ink); background: var(--ink); color: #fff; }
+@media (max-width: 820px) {
+  body.editor-page .site-header { display: none; }
+  .ed-top { display: flex; align-items: center; gap: 6px; height: 56px; padding: 0 8px; background: #fff; border-bottom: 1px solid var(--line); flex: none; position: relative; z-index: 30; }
+  .ed-logo { display: inline-grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 10px; }
+  .ed-logo img { width: 32px; height: 32px; }
+  .ed-saved { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; color: var(--ink-3); flex: none; }
+  .ed-saved[hidden] { display: none; }
+  .ed-saved i { width: 7px; height: 7px; border-radius: 50%; background: var(--ok, #15803d); }
+  .ed-prod { flex: 1; min-width: 0; height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border: 1px solid var(--line); border-radius: 12px; background: #fff; font: inherit; color: var(--ink); cursor: pointer; text-align: start; }
+  .ed-prod.open { border-color: var(--ink); background: var(--bg); }
+  .ed-prod-dot { width: 20px; height: 20px; border-radius: 50%; flex: none; box-shadow: 0 0 0 1px rgba(0,0,0,.22), inset 0 0 0 2px #fff; }
+  .ed-prod-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
+  .ed-prod-txt b { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ed-prod-txt small { font-size: 11px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ed-prod-txt small:empty { display: none; }
+  .ed-prod.open .ed-chev { transform: rotate(180deg); }
+  .ed-chev { flex: none; color: var(--ink-3); }
+  .ed-more { width: 44px; height: 44px; flex: none; display: inline-grid; place-items: center; border: 0; border-radius: 12px; background: none; color: var(--ink); cursor: pointer; position: relative; }
+  .ed-more[aria-expanded="true"] { background: var(--bg); }
+  .ed-more .badge { position: absolute; top: 4px; inset-inline-end: 2px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; background: var(--bg); color: var(--ink); font-size: 11px; line-height: 16px; box-shadow: 0 0 0 2px #fff; }
+  .ed-menu { position: absolute; top: 52px; inset-inline-end: 8px; min-width: 220px; background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 32px rgba(16,24,40,.16); padding: 6px; display: flex; flex-direction: column; z-index: 45; }
+  .ed-menu[hidden] { display: none; }
+  .ed-menu a, .ed-menu button { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px 10px; border: 0; border-radius: 8px; background: none; font: inherit; font-size: 15px; font-weight: 600; color: var(--ink); text-decoration: none; cursor: pointer; text-align: start; width: 100%; }
+  .ed-menu a:hover, .ed-menu button:hover, .ed-menu a:focus-visible, .ed-menu button:focus-visible { background: var(--bg); }
+  .ed-menu svg { flex: none; color: var(--ink-2); }
+  .ed-menu .badge { margin-inline-start: auto; }
+  .ed-menu #ed-save { border-top: 1px solid var(--line); border-radius: 0 0 8px 8px; margin-top: 4px; padding-top: 10px; }
+  .ed-menu #ed-save > span { display: flex; flex-direction: column; }
+  .ed-menu small { font-size: 12px; font-weight: 400; color: var(--ink-3); }
+  /* The tool row a little lower, so the top bar takes no room from the product (still 44 px and more per tool). */
+  .tool { padding: 4px 1px; gap: 2px; }
+  /* The product button does the tool row's Product job. */
+  .tools .tool[data-sheet="product"] { display: none !important; }
+  /* Buy bar: the price, what is being bought, one orange button. Save is in the ⋯ menu, Preview above the product. */
+  .panel-foot { padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); gap: 12px; }
+  .panel-foot .amount { font-size: 18px; line-height: 1.2; }
+  .panel-foot .qty-chip, .panel-foot #save-draft, .panel-foot #preview-open-m { display: none !important; }
+  .buy-sum { display: block; max-width: 100%; border: 0; background: none; padding: 2px 0; margin: 0; font: inherit; font-size: 12px; color: var(--ink-3); text-align: start; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; position: relative; }
+  .buy-sum::after { content: ""; position: absolute; inset: -14px -4px -10px; }
+  .buy-sum.ask { color: var(--accent); font-weight: 700; }
+  .buy-sum[hidden] { display: none; }
+  .panel-foot #add-to-cart { min-width: 168px; padding: 0 18px; font-size: 15px; }
+  /* The print check in its own short sheet. */
+  body.sheet-check .panel-scroll { display: block; }
+  body.sheet-check .sheet-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px 8px; }
+  body.sheet-check #sec-check { display: block; border: 0; }
+  body.sheet-check #sec-check > h3 { display: none; }
+  /* The size question as a sheet from the bottom, with the design still in view above it. */
+  #size-ask { place-items: end stretch; padding: 0; }
+  #size-ask .pv-box, #size-ask > div { width: 100%; height: auto; max-height: 70%; border-radius: 18px 18px 0 0; padding: 18px 16px calc(16px + env(safe-area-inset-bottom)); }
+  #size-ask .size-ask-foot .btn { flex: 1; min-height: 48px; }
+}
