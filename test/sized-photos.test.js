@@ -106,3 +106,18 @@ test('the shop\'s artwork in small copies for the Templates list: transparent, f
     '/img-w/320/art/svg/x.svg',
   ]) assert.strictEqual((await fetch(base + url)).status, 404, url);
 });
+
+test('the big artwork\'s real sizes, for the editor\'s print check (it shows a 1200 px copy)', async () => {
+  const r = await fetch(`${base}/api/art-sizes`);
+  assert.strictEqual(r.status, 200);
+  assert.match(r.headers.get('cache-control'), /max-age=3600/);
+  const sizes = await r.json();
+  const meta = await sharp(path.join(__dirname, '../public/img/art/christmas/trees-plaid-bows.png')).metadata();
+  assert.deepStrictEqual(sizes['christmas/trees-plaid-bows.png'], [meta.width, meta.height]);
+  assert.ok(Object.values(sizes).every(([w]) => w > 1400), 'only artwork worth a lighter copy');
+  assert.ok(Object.keys(sizes).every((k) => /^[a-z0-9-]+\/[^/]+\.(png|webp|jpe?g)$/i.test(k)));
+  // The copy the editor shows is there.
+  const copy = await fetch(`${base}/img-w/1200/art/christmas/trees-plaid-bows.png`);
+  assert.strictEqual(copy.status, 200);
+  assert.strictEqual((await sharp(Buffer.from(await copy.arrayBuffer())).metadata()).width, 1200);
+});

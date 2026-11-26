@@ -400,12 +400,19 @@
    */
   const fileArt = new Map();
   /** The full-size original of an uploaded design (or of its copy without the words), used by print files. */
-  const PRINT_SRC = /^\/library-art\/[0-9a-z-]{4,40}\/(?:nowords-)?print\.(png|jpg)$/;
+  // (Also the shop's own big artwork, shown as a 1200 px copy: see makeImage.)
+  const PRINT_SRC = /^\/library-art\/[0-9a-z-]{4,40}\/(?:nowords-)?print\.(png|jpg)$|^\/img\/art\/[a-z0-9-]{1,40}\/[A-Za-z0-9_-][A-Za-z0-9_.-]{0,100}\.(?:png|webp|jpe?g)$/i;
   /** A light ink (the white copy of one-colour artwork goes with it): dark product colours. */
   const lightInk = (ink) => /^#[0-9a-f]{6}$/i.test(ink || '') && parseInt(ink.slice(1, 3), 16) + parseInt(ink.slice(3, 5), 16) + parseInt(ink.slice(5, 7), 16) > 384;
   // A small copy of the shop's artwork for the Templates list's pictures (the print files are 2–3 MB each: owner,
   // 26 Nov). Only for those pictures; the artwork put on the product is the full file.
-  const thumbSrc = (src) => src.replace(/^\/img\/art\/([a-z0-9-]{1,40})\/([A-Za-z0-9_-][A-Za-z0-9_.-]{0,100}\.(?:png|webp|jpe?g))$/i, '/img-w/320/art/$1/$2');
+  const ART_RASTER = /^\/img\/art\/([a-z0-9-]{1,40})\/([A-Za-z0-9_-][A-Za-z0-9_.-]{0,100}\.(?:png|webp|jpe?g))$/i;
+  const thumbSrc = (src) => src.replace(ART_RASTER, '/img-w/320/art/$1/$2');
+  // On the product, big artwork (2–3 MB print files, 2–3 s to appear) is shown as a 1200 px copy; its print files use
+  // the original (`printSrc`, swapped in by usePrintSources) and the print check its real size (`printPx`). Owner, 26 Nov.
+  let artSizesP = null;
+  const artSizes = () => (artSizesP = artSizesP || fetch('/api/art-sizes').then((r) => (r.ok ? r.json() : {})).catch(() => ({})));
+  const loadImage = (url) => new Promise((resolve) => fabric.Image.fromURL(url, (img, failed) => resolve(failed || !img ? null : img)));
   async function makeImage(i, ink, thumb = false) {
     // A white copy of one-colour artwork (`dark`) for dark product colours (light ink).
     const light = Boolean(i.dark) && lightInk(ink);
@@ -422,6 +429,16 @@
       const o = await new Promise((resolve) => fabric.loadSVGFromString(text, (objects, options) => resolve(objects && objects.length ? fabric.util.groupSVGElements(objects, options) : null)));
       if (o) o.set({ name: 'art:' + src.split('/').pop().replace(/\.svg$/, '') });
       return both(o);
+    }
+    const m = !uploaded && !thumb ? ART_RASTER.exec(src) : null;
+    const px = m ? (await artSizes())[`${m[1]}/${m[2]}`] : null;
+    if (px) {
+      const img = (await loadImage(`/img-w/1200/art/${m[1]}/${m[2]}`)) || (await loadImage(src));
+      if (!img) return null;
+      img.set({ name: 'art:' + src.split('/').pop().replace(/\.\w+$/, '') });
+      if (img.getSrc && !/^\/img-w\//.test(new URL(img.getSrc(), location.href).pathname)) return both(img); // (the original, after all)
+      img.set({ printSrc: src, printPx: px.slice(0, 2).map(Number) });
+      return both(img);
     }
     return new Promise((resolve) => fabric.Image.fromURL(thumb ? thumbSrc(src) : src, (img, failed) => {
       if (failed || !img) return resolve(null);

@@ -221,11 +221,30 @@ test('computer speed (owner, 26 Nov): the product photo is not held up by the le
     const art = order.filter((x) => x.includes('/art/') && !x.endsWith('.svg'));
     assert.ok(art.length > 0, 'artwork pictures were drawn');
     assert.deepStrictEqual(art.filter((x) => !x.startsWith('/img-w/320/art/')), [], 'only small copies for the list');
-    // The artwork put on the product is the full file (for the print).
+    // On the product: a 1200 px copy of big artwork; the print files are made from the original, at the same size,
+    // and the print check goes by the original's pixels.
     order.length = 0;
     await page.click('#template-grid .template-btn >> nth=0');
     await page.waitForFunction(() => window.__editor.canvas.getObjects().some((o) => o.type === 'image'), null, { timeout: 30000 });
-    assert.ok(order.some((x) => /^\/img\/art\/.+\.(png|jpe?g|webp)$/.test(x)), `full artwork on the product: ${order.join(', ')}`);
+    assert.ok(order.some((x) => /^\/img-w\/1200\/art\/.+\.(png|jpe?g|webp)$/.test(x)), `screen copy on the product: ${order.join(', ')}`);
+    const pic = await page.evaluate(async () => {
+      const ed = window.__editor;
+      const o = ed.canvas.getObjects().find((x) => x.type === 'image');
+      const shown = Math.round(o.width * o.scaleX * 1000);
+      const was = { src: new URL(o.getSrc()).pathname, px: o.getElement().naturalWidth, printSrc: o.printSrc, printPx: o.printPx, issues: ed.checkIssues().map((i) => i.key) };
+      const saved = o.toObject(['printSrc', 'printPx']);
+      await window.POD_DESIGN.usePrintSources(ed.canvas);
+      return { was, saved: { printSrc: saved.printSrc, printPx: saved.printPx }, now: { src: new URL(o.getSrc()).pathname, px: o.getElement().naturalWidth, same: Math.round(o.width * o.scaleX * 1000) === shown } };
+    });
+    assert.match(pic.was.src, /^\/img-w\/1200\/art\//);
+    assert.ok(pic.was.px <= 1200);
+    assert.strictEqual(pic.was.printSrc, pic.now.src);
+    assert.match(pic.now.src, /^\/img\/art\/[a-z0-9-]+\/[^/]+\.(png|jpe?g|webp)$/);
+    assert.strictEqual(pic.now.px, pic.was.printPx[0], 'the original, full size, for the print');
+    assert.ok(pic.now.px > 1400);
+    assert.strictEqual(pic.now.same, true, 'at the same size on the product');
+    assert.deepStrictEqual(pic.was.issues.filter((k) => /dpi|res|blur|quality/i.test(k)), [], 'no low-quality warning for the copy');
+    assert.deepStrictEqual(pic.saved, { printSrc: pic.was.printSrc, printPx: pic.was.printPx }, 'kept with the saved design');
     assert.deepStrictEqual(errors, []);
     await ctx.close();
   } finally {

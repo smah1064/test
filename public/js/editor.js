@@ -7025,6 +7025,7 @@
         sidesPayload[s.id] = { editor: { version: fabric.version, objects: await inlineImages(st.designs[s.id]), ...(st.offsets[s.id] ? { offset: st.offsets[s.id] } : {}), ...(st.pattern ? { pattern: { ...st.pattern } } : {}), area: xywh(baseArea(s.id)) } };
         const withFields = useMerge && mergeSides.some((x) => x.id === s.id);
         if (withFields) {
+          if (D.usePrintSources) await D.usePrintSources(canvas); // (full-size artwork in the name-list prints too)
           // The background and one picture of the names per row...
           const m = await exportMergeSide(s, (i, n) => busy(true, t('merge.preparing', { i: POD.num(i), n: POD.num(n) })));
           files[`${s.id}-merge-base.png`] = m.base;
