@@ -704,6 +704,20 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       x.lastSeen = new Date().toISOString();
     });
   }
+  /**
+   * An answer for someone let in while the shop is private is never kept for others by a shared cache: the hosting's
+   * CDN (hcdn) ignores cookies, so a product picture an invited tester opened was handed to strangers without an
+   * invitation (security review, 26 Nov). "public" becomes "private" (the browser still keeps it), and answers that
+   * say nothing are "private, no-cache" (e.g. /api/products).
+   */
+  function privateWhilePreview(res) {
+    const set = res.setHeader;
+    res.setHeader = function setHeader(name, value) {
+      if (String(name).toLowerCase() === 'cache-control') value = String(value).replace(/\bpublic\b/gi, 'private');
+      return set.call(this, name, value);
+    };
+    res.setHeader('Cache-Control', 'private, no-cache');
+  }
   /** Too many wrong codes from this visitor for now. */
   const previewWait = (req) => typeof limiter.check(`previewCode:${req.ip}`, LIMITS.previewCode) === 'number';
   /** The person with this code who may come in, or null. */
@@ -727,6 +741,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (req.path === '/robots.txt') return res.type('text').send('User-agent: *\nDisallow: /\n');
     // A personal link: https://<shop>/<any page>?invite=CODE
     if (req.method === 'GET' && typeof req.query.invite === 'string') {
+      // (Never kept by the hosting's CDN: the answer carries this browser's own cookie.)
+      res.set('Cache-Control', 'no-store');
       // (The address as sent, its other parameters kept as they were.)
       const back = previewBack(req.originalUrl);
       if (!previewWho(req)) {
@@ -747,6 +763,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       // (Also when theirs is out of date: an older form, or a password changed since.)
       if (!who.startsWith('p-') && (preview.verify(auth.previewKey, preview.cookieFrom(req)) || {}).who !== who) previewCookie(req, res, who);
       previewSeen(who);
+      privateWhilePreview(res);
       return next();
     }
     // (A path written with ".." or encoded slashes is never one of the open ones.)
@@ -3659,12 +3676,19 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const m = new RegExp(`(?:^|;\\s*)${name}=([^;]*)`).exec(req.get('cookie') || '');
     return m ? m[1] : '';
   };
+  // Each entry is "<order id>~<link key>~<mark>". The id and key are in the order's link (shared on WhatsApp), so they
+  // only open the order, as the link does; the mark is signed by the shop and only ever sent in this cookie, so it
+  // proves this is the browser the order was placed from ("Save your orders"; security review, 26 Nov).
+  const placedMark = (id, key) => crypto.createHmac('sha256', auth.linkKey).update(`guest-owner.${id}.${key}`).digest('base64url').slice(0, 22);
+  /** [id, key, placedHere] for each order this browser keeps. */
   const ordersHere = (req) => cookieOf(req, ORDERS_COOKIE).split('|').slice(0, 8)
-    .map((x) => x.split('~')).filter(([id, key]) => UUID_RE.test(id || '') && LINK_KEY_RE.test(key || ''));
+    .map((x) => x.split('~')).filter(([id, key]) => UUID_RE.test(id || '') && LINK_KEY_RE.test(key || ''))
+    .map(([id, key, mark]) => [id, key, sameSecret(mark || '', placedMark(id, key))]);
   function rememberOrderHere(req, res, order) {
     if (!order || !order.linkKey || order.customerId) return;
-    const list = [[order.id, order.linkKey], ...ordersHere(req).filter(([id]) => id !== order.id)].slice(0, 8);
-    res.append('Set-Cookie', `${ORDERS_COOKIE}=${list.map((x) => x.join('~')).join('|')}; Path=/api/orders; Max-Age=${180 * 86400}; HttpOnly; SameSite=Lax${isHttps(req) ? '; Secure' : ''}`);
+    const list = [[order.id, order.linkKey, true], ...ordersHere(req).filter(([id]) => id !== order.id)].slice(0, 8);
+    const value = list.map(([id, key, placed]) => (placed ? `${id}~${key}~${placedMark(id, key)}` : `${id}~${key}`)).join('|');
+    res.append('Set-Cookie', `${ORDERS_COOKIE}=${value}; Path=/api/orders; Max-Age=${180 * 86400}; HttpOnly; SameSite=Lax${isHttps(req) ? '; Secure' : ''}`);
   }
   /**
    * The item a "send a new version" request is about: with the order's key (or the account it was placed from),
@@ -4060,7 +4084,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
    */
   function guestOwnerOf(req, order) {
     if (!order || order.customerId || !order.linkKey || !order.customer || !order.customer.phone) return false;
-    return ordersHere(req).some(([id, key]) => id === order.id && sameSecret(key, order.linkKey));
+    // (The signed mark, never the link's own id and key: those are in the link.)
+    return ordersHere(req).some(([id, key, placed]) => placed && id === order.id && sameSecret(key, order.linkKey));
   }
   /** The offer, when it applies: a guest's order, nobody signed in here, and no account with that mobile yet. */
   function accountOfferFor(req, order) {
@@ -4078,7 +4103,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     rateLimit(req, 'accountSignup');
     const { salt, hash } = customers.hashPassword(fields.password);
     // This browser's other guest orders from the same mobile go on the account too.
-    const here = new Map(ordersHere(req));
+    const here = new Map(ordersHere(req).filter(([, , placed]) => placed).map(([id, key]) => [id, key]));
     const created = store.mutate((db) => {
       db.customers ||= [];
       if (db.customers.some((x) => x.phone === fields.phone)) throw new HttpError(409, 'acctPhoneTaken');

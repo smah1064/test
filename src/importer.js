@@ -23,6 +23,8 @@ const zlib = require('zlib');
 const MAX_PAGE = 3e6;
 const MAX_IMAGE = 15e6;
 const TIMEOUT = 12000;
+// The whole download, redirects included (a site that sends a byte now and then never trips TIMEOUT).
+const TOTAL_TIMEOUT = 30000;
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
 class ImportError extends Error {
@@ -107,11 +109,21 @@ function checkUrl(raw) {
 
 /** GET a URL safely; follows up to 5 redirects. Resolves { url, type, body }. */
 function safeGet(raw, { maxBytes, accept }) {
-  return new Promise((resolve, reject) => {
+  return new Promise((done, fail) => {
     let hops = 0;
+    // A deadline for the whole download, redirects included: the socket's own timeout only notices silence, so a
+    // site sending a byte every few seconds would hold the request open for ever (security review, 26 Nov).
+    let current = null;
+    const deadline = setTimeout(() => {
+      const e = new ImportError('importFailed', 'timeout');
+      if (current) current.destroy(e);
+      fail(e);
+    }, TOTAL_TIMEOUT);
+    const resolve = (v) => { clearTimeout(deadline); done(v); };
+    const reject = (e) => { clearTimeout(deadline); fail(e); };
     const go = (u) => {
       const mod = u.protocol === 'https:' ? https : http;
-      const req = mod.get(u, {
+      const req = current = mod.get(u, {
         lookup: safeLookup,
         timeout: TIMEOUT,
         headers: { 'User-Agent': UA, Accept: accept, 'Accept-Language': 'ar,en;q=0.8', 'Accept-Encoding': 'gzip, deflate, br' },

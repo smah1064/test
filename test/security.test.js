@@ -299,3 +299,110 @@ test('customers can only be signed out by the shop itself; imported sources must
   assert.strictEqual(other.status, 403);
   assert.strictEqual((await fetch(base + '/api/account/logout', { method: 'POST', headers: { 'Sec-Fetch-Site': 'same-origin' } })).status, 200);
 });
+
+// ---------- "Save your orders": the order's shared link is not the browser it was placed from (review 26 Nov) ----------
+
+test('"Save your orders": a cookie written from the order link alone makes no account', async () => {
+  const sharp = require('sharp');
+  const png = (w, h) => sharp({ create: { width: w, height: h, channels: 4, background: { r: 200, g: 30, b: 60, alpha: 1 } } }).png().toBuffer();
+  const json = { 'Content-Type': 'application/json' };
+  const made = await (await post('/api/designs', { productId: 'tshirt', color: 'black', size: 'M', sides: { front: { editor: { objects: [{ type: 'i-text', text: 'hi' }] } } } })).json();
+  for (const name of made.files) {
+    const body = name.endsWith('.svg') ? Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>') : name.includes('print') ? await png(3600, 4800) : await png(60, 72);
+    assert.strictEqual((await fetch(`${base}/api/designs/${made.id}/files/${name}`, { method: 'PUT', headers: { 'x-upload-token': made.uploadToken }, body })).status, 204);
+  }
+  assert.strictEqual((await fetch(`${base}/api/designs/${made.id}/complete`, { method: 'POST', headers: { 'x-upload-token': made.uploadToken } })).status, 200);
+  const q = await (await post('/api/cart/quote', { designIds: [made.id] })).json();
+  const customer = { name: 'Sara Guest', phone: '01077788899', governorate: 'giza', city: 'Dokki', address: '5 Nile St', email: 'sara@example.com' };
+  const placed = await post('/api/orders', { customer, designIds: [made.id], expectedTotal: q.total, orderKey: `cart-sec-${Date.now()}` });
+  assert.strictEqual(placed.status, 201, await placed.clone().text());
+  const order = await placed.json();
+  const here = placed.headers.getSetCookie().find((c) => c.startsWith('pod_orders=')).split(';')[0];
+  // What anyone with the shared link (/order?id=…&k=…) can write by hand: it opens the order, as the link does...
+  const forged = `pod_orders=${order.id}~${order.key}`;
+  const seen = await fetch(`${base}/api/orders/${order.id}`, { headers: { cookie: forged } });
+  assert.strictEqual(seen.status, 200);
+  assert.strictEqual((await seen.json()).accountOffer, undefined, 'no offer (it would show the mobile)');
+  // ...but makes no account with the customer's mobile and the visitor's password.
+  const take = await fetch(`${base}/api/orders/${order.id}/account`, { method: 'POST', headers: { ...json, cookie: forged }, body: JSON.stringify({ password: 'Attacker-chosen-9' }) });
+  assert.strictEqual(take.status, 403);
+  const bad = here.replace(/.$/, (c) => (c === 'A' ? 'B' : 'A'));
+  assert.strictEqual((await fetch(`${base}/api/orders/${order.id}/account`, { method: 'POST', headers: { ...json, cookie: bad }, body: JSON.stringify({ password: 'Attacker-chosen-9' }) })).status, 403, 'a changed mark');
+  // The browser the order was placed from still can.
+  const mine = await fetch(`${base}/api/orders/${order.id}/account`, { method: 'POST', headers: { ...json, cookie: here }, body: JSON.stringify({ password: 'Sara-own-pass-77' }) });
+  assert.strictEqual(mine.status, 201, await mine.clone().text());
+});
+
+// ---------- Private preview behind the hosting's CDN (it ignores cookies) ----------
+
+test('while private, an invited visitor\'s answers are never public (a shared cache would hand them to strangers)', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pod-sec-preview-'));
+  const app = createApp({ dataDir: dir, adminPassword: 'secret', cleanupEvery: 0, requireApproval: false, previewStart: true });
+  const srv = await new Promise((resolve) => { const s = app.listen(0, () => resolve(s)); });
+  const b = `http://127.0.0.1:${srv.address().port}`;
+  try {
+    const token = (await (await fetch(b + '/api/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: 'secret' }) })).json()).token;
+    const person = await (await fetch(b + '/api/admin/preview/people', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ name: 'Tester' }) })).json();
+    const inv = await fetch(`${b}/?invite=${person.code}`, { redirect: 'manual' });
+    assert.strictEqual(inv.status, 303);
+    assert.match(inv.headers.get('cache-control') || '', /no-store/, 'the answer that sets the cookie is never kept');
+    const cookie = inv.headers.getSetCookie().find((c) => c.startsWith('ebda3_preview=')).split(';')[0];
+    const thumb = await fetch(`${b}/api/thumbs/tshirt/white.webp`, { headers: { cookie } });
+    assert.strictEqual(thumb.status, 200);
+    assert.doesNotMatch(thumb.headers.get('cache-control'), /public/);
+    assert.match(thumb.headers.get('cache-control'), /private/);
+    const products = await fetch(`${b}/api/products`, { headers: { cookie } });
+    assert.strictEqual(products.status, 200);
+    assert.match(products.headers.get('cache-control') || '', /private/);
+    const img = await fetch(`${b}/img/og-ebda3.png`, { headers: { cookie } });
+    assert.doesNotMatch(img.headers.get('cache-control') || '', /public/);
+    // Without the invitation: still closed; and once the shop is open, public pictures stay public.
+    assert.strictEqual((await fetch(`${b}/api/thumbs/tshirt/white.webp`)).status, 403);
+    assert.strictEqual((await fetch(b + '/api/admin/preview', { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ on: false }) })).status, 200);
+    assert.match((await fetch(`${b}/api/thumbs/tshirt/white.webp`)).headers.get('cache-control'), /^public/);
+  } finally {
+    srv.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ---------- Name lists as CSV: ";" (Excel set to split on ";") ----------
+
+test('name-list CSV: a cell with ";" is quoted, so no part of it becomes a formula', () => {
+  const out = merge.csv(['Name'], [['Ali;=1+1'], ['Mona;@SUM(1+1)*cmd|x'], ['Sara']]).toString('utf8');
+  assert.match(out, /^1,"Ali;=1\+1"\r$/m);
+  assert.match(out, /^2,"Mona;@SUM\(1\+1\)\*cmd\|x"\r$/m);
+  assert.match(out, /^3,Sara\r$/m);
+});
+
+// ---------- Import from a link: a site that drips bytes is cut off (review 26 Nov) ----------
+
+test('import: a download that never finishes is stopped by the overall deadline', async () => {
+  const http = require('http');
+  const Module = require('module');
+  // The importer as it is, but with a short deadline and allowed to reach this test's own server.
+  const file = path.join(__dirname, '..', 'src', 'importer.js');
+  const src = fs.readFileSync(file, 'utf8')
+    .replace('const TOTAL_TIMEOUT = 30000;', 'const TOTAL_TIMEOUT = 1500;')
+    .replace('function privateAddress(ip) {', "function privateAddress(ip) { if (ip === '127.0.0.1') return false;")
+    .replace("if (u.port && !['80', '443'].includes(u.port))", 'if (false)')
+    .replace("if (/^(localhost|", 'if (/^(localhost-never|');
+  assert.ok(src.includes('TOTAL_TIMEOUT = 1500') && src.includes("ip === '127.0.0.1'") && src.includes('if (false)'));
+  const m = new Module(file);
+  m.paths = Module._nodeModulePaths(path.dirname(file));
+  m._compile(src, file);
+  const drip = http.createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'text/html' });
+    const t = setInterval(() => res.write('a'), 200);
+    res.on('close', () => clearInterval(t));
+  });
+  await new Promise((resolve) => drip.listen(0, '127.0.0.1', resolve));
+  try {
+    const t0 = Date.now();
+    await assert.rejects(m.exports.safeGet(`http://127.0.0.1:${drip.address().port}/`, { maxBytes: 3e6, accept: '*/*' }), (e) => e.code === 'importFailed');
+    assert.ok(Date.now() - t0 < 5000, `stopped after ${Date.now() - t0} ms`);
+  } finally {
+    drip.close();
+    drip.closeAllConnections();
+  }
+});

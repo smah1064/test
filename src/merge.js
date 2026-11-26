@@ -261,7 +261,8 @@ function csv(columns, rows) {
     // (=HYPERLINK(...), +cmd, @SUM...) gets a ' in front, like the accounts CSV.
     // Plain numbers (+201..., -5) stay as they are.
     if (/^[=@\t\r]/.test(s) || (/^[+-]/.test(s) && !/^[+-]?\d[\d\s.,]*$/.test(s))) s = `'${s}`;
-    return /[",\n\r]/.test(s) || s.startsWith("'") ? `"${s.replace(/"/g, '""')}"` : s;
+    // (";" too: Excel set to split on ";" would make the rest of "Ali;=1+1" a cell of its own, a formula.)
+    return /[",;\n\r]/.test(s) || s.startsWith("'") ? `"${s.replace(/"/g, '""')}"` : s;
   };
   const lines = [['#', ...columns], ...rows.map((r, i) => [i + 1, ...r])].map((r) => r.map(cell).join(','));
   return Buffer.from('﻿' + lines.join('\r\n') + '\r\n', 'utf8');
