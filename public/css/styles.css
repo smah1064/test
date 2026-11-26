@@ -474,6 +474,8 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 .sample-note > span:first-child { flex: none; }
 .sample-note strong { display: block; font-size: 14px; }
 .sample-note button { border: 0; background: none; color: #c2410c; font: inherit; font-weight: 700; text-decoration: underline; padding: 6px 2px; margin: -6px 0; cursor: pointer; }
+.sample-note.compact { padding: 6px 10px; align-items: center; }
+.sample-note.compact strong { display: inline; font-size: 13px; }
 .sample-note button:focus-visible { outline: 2px solid #1d1a18; outline-offset: 2px; }
 
 /* ---------- Live preview ---------- */

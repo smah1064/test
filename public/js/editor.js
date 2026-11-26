@@ -4561,6 +4561,7 @@
     const words = String(hit.obj.text || '').replace(/\s+/g, ' ').trim();
     const shown = words.length > 30 ? words.slice(0, 29) + '…' : words;
     const bar = document.querySelector('.stage-bar');
+    note.classList.remove('compact');
     note.innerHTML = `<span aria-hidden="true">⚠</span><span><strong>${esc(t('sample.noteTitle', { text: shown }))}</strong>${esc(t('sample.noteText'))} <button type="button" id="sample-note-edit">${esc(t('sample.noteEdit'))}</button></span>`;
     // Never over the text it warns about, nor over the panel's controls (QA 26 Nov: on phones it sat on the new text,
     // and on a phone held sideways over the bottom sheet's ×): under the toolbar, else at the foot of the design
@@ -4586,10 +4587,22 @@
     const floatBar = $('float-bar');
     const fb = floatBar && !floatBar.hidden && stage ? floatBar.getBoundingClientRect() : null;
     const fbTop = fb ? fb.top - stage.getBoundingClientRect().top : Infinity;
-    const clear = (y) => !(y < objBottom && y + noteH > objTop) && y + noteH <= Math.min(stageH, fbTop) - 4 && y >= top;
-    let y = top;
-    if (!clear(y)) y = Math.min(stageH, fbTop) - noteH - 8;
-    if (noteH * 2 > stageH || !clear(y)) {
+    /** Under the toolbar, else at the foot of the design area: where the note covers neither the text nor its handles. */
+    const spot = () => {
+      const noteH = note.offsetHeight;
+      const clear = (y) => !(y < objBottom && y + noteH > objTop) && y + noteH <= Math.min(stageH, fbTop) - 4 && y >= top;
+      let y = top;
+      if (!clear(y)) y = Math.min(stageH, fbTop) - noteH - 8;
+      return noteH * 2 > stageH || !clear(y) ? null : y;
+    };
+    let y = spot();
+    if (y == null) {
+      // Little room (a phone with its panel open): one line, what it says and "Change it" (QA 26 Nov).
+      note.classList.add('compact');
+      note.innerHTML = `<span aria-hidden="true">⚠</span><span><strong>${esc(t('sample.noteTitle', { text: shown }))}</strong> <button type="button" id="sample-note-edit">${esc(t('sample.noteEdit'))}</button></span>`;
+      y = spot();
+    }
+    if (y == null) {
       note.hidden = true;
       return;
     }
