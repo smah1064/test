@@ -50,6 +50,7 @@ const MESSAGES = {
   bookLatin: { en: '{field}: please type it in English letters (the book is printed in English)', ar: '{field}: اكتبه بحروف إنجليزي من فضلك (الكتاب مطبوع بالإنجليزي)' },
   bookBadDate: { en: '{field}: please choose a real date from 1900 up to today', ar: '{field}: اختار تاريخ صحيح من سنة 1900 لحد النهارده' },
   acctName: { en: 'Please enter your name', ar: 'اكتب اسمك من فضلك' },
+  nameShort: { en: 'Please write your full name (at least 2 letters).', ar: 'اكتب اسمك كامل (حرفين على الأقل).' },
   acctPasswordShort: { en: 'The password needs at least 8 characters', ar: 'كلمة المرور لازم تكون 8 حروف أو أكتر' },
   acctPasswordLong: { en: 'That password is too long', ar: 'كلمة المرور طويلة جدًا' },
   acctPasswordCommon: { en: 'That password is too easy to guess (numbers in a row, one letter repeated, or a common one like password1). Please choose another.', ar: 'كلمة المرور دي سهلة التخمين (أرقام ورا بعض، أو حرف متكرر، أو كلمة مشهورة زي password1). اختار واحدة تانية من فضلك.' },

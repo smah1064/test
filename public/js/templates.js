@@ -799,7 +799,7 @@
     return (letters[max] !== ' ' && space > 0 ? kept.slice(0, space) : kept).join('').trim();
   }
   // The English-only fonts have no Arabic letters: an Arabic name typed over an English sample is set in an
-  // Arabic font of the same feel (the editor does the same, with Cairo).
+  // Arabic font of the same feel (the editor does the same when Arabic is typed in such a font).
   const ARABIC_FOR = {
     'Dancing Script': 'Aref Ruqaa', Pacifico: 'Aref Ruqaa', Lobster: 'Aref Ruqaa', Caveat: 'Aref Ruqaa',
     'Playfair Display': 'El Messiri', 'Abril Fatface': 'El Messiri', 'Roboto Slab': 'El Messiri',
@@ -842,5 +842,5 @@
     return changed ? { ...design, items } : design;
   }
 
-  window.POD_DESIGN = { FONTS, BUNDLED, ARABIC_RE, ACCENT, SHAPES, TEXT_PRESETS, TEMPLATES, ensureFont, ensureFontsFor, buildTemplate, readyArea, templateThumb, usePrintSources, inlineSvgImages, NAME_ROLES, sampleNames, cleanName, withNames, wordsTexts, ensureWordsFonts };
+  window.POD_DESIGN = { FONTS, BUNDLED, ARABIC_RE, ARABIC_FOR, ACCENT, SHAPES, TEXT_PRESETS, TEMPLATES, ensureFont, ensureFontsFor, buildTemplate, readyArea, templateThumb, usePrintSources, inlineSvgImages, NAME_ROLES, sampleNames, cleanName, withNames, wordsTexts, ensureWordsFonts };
 })();

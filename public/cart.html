@@ -180,7 +180,7 @@
       <form class="card summary" id="checkout" novalidate>
         <h2 style="font-size:18px" data-i18n="checkout.title"></h2>
         <p class="small acct-note" id="acct-note"></p>
-        <div class="field"><label for="name" data-i18n="checkout.name"></label><input type="text" id="name" name="name" autocomplete="name" maxlength="120" dir="auto" required></div>
+        <div class="field"><label for="name" data-i18n="checkout.name"></label><input type="text" id="name" name="name" autocomplete="name" minlength="2" maxlength="120" dir="auto" required></div>
         <div class="field"><label for="phone" data-i18n="checkout.phone"></label><input type="tel" id="phone" name="phone" autocomplete="tel" maxlength="30" inputmode="tel" dir="ltr" data-i18n-placeholder="checkout.phonePh" required></div>
         <div class="field"><label for="email" data-i18n="checkout.email"></label><input type="email" id="email" name="email" autocomplete="email" maxlength="200" dir="ltr" aria-describedby="email-why"><p class="field-hint" id="email-why" data-i18n="checkout.emailWhy"></p></div>
         <div class="field grid-2">

@@ -1003,7 +1003,15 @@
       const u = areaUnitsPerCm();
       // (Counted in whole cm from the standard spot: adding 1 cm to a position rounded to the canvas each time crept,
       // 4 taps said 4.5 cm and 16 said 17. QA 25 Nov.)
-      const to = (d, step) => (Math.round(d / u) + step) * u;
+      // To the next whole cm in that direction: from "0.5 cm lower" (as far as the zone goes) ↑ is the standard spot,
+      // not "1 cm higher" (QA 26 Nov).
+      const to = (d, step) => {
+        if (!step) return d;
+        // (A position a hair from a whole cm, 0.9999 after the canvas's rounding, counts as that cm.)
+        const raw = d / u;
+        const cur = Math.abs(raw - Math.round(raw)) < 0.05 ? Math.round(raw) : raw;
+        return (step > 0 ? Math.floor(cur) + step : Math.ceil(cur) + step) * u;
+      };
       if (moveArea(to(o.dx, sx), to(o.dy, sy))) commit();
       return;
     }
@@ -1459,8 +1467,13 @@
     const props = { direction: first && /[\u0590-\u08ff\ufb1d-\ufdff\ufe70-\ufefc]/.test(first[0]) ? 'rtl' : 'ltr' };
     if (arabic && o.charSpacing) props.charSpacing = 0;
     if (arabic && D.FONTS.english.includes(o.fontFamily)) {
-      props.fontFamily = 'Cairo';
-      D.ensureFont('Cairo', o.fontWeight).then(() => { o.initDimensions(); o.setCoords(); canvas.requestRenderAll(); });
+      // An Arabic font of the same feel (script → Aref Ruqaa, display → Lalezar…), as the design page's name box picks
+      // (QA 26 Nov: always plain Cairo).
+      const font = (D.ARABIC_FOR && D.ARABIC_FOR[o.fontFamily]) || 'Cairo';
+      props.fontFamily = font;
+      if (font === 'Lalezar') props.fontWeight = 'normal';
+      else if (font === 'Aref Ruqaa') props.fontWeight = 'bold';
+      D.ensureFont(font, props.fontWeight || o.fontWeight).then(() => { o.initDimensions(); o.setCoords(); canvas.requestRenderAll(); });
     }
     o.set(props);
   }
@@ -1536,7 +1549,21 @@
   }));
   // The example words of a new text ("Your Text"): selected when the customer starts typing, so typing replaces them.
   const stillPlaceholder = (o) => Boolean(o && o.placeholder && o.text === o.placeholder);
-  canvas.on('text:editing:entered', (e) => { if (stillPlaceholder(e.target)) { e.target.selectAll(); canvas.requestRenderAll(); } });
+  canvas.on('text:editing:entered', (e) => {
+    if (!stillPlaceholder(e.target)) return;
+    e.target.selectAll();
+    // A double-click (or a phone's double tap) selects the word under it right after: for a moment the whole sample
+    // stays selected, so the first letters typed replace all of it, not one word of it (QA 26 Nov: "Hello Text").
+    e.target.wholeSampleUntil = Date.now() + 600;
+    canvas.requestRenderAll();
+  });
+  canvas.on('text:selection:changed', (e) => {
+    const o = e.target;
+    if (!o || !o.isEditing || !(o.wholeSampleUntil > Date.now()) || !stillPlaceholder(o)) return;
+    if (o.selectionStart === 0 && o.selectionEnd === o.text.length) return;
+    o.selectAll();
+    canvas.requestRenderAll();
+  });
   document.addEventListener('focusin', (e) => {
     if (e.target && e.target.id === 'p-text' && stillPlaceholder(active())) setTimeout(() => { try { e.target.select(); } catch (err) { /* gone */ } }, 0);
   });
@@ -2200,7 +2227,19 @@
     document.body.classList.toggle('sheet-product', mode === 'product');
     document.querySelectorAll('[data-sheet]').forEach((b) => b.classList.toggle('open', b.dataset.sheet === mode));
     syncSheetTitle();
-    requestAnimationFrame(() => { fit(); renderFloatBar(); });
+    requestAnimationFrame(() => {
+      fit();
+      // Switched to Embroidery (or back) with the Product sheet open: the zoom was worked out for the small design area
+      // above the sheet; with the sheet closed, it is zoomed to the print area again (QA 26 Nov: a phone showed the
+      // whole polo with a 1 cm embroidery box).
+      if (!mode && st.refocusAfterSheet) {
+        st.refocusAfterSheet = false;
+        st.zoom = 1;
+        fit();
+        autoFocusPrint();
+      }
+      renderFloatBar();
+    });
   }
   document.querySelectorAll('[data-sheet]').forEach((b) => b.addEventListener('click', () => {
     closeFlyouts();
@@ -3009,10 +3048,42 @@
       <label>${esc(t('words.title'))}</label>
       <div class="word-chips" dir="auto">${wordChips(o, words)}</div>
       ${st.wordSel != null
-        ? `<div class="color-row" style="margin-top:6px"><input type="color" id="p-wordcolor" value="${wordColour(o, words[st.wordSel])}" aria-label="${esc(t('words.colour'))}">${palette('word')}</div>`
+        ? `<div class="color-row" style="margin-top:6px"><button type="button" class="btn btn-sm ${wordBold(o, words[st.wordSel]) ? 'active' : ''}" data-act="word-bold" title="${esc(t('words.bold'))}" aria-label="${esc(t('words.bold'))}" aria-pressed="${wordBold(o, words[st.wordSel])}"><b>B</b></button><input type="color" id="p-wordcolor" value="${wordColour(o, words[st.wordSel])}" aria-label="${esc(t('words.colour'))}">${palette('word')}</div>`
         : `<p class="muted small" style="margin:4px 0 0">${esc(t('words.hint'))}</p>`}
       ${styled ? `<button type="button" class="btn btn-sm" data-act="reset-words" style="margin-top:6px">${esc(t('words.reset'))}</button>` : ''}
     </div>`;
+  }
+  /**
+   * Bold (or not) letters start..end of a text (Fabric's character positions), as one word is coloured: B while
+   * typing with letters selected, Ctrl+B, or B next to a chosen word (QA 26 Nov: B bolded the whole text).
+   */
+  async function boldRange(o, start, end) {
+    if (!o || !o.setSelectionStyles || end <= start) return false;
+    const now = o.getSelectionStyles(start, end).map((x) => x.fontWeight || o.fontWeight);
+    const isBold = (w) => w === 'bold' || Number(w) >= 600;
+    const weight = now.every(isBold) ? 'normal' : 'bold';
+    await D.ensureFont(o.fontFamily, weight, o.fontStyle);
+    o.setSelectionStyles({ fontWeight: weight }, start, end);
+    o.initDimensions();
+    o.setCoords();
+    o.dirty = true;
+    canvas.requestRenderAll();
+    commit();
+    return true;
+  }
+  // Ctrl+B (⌘B) while typing: the selected letters bold, or not.
+  document.addEventListener('keydown', (e) => {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey || String(e.key).toLowerCase() !== 'b') return;
+    const o = canvas.getActiveObject();
+    if (!o || !o.isEditing || !(o.selectionEnd > o.selectionStart)) return;
+    e.preventDefault();
+    const sel = [o.selectionStart, o.selectionEnd];
+    boldRange(o, sel[0], sel[1]).then(() => { if (o.isEditing) { o.selectionStart = sel[0]; o.selectionEnd = sel[1]; canvas.requestRenderAll(); } });
+  });
+  function wordBold(o, w) {
+    const one = o.getSelectionStyles ? o.getSelectionStyles(fabricAt(o, w.start), fabricAt(o, w.start) + 1)[0] : null;
+    const wgt = (one && one.fontWeight) || o.fontWeight;
+    return wgt === 'bold' || Number(wgt) >= 600;
   }
   function setWordColour(o, colour) {
     const words = wordsOf(o);
@@ -3430,6 +3501,12 @@
     }
     if (btn.dataset.toggle) {
       const tg = btn.dataset.toggle;
+      if (tg === 'bold' && o.isEditing && o.selectionEnd > o.selectionStart) {
+        // Letters selected while typing: only those (as Ctrl+B).
+        await boldRange(o, o.selectionStart, o.selectionEnd);
+        renderProps();
+        return;
+      }
       if (tg === 'bold') {
         const weight = o.fontWeight === 'bold' || Number(o.fontWeight) >= 600 ? 'normal' : 'bold';
         await D.ensureFont(o.fontFamily, weight, o.fontStyle);
@@ -3459,6 +3536,14 @@
     if (act === 'delete') removeSelected();
     if (act === 'fit') fitToArea(o);
     if (act === 'straighten') { setProp({ curve: 0 }, { commitNow: true }); renderProps(); }
+    if (act === 'word-bold') {
+      const words = wordsOf(o);
+      followWordSel(o, words);
+      const w = words[st.wordSel];
+      if (w) await boldRange(o, fabricAt(o, w.start), fabricAt(o, w.end));
+      renderProps();
+      return;
+    }
     if (act === 'reset-words') { st.wordSel = null; o.set({ styles: {} }); o.dirty = true; canvas.requestRenderAll(); commit(); renderProps(); }
     if (act === 'crop') startCrop(o);
     if (act === 'removebg') await removeImageBackground(o);
@@ -3469,6 +3554,8 @@
   // ---------- Layers ----------
   function shapeName(o) {
     if (o.name === 'Background') return t('layers.background');
+    // (An icon from the library is named by its id, "icon:building-skyscraper": shown as "Icon". QA 26 Nov.)
+    if (/^icon:/.test(o.name || '')) return t('layer.icon');
     if (o.type === 'group' && !isSticker(o)) return t('layers.group', { n: o.size() });
     if (isSticker(o)) {
       const sk = SK.STICKERS.find((x) => 'sticker:' + x.id === o.name);
@@ -3665,6 +3752,7 @@
     st.zoom = 1;
     fit();
     autoFocusPrint();
+    if (st.sheet) st.refocusAfterSheet = true;
   }));
   $('pat-repeats').addEventListener('click', (e) => {
     const b = e.target.closest('[data-repeat]');
@@ -3788,12 +3876,13 @@
     }
     return redrawn;
   }
-  $('product-select').addEventListener('change', serial(async (e) => changeProduct(e.target.value)));
+  $('product-select').addEventListener('change', serial(async (e) => changeProduct(e.target.value, { ask: true })));
 
   /** Switch product, carrying the design across by scaling it into the new print areas. */
-  async function changeProduct(id) {
+  async function changeProduct(id, { ask = false } = {}) {
     const next = products.find((p) => p.id === id);
     if (!next || next === st.product) return;
+    const optionsBefore = st.options;
     st.options = {}; // options belong to a product
     seedBinding(next);
     cancelCrop();
@@ -3823,6 +3912,13 @@
     if (embObjs.length && prev.embroidery) {
       if (next.embroidery) mapped[EMB] = remap(embObjs, sideDef(EMB).printArea, next.embroidery.area);
       else lost.push(t('emb.embroidery'));
+    }
+    // A side's design the new product has no room for: asked first, as it can't be got back (QA 26 Nov: dropped with
+    // only a message after it, and neither switching back nor Undo restored it).
+    if (lost.length && ask && !confirm(t('msg.noRoomConfirm', { product: tr(next.name), sides: lost.join(' + ') }))) {
+      st.options = optionsBefore;
+      $('product-select').value = prev.id;
+      return;
     }
     if (lost.length) toast(t('msg.noRoom', { product: tr(next.name), sides: lost.join(' + ') }));
     const wasEmb = st.side === EMB;
@@ -4266,8 +4362,34 @@
     const words = String(hit.obj.text || '').replace(/\s+/g, ' ').trim();
     const shown = words.length > 30 ? words.slice(0, 29) + '…' : words;
     const bar = document.querySelector('.stage-bar');
-    note.style.top = ((bar ? bar.offsetTop + bar.offsetHeight : 0) + 8) + 'px';
     note.innerHTML = `<span aria-hidden="true">⚠</span><span><strong>${esc(t('sample.noteTitle', { text: shown }))}</strong>${esc(t('sample.noteText'))} <button type="button" id="sample-note-edit">${esc(t('sample.noteEdit'))}</button></span>`;
+    // Never over the text it warns about, nor over the panel's controls (QA 26 Nov: on phones it sat on the new text,
+    // and on a phone held sideways over the bottom sheet's ×): under the toolbar, else at the foot of the design
+    // area, else not shown (the design check still lists it).
+    const stage = note.offsetParent;
+    const top = (bar ? bar.offsetTop + bar.offsetHeight : 0) + 8;
+    const noteH = note.offsetHeight;
+    const stageH = stage ? stage.clientHeight : window.innerHeight;
+    let objTop = -1;
+    let objBottom = -1;
+    try {
+      const cr = canvas.upperCanvasEl.getBoundingClientRect();
+      const sr = stage ? stage.getBoundingClientRect() : { top: 0 };
+      const br = hit.obj.getBoundingRect();
+      objTop = cr.top - sr.top + br.top;
+      objBottom = objTop + br.height;
+    } catch (e) { /* not on the canvas yet */ }
+    const floatBar = $('float-bar');
+    const fb = floatBar && !floatBar.hidden && stage ? floatBar.getBoundingClientRect() : null;
+    const fbTop = fb ? fb.top - stage.getBoundingClientRect().top : Infinity;
+    const clear = (y) => !(y < objBottom && y + noteH > objTop) && y + noteH <= Math.min(stageH, fbTop) - 4 && y >= top;
+    let y = top;
+    if (!clear(y)) y = Math.min(stageH, fbTop) - noteH - 8;
+    if (noteH * 2 > stageH || !clear(y)) {
+      note.hidden = true;
+      return;
+    }
+    note.style.top = y + 'px';
   }
   $('sample-note').addEventListener('click', (e) => {
     if (!e.target.closest('#sample-note-edit')) return;
@@ -4603,7 +4725,14 @@
       g[c] ||= {};
       // (Typed in Arabic or Persian digits too: a number box would drop those.)
       const n = String(v || '').replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).replace(/\D/g, '');
-      g[c][z] = Math.max(0, Math.min(1000, Math.floor(Number(n) || 0)));
+      const asked = Math.floor(Number(n) || 0);
+      g[c][z] = Math.max(0, Math.min(1000, asked));
+      // (More than 1,000 in one box: said, with the number put back to 1,000, not changed silently. QA 26 Nov.)
+      if (asked > 1000) {
+        toast(t('qty.max', { n: POD.num(1000) }), 'error');
+        const box = $('qty-field') && $('qty-field').querySelector(`.qty-in[data-qc="${CSS.escape(c)}"][data-qz="${CSS.escape(z)}"]`);
+        if (box) box.value = '1000';
+      }
       // Only a few left of this colour and size: no more than there are (the cart would refuse it).
       const few = POD.comboFew(st.product, c, z);
       if (few && g[c][z] > few) {
@@ -5464,7 +5593,7 @@
   function renderShareReplies(share) {
     const fb = (share && share.feedback) || [];
     $('share-dialog-replies').innerHTML = fb.length
-      ? fb.slice().reverse().map((f) => `<li class="${f.vote === 'up' ? 'up' : 'change'}"><strong>${f.vote === 'up' ? '👍 ' + esc(t('share.approved')) : '✏️ ' + esc(t('share.wantsChange'))}</strong>${f.comment ? `<p dir="auto">${esc(f.comment)}</p>` : ''}<span class="muted small">${f.name ? esc(f.name) : ''}</span></li>`).join('')
+      ? fb.slice().reverse().map((f) => `<li class="${f.vote === 'up' ? 'up' : 'change'}"><strong>${f.vote === 'up' ? '👍 ' + esc(t('share.approved')) : '✏️ ' + esc(t('share.wantsChange'))}</strong>${f.comment ? `<p dir="auto">${esc(f.comment)}</p>` : ''}${f.name ? `<span class="muted small"><bdi>${esc(f.name)}</bdi></span>` : ''}</li>`).join('')
       : `<li class="muted small">${esc(t('share.noReplies'))}</li>`;
   }
   function openShareDialog(share) {

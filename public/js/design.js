@@ -67,7 +67,8 @@
     // the server for the whole list and showed a blank, orderable T-shirt. QA 26 Nov).
     if (!(params.get('id') || '').trim()) throw new Error('no design');
     [catalog, design, { categories }] = await loadOrRetry($('dp-net'), () => Promise.all([POD.loadCatalog(), POD.api('/api/library/' + encodeURIComponent(params.get('id') || '')), POD.api('/api/library')]));
-    if (!design || !design.id || !Array.isArray(design.items)) throw new Error('no design');
+    // (A design is items, or objects for one added from a share link: QA 26 Nov, those showed "isn't available".)
+    if (!design || !design.id || !(Array.isArray(design.items) || Array.isArray(design.objects))) throw new Error('no design');
   } catch (e) {
     $('dp-missing').hidden = false;
     return;

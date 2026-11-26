@@ -198,6 +198,9 @@ function cleanString(value, field, { max = 200, required = true, lines = ' ' } =
   if (required && !s) throw new HttpError(400, 'fieldRequired', { field: FIELDS[field] });
   // (A name says something: "ـــ", vowel marks or dots alone aren't one. QA 25 Nov.)
   if (field === 'name' && s && !/[\p{L}\p{N}]/u.test(s.replace(/\u0640/g, ''))) throw new HttpError(400, 'fieldRequired', { field: FIELDS[field] });
+  // At least two letters, as an account asks for (QA 26 Nov: "م" ordered fine, then "Save your orders" refused it with
+  // no box to fix it in).
+  if (field === 'name' && s && s.replace(/[^\p{L}\p{N}]/gu, '').length < 2) throw new HttpError(400, 'nameShort');
   if (s.length > max) throw new HttpError(400, 'fieldTooLong', { field: FIELDS[field] });
   return s;
 }
@@ -972,7 +975,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     }
   }
   /** The proof as the customer and the shop see it (see the shared contract). */
-  async function proofFor(d) {
+  async function proofFor(d, item = null) {
     const product = getProduct(d.productId);
     if (!d.preflight && d.kind !== 'book') {
       await runPreflight(d);
@@ -997,7 +1000,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       proofHash: proofHashOf(d),
       product: product ? { id: product.id, name: product.name, ...(product.colorLabel ? { colorLabel: product.colorLabel } : {}) } : { id: d.productId, name: d.productName },
       color: d.color, size: d.size, quantities: withoutLinePrices(withPacks(d.productId, d.quantities)), copies: copiesOf(d),
-      method: d.method || 'print', process: d.process || (product && product.process) || null,
+      // (An ordered item's method: the shop may have switched it between DTG and DTF. QA 26 Nov.)
+      method: d.method || 'print', process: (item && item.process && item.process !== 'embroidery' && d.method !== 'embroidery' ? item.process : null) || d.process || (product && product.process) || null,
       ...(embSideOf(d) ? { embSide: embSideOf(d) } : {}),
       sides: d.kind === 'book' ? [] : d.sides.map(side),
       ...(d.kind === 'book' ? { pages: bookFor(d.bookId).pages.map((_, i) => `/api/books/designs/${d.id}/pages/${i}.jpg?v=${d.version || 0}`) } : {}),
@@ -1091,7 +1095,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const d = store.getDesign(item.designId);
     return {
       ...adminItem(order, item, order.items.indexOf(item)),
-      proof: d ? await proofFor(d) : null,
+      proof: d ? await proofFor(d, item) : null,
       proofLink: item.proofToken ? `/proof?t=${item.proofToken}` : null,
       // The shop's edit waiting for an owner to say it prints without asking (so nobody edits it twice meanwhile).
       ...(() => {
@@ -1114,7 +1118,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       res.set('Cache-Control', 'no-store');
       const reviseLink = item.status === 'changes_requested' ? reviseLinkOf(order, item) : null;
       const team = teamActingAsCustomer(req, order);
-      res.json({ ...(team ? { team: true } : {}), order: { id: order.id, number: order.number }, item: { id: item.id, position: order.items.indexOf(item) + 1, productName: item.productName }, proof: await proofFor(d), note: (item.review && item.review.note) || null, status: item.status, ...(reviseLink ? { reviseLink } : {}) });
+      res.json({ ...(team ? { team: true } : {}), order: { id: order.id, number: order.number }, item: { id: item.id, position: order.items.indexOf(item) + 1, productName: item.productName }, proof: await proofFor(d, item), note: (item.review && item.review.note) || null, status: item.status, ...(reviseLink ? { reviseLink } : {}) });
     } catch (e) {
       next(e);
     }
@@ -1256,9 +1260,37 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   });
   // The shop fixes the artwork: a corrected print file (same size), kept as a new version; the customer approves it.
   // While one is processed (a second or two), the job can't start printing or get another file (QA 25 Nov).
-  const replacingItems = new Set();
+  // Kept in a lock file per job in the data folder too, so every copy of the app sharing it sees it (QA 26 Nov: on a
+  // second copy, "start printing" went through while the file was being swapped, then was silently undone; a job sent
+  // back to Review there during a film stayed on the film). A copy that stopped mid-way leaves one: older than 10
+  // minutes, it no longer counts.
+  const locksDir = path.join(dataDir, 'locks');
+  fs.mkdirSync(locksDir, { recursive: true });
+  const itemLocks = (kind) => {
+    const mine = new Set();
+    const file = (id) => path.join(locksDir, `${kind}-${String(id).replace(/[^\w-]/g, '')}`);
+    return {
+      has: (id) => {
+        if (mine.has(id)) return true;
+        try {
+          return Date.now() - fs.statSync(file(id)).mtimeMs < 10 * 60e3;
+        } catch (e) {
+          return false;
+        }
+      },
+      add: (id) => {
+        mine.add(id);
+        try { fs.writeFileSync(file(id), String(process.pid)); } catch (e) { /* this copy still knows */ }
+      },
+      delete: (id) => {
+        mine.delete(id);
+        fs.rmSync(file(id), { force: true });
+      },
+    };
+  };
+  const replacingItems = itemLocks('replacing');
   // Jobs being put on a DTF film right now (the film route): not sent back to Review until it's made.
-  const filmMaking = new Set();
+  const filmMaking = itemLocks('film');
   app.put('/api/admin/items/:itemId/replacement/:side', adminOnly, express.raw({ type: () => true, limit: '60mb' }), async (req, res, next) => {
     let marked = null;
     // (Held until the new file is fully saved, not until the connection closes: a dropped connection let the job
@@ -2799,7 +2831,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       }
     }
   }
-  async function saveBook(design, body, ip) {
+  async function saveBook(design, body, ip, uiLang = 'en') {
     const prev = bookSaves.get(design.id) || Promise.resolve();
     const run = prev.catch(() => {}).then(async () => {
       await takeBookLock(design.id);
@@ -2807,7 +2839,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         // What another copy saved (or ordered) while this one waited: this save starts from it.
         store.sync();
         if (design.orderId) throw new HttpError(409, 'designOrdered');
-        return await saveBookAtomic(design, body, ip);
+        return await saveBookAtomic(design, body, ip, uiLang);
       } finally {
         fs.rmSync(store.designFile(design.id, BOOK_LOCK), { force: true });
       }
@@ -2819,7 +2851,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (bookSaves.get(design.id) === run) bookSaves.delete(design.id);
     }
   }
-  async function saveBookAtomic(design, body, ip) {
+  async function saveBookAtomic(design, body, ip, uiLang) {
     // All or nothing: if anything fails (a page that can't be drawn, a bad photo),
     // the book stays exactly as it was, so a half-saved book can't be ordered.
     const before = JSON.parse(JSON.stringify(design));
@@ -2831,7 +2863,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     try { names = fs.readdirSync(store.designDir(design.id)).filter(KEPT); } catch (e) { names = []; }
     const saved = new Map(names.map((f) => [f, fs.readFileSync(store.designFile(design.id, f))]));
     try {
-      await saveBookNow(design, body, ip);
+      await saveBookNow(design, body, ip, uiLang);
     } catch (e) {
       // Ordered while this save was running: the book stays ordered (never put back to "not ordered").
       const fresh = store.getDesign(design.id);
@@ -2847,7 +2879,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       throw e;
     }
   }
-  async function saveBookNow(design, body, ip) {
+  async function saveBookNow(design, body, ip, uiLang = 'en') {
     const { answers, face, size, aiConsent } = body && typeof body === 'object' ? body : {};
     const book = bookFor(design.bookId);
     const product = bookProduct(book);
@@ -2869,7 +2901,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     // that can (QA 26 Nov: a sold-out hardcover was still saved and ordered).
     const asked = product.sizes.find((z) => z.id === size);
     if (asked && catalog.unavailable(product, { sizeId: asked.id }) === 'sizeUnavailable') {
-      throw new HttpError(409, 'sizeUnavailable', { name: product.name[body && body.lang === 'ar' ? 'ar' : 'en'] || product.name.en });
+      // (The book's name in the page's language: the body's `lang` is the book's print language, always English.)
+      throw new HttpError(409, 'sizeUnavailable', { name: product.name[uiLang] || product.name.en });
     }
     const sizeDef = asked || product.sizes.find((z) => !catalog.unavailable(product, { sizeId: z.id })) || product.sizes[0];
     design.size = { id: sizeDef.id, label: sizeDef.label };
@@ -2944,7 +2977,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       };
       store.createDesign(design, {});
       try {
-        await saveBook(design, req.body || {}, req.ip);
+        await saveBook(design, req.body || {}, req.ip, langOf(req));
       } catch (e) {
         fs.rmSync(store.designDir(design.id), { recursive: true, force: true });
         store.mutate((db) => { delete db.designs[design.id]; });
@@ -2970,7 +3003,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   }, express.json({ limit: '10mb' }), async (req, res, next) => {
     try {
       const design = editableBook(req);
-      await saveBook(design, req.body || {}, req.ip);
+      await saveBook(design, req.body || {}, req.ip, langOf(req));
       res.json(bookResponse(design));
     } catch (e) {
       next(e);
@@ -6595,6 +6628,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       // Embroidered items stay embroidered: the stitch file can't be printed instead.
       if (item.process === 'embroidery' && method !== 'embroidery') throw new HttpError(400, 'badProcess', { list: 'embroidery' });
       if (!allowed.includes(method)) throw new HttpError(400, 'badProcess', { list: allowed.join(', ') });
+      if (item.process !== method) {
+        // The print PDFs made before name the old method on their label: made again on the next download.
+        const d = store.getDesign(item.designId);
+        for (const sd of (d && d.sides) || []) {
+          for (const f of Object.values(FORMATS)) if (f.ext === 'pdf' && !f.make) fs.rmSync(store.designFile(d.id, f.file(sd.id)), { force: true });
+        }
+      }
       item.process = method;
       store.save();
       if (status === undefined) return res.json(adminItem(order, item, order.items.indexOf(item)));
@@ -6672,6 +6712,15 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       design.emb = { colors: [], stitches: 0, trims: 0, warnings: ['failed'] };
     }
     return design.emb;
+  }
+  /**
+   * How a side is made: an embroidered side stays embroidery; otherwise the ordered item's method (the shop may switch
+   * it between DTG and DTF after the order: QA 26 Nov, the label and the proof still said DTG), else the design's.
+   */
+  function sideProcess(side, design, item, product = getProduct(design.productId)) {
+    if (side && side.process === 'embroidery') return 'embroidery';
+    if (item && item.process && item.process !== 'embroidery') return item.process;
+    return (side && side.process) || design.process || (product && product.process) || null;
   }
   async function makeFile(design, sideId, format, { now = false } = {}) {
     // Only finished designs (their files were checked when they were completed).
@@ -6829,7 +6878,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (fmt.make) out = await fmt.make(png, side, design);
       else if (fmt.ext === 'pdf') {
         const product = getProduct(design.productId);
-        const label = `${order ? order.number + ' · ' : ''}${pickEn(design.productName)} · ${pickEn(design.size.label)} · ${pickEn(design.color.name)} · ${pickEn(side.name)} · trim ${side.widthIn} x ${side.heightIn} in${side.bleedIn ? ` + ${side.bleedIn} in bleed` : ''}${side.offsetCm ? ` · PLACEMENT moved ${placementEn(side.offsetCm)} from standard` : ''} · ${side.dpi} DPI · ${String(side.process || design.process || (product && product.process) || '').toUpperCase()}`;
+        const label = `${order ? order.number + ' · ' : ''}${pickEn(design.productName)} · ${pickEn(design.size.label)} · ${pickEn(design.color.name)} · ${pickEn(side.name)} · trim ${side.widthIn} x ${side.heightIn} in${side.bleedIn ? ` + ${side.bleedIn} in bleed` : ''}${side.offsetCm ? ` · PLACEMENT moved ${placementEn(side.offsetCm)} from standard` : ''} · ${side.dpi} DPI · ${String(sideProcess(side, design, ordered, product) || '').toUpperCase()}`;
         out = await printfiles.printPdf(png, side, { marks: format === 'pdf-marks', title: base, slug: label });
       } else throw new HttpError(404, 'notFound');
       store.writeDesignFile(designId, fmt.file(sideId), out);
@@ -6987,6 +7036,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (co.error) throw new HttpError(400, co.error);
     // (No costs sent: the saved ones stay; they're never wiped by a request about prices only.)
     const costsSent = (req.body || {}).costs !== undefined;
+    // The activity log says what changed: the selling price old → new, the sizes' prices, the costs (QA 26 Nov: a
+    // price change read "(costs)").
+    const baseBefore = product.basePrice;
+    const sizesBefore = JSON.stringify(product.sizes.map((z) => z.surcharge || 0));
     store.mutate((db) => {
       db.pricing ||= {};
       db.costs ||= {};
@@ -6997,6 +7050,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       else delete db.costs[product.id];
     });
     accounting.applyPricing(PRODUCTS, store.db.pricing);
+    const nm = nameOfProduct(product.id);
+    const changed = (l) => [
+      product.basePrice !== baseBefore ? (l === 'ar' ? `السعر ${moneyIn(baseBefore, l)} ← ${moneyIn(product.basePrice, l)}` : `price ${moneyIn(baseBefore, l)} → ${moneyIn(product.basePrice, l)}`) : '',
+      JSON.stringify(product.sizes.map((z) => z.surcharge || 0)) !== sizesBefore ? (l === 'ar' ? 'أسعار المقاسات' : 'size prices') : '',
+      costsSent ? (l === 'ar' ? 'التكاليف' : 'costs') : '',
+    ].filter(Boolean).join(l === 'ar' ? '، ' : ', ');
+    if (changed('en')) res.locals.summary = enAr(`${nm.en} (${changed('en')})`, `${nm.ar} (${changed('ar')})`);
     res.json(pricingRow(product));
   });
   app.put('/api/admin/accounts/settings', requireAdmin, express.json(), (req, res) => {
@@ -7180,7 +7240,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
           }
           const link = dispatch.signLink(auth.linkKey, { designId: design.id, side: sideId, format });
           expires = link.expires;
-          const sideLabel = !ONCE.has(format) && design.sides.length > 1 ? ` · ${(design.sides.find((sd) => sd.id === sideId).name || {})[lang] || pickEn(design.sides.find((sd) => sd.id === sideId).name)}` : '';
+          // (A booklet's "صفحة 2" in the Arabic message: Arabic digits, as in its print-areas line. QA 26 Nov.)
+          const sideName = (design.sides.find((sd) => sd.id === sideId).name || {})[lang] || pickEn(design.sides.find((sd) => sd.id === sideId).name);
+          const sideLabel = !ONCE.has(format) && design.sides.length > 1 ? ` · ${lang === 'ar' ? i18n.arabicDigits(sideName) : sideName}` : '';
           files.push({ format, side: sideId, name: f.name, path: f.path, size: fs.statSync(f.path).size, label: `${FILE_LABELS[format] ? FILE_LABELS[format][lang] : format}${sideLabel}`, url: `${siteUrl}/dl/${link.token}` });
         }
       }
@@ -7318,14 +7380,15 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         }
       }
       const film = await printfiles.filmPdf(pieces, { title: 'DTF film' });
-      // A job that left the queue meanwhile (sent back, printed elsewhere): the film isn't given out.
-      for (const it of chosen) {
-        const f = store.findItem(it.id);
-        if (!f || !['queued', 'printing'].includes(f.item.status)) throw new HttpError(409, 'filmItemChanged');
-      }
       const at = new Date().toISOString();
       // Number the film under the lock, so two copies never hand out the same number.
       const batchId = store.mutate((db) => {
+        // A job that left the queue meanwhile (sent back, printed elsewhere, on this copy or another: checked with the
+        // latest data, QA 26 Nov): the film isn't given out.
+        for (const it of chosen) {
+          const f = store.findItem(it.id);
+          if (!f || !['queued', 'printing'].includes(f.item.status)) throw new HttpError(409, 'filmItemChanged');
+        }
         const id = `F${(db.nextFilmNumber = (db.nextFilmNumber || 0) + 1)}`;
         for (const it of chosen) {
           const found = store.findItem(it.id);
@@ -7385,7 +7448,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const side = (k, store) => {
       const o = own[k] && typeof own[k] === 'object' ? own[k] : {};
       const url = appUrl(o.storeUrl) || store;
-      return { minBuild: appBuild(o.minBuild, 10000), latestBuild: appBuild(o.latestBuild, 10000), ...(url ? { storeUrl: url } : {}) };
+      // (The latest build is never below the oldest one allowed: the apps would be sent to update to a build the store
+      // doesn't have. QA 26 Nov.)
+      const minBuild = appBuild(o.minBuild, 10000);
+      return { minBuild, latestBuild: Math.max(minBuild, appBuild(o.latestBuild, 10000)), ...(url ? { storeUrl: url } : {}) };
     };
     const msg = own.message && typeof own.message === 'object' ? own.message : null;
     const text = (v) => (typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 300) : '');

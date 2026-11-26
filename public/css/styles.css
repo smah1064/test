@@ -580,6 +580,8 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 .share-replies li.up { border-color: #b7e4c7; background: #f3fbf6; }
 .share-replies li.change { border-color: #ffd8a8; background: #fff9f0; }
 .share-replies p { margin: 4px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* The name (and time) on its own line, under the verdict: "👍 حلو جدًاSara" read as one word (QA 26 Nov). */
+.share-replies li > .muted { display: block; margin-top: 2px; }
 @media (max-width: 860px) { .share-layout { grid-template-columns: 1fr; } .share-panel { position: static; } }
 
 /* ---------- Share sheet in the editor ---------- */
