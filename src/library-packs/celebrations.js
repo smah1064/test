@@ -195,38 +195,38 @@ const designs = [
   ], 'black'),
 
   // ---------- Graduation ----------
-  D('ce-class-of-2025', 'graduation', 'Class of 2025', 'دفعة 2025', [
+  D('ce-class-of-2025', 'graduation', 'Class of 2026', 'دفعة 2026', [
     K('grad-cap', 0.28, 0.5, 0.2),
     T('CLASS OF', 'Bebas Neue', 0.15, 0.5, 0.46, { spacing: 250 }),
-    T('2025', 'Anton', 0.32, 0.5, 0.7, { fill: GOLD }),
+    T('2026', 'Anton', 0.32, 0.5, 0.7, { fill: GOLD }),
   ], 'navy'),
   D('ce-et5aragt-a5eran', 'graduation', 'Finally graduated', 'اتخرجت أخيرًا', [
     A('fluent-emoji-flat:graduation-cap', 0.3, 0.5, 0.2),
     T('اتخرجت', 'Lalezar', 0.26, 0.5, 0.52),
     T('أخيرًا', 'Marhey', 0.16, 0.5, 0.77, { weight: 'bold', fill: ACCENT }),
   ]),
-  D('ce-dof3a-2025', 'graduation', 'Graduating class 2025 (Arabic)', 'دفعة 2025', [
+  D('ce-dof3a-2025', 'graduation', 'Graduating class 2026 (Arabic)', 'دفعة 2026', [
     T('دفعة', 'Lalezar', 0.22, 0.5, 0.26, { fill: WHITE }),
-    T('2025', 'Bungee', 0.24, 0.5, 0.52, { fill: SUN, glow: GOLD }),
+    T('2026', 'Bungee', 0.24, 0.5, 0.52, { fill: SUN, glow: GOLD }),
     T('اسم الكلية', 'Changa', 0.08, 0.5, 0.76, { weight: 'bold', fill: DARK, bg: SUN, bgShape: 'pill' }),
   ], 'black'),
   D('ce-grad-doctora', 'graduation', 'Doctor graduate (her name)', 'الدكتورة سارة', [
     A('fluent-emoji-flat:stethoscope', 0.26, 0.5, 0.18),
     T('الدكتورة', 'Reem Kufi', 0.13, 0.5, 0.42, { weight: 'bold', fill: TEAL }),
     T('سارة', 'Aref Ruqaa', 0.28, 0.5, 0.62, { weight: 'bold', sampleName: 'name' }),
-    T('دفعة 2025', 'Changa', 0.07, 0.5, 0.84, { weight: 'bold', fill: TEAL }),
+    T('دفعة 2026', 'Changa', 0.07, 0.5, 0.84, { weight: 'bold', fill: TEAL }),
   ]),
   D('ce-grad-bashmohandes', 'graduation', 'Engineer graduate (name)', 'الباشمهندس أحمد', [
     A('fluent-emoji-flat:gear', 0.24, 0.5, 0.18),
     T('الباشمهندس', 'Lalezar', 0.14, 0.5, 0.42),
     T('أحمد', 'Lalezar', 0.28, 0.5, 0.63, { fill: BLUE, sampleName: 'name' }),
-    T('دفعة 2025', 'Changa', 0.07, 0.5, 0.85, { weight: 'bold' }),
+    T('دفعة 2026', 'Changa', 0.07, 0.5, 0.85, { weight: 'bold' }),
   ], 'heather'),
   D('ce-grad-mo7ami', 'graduation', 'Lawyer graduate (name)', 'المحامي أحمد', [
     A('fluent-emoji-flat:balance-scale', 0.26, 0.5, 0.18),
     T('المحامي', 'Reem Kufi', 0.13, 0.5, 0.42, { weight: 'bold' }),
     T('أحمد', 'Aref Ruqaa', 0.28, 0.5, 0.62, { weight: 'bold', fill: GOLD, sampleName: 'name' }),
-    T('دفعة 2025', 'Changa', 0.07, 0.5, 0.84, { weight: 'bold' }),
+    T('دفعة 2026', 'Changa', 0.07, 0.5, 0.84, { weight: 'bold' }),
   ], 'navy'),
   D('ce-om-el-5areeg', 'graduation', 'Proud mum of the graduate', 'أم الخريج فخورة', [
     T('أم الخريج', 'Lalezar', 0.19, 0.5, 0.26),
@@ -245,7 +245,7 @@ const designs = [
     T('مفيش امتحانات', 'Lalezar', 0.14, 0.5, 0.48),
     T('تاني!', 'Lalezar', 0.24, 0.5, 0.72, { fill: ACCENT }),
   ], 'sand'),
-  D('ce-graduate-laurel', 'graduation', 'Graduate laurel 2025', 'Graduate 2025', [
+  D('ce-graduate-laurel', 'graduation', 'Graduate laurel 2026', 'Graduate 2026', [
     A('tabler:laurel-wreath', 0.72, 0.5, 0.4, { fill: GOLD }),
     T('25', 'Abril Fatface', 0.17, 0.5, 0.39, { fill: WHITE }),
     T('GRADUATE', 'Playfair Display', 0.1, 0.5, 0.76, { spacing: 250 }),
@@ -260,7 +260,7 @@ const designs = [
     A('fluent-emoji-flat:scroll', 0.24, 0.5, 0.18),
     T('خريج', 'Lalezar', 0.26, 0.5, 0.44),
     T('كلية التجارة', 'Changa', 0.1, 0.5, 0.67, { weight: 'bold', fill: WHITE, bg: BLUE, bgShape: 'pill' }),
-    T('2025', 'Bebas Neue', 0.1, 0.5, 0.85, { spacing: 300 }),
+    T('2026', 'Bebas Neue', 0.1, 0.5, 0.85, { spacing: 300 }),
   ]),
 
   // ---------- New baby ----------
