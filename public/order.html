@@ -369,11 +369,22 @@
             ${shippingLines(o)}
             <div class="line total"><span>${esc(t('checkout.total'))}</span><span>${esc(money(o.total))}</span></div>` : ''}
             ${o.delivery && dueDay(o) && !delivered ? `<p class="dlv-expected">🚚 ${esc(t('delivery.line', { speed: t(o.delivery.speed === 'express' ? 'delivery.express' : 'delivery.standard'), date: POD.day(dueDay(o)) }))}</p>` : ''}
-            ${money$ && o.payment && o.payment.method === 'cod' && o.payment.status !== 'paid' && !delivered ? `<div class="pay-box"><strong>${esc(t('order.payCod', { amount: money(o.total) }))}</strong><span>${esc(t('checkout.codText'))}</span></div>` : ''}
+            ${money$ && o.payment && o.payment.method === 'cod' && o.payment.status !== 'paid' && !delivered ? `<div class="pay-box${POD.payment.prepayOnly ? ' pay-box-ok' : ''}"><strong>${esc(t('order.payCod', { amount: money(o.total) }))}</strong><span>${esc(t('checkout.codText'))}</span></div>` : ''}
             <p class="muted small" style="margin-bottom:0;overflow-wrap:anywhere">${deliverTo}</p>
           </div>
+          ${POD.payment.prepayOnly && !team ? guaranteeHtml(o) : ''}
           ${shopWa() && !team ? `<div class="order-wa"><p>${esc(t('order.waText'))}</p><a class="btn btn-whatsapp" id="order-wa" target="_blank" rel="noopener" href="${esc(whatsappLink(o))}">${esc(t('order.waButton'))}</a></div>` : ''}`;
         placeOffer(o);
+      }
+
+      // ---------- The money-back guarantee (paying in advance only: src/payment-wording.js; owner's decision, 26 Nov) ----------
+      // How to use it: a photo and the order number on WhatsApp or by email, within 7 days of delivery.
+      function guaranteeHtml(o) {
+        return `<div class="card guar-card">
+            <strong>🛡️ ${esc(t('guar.badge'))}</strong>
+            <p>${esc(t('guar.orderText', { n: POD.orderNo(o.number) }))}</p>
+            <a href="/guarantee">${esc(t('guar.more'))}</a>
+          </div>`;
       }
 
       // ---------- "Save your orders": a guest's order kept on a new account (owner's OK, UX item 8, 26 Nov) ----------

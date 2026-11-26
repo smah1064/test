@@ -336,6 +336,23 @@ details.font-picker[open] summary { border-bottom: 1px solid var(--line); }
 .pay-box { border: 2px solid var(--accent); border-radius: 10px; padding: 10px 12px; margin: 12px 0; background: var(--accent-soft); }
 .pay-box strong { display: block; }
 .pay-box span { font-size: 13px; color: var(--ink-2); }
+/* Paying in advance only (src/payment-wording.js; owner's decisions, 26 Nov): the order page's payment box is calm
+   (paid already, nothing for the courier), the ways to pay under the checkout's, and the money-back guarantee's
+   line (under Add to cart), link (home), badge (by Place order) and card (order page). */
+.pay-box.pay-box-ok { border: 1px solid #bfe3cd; background: #eef8f1; }
+.pay-box.pay-box-ok strong { color: #0f6b3a; }
+.pay-box .pay-methods { display: block; margin-top: 2px; font-weight: 700; }
+.guar-line, .guar-link { display: block; margin: 10px 0 0; font-size: 13px; line-height: 1.5; color: #0f6b3a; text-decoration: none; }
+.guar-link { margin-top: 6px; font-weight: 700; }
+.guar-line::before, .guar-link::before, .guar-badge strong::before { content: '🛡️ '; }
+.guar-line:hover, .guar-link:hover, .guar-badge:hover { text-decoration: underline; }
+.guar-badge { display: block; margin: 10px 0 0; padding: 8px 12px; border-radius: 10px; border: 1px solid #bfe3cd; background: #eef8f1; color: #0f6b3a; font-size: 13px; line-height: 1.5; text-align: center; text-decoration: none; }
+.guar-badge span { color: var(--ink-2); }
+.guar-card { margin-top: 16px; padding: 14px 16px; border-color: #bfe3cd; background: #eef8f1; box-shadow: none; }
+.guar-card strong { color: #0f6b3a; }
+.guar-card p { margin: 6px 0 8px; font-size: 14px; line-height: 1.7; }
+.guar-card a { font-weight: 700; color: #0f6b3a; }
+html[lang="ar"] .guar-page ol { list-style-type: arabic-indic; }
 @media (max-width: 960px) {
   .panel-foot { position: sticky; bottom: 0; z-index: 5; box-shadow: 0 -6px 18px rgba(16,24,40,.08); }
   .stage-bar { gap: 6px; padding: 8px 10px; }
@@ -440,6 +457,10 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
   .tools { flex: none; }
   .panel-foot #preview-open-m { gap: 5px; align-items: center; }
   .foot-actions { flex: none; }
+  /* The money-back guarantee's line (paying in advance only): its own row under the price and the buttons. */
+  .panel-foot:has(> .guar-line:not([hidden])) { flex-wrap: wrap; row-gap: 4px; }
+  .panel-foot:has(> .guar-line:not([hidden])) .price-line { flex-basis: 0; }
+  .panel-foot > .guar-line { flex: 0 0 100%; margin: 0; font-size: 12px; }
 
   .flyout {
     position: fixed; inset-inline: 0; bottom: 0; top: auto; width: auto; margin: 0;

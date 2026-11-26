@@ -24,7 +24,8 @@ window.POD_STRINGS = {
   'home.step3.title': ['Delivered to your door', 'يوصلك لحد الباب'],
   'home.step3.text': ['Pay cash on delivery anywhere in Egypt and follow each item from the print queue to your door.', 'ادفع كاش عند الاستلام في أي مكان في مصر، وتابع كل قطعة من الطباعة لحد التوصيل.'],
   // Paying in advance only, from launch (src/payment-wording.js): a text's 'key.prepay' wording replaces it then
-  // (POD.payment in common.js). No way to pay is named yet, and nothing promises cash on delivery.
+  // (POD.payment in common.js). Nothing promises cash on delivery; the ways to pay (card, Vodafone Cash, InstaPay:
+  // owner's decision, 26 Nov) are named only where the shop says how to pay (the FAQ, checkout, the photos page).
   'home.step3.text.prepay': ['Delivered anywhere in Egypt. Follow each item from the print queue to your door.', 'بنوصّل لأي مكان في مصر، وتابع كل قطعة من الطباعة لحد التوصيل.'],
   'home.pick': ['Pick something to customise', 'اختر منتجًا لتخصيصه'],
   'pp.viewDesigned': ['With a ready-made design', 'بتصميم جاهز'],
@@ -101,7 +102,37 @@ window.POD_STRINGS = {
   'hm.a3': ['Yes. You see the print file and how it looks on the product, and we only print what you approved.', 'أيوه. بتشوف ملف الطباعة وشكله على المنتج، ومش بنطبع غير اللي وافقت عليه.'],
   'hm.q4': ['How do I pay?', 'بدفع إزاي؟'],
   'hm.a4': ['Cash on delivery: you pay the courier when your order arrives.', 'الدفع عند الاستلام: بتدفع للمندوب لما الطلب يوصلك.'],
-  'hm.a4.prepay': ['You pay in advance when you order, so there\'s nothing to pay the courier when it arrives.', 'بتدفع مقدّمًا وانت بتطلب، ومفيش حاجة تدفعها للمندوب لما الطلب يوصلك.'],
+  'hm.a4.prepay': ['You pay in advance when you order, by card, Vodafone Cash or InstaPay, so there\'s nothing to pay the courier when it arrives.', 'بتدفع مقدّمًا وانت بتطلب، بالكارت أو فودافون كاش أو إنستاباي، ومفيش حاجة تدفعها للمندوب لما الطلب يوصلك.'],
+  // ---------- Money-back guarantee and the ways to pay (owner's decisions, 26 Nov) ----------
+  // Shown only while the shop takes payment in advance (src/payment-wording.js): the page parts that carry them are
+  // hidden and empty otherwise (data-prepay-only, POD.payment in common.js), and /guarantee is not found.
+  'guar.home': ['Money-back guarantee if the print doesn\'t match the design', 'ضمان استرجاع فلوسك لو المطبوع مش زي التصميم'],
+  'guar.add': ['Guaranteed: if the print doesn\'t match your design, we reprint it free or give you your money back.', 'مضمون: لو المطبوع مش زي التصميم، نطبعهولك تاني ببلاش أو ترجعلك فلوسك.'],
+  'guar.badge': ['Money-back guarantee', 'ضمان استرجاع الفلوس'],
+  'guar.badgeText': ['if the print doesn\'t match the design', 'لو المطبوع مش زي التصميم'],
+  'guar.orderText': ['Something wrong with the print, or did it arrive damaged or wrong? Send a photo of the item with your order number {n} on WhatsApp or by email within 7 days of delivery, and choose a free reprint or your money back. No need to send the item back.', 'فيه مشكلة في الطباعة، أو القطعة وصلت بايظة أو غلط؟ صوّرها وابعت الصورة مع رقم الطلب {n} على واتساب أو الإيميل خلال 7 أيام من ما الطلب يوصلك، واختار: نطبعهالك تاني ببلاش أو ترجعلك فلوسك. ومش محتاج ترجّع القطعة.'],
+  'guar.more': ['Guarantee details', 'تفاصيل الضمان'],
+  'pay.methods': ['Pay by card, Vodafone Cash or InstaPay.', 'ادفع بالكارت أو فودافون كاش أو إنستاباي.'],
+  // The guarantee's page (/guarantee).
+  'gu.pageTitle': ['Money-back guarantee · ebda3', 'ضمان استرجاع الفلوس · إبداع'],
+  'gu.title': ['Our guarantee: what you see is what you get', 'ضماننا: اللي شفته هو اللي هيوصلك'],
+  'gu.intro': ['You pay in advance, so you should feel sure. If your item doesn\'t match the design you approved, we reprint it free or give you your money back: you choose.', 'انت بتدفع مقدّمًا، فمن حقك تطمّن. لو القطعة وصلتك مش زي التصميم اللي وافقت عليه، نطبعهالك تاني ببلاش أو ترجعلك فلوسك، وانت اللي تختار.'],
+  'gu.covered.h': ['What\'s covered', 'الضمان بيغطي إيه؟'],
+  'gu.covered.print': ['The print doesn\'t match the preview: the colours are clearly off, part of the design is cut off, the print is blurry, or it\'s in the wrong place.', 'الطباعة مش زي البروفة: الألوان مختلفة بشكل واضح، أو جزء من التصميم مقصوص، أو الطباعة مش واضحة، أو التصميم في مكان غلط.'],
+  'gu.covered.damaged': ['The item arrives damaged, or it isn\'t what you ordered (a different product, size or colour).', 'القطعة وصلت بايظة، أو وصلك حاجة غير اللي طلبتها (منتج أو مقاس أو لون تاني).'],
+  'gu.not.h': ['What\'s not covered', 'إيه اللي مش داخل في الضمان؟'],
+  'gu.not.p': ['Changing your mind: every piece is made for one person, so it can\'t be sold to anyone else.', 'لو غيّرت رأيك: كل قطعة بتتعمل مخصوص لشخص واحد، فمينفعش تتباع لحد تاني.'],
+  'gu.choice.h': ['You choose', 'انت اللي تختار'],
+  'gu.choice.p': ['A free reprint of the item, or your money back.', 'نطبعلك القطعة تاني ببلاش، أو ترجعلك فلوسك.'],
+  'gu.when.h': ['How long do I have?', 'قدامي قد إيه؟'],
+  'gu.when.p': ['Within 7 days of delivery.', 'خلال 7 أيام من يوم ما الطلب يوصلك.'],
+  'gu.how.h': ['How to claim', 'تطلب الضمان إزاي؟'],
+  'gu.how.1': ['Take a clear photo of the item.', 'صوّر القطعة صورة واضحة.'],
+  'gu.how.2': ['Send it with your order number on WhatsApp or by email (a reply to your order email is fine).', 'ابعتها مع رقم الطلب على واتساب أو بالإيميل (ممكن ترد على إيميل الطلب).'],
+  'gu.how.3': ['No need to send the item back.', 'مش محتاج ترجّع القطعة.'],
+  'gu.refund.h': ['How the money comes back', 'الفلوس بترجع إزاي؟'],
+  'gu.refund.p': ['The same way you paid (card, Vodafone Cash or InstaPay), within 7 days.', 'بنفس الطريقة اللي دفعت بيها (كارت أو فودافون كاش أو إنستاباي)، خلال 7 أيام.'],
+  'gu.wa': ['Message us on WhatsApp', 'ابعتلنا على واتساب'],
   'hm.q5': ['Can I order just one piece?', 'أقدر أطلب قطعة واحدة بس؟'],
   'hm.a5': ['Yes. Every piece is printed on its own, so one t-shirt or one mug is fine. Bigger orders can mix sizes and colours, or print a different name on each piece.', 'أيوه. كل قطعة بتتطبع لوحدها، فتيشيرت واحد أو مج واحد عادي جدًا. والطلبات الكبيرة ممكن تجمع مقاسات وألوان، أو تطبع اسم مختلف على كل قطعة.'],
   'hm.q6': ['I don\'t have a design. Can you help?', 'معنديش تصميم. ممكن تساعدوني؟'],

@@ -130,9 +130,26 @@
       document.querySelectorAll('[data-i18n]').forEach((el) => {
         if (STRINGS[el.dataset.i18n + '.prepay']) el.textContent = t(el.dataset.i18n);
       });
+      prepayParts(document);
       document.dispatchEvent(new CustomEvent('pod:paymentchange', { detail: { prepayOnly } }));
     },
   };
+
+  /**
+   * Parts of a page there only while paying in advance (the money-back guarantee, the ways to pay: owner's
+   * decisions, 26 Nov): `data-prepay-only`, hidden and empty in the page. Then they get their words
+   * (`data-prepay-i18n`) and, for a link, its address (`data-prepay-href`); otherwise they stay hidden and empty.
+   */
+  function prepayParts(root) {
+    root.querySelectorAll('[data-prepay-only]').forEach((el) => {
+      if (el.dataset.prepayI18n) el.textContent = prepayOnly ? t(el.dataset.prepayI18n) : '';
+      if (el.dataset.prepayHref) {
+        if (prepayOnly) el.setAttribute('href', el.dataset.prepayHref);
+        else el.removeAttribute('href');
+      }
+      el.hidden = !prepayOnly;
+    });
+  }
 
   /** Translate a UI string key. */
   function t(key, params) {
@@ -157,6 +174,7 @@
     root.querySelectorAll('[data-i18n-title]').forEach((el) => (el.title = t(el.dataset.i18nTitle)));
     root.querySelectorAll('[data-i18n-aria]').forEach((el) => el.setAttribute('aria-label', t(el.dataset.i18nAria)));
     root.querySelectorAll('[data-i18n-placeholder]').forEach((el) => (el.placeholder = t(el.dataset.i18nPlaceholder)));
+    if (prepayOnly) prepayParts(root);
     const titleKey = document.body && document.body.dataset.titleKey;
     if (titleKey) document.title = t(titleKey);
   }
