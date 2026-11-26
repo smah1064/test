@@ -2283,12 +2283,24 @@
     const s = sideDef(sideId);
     const widthIn = ((o.width * Math.abs(o.scaleX || 1)) / s.printArea.w) * s.printWidthIn;
     // An uploaded design prints from its full-size original (printPx), not the screen copy.
-    let px = o.printSrc && Array.isArray(o.printPx) && o.printPx[0] > o.width && !o.printSwapped ? o.printPx[0] : o.width;
+    // (A cropped part of it: that part of the original. QA 26 Nov: a quarter of a picture showed the whole one's DPI.)
+    const el = o.printSrc && !o.printSwapped && Array.isArray(o.printPx) && (o._originalElement || o.getElement());
+    const copyW = el ? el.naturalWidth || el.width : 0;
+    let px = copyW && o.printPx[0] > copyW ? (o.width * o.printPx[0]) / copyW : o.width;
     // A photo from a PDF / EPS has only its own pixels, however big the picture made from it (QA 26 Nov).
     if (typeof o.photoShare === 'number' && o.photoShare > 0 && o.photoShare < 1) px = Math.min(px, o.width * o.photoShare);
     return Math.round(px / widthIn);
   }
 
+  /** The ready designs' full-size originals into the print (not their screen copies); stops with a message when one can't be loaded. */
+  async function printSources() {
+    if (!D.usePrintSources) return;
+    try {
+      await D.usePrintSources(canvas);
+    } catch (e) {
+      throw e && e.code === 'printSource' ? new Error(t('msg.printSource')) : e;
+    }
+  }
   async function toDataUrl(url) {
     const blob = await (await fetch(url)).blob();
     return new Promise((resolve, reject) => {
@@ -3761,6 +3773,8 @@
       }
       const img = await loadHtmlImage(URL.createObjectURL(blob));
       o.setElement(img, { width: o.width, height: o.height, cropX: o.cropX, cropY: o.cropY });
+      // New pixels: the print is this picture, not the ready design's original again (QA 26 Nov).
+      o.set({ printSrc: undefined, printPx: undefined });
       if (o.filters && o.filters.length) o.applyFilters();
       o.dirty = true;
       canvas.requestRenderAll();
@@ -7122,7 +7136,7 @@
         sidesPayload[s.id] = { editor: { version: fabric.version, objects: await inlineImages(st.designs[s.id]), ...(st.offsets[s.id] ? { offset: st.offsets[s.id] } : {}), ...(st.pattern ? { pattern: { ...st.pattern } } : {}), area: xywh(baseArea(s.id)) } };
         const withFields = useMerge && mergeSides.some((x) => x.id === s.id);
         if (withFields) {
-          if (D.usePrintSources) await D.usePrintSources(canvas); // (full-size artwork in the name-list prints too)
+          await printSources(); // (full-size artwork in the name-list prints too)
           // The background and one picture of the names per row...
           const m = await exportMergeSide(s, (i, n) => busy(true, t('merge.preparing', { i: POD.num(i), n: POD.num(n) })));
           files[`${s.id}-merge-base.png`] = m.base;
@@ -7135,7 +7149,7 @@
         }
         try {
           // (Uploaded designs: the full-size original goes into the print, not the screen copy.)
-          if (D.usePrintSources) await D.usePrintSources(canvas);
+          await printSources();
           files[`${s.id}-print.png`] = await exportPrint(s);
           // A booklet page from the customer's PDF with things added on top: those things on their own
           // (the print files put them over the PDF page itself).
@@ -7590,6 +7604,13 @@
       commit();
     }
     canvas.requestRenderAll();
+    // Opening it is the starting point: Undo can't take the design off again (QA 26 Nov: one tap emptied the
+    // product), as with shared designs, cart designs and saved drafts.
+    for (const sd of Object.keys(st.history)) if (sd !== st.side) delete st.history[sd];
+    const h = hist();
+    h.stack = [snapshot()];
+    h.i = 0;
+    refreshChrome();
     toast(t('design.loaded'));
     scheduleDraft();
   }

@@ -312,6 +312,7 @@ window.POD_STRINGS = {
   'pp.readyHelp': ['Every design fits this product. Pick a colour above to see them in it.', 'كل التصميمات بتتظبط على المنتج ده. اختار لون فوق عشان تشوفها بيه.'],
   'pp.order': ['Order as is', 'اطلبه كده'],
   'pp.edit': ['Edit', 'عدّل'],
+  'msg.printSource': ['The design\'s full-size picture didn\'t load, so nothing was added. Check your connection and try again.', 'صورة التصميم بحجمها الكامل ماتحمّلتش، فماضفناش حاجة. اتأكد من الإنترنت وجرّب تاني.'],
   'msg.network': ['No internet connection. Check your connection and try again.', 'مفيش اتصال بالإنترنت. اتأكد من الاتصال وحاول تاني.'],
   // A page whose products (or order) couldn't load: no signal, or the site busy for a moment.
   'net.title': ['No connection', 'مفيش اتصال'],
@@ -1124,6 +1125,7 @@ window.POD_STRINGS = {
   'cart.qtyPack': ['Cheaper as {pack}, so we changed it for you.', 'أرخص كـ {pack}، فغيّرناها لك.'],
   'cart.qtyCheaper': ['Tip: {copies} cost only {price}.', 'نصيحة: {copies} بـ {price} بس.'],
   'cart.qtyTake': ['Make it {copies}', 'خليها {copies}'],
+  'cart.qtyTotalChanged': ['Your new quantity changed the total. Check it, then press “Place order” again.', 'الكمية الجديدة غيّرت الإجمالي. راجعه واضغط «تأكيد الطلب» تاني.'],
   'cart.note': [
     'Change how many with <strong>−</strong> and <strong>+</strong>. Other sizes or colours of the same design? Use <strong>Edit design</strong> and set the quantities under the product; the price covers every piece. <strong>Duplicate</strong> starts a separate design from this one.',
     'غيّر العدد بـ <strong>−</strong> و<strong>+</strong>. محتاج مقاسات أو ألوان تانية من نفس التصميم؟ اضغط <strong>تعديل التصميم</strong> واكتب الكميات تحت المنتج؛ السعر بيشمل كل القطع. و<strong>نسخة أخرى</strong> بتبدأ تصميم منفصل من التصميم ده.',
