@@ -1089,7 +1089,7 @@
     const items = rawCart();
     // With what this device last agreed with the account: the server merges (another device may have
     // added or removed items since this page was opened) and answers with the merged cart.
-    const body = JSON.stringify({ items: items.map((i) => ({ designId: i.designId, addedAt: i.addedAt, ...(i.later ? { later: true } : {}), ...(i.movedAt ? { movedAt: i.movedAt } : {}), ...(i.editToken ? { editToken: i.editToken } : {}), ...(i.listKey ? { listKey: i.listKey } : {}), ...(i.view ? { view: i.view } : {}) })), base: [...cartBase(acct)] });
+    const body = JSON.stringify({ items: items.map((i) => ({ designId: i.designId, addedAt: i.addedAt, ...(i.later ? { later: true } : {}), ...(i.movedAt ? { movedAt: i.movedAt } : {}), ...(i.editToken ? { editToken: i.editToken } : {}), ...(i.listKey ? { listKey: i.listKey } : {}), ...(i.designKey ? { designKey: i.designKey } : {}), ...(i.view ? { view: i.view } : {}) })), base: [...cartBase(acct)] });
     try {
       const res = await fetch('/api/account/cart', { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Account': acct }, body, keepalive: body.length < 60000 });
       if (!res.ok || cartAcct() !== acct) return;

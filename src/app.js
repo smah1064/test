@@ -2087,9 +2087,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         if (checked.get(side.id) !== fileHash(store.designFile(design.id, `${side.id}-print.png`))) throw new HttpError(409, 'designChanged');
       }
       design.status = 'ready';
+      // The upload key stays the cart's key for this design: with it the cart changes how many (owner, 26 Nov).
+      if (!design.merge && !design.kind) design.cartKeyHash = design.uploadTokenHash;
       delete design.uploadTokenHash;
       store.save();
-      const { uploadTokenHash, listKeyHash, ...pub } = design; // eslint-disable-line no-unused-vars
+      const { uploadTokenHash, listKeyHash, cartKeyHash, ...pub } = design; // eslint-disable-line no-unused-vars
       res.json({ ...pub, previewUrl: `/files/designs/${design.id}/${design.sides[0].id}-preview.png` });
     } catch (e) {
       next(e);
@@ -2615,7 +2617,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     // A design id is in public picture links: it must not lead to the order (and the customer) it is in.
     // Nor to what was paid: the editor works prices out itself (the team sees design ids, and the
     // amounts are only for people allowed to see them).
-    const { uploadTokenHash, listKeyHash, orderId, revisionOf, price, unitPrice, ...pub } = design; // eslint-disable-line no-unused-vars
+    const { uploadTokenHash, listKeyHash, cartKeyHash, orderId, revisionOf, price, unitPrice, ...pub } = design; // eslint-disable-line no-unused-vars
     if (Array.isArray(pub.quantities)) pub.quantities = withoutLinePrices(pub.quantities);
     // The names only for who may read them (else the editor asks for the list again).
     const list = design.merge && listOpenFor(req, design) ? readMergeList(design) : null;
@@ -3733,7 +3735,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       // Already ordered (e.g. the answer to the order got lost): the cart can take the customer to it.
       const why = price === null ? null : designUnavailable(d);
       const p = why && getProduct(d.productId);
-      return { designId: String(id).slice(0, 40), price, gone: price === null, ...(d && d.orderId ? { ordered: true } : {}), ...(why ? { unavailable: why, unavailableText: format(why, { name: p ? p.name[langOf(req)] || p.name.en : '' }, langOf(req)) } : {}) };
+      // The cart's − / + (one artwork in one colour and size): how many now, and in what steps.
+      const count = price === null || why ? null : cartCount(d);
+      return { designId: String(id).slice(0, 40), price, gone: price === null, ...(count ? { count } : {}), ...(d && d.orderId ? { ordered: true } : {}), ...(why ? { unavailable: why, unavailableText: format(why, { name: p ? p.name[langOf(req)] || p.name.en : '' }, langOf(req)) } : {}) };
     });
     // Counted stock: the cart says so before checkout when it asks for more pieces than are left.
     // In cart order: the pieces that still fit what's left go through; only the items past it are flagged
@@ -4295,14 +4299,19 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     } catch (err) { /* gone */ }
     return n;
   }
+  // The cart's key for one design (its upload token): changes how many from the cart.
+  const DESIGN_KEY_RE = /^[a-f0-9]{48}$/;
   /** An exact copy of a saved design (files included), not ordered yet. Returns { design, token }. */
   function copyDesign(src) {
     const token = crypto.randomBytes(24).toString('hex');
     const copy = JSON.parse(JSON.stringify(src));
     Object.assign(copy, { id: crypto.randomUUID(), createdAt: new Date().toISOString(), status: 'ready', orderId: null, reorderOf: src.id });
     delete copy.uploadTokenHash;
+    delete copy.cartKeyHash;
     delete copy.orderedAt;
     if (copy.kind === 'book') copy.uploadTokenHash = sha(token); // the book page edits with this token
+    // One artwork (not a name list, book or set): the token is the cart's key to change how many.
+    if (!copy.kind && !copy.merge) copy.cartKeyHash = sha(token);
     // A name list: the copy's own key, kept with its new cart item.
     const listKey = copy.merge ? crypto.randomBytes(18).toString('base64url') : null;
     if (listKey) copy.listKeyHash = sha(listKey);
@@ -4316,6 +4325,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     designId: d.id,
     ...(d.kind === 'book' ? { bookId: d.bookId, editToken: token } : {}),
     ...(d.merge && listKey ? { listKey } : {}),
+    ...(!d.kind && !d.merge && DESIGN_KEY_RE.test(token || '') ? { designKey: token } : {}),
     productId: d.productId,
     productName: d.productName,
     colorName: d.color.name,
@@ -4332,6 +4342,115 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   });
 
   // Order again: an exact copy of every item, at today's prices, ready for the cart.
+  // ---------- How many, changed from the cart (owner, 26 Nov) ----------
+  // One artwork in one colour and size (or one pack): the cart's − / + changes the number without the editor. With the
+  // cart's key (kept with the item) the design itself changes; without it (an item added before the key, or the
+  // design was ordered) a copy is made at the new number, with its own key. Several sizes / colours, name lists, books
+  // and photo sets still go through the editor.
+  /** Copies in one pack of a size (1 for a size that isn't a pack). */
+  const packSize = (z) => (z && z.pack && z.copies > 0 ? z.copies : 1);
+  /** The design's one line (colour, size, how many), or null when it has several or isn't one artwork. */
+  function oneLine(d, product) {
+    if (!d || d.kind || d.merge || !product || (d.quantities && d.quantities.length > 1)) return null;
+    const line = d.quantities && d.quantities[0] ? d.quantities[0] : { color: d.color, size: d.size, qty: 1 };
+    const size = product.sizes.find((z) => z.id === (line.size && line.size.id));
+    const colour = product.colors.find((c) => c.id === (line.color && line.color.id));
+    return size && colour ? { line, size, colour, qty: Number(line.qty) || 1 } : null;
+  }
+  /** A pack's family that can be printed in this colour now (the size itself first). */
+  const packFamily = (product, d, size, colour) => [size, ...product.sizes.filter((z) => z !== size && z.pack && z.family === size.family
+    && !catalog.unavailable(product, { colorId: colour.id, sizeId: z.id, sideIds: (d.sides || []).map((sd) => sd.id).filter((id) => id !== EMB) }))];
+  /**
+   * The cart's − / + for a design (owner, 26 Nov): { n, step, max, unit } where n counts pieces, or copies for packs
+   * ("8 pages × 10 copies" twice: 20, in steps of the family's smallest pack). null: changed in the editor.
+   */
+  function cartCount(d) {
+    const product = d && getProduct(d.productId);
+    const one = oneLine(d, product);
+    if (!one || d.orderId) return null;
+    if (!one.size.pack) return { n: one.qty, step: 1, max: MAX_PIECES, unit: 'piece' };
+    const step = Math.min(...packFamily(product, d, one.size, one.colour).map(packSize));
+    return { n: one.qty * packSize(one.size), step, max: MAX_PACK_COPIES, unit: one.size.unit === 'piece' ? 'packPiece' : 'copy' };
+  }
+  /** The design with this line instead (price and pieces as the shop counts them). */
+  function withLine(x, product, colour, size, qty) {
+    const sameAsChosen = qty === 1 && colour.id === x.color.id && size.id === x.size.id;
+    if (size.id !== x.size.id) x.size = { ...x.size, id: size.id, label: withOptions(size.label, x.options) };
+    if (sameAsChosen) delete x.quantities;
+    else x.quantities = [{ color: { id: colour.id, name: colour.name, hex: colour.hex }, size: { id: size.id, label: withOptions(size.label, x.options), ...packOf(size) }, qty }];
+    x.price = designPrice({ ...x, orderId: null, status: 'ready' });
+    return x;
+  }
+  app.post('/api/designs/:id/quantity', express.json({ limit: '2kb' }), (req, res) => {
+    const d = UUID_RE.test(req.params.id) && store.getDesign(req.params.id);
+    if (!d || d.status !== 'ready') throw new HttpError(404, 'designNotFound');
+    const product = getProduct(d.productId);
+    if (!product) throw new HttpError(404, 'designNotFound');
+    const one = oneLine(d, product);
+    if (!one) throw new HttpError(409, 'qtyInEditor');
+    const b = req.body || {};
+    // Pieces, or for packs the copies: the cheapest size of the pack's family that makes exactly that many (as the
+    // editor switches "10 × 1 copy" to "1 × 10 copies" when that costs less; the owner's choice, 25 Nov).
+    let pick;
+    let cheaper = null;
+    let switchedTo = null;
+    if (!one.size.pack) {
+      const qty = Number(b.qty);
+      if (!Number.isInteger(qty) || qty < 1 || qty > MAX_PIECES) throw new HttpError(400, 'qtyBad');
+      pick = { size: one.size, qty };
+    } else {
+      const copies = Number(b.copies);
+      if (!Number.isInteger(copies) || copies < 1) throw new HttpError(400, 'qtyBad');
+      if (copies > MAX_PACK_COPIES) throw new HttpError(400, 'qtyTooManyCopies', { max: MAX_PACK_COPIES.toLocaleString('en-US') });
+      const family = packFamily(product, d, one.size, one.colour);
+      const priced = family.map((z) => {
+        const qty = copies / packSize(z);
+        if (!Number.isInteger(qty) || qty < 1 || qty > MAX_PIECES) return null;
+        const price = withLine(JSON.parse(JSON.stringify(d)), product, one.colour, z, qty).price;
+        return price == null ? null : { size: z, qty, price };
+      }).filter(Boolean);
+      if (!priced.length) throw new HttpError(400, 'qtyBad');
+      // (Ties: the size already chosen.)
+      pick = priced.reduce((a, c) => (c.price < a.price - 0.5 ? c : a));
+      // Said only when a bigger pack was taken for less than the smallest ones that make that many.
+      const plain = priced.reduce((a, c) => (packSize(c.size) < packSize(a.size) ? c : a));
+      if (pick !== plain) switchedTo = pick;
+      // Fewer copies than a pack that costs less ("9 menus for 1,170; 10 are 250"): said, nothing changed.
+      const bigger = family.filter((z) => packSize(z) > copies).map((z) => ({ z, price: withLine(JSON.parse(JSON.stringify(d)), product, one.colour, z, 1).price }))
+        .filter((x) => x.price != null && x.price < pick.price - 0.5).sort((a, c) => a.price - c.price)[0];
+      if (bigger) cheaper = { copies: packSize(bigger.z), price: bigger.price, now: pick.price };
+    }
+    // (Stock is checked when the order is placed, as for any cart.)
+    const key = String(req.get('x-design-key') || '');
+    const own = !d.orderId && d.cartKeyHash && DESIGN_KEY_RE.test(key) && sameSecret(sha(key), d.cartKeyHash);
+    const apply = (x) => {
+      withLine(x, product, one.colour, pick.size, pick.qty);
+      if (x.price == null) throw new HttpError(409, 'productUnavailable', { name: product.name[langOf(req)] || product.name.en });
+      Object.assign(x, pieceInfo(product, x));
+    };
+    let design;
+    let designKey = null;
+    if (own) {
+      store.mutate((db) => {
+        const cur = db.designs[d.id];
+        if (!cur || cur.orderId) throw new HttpError(409, 'designOrdered');
+        apply(cur);
+        design = cur;
+      });
+    } else {
+      // Without the cart's key (added before it existed, or another device): a copy at the new number, with its own key.
+      rateLimit(req, 'designs');
+      const copy = copyDesign(d);
+      designKey = copy.token;
+      store.mutate((db) => {
+        apply(db.designs[copy.design.id]);
+        design = db.designs[copy.design.id];
+      });
+    }
+    res.set('Cache-Control', 'no-store');
+    res.json({ entry: cartEntry(design, designKey), count: cartCount(design), copied: Boolean(designKey), ...(cheaper ? { cheaper } : {}), ...(switchedTo ? { switched: { label: switchedTo.size.label, qty: switchedTo.qty } } : {}) });
+  });
+
   app.post('/api/orders/:id/reorder', express.json({ limit: '8kb' }), (req, res) => {
     const order = customerOrderFor(req, req.params.id);
     // Only some of the items ({ items: [item ids] }), or the whole order.
@@ -4394,7 +4513,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const d = rec && UUID_RE.test(rec.designId || '') && store.getDesign(rec.designId);
       if (!d || d.orderId || (d.status && d.status !== 'ready')) continue;
       if (d.kind === 'book' && !rec.editToken) continue;
-      items.push({ ...cartEntry(d, rec.editToken, rec.listKey), ...(rec.view ? { view: rec.view } : {}), addedAt: rec.addedAt || c.updatedAt || new Date().toISOString(), ...(rec.later ? { later: true } : {}), ...(rec.movedAt ? { movedAt: rec.movedAt } : {}) });
+      items.push({ ...cartEntry(d, d.kind === 'book' ? rec.editToken : rec.designKey, rec.listKey), ...(rec.view ? { view: rec.view } : {}), addedAt: rec.addedAt || c.updatedAt || new Date().toISOString(), ...(rec.later ? { later: true } : {}), ...(rec.movedAt ? { movedAt: rec.movedAt } : {}) });
     }
     return { items, updatedAt: c.updatedAt };
   }
@@ -4424,7 +4543,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const at = when(it.addedAt) || new Date().toISOString();
       // "Saved for later" (kept out of the order), and when it last moved between cart and saved.
       const moved = when(it.movedAt);
-      items.push({ designId: it.designId, addedAt: at, ...(it.later === true ? { later: true } : {}), ...(moved ? { movedAt: moved } : {}), ...(d.kind === 'book' && BOOK_TOKEN_RE.test(it.editToken || '') ? { editToken: it.editToken } : {}), ...(d.merge && LIST_KEY_RE.test(it.listKey || '') ? { listKey: it.listKey } : {}), ...(it.view && typeof it.view === 'object' && /^[A-Za-z0-9_-]{12}$/.test(it.view.id || '') && /^[A-Za-z0-9_-]{32}$/.test(it.view.key || '') ? { view: { id: it.view.id, key: it.view.key } } : {}) });
+      items.push({ designId: it.designId, addedAt: at, ...(it.later === true ? { later: true } : {}), ...(moved ? { movedAt: moved } : {}), ...(d.kind === 'book' && BOOK_TOKEN_RE.test(it.editToken || '') ? { editToken: it.editToken } : {}), ...(!d.kind && !d.merge && DESIGN_KEY_RE.test(it.designKey || '') ? { designKey: it.designKey } : {}), ...(d.merge && LIST_KEY_RE.test(it.listKey || '') ? { listKey: it.listKey } : {}), ...(it.view && typeof it.view === 'object' && /^[A-Za-z0-9_-]{12}$/.test(it.view.id || '') && /^[A-Za-z0-9_-]{32}$/.test(it.view.key || '') ? { view: { id: it.view.id, key: it.view.key } } : {}) });
     }
     // With `base` (the ids this device last agreed with the account): merged with what the account has
     // now, so a device with an old page open can't drop items added elsewhere or bring back removed ones.

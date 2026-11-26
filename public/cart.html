@@ -722,6 +722,160 @@
         if (changed || before !== JSON.stringify([...savedBlocked])) renderSaved();
       }
 
+      // ---------- How many, changed here (owner, 26 Nov): − / + on one artwork in one colour and size ----------
+      // designId -> { n, step, max, unit } from the shop's prices (none: several sizes / colours, name lists, books and
+      // photo sets, changed in the editor). Packs count copies, in steps of the smallest pack.
+      const counts = new Map();
+      // designId -> the number on screen while it is being typed or sent.
+      const qtyDraft = new Map();
+      // designId -> { text, take? } a word under the counter (a pack chosen for less, a cheaper pack, a refusal).
+      const qtyNotes = new Map();
+      const QTY_MINUS = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg>';
+      const QTY_PLUS = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
+      const qtyMin = (c) => (c.unit === 'piece' ? 1 : c.step);
+      /** Digits as typed (Arabic ones too) to a number of the counter's steps, kept between its least and most. */
+      function qtyClamp(c, v) {
+        const n = Number(String(v).replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[^\d]/g, ''));
+        if (!Number.isFinite(n) || n < 1) return qtyMin(c);
+        return Math.min(Math.floor(c.max / c.step) * c.step, Math.max(qtyMin(c), Math.ceil(n / c.step) * c.step));
+      }
+      function qtyBox(item, i) {
+        const c = counts.get(item.designId);
+        if (!c || blocked.has(item.designId)) return '';
+        const n = qtyDraft.has(item.designId) ? qtyDraft.get(item.designId) : c.n;
+        const note = qtyNotes.get(item.designId);
+        const label = t(c.unit === 'copy' ? 'cart.qtyCopies' : c.unit === 'packPiece' ? 'cart.qtyPieces' : 'cart.qty');
+        return `
+              <div class="cart-qty" data-qty-for="${esc(item.designId)}">
+                <span class="cart-qty-label" id="qty-l-${i}">${esc(label)}</span>
+                <div class="qty-step" dir="ltr" role="group" aria-labelledby="qty-l-${i}">
+                  <button type="button" class="btn btn-sm" id="qty-less-${i}" data-qstep="-1" data-qid="${esc(item.designId)}" aria-label="${esc(t('props.less'))}"${n <= qtyMin(c) ? ' disabled' : ''}>${QTY_MINUS}</button>
+                  <input class="qty-n" id="qty-n-${i}" data-qin="${esc(item.designId)}" type="text" inputmode="numeric" autocomplete="off" value="${esc(POD.num(n))}" aria-labelledby="qty-l-${i}">
+                  <button type="button" class="btn btn-sm" id="qty-more-${i}" data-qstep="1" data-qid="${esc(item.designId)}" aria-label="${esc(t('props.more'))}"${n + c.step > c.max ? ' disabled' : ''}>${QTY_PLUS}</button>
+                </div>
+                ${note ? `<p class="cart-qty-note${note.error ? ' bad' : ''}" role="${note.error ? 'alert' : 'status'}">${esc(note.text)}${note.take ? ` <button type="button" class="link-btn" data-qtake="${esc(item.designId)}" data-qn="${note.take}">${esc(t('cart.qtyTake', { copies: POD.plural(c.unit === 'packPiece' ? 'qty.unitPieces' : 'qty.copies', note.take) }))}</button>` : ''}</p>` : ''}
+              </div>`;
+      }
+      /** The counter's number on screen and its − / + (without drawing the whole cart again, so typing goes on). */
+      function paintQty(id) {
+        const c = counts.get(id);
+        const box = document.querySelector(`[data-qty-for="${CSS.escape(id)}"]`);
+        if (!c || !box) return;
+        const n = qtyDraft.has(id) ? qtyDraft.get(id) : c.n;
+        const field = box.querySelector('[data-qin]');
+        if (field && document.activeElement !== field) field.value = POD.num(n);
+        box.querySelector('[data-qstep="-1"]').disabled = n <= qtyMin(c);
+        box.querySelector('[data-qstep="1"]').disabled = n + c.step > c.max;
+      }
+      // One change at a time (a change can make a new design: the next one goes to it); the last number wins.
+      let qtyChain = Promise.resolve();
+      const qtyTimers = new Map();
+      // designId -> the design that took its place (a copy made at the new number).
+      const qtyMoved = new Map();
+      const qtyNow = (id) => { while (qtyMoved.has(id)) id = qtyMoved.get(id); return id; };
+      function queueQty(id, wait) {
+        clearTimeout(qtyTimers.get(id));
+        qtyTimers.set(id, setTimeout(() => { qtyTimers.delete(id); qtyChain = qtyChain.then(() => sendQty(id)); }, wait));
+      }
+      /** Changes still waiting or on their way: sent now, and waited for (before the order is placed). */
+      async function flushQty() {
+        for (const [id, timer] of [...qtyTimers]) {
+          clearTimeout(timer);
+          qtyTimers.delete(id);
+          qtyChain = qtyChain.then(() => sendQty(id));
+        }
+        await qtyChain;
+      }
+      async function sendQty(firstId) {
+        const id = qtyNow(firstId);
+        const c = counts.get(id);
+        const n = qtyDraft.get(id);
+        const item = POD.getCart().find((it) => it.designId === id);
+        if (!c || n == null || !item) { qtyDraft.delete(id); return; }
+        if (n === c.n) { qtyDraft.delete(id); paintQty(id); return; }
+        const box = document.querySelector(`[data-qty-for="${CSS.escape(id)}"]`);
+        if (box) box.setAttribute('aria-busy', 'true');
+        let res;
+        try {
+          res = await POD.api(`/api/designs/${encodeURIComponent(id)}/quantity`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(typeof item.designKey === 'string' ? { 'x-design-key': item.designKey } : {}) },
+            body: JSON.stringify(c.unit === 'piece' ? { qty: n } : { copies: n }),
+          });
+        } catch (err) {
+          qtyDraft.delete(id);
+          qtyNotes.set(id, { text: err.message, error: true });
+          render();
+          return;
+        }
+        const cart = POD.getCart();
+        const at = cart.findIndex((it) => it.designId === id);
+        // (Removed or ordered meanwhile: nothing to change here.)
+        if (at < 0) { qtyDraft.delete(id); return; }
+        const old = cart[at];
+        const entry = { ...res.entry, addedAt: old.addedAt || res.entry.addedAt, ...(old.view ? { view: old.view } : {}), ...(!res.entry.designKey && old.designKey ? { designKey: old.designKey } : {}) };
+        const nid = entry.designId;
+        cart[at] = entry;
+        if (nid !== id) {
+          // A copy at the new number: it takes the item's place, with its tick (the same artwork and proof).
+          qtyMoved.set(id, nid);
+          if (approvals.has(id)) { approvals.set(nid, approvals.get(id)); approvals.delete(id); saveApprovals(); }
+          if (expanded.delete(id)) expanded.add(nid);
+          if (openMenu === id) openMenu = null;
+          counts.delete(id);
+          qtyNotes.delete(id);
+          // (Typed again meanwhile: that number goes to the new design.)
+          if (qtyDraft.has(id) && qtyDraft.get(id) !== n) qtyDraft.set(nid, qtyDraft.get(id));
+          qtyDraft.delete(id);
+          if (qtyTimers.has(id)) { clearTimeout(qtyTimers.get(id)); qtyTimers.delete(id); queueQty(nid, 0); }
+        } else if (qtyDraft.get(id) === n) qtyDraft.delete(id);
+        if (res.count) counts.set(nid, res.count);
+        const word = (x) => POD.plural(c.unit === 'packPiece' ? 'qty.unitPieces' : 'qty.copies', x);
+        if (res.switched) qtyNotes.set(nid, { text: t('cart.qtyPack', { pack: `${POD.num(res.switched.qty)} × ${tr(res.switched.label)}` }) });
+        else if (res.cheaper) qtyNotes.set(nid, { text: t('cart.qtyCheaper', { copies: word(res.cheaper.copies), price: money(res.cheaper.price) }), take: res.cheaper.copies });
+        else qtyNotes.delete(nid);
+        POD.setCart(cart);
+        // The proof shows the pieces: asked again (a copy's proof loads as the cart is drawn).
+        if (nid === id) loadProof(id, { force: true });
+        render();
+        await refreshPrices();
+        render();
+      }
+      document.getElementById('items').addEventListener('click', (e) => {
+        const b = e.target.closest('[data-qstep]');
+        const take = e.target.closest('[data-qtake]');
+        if (!b && !take) return;
+        const id = (b || take).dataset.qid || take.dataset.qtake;
+        const c = counts.get(id);
+        if (!c) return;
+        const cur = qtyDraft.has(id) ? qtyDraft.get(id) : c.n;
+        const n = take ? qtyClamp(c, take.dataset.qn) : qtyClamp(c, cur + Number(b.dataset.qstep) * c.step);
+        if (take) qtyNotes.delete(id);
+        qtyDraft.set(id, n);
+        const field = document.querySelector(`[data-qin="${CSS.escape(id)}"]`);
+        if (field) field.value = POD.num(n);
+        paintQty(id);
+        // A few quick presses make one change.
+        queueQty(id, take ? 0 : 450);
+      });
+      // Typed: sent when the customer leaves the box or presses Enter.
+      document.getElementById('items').addEventListener('input', (e) => {
+        const id = e.target.dataset && e.target.dataset.qin;
+        if (id && counts.has(id)) qtyDraft.set(id, qtyClamp(counts.get(id), e.target.value));
+      });
+      document.getElementById('items').addEventListener('change', (e) => {
+        const id = e.target.dataset && e.target.dataset.qin;
+        if (!id || !counts.has(id)) return;
+        const n = qtyClamp(counts.get(id), e.target.value);
+        qtyDraft.set(id, n);
+        e.target.value = POD.num(n);
+        paintQty(id);
+        queueQty(id, 0);
+      });
+      document.getElementById('items').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && e.target.dataset && e.target.dataset.qin) { e.preventDefault(); e.target.blur(); }
+      });
+
       /**
        * "Edit design" and "Remove" on the item; "Another copy" and "Save for later" in its "⋯" menu (only what applies;
        * no menu when nothing does). An item the shop can't make now keeps "Save for later" in sight: it is the way on.
@@ -802,6 +956,7 @@
             <div>
               <div class="item-head"><h3>${esc(tr(item.productName))}${blocked.has(item.designId) ? ` <span class="saved-state blocked">${esc(t('cart.blocked'))}</span>` : ''}</h3><div class="price">${itemPrice(item)}</div></div>
               <div class="meta" data-meta-for="${esc(item.designId)}">${itemMeta(item)}</div>
+              ${qtyBox(item, i)}
               ${blocked.has(item.designId) ? `<div class="cart-unavail" role="alert"><strong>${esc(blocked.get(item.designId))}</strong> ${(outOfShop.get(item.designId) || {}).similar
     ? `<a class="cart-similar" href="${esc(outOfShop.get(item.designId).similar)}">${esc(POD.similarLabel(outOfShop.get(item.designId).similar))}</a>`
     : `<span>${(outOfShop.get(item.designId) || {}).backOn ? `${esc(t('avail.backOnLong', { date: POD.backOnDay(outOfShop.get(item.designId).backOn) }))} ` : ''}${esc(t(cart.some((x) => !blocked.has(x.designId)) ? 'cart.blockedHint' : 'cart.blockedHintOnly'))}</span>`}</div>` : ''}
@@ -993,6 +1148,7 @@
           // Newer servers may also send the pieces; they are the ones that will be ordered.
           if (Array.isArray(q.quantities) && JSON.stringify(q.quantities) !== JSON.stringify(item.quantities || null)) { item.quantities = q.quantities; synced = true; }
           if (q.copies != null && (q.copies || 1) !== (item.copies || 1)) { item.copies = q.copies; synced = true; }
+          if (q.count) counts.set(item.designId, q.count); else counts.delete(item.designId);
           return true;
         });
         // Hidden or sold out since it was added: the shop's message on the item (cleared when it is back).
@@ -1232,6 +1388,10 @@
         btn.disabled = true;
         btn.textContent = t('checkout.placing');
         try {
+          // A number just changed in the cart: sent before anything else (the price then shown is the one to pay).
+          const seenTotal = render.total;
+          await flushQty();
+          if (Math.abs(render.total - seenTotal) > 0.009) throw Object.assign(new Error(t('cart.pricesUpdated')), { code: 'priceChanged' });
           // An earlier try may have reached the shop although its answer got lost: show that order.
           if (await showPlacedOrder()) return;
           const customer = Object.fromEntries(new FormData(form));

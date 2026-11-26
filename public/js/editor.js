@@ -7141,6 +7141,8 @@
         ...(design.quantities ? { quantities: design.quantities } : {}),
         ...(design.merge ? { merge: { count: design.merge.count } } : {}),
         ...(design.merge && created.listKey ? { listKey: created.listKey } : {}),
+        // (The cart's key for this design: with it the cart changes how many without copying it.)
+        ...(!design.merge && !design.kind && /^[a-f0-9]{48}$/.test(created.uploadToken || '') ? { designKey: created.uploadToken } : {}),
         ...(viewOk(st.view) ? { view: { id: st.view.id, key: st.view.key } } : {}),
         previewUrl: design.previewUrl,
         addedAt: new Date().toISOString(),

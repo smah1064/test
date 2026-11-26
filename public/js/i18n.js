@@ -1114,9 +1114,16 @@ window.POD_STRINGS = {
   'saved.emptyText': ['Designs you start are kept here until you finish them, and so are cart items you save for later.', 'أي تصميم تبدأه بيتحفظ هنا لحد ما تخلّصه، وكمان أي حاجة من السلة تحفظها لبعدين.'],
   'cart.printed': ['Printed: {sides}', 'الطباعة: {sides}'],
   'cart.preview': ['Preview of your {product}', 'معاينة {product}'],
+  // The cart's − / + (owner, 26 Nov).
+  'cart.qty': ['Quantity', 'الكمية'],
+  'cart.qtyCopies': ['Copies', 'عدد النسخ'],
+  'cart.qtyPieces': ['Pieces', 'عدد القطع'],
+  'cart.qtyPack': ['Cheaper as {pack}, so we changed it for you.', 'أرخص كـ {pack}، فغيّرناها لك.'],
+  'cart.qtyCheaper': ['Tip: {copies} cost only {price}.', 'نصيحة: {copies} بـ {price} بس.'],
+  'cart.qtyTake': ['Make it {copies}', 'خليها {copies}'],
   'cart.note': [
-    'Want more pieces of a design, in other sizes or colours? Use <strong>Edit design</strong> and set the quantities under the product; the price covers every piece. <strong>Duplicate</strong> starts a separate design from this one.',
-    'محتاج قطع أكتر من التصميم، أو مقاسات وألوان تانية؟ اضغط <strong>تعديل التصميم</strong> واكتب الكميات تحت المنتج؛ السعر بيشمل كل القطع. و<strong>نسخة أخرى</strong> بتبدأ تصميم منفصل من التصميم ده.',
+    'Change how many with <strong>−</strong> and <strong>+</strong>. Other sizes or colours of the same design? Use <strong>Edit design</strong> and set the quantities under the product; the price covers every piece. <strong>Duplicate</strong> starts a separate design from this one.',
+    'غيّر العدد بـ <strong>−</strong> و<strong>+</strong>. محتاج مقاسات أو ألوان تانية من نفس التصميم؟ اضغط <strong>تعديل التصميم</strong> واكتب الكميات تحت المنتج؛ السعر بيشمل كل القطع. و<strong>نسخة أخرى</strong> بتبدأ تصميم منفصل من التصميم ده.',
   ],
   'checkout.title': ['Delivery details', 'بيانات التوصيل'],
   'checkout.name': ['Full name', 'الاسم بالكامل'],

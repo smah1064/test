@@ -210,6 +210,7 @@ const MESSAGES = {
   qtyNoColors: { en: 'This product can be ordered in one colour per design.', ar: 'المنتج ده بيتطلب بلون واحد لكل تصميم.' },
   qtyOnePageCount: { en: 'A booklet design is for one page count: order other page counts as their own design.', ar: 'تصميم الكتيب بيبقى لعدد صفحات واحد: اطلب أي عدد صفحات تاني كتصميم لوحده.' },
   qtyNoSizes: { en: 'This product can be ordered in one size per design (a bigger size is a bigger print).', ar: 'المنتج ده بيتطلب بمقاس واحد لكل تصميم (المقاس الأكبر طباعته أكبر).' },
+  qtyInEditor: { en: 'Several sizes or colours: change the quantities in the design (Edit design).', ar: 'فيه كذا مقاس أو لون: غيّر الكميات من التصميم (تعديل التصميم).' },
   qtyTooManyCopies: { en: 'Up to {max} copies of one design online. For more, please contact us on WhatsApp.', ar: 'أقصى عدد أونلاين {max} نسخة للتصميم الواحد. لو محتاج أكتر، كلمنا على واتساب.' },
   qtyTooMany: { en: 'Up to {max} pieces per design. For more, add the design again.', ar: 'لحد {max} قطعة للتصميم. لو محتاج أكتر ضيف التصميم تاني.' },
   mergeBadSize: { en: 'Row {row}: size "{value}" is not one of this product\'s sizes ({list}).', ar: 'الصف {row}: المقاس "{value}" مش من مقاسات المنتج ({list}).' },
