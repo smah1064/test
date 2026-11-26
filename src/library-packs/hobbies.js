@@ -68,7 +68,7 @@ const designs = [
     S('hexagon', 0.4, 0.5, 0.25, { fill: TEAL }),
     T('5', 'Anton', 0.24, 0.5, 0.25, { fill: '#ffffff' }),
     T('خماسي', 'Lalezar', 0.26, 0.5, 0.58),
-    T('دوري الحتة 2025', 'Changa', 0.085, 0.5, 0.82, { weight: 'bold', fill: TEAL }),
+    T('دوري الحتة 2026', 'Changa', 0.085, 0.5, 0.82, { weight: 'bold', fill: TEAL }),
   ]),
   D('hb-first-class-fan', 'football', 'First-class fan', 'مشجع درجة أولى', [
     A('fluent-emoji-flat:heart-on-fire', 0.24, 0.5, 0.2),
@@ -270,7 +270,7 @@ const designs = [
   D('hb-sahel', 'travel', 'Sahel summer', 'الساحل صيف', [
     A('fluent-emoji-flat:sun', 0.26, 0.5, 0.16),
     T('الساحل', 'Lalezar', 0.3, 0.5, 0.44, { fill: BLUE }),
-    T('صيف 2025', 'Marhey', 0.13, 0.5, 0.66, { weight: 'bold', fill: ACCENT }),
+    T('صيف 2026', 'Marhey', 0.13, 0.5, 0.66, { weight: 'bold', fill: ACCENT }),
     A('fluent-emoji-flat:water-wave', 0.2, 0.5, 0.86),
   ]),
   D('hb-summer-vibes', 'travel', 'Summer vibes', 'سمر فايبز', [
@@ -311,14 +311,14 @@ const designs = [
   D('hb-family-trip', 'travel', 'Family trip with year', 'رحلة العيلة بالسنة', [
     A('fluent-emoji-flat:airplane', 0.26, 0.5, 0.16),
     T('رحلة العيلة', 'Lalezar', 0.13, 0.5, 0.4, { fill: '#ffffff', bg: BLUE, bgShape: 'pill' }),
-    T('2025', 'Anton', 0.28, 0.5, 0.64, { fill: BLUE }),
+    T('2026', 'Anton', 0.28, 0.5, 0.64, { fill: BLUE }),
     T('FAMILY TRIP', 'Montserrat', 0.06, 0.5, 0.86, { weight: 'bold', spacing: 400 }),
   ]),
   D('hb-shella-trip', 'travel', 'Friends trip with year', 'رحلة الشلة بالسنة', [
     A('fluent-emoji-flat:sunglasses', 0.3, 0.5, 0.15),
     T('رحلة', 'Lalezar', 0.2, 0.5, 0.36),
     T('الشلة', 'Lalezar', 0.3, 0.5, 0.58, { fill: ACCENT }),
-    T('2025', 'Bungee', 0.1, 0.5, 0.83, { fill: '#ffffff', bg: ACCENT, bgShape: 'box' }),
+    T('2026', 'Bungee', 0.1, 0.5, 0.83, { fill: '#ffffff', bg: ACCENT, bgShape: 'box' }),
   ], 'white'),
 ];
 

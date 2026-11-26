@@ -39,7 +39,7 @@ const FLAGGED = {
   'ev-fam-mum': [['عيلة المصري', 'family', 'المصري']],
   'ev-fam-son': [['عيلة المصري', 'family', 'المصري']],
   'ev-fam-daughter': [['عيلة المصري', 'family', 'المصري']],
-  'ev-a9ghar-wa7ed': [['سليم 2025', 'baby', 'سليم']],
+  'ev-a9ghar-wa7ed': [['سليم 2026', 'baby', 'سليم']],
   'hb-kit-name-number': [['أحمد', 'name']],
   'hb-kit-en': [['AHMED', 'name']],
   'hb-player-one': [['AHMED', 'name']],
@@ -182,10 +182,10 @@ test('withNames: the typed name replaces the sample (all of it, or its name part
   assert.deepStrictEqual({ ...omar.items[0].fitTo }, { text: 'LAILA', font: 'Bungee', weight: 'normal' }); // (made in the page's realm)
   assert.strictEqual(omar.items[0].direction, 'ltr');
   assert.strictEqual(textOf(laila, 0), 'LAILA', 'the shop\'s design is not changed');
-  // Only the name part: "عيلة المصري" -> "عيلة الشريف", "Laila's" -> "Nour's", "سليم 2025" -> "يوسف 2025".
+  // Only the name part: "عيلة المصري" -> "عيلة الشريف", "Laila's" -> "Nour's", "سليم 2026" -> "يوسف 2026".
   assert.strictEqual(textOf(D.withNames(byId('ev-fam-dad'), ['الشريف']), 0), 'عيلة الشريف');
   assert.strictEqual(textOf(D.withNames(byId('lz-door-room-en'), ['Nour']), 0), "Nour's");
-  assert.strictEqual(textOf(D.withNames(byId('ev-a9ghar-wa7ed'), ['يوسف']), 0), 'يوسف 2025');
+  assert.strictEqual(textOf(D.withNames(byId('ev-a9ghar-wa7ed'), ['يوسف']), 0), 'يوسف 2026');
   assert.strictEqual(textOf(D.withNames(byId('lz-coaster-monogram-en'), ['h', 'Hassans']), 1), 'THE HASSANS');
   // Several: in order, an empty one keeps its sample.
   const plaque = D.withNames(byId('lz-plaque-mr-mrs-en'), ['Youssef', '']);

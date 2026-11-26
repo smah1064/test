@@ -741,8 +741,10 @@
       }
       /** The number typed (Arabic and Persian digits; a decimal mark is one: "2.5" is 2, not 25. QA 26 Nov), or null for none. */
       function qtyNumber(v) {
+        // (A comma groups thousands, as the box itself writes "1,000" (and "١٬٠٠٠"): read as a decimal mark, "2,000"
+        // became 2. Only "." and "٫" end the whole number. Tester 2, 26 Nov.)
         const text = String(v).replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d))
-          .replace(/[٫,]/g, '.').replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1');
+          .replace(/[,٬،\s]/g, '').replace(/٫/g, '.').replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1');
         const n = Math.floor(Number(text));
         return text && Number.isFinite(n) && n >= 1 ? n : null;
       }

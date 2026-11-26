@@ -20,8 +20,9 @@ const PhotoUtil = (() => {
   }
   /** What the copies box holds: { value, over }. value is null while it has no digits; over means it was above max. */
   function parseCopies(raw, max) {
-    // (A decimal mark is one: "2.5" is 2 copies, not 25. QA 26 Nov.)
-    const digits = latinDigits(raw).replace(/[٫,]/g, '.').split('.')[0].replace(/[^0-9]/g, '');
+    // (A decimal mark is one: "2.5" is 2 copies, not 25. QA 26 Nov. A comma groups thousands, as numbers are written
+    // in the shop: "1,000" is a thousand. Tester 2, 26 Nov.)
+    const digits = latinDigits(raw).replace(/[,٬،\s]/g, '').replace(/٫/g, '.').split('.')[0].replace(/[^0-9]/g, '');
     if (!digits) return { value: null, over: false };
     const n = Number(digits);
     if (n > max) return { value: max, over: true };

@@ -318,7 +318,7 @@ const designs = [
     A('fluent-emoji-flat:baby', 0.3, 0.5, 0.2),
     T('أصغر واحد', 'Lalezar', 0.2, 0.5, 0.48),
     T('في العيلة', 'Marhey', 0.14, 0.5, 0.68, { weight: 'bold', fill: PINK }),
-    T('سليم 2025', 'Changa', 0.07, 0.5, 0.86, { weight: 'bold', fill: BLUE, sampleName: 'baby', samplePart: 'سليم' }),
+    T('سليم 2026', 'Changa', 0.07, 0.5, 0.86, { weight: 'bold', fill: BLUE, sampleName: 'baby', samplePart: 'سليم' }),
   ], 'white', LITTLE),
 ];
 
