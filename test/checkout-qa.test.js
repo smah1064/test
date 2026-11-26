@@ -29,6 +29,8 @@ function fakePod(strings, lang) {
     date: (d) => String(d),
     api: async () => { throw new Error('no network'); },
     orderKey: (id, k) => k || '', orderHeaders: (k) => (k ? { 'x-order-key': k } : {}), orderPath: (p, id, k) => `/${p}?id=${encodeURIComponent(id)}${k ? `&k=${k}` : ''}`,
+    // (Cash on delivery, as during the preview: src/payment-wording.js.)
+    payment: { prepayOnly: false, set() {} },
   };
 }
 

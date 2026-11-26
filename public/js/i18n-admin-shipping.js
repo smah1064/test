@@ -10,6 +10,8 @@ Object.assign(window.POD_STRINGS, {
   'ship.paid': ['Paid', 'مدفوع'],
   'ship.unpaid': ['Not paid', 'لم يُدفع'],
   'ship.cod': ['Cash on delivery', 'الدفع عند الاستلام'],
+  // Paying in advance only, from launch (src/payment-wording.js; 'key.prepay' replaces 'key' then).
+  'ship.cod.prepay': ['Payment in advance', 'الدفع مقدّمًا'],
   'ship.payment': ['Payment', 'الدفع'],
   'ship.markPaid': ['Mark paid', 'سجّل إنه اتدفع'],
   'ship.markUnpaid': ['Mark not paid', 'لسه ما اتدفعش'],

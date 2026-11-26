@@ -116,6 +116,8 @@ async function invoiceHtml(ord, lang) {
     tr: (v) => (v && typeof v === 'object' ? v[lang] || v.en || '' : v == null ? '' : String(v)),
     esc, money: (x) => `EGP ${x}`, num: (x) => String(x), orderNo: (x) => String(x).replace(/^POD-/i, ""), api: async () => ord,
     orderKey: (id, k) => k || '', orderHeaders: (k) => (k ? { 'x-order-key': k } : {}), orderPath: (p, id, k) => `/${p}?id=${encodeURIComponent(id)}${k ? `&k=${k}` : ''}`,
+    // (Cash on delivery, as during the preview: src/payment-wording.js.)
+    payment: { prepayOnly: false, set() {} },
   };
   const el = () => ({ innerHTML: '', hidden: false, href: '', addEventListener() {} });
   const els = { content: el(), 'inv-actions': el(), 'inv-back': el(), 'inv-print': el() };

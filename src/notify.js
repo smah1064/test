@@ -13,6 +13,7 @@
 const { GOVERNORATES } = require('./egypt');
 const { getProduct } = require('./products');
 const { arabicDigits } = require('./i18n');
+const { PREPAY_ONLY } = require('./payment-wording');
 
 const env = (k) => (process.env[k] || '').trim();
 const config = () => ({
@@ -76,6 +77,8 @@ const L = {
     shippedSubject: (n) => `طلبك رقم ${n} في الطريق ليك · إبداع`,
     shippedBody: 'طلبك اتشحن وفي الطريق ليك! جهّز المبلغ للمندوب عند الاستلام.',
     shippedBodyPaid: 'طلبك اتشحن وفي الطريق ليك!',
+    // Paying in advance only (src/payment-wording.js, from launch): no method named, nothing for the courier.
+    prepay: 'الدفع مقدّمًا', shippedBodyPrepay: 'طلبك اتشحن وفي الطريق ليك! ومفيش حاجة تدفعها للمندوب.',
     courier: 'شركة الشحن', trackingNumber: 'رقم التتبع', trackingLink: 'تتبع الشحنة عند شركة الشحن', eta: 'الاستلام المتوقع',
     invoice: 'الفاتورة', copies: (n) => arCount(n, 'نسخة واحدة', 'نسختين', 'نسخ', 'نسخة'), order: 'الطلب', orderNo: 'طلب رقم',
     pieces: (n) => arCount(n, 'قطعة واحدة', 'قطعتين', 'قطع', 'قطعة'), photos: (n) => arCount(n, 'صورة واحدة', 'صورتين', 'صور', 'صورة'),
@@ -96,6 +99,7 @@ const L = {
     shippedSubject: (n) => `Your order no. ${n} is on its way · ebda3`,
     shippedBody: 'Your order has shipped and is on its way to you! Please have the amount ready for the courier on delivery.',
     shippedBodyPaid: 'Your order has shipped and is on its way to you!',
+    prepay: 'Payment in advance', shippedBodyPrepay: 'Your order has shipped and is on its way to you! There is nothing to pay the courier.',
     courier: 'Courier', trackingNumber: 'Tracking number', trackingLink: 'Track the parcel with the courier', eta: 'Expected delivery',
     invoice: 'Invoice', copies: (n) => `${n} cop${n === 1 ? 'y' : 'ies'}`, order: 'Order', orderNo: 'Order no.',
     pieces: (n) => enCount(n, 'piece'), photos: (n) => enCount(n, 'photo'), names: (n) => `Name list: ${enCount(n, 'name')}`, listSep: ', ',
@@ -180,14 +184,17 @@ const dayOf = (ymd, lang) => {
 const deliveryText = (order, lang) => (order.delivery ? L[lang].deliveryLine(order.delivery, dayOf(order.delivery.by, lang)) : '');
 const addressOf = (c, lang) => [c.address, c.city, govName(c.governorate, lang)].filter(Boolean).join(lang === 'ar' ? '، ' : ', ');
 
+/** How the order is paid, after its total: cash on delivery (the preview) or in advance (from launch). */
+const payWord = (t, prepayOnly) => (prepayOnly ? t.prepay : t.cod);
+
 // ---------- Messages ----------
-function adminWhatsAppText(order, links, lang) {
+function adminWhatsAppText(order, links, lang, prepayOnly) {
   const t = L[lang];
   const c = order.customer;
   const lines = [
     `🛒 ${t.newOrder} ${order.number}`,
     order.delivery && order.delivery.speed === 'express' ? t.expressAdmin : '',
-    `${t.items(order.items.length)} · ${t.total} ${money(order.total, lang)} (${t.cod})`,
+    `${t.items(order.items.length)} · ${t.total} ${money(order.total, lang)} (${payWord(t, prepayOnly)})`,
     deliveryText(order, lang),
     `${c.name} · ${c.phone}`,
     addressOf(c, lang),
@@ -199,7 +206,7 @@ function adminWhatsAppText(order, links, lang) {
   return lines.filter(Boolean).join('\n').slice(0, 1500);
 }
 
-function emailHtml(order, links, lang, forAdmin) {
+function emailHtml(order, links, lang, forAdmin, prepayOnly) {
   const t = L[lang];
   const c = order.customer;
   const rows = order.items.map((it, i) => `
@@ -228,7 +235,7 @@ function emailHtml(order, links, lang, forAdmin) {
         ${sum(t.subtotal, money(order.subtotal, lang))}
         ${order.discount ? sum(`${t.discount} (${order.coupon ? order.coupon.code : ''})`, `-${money(order.discount, lang)}`) : ''}
         ${sum(order.delivery && order.delivery.speed === 'express' ? `${t.shipping} (${t.express})` : t.shipping, order.shipping ? money(order.shipping, lang) : t.free)}
-        ${sum(`${t.total} (${t.cod})`, money(order.total, lang), true)}
+        ${sum(`${t.total} (${payWord(t, prepayOnly)})`, money(order.total, lang), true)}
       </table>
       ${order.delivery ? `<p style="margin:12px 0 0;font-weight:700">🚚 ${esc(deliveryText(order, lang))}</p>` : ''}
       ${details}
@@ -236,7 +243,7 @@ function emailHtml(order, links, lang, forAdmin) {
     </div>
   </div></body></html>`;
 }
-const emailText = (order, links, lang, forAdmin) => {
+const emailText = (order, links, lang, forAdmin, prepayOnly) => {
   const t = L[lang];
   const c = order.customer;
   return [
@@ -248,7 +255,7 @@ const emailText = (order, links, lang, forAdmin) => {
     `${t.subtotal}: ${money(order.subtotal, lang)}`,
     ...(order.discount ? [`${t.discount}${order.coupon ? ` (${order.coupon.code})` : ''}: -${money(order.discount, lang)}`] : []),
     `${order.delivery && order.delivery.speed === 'express' ? `${t.shipping} (${t.express})` : t.shipping}: ${order.shipping ? money(order.shipping, lang) : t.free}`,
-    `${t.total} (${t.cod}): ${money(order.total, lang)}`,
+    `${t.total} (${payWord(t, prepayOnly)}): ${money(order.total, lang)}`,
     deliveryText(order, lang),
     forAdmin ? `${t.customer}: ${c.name} · ${c.phone}${c.email ? ' · ' + c.email : ''}\n${t.address}: ${addressOf(c, lang)}${c.notes ? `\n${t.notes}: ${c.notes}` : ''}` : `${t.address}: ${addressOf(c, lang)}`,
     '',
@@ -288,7 +295,7 @@ function orderLink(base, order, page = 'order') {
 }
 
 /** Send every configured notification for a new order. Returns a result per channel. */
-async function orderPlaced(order, { origin, lang, admin = true, customer = true }) {
+async function orderPlaced(order, { origin, lang, admin = true, customer = true, prepayOnly = PREPAY_ONLY }) {
   const cfg = config();
   const base = cfg.siteUrl || origin || '';
   const links = { admin: base ? `${base}/admin` : '', track: orderLink(base, order) };
@@ -307,9 +314,9 @@ async function orderPlaced(order, { origin, lang, admin = true, customer = true 
   };
   const st = status();
   await Promise.all([
-    run('adminWhatsApp', admin && st.adminWhatsApp, () => sendWhatsApp(cfg, adminWhatsAppText(order, links, adminLang))),
-    run('adminEmail', admin && st.adminEmail, () => sendEmail(cfg, cfg.adminEmail, L[adminLang].adminSubject(order.number, money(order.total, adminLang)), emailHtml(order, links, adminLang, true), emailText(order, links, adminLang, true))),
-    run('customerEmail', customer && st.customerEmail && Boolean(order.customer.email), () => sendEmail(cfg, order.customer.email, L[custLang].thanksSubject(custNo(order.number, custLang)), emailHtml(order, links, custLang, false), emailText(order, links, custLang, false))),
+    run('adminWhatsApp', admin && st.adminWhatsApp, () => sendWhatsApp(cfg, adminWhatsAppText(order, links, adminLang, prepayOnly))),
+    run('adminEmail', admin && st.adminEmail, () => sendEmail(cfg, cfg.adminEmail, L[adminLang].adminSubject(order.number, money(order.total, adminLang)), emailHtml(order, links, adminLang, true, prepayOnly), emailText(order, links, adminLang, true, prepayOnly))),
+    run('customerEmail', customer && st.customerEmail && Boolean(order.customer.email), () => sendEmail(cfg, order.customer.email, L[custLang].thanksSubject(custNo(order.number, custLang)), emailHtml(order, links, custLang, false, prepayOnly), emailText(order, links, custLang, false, prepayOnly))),
   ]);
   return result;
 }
@@ -420,12 +427,12 @@ function etaText(eta, lang) {
   }
 }
 
-function shippedContent(order, links, lang) {
+function shippedContent(order, links, lang, prepayOnly) {
   const t = L[lang];
   const c = order.customer || {};
   const sh = order.shipment || {};
   const paid = order.payment && order.payment.status === 'paid';
-  const body = paid ? t.shippedBodyPaid : t.shippedBody;
+  const body = paid ? t.shippedBodyPaid : prepayOnly ? t.shippedBodyPrepay : t.shippedBody;
   const trackingUrl = httpUrl(sh.trackingUrl);
   const facts = [
     sh.courier ? [t.courier, sh.courier] : null,
@@ -444,7 +451,7 @@ function shippedContent(order, links, lang) {
       <p style="margin:0 0 12px;font-weight:700">${esc(t.orderNo)} ${esc(custNo(order.number, lang))}</p>
       ${facts.length ? `<table style="width:100%;border-collapse:collapse;margin:0 0 12px;background:#f8f9fb;border-radius:10px">${facts.map(([k, v]) => `<tr><td style="padding:8px 12px;color:#555">${esc(k)}</td><td style="padding:8px 12px;text-align:${end};font-weight:700"><bdi>${esc(v)}</bdi></td></tr>`).join('')}</table>` : ''}
       <table style="width:100%;border-collapse:collapse">${items.map((line) => `<tr><td style="padding:8px 0;border-bottom:1px solid #eee">${esc(line)}</td></tr>`).join('')}</table>
-      <p style="margin:12px 0 0;font-weight:700">${esc(t.total)}${paid ? '' : ` (${esc(t.cod)})`}: ${esc(money(order.total, lang))}</p>
+      <p style="margin:12px 0 0;font-weight:700">${esc(t.total)}${paid ? '' : ` (${esc(payWord(t, prepayOnly))})`}: ${esc(money(order.total, lang))}</p>
       <p style="margin:20px 0 0">${[
         trackingUrl ? button(trackingUrl, t.trackingLink, true) : '',
         links.track ? button(links.track, t.track, !trackingUrl) : '',
@@ -462,7 +469,7 @@ function shippedContent(order, links, lang) {
     '',
     ...items,
     '',
-    `${t.total}${paid ? '' : ` (${t.cod})`}: ${money(order.total, lang)}`,
+    `${t.total}${paid ? '' : ` (${payWord(t, prepayOnly)})`}: ${money(order.total, lang)}`,
     links.track ? `${t.track}: ${links.track}` : '',
     links.invoice ? `${t.invoice}: ${links.invoice}` : '',
   ].join('\n').replace(/\n{3,}/g, '\n\n').trim();
@@ -474,7 +481,7 @@ function shippedContent(order, links, lang) {
  * order page and the invoice), in the language they ordered in. Never throws.
  * Returns { email: 'sent' | 'skipped' | 'failed', reason? }.
  */
-async function orderShipped(order, { siteUrl } = {}) {
+async function orderShipped(order, { siteUrl, prepayOnly = PREPAY_ONLY } = {}) {
   try {
     const cfg = config();
     const to = order && order.customer && String(order.customer.email || '').trim();
@@ -483,7 +490,7 @@ async function orderShipped(order, { siteUrl } = {}) {
     const base = (cfg.siteUrl || String(siteUrl || '')).replace(/\/+$/, '');
     const links = { track: orderLink(base, order), invoice: orderLink(base, order, 'invoice') };
     const lang = order.lang === 'en' ? 'en' : 'ar';
-    const { subject, html, text } = shippedContent(order, links, lang);
+    const { subject, html, text } = shippedContent(order, links, lang, prepayOnly);
     await sendEmail(cfg, to, subject, html, text);
     return { email: 'sent' };
   } catch (e) {

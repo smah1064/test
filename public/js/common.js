@@ -112,9 +112,31 @@
     }) : str;
   }
 
+  // ---------- How the shop takes payment ----------
+  // Cash on delivery during the preview; paying in advance only from launch (src/payment-wording.js). The server
+  // says which (/api/products, an order's `shop.payment`, the dashboard's session). While it is in advance, a text
+  // with a prepay wording ('key.prepay' next to 'key' in i18n.js) shows that one instead: no page promises cash
+  // on delivery. Otherwise every text is as it always was.
+  let prepayOnly = false;
+  const payment = {
+    get prepayOnly() {
+      return prepayOnly;
+    },
+    /** From the server's `payment` ({ prepayOnly }): the texts already on the page that change, change. */
+    set(info) {
+      const next = Boolean(info && info.prepayOnly);
+      if (next === prepayOnly) return;
+      prepayOnly = next;
+      document.querySelectorAll('[data-i18n]').forEach((el) => {
+        if (STRINGS[el.dataset.i18n + '.prepay']) el.textContent = t(el.dataset.i18n);
+      });
+      document.dispatchEvent(new CustomEvent('pod:paymentchange', { detail: { prepayOnly } }));
+    },
+  };
+
   /** Translate a UI string key. */
   function t(key, params) {
-    const pair = STRINGS[key];
+    const pair = (prepayOnly && STRINGS[key + '.prepay']) || STRINGS[key];
     if (!pair) return key;
     return fill(lang === 'ar' ? arabicDigits(pair[1]) : pair[0], params);
   }
@@ -161,6 +183,7 @@
         return r.json();
       }).then((catalog) => {
         hideEmptyMenus(catalog);
+        payment.set(catalog && catalog.payment);
         return catalog;
       }).catch((err) => {
         catalogPromise = null; // (no connection or a server error: the next try asks again)
@@ -1380,6 +1403,6 @@
     productState, backOnDay, backText, similarProducts, similarHref, similarLabel, productHref, showUnavailable,
     getCart, setCart, getSaved, setSaved, moveItem, designFor, putFile, updateCartBadge, toast, esc, api, drafts, forgetPersonal,
     sizedArea, placedArea, sizeView, canvasEdges, drawPattern, wrapOffsets, fabricCm,
-    orderKey, orderHeaders, orderPath,
+    orderKey, orderHeaders, orderPath, payment,
   };
 })();

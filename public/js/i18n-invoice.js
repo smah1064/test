@@ -14,6 +14,9 @@ Object.assign(window.POD_STRINGS, {
   'invoice.paid': ['Paid', 'مدفوع'],
   'invoice.unpaid': ['Not paid yet', 'لم يُدفع بعد'],
   'invoice.paidOnDelivery': ['Paid on delivery', 'اتدفع عند الاستلام'],
+  // Paying in advance only, from launch (src/payment-wording.js; 'key.prepay' replaces 'key' then).
+  'invoice.methodPrepay': ['Payment in advance', 'الدفع مقدّمًا'],
+  'invoice.paidOnDelivery.prepay': ['Paid', 'مدفوع'],
   'invoice.colItem': ['Item', 'المنتج'],
   'invoice.colQty': ['Qty', 'الكمية'],
   'invoice.colUnit': ['Unit price', 'سعر الوحدة'],
@@ -22,6 +25,7 @@ Object.assign(window.POD_STRINGS, {
   'invoice.copies.two': ['× 2 copies, {price} each', '× نسختين، سعر النسخة {price}'],
   'invoice.copies.few': ['× {n} copies, {price} each', '× {n} نسخ، سعر النسخة {price}'],
   'invoice.amountDue': ['Amount due on delivery', 'المبلغ المطلوب عند الاستلام'],
+  'invoice.amountDue.prepay': ['Amount due', 'المبلغ المطلوب'],
   'invoice.website': ['Website', 'الموقع'],
   'invoice.whatsapp': ['WhatsApp', 'واتساب'],
   'invoice.email': ['Email', 'البريد'],
