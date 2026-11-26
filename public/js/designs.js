@@ -122,7 +122,10 @@
       business: 'business, بيزنس, بزنس',
       catalog: 'catalog, catalogue, كتالوج, كاتلوج, كاتالوج, كتلوج',
       invitation: 'invitation, invite, دعوة',
-      wedding: 'wedding, فرح, أفراح, زفاف',
+      wedding: 'wedding, فرح, أفراح, زفاف, زواج, جواز',
+      // (كرة as well as كورة, soccer as well as football, Egypt in English too, invoice and letterhead in Arabic. QA 26 Nov.)
+      football: 'football, soccer, كورة, كرة, كرة القدم, كرة قدم',
+      egypt: 'egypt, egyptian, مصر, مصري, مصرية',
       poster: 'poster, بوستر',
       notebook: 'notebook, note book, نوت بوك, نوتبوك, كشكول, كشاكيل',
       calendar: 'calendar, نتيجة, تقويم, نتايج',
@@ -373,7 +376,7 @@
     // Typed a product name ("mug", "تيشيرت")? Offer the designs on that product.
     const named = terms.length ? products.filter((p) => fitting.has(p.id) && p.id !== state.product && SEARCH.match(SEARCH.index(`${p.name.en} ${p.name.ar}`), terms)).slice(0, 6) : [];
     return `<div class="card empty design-empty">
-      <h2>${esc(state.q.trim() ? t('designs.noMatch', { q: state.q.trim() }) : t('designs.noMatchFilters'))}</h2>
+      <h2>${state.q.trim() ? esc(t('designs.noMatch', { q: '\u0000' })).replace('\u0000', `<bdi>${esc(state.q.trim())}</bdi>`) : esc(t('designs.noMatchFilters'))}</h2>
       <p class="muted">${esc(t('designs.noMatchHint'))}</p>
       <div class="design-empty-actions">${btns.join('')}</div>
       ${named.length ? `<p class="design-empty-products"><span class="muted small">${esc(t('designs.productHint'))}</span> ${named.map((p) => `<button type="button" class="chip" data-show-product="${esc(p.id)}">${esc(tr(p.name))}</button>`).join(' ')}</p>` : ''}

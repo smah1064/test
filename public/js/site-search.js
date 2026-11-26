@@ -16,7 +16,7 @@
     let q = ''; // header only
     const cat = 'all'; // header only
     const ALIASES = {
-      tshirt: 'tee t-shirt tshirt shirt تي شيرت تيشرت تشيرت', kidstee: 'tee t-shirt kids اطفال تيشرت', polo: 'tee shirt تيشرت', oversized: 'tee shirt تيشرت', jersey: 'football soccer shirt تيشرت فانلة',
+      tshirt: 'tee t-shirt tshirt shirt تي شيرت تيشرت تشيرت', kidstee: 'tee t-shirt kids اطفال تيشرت', polo: 'tee shirt تيشرت', oversized: 'tee shirt تيشرت', jersey: 'football soccer shirt تيشرت فانلة كرة كورة جرسيه جيرسي',
       hoodie: 'hoody sweater هودى', ziphoodie: 'hoody zip jacket هودى جاكيت', kidshoodie: 'hoody هودى اطفال', sweatshirt: 'sweater سويت شيرت بلوفر',
       cap: 'hat قبعة طاقية', mug: 'cup coffee tea كوب كوباية مق', magicmug: 'cup كوب مق', couplemugs: 'cup كوب مق', tumbler: 'cup travel mug كوب',
       cushion: 'pillow مخدة وسادة', poster: 'frame picture صورة برواز', bottle: 'water flask زجاجة ازازة', tote: 'bag شنطة', phonecase: 'cover iphone samsung كفر',
@@ -29,7 +29,7 @@
       menus: 'menu منيو قايمة طعام مطعم كافيه', brochures: 'brochure flyer leaflet بروشور مطوية', booklets: 'catalog catalogue booklet كتالوج كتيب', folders: 'folder فولدر ملف',
       notepads: 'notepad pad بلوك نوت مفكرة', postcards: 'postcard thank you card بوستكارد كارت شكر', giftvouchers: 'voucher gift card كوبون قسيمة جيفت كارد',
       magnets: 'magnet fridge مغناطيس مغنطيس تلاجة ثلاجة', wrappingpaper: 'gift wrap ورق هدايا تغليف', windowstickers: 'window decal vinyl ستيكر فاترينة زجاج',
-      photobook: 'album photo book البوم صور', tablenumbers: 'wedding table number ارقام ترابيزات فرح', placecards: 'wedding place name card كروت اسامي فرح معازيم', bookmarks: 'bookmark فاصل كتاب',
+      photobook: 'album photo book البوم صور', tablenumbers: 'wedding table number ارقام ترابيزات فرح', placecards: 'wedding place name card كروت اسامي فرح معازيم', bookmarks: 'bookmark فاصل كتاب', invoicebook: 'invoice receipt فاتورة فاتوره فواتير ايصال إيصال', letterhead: 'letter head ليتر هيد ليترهيد ورق مراسلات',
     };
     // search-kit:start (the same lines are in public/index.html and public/js/designs.js; test/search-kit.test.js checks both)
     // Forgiving search: what the typed words find, plus plurals (hoodies, تيشيرتات), one word or two (t-shirt, tshirt),
@@ -62,7 +62,10 @@
         business: 'business, بيزنس, بزنس',
         catalog: 'catalog, catalogue, كتالوج, كاتلوج, كاتالوج, كتلوج',
         invitation: 'invitation, invite, دعوة',
-        wedding: 'wedding, فرح, أفراح, زفاف',
+        wedding: 'wedding, فرح, أفراح, زفاف, زواج, جواز',
+        // (كرة as well as كورة, soccer as well as football, Egypt in English too, invoice and letterhead in Arabic. QA 26 Nov.)
+        football: 'football, soccer, كورة, كرة, كرة القدم, كرة قدم',
+        egypt: 'egypt, egyptian, مصر, مصري, مصرية',
         poster: 'poster, بوستر',
         notebook: 'notebook, note book, نوت بوك, نوتبوك, كشكول, كشاكيل',
         calendar: 'calendar, نتيجة, تقويم, نتايج',

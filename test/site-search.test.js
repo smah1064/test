@@ -96,3 +96,10 @@ test('what the header suggests: Arabic and English, forgiving, best first', () =
   assert.deepStrictEqual(ids('xyzq'), [], 'nothing');
   assert.deepStrictEqual(ids('$&'), [], 'only symbols: nothing, not everything');
 });
+
+// QA 26 Nov: كرة / جرسيه find the jersey, فاتورة the invoice book, ليتر هيد the letterhead.
+test('the header finds the jersey by كرة and جرسيه, the invoice book by فاتورة, the letterhead by ليتر هيد', () => {
+  for (const [q, id] of [['كرة', 'jersey'], ['جرسيه', 'jersey'], ['فاتورة', 'invoicebook'], ['فاتوره', 'invoicebook'], ['ليتر هيد', 'letterhead']]) {
+    assert.ok(ids(q).includes(id), `${q} → ${id} (${ids(q).slice(0, 5)})`);
+  }
+});

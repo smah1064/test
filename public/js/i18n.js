@@ -961,6 +961,7 @@ window.POD_STRINGS = {
   'check.hidden': ['{name} is hidden behind a picture or shape and won\'t show in print. Move the text above it (Layers) or move one of them.', '{name} مستخبي ورا صورة أو شكل ومش هيظهر في الطباعة. طلّع الكلام فوقه (الطبقات) أو حرّك واحد منهم.'],
   'layer.art': ['Design picture', 'صورة التصميم'],
   'layer.icon': ['Icon', 'أيقونة'],
+  'qty.packCheaper': ['Tip: {n} copies cost only {price} (you chose {typed} for {now}). Pick the {n}-copy pack to save.', 'نصيحة: {n} نسخة بـ {price} بس (انت مختار {typed} بـ {now}). اختار باكدج الـ {n} نسخة ووفّر.'],
   'qty.max': ['Up to {n} pieces per colour and size online. For more, please contact us on WhatsApp.', 'أقصى عدد أونلاين {n} قطعة لكل لون ومقاس. لو محتاج أكتر، كلمنا على واتساب.'],
   'check.lowres': ['{name} is low resolution ({dpi} DPI) and will look blurry. Make it smaller or use a bigger image.', 'دقة {name} قليلة ({dpi} DPI) وهيطلع مش واضح. صغّره أو استخدم صورة أكبر.'],
   'check.okres': ['{name} is {dpi} DPI: OK, but 150+ looks sharper.', 'دقة {name} {dpi} DPI: مقبولة، بس من 150 وطالع بتبقى أوضح.'],

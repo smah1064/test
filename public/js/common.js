@@ -624,9 +624,13 @@
       root.setAttribute('aria-live', 'polite');
       document.body.appendChild(root);
     }
+    // A new message replaces the errors still showing (an error fixed and tried again: "Account created ✓" sat next to
+    // the old "password too common". QA 26 Nov).
+    root.querySelectorAll('.toast.error').forEach((x) => x.remove());
     const el = document.createElement('div');
     el.className = 'toast' + (type === 'error' ? ' error' : '');
     el.textContent = message;
+    el.dir = 'auto'; // (an English message on an Arabic page keeps its full stop at its end)
     // A bar kept at the bottom of the screen (the editor's price and Add to cart bar on phones) stays readable: the
     // messages go just above it (they covered the price and Save. QA 26 Nov).
     const bar = document.querySelector('[data-toast-above]');
@@ -637,6 +641,12 @@
     // (A longer message stays long enough to read, up to 10 seconds: four lines on a phone went in 2.8. QA 25 Nov.)
     setTimeout(() => el.remove(), Math.min(10000, Math.max(type === 'error' ? 5000 : 2800, String(message || '').length * 60)));
   }
+
+  // Messages in the old language go when the language is switched.
+  document.addEventListener('pod:langchange', () => {
+    const root = document.getElementById('toast-root');
+    if (root) root.querySelectorAll('.toast').forEach((x) => x.remove());
+  });
 
   function esc(s) {
     return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -1137,6 +1147,9 @@
   });
   /** Bring this browser's cart and the account's together (on every page, when signed in). */
   async function mergeAccountCart() {
+    // Back on the cart straight from Google / Facebook sign-in, this browser doesn't know the account yet: asked once,
+    // so the account's cart shows on that first visit, not after a reload (QA 26 Nov).
+    if (!cartAcct() && /^\/cart\/?$/.test(location.pathname)) await drafts.whoami();
     if (!cartAcct()) return;
     // Who is signed in now (an ended session clears what the last customer left here).
     const me = await drafts.whoami();

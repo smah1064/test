@@ -3918,6 +3918,9 @@
     if (lost.length && ask && !confirm(t('msg.noRoomConfirm', { product: tr(next.name), sides: lost.join(' + ') }))) {
       st.options = optionsBefore;
       $('product-select').value = prev.id;
+      // (Everything as before, the price too: it showed the price without the options. QA 26 Nov.)
+      renderOptions();
+      refreshPrice();
       return;
     }
     if (lost.length) toast(t('msg.noRoom', { product: tr(next.name), sides: lost.join(' + ') }));
@@ -4645,14 +4648,27 @@
         }
       }
     }
-    if (!next) return;
+    if (!next) return hintBiggerPack(lines, before);
     const after = Object.values(next).reduce((a, row) => a + Object.entries(row).reduce((b, [z, n]) => b + unitPrice(z) * n, 0), 0);
-    if (!(after < before - 0.5)) return;
+    if (!(after < before - 0.5)) return hintBiggerPack(lines, before);
     if (size !== st.sizeId) changeSize(size);
     st.qty = next;
     const list = Object.values(next).flatMap((row) => Object.entries(row).map(([z, n]) => `${POD.num(n)} × ${tr(sizeById(z).label)}`));
     toast(t('qty.packSwitched', { list: [...new Set(list)].join(POD.lang === 'ar' ? '، ' : ', '), save: money(before - after) }));
     renderOptions();
+  }
+  /**
+   * A few single copies that cost more than a bigger pack (9 menus for 1,170 when 10 are 250): said, with the pack to
+   * pick (nothing is changed: the customer may want exactly these). QA 26 Nov.
+   */
+  function hintBiggerPack(lines, before) {
+    const p = st.product;
+    const first = sizeById(lines[0].size);
+    if (!first) return;
+    const copies = copiesIn(lines);
+    const best = p.sizes.filter((z) => counted(z) && z.family === first.family && z.copies >= copies && sizeOk(p, lines[0].color, z))
+      .map((z) => ({ z, cost: unitPrice(z.id) })).filter((x) => x.cost < before - 0.5).sort((a, b) => a.cost - b.cost)[0];
+    if (best) toast(t('qty.packCheaper', { n: POD.num(best.z.copies), price: money(best.cost), typed: POD.num(copies), now: money(before) }));
   }
   let qtyRedraw = false;
   function renderQty({ force = false } = {}) {
