@@ -100,3 +100,26 @@ test('phones: a sticker gets Done and More; its bubble has copy and delete', { t
     await srv.close();
   }
 });
+
+test('phones: Crop from a photo\'s own bar shows Cancel, Free, Square and Apply, and Apply ends it', { timeout: 90000 }, async () => {
+  const srv = await startServer();
+  const browser = await loadPlaywright().chromium.launch();
+  try {
+    const { ctx, page, errors } = await open(browser, srv.base, { lang: 'en', viewport: { width: 360, height: 740 } });
+    // A plain 600 x 400 PNG (built in the page, no file on disk).
+    const png = await page.evaluate(() => { const c = document.createElement('canvas'); c.width = 600; c.height = 400; const g = c.getContext('2d'); g.fillStyle = '#3b82f6'; g.fillRect(0, 0, 600, 400); return c.toDataURL('image/png').split(',')[1]; });
+    await page.setInputFiles('#file-input', { name: 'photo.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') });
+    await page.waitForFunction(() => window.__editor.canvas.getObjects().some((o) => o.type === 'image'), null, { timeout: 20000 });
+    await page.waitForSelector('#el-bar [data-el="crop"]');
+    await page.click('#el-bar [data-el="crop"]');
+    assert.deepStrictEqual(await page.$$eval('#el-bar [data-el]', (xs) => xs.map((x) => x.dataset.el)), ['crop-cancel', 'crop-free', 'crop-square', 'crop-apply']);
+    await page.click('#el-bar [data-el="crop-square"]');
+    await page.click('#el-bar [data-el="crop-apply"]');
+    await page.waitForSelector('#el-bar [data-el="crop"]');
+    assert.deepStrictEqual(errors, []);
+    await ctx.close();
+  } finally {
+    await browser.close();
+    await srv.close();
+  }
+});

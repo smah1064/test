@@ -59,6 +59,11 @@ test('phones: top bar with the product button and ⋯ menu; buy bar says what is
         await page.click('#ed-prod');
         await page.waitForSelector('#sizes [data-size="M"]', { state: 'visible' });
         await page.click('#sizes [data-size="M"]');
+        // A colour shows in the bar at once (QA 26 Nov: it lagged one step behind).
+        const second = await page.$eval('#swatches [data-color]:nth-child(2)', (b) => b.getAttribute('aria-label'));
+        await page.click('#swatches [data-color]:nth-child(2)');
+        await page.waitForFunction((w) => document.getElementById('ed-prod-sub').textContent.includes(w), second);
+        await page.click('#swatches [data-color]:nth-child(1)');
         await page.click('#sheet-close');
         assert.match(await page.textContent('#ed-prod-sub'), /M/);
         assert.match(await page.textContent('#buy-sum'), lang === 'ar' ? /M.*قطعة واحدة/ : /M.*1 piece/);
