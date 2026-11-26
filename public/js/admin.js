@@ -294,6 +294,8 @@
     if (typeof r.emailReady === 'boolean') emailReady = r.emailReady;
     setAccess(r, r.shown || r.name);
     sessionAt = Date.now();
+    // Cash on delivery or paid in advance: the orders' payment lines (src/payment-wording.js).
+    if (r.payment) POD.payment.set(r.payment);
     $('weak-pw').hidden = !(role === 'owner' && r.weakPassword);
   }
 

@@ -159,7 +159,7 @@
     const cod = !o.payment || o.payment.method === 'cod';
     const paidOnDelivery = cod && delivered && !(o.payment && o.payment.status === 'paid');
     const paid = (o.payment && o.payment.status === 'paid') || paidOnDelivery;
-    const method = !o.payment || o.payment.method === 'cod' ? t('checkout.cod') : String(o.payment.method);
+    const method = !o.payment || o.payment.method === 'cod' ? t(POD.payment.prepayOnly ? 'invoice.methodPrepay' : 'checkout.cod') : String(o.payment.method);
     const site = shop.url ? shop.url.replace(/^https?:\/\//, '').replace(/\/$/, '') : '';
     const contacts = [
       site && `<li><span>${esc(t('invoice.website'))}:</span> ${ltr(site)}</li>`,
@@ -245,6 +245,8 @@
         ? await POD.api('/api/orders/' + encodeURIComponent(orderId) + '/team', { headers: { 'x-team-view': team } })
         : await POD.api('/api/orders/' + encodeURIComponent(orderId), { headers: POD.orderHeaders(key) });
       if (!team && order.key) key = order.key;
+      // Cash on delivery or paid in advance: the invoice's payment wording (src/payment-wording.js).
+      if (order.shop) POD.payment.set(order.shop.payment);
       error = null;
     } catch (e) {
       error = e;

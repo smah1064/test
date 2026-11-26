@@ -25,9 +25,10 @@ const OPEN_LIMITS = Object.fromEntries(
   ['designs', 'designsAll', 'orders', 'shares', 'artwork', 'draftSave'].map((k) => [k, [{ max: 1e6, ms: 1000 }]]),
 );
 
-async function startServer() {
+/** `options`: more createApp options (e.g. { prepayOnly: true }: the shop as it will talk about paying from launch). */
+async function startServer(options = {}) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pod-e2e-'));
-  const app = createApp({ dataDir, adminPassword: 'secret', limits: OPEN_LIMITS, cleanupEvery: 0 });
+  const app = createApp({ dataDir, adminPassword: 'secret', limits: OPEN_LIMITS, cleanupEvery: 0, ...options });
   const server = await new Promise((resolve) => {
     const s = app.listen(0, '127.0.0.1', () => resolve(s));
   });

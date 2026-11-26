@@ -55,7 +55,8 @@ test('open, type, suggestions, Escape closes; header height unchanged; no sidewa
         await page.evaluate(() => document.fonts.ready);
         const where = `${lang} ${name}`;
         const before = await page.evaluate(() => document.querySelector('.site-header').offsetHeight);
-        assert.strictEqual(before, name === '1366px' ? 61 : 109, `${where}: the header's height while closed`);
+        // (111 on phones since Thumb-size buttons, step 2: the chips under the header are 44 px tall, it was 109.)
+        assert.strictEqual(before, name === '1366px' ? 61 : 111, `${where}: the header's height while closed`);
         const btn = page.locator('[data-site-search]');
         const box = await btn.boundingBox();
         assert.ok(box.width >= 44 && box.height >= 44, `${where}: a 44px tap target (${box.width}×${box.height})`);

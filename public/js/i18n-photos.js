@@ -60,6 +60,8 @@ Object.assign(window.POD_STRINGS, {
   'photos.dlvStandard': ['Standard delivery available at checkout · shipping {fee}', 'التوصيل العادي متاح عند الدفع، الشحن {fee}'],
   'photos.dlvFree': ['free from {price}', 'مجاني من {price}'],
   'photos.dlvCod': ['💵 Cash on delivery available', '💵 الدفع عند الاستلام متاح'],
+  // Paying in advance only, from launch (src/payment-wording.js; 'key.prepay' replaces 'key' then).
+  'photos.dlvCod.prepay': ['🧾 Pay in advance, when you order', '🧾 الدفع مقدّمًا وقت الطلب'],
   'photos.days.one': ['1 business day', 'يوم عمل واحد'],
   'photos.days.two': ['2 business days', 'يومين عمل'],
   'photos.days.few': ['{n} business days', '{n} أيام عمل'],
