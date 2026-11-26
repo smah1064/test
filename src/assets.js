@@ -90,7 +90,9 @@ function scoreWord(words, name, alt, exact) {
   let best = 0;
   for (const w of words) {
     if (w === alt) return 3;
-    if (alt.length >= 3 && w.startsWith(alt)) best = Math.max(best, 2);
+    // Another form of the same word ("cats", "flowers", "dancing") is a whole-word match; the start of a longer word
+    // ("category" for cat, "dogecoin" for dog) only while nothing matches whole (QA 26 Nov), as a word still being typed.
+    if (alt.length >= 3 && w.startsWith(alt)) best = Math.max(best, /^(?:s|es|ies|ing|ed|er|ers|y)$/.test(w.slice(alt.length)) ? 2.5 : 2);
   }
   // Inside a longer word ("cupcake" for "cake") only for what was typed in English.
   if (!best && !exact && alt.length >= 4 && name.includes(alt)) best = 1;
@@ -115,10 +117,11 @@ function search(q, { type = 'all', page = 0, per = 60 } = {}) {
   } else if (!terms.length) {
     list = [];
   } else {
-    const scored = [];
+    let scored = [];
     for (const e of pool) {
       let total = 0;
       let ok = true;
+      let part = false; // a word only found as the start of a longer one
       for (const { alts, exact } of terms) {
         // The best keyword, plus a little for every other keyword it also has
         // ("كورة" -> football soccer ball: the soccer ball beats a rice ball).
@@ -134,12 +137,15 @@ function search(q, { type = 'all', page = 0, per = 60 } = {}) {
           } else if (sc >= 2) others++;
         }
         if (!best) { ok = false; break; }
+        if (best === 2 || best === 2.3) part = true;
         total += best + 0.6 * others;
       }
       // "Not this" variants (crossed out) only when asked for.
       if (ok && (e.words.includes('off') || e.words.includes('slash')) && !terms.some((tm) => tm.alts.includes('off') || tm.alts.includes('slash'))) total -= 1.5;
-      if (ok) scored.push([total, e]);
+      if (ok) scored.push([total, e, part]);
     }
+    // Whole words found: the pictures that only start with what was typed go ("cat" isn't "category").
+    if (scored.some((x) => !x[2])) scored = scored.filter((x) => !x[2]);
     // Best matches first; colourful stickers before icons; shorter names (the plain one) first.
     scored.sort((a, b) => b[0] - a[0] || (a[1].set.kind === 'sticker' ? -1 : 0) - (b[1].set.kind === 'sticker' ? -1 : 0) || a[1].name.length - b[1].name.length);
     list = scored.map((x) => x[1]);
