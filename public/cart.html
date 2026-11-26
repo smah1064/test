@@ -354,6 +354,20 @@
         sel.value = current;
       }
 
+      /** Where an item can be delivered (governorate ids), or null for anywhere: big or fragile pieces go by the shop's
+       * own van in Cairo and Giza only (CNC and UV products, 27 Nov). The server refuses other governorates too. */
+      function itemAreas(item) {
+        const p = products.find((x) => x.id === item.productId);
+        if (!p) return null;
+        const lines = qtyLines(item);
+        const label = item.sizeLabel && typeof item.sizeLabel === 'object' ? item.sizeLabel.en : item.sizeLabel;
+        const sizeIds = lines.length ? lines.map((l) => l.size && l.size.id) : p.sizes.filter((z) => z.label && z.label.en === label).map((z) => z.id);
+        return POD.deliverAreas(p, sizeIds);
+      }
+      const areaNote = (item) => {
+        const areas = itemAreas(item);
+        return areas ? `<p class="cart-area-note">${esc(t('deliver.only', { areas: POD.areaNames(areas, governorates) }))}</p>` : '';
+      };
       // One artwork in several colours / sizes: quantities = [{ color, size, qty, unitPrice }].
       const qtyLines = (item) => (Array.isArray(item.quantities) ? item.quantities.filter((l) => l && Number(l.qty) > 0) : []);
       const piecesText = (n) => t('qty.pieces.' + (n === 1 ? 'one' : n === 2 ? 'two' : n % 100 >= 3 && n % 100 <= 10 ? 'few' : 'many'), { n: POD.num(n) });
@@ -1026,6 +1040,7 @@
             <div>
               <div class="item-head"><h3>${esc(tr(item.productName))}${blocked.has(item.designId) ? ` <span class="saved-state blocked">${esc(t('cart.blocked'))}</span>` : ''}</h3><div class="price">${itemPrice(item)}</div></div>
               <div class="meta" data-meta-for="${esc(item.designId)}">${itemMeta(item)}</div>
+              ${areaNote(item)}
               ${qtyBox(item, i)}
               ${blocked.has(item.designId) ? `<div class="cart-unavail" role="alert"><strong>${esc(blocked.get(item.designId))}</strong> ${(outOfShop.get(item.designId) || {}).similar
     ? `<a class="cart-similar" href="${esc(outOfShop.get(item.designId).similar)}">${esc(POD.similarLabel(outOfShop.get(item.designId).similar))}</a>`
@@ -1404,7 +1419,7 @@
       const form = document.getElementById('checkout');
       // ---------- Field errors: shown under the field, which is scrolled to and focused ----------
       const FIELDS = ['name', 'phone', 'email', 'governorate', 'city', 'address'].map((id) => document.getElementById(id));
-      const SERVER_FIELD = { badPhone: 'phone', badEmail: 'email', badGovernorate: 'governorate' };
+      const SERVER_FIELD = { badPhone: 'phone', badEmail: 'email', badGovernorate: 'governorate', deliverOnlyIn: 'governorate' };
       // The same refusals in this page's words (to show them again in the other language).
       const SERVER_TEXT = { badPhone: 'checkout.badPhone', badEmail: 'checkout.badEmail', badGovernorate: 'checkout.needGov' };
       const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -1421,6 +1436,11 @@
       function fieldProblem(el) {
         const v = el.value.trim();
         if (el.required && !v) return el.id === 'governorate' ? t('checkout.needGov') : t('checkout.needField', { field: (el.labels[0] && el.labels[0].textContent) || '' });
+        // An item that goes by the shop's own van only (Cairo and Giza): said at the governorate, before ordering.
+        if (el.id === 'governorate') {
+          const far = POD.getCart().find((item) => { const a = itemAreas(item); return a && !a.includes(v); });
+          if (far) return t('checkout.deliverOnly', { name: tr(far.productName), areas: POD.areaNames(itemAreas(far), governorates) });
+        }
         if (el.id === 'phone' && !egyptMobile(v)) return t('checkout.badPhone');
         if (el.id === 'email' && v && !EMAIL_RE.test(v)) return t('checkout.badEmail');
         return '';
@@ -1461,6 +1481,8 @@
       // A corrected field loses its error as soon as it is right (it never gains one while typing).
       form.addEventListener('input', (e) => { const el = e.target; if (el.getAttribute && el.getAttribute('aria-invalid') && FIELDS.includes(el) && !fieldProblem(el)) setFieldError(el, ''); });
       form.addEventListener('change', (e) => { const el = e.target; if (el.getAttribute && el.getAttribute('aria-invalid') && FIELDS.includes(el)) setFieldError(el, fieldProblem(el)); });
+      // (A governorate the van doesn't go to: said as soon as it is chosen, not at "Place order".)
+      document.getElementById('governorate').addEventListener('change', (e) => { if (e.target.value) setFieldError(e.target, fieldProblem(e.target)); });
 
       form.addEventListener('submit', async (e) => {
         e.preventDefault();

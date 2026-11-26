@@ -247,6 +247,7 @@ const MESSAGES = {
   sideUnavailable: { en: 'One side of {name} can\'t be printed right now. Remove the design from that side.', ar: 'وش من {name} مش متاح للطباعة دلوقتي. شيل التصميم من الوش ده.' },
   variantUnavailable: { en: 'This colour in this size of {name} is sold out right now. Please choose another colour or size.', ar: 'اللون ده بالمقاس ده من {name} خلصان دلوقتي. اختار لون أو مقاس تاني.' },
   notEnoughStock: { en: 'Only {left} of {name} left. Please order fewer pieces.', ar: 'فاضل {left} بس من {name}. اطلب عدد أقل.' },
+  deliverOnlyIn: { en: '{name} is delivered in {areas} only (it goes by our own van). Choose an address there, or remove it from this order.', ar: '{name} بيتوصّل في {areas} بس (بيروح بعربيتنا). اختار عنوان هناك، أو شيله من الطلب ده.' },
   // Nothing left of it for this item: never "Only 0 left… order fewer" (format() picks this one for notEnoughStock with left 0).
   stockNoneLeft: { en: 'No more pieces of {name} are left for this item.', ar: 'مفيش قطع تانية فاضلة من {name} للمنتج ده.' },
   // The cart's prices (POST /api/cart/quote): what is left is all taken by the items above this one in the cart.

@@ -1424,6 +1424,26 @@
   /** "/order?id=…&k=…" (or /invoice): the key only when there is one. */
   const orderPath = (page, id, key) => `/${page}?id=${encodeURIComponent(id)}${typeof key === 'string' && ORDER_KEY_RE.test(key) ? `&k=${encodeURIComponent(key)}` : ''}`;
 
+  /**
+   * Where a product, in the sizes given (ids), can be delivered: governorate ids from its `deliverTo` or its sizes',
+   * or null for anywhere (big or fragile pieces go by the shop's own van: CNC and UV products, 27 Nov). As the server's.
+   */
+  function deliverAreas(product, sizeIds = []) {
+    if (!product) return null;
+    let areas = Array.isArray(product.deliverTo) && product.deliverTo.length ? product.deliverTo.slice() : null;
+    for (const id of sizeIds) {
+      const z = (product.sizes || []).find((x) => x.id === id);
+      if (z && Array.isArray(z.deliverTo) && z.deliverTo.length) areas = areas ? areas.filter((a) => z.deliverTo.includes(a)) : z.deliverTo.slice();
+    }
+    return areas;
+  }
+  /** "Cairo and Giza" / «القاهرة والجيزة», from the shop's governorates ({ id, name }). */
+  function areaNames(ids, governorates = []) {
+    const names = (ids || []).map((id) => { const g = governorates.find((x) => x.id === id); return g ? tr(g.name) : id; });
+    if (lang === 'ar') return names.join(' و');
+    return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names.join('');
+  }
+
   window.POD = {
     get lang() {
       return lang;
@@ -1434,6 +1454,6 @@
     productState, backOnDay, backText, similarProducts, similarHref, similarLabel, productHref, showUnavailable,
     getCart, setCart, getSaved, setSaved, moveItem, designFor, putFile, updateCartBadge, toast, esc, api, drafts, forgetPersonal,
     sizedArea, placedArea, sizeView, canvasEdges, drawPattern, wrapOffsets, fabricCm,
-    orderKey, orderHeaders, orderPath, payment,
+    orderKey, orderHeaders, orderPath, payment, deliverAreas, areaNames,
   };
 })();
