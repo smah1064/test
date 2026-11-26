@@ -372,6 +372,28 @@ describe('updates (from /app/config.json)', () => {
     }
   });
 
+  // What https://ebda3.me/app/config.json answered when the shop added it (26 Nov 2026).
+  const LIVE_CONFIG = {
+    android: { minBuild: 10000, latestBuild: 10000, storeUrl: 'https://play.google.com/store/apps/details?id=me.ebda3.app' },
+    ios: { minBuild: 10000, latestBuild: 10000 },
+    features: { push: false, socialLogin: { android: false, ios: false } },
+    inAppHosts: [],
+  };
+  for (const platform of ['android', 'ios']) {
+    it(`the shop's live settings on ${platform}: nothing shown, sign-in buttons and notifications stay off`, async () => {
+      const app = await open('/order?id=x&k=y&new=1', { config: LIVE_CONFIG, platform, push: true, build: 10000 });
+      try {
+        await until(() => app.calls('Ebda3Shell', 'setRemoteConfig').then((c) => c.length), { what: 'the settings to be read' });
+        await wait(800);
+        assert.equal(await app.page.locator('#e3a-sheet, #e3a-banner').count(), 0);
+        assert.equal(await app.page.evaluate(() => document.documentElement.classList.contains('app-social-off')), true);
+        assert.equal((await app.calls('PushNotifications', 'requestPermissions')).length, 0);
+      } finally {
+        await app.close();
+      }
+    });
+  }
+
   it('keeps working without the config file (the site hasn\'t added it yet)', async () => {
     const app = await open('/', { config: null });
     try {

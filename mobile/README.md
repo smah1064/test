@@ -93,7 +93,10 @@ npm run sync           # copy the app's files and settings into both native proj
 
 ## What the website provides
 
-The apps work without these; each one turns on a feature. All were sent to the website's chat.
+The apps work without these; each one turns on a feature. All were sent to the website's chat. Items 1 and 2 are
+live on ebda3.me since 26 Nov 2026 (see the website README, "Phone apps: what the website serves for them"): the
+two link files answer once the keys are set (`APP_ANDROID_SHA256`, `APP_APPLE_TEAM_ID`), and `/app/config.json` can
+be changed on the server with `DATA_DIR/app-config.json`. Items 3 and 4 wait for the store and Firebase accounts.
 
 1. **`/.well-known/assetlinks.json`** and **`/.well-known/apple-app-site-association`** (open shop links in the
    app), and **`/app/config.json`**, all reachable while the shop is private.
