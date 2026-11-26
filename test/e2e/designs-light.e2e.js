@@ -162,12 +162,13 @@ test('"All" mixes the categories, Christmas first until 7 January (Cairo); one c
   for (const now of ['2026-11-26T12:00:00Z', '2026-12-24T12:00:00Z', '2027-01-07T21:30:00Z']) {
     const first = await firstOn(now);
     const cats = first.map(catOf);
-    assert.strictEqual(cats[0], 'christmas', `${now}: Christmas first (${cats.slice(0, 3)})`);
-    assert.strictEqual(new Set(cats).size, 24, `${now}: the first 24 from 24 categories (${cats.join(',')})`);
-    assert.strictEqual(cats.filter((c) => c === 'christmas').length, 1);
-    // The categories take their turns in the shop's order after Christmas.
-    const rest = cats.slice(1);
-    assert.deepStrictEqual(rest, catIds.filter((c) => c !== 'christmas' && rest.includes(c)));
+    // The first two are Christmas designs (owner, 26 Nov), then every subject takes its turn in the shop's order
+    // (Christmas too, at its usual place).
+    assert.deepStrictEqual(cats.slice(0, 2), ['christmas', 'christmas'], `${now}: two Christmas designs first (${cats.slice(0, 4)})`);
+    const rest = cats.slice(2);
+    assert.strictEqual(new Set(rest).size, rest.length, `${now}: then one from each subject (${rest.join(',')})`);
+    assert.deepStrictEqual(rest, catIds.filter((c) => rest.includes(c)));
+    assert.ok(cats.filter((c) => c === 'christmas').length <= 3);
   }
   // From 8 January in Cairo (22:30 UTC on the 7th is 00:30 on the 8th there): Christmas takes its usual turn.
   for (const now of ['2027-01-07T22:30:00Z', '2027-03-01T12:00:00Z']) {

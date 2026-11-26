@@ -323,14 +323,15 @@
   };
   function mixed(list) {
     const ids = lib.categories.map((c) => c.id);
-    if (christmasSeason() && ids.includes('christmas')) ids.unshift(...ids.splice(ids.indexOf('christmas'), 1));
     const groups = new Map(ids.map((id) => [id, []]));
     for (const d of list) {
       if (!groups.has(d.category)) groups.set(d.category, []);
       groups.get(d.category).push(d);
     }
+    // In the Christmas season the first two are Christmas designs, then every subject takes its turn (owner, 26 Nov).
+    const lead = christmasSeason() && groups.has('christmas') ? groups.get('christmas').splice(0, 2) : [];
     const lists = [...groups.values()].filter((g) => g.length);
-    const out = [];
+    const out = [...lead];
     for (let i = 0; out.length < list.length; i++) for (const g of lists) if (i < g.length) out.push(g[i]);
     return out;
   }
