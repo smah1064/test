@@ -1623,7 +1623,8 @@
 
   // Serialise async UI actions so loads never interleave.
   let chain = Promise.resolve();
-  const serial = (fn) => (...args) => (chain = chain.then(() => fn(...args)).catch((e) => toast(e.message, 'error')));
+  // (A step that fails never leaves the "Saving…" / "Adding…" cover on the page: owner 26 Nov.)
+  const serial = (fn) => (...args) => (chain = chain.then(() => fn(...args)).catch((e) => { busy(false); toast(e.message, 'error'); }));
 
   // ---------- Arabic text ----------
   /** Arabic needs right-to-left direction, joined letters (no letter spacing) and an Arabic font. */
@@ -6741,6 +6742,16 @@
   let startingOver = false; // "Start a new design": nothing is saved while the page reloads
   /** Save the current design for this product in the browser (or forget it when empty). */
   let lastPreview = null; // the thumbnail of the last full save (reused by quick saves when leaving)
+  const DRAFT_MS = 15000;
+  /** The promise, or a refusal once `ms` have passed without an answer. */
+  const inTime = (p, ms) => Promise.race([p, new Promise((_, reject) => setTimeout(() => reject(new Error('no answer in time')), ms))]);
+  /** Why a save didn't finish, in the shop's log (browser errors go there too), to find what stops it on a customer's browser. */
+  function reportSave(why) {
+    try {
+      const body = JSON.stringify({ page: location.pathname, msg: `draft not saved (${st.product ? st.product.id : '?'}): ${String(why).slice(0, 200)}` });
+      if (!navigator.sendBeacon || !navigator.sendBeacon('/api/client-error', body)) fetch('/api/client-error', { method: 'POST', body, keepalive: true }).catch(() => {});
+    } catch (e) { /* never in the way */ }
+  }
   function saveDraft({ quick = false, force = false } = {}) {
     clearTimeout(draftTimer);
     draftTimer = null;
@@ -6764,18 +6775,31 @@
         preview = null;
       }
     }
-    draftSaving = draftSaving.then(async () => {
-      if (empty) {
-        await POD.drafts.remove(productId);
-        return true;
+    // Each save waits for the one before (a failed one doesn't stop it), and none waits for ever: a step that doesn't
+    // finish in time counts as not saved (the customer is told), the step's name goes to the shop's log.
+    draftSaving = draftSaving.catch(() => false).then(async () => {
+      let step = 'start';
+      try {
+        if (empty) {
+          step = 'remove';
+          await inTime(POD.drafts.remove(productId), DRAFT_MS);
+          return true;
+        }
+        const inl = {};
+        step = 'photos';
+        for (const [id, objs] of Object.entries(designs)) inl[id] = await inTime(inlineImages(objs), DRAFT_MS);
+        step = 'picture';
+        const blob = preview ? await inTime(preview, DRAFT_MS).catch(() => null) : lastPreview;
+        if (blob) lastPreview = blob;
+        step = 'store';
+        const ok = await inTime(POD.drafts.set(productId, { ...meta, designs: inl, preview: blob, savedAt: new Date().toISOString() }), DRAFT_MS * 2);
+        if (ok && !rescueWritten) try { localStorage.removeItem('pod-rescue:' + productId); } catch (e) { /* private mode */ }
+        if (!ok) reportSave('store refused');
+        return ok;
+      } catch (e) {
+        reportSave(`${step}: ${(e && e.message) || e}`);
+        return false;
       }
-      const inl = {};
-      for (const [id, objs] of Object.entries(designs)) inl[id] = await inlineImages(objs);
-      const blob = preview ? await preview.catch(() => null) : lastPreview;
-      if (blob) lastPreview = blob;
-      const ok = await POD.drafts.set(productId, { ...meta, designs: inl, preview: blob, savedAt: new Date().toISOString() });
-      if (ok && !rescueWritten) try { localStorage.removeItem('pod-rescue:' + productId); } catch (e) { /* private mode */ }
-      return ok;
     });
     return draftSaving;
   }
@@ -7292,10 +7316,15 @@
     // Nothing on it yet: nothing to keep (it said "saved in My saved designs", and nothing was there. QA 26 Nov).
     if (!designedSides().length) return toast(t('msg.addFirst'), 'error');
     busy(true, t('busy.saving'));
-    let ok = await saveDraft({ force: true }); // (asked for: saved even when nothing was changed)
-    // Signed in: wait for the copy on the account too (a few seconds at most), so it opens on the other device.
-    if (ok && POD.drafts.flush) ok = (await Promise.race([POD.drafts.flush(st.product.id).then(() => true), new Promise((r) => setTimeout(() => r(true), 8000))])) && ok;
-    busy(false);
+    let ok = false;
+    try {
+      // (Never more than about a minute under "Saving…", whatever the browser does: owner 26 Nov.)
+      ok = await inTime(saveDraft({ force: true }), DRAFT_MS * 4).catch(() => false); // (asked for: saved even when nothing was changed)
+      // Signed in: wait for the copy on the account too (a few seconds at most), so it opens on the other device.
+      if (ok && POD.drafts.flush) ok = (await Promise.race([POD.drafts.flush(st.product.id).then(() => true, () => true), new Promise((r) => setTimeout(() => r(true), 8000))])) && ok;
+    } finally {
+      busy(false);
+    }
     if (!ok) return toast(t('draft.saveFailed'), 'error');
     st.dirty = false;
     // Its view-only link (if it has one) shows this version now.

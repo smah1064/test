@@ -816,15 +816,25 @@
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
     }));
+    // The browser's storage can stop answering (seen on Firefox, owner 26 Nov: "Saving…" for minutes): every call
+    // gives up after a while instead of waiting for ever, and the next one opens the storage again.
+    const STORE_MS = 12000;
+    const late = (ms) => new Promise((_, reject) => setTimeout(() => reject(new Error('storage did not answer')), ms));
     const run = async (mode, fn) => {
-      const db = await open();
-      return new Promise((resolve, reject) => {
+      let db;
+      try {
+        db = await Promise.race([open(), late(STORE_MS)]);
+      } catch (e) {
+        dbp = null;
+        throw e;
+      }
+      return Promise.race([late(STORE_MS), new Promise((resolve, reject) => {
         const tx = db.transaction('drafts', mode);
         const req = fn(tx.objectStore('drafts'));
         tx.oncomplete = () => resolve(req ? req.result : undefined);
         tx.onerror = () => reject(tx.error);
         tx.onabort = () => reject(tx.error);
-      });
+      })]);
     };
     // Each draft in this browser remembers whose it is (the signed-in customer's id, or none for a
     // guest). Before any draft is shown or saved the page asks the shop who is signed in (once per

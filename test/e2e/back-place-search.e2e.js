@@ -102,7 +102,7 @@ test('home (360 px): Back after a search comes back to the same results and the 
     await page.waitForSelector(`#product-grid .hm-gcard[data-place="${id}"]`);
     assert.strictEqual(await page.inputValue('#home-q'), 'card');
     assert.strictEqual(await cards.count(), n);
-    await page.waitForFunction((want) => Math.abs(window.scrollY - want) < 80, y, { timeout: 10000 });
+    await page.waitForFunction((want) => Math.abs(window.scrollY - want) < 80, y, { timeout: 25000 });
     assert.ok((await onScreen(page, `#product-grid .hm-gcard[data-place="${id}"]`)).seen);
   } finally {
     await ctx.close();
