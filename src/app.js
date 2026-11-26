@@ -822,11 +822,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   const SIZED_DIRS = new Set(['lifestyle', 'designed']);
   const sizedDir = path.join(dataDir, 'img-sized');
   const sizing = new Map();
-  app.get('/img-w/:w/:dir/:file', async (req, res, next) => {
+  // (Also the shop's artwork, /img-w/320/art/christmas/trees.png: the Templates list drew its small pictures from
+  // the print files, 2–3 MB each, owner 26 Nov: "artwork loading very slow". Transparent parts stay transparent.)
+  const sizedPhoto = async (req, res, next, dir) => {
     try {
       const w = Number(req.params.w);
-      const { dir, file } = req.params;
-      if (!SIZED_WIDTHS.has(w) || !SIZED_DIRS.has(dir) || !/^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,100}\.(webp|jpe?g|png)$/i.test(file) || file.includes('..')) throw new HttpError(404, 'notFound');
+      const { file } = req.params;
+      if (!SIZED_WIDTHS.has(w) || !dir || !/^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,100}\.(webp|jpe?g|png)$/i.test(file) || file.includes('..')) throw new HttpError(404, 'notFound');
       const src = path.join(__dirname, '..', 'public', 'img', dir, file);
       let st;
       try { st = fs.statSync(src); } catch (e) { throw new HttpError(404, 'notFound'); }
@@ -849,7 +851,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     } catch (e) {
       next(e);
     }
-  });
+  };
+  app.get('/img-w/:w/art/:sub/:file', (req, res, next) => sizedPhoto(req, res, next, /^[a-z0-9-]{1,40}$/.test(req.params.sub) ? `art/${req.params.sub}` : null));
+  app.get('/img-w/:w/:dir/:file', (req, res, next) => sizedPhoto(req, res, next, SIZED_DIRS.has(req.params.dir) ? req.params.dir : null));
 
   // ---------- Catalog ----------
   // CAPTCHA (Cloudflare Turnstile, see src/captcha.js): the site key for the forms, null when off.

@@ -193,3 +193,43 @@ test('computer QA (26 Nov): booklets keep the earlier layout; the sample note an
     await srv.close();
   }
 });
+
+test('computer speed (owner, 26 Nov): the product photo is not held up by the lettering list; template pictures use small artwork copies', { timeout: 120000 }, async () => {
+  const srv = await startServer();
+  const browser = await loadPlaywright().chromium.launch();
+  try {
+    const ctx = await browser.newContext({ viewport: { width: 1366, height: 768 }, deviceScaleFactor: 1 });
+    await ctx.addInitScript(() => { try { localStorage.setItem('pod-lang', 'en'); } catch (e) { /* ignore */ } });
+    const page = await ctx.newPage();
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(String(e)));
+    const order = [];
+    page.on('request', (r) => {
+      const u = new URL(r.url()).pathname;
+      if (/^\/mockups\/photos\//.test(u)) order.push('photo');
+      else if (/^\/fonts\/files\//.test(u)) order.push('font');
+      else if (/^\/(img|img-w\/\d+)\/art\//.test(u)) order.push(u);
+    });
+    await page.goto(`${srv.base}/editor?product=tshirt`);
+    await page.waitForFunction(() => window.__editor && window.__editor.canvas.backgroundImage);
+    // At most the label's and the default lettering's fonts before the product photo is asked for.
+    const before = order.slice(0, order.indexOf('photo')).filter((x) => x === 'font').length;
+    assert.ok(before <= 4, `${before} fonts were asked for before the product photo`);
+    await page.waitForSelector('#flyout-text:not([hidden])'); // (then the Text list, as before)
+    await page.click('.tools .tool[data-flyout="templates"]');
+    await page.waitForFunction(() => [...document.querySelectorAll('#template-grid img')].filter((i) => i.src && i.complete).length >= 4, null, { timeout: 30000 });
+    const art = order.filter((x) => x.includes('/art/') && !x.endsWith('.svg'));
+    assert.ok(art.length > 0, 'artwork pictures were drawn');
+    assert.deepStrictEqual(art.filter((x) => !x.startsWith('/img-w/320/art/')), [], 'only small copies for the list');
+    // The artwork put on the product is the full file (for the print).
+    order.length = 0;
+    await page.click('#template-grid .template-btn >> nth=0');
+    await page.waitForFunction(() => window.__editor.canvas.getObjects().some((o) => o.type === 'image'), null, { timeout: 30000 });
+    assert.ok(order.some((x) => /^\/img\/art\/.+\.(png|jpe?g|webp)$/.test(x)), `full artwork on the product: ${order.join(', ')}`);
+    assert.deepStrictEqual(errors, []);
+    await ctx.close();
+  } finally {
+    await browser.close();
+    await srv.close();
+  }
+});

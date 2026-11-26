@@ -403,7 +403,10 @@
   const PRINT_SRC = /^\/library-art\/[0-9a-z-]{4,40}\/(?:nowords-)?print\.(png|jpg)$/;
   /** A light ink (the white copy of one-colour artwork goes with it): dark product colours. */
   const lightInk = (ink) => /^#[0-9a-f]{6}$/i.test(ink || '') && parseInt(ink.slice(1, 3), 16) + parseInt(ink.slice(3, 5), 16) + parseInt(ink.slice(5, 7), 16) > 384;
-  async function makeImage(i, ink) {
+  // A small copy of the shop's artwork for the Templates list's pictures (the print files are 2–3 MB each: owner,
+  // 26 Nov). Only for those pictures; the artwork put on the product is the full file.
+  const thumbSrc = (src) => src.replace(/^\/img\/art\/([a-z0-9-]{1,40})\/([A-Za-z0-9_-][A-Za-z0-9_.-]{0,100}\.(?:png|webp|jpe?g))$/i, '/img-w/320/art/$1/$2');
+  async function makeImage(i, ink, thumb = false) {
     // A white copy of one-colour artwork (`dark`) for dark product colours (light ink).
     const light = Boolean(i.dark) && lightInk(ink);
     const src = String((light ? i.dark : i.src) || '');
@@ -420,7 +423,7 @@
       if (o) o.set({ name: 'art:' + src.split('/').pop().replace(/\.svg$/, '') });
       return both(o);
     }
-    return new Promise((resolve) => fabric.Image.fromURL(src, (img, failed) => {
+    return new Promise((resolve) => fabric.Image.fromURL(thumb ? thumbSrc(src) : src, (img, failed) => {
       if (failed || !img) return resolve(null);
       img.set({ name: uploaded ? (i.name || 'Design') : 'art:' + src.split('/').pop().replace(/\.\w+$/, '') });
       // An uploaded design shows a light copy; its print files use the full-size original (see POD_PRINTSRC).
@@ -571,7 +574,7 @@
       o.setCoords();
     }
   }
-  async function buildTemplate(tpl, fullArea, ink, { inset = 0, words: liveWords = true } = {}) {
+  async function buildTemplate(tpl, fullArea, ink, { inset = 0, words: liveWords = true, thumb = false } = {}) {
     // Pictures with their words as live text (see wordsArt): the picture without the words, then the words.
     if (liveWords && tpl.items.some((i) => i.kind === 'image' && wordsArt(i))) {
       tpl = { ...tpl, items: tpl.items.map((i) => (i.kind === 'image' && wordsArt(i)) || i), wordsOf: tpl.items.map((i) => (i.kind === 'image' && wordsArt(i) ? i.words : null)) };
@@ -588,7 +591,7 @@
     const SK = window.POD_STICKERS;
     const stickerObjs = await Promise.all(tpl.items.map((i) => {
       if (i.kind === 'art') return makeArt(i, ink);
-      if (i.kind === 'image') return makeImage(i, ink);
+      if (i.kind === 'image') return makeImage(i, ink, thumb);
       if (i.kind !== 'sticker' || !SK) return null;
       const def = SK.STICKERS.find((x) => x.id === i.sticker);
       return def ? SK.makeSticker(def) : null;
@@ -702,7 +705,7 @@
     const size = 160;
     const dark = (() => { const n = parseInt(bg.slice(1), 16); return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255 < 0.45; })();
     const sc = new fabric.StaticCanvas(null, { width: size, height: size, backgroundColor: bg, renderOnAddRemove: false });
-    const objs = await buildTemplate(tpl, { x: 12, y: 12, w: size - 24, h: size - 24 }, dark ? '#ffffff' : '#16181d');
+    const objs = await buildTemplate(tpl, { x: 12, y: 12, w: size - 24, h: size - 24 }, dark ? '#ffffff' : '#16181d', { thumb: true });
     objs.forEach((o) => sc.add(o));
     sc.renderAll();
     const url = sc.toDataURL({ format: 'png' });
