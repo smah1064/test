@@ -44,6 +44,7 @@ const roles = require('./roles');
 const thumbs = require('./thumbs');
 const ai = require('./ai');
 const notify = require('./notify');
+const { PREPAY_ONLY } = require('./payment-wording');
 const dispatch = require('./dispatch');
 const accounting = require('./accounting');
 const bgremove = require('./bgremove');
@@ -361,7 +362,8 @@ function publicItem(item) {
   };
 }
 
-function publicOrder(order) {
+/** `payment`: how the shop takes payment ({ prepayOnly }, src/payment-wording.js), for the order page's and invoice's wording. */
+function publicOrder(order, payment) {
   const c = order.customer;
   return {
     id: order.id,
@@ -382,7 +384,7 @@ function publicOrder(order) {
     payment: order.payment,
     shipment: publicShipment(order),
     timeline: orderTimeline(order),
-    shop: shopInfo(),
+    shop: shopInfo(payment),
     invoice: { number: `INV-${order.number}`, issuedAt: order.createdAt },
   };
 }
@@ -392,8 +394,8 @@ function publicOrder(order) {
  * (orders placed since the keys came in). Only for the customer's ways in (the link, the cart, the
  * account), never for the dashboard: the team works with the order number, which alone no longer opens it.
  */
-function customerOrder(order) {
-  return { ...publicOrder(order), ...(order.linkKey ? { key: order.linkKey } : {}) };
+function customerOrder(order, payment) {
+  return { ...publicOrder(order, payment), ...(order.linkKey ? { key: order.linkKey } : {}) };
 }
 
 const SHIPMENT_FIELDS = ['courier', 'trackingNumber', 'trackingUrl', 'eta', 'shippedAt', 'deliveredAt'];
@@ -426,13 +428,14 @@ function orderTimeline(order) {
     { step: 'delivered', at: delivered },
   ];
 }
-/** The shop's own details, for invoices and the tracking page. */
-function shopInfo() {
+/** The shop's own details, for invoices and the tracking page (and how it takes payment: see publicOrder). */
+function shopInfo(payment = { prepayOnly: PREPAY_ONLY }) {
   return {
     name: { en: 'ebda3', ar: 'إبداع' },
     url: notify.siteUrl() || null,
     whatsapp: notify.shopWhatsApp() || null,
     email: process.env.MAIL_FROM || null,
+    payment: { prepayOnly: Boolean(payment && payment.prepayOnly) },
   };
 }
 
@@ -563,8 +566,10 @@ const DEFAULT_LIMITS = {
   downloads: [{ max: 200, ms: 3600e3 }],
 };
 
-function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 3600e3, oauthConfig = {}, oauthFetch, importGet, requireApproval = true, captcha = captchaMod.fromEnv(), captchaFetch, libraryOnce = [], previewStart = false }) {
+function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 3600e3, oauthConfig = {}, oauthFetch, importGet, requireApproval = true, captcha = captchaMod.fromEnv(), captchaFetch, libraryOnce = [], previewStart = false, prepayOnly = PREPAY_ONLY }) {
   if (!adminPassword) throw new Error('adminPassword is required');
+  // How the shop takes payment, for the pages' and messages' wording (src/payment-wording.js; tests set it here).
+  const PAYMENT = Object.freeze({ prepayOnly: Boolean(prepayOnly) });
   const store = new Store(dataDir);
   const app = express();
   // Sign-in attempts (customers and admin) are counted in a file shared by every copy of the app,
@@ -900,6 +905,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       mockup: { width: MOCKUP_WIDTH, height: MOCKUP_HEIGHT },
       pricing: { extraSide: EXTRA_SIDE_PRICE, shipping: SHIPPING_FLAT, freeShippingOver: FREE_SHIPPING_OVER },
       delivery: { standardDays: DELIVERY_DAYS.standard, expressDays: DELIVERY_DAYS.express, expressFee: expressFee() },
+      // Paying in advance only (from launch) or cash on delivery (the preview): the pages' wording.
+      payment: { ...PAYMENT },
       categories: CATEGORIES,
       governorates: GOVERNORATES,
       contact: { whatsapp: notify.shopWhatsApp() || null },
@@ -3888,7 +3895,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     // Not placed: an empty answer (the cart asks this on every visit while it has a key).
     if (!order) return res.status(204).end();
     rememberOrderHere(req, res, order);
-    res.json(customerOrder(order));
+    res.json(customerOrder(order, PAYMENT));
   });
   // ---------- Who may open a customer's order page ----------
   // Its secret key (the x-order-key header, or ?k= from the customer's link), the account it was placed
@@ -4040,7 +4047,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const already = orderKey && orderByKey(orderKey);
     if (already) {
       rememberOrderHere(req, res, already);
-      return res.status(200).json(customerOrder(already));
+      return res.status(200).json(customerOrder(already, PAYMENT));
     }
     const customer = body.customer && typeof body.customer === 'object' ? body.customer : {};
     const c = {
@@ -4224,7 +4231,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       });
     }
     rememberOrderHere(req, res, order);
-    res.status(201).json(customerOrder(order));
+    res.status(201).json(customerOrder(order, PAYMENT));
     // Books: the AI redraws every page with the child, in the background.
     for (const item of order.items) if (item.kind === 'book') queueRedraw(order, item);
     // Tell the shop and the customer, after answering: sending never holds up or fails an order.
@@ -4239,7 +4246,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       store.save();
       return;
     }
-    notify.orderPlaced(order, { origin: linkBase(req), lang: order.lang, admin: toShop, customer: toCustomer })
+    notify.orderPlaced(order, { origin: linkBase(req), lang: order.lang, admin: toShop, customer: toCustomer, prepayOnly: PAYMENT.prepayOnly })
       .then((result) => {
         order.notifications = { ...result, at: new Date().toISOString() };
         store.save();
@@ -4302,7 +4309,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     });
     const saved = store.getOrder(order.id);
     // (With the item's own edit link only: no amounts and no key, just that it was sent.)
-    res.json(byLink ? { ok: true, status: 'review' } : customerOrder(saved));
+    res.json(byLink ? { ok: true, status: 'review' } : customerOrder(saved, PAYMENT));
     // Tell the shop a new version is waiting in Review (after answering; it never holds up the customer).
     if (!limiter.hit('notify:*', LIMITS.notify)) {
       const it = saved.items.find((x) => x.id === item.id);
@@ -4315,7 +4322,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     res.set({ 'Cache-Control': 'private, no-store', Vary: 'x-order-key, Cookie' });
     const order = customerOrderFor(req, req.params.id);
     const offer = accountOfferFor(req, order);
-    res.json({ ...customerOrder(order), ...(offer ? { accountOffer: offer } : {}) });
+    res.json({ ...customerOrder(order, PAYMENT), ...(offer ? { accountOffer: offer } : {}) });
   });
 
   // ---------- After a guest order: keep it on a new account (owner's OK, UX item 8, 26 Nov) ----------
@@ -4835,7 +4842,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (typeof notify.orderShipped !== 'function') return;
     const siteUrl = linkBase(req);
     Promise.resolve()
-      .then(() => notify.orderShipped(order, { siteUrl }))
+      .then(() => notify.orderShipped(order, { siteUrl, prepayOnly: PAYMENT.prepayOnly }))
       .then((result) => {
         order.notifications = { ...(order.notifications || {}), shipped: { ...(result || {}), at: new Date().toISOString() } };
         store.save();
@@ -5229,6 +5236,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const list = store.db.approvals || [];
     res.json({
       ok: true, id: w.id, role: w.role, roles: w.roles, perms: [...w.perms], emailReady: notify.emailReady(),
+      // (The dashboard's payment lines: nothing to collect on delivery once the shop takes payment in advance.)
+      payment: { ...PAYMENT },
       ...(w.emergency ? { emergency: true, weakPassword: auth.weak } : { name: w.name, shown: w.shown || w.name }),
       ...approvalCounts(w),
     });
@@ -6943,7 +6952,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
 
   app.get('/api/admin/orders', requireAdmin, (req, res) => {
     const orders = [...store.listOrders()].reverse().map((o) => ({
-      ...publicOrder(o),
+      ...publicOrder(o, PAYMENT),
       customer: adminCustomer(o.customer),
       items: o.items.map((item, i) => adminItem(o, item, i)),
       notifications: o.notifications || null,
@@ -7009,7 +7018,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (!t) throw new HttpError(401, 'teamViewOver');
     const amounts = t.who.perms.has('orders.amounts');
     const view = {
-      ...publicOrder(order),
+      ...publicOrder(order, PAYMENT),
       team: { amounts, owner: t.who.role === 'owner', expiresAt: new Date(t.exp).toISOString() },
       // An owner can pass the customer their own link again (a guest who lost the email).
       ...(t.who.role === 'owner' && order.linkKey ? { customerLink: notify.orderLink(linkBase(req), order) || `/order?id=${encodeURIComponent(order.id)}&k=${encodeURIComponent(order.linkKey)}` } : {}),

@@ -588,6 +588,8 @@
             ? await POD.api('/api/orders/' + encodeURIComponent(orderId) + '/team', { headers: { 'x-team-view': team } })
             : await POD.api('/api/orders/' + encodeURIComponent(orderId), { headers: POD.orderHeaders(key) });
           error = null;
+          // Cash on delivery or paid in advance: the page's payment wording (src/payment-wording.js).
+          if (order.shop) POD.payment.set(order.shop.payment);
           if (!team && order.key && order.key !== key) key = order.key;
           // The link in the address bar carries the key (copied from there, it still opens the order).
           if (!team && key && new URLSearchParams(location.search).get('k') !== key) {
