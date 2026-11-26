@@ -78,3 +78,11 @@ test('the home page: sized photos with srcset, 8 products first, the four points
   // No payment method is promised (cash on delivery now, payment in advance from launch).
   assert.doesNotMatch(strings.POD_STRINGS['hm.trust.payS'].join(' '), /cash|استلام|مقدم/i);
 });
+
+test('small text on the home cards is readable, and the price note shows on phones (UX item F)', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  assert.match(html, /<span class="hm-price-note" data-i18n="home.priceNote"><\/span>/);
+  assert.doesNotMatch(html, /hide-sm" data-i18n="home.priceNote"/);
+  const css = fs.readFileSync(path.join(__dirname, '../public/css/styles.css'), 'utf8');
+  assert.match(css, /\.hm-pack \{ color: var\(--ink-2\); font-size: 13\.5px; \}/);
+});

@@ -1284,9 +1284,14 @@ html[dir="ltr"] .hm-tile-link span { display: inline-block; transform: scaleX(-1
 .hm-pic img.photo-thumb { object-fit: contain; padding: 8%; box-sizing: border-box; }
 .hm-card:hover .hm-pic img { transform: scale(1.04); }
 .hm-card h3 { font-size: 16px; margin: 4px 0 0; line-height: 1.35; }
-.hm-meta { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; font-size: 14px; }
+.hm-meta { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; font-size: 15px; }
 .hm-price { font-weight: 700; color: var(--ink); }
-.hm-pack { color: var(--ink-3); font-size: 13px; }
+/* The size or pack next to the price («٣٢٥ مل», "A5 × 100"): readable, not pale (owner's OK, UX item F, 26 Nov). */
+.hm-pack { color: var(--ink-2); font-size: 13.5px; }
+/* "Prices include printing on one side": next to "All products", and under it on phones (it was hidden there). */
+#products .section-title { flex-wrap: wrap; gap: 2px 12px; }
+.hm-price-note { color: var(--ink-2); font-size: 14px; }
+@media (max-width: 600px) { .hm-price-note { flex-basis: 100%; } }
 .hm-badge { position: absolute; top: 10px; inset-inline-start: 10px; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
 .hm-badge-new { background: #e5f6ee; color: #0f6b3d; }
 .hm-badge-best { background: #fff1e0; color: #9a4a00; }

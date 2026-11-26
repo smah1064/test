@@ -22,6 +22,8 @@ test('home on a phone: the four points, sized photos, 8 products then "Show all"
       // B: four points, between the banner and the tiles.
       assert.strictEqual(await page.locator('.hm-trust li').count(), 4);
       assert.match(await page.locator('.hm-trust').innerText(), lang === 'ar' ? /بتشوف البروفة/ : /You see the proof/);
+      // F: the price note shows on phones too.
+      assert.ok(await page.locator('.hm-price-note').isVisible(), 'price note on phones');
       // D: 8 products, and a button for the rest.
       const total = await page.evaluate(() => Number((document.querySelector('[data-show-all]').textContent.match(/[\d٠-٩]+/) || ['0'])[0].replace(/[٠-٩]/g, (d) => d.charCodeAt(0) - 0x660)));
       assert.strictEqual(await page.locator('.hm-gcard').count(), 8);
