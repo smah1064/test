@@ -539,7 +539,9 @@ const DEFAULT_LIMITS = {
   mergeParse: [{ max: 30, ms: 10 * 60e3 }, { max: 150, ms: 24 * 3600e3 }],
   reorder: [{ max: 20, ms: 10 * 60e3 }, { max: 100, ms: 24 * 3600e3 }],
   reorderOrder: [{ max: 6, ms: 3600e3 }, { max: 12, ms: 24 * 3600e3 }], // per order (items can be ordered again one by one)
-  reorderMB: 8000, // megabytes of files copied by "Order again", the whole shop, per day
+  reorderMB: 8000, // megabytes of files copied by "Order again" (and the cart's − / + copies), the whole shop, per day
+  // Megabytes of view-only link pictures, the whole shop, per day (one visitor could add ~9 GB a day: QA 26 Nov).
+  viewsMB: Number(process.env.VIEWS_DAILY_MB) || 3000,
   // Megabytes of booklet PDFs kept (45 days each) for the whole shop per day, so a few visitors can't
   // fill the disk (per visitor: the 'artwork' limit).
   pdfPagesMB: Number(process.env.PDF_PAGES_DAILY_MB) || 6000,
@@ -2355,6 +2357,17 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     res.status(201).json({ ok: true });
   });
 
+  // One file at a time per visitor: two looping files from one visitor took both converter turns and kept every other
+  // customer waiting (QA 26 Nov). A visitor's next file waits for their own one before.
+  const artQueues = new Map();
+  function oneAtATime(key, fn) {
+    const prev = artQueues.get(key) || Promise.resolve();
+    const run = prev.then(fn, fn);
+    const tail = run.then(() => {}, () => {});
+    artQueues.set(key, tail);
+    tail.then(() => { if (artQueues.get(key) === tail) artQueues.delete(key); });
+    return run;
+  }
   app.post('/api/artwork', (req, res, next) => {
     // Counted before the file is read, so repeated big uploads can't hold the server's memory (QA 25 Nov).
     rateLimit(req, 'artwork');
@@ -2366,10 +2379,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const px = Math.min(4000, Math.max(500, Number(req.get('x-max-px')) || 3000));
       let out;
       try {
-        out = await artwork.convertArtwork(buf, { px });
+        out = await oneAtATime(req.ip, () => artwork.convertArtwork(buf, { px }));
       } catch (e) {
         if (!(e instanceof artwork.ArtworkError)) throw e;
-        if (e.reason === 'busy') throw new HttpError(429, 'tooFast');
+        if (e.reason === 'busy') throw new HttpError(429, 'artworkBusy');
         console.warn('[artwork] could not convert a', artwork.sniff(buf).kind, 'file of', buf.length, 'bytes:', e.reason, String(e.detail || '').slice(0, 400));
         throw new HttpError(400, e.reason === 'empty' ? 'artworkEmpty' : e.reason === 'locked' ? 'artworkLocked' : 'artworkBad');
       }
@@ -2404,10 +2417,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (!shopBudgetLeft('pdfPagesMB', LIMITS.pdfPagesMB, mb)) throw new HttpError(429, 'pdfBudget');
       let out;
       try {
-        out = await artwork.pdfPages(buf, { max });
+        out = await oneAtATime(req.ip, () => artwork.pdfPages(buf, { max }));
       } catch (e) {
         if (!(e instanceof artwork.ArtworkError)) throw e;
-        if (e.reason === 'busy') throw new HttpError(429, 'tooFast');
+        if (e.reason === 'busy') throw new HttpError(429, 'artworkBusy');
         console.warn('[artwork] could not read the pages of a PDF of', buf.length, 'bytes:', e.reason, String(e.detail || '').slice(0, 400));
         // A PDF locked with a password says so (it can't be read until it's saved without one).
         throw new HttpError(400, /\/Encrypt\b/.test(buf.subarray(0, Math.min(buf.length, 4e6)).toString('latin1')) || /\/Encrypt\b/.test(buf.subarray(Math.max(0, buf.length - 2e5)).toString('latin1')) ? 'pdfLocked' : 'pdfBad');
@@ -2466,10 +2479,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   app.post('/api/shares', (req, res, next) => {
     rateLimit(req, 'shares');
     next();
-  }, express.json({ limit: '15mb' }), (req, res) => {
+  }, express.json({ limit: '15mb' }), asyncRoute(async (req, res) => {
     const b = req.body || {};
     const product = getProduct(b.productId);
     if (!product) throw new HttpError(400, 'unknownProduct', { id: String(b.productId || '').slice(0, 40) });
+    // A new link: the robot check (invisible to people), as at checkout; signed-in customers passed it at sign-up
+    // (owner, 26 Nov).
+    if (!currentCustomer(req)) await checkCaptcha(req);
     const color = product.colors.find((c) => c.id === b.color) || product.colors[0];
     const size = product.sizes.find((z) => z.id === b.size) || product.sizes[0];
     const has = (id) => b.sides && b.sides[id] && Array.isArray(b.sides[id].objects) && b.sides[id].objects.length;
@@ -2508,7 +2524,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     };
     writeShare(share);
     res.status(201).json(publicShare(share));
-  });
+  }));
   // ---------- View-only links: flip through a booklet, or see both sides (owner's decision, 26 Nov) ----------
   // Whoever has the link only looks (no approval, comments, prices or customer details); it shows the latest version
   // the customer saved (the editor sends the pictures again with the link's own key) and stops 60 days after that.
@@ -2523,15 +2539,18 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       throw viewErr(e);
     }
   }
-  app.post('/api/views', (req, res, next) => { rateLimit(req, 'views'); next(); }, express.json({ limit: '40mb' }), (req, res) => {
+  app.post('/api/views', (req, res, next) => { rateLimit(req, 'views'); next(); }, express.json({ limit: '40mb' }), asyncRoute(async (req, res) => {
     const b = req.body || {};
     const product = getProduct(b.productId);
     if (!viewable(product)) throw new HttpError(400, 'viewProduct');
     const { pics, kind, rtl } = viewPictures(product, b);
+    // A new link: the robot check (invisible to people); signed-in customers passed it at sign-up (owner, 26 Nov).
+    if (!currentCustomer(req)) await checkCaptcha(req);
+    if (!takeShopBudget('viewsMB', LIMITS.viewsMB, Math.max(1, Math.ceil(pics.reduce((n, p) => n + p.data.length, 0) / 1e6)))) throw new HttpError(429, 'tooManyWait', { min: 60 });
     const { view, key } = views.create({ productId: product.id, kind, rtl, pics });
     res.set('Cache-Control', 'no-store');
     res.status(201).json({ id: view.id, key, url: `/view?id=${view.id}` });
-  });
+  }));
   // The customer's newer version (with the link's key): the same link shows it.
   app.put('/api/views/:id', (req, res, next) => { rateLimit(req, 'views'); next(); }, express.json({ limit: '40mb' }), (req, res) => {
     let v;
@@ -2540,7 +2559,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const product = getProduct(b.productId);
     if (!viewable(product)) throw new HttpError(400, 'viewProduct');
     const { pics, kind, rtl } = viewPictures(product, b);
-    Object.assign(v, { productId: product.id, kind, rtl });
+    Object.assign(v, { productId: product.id, kind, rtl }); // (its older pictures go: an update doesn't add to the disk)
     views.put(v, pics);
     res.set('Cache-Control', 'no-store');
     res.json({ id: v.id, url: `/view?id=${v.id}`, updatedAt: v.updatedAt });
@@ -4184,7 +4203,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       // The coupon's limits, with every order saved so far (by any copy of the app).
       if (applied) {
         const r = coupons.apply((db.coupons || []).find((x) => x.id === applied.id), { lines, orders: db.orders, phone: c.phone, shipping: shippingFor(subtotal) });
-        if (!r.ok) throw new HttpError(409, r.reason, r.params || {});
+        // (An automatic offer used up meanwhile: the customer typed no code; the total changes, said as that. QA 26 Nov.)
+        if (!r.ok) throw applied.auto ? new HttpError(409, 'priceChanged', { total: round2(subtotal + shippingFor(subtotal) + delivery.fee) }) : new HttpError(409, r.reason, r.params || {});
       }
       // Counted stock goes down by the pieces ordered (checked again with the latest count, every
       // product first, so a refused order takes nothing off).
@@ -4567,7 +4587,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       });
     } else {
       // Without the cart's key (added before it existed, or another device): a copy at the new number, with its own key.
+      // Copies count against the shop's daily copy room, as "Order again" does (QA 26 Nov: 20 calls copied ~900 MB).
       rateLimit(req, 'designs');
+      rateLimit(req, 'designsAll', '*');
+      const mb = Math.max(1, Math.ceil(dirBytes(store.designDir(d.id)) / 1e6));
+      if (!takeShopBudget('reorderMB', LIMITS.reorderMB, mb)) throw new HttpError(429, 'tooManyWait', { min: 60 });
       const copy = copyDesign(d);
       designKey = copy.token;
       store.mutate((db) => {

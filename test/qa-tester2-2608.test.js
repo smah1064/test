@@ -41,3 +41,20 @@ test('a cut-out (transparent) photo gets white behind the face, not black', asyn
   const mid = ((info.height >> 1) * info.width + (info.width >> 1)) * info.channels;
   assert.ok(data[mid] > 150 && data[mid + 1] < 100, 'the person is still there');
 });
+
+test('a book dedication keeps < and > ("Love you <3"); the story\'s own marks { } [ ] | are still left out; the page renders', async () => {
+  const face = 'data:image/jpeg;base64,' + (await sharp({ create: { width: 400, height: 500, channels: 3, background: '#c99' } }).jpeg().toBuffer()).toString('base64');
+  const answers = { name: 'Yousef', gender: 'boy', birthday: '2019-03-12', city: 'Cairo', father: 'Ahmed', mother: 'Mona', fruit: 'mango', animal: 'cat', friend: 'Omar', dedication: 'Love you <3 & {name} [x] | Mama' };
+  const res = await fetch(base + '/api/books/space-hero/designs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ answers, face }) });
+  assert.strictEqual(res.status, 201, await res.clone().text());
+  const d = await res.json();
+  const saved = JSON.parse(fs.readFileSync(path.join(dataDir, 'db.json'), 'utf8'));
+  const designs = Array.isArray(saved.designs) ? saved.designs : Object.values(saved.designs || {});
+  const dedication = designs.find((x) => x.id === d.id).answers.dedication;
+  assert.match(dedication, /Love you <3 &/);
+  assert.doesNotMatch(dedication, /[{}[\]|]/);
+  // The dedication page (the second) draws it without trouble.
+  const page = await fetch(`${base}/api/books/designs/${d.id}/pages/1.jpg`);
+  assert.strictEqual(page.status, 200);
+  assert.ok((await page.arrayBuffer()).byteLength > 5000);
+});
