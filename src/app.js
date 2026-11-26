@@ -3955,8 +3955,54 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     // (Before the check: a refusal is never kept by a cache either, for the customer whose link has the key.)
     res.set({ 'Cache-Control': 'private, no-store', Vary: 'x-order-key, Cookie' });
     const order = customerOrderFor(req, req.params.id);
-    res.json(customerOrder(order));
+    const offer = accountOfferFor(req, order);
+    res.json({ ...customerOrder(order), ...(offer ? { accountOffer: offer } : {}) });
   });
+
+  // ---------- After a guest order: keep it on a new account (owner's OK, UX item 8, 26 Nov) ----------
+  // The order page offers "Save your orders": the order's own name, mobile and email, and a password typed there.
+  /** The guest who placed this order: with its link's key or on the browser it was ordered from (not an old number-only link). */
+  function guestOwnerOf(req, order) {
+    if (!order || order.customerId || !order.linkKey || !order.customer || !order.customer.phone) return false;
+    const k = String(req.get('x-order-key') || '');
+    if (LINK_KEY_RE.test(k) && sameSecret(k, order.linkKey)) return true;
+    return ordersHere(req).some(([id, key]) => id === order.id && sameSecret(key, order.linkKey));
+  }
+  /** The offer, when it applies: a guest's order, nobody signed in here, and no account with that mobile yet. */
+  function accountOfferFor(req, order) {
+    if (!guestOwnerOf(req, order) || currentCustomer(req)) return null;
+    if ((store.db.customers || []).some((c) => c.phone === order.customer.phone)) return null;
+    return { phone: order.customer.phone };
+  }
+  app.post('/api/orders/:id/account', express.json({ limit: '10kb' }), asyncRoute(async (req, res) => {
+    const order = UUID_RE.test(String(req.params.id || '')) && store.getOrder(req.params.id);
+    if (!order) throw new HttpError(404, 'orderNotFound');
+    if (!guestOwnerOf(req, order)) throw new HttpError(403, 'orderLinkNeeded');
+    const c = order.customer;
+    const { fields, error } = customers.cleanSignup({ name: c.name, phone: c.phone, email: c.email || '', password: (req.body || {}).password });
+    if (error) throw new HttpError(400, error);
+    rateLimit(req, 'accountSignup');
+    const { salt, hash } = customers.hashPassword(fields.password);
+    // This browser's other guest orders from the same mobile go on the account too.
+    const here = new Map(ordersHere(req));
+    const created = store.mutate((db) => {
+      db.customers ||= [];
+      if (db.customers.some((x) => x.phone === fields.phone)) throw new HttpError(409, 'acctPhoneTaken');
+      const o = (db.orders || []).find((x) => x.id === order.id);
+      if (!o || o.customerId) throw new HttpError(403, 'orderLinkNeeded');
+      // (An email another account already has: the new account starts without one; it can be added on the account page.)
+      const email = fields.email && !db.customers.some((x) => x.email === fields.email) ? fields.email : '';
+      const cust = { id: crypto.randomUUID(), name: fields.name, phone: fields.phone, email, salt, passHash: hash, pv: 1, createdAt: new Date().toISOString() };
+      db.customers.push(cust);
+      for (const x of db.orders || []) {
+        const mine = x.id === o.id || (here.has(x.id) && x.linkKey && sameSecret(here.get(x.id), x.linkKey) && x.customer && x.customer.phone === fields.phone);
+        if (mine && !x.customerId) x.customerId = cust.id;
+      }
+      return cust;
+    });
+    setSession(req, res, created);
+    res.status(201).json({ customer: customers.publicCustomer(created) });
+  }));
 
   // ---------- After the order: order again, drafts on the account, shipping ----------
   // Derived files that carry the old order's number or are cheap to make again.

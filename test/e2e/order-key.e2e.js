@@ -78,7 +78,7 @@ test('the customer\'s link opens the order and its invoice; the number alone say
   // The customer's link: the order, with the key on its own links.
   await page.goto(`${srv.base}/order?id=${order.id}&k=${order.key}`);
   await page.waitForSelector('[data-act="reorder"]');
-  assert.match(await page.textContent('h1'), new RegExp(order.number));
+  assert.match(await page.textContent('h1'), new RegExp(`Order no\\. ${order.number.replace(/^POD-/, '')}$`)); // (without the shop's "POD-": UX item 7)
   assert.ok((await moneyOnPage(page)).length > 0, 'the customer sees the amounts');
   const invoiceHref = await page.getAttribute('.order-actions a', 'href');
   assert.strictEqual(invoiceHref, `/invoice?id=${order.id}&k=${order.key}`);
@@ -142,7 +142,7 @@ test('Operations: "Customer page" opens the 30-minute team view without amounts 
   await tab.waitForSelector('.team-view');
   assert.match(await tab.textContent('.team-view'), /Team view/);
   assert.match(await tab.textContent('.team-view'), /Amounts are hidden for your role/);
-  assert.match(await tab.textContent('h1'), new RegExp(order.number));
+  assert.match(await tab.textContent('h1'), new RegExp(`Order no\\. ${order.number.replace(/^POD-/, '')}$`));
   assert.deepStrictEqual(await moneyOnPage(tab), [], 'no amounts on the team view');
   for (const sel of ['[data-act="reorder"]', '[data-act="reorder-item"]', '#order-wa', '.order-actions', '[data-act="copy-customer"]']) {
     assert.strictEqual(await tab.locator(sel).count(), 0, `${sel} is not there`);

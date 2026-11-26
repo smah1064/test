@@ -51,6 +51,14 @@ function num(n, lang) {
     return String(n);
   }
 }
+/**
+ * The order number as customers see it: without the shop's own "POD-" (it means nothing to them), in the
+ * message's digits and never grouped ("١٠٠١", "1001"). The shop's own messages keep the full number.
+ */
+function custNo(number, lang) {
+  const n = String(number == null ? '' : number).replace(/^POD-/i, '');
+  return lang === 'ar' ? n.replace(/[0-9]/g, (d) => String.fromCharCode(0x0660 + Number(d))) : n;
+}
 /** Arabic counting (as on the rest of the shop): 1 and 2 have their own words, 3–10 (103–110…) the plural, others the singular. */
 const arCount = (n, one, two, few, many) => (n === 1 ? one : n === 2 ? two : n % 100 >= 3 && n % 100 <= 10 ? `${num(n, 'ar')} ${few}` : `${num(n, 'ar')} ${many}`);
 const enCount = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -60,16 +68,16 @@ const L = {
     total: 'الإجمالي', subtotal: 'المنتجات', discount: 'الخصم', shipping: 'الشحن', free: 'مجاني', cod: 'الدفع عند الاستلام',
     customer: 'العميل', phone: 'الموبايل', email: 'البريد', address: 'العنوان', notes: 'ملاحظات',
     openAdmin: 'افتح لوحة الإنتاج', track: 'تابع طلبك',
-    thanksSubject: (n) => `تم استلام طلبك ${n} · إبداع`,
+    thanksSubject: (n) => `تم استلام طلبك رقم ${n} · إبداع`,
     thanksHi: (name) => `أهلًا ${name}،`,
     thanksBody: 'شكرًا لطلبك! استلمنا طلبك وهنبدأ نطبع كل قطعة مخصوص ليك. هنتواصل معاك قبل الشحن.',
     adminSubject: (n, total) => `طلب جديد ${n} · ${total}`,
     sides: ' + ', dir: 'rtl', test: 'رسالة تجريبية من متجرك: الإشعارات شغالة ✅',
-    shippedSubject: (n) => `طلبك ${n} في الطريق ليك · إبداع`,
+    shippedSubject: (n) => `طلبك رقم ${n} في الطريق ليك · إبداع`,
     shippedBody: 'طلبك اتشحن وفي الطريق ليك! جهّز المبلغ للمندوب عند الاستلام.',
     shippedBodyPaid: 'طلبك اتشحن وفي الطريق ليك!',
     courier: 'شركة الشحن', trackingNumber: 'رقم التتبع', trackingLink: 'تتبع الشحنة عند شركة الشحن', eta: 'الاستلام المتوقع',
-    invoice: 'الفاتورة', copies: (n) => arCount(n, 'نسخة واحدة', 'نسختين', 'نسخ', 'نسخة'), order: 'الطلب',
+    invoice: 'الفاتورة', copies: (n) => arCount(n, 'نسخة واحدة', 'نسختين', 'نسخ', 'نسخة'), order: 'الطلب', orderNo: 'طلب رقم',
     pieces: (n) => arCount(n, 'قطعة واحدة', 'قطعتين', 'قطع', 'قطعة'), photos: (n) => arCount(n, 'صورة واحدة', 'صورتين', 'صور', 'صورة'),
     names: (n) => `قائمة أسماء: ${arCount(n, 'اسم واحد', 'اسمين', 'أسماء', 'اسم')}`, listSep: '، ',
     delivery: 'التوصيل', express: '⚡ توصيل سريع', expressAdmin: '⚡ توصيل سريع: خلال يومين عمل',
@@ -80,16 +88,16 @@ const L = {
     total: 'Total', subtotal: 'Items', discount: 'Discount', shipping: 'Shipping', free: 'Free', cod: 'Cash on delivery',
     customer: 'Customer', phone: 'Mobile', email: 'Email', address: 'Address', notes: 'Notes',
     openAdmin: 'Open the production dashboard', track: 'Track your order',
-    thanksSubject: (n) => `We received your order ${n} · ebda3`,
+    thanksSubject: (n) => `We received your order no. ${n} · ebda3`,
     thanksHi: (name) => `Hi ${name},`,
     thanksBody: 'Thank you for your order! We have received it and will print each item just for you. We will contact you before shipping.',
     adminSubject: (n, total) => `New order ${n} · ${total}`,
     sides: ' + ', dir: 'ltr', test: 'Test message from your shop: notifications are working ✅',
-    shippedSubject: (n) => `Your order ${n} is on its way · ebda3`,
+    shippedSubject: (n) => `Your order no. ${n} is on its way · ebda3`,
     shippedBody: 'Your order has shipped and is on its way to you! Please have the amount ready for the courier on delivery.',
     shippedBodyPaid: 'Your order has shipped and is on its way to you!',
     courier: 'Courier', trackingNumber: 'Tracking number', trackingLink: 'Track the parcel with the courier', eta: 'Expected delivery',
-    invoice: 'Invoice', copies: (n) => `${n} cop${n === 1 ? 'y' : 'ies'}`, order: 'Order',
+    invoice: 'Invoice', copies: (n) => `${n} cop${n === 1 ? 'y' : 'ies'}`, order: 'Order', orderNo: 'Order no.',
     pieces: (n) => enCount(n, 'piece'), photos: (n) => enCount(n, 'photo'), names: (n) => `Name list: ${enCount(n, 'name')}`, listSep: ', ',
     delivery: 'Delivery', express: '⚡ Express delivery', expressAdmin: '⚡ EXPRESS: deliver within 2 business days',
     deliveryLine: (d, by) => `${d.speed === 'express' ? '⚡ Express' : 'Standard'} delivery within ${d.days} business day${d.days === 1 ? '' : 's'} (by ${by})`,
@@ -202,7 +210,7 @@ function emailHtml(order, links, lang, forAdmin) {
   const sum = (label, value, bold) => `<tr><td style="padding:4px 0;${bold ? 'font-weight:700' : ''}">${esc(label)}</td><td style="padding:4px 0;text-align:${lang === 'ar' ? 'left' : 'right'};${bold ? 'font-weight:700' : ''}">${esc(value)}</td></tr>`;
   const intro = forAdmin
     ? `<h2 style="margin:0 0 12px">🛒 ${esc(t.newOrder)} ${esc(order.number)}</h2>`
-    : `<h2 style="margin:0 0 12px">${esc(t.thanksHi(c.name))}</h2><p style="margin:0 0 16px">${esc(t.thanksBody)}</p><p style="margin:0 0 12px;font-weight:700">${esc(order.number)}</p>`;
+    : `<h2 style="margin:0 0 12px">${esc(t.thanksHi(c.name))}</h2><p style="margin:0 0 16px">${esc(t.thanksBody)}</p><p style="margin:0 0 12px;font-weight:700">${esc(t.orderNo)} ${esc(custNo(order.number, lang))}</p>`;
   const details = forAdmin
     ? `<table style="width:100%;margin-top:16px;border-collapse:collapse">
         ${sum(t.customer, c.name)}${sum(t.phone, c.phone)}${c.email ? sum(t.email, c.email) : ''}${sum(t.address, addressOf(c, lang))}${c.notes ? sum(t.notes, c.notes) : ''}
@@ -232,7 +240,7 @@ const emailText = (order, links, lang, forAdmin) => {
   const t = L[lang];
   const c = order.customer;
   return [
-    forAdmin ? `${t.newOrder} ${order.number}` : `${t.thanksHi(c.name)}\n${t.thanksBody}\n${order.number}`,
+    forAdmin ? `${t.newOrder} ${order.number}` : `${t.thanksHi(c.name)}\n${t.thanksBody}\n${t.orderNo} ${custNo(order.number, lang)}`,
     '',
     ...order.items.map((it, i) => `${num(i + 1, lang)}. ${itemLine(it, lang)} · ${money(it.price, lang)}`),
     '',
@@ -301,7 +309,7 @@ async function orderPlaced(order, { origin, lang, admin = true, customer = true 
   await Promise.all([
     run('adminWhatsApp', admin && st.adminWhatsApp, () => sendWhatsApp(cfg, adminWhatsAppText(order, links, adminLang))),
     run('adminEmail', admin && st.adminEmail, () => sendEmail(cfg, cfg.adminEmail, L[adminLang].adminSubject(order.number, money(order.total, adminLang)), emailHtml(order, links, adminLang, true), emailText(order, links, adminLang, true))),
-    run('customerEmail', customer && st.customerEmail && Boolean(order.customer.email), () => sendEmail(cfg, order.customer.email, L[custLang].thanksSubject(order.number), emailHtml(order, links, custLang, false), emailText(order, links, custLang, false))),
+    run('customerEmail', customer && st.customerEmail && Boolean(order.customer.email), () => sendEmail(cfg, order.customer.email, L[custLang].thanksSubject(custNo(order.number, custLang)), emailHtml(order, links, custLang, false), emailText(order, links, custLang, false))),
   ]);
   return result;
 }
@@ -433,7 +441,7 @@ function shippedContent(order, links, lang) {
     <div style="background:#fff;border-radius:14px;padding:20px;direction:${t.dir};text-align:${lang === 'ar' ? 'right' : 'left'}">
       <h2 style="margin:0 0 12px">📦 ${esc(t.thanksHi(c.name || ''))}</h2>
       <p style="margin:0 0 16px;line-height:1.6">${esc(body)}</p>
-      <p style="margin:0 0 12px;font-weight:700">${esc(t.order)} ${esc(order.number)}</p>
+      <p style="margin:0 0 12px;font-weight:700">${esc(t.orderNo)} ${esc(custNo(order.number, lang))}</p>
       ${facts.length ? `<table style="width:100%;border-collapse:collapse;margin:0 0 12px;background:#f8f9fb;border-radius:10px">${facts.map(([k, v]) => `<tr><td style="padding:8px 12px;color:#555">${esc(k)}</td><td style="padding:8px 12px;text-align:${end};font-weight:700"><bdi>${esc(v)}</bdi></td></tr>`).join('')}</table>` : ''}
       <table style="width:100%;border-collapse:collapse">${items.map((line) => `<tr><td style="padding:8px 0;border-bottom:1px solid #eee">${esc(line)}</td></tr>`).join('')}</table>
       <p style="margin:12px 0 0;font-weight:700">${esc(t.total)}${paid ? '' : ` (${esc(t.cod)})`}: ${esc(money(order.total, lang))}</p>
@@ -447,7 +455,7 @@ function shippedContent(order, links, lang) {
   const text = [
     t.thanksHi(c.name || ''),
     body,
-    `${t.order} ${order.number}`,
+    `${t.orderNo} ${custNo(order.number, lang)}`,
     '',
     ...facts.map(([k, v]) => `${k}: ${v}`),
     trackingUrl ? `${t.trackingLink}: ${trackingUrl}` : '',
@@ -458,7 +466,7 @@ function shippedContent(order, links, lang) {
     links.track ? `${t.track}: ${links.track}` : '',
     links.invoice ? `${t.invoice}: ${links.invoice}` : '',
   ].join('\n').replace(/\n{3,}/g, '\n\n').trim();
-  return { subject: t.shippedSubject(order.number), html, text };
+  return { subject: t.shippedSubject(custNo(order.number, lang)), html, text };
 }
 
 /**
@@ -502,7 +510,7 @@ async function proofMessage(order, item, { kind = 'proof', note = '', link = '',
     const product = item && item.productName ? tr(item.productName, ar ? 'ar' : 'en') : '';
     const T = ar
       ? {
-        subject: kind === 'proof' ? `طلبك ${order.number}: محتاجين موافقتك على البروفة` : `طلبك ${order.number}: محتاج تعديل قبل الطباعة`,
+        subject: kind === 'proof' ? `طلبك رقم ${custNo(order.number, 'ar')}: محتاجين موافقتك على البروفة` : `طلبك رقم ${custNo(order.number, 'ar')}: محتاج تعديل قبل الطباعة`,
         lead: kind === 'proof' ? `جهّزنالك بروفة جديدة لـ ${product}. راجعها ووافق عليها عشان نبدأ الطباعة.` : `راجعنا ${product} ومحتاج تعديل قبل ما نطبعه.`,
         button: kind === 'proof' ? 'راجع البروفة' : 'افتح الطلب',
         noteLabel: 'رسالة من إبداع:',
@@ -510,7 +518,7 @@ async function proofMessage(order, item, { kind = 'proof', note = '', link = '',
         screen: 'دي بروفة على الشاشة؛ ألوان الطباعة ممكن تفرق شوية عن اللي شايفه على شاشتك.',
       }
       : {
-        subject: kind === 'proof' ? `Order ${order.number}: please approve your proof` : `Order ${order.number}: a change is needed before printing`,
+        subject: kind === 'proof' ? `Order no. ${custNo(order.number, 'en')}: please approve your proof` : `Order no. ${custNo(order.number, 'en')}: a change is needed before printing`,
         lead: kind === 'proof' ? `We have a new proof for your ${product}. Please check and approve it so we can print.` : `We checked your ${product} and something needs changing before we print.`,
         button: kind === 'proof' ? 'Check the proof' : 'Open your order',
         noteLabel: 'Message from the print shop:',

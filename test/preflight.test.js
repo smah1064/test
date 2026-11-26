@@ -202,3 +202,9 @@ test('a 3600 x 4800 print is analysed in under 1.5 s', async () => {
   assert.ok(ms < 1500, `took ${ms.toFixed(0)} ms`);
   assert.notStrictEqual(r.status, 'fail');
 });
+
+test('mergeClientChecks keeps the editor\'s unchanged sample text warning (the proof is not "ready to print")', () => {
+  const merged = mergeClientChecks({ status: 'pass', checks: [] }, [{ id: 'sampleText', level: 'warn', side: 'front', params: { name: 'نصك هنا' } }]);
+  assert.strictEqual(merged.status, 'warn');
+  assert.deepStrictEqual(merged.checks.map((c) => c.id), ['sampleText']);
+});

@@ -79,7 +79,8 @@ window.PODSaved = (() => {
    * Draws the list into `box` (a section; hidden when there is nothing saved).
    * opts.meta / opts.price: how a ready item's details and price are written (the cart has its own);
    * opts.onToCart(designId): after a ready item went back to the cart;
-   * opts.onChange(): after something was removed.
+   * opts.onChange(): after something was removed;
+   * opts.compact: one short line (title, what is in it, "Show them") that opens the whole list in place (the cart).
    */
   async function render(box, opts = {}) {
     if (!box) return;
@@ -165,11 +166,32 @@ window.PODSaved = (() => {
         <div class="price"></div>
       </div>`;
     }).join('');
-    box.innerHTML = `
-      <h2 class="saved-title">${esc(t('saved.title', { n: POD.num(n) }))}</h2>
-      <p class="muted small">${esc(t(opts.note || 'saved.note'))}</p>
+    const list = `
       ${saved.length ? `<h3 class="saved-group">${esc(t('saved.ready', { n: POD.num(saved.length) }))}</h3>${ready}` : ''}
       ${drafts.length ? `<h3 class="saved-group">${esc(t('saved.unfinished', { n: POD.num(drafts.length) }))}</h3>${unfinished}` : ''}`;
+    box.classList.toggle('saved-compact', Boolean(opts.compact));
+    if (opts.compact) {
+      // "My saved designs (2)" · "T-shirt، Mug · ready to order" · "Show them": the list opens under it.
+      const open = Boolean(box.__open);
+      const listId = (box.id || 'saved') + '-list';
+      box.innerHTML = `
+      <div class="saved-line">
+        <div class="saved-line-text">
+          <h2 class="saved-title">${esc(t('saved.title', { n: POD.num(n) }))}</h2>
+          <p class="muted small saved-sum">${esc(summary(saved, drafts))}</p>
+        </div>
+        <button class="btn btn-sm saved-open" type="button" data-saved-open aria-expanded="${open}" aria-controls="${esc(listId)}">${esc(t(open ? 'saved.hide' : 'saved.show'))}</button>
+      </div>
+      <div class="saved-list" id="${esc(listId)}"${open ? '' : ' hidden'}>
+        <p class="muted small">${esc(t(opts.note || 'saved.note'))}</p>
+        ${open ? list : ''}
+      </div>`;
+    } else {
+      box.innerHTML = `
+      <h2 class="saved-title">${esc(t('saved.title', { n: POD.num(n) }))}</h2>
+      <p class="muted small">${esc(t(opts.note || 'saved.note'))}</p>
+      ${list}`;
+    }
     if (!box.__wired) {
       box.__wired = true;
       // A preview that no longer loads: the plain product instead.
@@ -182,6 +204,14 @@ window.PODSaved = (() => {
       }, true);
       box.addEventListener('click', async (e) => {
         const o = box.__opts || {};
+        const toggle = e.target.closest('[data-saved-open]');
+        if (toggle) {
+          box.__open = !box.__open;
+          await render(box, o);
+          const again = box.querySelector('[data-saved-open]');
+          if (again) again.focus({ preventScroll: true });
+          return;
+        }
         const back = e.target.closest('[data-to-cart]');
         const del = e.target.closest('[data-saved-remove]');
         const draft = e.target.closest('[data-del-draft]');
@@ -206,6 +236,18 @@ window.PODSaved = (() => {
         }
       });
     }
+  }
+
+  /** "T-shirt، Mug +1 more · ready to order": the first names, and what they are when they are all of one kind. */
+  function summary(saved, drafts) {
+    const names = [...new Set([
+      ...saved.map((it) => tr(it.productName)),
+      ...drafts.map((d) => (d.product ? tr(d.product.name) : d.name ? tr(d.name) : t('saved.unknownProduct'))),
+    ].filter(Boolean))];
+    let out = names.slice(0, 2).join(POD.lang === 'ar' ? '، ' : ', ');
+    if (names.length > 2) out += ' ' + t('saved.sumMore', { n: names.length - 2 });
+    const kind = !drafts.length ? t('saved.sumReady') : !saved.length ? t('saved.sumDraft') : '';
+    return kind ? `${out}${POD.sep()}${kind}` : out;
   }
 
   return { render, loadDrafts };

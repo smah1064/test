@@ -78,7 +78,7 @@ test('Arabic order messages: quantities, names, photo sets, Arabic digits and th
   const wa = sent.find((s) => s.kind === 'whatsapp').text;
   const [toAdmin, toCustomer] = ['admin@example.test', 'mona@example.test'].map((to) => sent.find((s) => s.kind === 'email' && s.body.to[0].email === to).body);
 
-  assert.match(toCustomer.subject, /^تم استلام طلبك POD-2001 · إبداع$/);
+  assert.match(toCustomer.subject, /^تم استلام طلبك رقم ٢٠٠١ · إبداع$/);
   assert.match(wa, /٤ منتجات · الإجمالي/);
   assert.match(wa, /⚡ توصيل سريع: خلال يومين عمل/);
   for (const text of [wa, toAdmin.textContent, toCustomer.textContent, toAdmin.htmlContent, toCustomer.htmlContent]) {
@@ -108,7 +108,7 @@ test('English order messages keep Latin digits and the English name', async () =
   const wa = sent.find((s) => s.kind === 'whatsapp').text;
   const mails = sent.filter((s) => s.kind === 'email').map((s) => s.body);
   assert.strictEqual(mails.length, 2);
-  assert.match(mails.find((m) => m.to[0].email === 'mona@example.test').subject, /We received your order POD-2001 · ebda3/);
+  assert.match(mails.find((m) => m.to[0].email === 'mona@example.test').subject, /We received your order no\. 2001 · ebda3/);
   assert.match(wa, /4 items · Total/);
   for (const text of [wa, ...mails.flatMap((m) => [m.textContent, m.htmlContent])]) {
     assert.match(text, /T-shirt · 55 pieces \(White · M ×30, Black · L ×25\) · Front/);
@@ -138,7 +138,7 @@ test('Arabic standard delivery uses Arabic digits and counting', async () => {
 test('the shipped email shows quantities, names and photo sets in both languages', async () => {
   await notify.orderShipped(order(), {});
   const ar = sent[0].body;
-  assert.match(ar.subject, /^طلبك POD-2001 في الطريق ليك · إبداع$/);
+  assert.match(ar.subject, /^طلبك رقم ٢٠٠١ في الطريق ليك · إبداع$/);
   for (const text of [ar.textContent, ar.htmlContent]) {
     assert.match(text, /١\. تيشيرت · ٥٥ قطعة \(أبيض · M ×٣٠، أسود · L ×٢٥\)/);
     assert.match(text, /٢\. شهادة · أبيض · A4 · الأمام · قائمة أسماء: ٤٠ اسم/);
@@ -150,7 +150,7 @@ test('the shipped email shows quantities, names and photo sets in both languages
   sent = [];
   await notify.orderShipped(order({ lang: 'en' }), {});
   const en = sent[0].body;
-  assert.match(en.subject, /Your order POD-2001 is on its way · ebda3/);
+  assert.match(en.subject, /Your order no\. 2001 is on its way · ebda3/);
   assert.match(en.textContent, /1\. T-shirt · 55 pieces \(White · M ×30, Black · L ×25\) · Front/);
   assert.match(en.textContent, /Name list: 40 names/);
   assert.match(en.textContent, /4 photos · 7 copies/);
@@ -198,4 +198,16 @@ test('the plain-text order email has the same sums as the HTML one (they add up 
   assert.match(mail.textContent, /Subtotal: EGP 28,020|Items: EGP 28,020|28,020/);
   assert.match(mail.textContent, /EID20\): -\S*EGP\s100/);
   assert.match(mail.textContent, /Shipping \(.*\): \S*EGP\s100/);
+});
+
+test('customers see the order number without the shop\'s "POD-"; the shop\'s own message keeps it (UX item 7)', async () => {
+  const src = require('fs').readFileSync(require('path').join(__dirname, '../src/notify.js'), 'utf8');
+  // The shop's WhatsApp and email still name the full number.
+  assert.ok(src.includes("${t.newOrder} ${order.number}"));
+  // The shared page helper: "١٠٠١" in Arabic, "1001" in English, never grouped.
+  const common = require('fs').readFileSync(require('path').join(__dirname, '../public/js/common.js'), 'utf8');
+  assert.match(common, /function orderNo\(number\)/);
+  const strings = {};
+  require('vm').runInNewContext(require('fs').readFileSync(require('path').join(__dirname, '../public/js/i18n.js'), 'utf8'), { window: strings });
+  assert.strictEqual(JSON.stringify(strings.POD_STRINGS['order.title']), JSON.stringify(['Order no. {n}', 'طلب رقم {n}']));
 });

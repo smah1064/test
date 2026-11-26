@@ -148,6 +148,8 @@ test('cart proof: white lettering is shown on dark checks, and "Dark background"
     // "Which size?"
     await page.click('#size-ask [data-ask-size="M"]');
     await page.waitForURL(/\/cart/, { timeout: 60000 });
+    // (Not approved yet: the proof is a short card; "See proof details" opens the whole of it.)
+    await page.click('[data-proof-toggle]', { timeout: 30000 });
     await page.waitForSelector('.proof-art-box.is-dark', { timeout: 30000 });
     assert.strictEqual(await page.getAttribute('[data-proof-bg]', 'aria-pressed'), 'true');
     assert.strictEqual((await page.textContent('[data-proof-bg]')).trim(), 'Dark background');

@@ -24,6 +24,19 @@
   const { esc, money, toast, t, tr } = POD;
   const D = window.POD_DESIGN;
   const isText = (o) => o && (o.type === 'i-text' || o.type === 'text' || o.type === 'textbox');
+  /** The words a text preset starts with, in both languages (the sample a customer is meant to replace). */
+  let sampleTexts = null;
+  const isSampleText = (text) => {
+    if (!sampleTexts) {
+      sampleTexts = new Set();
+      const S = window.POD_STRINGS || {};
+      for (const p of D.TEXT_PRESETS || []) {
+        if (p.sample) sampleTexts.add(p.sample.trim().toLowerCase());
+        if (p.text && Array.isArray(S[p.text])) S[p.text].forEach((w) => sampleTexts.add(String(w).trim().toLowerCase()));
+      }
+    }
+    return sampleTexts.has(String(text || '').replace(/\s+/g, ' ').trim().toLowerCase());
+  };
 
   // ---------- Fabric defaults ----------
   fabric.Object.prototype.objectCaching = false;
@@ -3998,6 +4011,7 @@
       else if (i.key === 'check.hidden') out.push({ id: 'hiddenText', level: 'fail', side: sideId, params: { name: short(i.params.name) } });
       else if (i.key === 'check.inkOnColour') out.push({ id: 'inkOnColour', level: 'warn', side: sideId, params: { name: short(i.params.name), colour: short(i.params.colour) } });
       else if (i.key === 'check.fieldText') out.push({ id: 'fieldText', level: 'fail', side: sideId, params: { name: short(i.params.name) } });
+      else if (i.key === 'check.sampleText') out.push({ id: 'sampleText', level: 'warn', side: sideId, params: { name: short(i.params.name) } });
       else if (i.key === 'check.cutPieces') out.push({ id: 'cutPieces', level: 'warn', side: sideId, params: { n: Number(st.cutPieces) || 0 } });
       else if (i.key === 'check.cutPhoto') out.push({ id: 'cutPhoto', level: 'warn', side: sideId, params: { name: short(i.params.name) } });
       // Past the edge, and the embroidery warnings: on the proof too, never "nothing to fix" (QA 25 Nov).
@@ -4118,6 +4132,8 @@
     if (!st.product.merge) {
       for (const o of objs) if (isText(o) && hasShopField(o.text)) issues.push({ level: 'error', key: 'check.fieldText', obj: o, params: { name: layerName(o) } });
     }
+    // A text preset added and never changed («نصك هنا», "Your Text", "BOLD"…) would print as it is (owner's OK, 26 Nov).
+    for (const o of objs) if (isText(o) && isSampleText(o.text)) issues.push({ level: 'warn', key: 'check.sampleText', obj: o, params: { name: layerName(o) } });
     // Several garment colours in one order (name list colours or the quantities): words that disappear on one of them.
     if (!st.product.surface && !embHere() && !laser()) {
       const ids = new Set(Object.entries(qtyGrid()).filter(([, row]) => Object.values(row).some((n) => n > 0)).map(([c]) => c));
@@ -4224,12 +4240,50 @@
       <li><i class="lg lg-trim"></i>${esc(t('check.legendTrim'))}</li>
       <li><i class="lg lg-safe"></i>${esc(t('check.legendSafe'))}</li>
       ${R.b ? `<li><i class="lg lg-bleed"></i>${esc(t('check.legendBleed'))}</li>` : ''}`;
+    paintSampleNote(issues);
     $('check-list').innerHTML = issues.length
       ? issues.map((i, k) => `<li class="${i.level}" data-issue="${k}"><span>${i.level === 'error' ? '⛔' : '⚠'}</span><span>${esc(t(i.key, { ...i.params, dpi: POD.num(i.params.dpi ?? 0), pt: POD.num(i.params.pt ?? 0) }))}</span></li>`).join('')
       : elsewhere.length ? `<li class="warn"><span>⚠</span><span>${esc(t('check.otherSideLong', { sides: elsewhere.join(POD.lang === 'ar' ? '، ' : ', ') }))}</span></li>`
         : `<li class="ok"><span>✓</span><span>${esc(t('check.allGood'))}</span></li>`;
     canvas.requestRenderAll();
   }
+  /**
+   * The note on the design while a text preset still says its sample words, with a button that selects it to
+   * type over.
+   */
+  function paintSampleNote(issues) {
+    const note = $('sample-note');
+    if (!note) return;
+    // (Hidden only while the customer is typing in that text: in its box in the panel, or on the design itself.)
+    const active = canvas.getActiveObject();
+    const typing = (o) => o && (o.isEditing || (o === active && document.activeElement && document.activeElement.id === 'p-text'));
+    const hit = (issues || []).find((i) => i.key === 'check.sampleText' && i.obj && !typing(i.obj));
+    note.hidden = !hit;
+    if (!hit) { note._obj = null; return; }
+    note._obj = hit.obj;
+    const words = String(hit.obj.text || '').replace(/\s+/g, ' ').trim();
+    const shown = words.length > 30 ? words.slice(0, 29) + '…' : words;
+    const bar = document.querySelector('.stage-bar');
+    note.style.top = ((bar ? bar.offsetTop + bar.offsetHeight : 0) + 8) + 'px';
+    note.innerHTML = `<span aria-hidden="true">⚠</span><span><strong>${esc(t('sample.noteTitle', { text: shown }))}</strong>${esc(t('sample.noteText'))} <button type="button" id="sample-note-edit">${esc(t('sample.noteEdit'))}</button></span>`;
+  }
+  $('sample-note').addEventListener('click', (e) => {
+    if (!e.target.closest('#sample-note-edit')) return;
+    const o = $('sample-note')._obj;
+    if (!o || !canvas.contains(o)) return;
+    canvas.setActiveObject(o);
+    canvas.requestRenderAll();
+    $('sample-note').hidden = true;
+    // The text box in the side panel, its words selected to type over (phones and desktop alike).
+    setTimeout(() => { const box = $('p-text'); if (box) { box.focus(); box.select(); } }, 60);
+  });
+  document.addEventListener('focusin', (e) => { if (e.target.id === 'p-text') paintSampleNote(st.issues); });
+  document.addEventListener('focusout', (e) => { if (e.target.id === 'p-text') setTimeout(() => paintSampleNote(st.issues), 0); });
+  canvas.on('text:editing:entered', () => paintSampleNote(st.issues));
+  canvas.on('text:editing:exited', () => paintSampleNote(st.issues));
+  canvas.on('selection:cleared', () => paintSampleNote(st.issues));
+  canvas.on('selection:updated', () => paintSampleNote(st.issues));
+  canvas.on('selection:created', () => paintSampleNote(st.issues));
   $('check-list').addEventListener('click', (e) => {
     const li = e.target.closest('[data-issue]');
     const issue = li && st.issues[Number(li.dataset.issue)];

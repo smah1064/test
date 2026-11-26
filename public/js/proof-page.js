@@ -91,7 +91,7 @@
     const head = `
       <div class="page-head">
         <h1>${esc(t('proofPage.title'))}</h1>
-        <p><strong>${esc(t('proofPage.for', { n: d.order.number, pos: POD.num(d.item.position || 1), product: tr(d.item.productName || (d.proof.product && d.proof.product.name)) }))}</strong></p>
+        <p><strong>${esc(t('proofPage.for', { n: POD.orderNo(d.order.number), pos: POD.num(d.item.position || 1), product: tr(d.item.productName || (d.proof.product && d.proof.product.name)) }))}</strong></p>
         <p class="muted">${esc(t('proofPage.intro'))}</p>
       </div>`;
     if (st.view === 'done') {

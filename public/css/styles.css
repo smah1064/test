@@ -466,6 +466,12 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 .check-list li.ok { background: #e7f6ee; color: var(--ok); cursor: default; }
 .check-list li.warn { background: #fff8eb; color: #7a4a00; }
 .check-list li.error { background: #fdecec; color: #8a1c1c; }
+.sample-note { position: absolute; inset-inline: 12px; z-index: 20; display: flex; gap: 10px; align-items: flex-start; background: #fff8eb; color: #7a4a00; border: 1px solid #f3c77a; border-radius: 12px; padding: 10px 12px; font-size: 13px; line-height: 1.5; box-shadow: 0 6px 18px rgba(0, 0, 0, .08); }
+.sample-note > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.sample-note > span:first-child { flex: none; }
+.sample-note strong { display: block; font-size: 14px; }
+.sample-note button { border: 0; background: none; color: #c2410c; font: inherit; font-weight: 700; text-decoration: underline; padding: 6px 2px; margin: -6px 0; cursor: pointer; }
+.sample-note button:focus-visible { outline: 2px solid #1d1a18; outline-offset: 2px; }
 
 /* ---------- Live preview ---------- */
 .pv-modal { position: fixed; inset: 0; background: rgba(15, 17, 22, .55); z-index: 60; display: grid; place-items: center; padding: 20px; }
@@ -1034,8 +1040,6 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 .dlv-express-pill { background: #fff3bf; color: #7a5800; font-size: 11px; vertical-align: middle; text-transform: none; }
 .sample-pill { background: #e7f5ff; color: #0b4f71; font-size: 11px; vertical-align: middle; text-transform: none; }
 .wa-bad-pill { background: #ffe3e3; color: #a51111; font-size: 11px; vertical-align: middle; text-transform: none; }
-@media (max-width: 340px) { .site-header nav a[href="/designs"] { display: none; } }
-@media (max-width: 300px) { .site-header nav a[href="/photos"] { display: none; } }
 /* Menu with the kids' books link ("Stories"): one line at every width, Products and Cart always shown. */
 @media (max-width: 960px) and (min-width: 901px) { .site-header nav { gap: 16px; } }
 @media (max-width: 760px) { .site-header .acct-link span { display: none; } }
@@ -1046,11 +1050,38 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 @media (max-width: 400px) and (min-width: 381px) { .site-header nav { font-size: 13px; } }
 @media (max-width: 380px) { .site-header nav { gap: 6px; } }
 @media (max-width: 310px) { .site-header nav { gap: 4px; } }
-/* Phones: the Stories link gives way first (the kids' books stay on the home page), so Photos and
-   Designs keep their place in the menu as before; then the older rules hide Designs, then Photos. */
-@media (max-width: 420px) { .site-header nav .nav-books { display: none; } }
-@media (max-width: 470px) { html[lang="en"] .site-header nav .nav-books { display: none; } }
-@media (max-width: 346px) { html[lang="en"] .site-header nav a[href="/designs"] { display: none; } }
+/* Phones (600px and less): the top row keeps the full logo in the page's language, the account icon, Cart and
+   the language button; the menu links (Products, Ready designs, Photo prints, Kids' books, T-shirts, Mugs) move
+   to a row of chips under it that is swiped sideways (no scrollbar, the page itself never scrolls sideways).
+   The chip of the page you're on is dark (common.js marks it). Computers and tablets keep the one-row menu. */
+.site-header .nav-chips { display: none; }
+@media (max-width: 600px) {
+  /* (links to a part of a page, like /#products, land below the taller sticky header) */
+  html { scroll-padding-top: 116px; }
+  .site-header .inner { height: 56px; gap: 12px; }
+  .site-header .inner > nav { gap: 14px; font-size: 15px; }
+  .site-header .inner > nav > a:not(.cart-link):not(.acct-link) { display: none; }
+  .site-header .lang-toggle { padding: 5px 10px; font-size: 13px; }
+  .site-header .badge { min-width: 20px; height: 20px; font-size: 12px; padding: 0 6px; }
+  .site-header .nav-chips {
+    display: flex; gap: 8px; margin: 0; padding: 2px 16px 10px;
+    overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: none;
+    -webkit-overflow-scrolling: touch; scroll-padding-inline: 16px;
+  }
+  .site-header .nav-chips::-webkit-scrollbar { display: none; }
+  .site-header .nav-chips a {
+    flex: none; display: inline-flex; align-items: center; min-height: 40px; padding: 0 16px;
+    border-radius: 999px; background: #f1f3f5; color: var(--ink); font-size: 14.5px; font-weight: 600;
+    text-decoration: none; white-space: nowrap;
+  }
+  .site-header .nav-chips a:hover { color: var(--ink); background: #e7eaee; }
+  .site-header .nav-chips a.active { background: var(--ink); color: #fff; }
+}
+@media (max-width: 370px) {
+  .site-header .inner { gap: 8px; }
+  .site-header .inner > nav { gap: 10px; font-size: 14px; }
+  .site-header .lang-toggle { padding: 4px 8px; font-size: 12.5px; }
+}
 
 /* CAPTCHA (Cloudflare Turnstile): takes no room unless Cloudflare asks the customer to tick a box. */
 .captcha-box:empty { display: none; }
@@ -1135,10 +1166,8 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 .brand-logo { display: block; height: 40px; width: auto; }
 html[lang="ar"] .brand-en, html:not([lang="ar"]) .brand-ar { display: none; }
 .brand-mark-logo { display: none; }
-/* English pages on phones: the compact ع mark from the brand kit (the wide 'ebda3' word pushed the header off screen). */
-@media (max-width: 480px) { html:not([lang="ar"]) .brand-en { display: none; } html:not([lang="ar"]) .brand-mark-logo { display: block; } }
+/* Phones keep the full logo in the page's language (the menu links have their own row there, see .nav-chips). */
 @media (max-width: 640px) { .brand-logo { height: 34px; } }
-@media (max-width: 400px) { .brand-logo { height: 26px; } }
 
 /* Preview zoom: magnified where the pointer is, or on the design with the button. */
 .pv-canvas.pv-zoomable { cursor: zoom-in; transition: transform .12s ease-out; will-change: transform; }

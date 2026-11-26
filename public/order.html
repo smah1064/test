@@ -31,6 +31,17 @@
     /* Just ordered: the delivery day and the way back to this page come first. */
     .placed { margin-bottom: 16px; padding: 16px 18px; border-color: #9fd6b6; background: #f6fbf8; }
     .placed h2 { font-size: 19px; margin: 0 0 6px; }
+    /* "Save your orders" (a guest's order kept on a new account). */
+    .acct-offer { margin-bottom: 16px; padding: 16px 18px; }
+    .acct-offer h2 { font-size: 17px; margin: 0 0 6px; }
+    .acct-offer p { margin: 0 0 10px; line-height: 1.6; }
+    .acct-offer form { display: grid; gap: 6px; }
+    .acct-offer label { font-size: 14px; font-weight: 700; }
+    .acct-offer input { width: 100%; box-sizing: border-box; }
+    .acct-offer input[readonly] { background: #f6f7f9; }
+    .acct-offer-err { color: #b42318; font-size: 14px; min-height: 0; margin: 0; }
+    .acct-offer-err:empty { display: none; }
+    .acct-offer-ok { margin: 0; font-weight: 700; color: #15803d; }
     .placed p { margin: 6px 0 0; line-height: 1.55; }
     .placed-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
     .placed-actions .btn { flex: 1 1 220px; }
@@ -51,6 +62,14 @@
         <button class="btn btn-sm lang-toggle" data-lang-toggle data-i18n="lang.other"></button>
       </nav>
     </div>
+    <nav class="nav-chips" data-i18n-aria="nav.sections">
+      <a href="/#products" data-chip="products" data-i18n="nav.products"></a>
+      <a href="/designs" data-chip="designs" data-i18n="nav.designs"></a>
+      <a href="/photos" data-chip="photos" data-i18n="nav.photos"></a>
+      <a class="nav-books" href="/?cat=kids#products" data-chip="books" data-i18n="nav.books"></a>
+      <a href="/product?id=tshirt" data-chip="tshirt" data-i18n="nav.tshirts"></a>
+      <a href="/product?id=mug" data-chip="mug" data-i18n="nav.mugs"></a>
+    </nav>
   </header>
 
   <main class="container" style="max-width: 820px;">
@@ -111,7 +130,7 @@
           else if (A.pieces(it) > 1) parts.push(A.piecesText(A.pieces(it)));
           return `${POD.num(i + 1)}. ${parts.join(SEP())}`;
         }).join('\n');
-        const text = t('order.waMessage', { n: o.number, items, total: money(o.total), name: o.customer.name });
+        const text = t('order.waMessage', { n: POD.orderNo(o.number), items, total: money(o.total), name: o.customer.name });
         return `https://wa.me/${shopWa()}?text=${encodeURIComponent(text)}`;
       }
       /** When the order was placed, for the line under its number: "25 November 2026 at 10:18" / "٢٥ نوفمبر ٢٠٢٦ في ١٠:١٨ ص"
@@ -290,7 +309,8 @@
               </div>
               <p class="muted small">${esc(t('order.emailWhy'))}</p>
             </section>` : ''}
-            <h1>${esc(t('order.title', { n: o.number }))}</h1>
+            ${!team && (o.accountOffer || offerDone) ? '<div id="acct-offer-slot"></div>' : ''}
+            <h1>${esc(t('order.title', { n: POD.orderNo(o.number) }))}</h1>
             <p class="muted">${esc(listed(POD.plural('order.meta', o.items.length, { status: t('order.' + shownStatus(o)), date: placedOn(o.createdAt) })))}</p>
             ${isNew ? '' : arrives}
             ${team ? (money$ ? `<div class="order-actions"><a class="btn" href="/invoice?id=${encodeURIComponent(o.id)}&team=${encodeURIComponent(team)}">${esc(t('track.invoice'))}</a></div>` : '') : `
@@ -340,7 +360,72 @@
             <p class="muted small" style="margin-bottom:0;overflow-wrap:anywhere">${deliverTo}</p>
           </div>
           ${shopWa() && !team ? `<div class="order-wa"><p>${esc(t('order.waText'))}</p><a class="btn btn-whatsapp" id="order-wa" target="_blank" rel="noopener" href="${esc(whatsappLink(o))}">${esc(t('order.waButton'))}</a></div>` : ''}`;
+        placeOffer(o);
       }
+
+      // ---------- "Save your orders": a guest's order kept on a new account (owner's OK, UX item 8, 26 Nov) ----------
+      // The mobile and name come from the order; only a password is typed. The card is one element kept across the
+      // 30-second refresh (put back in its place each time), so what is being typed stays, and so does the focus.
+      let offerEl = null;
+      let offerDone = false;
+      function offerHtml(o) {
+        if (offerDone) {
+          return `<p class="acct-offer-ok" role="status">${esc(t('offer.done'))} <a href="/account">${esc(t('offer.toAccount'))}</a></p>`;
+        }
+        return `<h2 id="acct-offer-h">${esc(t('offer.title'))}</h2>
+          <p>${esc(t('offer.text'))}</p>
+          <form id="acct-offer-form" novalidate>
+            <label for="offer-phone">${esc(t('checkout.phone'))}</label>
+            <input id="offer-phone" type="tel" dir="ltr" value="${esc(POD.lang === 'ar' ? POD.arabicDigits(o.accountOffer.phone) : o.accountOffer.phone)}" readonly>
+            <label for="offer-pass">${esc(t('offer.password'))}</label>
+            <input id="offer-pass" type="password" autocomplete="new-password" minlength="8" required aria-describedby="offer-err">
+            <p class="acct-offer-err" id="offer-err" role="alert"></p>
+            <button class="btn btn-primary btn-block" type="submit">${esc(t('offer.save'))}</button>
+          </form>`;
+      }
+      function placeOffer(o) {
+        const slot = document.getElementById('acct-offer-slot');
+        if (!slot) return;
+        const lang = POD.lang;
+        if (!offerEl || offerEl.dataset.lang !== lang || (offerDone && !offerEl.querySelector('.acct-offer-ok'))) {
+          const typed = offerEl && offerEl.querySelector('#offer-pass') ? offerEl.querySelector('#offer-pass').value : '';
+          offerEl = document.createElement('section');
+          offerEl.className = 'card acct-offer';
+          offerEl.setAttribute('aria-labelledby', 'acct-offer-h');
+          offerEl.dataset.lang = lang;
+          offerEl.innerHTML = offerHtml(o);
+          const pass = offerEl.querySelector('#offer-pass');
+          if (pass) pass.value = typed;
+        }
+        const focused = offerEl.contains(document.activeElement) ? document.activeElement : null;
+        slot.replaceWith(offerEl);
+        if (focused && document.activeElement !== focused) focused.focus();
+      }
+      document.addEventListener('submit', async (e) => {
+        if (e.target.id !== 'acct-offer-form') return;
+        e.preventDefault();
+        const form = e.target;
+        const pass = form.querySelector('#offer-pass');
+        const err = form.querySelector('#offer-err');
+        const btn = form.querySelector('button[type="submit"]');
+        err.textContent = '';
+        if (pass.value.length < 8) { err.textContent = t('acct.passwordShort'); pass.focus(); return; }
+        btn.disabled = true;
+        try {
+          await POD.api('/api/orders/' + encodeURIComponent(orderId) + '/account', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...POD.orderHeaders(key) },
+            body: JSON.stringify({ password: pass.value }),
+          });
+          offerDone = true;
+          render();
+          const ok = document.querySelector('.acct-offer-ok');
+          if (ok) { ok.tabIndex = -1; ok.focus(); }
+        } catch (ex) {
+          err.textContent = ex.message;
+          btn.disabled = false;
+        }
+      });
 
       /** Shipping, then the express fee on its own line. */
       function shippingLines(o) {
@@ -370,7 +455,7 @@
         }
       }
       /** WhatsApp with the order link typed in: the customer picks their own chat ("Message yourself"). */
-      const selfWhatsapp = (o) => `https://wa.me/?text=${encodeURIComponent(t('order.waSelf', { n: o.number, link: pageLink(o) }))}`;
+      const selfWhatsapp = (o) => `https://wa.me/?text=${encodeURIComponent(t('order.waSelf', { n: POD.orderNo(o.number), link: pageLink(o) }))}`;
       async function copyLink() {
         try {
           await navigator.clipboard.writeText(pageLink(order));

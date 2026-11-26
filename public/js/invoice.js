@@ -183,7 +183,7 @@
             <dl class="inv-meta">
               <dt>${esc(t('invoice.number'))}</dt><dd>${ltr(inv)}</dd>
               <dt>${esc(t('invoice.issued'))}</dt><dd>${esc(day((o.invoice && o.invoice.issuedAt) || o.createdAt))}</dd>
-              <dt>${esc(t('invoice.order'))}</dt><dd>${ltr(o.number)}</dd>
+              <dt>${esc(t('invoice.order'))}</dt><dd>${ltr(POD.orderNo(o.number))}</dd>
               <dt>${esc(t('invoice.orderDate'))}</dt><dd>${esc(day(o.createdAt))}</dd>
             </dl>
           </div>
