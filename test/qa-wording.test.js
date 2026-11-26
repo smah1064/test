@@ -81,7 +81,7 @@ test('customer messages are in Egyptian Arabic, not formal Arabic', () => {
   const want = {
     'draft.startNewConfirm': 'تبدأ تصميم جديد؟ تصميمك المحفوظ للمنتج ده هيتمسح.',
     'draft.restored': 'رجّعنالك تصميمك المحفوظ.',
-    'draft.saveTitle': 'احفظ التصميم وارجع للمنتجات. تقدر تكمّله في أي وقت.',
+    'draft.saveTitle': 'احفظ التصميم في تصميماتي المحفوظة. هتفضل هنا وتقدر تكمّله في أي وقت.', // (Save stays in the editor: redesign stage 2)
     'draft.saveFailed': 'معرفناش نحفظ التصميم على الجهاز ده.',
     'msg.badImage': 'معرفناش نقرا الملف ده كصورة',
     'msg.openFailed': 'معرفناش نفتح التصميم: {msg}',

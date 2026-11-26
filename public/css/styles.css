@@ -1600,6 +1600,8 @@ html[dir="ltr"] .hm-tile-link span { display: inline-block; transform: scaleX(-1
   .ed-menu #ed-save { border-top: 1px solid var(--line); border-radius: 0 0 8px 8px; margin-top: 4px; padding-top: 10px; }
   .ed-menu #ed-save > span { display: flex; flex-direction: column; }
   .ed-menu small { font-size: 12px; font-weight: 400; color: var(--ink-3); }
+  /* The tool row a little lower, so the top bar takes no room from the product (still 44 px and more per tool). */
+  .tool { padding: 4px 1px; gap: 2px; }
   /* The product button does the tool row's Product job. */
   .tools .tool[data-sheet="product"] { display: none !important; }
   /* Buy bar: the price, what is being bought, one orange button. Save is in the ⋯ menu, Preview above the product. */
