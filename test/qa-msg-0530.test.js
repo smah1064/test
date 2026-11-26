@@ -114,7 +114,7 @@ async function invoiceHtml(ord, lang) {
     lang,
     t: (key, params) => (strings[key] ? strings[key][lang === 'ar' ? 1 : 0].replace(/\{(\w+)\}/g, (_, k) => (params && params[k] != null ? params[k] : '')) : key),
     tr: (v) => (v && typeof v === 'object' ? v[lang] || v.en || '' : v == null ? '' : String(v)),
-    esc, money: (x) => `EGP ${x}`, num: (x) => String(x), api: async () => ord,
+    esc, money: (x) => `EGP ${x}`, num: (x) => String(x), orderNo: (x) => String(x).replace(/^POD-/i, ""), api: async () => ord,
     orderKey: (id, k) => k || '', orderHeaders: (k) => (k ? { 'x-order-key': k } : {}), orderPath: (p, id, k) => `/${p}?id=${encodeURIComponent(id)}${k ? `&k=${k}` : ''}`,
   };
   const el = () => ({ innerHTML: '', hidden: false, href: '', addEventListener() {} });
