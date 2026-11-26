@@ -130,8 +130,9 @@
       const v = state.answers[q.id] || '';
       const label = `<label for="q-${q.id}">${esc(tr(q.label))}</label>`;
       if (q.type === 'choice') {
-        return `<div class="field"><label>${esc(tr(q.label))}</label><div class="chips ${q.options[0].picture ? 'bk-pics' : ''}" data-choice="${q.id}">
-          ${q.options.map((o) => `<button type="button" class="chip ${o.id === v ? 'active' : ''}" data-q="${q.id}" data-v="${esc(o.id)}">${o.picture ? `<img src="${esc(o.picture)}" alt="">` : ''}<span>${esc(tr(o.label))}</span></button>`).join('')}
+        // (A group named by its question, each choice saying whether it is the one picked, for screen readers. Tester 1, 26 Nov.)
+        return `<div class="field"><label id="q-${q.id}-label">${esc(tr(q.label))}</label><div class="chips ${q.options[0].picture ? 'bk-pics' : ''}" data-choice="${q.id}" role="group" aria-labelledby="q-${q.id}-label">
+          ${q.options.map((o) => `<button type="button" class="chip ${o.id === v ? 'active' : ''}" data-q="${q.id}" data-v="${esc(o.id)}" aria-pressed="${o.id === v}">${o.picture ? `<img src="${esc(o.picture)}" alt="">` : ''}<span>${esc(tr(o.label))}</span></button>`).join('')}
         </div></div>`;
       }
       if (q.type === 'textarea') {
@@ -183,7 +184,7 @@
     const b = e.target.closest('button[data-q]');
     if (!b) return;
     state.answers[b.dataset.q] = b.dataset.v;
-    b.parentElement.querySelectorAll('button').forEach((x) => x.classList.toggle('active', x === b));
+    b.parentElement.querySelectorAll('button').forEach((x) => { x.classList.toggle('active', x === b); x.setAttribute('aria-pressed', String(x === b)); });
     changed();
   });
   $('bk-sizes').addEventListener('click', (e) => {

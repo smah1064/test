@@ -735,12 +735,22 @@
       const qtyMin = (c) => (c.unit === 'piece' ? 1 : c.step);
       /** Digits as typed (Arabic ones too) to a number of the counter's steps, kept between its least and most. */
       function qtyClamp(c, v) {
-        // (Arabic and Persian digits; a decimal mark is one: "2.5" is 2, not 25. QA 26 Nov.)
-        const n = Math.floor(Number(String(v).replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d))
-          .replace(/[٫,]/g, '.').replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1')));
-        if (!Number.isFinite(n) || n < 1) return qtyMin(c);
+        const n = qtyNumber(v);
+        if (n == null) return qtyMin(c);
         return Math.min(Math.floor(c.max / c.step) * c.step, Math.max(qtyMin(c), Math.ceil(n / c.step) * c.step));
       }
+      /** The number typed (Arabic and Persian digits; a decimal mark is one: "2.5" is 2, not 25. QA 26 Nov), or null for none. */
+      function qtyNumber(v) {
+        const text = String(v).replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d))
+          .replace(/[٫,]/g, '.').replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1');
+        const n = Math.floor(Number(text));
+        return text && Number.isFinite(n) && n >= 1 ? n : null;
+      }
+      /** A typed number, or the one before the customer started typing when the box was emptied, or says 0 or "abc"
+       *  (10,000 cards became the least, 100: tester 1, 26 Nov). */
+      const qtyTyped = (id, v) => (qtyNumber(v) == null ? qtyBefore.get(id) : qtyClamp(counts.get(id), v));
+      // designId -> the number in the box when the customer started typing in it.
+      const qtyBefore = new Map();
       function qtyBox(item, i) {
         const c = counts.get(item.designId);
         if (!c || blocked.has(item.designId)) return '';
@@ -867,14 +877,23 @@
         queueQty(id, take ? 0 : 450);
       });
       // Typed: sent when the customer leaves the box or presses Enter.
+      document.getElementById('items').addEventListener('focusin', (e) => {
+        const id = e.target.dataset && e.target.dataset.qin;
+        if (id && counts.has(id)) qtyBefore.set(id, qtyDraft.has(id) ? qtyDraft.get(id) : counts.get(id).n);
+      });
       document.getElementById('items').addEventListener('input', (e) => {
         const id = e.target.dataset && e.target.dataset.qin;
-        if (id && counts.has(id)) qtyDraft.set(id, qtyClamp(counts.get(id), e.target.value));
+        if (!id || !counts.has(id)) return;
+        if (!qtyBefore.has(id)) qtyBefore.set(id, qtyDraft.has(id) ? qtyDraft.get(id) : counts.get(id).n);
+        const n = qtyTyped(id, e.target.value);
+        if (n === counts.get(id).n) qtyDraft.delete(id); else qtyDraft.set(id, n);
       });
       document.getElementById('items').addEventListener('change', (e) => {
         const id = e.target.dataset && e.target.dataset.qin;
         if (!id || !counts.has(id)) return;
-        const n = qtyClamp(counts.get(id), e.target.value);
+        const typed = qtyTyped(id, e.target.value);
+        const n = typed == null ? counts.get(id).n : typed;
+        qtyBefore.delete(id);
         qtyDraft.set(id, n);
         e.target.value = POD.num(n);
         paintQty(id);
@@ -1610,8 +1629,10 @@
           const e = quoteFailed;
           POD.toast(e.status && e.status < 500 && e.message ? e.message : t('msg.network'), 'error');
         }
-        if (code && quote && quote.couponError) {
-          couponNote = { code, msg: quote.couponError, lang: quote.lang, beaten: Boolean(quote.couponBeaten) };
+        // (A code that only saves less than the automatic offer stays typed in: if that offer turns out not to be
+        // for this phone, e.g. once per customer, the customer's own code is what the order gets. Tester 1, 26 Nov.)
+        if (code && quote && quote.couponError && !quote.couponBeaten) {
+          couponNote = { code, msg: quote.couponError, lang: quote.lang };
           setCoupon('');
         }
         render();
@@ -1628,6 +1649,17 @@
         msg.textContent = '';
         msg.classList.remove('bad');
         markCoupon(false);
+      });
+      // The phone typed in: the shop's offers can depend on it (an offer once per customer), so the prices are asked
+      // again for that phone when a coupon or an offer is in play (tester 1, 26 Nov).
+      let quotedPhone = '';
+      document.getElementById('phone').addEventListener('change', async (e) => {
+        const phone = e.target.value.trim();
+        if (!egyptMobile(phone) || phone === quotedPhone) return;
+        if (!couponCode && !(quote && quote.coupon)) return;
+        quotedPhone = phone;
+        await refreshPrices();
+        render();
       });
       document.getElementById('coupon-remove').addEventListener('click', async () => {
         couponNote = null;

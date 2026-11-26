@@ -5722,7 +5722,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     ...CATALOG_FIELD_NAMES,
     code: enAr('code', 'الكود'), type: enAr('type', 'النوع'), value: enAr('value', 'القيمة'), minOrder: enAr('minimum order', 'أقل طلب'),
     maxDiscount: enAr('maximum discount', 'أقصى خصم'), maxUses: enAr('uses in all', 'عدد مرات الاستخدام'), perCustomer: enAr('uses per customer', 'مرات لكل عميل'),
-    startsOn: enAr('starts on', 'يبدأ يوم'), endsOn: enAr('ends on', 'ينتهي يوم'), active: enAr('on', 'شغال'), products: enAr('products', 'المنتجات'), categories: enAr('categories', 'الأقسام'),
+    startsOn: enAr('starts on', 'يبدأ يوم'), endsOn: enAr('ends on', 'ينتهي يوم'), active: enAr('on', 'شغال'), auto: enAr('applies automatically', 'بيتطبق لوحده'), products: enAr('products', 'المنتجات'), categories: enAr('categories', 'الأقسام'),
     note: enAr('note', 'ملاحظة'), amount: enAr('amount', 'المبلغ'), date: enAr('date', 'التاريخ'),
     costs: enAr('costs', 'التكاليف'), blank: enAr('blank item', 'القطعة السادة'), printFirst: enAr('printing (first side)', 'الطباعة (أول وش)'), printExtra: enAr('printing (each extra side)', 'الطباعة (كل وش زيادة)'), other: enAr('other', 'أخرى'),
     actualCost: enAr('actual cost', 'التكلفة الفعلية'), actualShipping: enAr('actual shipping cost', 'تكلفة الشحن الفعلية'), shippingCost: enAr('shipping cost', 'تكلفة الشحن'),
@@ -6300,6 +6300,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   // A change that was being applied when the app stopped (5 minutes on) can be approved again.
   // (A change being applied waits at most 2 minutes, the run's own time limit.)
   const openForDecision = (a) => a.status === 'pending' || a.status === 'failed' || (a.status === 'applying' && Date.now() - Date.parse(a.applyingAt || 0) > 2 * 60e3);
+  /** Who decided a request (or is applying it right now: two copies of the dashboard approving at the same moment
+   *  named "—". Tester 1, 26 Nov). */
+  const deciderName = (x, req) => {
+    const by = x.decidedBy || (x.status === 'applying' ? x.applyingBy : null);
+    if (by && by.id === 'owner') return langOf(req) === 'ar' ? 'صاحب الموقع (دخول الطوارئ)' : 'the owner (emergency login)';
+    return (by && by.name) || '—';
+  };
   app.get('/api/admin/approvals', adminGate, (req, res) => {
     const w = req.adminWho;
     const status = typeof req.query.status === 'string' ? req.query.status : 'pending';
@@ -6324,9 +6331,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       res.locals.summary = x.summary;
       // (Withdrawn by the person who asked, or cancelled when they were switched off: said so, not "decided by them".)
       if (x.status === 'cancelled') throw new HttpError(409, 'approvalWithdrawn');
-      if (!openForDecision(x)) throw new HttpError(409, 'approvalDecidedBy', { name: x.decidedBy && x.decidedBy.id === 'owner' ? (langOf(req) === 'ar' ? 'صاحب الموقع (دخول الطوارئ)' : 'the owner (emergency login)') : (x.decidedBy && x.decidedBy.name) || '—' });
+      if (!openForDecision(x)) throw new HttpError(409, 'approvalDecidedBy', { name: deciderName(x, req) });
       x.status = 'applying';
       x.applyingAt = new Date().toISOString();
+      x.applyingBy = { id: w.id, name: w.shown || w.name };
       return { ...x };
     });
     res.locals.approvalId = a.id;
@@ -6341,6 +6349,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         x.status = 'failed';
         x.error = { en: format('approvalPersonGone', {}, 'en'), ar: format('approvalPersonGone', {}, 'ar') };
         delete x.applyingAt;
+        delete x.applyingBy;
         return x;
       });
       res.locals.outcome = 'failed';
@@ -6393,6 +6402,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       x.decidedBy = { id: w.id, name: w.shown || w.name };
       x.decidedAt = new Date().toISOString();
       delete x.applyingAt;
+      delete x.applyingBy;
       if (note) x.note = note;
       if (ok) delete x.error;
       else x.error = result && result.errorText ? { en: String(result.errorText.en).slice(0, 300), ar: String(result.errorText.ar).slice(0, 300) } : String((result && result.error) || `HTTP ${out.status}`).slice(0, 300);
@@ -6419,11 +6429,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (status === 'cancelled' && !(x.by && x.by.id === w.id) && !w.perms.has('approvals')) throw new HttpError(403, 'noPermission');
       // (Withdrawn by the person who asked, or cancelled when they were switched off: said so, not "decided by them".)
       if (x.status === 'cancelled') throw new HttpError(409, 'approvalWithdrawn');
-      if (!openForDecision(x)) throw new HttpError(409, 'approvalDecidedBy', { name: x.decidedBy && x.decidedBy.id === 'owner' ? (langOf(req) === 'ar' ? 'صاحب الموقع (دخول الطوارئ)' : 'the owner (emergency login)') : (x.decidedBy && x.decidedBy.name) || '—' });
+      if (!openForDecision(x)) throw new HttpError(409, 'approvalDecidedBy', { name: deciderName(x, req) });
       x.status = status;
       x.decidedBy = { id: w.id, name: w.shown || w.name };
       x.decidedAt = new Date().toISOString();
       delete x.applyingAt;
+      delete x.applyingBy;
       if (note) x.note = note;
       return x;
     });

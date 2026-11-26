@@ -600,7 +600,11 @@
     // printed too. Booklets go imposed.
     const stitched = item.sides.filter((sd) => (sd.process || item.process) === 'embroidery').length;
     const printedToo = item.sides.length > stitched;
-    const main = item.paged ? ['booklet-imposed'] : [...(stitched ? ['dst', 'stitches'] : []), ...(!stitched || printedToo ? [printPdfKey(item)] : [])];
+    // (Sublimation and DTF go as the file made for them, the mirrored print or the film: the plain PDF would print
+    // the wrong way round on the transfer. Tester 1, 26 Nov.)
+    const procs = [...new Set([item.process, ...item.sides.map((sd) => sd.process)].filter(Boolean))];
+    const transfer = !item.kind && !item.merge && procs.length === 1 && ['sublimation', 'dtf'].includes(procs[0]) ? RECOMMENDED[procs[0]] : null;
+    const main = item.paged ? ['booklet-imposed'] : [...(stitched ? ['dst', 'stitches'] : []), ...(!stitched || printedToo ? [transfer || printPdfKey(item)] : [])];
     return { houseId, channel: house ? house.prefer : 'email', formats: new Set([...main, 'preview-pdf'].filter((f) => offered.includes(f))), note: '', msg: '', busy: false };
   }
   const when = (iso) => new Date(iso).toLocaleString(POD.lang === 'ar' ? 'ar-EG' : 'en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });

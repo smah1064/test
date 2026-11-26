@@ -26,18 +26,34 @@
   const isText = (o) => o && (o.type === 'i-text' || o.type === 'text' || o.type === 'textbox');
   /** The words a text preset starts with, in both languages (the sample a customer is meant to replace). */
   let sampleTexts = null;
+  let sampleDetails = null;
+  const sampleNorm = (x) => String(x || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  /** A phone number as its digits (the same sample written "0100 123 4567"), or '' for other text. */
+  const sampleDigits = (x) => (/^[\d\s\-+().]{7,}$/.test(x) ? x.replace(/\D/g, '') : '');
+  // The ready designs' own sample words (a company's name, its email…), as their texts are written.
+  const SAMPLE_WORDS = ['اسم الشركة', 'company name', 'info@company.com', 'ahmed@company.com', '0100 123 4567'];
   const isSampleText = (text) => {
     if (!sampleTexts) {
       sampleTexts = new Set();
       const S = window.POD_STRINGS || {};
       // (And the sample details shown for a template's blanks: Sara Ahmed, 01001234567…)
-      for (const x of D.FIELD_SAMPLE_TEXTS || []) sampleTexts.add(String(x).trim().toLowerCase());
+      for (const x of D.FIELD_SAMPLE_TEXTS || []) sampleTexts.add(sampleNorm(x));
+      for (const x of SAMPLE_WORDS) sampleTexts.add(sampleNorm(x));
       for (const p of D.TEXT_PRESETS || []) {
-        if (p.sample) sampleTexts.add(p.sample.trim().toLowerCase());
-        if (p.text && Array.isArray(S[p.text])) S[p.text].forEach((w) => sampleTexts.add(String(w).trim().toLowerCase()));
+        if (p.sample) sampleTexts.add(sampleNorm(p.sample));
+        if (p.text && Array.isArray(S[p.text])) S[p.text].forEach((w) => sampleTexts.add(sampleNorm(w)));
       }
+      for (const x of [...sampleTexts]) if (sampleDigits(x)) sampleTexts.add(sampleDigits(x));
+      // (Only the sample details count inside a line: a font's sample word, as "Elegant", may well be the customer's.)
+      sampleDetails = new Set([...(D.FIELD_SAMPLE_TEXTS || []), ...SAMPLE_WORDS].map(sampleNorm));
+      for (const x of [...sampleDetails]) if (sampleDigits(x)) sampleDetails.add(sampleDigits(x));
     }
-    return sampleTexts.has(String(text || '').replace(/\s+/g, ' ').trim().toLowerCase());
+    const isIn = (set, x) => set.has(x) || Boolean(sampleDigits(x) && set.has(sampleDigits(x)));
+    if (isIn(sampleTexts, sampleNorm(text))) return true;
+    // (A sample detail sharing a line with others, as "01001234567 | sara@example.com" or "Cairo · 0100 123 4567":
+    // tester 1, 26 Nov.)
+    const parts = String(text || '').split(/[|•·،,\n]|\s[-–—]\s/).map(sampleNorm).filter(Boolean);
+    return parts.length > 1 && parts.some((x) => isIn(sampleDetails, x));
   };
 
   // ---------- Fabric defaults ----------
@@ -5678,6 +5694,7 @@
       ? `<span class="qty-out" title="${esc(tEd('ed.soldOut'))}">—</span>`
       : `<input type="text" inputmode="numeric" maxlength="4" autocomplete="off" class="qty-in${POD.comboFew(p, c.id, z.id) ? ' is-few' : ''}" data-qc="${c.id}" data-qz="${z.id}" value="${unpickedOne ? '' : (g[c.id] && g[c.id][z.id]) || ''}" placeholder="0" aria-label="${esc(`${tr(c.name)} ${tr(z.label)}`)}"${POD.comboFew(p, c.id, z.id) ? ` title="${esc(t('fewLeftCombo', { colour: tr(c.name), size: tr(z.label), n: POD.num(POD.comboFew(p, c.id, z.id)) }))}"` : ''}>`);
     const simple = !mix().sizes && !mix().colors;
+    // (Its line says how many: "type how many under it" pointed at boxes the counter doesn't have. Tester 1, 26 Nov.)
     // One colour in one size (the usual single piece): a − / + counter, with the size-and-colour table one tap away
     // (the table of zeros under the sizes read as a second size question: owner's go 26 Nov, editor redesign stage 1;
     // on computers too since the owner's go of 26 Nov, UX item 7). A bigger order and packs keep the table.
@@ -5693,7 +5710,7 @@
             <button type="button" class="btn btn-sm" data-qstep="1" aria-label="${esc(t('props.more'))}" ${n >= 1000 ? 'disabled' : ''}>${ICON.plus}</button>
           </div>
         </div>
-        ${MOBILE.matches ? '' : `<p class="small qty-sum">${esc(qtySumText())}</p>`}
+        ${MOBILE.matches ? '' : `<p class="small qty-sum">${esc(qtyTotalText(n))}</p>`}
         <button type="button" class="qty-more" data-qgrid="open">${ICON.plus}<span>${esc(t(!mix().sizes ? 'qty.moreColours' : mix().colors ? 'qty.moreSizesColours' : 'qty.moreSizes'))}</span></button>`;
       return;
     }

@@ -32,7 +32,12 @@ const normCode = (c) => String(typeof c === 'string' || typeof c === 'number' ? 
   .replace(/[\uff01-\uff5e]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0))
   .replace(/[\u061c\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, '')
   .trim().toUpperCase().replace(/\s+/g, '');
-const isDay = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && new Date(`${d}T00:00:00Z`).toISOString().slice(0, 10) === d;
+// (A day that isn't one, like 2026-13-45, is refused: it used to stop the save with a server error. Tester 1, 26 Nov.)
+const isDay = (d) => {
+  if (typeof d !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
+  const t = new Date(`${d}T00:00:00Z`);
+  return !Number.isNaN(t.getTime()) && t.toISOString().slice(0, 10) === d;
+};
 
 /** Checks a coupon from the admin form; returns { coupon } or { error }. */
 function cleanCoupon(body, { products, categories, saved = null }) {

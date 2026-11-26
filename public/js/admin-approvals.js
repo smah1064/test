@@ -79,9 +79,10 @@ window.AdminApprovals = (() => {
   function itemHtml(a) {
     const st = ['pending', 'approved', 'rejected', 'cancelled', 'failed'].includes(a.status) ? a.status : 'pending';
     const mine = !owner();
-    // The values asked for, field by field (server: changes); older answers: the details text.
+    // The values asked for, field by field (server: changes); older answers: the details text. (Each value keeps its
+    // own direction inside the line, which sits beside its label: in Arabic a code no longer goes to the far left.)
     const changes = Array.isArray(a.changes) && a.changes.length
-      ? `<dl class="ap-changes">${a.changes.map((c) => `<dt>${esc(inLang(c.field))}</dt><dd dir="${dirOf(inLang(c.value))}">${esc(inLang(c.value))}</dd>`).join('')}</dl>` : '';
+      ? `<dl class="ap-changes">${a.changes.map((c) => `<dt>${esc(inLang(c.field))}</dt><dd><bdi dir="${dirOf(inLang(c.value))}">${esc(inLang(c.value))}</bdi></dd>`).join('')}</dl>` : '';
     const details = changes ? '' : inLang(a.details);
     const m = S.msg[a.id];
     const roles = roleNames(a.roles);
