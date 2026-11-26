@@ -22,7 +22,9 @@ const COMMON_PASSWORDS = new Set([
 ]);
 /** Parts that guess easily, taken out before what's left of a password is judged. */
 const WEAK_PARTS = ['password', 'passw0rd', 'qwerty', 'azerty', 'asdfgh', 'zxcvbn', '1q2w3e4r', '1q2w3e', 'q1w2e3', 'abc123', '1234567890',
-  '123456', '12345', '654321', 'iloveyou', 'welcome', 'letmein', 'admin', 'ebda3', 'ebdaa', 'abcdef', '00000', '11111'];
+  '123456', '12345', '654321', 'iloveyou', 'welcome', 'letmein', 'admin', 'ebda3', 'ebdaa', 'abcdef', '00000', '11111',
+  // (Four-letter runs and doubled digits: "abcd1234", "asdf1234", "11223344" are refused, "mona1234" still does. QA 26 Nov.)
+  'abcd', 'asdf', 'qwer', 'zxcv', '1122', '2233', '3344'];
 
 /** What's left of a (lower-case) password without the easy parts and the given own words, longest first. */
 function withoutParts(lower, own = []) {
@@ -49,6 +51,7 @@ function staffPassword(pw, who) {
 function commonPassword(pw) {
   const s = normalizeDigits(String(pw || '')).trim().toLowerCase();
   if (COMMON_PASSWORDS.has(s) || new Set(s).size < 4) return true;
+  if (/^(?:(\d)\1)+$/.test(s)) return true; // digits in pairs: 11223344, 99887766
   const rest = withoutParts(s);
   return rest.length < 5 || new Set(rest).size < 3;
 }

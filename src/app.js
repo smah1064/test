@@ -2753,9 +2753,48 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   // Saves of one book run one after the other: a failed save restores the book as it was before
   // *it* started, which must not undo a save that finished in between (two tabs, a retry).
   const bookSaves = new Map();
+  // Across copies of the app sharing the data folder, saves of one book also take turns: a lock file in the book's
+  // folder while one runs (QA 26 Nov: two copies saving at once left one tab's name with the other tab's photo).
+  // A copy that crashed mid-save leaves it behind: older than BOOK_LOCK_STALE, it no longer counts.
+  const BOOK_LOCK = '.saving.lock';
+  const BOOK_LOCK_STALE = 5 * 60e3;
+  const bookLocked = (id) => {
+    try {
+      return Date.now() - fs.statSync(store.designFile(id, BOOK_LOCK)).mtimeMs < BOOK_LOCK_STALE;
+    } catch (e) {
+      return false;
+    }
+  };
+  async function takeBookLock(id, waitMs = 90e3) {
+    const start = Date.now();
+    for (;;) {
+      try {
+        fs.writeFileSync(store.designFile(id, BOOK_LOCK), String(process.pid), { flag: 'wx' });
+        return;
+      } catch (e) {
+        if (e.code !== 'EEXIST') throw e;
+        if (!bookLocked(id)) {
+          fs.rmSync(store.designFile(id, BOOK_LOCK), { force: true });
+          continue;
+        }
+        if (Date.now() - start > waitMs) throw new HttpError(409, 'bookSaving');
+        await new Promise((r) => setTimeout(r, 200));
+      }
+    }
+  }
   async function saveBook(design, body, ip) {
     const prev = bookSaves.get(design.id) || Promise.resolve();
-    const run = prev.catch(() => {}).then(() => saveBookAtomic(design, body, ip));
+    const run = prev.catch(() => {}).then(async () => {
+      await takeBookLock(design.id);
+      try {
+        // What another copy saved (or ordered) while this one waited: this save starts from it.
+        store.sync();
+        if (design.orderId) throw new HttpError(409, 'designOrdered');
+        return await saveBookAtomic(design, body, ip);
+      } finally {
+        fs.rmSync(store.designFile(design.id, BOOK_LOCK), { force: true });
+      }
+    });
     bookSaves.set(design.id, run);
     try {
       return await run;
@@ -2770,7 +2809,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     // The photo, its line drawing (colouring books), the AI-redrawn pages and the preview as they are:
     // a save that fails half way puts all of them back, so the book never prints a face the customer
     // didn't approve (QA 25 Nov: only the photo came back, the line drawing stayed the new one).
-    const KEPT = (f) => f === 'face.jpg' || f === 'face-line.png' || f === 'book-preview.png' || /^redraw-\d+\.jpg$/.test(f);
+    const KEPT = (f) => f === 'face.jpg' || f === 'face-line.png' || f === 'face-cartoon.jpg' || f === 'book-preview.png' || /^redraw-\d+\.jpg$/.test(f);
     let names = [];
     try { names = fs.readdirSync(store.designDir(design.id)).filter(KEPT); } catch (e) { names = []; }
     const saved = new Map(names.map((f) => [f, fs.readFileSync(store.designFile(design.id, f))]));
@@ -2809,7 +2848,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       throw e;
     }
     design.lang = 'en'; // books are printed in English
-    const sizeDef = product.sizes.find((z) => z.id === size) || product.sizes[0];
+    // A cover (size) that is sold out or off (admin → Products) can't be chosen; with none asked for, the first one
+    // that can (QA 26 Nov: a sold-out hardcover was still saved and ordered).
+    const asked = product.sizes.find((z) => z.id === size);
+    if (asked && catalog.unavailable(product, { sizeId: asked.id }) === 'sizeUnavailable') {
+      throw new HttpError(409, 'sizeUnavailable', { name: product.name[body && body.lang === 'ar' ? 'ar' : 'en'] || product.name.en });
+    }
+    const sizeDef = asked || product.sizes.find((z) => !catalog.unavailable(product, { sizeId: z.id })) || product.sizes[0];
     design.size = { id: sizeDef.id, label: sizeDef.label };
     design.price = priceFor(product, sizeDef.id, 1);
     const consent = aiConsent === true;
@@ -2830,14 +2875,18 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       face || consentChanged || (consent && cartoon.enabled() && !(design.cartoon && design.cartoon.status === 'ready')) ? makeCartoon(design, ip) : null,
       redrawCover(design),
     ]);
-    // Ordered while this save was running: the customer approved the book as it was, which is what prints.
-    const fresh = store.getDesign(design.id);
-    if (design.orderId || (fresh && fresh.orderId)) throw new HttpError(409, 'designOrdered');
-    design.version = (design.version || 0) + 1;
+    if (design.orderId) throw new HttpError(409, 'designOrdered');
     fs.rmSync(store.designFile(design.id, 'book-print.pdf'), { force: true });
     fs.rmSync(store.designFile(design.id, 'book-preview.pdf'), { force: true });
     store.writeDesignFile(design.id, 'book-preview.png', await (await books.renderPage(bookData(design), 0, 600)).png().toBuffer());
-    store.save();
+    // Ordered while this save was running (here or on another copy of the app): the customer approved the book as it
+    // was, which is what prints. Checked under the data lock with the latest data, and the new version saved in the
+    // same step, so an order taken in between is never missed (QA 26 Nov); the save is then undone.
+    store.mutate((db) => {
+      const cur = db.designs[design.id];
+      if (design.orderId || (cur && cur.orderId)) throw new HttpError(409, 'designOrdered');
+      design.version = (design.version || 0) + 1;
+    });
   }
   const bookResponse = (design, token) => {
     const { uploadTokenHash, answers, ...pub } = design; // eslint-disable-line no-unused-vars
@@ -2948,7 +2997,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const design = store.getDesign(item.designId);
     if (!design || design.kind !== 'book' || design.photoRemoved) return false;
     if (!design.aiConsent || !cartoon.enabled()) {
-      item.redraw = { status: 'off' };
+      // Why: the customer didn't agree, or they did but the site's AI drawing is off (no key) — the dashboard says which (QA 26 Nov).
+      item.redraw = { status: 'off', reason: design.aiConsent ? 'aiOff' : 'noConsent' };
       store.save();
       return false;
     }
@@ -3068,7 +3118,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (!d || d.kind === 'gangsheet') return null;
     const product = getProduct(d.productId);
     if (!product) return null;
-    if (d.kind === 'book') return catalog.unavailable(product);
+    if (d.kind === 'book') return catalog.unavailable(product, { sizeId: d.size && d.size.id }); // its cover (QA 26 Nov)
     if (d.kind === 'photoset') return catalog.unavailable(product, { colorId: d.color && d.color.id });
     const lines = d.quantities && d.quantities.length ? d.quantities : [{ color: d.color, size: d.size }];
     for (const l of lines) {
@@ -3754,8 +3804,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const d = typeof id === 'string' && UUID_RE.test(id) && store.getDesign(id);
       if (!d || (d.status && d.status !== 'ready')) throw new HttpError(400, 'designGone');
       if (d.orderId) throw new HttpError(409, 'designOrdered');
-      // A kids book being saved (another tab): ordered once the save is done, never half saved (QA 25 Nov).
-      if (bookSaves.has(d.id)) throw new HttpError(409, 'bookSaving');
+      // A kids book being saved (another tab, or another copy of the app): ordered once the save is done, never
+      // half saved (QA 25 and 26 Nov).
+      if (bookSaves.has(d.id) || (d.kind === 'book' && bookLocked(d.id))) throw new HttpError(409, 'bookSaving');
       const why = designUnavailable(d);
       if (why) {
         const p = getProduct(d.productId);
@@ -3879,6 +3930,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         const cur = db.designs[d.id];
         if (!cur || (cur.status && cur.status !== 'ready')) throw new HttpError(400, 'designGone');
         if (cur.orderId) throw new HttpError(409, 'designOrdered');
+        if (cur.kind === 'book' && bookLocked(d.id)) throw new HttpError(409, 'bookSaving');
+        // Still the version the customer approved (a save that finished meanwhile, on any copy: QA 26 Nov).
+        if (approvals[d.id] && approvals[d.id].proofHash !== proofHashOf(cur)) throw new HttpError(409, 'proofChanged', { designId: d.id });
       }
       // The coupon's limits, with every order saved so far (by any copy of the app).
       if (applied) {
@@ -4046,7 +4100,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
 
   // ---------- After the order: order again, drafts on the account, shipping ----------
   // Derived files that carry the old order's number or are cheap to make again.
-  const STALE_COPY = /^(book-print\.pdf|book-preview\.pdf|preview-v\d+\.pdf|merge-print(-marks)?\.pdf|merge-copies\.zip|photos-v\d+\.zip)$/;
+  const STALE_COPY = /^(\.saving\.lock|book-print\.pdf|book-preview\.pdf|preview-v\d+\.pdf|merge-print(-marks)?\.pdf|merge-copies\.zip|photos-v\d+\.zip)$/;
   /** How many bytes a folder holds (its files, one level of sub-folders deep is plenty here). */
   function dirBytes(dir, depth = 0) {
     let n = 0;

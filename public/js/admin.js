@@ -425,6 +425,7 @@
   function redrawLine(item) {
     const r = item.redraw;
     if (!r) return esc(t('admin.redraw.off'));
+    if (r.status === 'off' && r.reason === 'aiOff') return esc(t('admin.redraw.offAi'));
     const line = esc(t('admin.redraw.' + r.status, { done: POD.num(r.done || 0), total: POD.num(r.total || 0) }));
     const kept = r.failed && r.failed.length ? `${SEP()}${esc(POD.plural('admin.redraw.kept', r.failed.length))}` : '';
     const again = ['done', 'failed'].includes(r.status) ? ` <button class="btn btn-sm" data-redraw="${esc(item.id)}">${esc(t('admin.redraw.again'))}</button>` : '';

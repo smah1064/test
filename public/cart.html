@@ -589,13 +589,13 @@
             body = `
               ${changedNote}
               ${shortProofHtml(proof, item, i)}
-              ${approveBox(PODProof.screenNote())}`;
+              ${approveBox(PODProof.screenNote({ printColours: !proof.pages }))}`;
           } else {
             body = `
               ${changedNote}
               ${!ok && !photos ? `<button class="link-btn proof-toggle proof-more" type="button" id="tog-${i}" data-proof-toggle="${esc(id)}" aria-expanded="true">${esc(t('cart.proofDetailsHide'))}</button>` : ''}
               ${photos ? photoProofHtml(proof, cartItemOf(id)) : PODProof.html(proof)}
-              ${approveBox(photos ? photoNote() : PODProof.screenNote())}`;
+              ${approveBox(photos ? photoNote() : PODProof.screenNote({ printColours: !proof.pages }))}`;
           }
         }
         const folded = ok && st && st.state === 'ok' && !expanded.has(id);
@@ -786,8 +786,9 @@
         const cart = POD.getCart();
         const focused = document.activeElement && document.activeElement.closest && document.activeElement.closest('#items') ? document.activeElement.id : null;
         document.getElementById('empty').hidden = cart.length > 0;
-        // The note about editing quantities and duplicating designs doesn't apply to photo sets.
-        document.getElementById('cart-note').hidden = cart.length > 0 && cart.every((it) => it.productId === 'photoprints');
+        // The note about editing quantities and duplicating designs doesn't apply to photo sets or kids books
+        // (QA 26 Nov), nor does the editor's "Print colours" view (the books' proofs leave it out).
+        document.getElementById('cart-note').hidden = cart.length > 0 && cart.every((it) => it.productId === 'photoprints' || it.bookId);
         document.getElementById('cart-layout').hidden = cart.length === 0;
         // An empty cart: the orders placed from this device, to find them again.
         document.getElementById('device-orders').innerHTML = cart.length ? '' : PODAftercare.deviceOrdersHtml();

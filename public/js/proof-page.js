@@ -121,7 +121,7 @@
       </section>
       <section class="card proof-card" style="margin-top:16px" aria-labelledby="decide-h">
         <h2 id="decide-h" style="font-size:18px;margin:0">${esc(t('proofPage.decide'))}</h2>
-        ${PODProof.screenNote()}
+        ${PODProof.screenNote({ printColours: !(d.proof && d.proof.pages) })}
         ${waiting && d.team ? `<p class="notice" role="status">${esc(t('proofPage.team'))}</p>` : waiting ? decideHtml() : `<p class="notice" role="status">${esc(t('proofPage.notWaiting', { status: statusText(d.status) }))}</p><div>${editAgain(d) || orderLink(d)}</div>`}
       </section>`;
     if (focused && document.getElementById(focused)) document.getElementById(focused).focus();
