@@ -35,13 +35,21 @@
   renderBookTabs();
   document.addEventListener('pod:langchange', renderBookTabs);
 
+  // ---------- Covers (the product's sizes) ----------
+  // A cover sold out in admin → Products is shown crossed out with "Sold out" and can't be picked, as the editor shows a
+  // sold-out size (the same catalogue data: soldOut on the size, or the colour in that size at 0 in stock: POD.sizeOk).
+  // QA 26 Nov: it was a normal choice and the order went through.
+  const colorId = ((product.colors || [])[0] || {}).id;
+  const coverOk = (s) => Boolean(s) && POD.sizeOk(product, colorId, s);
+  const firstCover = () => product.sizes.find(coverOk) || product.sizes[0];
+
   // ---------- State ----------
   const KEY = 'pod-book-' + book.id;
   const saved = (() => { try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { return {}; } })();
   const state = {
     answers: saved.answers || {},
     lang: 'en', // books are printed in English
-    size: product.sizes.find((s) => s.id === saved.size) || product.sizes[0],
+    size: product.sizes.find((s) => s.id === saved.size) || firstCover(),
     face: null, // data URL of the cropped face, when a new photo was chosen
     hasPhoto: false, // the server already has a photo for this book
     design: null, // { id, editToken, version, pages, ... }
@@ -72,6 +80,18 @@
         state.cartIndex = null;
       }
     } else state.cartIndex = null;
+  }
+  // The cover chosen before (last time on this page, or the book opened from the cart) sold out since: the first
+  // cover left is picked, and the page says so (shown once the page is drawn). A book opened from the cart is then
+  // saved again with it ("Update my book").
+  let coverMoved = null;
+  if (!coverOk(state.size)) {
+    const to = firstCover();
+    if (to && to !== state.size) {
+      coverMoved = { from: state.size, to };
+      state.size = to;
+      if (state.design) state.dirty = true;
+    }
   }
 
   // ---------- Form ----------
@@ -120,7 +140,14 @@
     }).join('');
     $('bk-questions').insertAdjacentHTML('afterbegin', `<p class="muted small bk-en-hint" id="bk-en-hint" style="margin:0 0 10px">${esc(t('book.englishHint'))}</p>`);
     $('bk-questions').querySelectorAll('input[data-q], textarea[data-q]').forEach(markLatin);
-    $('bk-sizes').innerHTML = product.sizes.map((s) => `<button type="button" class="chip ${s.id === state.size.id ? 'active' : ''}" data-size="${s.id}">${esc(tr(s.label))}${POD.sizeNote(product, s) ? ` <span style="opacity:.7">${esc(POD.sizeNote(product, s))}</span>` : ''}</button>`).join('');
+    $('bk-sizes').innerHTML = product.sizes.map((s) => {
+      if (!coverOk(s)) {
+        const why = t('book.coverSoldOut', { cover: tr(s.label) });
+        return `<button type="button" class="chip sold-out" aria-disabled="true" data-sold-size="${esc(s.id)}" title="${esc(why)}" aria-label="${esc(`${tr(s.label)}: ${t('soldOut')}`)}"><span class="sold-label">${esc(tr(s.label))}</span> <span class="sold-tag">${esc(t('soldOut'))}</span></button>`;
+      }
+      const on = s.id === state.size.id;
+      return `<button type="button" class="chip ${on ? 'active' : ''}" data-size="${esc(s.id)}" aria-pressed="${on}">${esc(tr(s.label))}${POD.sizeNote(product, s) ? ` <span style="opacity:.7">${esc(POD.sizeNote(product, s))}</span>` : ''}</button>`;
+    }).join('');
     $('bk-price').textContent = money(product.basePrice + state.size.surcharge);
     document.title = `${tr(product.name)} · ${t('brand')}`;
     renderButtons();
@@ -155,8 +182,10 @@
     changed();
   });
   $('bk-sizes').addEventListener('click', (e) => {
+    const sold = e.target.closest('[data-sold-size]');
+    if (sold) return POD.toast(sold.title);
     const b = e.target.closest('[data-size]');
-    if (!b) return;
+    if (!b || b.dataset.size === state.size.id) return;
     state.size = product.sizes.find((s) => s.id === b.dataset.size);
     renderForm();
     changed();
@@ -206,7 +235,28 @@
     ctx.lineTo(S * (0.5 + OVAL_RX * 0.8), S * (0.5 - OVAL_RY * 0.12));
     ctx.stroke();
     ctx.restore();
+    renderLowRes();
   }
+  /**
+   * "May print blurry", as the photo prints page warns: the face in the oval has fewer of the photo's own pixels per
+   * printed inch than the book needs (book.photo: the tallest the face prints, and the lowest pixels per inch that
+   * still look sharp). A small photo (QA 26 Nov: 60 x 40 px) or a small face zoomed in. Never blocks: the customer
+   * keeps it ("Use this one anyway") or picks another photo.
+   */
+  const photoNeeds = book.photo || {};
+  function faceDpi() {
+    if (!crop.img || !photoNeeds.printIn) return null;
+    return ((base() / crop.zoom) * OVAL_RY * 2) / photoNeeds.printIn; // photo pixels from the hairline to the chin
+  }
+  function renderLowRes() {
+    const dpi = state.face ? faceDpi() : null;
+    $('bk-lowres').hidden = !(dpi !== null && dpi < (photoNeeds.lowDpi || 100) && !crop.lowResOk);
+  }
+  $('bk-lowres-ok').addEventListener('click', () => {
+    crop.lowResOk = true;
+    renderLowRes();
+    $('bk-zoom').focus();
+  });
   function clampCrop() {
     const half = base() / crop.zoom / 2;
     crop.x = Math.min(Math.max(crop.x, half), crop.img.naturalWidth - half);
@@ -235,11 +285,12 @@
       crop.zoom = 2;
       crop.x = img.naturalWidth / 2;
       crop.y = img.naturalHeight * 0.4;
+      crop.lowResOk = false; // (a new photo: said again if it is small too)
       $('bk-zoom').value = crop.zoom;
       clampCrop();
       $('bk-crop').hidden = false;
-      drawCrop();
       state.face = 'pending';
+      drawCrop();
       changed();
     };
     img.onerror = () => POD.toast(t('book.badPhoto'), 'error');
@@ -515,5 +566,9 @@
 
   renderForm();
   renderThumbs();
+  if (coverMoved) {
+    if (state.cartIndex === null) remember(); // (said once: the next visit starts on the cover left)
+    POD.toast(t('book.coverMoved', { cover: tr(coverMoved.from.label), to: tr(coverMoved.to.label) }));
+  }
   document.addEventListener('pod:langchange', () => { renderForm(); showPage(state.page); });
 })();

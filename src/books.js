@@ -334,13 +334,16 @@ async function textImage(text, { font = 'Cairo Bold', pt = 14, px, width, maxH, 
   return out;
 }
 
+/** The outline of the colouring book's hollow letters, in px: about 0.6 mm when printed. */
+const outlineOf = (px) => Math.max(1.5, px * 0.0028);
+
 /**
- * Hollow letters to colour in (the colouring book's captions): the text drawn as a dark outline, white
- * inside. The outline is the letters stamped round a small circle in the dark colour, with the letters
- * in white on top; `t` is a textImage() result, returned the same way (a little bigger, for the outline).
+ * Hollow letters to colour in: the letters of `t` (a text picture, { img, w, h }) drawn as a dark outline,
+ * white inside. The outline is the letters stamped round a small circle in the dark colour, with the letters
+ * in white on top; returned the same way (a little bigger, for the outline).
  */
 async function hollowText(t, px, color = '#1b2740') {
-  const r = Math.max(1.5, px * 0.0028); // about 0.6 mm when printed
+  const r = outlineOf(px);
   const pad = Math.ceil(r) + 1;
   const tint = (hex) => sharp(t.img).composite([{ input: { create: { width: t.w, height: t.h, channels: 4, background: hex } }, blend: 'in' }]).png().toBuffer();
   const [ink, white] = await Promise.all([tint(color), tint('#ffffff')]);
@@ -356,6 +359,94 @@ async function hollowText(t, px, color = '#1b2740') {
   return { img, w, h };
 }
 
+/**
+ * A colouring-book caption: one line of hollow letters (hollowText) at most `width` x `maxH` px, outline included.
+ *  - One line, always: a long name makes the letters smaller (QA 26 Nov: a 20-letter name wrapped, "Captain" went
+ *    tiny and the name sat on the picture's frame).
+ *  - The outline grows every letter, so the space between two words is widened by it: without that the words ran
+ *    together ("Mohamed Abdelrahman the Firefighter" read as one word, QA 26 Nov). (Pango's letter_spacing is in
+ *    1/1024 px of the picture, whatever its dpi.)
+ *  - Pictures that the fonts draw in their own colours (emoji) are drawn as they are, over the hollow letters, not
+ *    turned into an outline (they came out as empty circles).
+ */
+async function hollowCaption(text, { px, width, maxH, pt = 46, font = 'Lalezar', color = '#1b2740' }) {
+  await loadFonts();
+  const r = outlineOf(px);
+  const pad = Math.ceil(r) + 1;
+  const dpi = Math.round(px / PAGE_IN);
+  const body = escapeMarkup(text).split(' ').join(`<span letter_spacing="${Math.round(3 * r * 1024)}"> </span>`);
+  // alpha: letters drawn see-through (the same layout), so only colour pictures (emoji) show.
+  const render = async (size, alpha) => {
+    const img = await sharp({ text: { text: `<span foreground="${color}"${alpha ? ` alpha="${alpha}"` : ''}>${body}</span>`, font: `${font} ${size}`, rgba: true, dpi } }).png().toBuffer();
+    const m = await sharp(img).metadata();
+    return { img, w: m.width, h: m.height };
+  };
+  let size = pt;
+  let t = await render(size);
+  for (let i = 0; i < 12 && size > 6; i++) {
+    const k = Math.min(width / (t.w + 2 * pad), maxH / (t.h + 2 * pad));
+    if (k >= 1) break;
+    // (The widened spaces don't shrink with the letters: try again until it fits.)
+    size = Math.max(6, Math.min(size - 0.25, Math.floor(size * k * 4) / 4));
+    t = await render(size);
+  }
+  // Colour pictures: taken out of the letters (by their shape, so no rim of them is left to outline) and laid on top.
+  let colour = null;
+  if (/[^\u0000-ɏ]/.test(text)) {
+    const c = await render(size, 1);
+    if ((await sharp(c.img).extractChannel(3).stats()).channels[0].max > 0) {
+      colour = c.img;
+      const shape = await sharp(c.img).extractChannel(3).threshold(1).toBuffer();
+      const cut = await sharp({ create: { width: t.w, height: t.h, channels: 3, background: '#000' } }).joinChannel(shape).png().toBuffer();
+      t = { ...t, img: await sharp(t.img).composite([{ input: cut, blend: 'dest-out' }]).png().toBuffer() };
+    }
+  }
+  let out = await hollowText(t, px, color);
+  if (colour) out = { ...out, img: await sharp(out.img).composite([{ input: colour, left: pad, top: pad }]).png().toBuffer() };
+  // Still too big at the smallest size: the picture is made smaller, so it always fits.
+  const k = Math.min(1, width / out.w, maxH / out.h);
+  if (k < 1) {
+    const w = Math.max(1, Math.floor(out.w * k));
+    const h = Math.max(1, Math.floor(out.h * k));
+    out = { img: await sharp(out.img).resize(w, h, { fit: 'fill' }).png().toBuffer(), w, h };
+  }
+  return out;
+}
+
+/**
+ * Where a colouring page's caption band may go. Some pictures have a frame drawn round them with the caption inside
+ * it (doctor, pilot, scientist, explorer: a line down each side and one along the bottom; the pilot's also a line
+ * above the caption). The band is white and covers what is under it, so it stays inside those lines (QA 26 Nov: a long
+ * name's band cut the pilot's frame). Measured on the picture itself, so girl pictures and AI-redrawn pages count as
+ * they are. { left, right, top, bottom } in px (the band goes between them); the whole page when there is no frame.
+ */
+async function captionRoom(base, px) {
+  const P = (f) => Math.round(px * f);
+  const room = { left: 2, right: px - 2, top: 0, bottom: px - 2 };
+  const y0 = P(0.78);
+  const { data } = await sharp(base).extract({ left: 0, top: y0, width: px, height: px - y0 }).greyscale().raw().toBuffer({ resolveWithObject: true });
+  const dark = (x, y) => data[(y - y0) * px + x] < 160;
+  // A side of a frame: a column near the edge that is dark down (nearly) all the caption's rows.
+  const side = (x) => {
+    let n = 0;
+    for (let y = P(0.86); y < P(0.93); y++) if (dark(x, y)) n++;
+    return n >= 0.9 * (P(0.93) - P(0.86));
+  };
+  const gap = P(0.008);
+  let framed = false;
+  for (let x = P(0.12); x >= P(0.01); x--) if (side(x)) { room.left = x + 1 + gap; framed = true; break; }
+  for (let x = P(0.88); x <= P(0.99); x++) if (side(x)) { room.right = x - gap; framed = true; break; }
+  // A line across: dark along at least half of the page.
+  const across = (y) => {
+    let n = 0;
+    for (let x = 0; x < px; x++) if (dark(x, y)) n++;
+    return n >= px * 0.5;
+  };
+  for (let y = P(0.93); y < P(0.99); y++) if (across(y)) { room.bottom = y; break; }
+  if (framed) for (let y = P(0.88); y >= P(0.8); y--) if (across(y)) { room.top = y + 1; break; }
+  return room;
+}
+
 // ---------- Faces ----------
 // The photo the shopper crops is an oval around the face (hairline to chin),
 // 4:5. On each page the drawn face (eyes, nose, mouth) is painted over with
@@ -364,6 +455,28 @@ async function hollowText(t, px, color = '#1b2740') {
 // of the illustration. The drawn hair and head shape stay.
 const FACE_W = 720;
 const FACE_H = 900;
+// How big the face crop is drawn for a face spot of height h (% of the page): a photo face (story pages, covers) is
+// PHOTO_FACE x h tall after its top PHOTO_TRIM (the hairline) is cut off; a line-art face (colouring pages) LINE_FACE x h.
+const PHOTO_FACE = 1.2;
+const PHOTO_TRIM = 0.1;
+const LINE_FACE = 1.18;
+/**
+ * The book page warns when the face crop is too small to print sharply, as the photo prints page does: fewer than
+ * LOW_DPI of the photo's own pixels per printed inch. Lower than for photo prints (150): the face is smoothed to sit
+ * with the painting (and traced for the colouring book), so a face 250 px tall prints as well as a bigger one; at
+ * 150 px it is soft and at 100 px blurry on the biggest face (tried at print size, 26 Nov).
+ * printIn: the tallest the whole crop prints in the book, in inches.
+ */
+const LOW_DPI = 100;
+function facePrint(book) {
+  let most = 0;
+  for (const page of book.pages) {
+    if (!page.face) continue;
+    const line = book.kind === 'coloring' && page.type !== 'cover';
+    most = Math.max(most, (page.face[2] / 100) * (line ? LINE_FACE : PHOTO_FACE / (1 - PHOTO_TRIM)));
+  }
+  return { printIn: Math.round(most * PAGE_IN * 100) / 100, lowDpi: LOW_DPI };
+}
 const ellipseSvg = (w, h, rx, ry, fill = '#fff') => Buffer.from(`<svg width="${w}" height="${h}"><ellipse cx="${w / 2}" cy="${h / 2}" rx="${rx}" ry="${ry}" fill="${fill}"/></svg>`);
 
 /** A soft-edged oval alpha mask (raw, 1 byte per pixel, 255 = keep). */
@@ -403,12 +516,12 @@ async function storyFaceLayers(base, face, px, [cx, cy, h, eyes]) {
   const patch = await sharp({ create: { width: ew, height: eh, channels: 3, background: hex } })
     .joinChannel(await ovalMask(ew, eh, 0.92, 0.05), { raw: { width: ew, height: eh, channels: 1 } }).png().toBuffer();
   // 2. The face, colour-matched and softened like paint.
-  const fh = Math.round(P(h * 1.2));
+  const fh = Math.round(P(h * PHOTO_FACE));
   const fw = Math.round(fh * (FACE_W / FACE_H));
   // Smooth skin texture a little so the photo sits with the painted style.
   // Drop the hairline strip at the top of the crop (the drawn fringe covers the forehead).
   const meta = await sharp(face).metadata();
-  const trim = Math.round(meta.height * 0.1);
+  const trim = Math.round(meta.height * PHOTO_TRIM);
   const photo = await sharp(face).extract({ left: 0, top: trim, width: meta.width, height: meta.height - trim }).resize(fw, fh, { fit: 'cover' }).clahe({ width: Math.max(3, Math.round(fw / 3)), height: Math.max(3, Math.round(fh / 3)), maxSlope: 2 }).median(Math.max(1, Math.min(7, Math.round(fw / 90) * 2 + 1))).toBuffer();
   const inner = await sharp(photo).extract({ left: Math.round(fw * 0.25), top: Math.round(fh * 0.3), width: Math.max(1, Math.round(fw * 0.5)), height: Math.max(1, Math.round(fh * 0.45)) }).stats();
   const mean = inner.channels.slice(0, 3).map((c) => c.mean || 1);
@@ -437,7 +550,7 @@ async function lineFaceLayers(faceLine, px, [cx, cy, h, eyes]) {
   const eh = Math.round(P(h * 1.02));
   const erase = await sharp({ create: { width: ew, height: eh, channels: 3, background: '#ffffff' } })
     .joinChannel(await ovalMask(ew, eh, 0.97, 0.015), { raw: { width: ew, height: eh, channels: 1 } }).png().toBuffer();
-  const fh = Math.round(P(h * 1.18));
+  const fh = Math.round(P(h * LINE_FACE));
   const fw = Math.round(fh * (FACE_W / FACE_H));
   return [
     { input: erase, left: Math.round(P(cx) - ew / 2), top: Math.round(P(cy) - eh / 2) },
@@ -546,14 +659,21 @@ async function renderPage({ book, answers, face, faceLine, redrawn }, index, px,
   }
 
   const put = (t, cx, top) => layers.push({ input: t.img, left: Math.round(cx - t.w / 2), top: Math.round(top) });
-  /** A caption centred at height cy on a solid white rounded band (covers any lines under it). */
-  const captionBand = (t, cy) => {
+  /**
+   * A colouring-book caption in hollow letters, centred at height cy on a solid white rounded band (covers any lines
+   * under it), the band inside any frame drawn round the picture (captionRoom). `width`: the most the letters may take.
+   */
+  const captionBand = async (text, cy, width) => {
     const padX = Math.round(px * 0.03);
     const padY = Math.round(px * 0.012);
-    const bw = Math.min(px - 4, t.w + padX * 2);
+    const room = await captionRoom(base, px);
+    // The band is centred: as wide as the room on its narrower side allows, with at least a little white each side.
+    const most = Math.min(px - 4, 2 * Math.floor(Math.min(px / 2 - room.left, room.right - px / 2)));
+    const t = await hollowCaption(text, { px, width: Math.min(width, most - 2 * Math.round(px * 0.012)), maxH: Math.min(px * 0.11, room.bottom - room.top - padY * 2) });
+    const bw = Math.min(most, t.w + padX * 2);
     const bh = t.h + padY * 2;
     const bx = Math.round(px / 2 - bw / 2);
-    const by = Math.round(Math.min(px - bh - 2, cy - bh / 2));
+    const by = Math.round(Math.max(room.top, Math.min(room.bottom - bh, cy - bh / 2)));
     layers.push({ input: Buffer.from(`<svg width="${px}" height="${px}"><rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="${Math.round(bh / 2)}" fill="#ffffff"/></svg>`), left: 0, top: 0 });
     put(t, px / 2, by + padY);
   };
@@ -591,13 +711,11 @@ async function renderPage({ book, answers, face, faceLine, redrawn }, index, px,
       layers.push({ input: await lineFaceImage(faceLine, fw, fh, 0.05), left: Math.round(px / 2 - fw / 2), top: P(18) });
     }
     // The caption below the frame and the row of circles, on a clean white band, in hollow letters to colour.
-    const cap = await hollowText(await textImage(fill(page.caption[lang], answers, lang), { font: 'Lalezar', pt: 46, px, width: px * 0.84, maxH: px * 0.11, color: '#1b2740' }), px);
-    captionBand(cap, P(90.5));
+    await captionBand(fill(page.caption[lang], answers, lang), P(90.5), px * 0.84);
   } else if (coloring) {
     // Captions sit on a white band, so they never run into the drawing's lines; the name is in hollow letters
     // to colour in, as the book promises (QA 25 Nov: they printed solid navy).
-    const cap = await hollowText(await textImage(fill(page.caption[lang], answers, lang), { font: 'Lalezar', pt: 46, px, width: px * 0.86, maxH: px * 0.11, color: '#1b2740' }), px);
-    captionBand(cap, px * 0.905);
+    await captionBand(fill(page.caption[lang], answers, lang), px * 0.905, px * 0.86);
   } else if (page.text) {
     // Story text on a soft panel at the bottom of the picture.
     const txt = await textImage(fill(page.text[lang], answers, lang), { font: 'Cairo Bold', pt: 18, px, width: px * 0.82, maxH: px * 0.22, color: '#1b2740' });
@@ -657,11 +775,13 @@ function publicBook(book) {
     blurb: book.blurb,
     pages: book.pages.length,
     questions: book.questions.map((q) => ({ ...q, options: q.options && q.options.map((o) => ({ ...o, picture: q.pictures ? `/api/books/companion/${o.id}.png` : null })) })),
+    // For the "may print blurry" note under the photo: { printIn, lowDpi } (facePrint).
+    photo: facePrint(book),
   };
 }
 
 module.exports = {
   BOOKS, TRIM_IN, BLEED_IN, PAGE_IN, PRINT_PX, FRUITS, ANIMALS, OLDEST_BIRTHDAY,
-  cleanAnswers, fill, formatDate, renderPage, pageJpeg, bookPdf, printPages, lineArt, publicBook, loadFonts,
+  cleanAnswers, fill, formatDate, renderPage, pageJpeg, bookPdf, printPages, lineArt, publicBook, loadFonts, facePrint,
   companionPath: (id) => (Object.hasOwn(FRUITS, id) || Object.hasOwn(ANIMALS, id) ? path.join(ASSETS, 'companions', `${id}.png`) : null),
 };
