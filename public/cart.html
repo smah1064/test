@@ -489,7 +489,10 @@
         const cur = proofs.get(id);
         if (cur && !force && cur.state !== 'error') return cur.promise;
         const entry = { state: 'loading' };
-        entry.promise = POD.api('/api/designs/' + encodeURIComponent(id) + '/proof').then((proof) => {
+        // (A name list's first names only with its key, kept with the cart item.)
+        const item = [...POD.getCart(), ...(POD.getSaved ? POD.getSaved() : [])].find((it) => it && it.designId === id);
+        const listKey = item && typeof item.listKey === 'string' ? { 'x-list-key': item.listKey } : {};
+        entry.promise = POD.api('/api/designs/' + encodeURIComponent(id) + '/proof', { headers: listKey }).then((proof) => {
           Object.assign(entry, { state: 'ok', proof });
           const a = approvals.get(id);
           // Approved an older version: ask again.

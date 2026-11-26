@@ -1018,7 +1018,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const d = UUID_RE.test(req.params.id) && store.getDesign(req.params.id);
       if (!d || (d.status && d.status !== 'ready')) throw new HttpError(404, 'designNotFound');
       res.set('Cache-Control', 'no-store');
-      res.json(await proofFor(d));
+      const proof = await proofFor(d);
+      // (The first names of a name list only for who may read the list.)
+      if (proof.merge && proof.merge.sample && !listOpenFor(req, d)) proof.merge = { ...proof.merge, sample: [] };
+      res.json(proof);
     } catch (e) {
       next(e);
     }
@@ -1056,6 +1059,24 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     return o ? `/editor?design=${item.designId}&revise=${o.id}.${item.id}&rt=${item.reviseToken}` : null;
   }
   const sameSecret = (a, b) => typeof a === 'string' && typeof b === 'string' && a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+  const LIST_KEY_RE = /^[A-Za-z0-9_-]{20,40}$/;
+  /**
+   * Who may read a design's name list (customers' names): the key kept with its cart item (x-list-key), the team
+   * (signed in), the order's own link or account, or the item's "edit and send again" link. Not the design's id alone,
+   * which is in public picture links (owner's OK, 26 Nov, from the security review).
+   */
+  function listOpenFor(req, design) {
+    if (!design || !design.merge) return false;
+    const k = String(req.get('x-list-key') || '');
+    if (design.listKeyHash && LIST_KEY_RE.test(k) && sameSecret(sha(k), design.listKeyHash)) return true;
+    const tok = security.bearer(req);
+    if (tok && (auth.verify(tok) || auth.verifyStaff(tok, staffList()))) return true;
+    const order = design.orderId && store.getOrder(design.orderId);
+    if (order && order.linkKey && orderOpenFor(req, order)) return true;
+    const rt = String(req.get('x-revise-token') || '');
+    if (order && rt && order.items.some((it) => it.designId === design.id && it.reviseToken && sameSecret(rt, it.reviseToken))) return true;
+    return false;
+  }
   function findByProofToken(token) {
     if (!/^[A-Za-z0-9_-]{20,40}$/.test(String(token || ''))) return null;
     for (const order of store.listOrders()) {
@@ -1891,6 +1912,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     // Name list: one printed copy per row, the {Column} fields filled in per copy.
     const mergeIn = (req.body || {}).merge;
     const mergeList = mergeIn ? cleanMerge(product, mergeIn, storedSides, { emb, pattern, colorDef, sizeDef }) : null;
+    const listKey = mergeList ? crypto.randomBytes(18).toString('base64url') : null;
     // One artwork, many pieces: several of the same, or the same artwork in other sizes / colours.
     const lines = mergeList ? mergeList.lines : cleanQuantities(product, (req.body || {}).quantities, colorDef, sizeDef);
     // Pictures imported from other sites: the customer must confirm they may print them.
@@ -1903,6 +1925,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       createdAt: new Date().toISOString(),
       status: 'uploading',
       uploadTokenHash: sha(token),
+      // A name list's names are customers' data: read back only with this key (kept with the cart item), the team's
+      // sign-in, or the order's own link (owner's OK, 26 Nov, from the security review).
+      ...(listKey ? { listKeyHash: sha(listKey) } : {}),
       productId: product.id,
       productName: product.name,
       process: emb ? 'embroidery' : product.process,
@@ -1950,7 +1975,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (mergeList) for (const sd of Object.keys(mergeList.sides)) files.push(`${sd}-merge-base.png`, `${sd}-merge.bin`);
     design.expectedFiles = files;
     store.createDesign(design, { 'editor.json': editorJson, ...pdfCopies, ...(mergeList ? { 'merge.json': JSON.stringify({ columns: mergeList.columns, rows: mergeList.rows }) } : {}) });
-    res.status(201).json({ id: design.id, uploadToken: token, files });
+    res.status(201).json({ id: design.id, uploadToken: token, files, ...(listKey ? { listKey } : {}) });
   });
 
   // Designs whose files are being checked (/complete): no more uploads until it is done (a file swapped in the
@@ -1987,7 +2012,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       // the same token gets the finished set again instead of an error.
       const prior = UUID_RE.test(req.params.id) && store.getDesign(req.params.id);
       if (prior && prior.kind === 'photoset' && prior.status === 'ready' && prior.doneTokenHash && prior.doneTokenHash === sha(req.get('x-upload-token') || '')) {
-        const { uploadTokenHash, doneTokenHash, ...pub } = prior; // eslint-disable-line no-unused-vars
+        const { uploadTokenHash, doneTokenHash, listKeyHash, ...pub } = prior; // eslint-disable-line no-unused-vars
         return res.json({ ...pub, previewUrl: `/files/designs/${prior.id}/front-preview.png` });
       }
       const design = uploadingDesign(req);
@@ -2000,7 +2025,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         design.doneTokenHash = design.uploadTokenHash;
         delete design.uploadTokenHash;
         store.save();
-        const { uploadTokenHash, doneTokenHash, ...pub } = design; // eslint-disable-line no-unused-vars
+        const { uploadTokenHash, doneTokenHash, listKeyHash, ...pub } = design; // eslint-disable-line no-unused-vars
         return res.json({ ...pub, previewUrl: `/files/designs/${design.id}/front-preview.png` });
       }
       if (design.kind === 'gangsheet') {
@@ -2018,7 +2043,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         design.status = 'ready';
         delete design.uploadTokenHash;
         store.save();
-        const { uploadTokenHash, ...pub } = design; // eslint-disable-line no-unused-vars
+        const { uploadTokenHash, listKeyHash, ...pub } = design; // eslint-disable-line no-unused-vars
         return res.json({ ...pub, previewUrl: `/files/designs/${design.id}/front-preview.png` });
       }
       const checked = new Map(); // side -> the print file as checked
@@ -2062,7 +2087,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       design.status = 'ready';
       delete design.uploadTokenHash;
       store.save();
-      const { uploadTokenHash, ...pub } = design; // eslint-disable-line no-unused-vars
+      const { uploadTokenHash, listKeyHash, ...pub } = design; // eslint-disable-line no-unused-vars
       res.json({ ...pub, previewUrl: `/files/designs/${design.id}/${design.sides[0].id}-preview.png` });
     } catch (e) {
       next(e);
@@ -2522,10 +2547,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     // A design id is in public picture links: it must not lead to the order (and the customer) it is in.
     // Nor to what was paid: the editor works prices out itself (the team sees design ids, and the
     // amounts are only for people allowed to see them).
-    const { uploadTokenHash, orderId, revisionOf, price, unitPrice, ...pub } = design; // eslint-disable-line no-unused-vars
+    const { uploadTokenHash, listKeyHash, orderId, revisionOf, price, unitPrice, ...pub } = design; // eslint-disable-line no-unused-vars
     if (Array.isArray(pub.quantities)) pub.quantities = withoutLinePrices(pub.quantities);
-    const list = design.merge ? readMergeList(design) : null;
-    res.json({ ...pub, editor, ...(list ? { mergeList: list } : {}) });
+    // The names only for who may read them (else the editor asks for the list again).
+    const list = design.merge && listOpenFor(req, design) ? readMergeList(design) : null;
+    res.set('Cache-Control', 'no-store');
+    res.json({ ...pub, editor, ...(list ? { mergeList: list } : design.merge ? { mergeLocked: true } : {}) });
   });
 
   // Mockup previews are public (design ids are unguessable); print files are admin-only.
@@ -4205,14 +4232,19 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     delete copy.uploadTokenHash;
     delete copy.orderedAt;
     if (copy.kind === 'book') copy.uploadTokenHash = sha(token); // the book page edits with this token
+    // A name list: the copy's own key, kept with its new cart item.
+    const listKey = copy.merge ? crypto.randomBytes(18).toString('base64url') : null;
+    if (listKey) copy.listKeyHash = sha(listKey);
+    else delete copy.listKeyHash;
     fs.cpSync(store.designDir(src.id), store.designDir(copy.id), { recursive: true, filter: (from) => !STALE_COPY.test(path.basename(from)) });
     store.createDesign(copy, {});
-    return { design: copy, token };
+    return { design: copy, token, listKey };
   }
   /** What the cart keeps for a design (the same as the editor and book page put there). */
-  const cartEntry = (d, token) => ({
+  const cartEntry = (d, token, listKey = null) => ({
     designId: d.id,
     ...(d.kind === 'book' ? { bookId: d.bookId, editToken: token } : {}),
+    ...(d.merge && listKey ? { listKey } : {}),
     productId: d.productId,
     productName: d.productName,
     colorName: d.color.name,
@@ -4254,7 +4286,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         skipped.push({ position: i + 1, productName: it.productName, reason });
         return;
       }
-      const { design, token } = copyDesign(d);
+      const { design, token, listKey } = copyDesign(d);
       const price = d.kind === 'gangsheet' ? d.price : designPrice({ ...design, orderId: null, status: 'ready' });
       if (price == null) {
         skipped.push({ position: i + 1, productName: it.productName, reason: 'productGone' });
@@ -4263,7 +4295,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       design.price = price;
       if (product && d.kind !== 'photoset') Object.assign(design, pieceInfo(product, design));
       store.save();
-      items.push(cartEntry(design, token));
+      items.push(cartEntry(design, token, listKey));
     });
     res.json({ items, skipped });
   });
@@ -4291,7 +4323,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const d = rec && UUID_RE.test(rec.designId || '') && store.getDesign(rec.designId);
       if (!d || d.orderId || (d.status && d.status !== 'ready')) continue;
       if (d.kind === 'book' && !rec.editToken) continue;
-      items.push({ ...cartEntry(d, rec.editToken), addedAt: rec.addedAt || c.updatedAt || new Date().toISOString(), ...(rec.later ? { later: true } : {}), ...(rec.movedAt ? { movedAt: rec.movedAt } : {}) });
+      items.push({ ...cartEntry(d, rec.editToken, rec.listKey), addedAt: rec.addedAt || c.updatedAt || new Date().toISOString(), ...(rec.later ? { later: true } : {}), ...(rec.movedAt ? { movedAt: rec.movedAt } : {}) });
     }
     return { items, updatedAt: c.updatedAt };
   }
@@ -4321,7 +4353,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const at = when(it.addedAt) || new Date().toISOString();
       // "Saved for later" (kept out of the order), and when it last moved between cart and saved.
       const moved = when(it.movedAt);
-      items.push({ designId: it.designId, addedAt: at, ...(it.later === true ? { later: true } : {}), ...(moved ? { movedAt: moved } : {}), ...(d.kind === 'book' && BOOK_TOKEN_RE.test(it.editToken || '') ? { editToken: it.editToken } : {}) });
+      items.push({ designId: it.designId, addedAt: at, ...(it.later === true ? { later: true } : {}), ...(moved ? { movedAt: moved } : {}), ...(d.kind === 'book' && BOOK_TOKEN_RE.test(it.editToken || '') ? { editToken: it.editToken } : {}), ...(d.merge && LIST_KEY_RE.test(it.listKey || '') ? { listKey: it.listKey } : {}) });
     }
     // With `base` (the ids this device last agreed with the account): merged with what the account has
     // now, so a device with an old page open can't drop items added elsewhere or bring back removed ones.

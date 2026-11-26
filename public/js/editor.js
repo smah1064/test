@@ -82,6 +82,7 @@
     'ed.soldOut': ['Sold out', 'خلصان'],
     'ed.qtyColoursGone': ['This product doesn\'t come in some of the colours you had quantities for: they were taken out. Check the quantities below.', 'المنتج ده مش متاح في بعض الألوان اللي كنت كاتب لها كميات، فشلناها. راجع الكميات تحت.'],
     'ed.fieldThere': ['{field} is already on the design: it is selected. Add another one by typing it in a text.', '{field} موجود على التصميم بالفعل، واخترناهولك. لو عايزه تاني اكتبه جوه نص.'],
+    'ed.listAgain': ['This design\'s name list isn\'t on this device. Upload your list again to fill in the names.', 'قايمة الأسامي بتاعة التصميم ده مش على الجهاز ده. ارفع القايمة تاني عشان الأسامي تتملا.'],
     'ed.sizeSwitched': ['That size is sold out in this colour, so we picked the next size.', 'المقاس ده خلصان في اللون ده، فاخترنالك المقاس اللي بعده.'],
     'ed.soldOutPick': ['This one is sold out right now. Please pick another.', 'ده خلصان دلوقتي. اختار غيره.'],
     'ed.designGone': ['This ready design isn\'t in the shop right now. Pick another one, or start your own.', 'التصميم الجاهز ده مش متاح دلوقتي. اختار تصميم تاني أو ابدأ تصميمك.'],
@@ -160,7 +161,17 @@
 
   if (params.get('design')) {
     try {
-      const saved = await POD.api('/api/designs/' + encodeURIComponent(params.get('design')));
+      // The name list's key kept with the cart item, the order's key or edit link, or the team's sign-in: the names
+      // are only sent to who may read them (owner's OK, 26 Nov).
+      const own = [...POD.getCart(), ...(POD.getSaved ? POD.getSaved() : [])].find((it) => it && it.designId === params.get('design'));
+      const rvOrder = /^([0-9a-f-]{36})\./i.exec(params.get('revise') || '');
+      const listHeaders = {
+        ...(own && typeof own.listKey === 'string' ? { 'x-list-key': own.listKey } : {}),
+        ...(rvOrder ? POD.orderHeaders(POD.orderKey(rvOrder[1], params.get('k'))) : {}),
+        ...(/^[A-Za-z0-9_-]{20,40}$/.test(params.get('rt') || '') ? { 'x-revise-token': params.get('rt') } : {}),
+        ...(params.get('shopEdit') && adminToken() ? { Authorization: `Bearer ${adminToken()}` } : {}),
+      };
+      const saved = await POD.api('/api/designs/' + encodeURIComponent(params.get('design')), { headers: listHeaders });
       const instead = await missing(saved.productId);
       st.product = products.find((p) => p.id === saved.productId) || instead || st.product;
       st.colorId = saved.color.id;
@@ -170,6 +181,7 @@
       st.options = optionsFrom(saved.options);
       if (saved.quantities) st.qty = Object.fromEntries([...new Set(saved.quantities.map((l) => l.color.id))].map((c) => [c, Object.fromEntries(saved.quantities.filter((l) => l.color.id === c).map((l) => [l.size.id, l.qty]))]));
       if (saved.mergeList) st.mergeList = { columns: saved.mergeList.columns, rows: saved.mergeList.rows, total: saved.mergeList.rows.length, truncated: false, fileName: '' };
+      else if (saved.mergeLocked) setTimeout(() => toast(tEd('ed.listAgain'), 'error'), 600);
       // Designs from before embroidery was a layer: their stitched front is the embroidery layer now.
       const host = st.product.embroidery && st.product.embroidery.side;
       const editorSides = { ...saved.editor };
@@ -6353,6 +6365,7 @@
         ...(design.copies > 1 ? { copies: design.copies } : {}),
         ...(design.quantities ? { quantities: design.quantities } : {}),
         ...(design.merge ? { merge: { count: design.merge.count } } : {}),
+        ...(design.merge && created.listKey ? { listKey: created.listKey } : {}),
         previewUrl: design.previewUrl,
         addedAt: new Date().toISOString(),
       };
