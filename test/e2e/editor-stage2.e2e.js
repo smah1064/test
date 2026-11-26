@@ -62,8 +62,9 @@ test('phones: top bar with the product button and ⋯ menu; buy bar says what is
         assert.match(await page.textContent('#buy-sum'), lang === 'ar' ? /M.*قطعة واحدة/ : /M.*1 piece/);
         // The ⋯ menu: cart, account, products, the other language, save; Escape closes it.
         await page.click('#ed-more');
-        const items = await page.$$eval('#ed-menu a, #ed-menu button', (xs) => xs.filter((x) => x.offsetParent).map((x) => x.getAttribute('href') || x.id || (x.hasAttribute('data-lang-toggle') ? 'lang' : '')));
-        assert.deepStrictEqual(items, ['/cart', '/account', '/#products', 'lang', 'ed-save']);
+        const items = await page.$$eval('#ed-menu a, #ed-menu button', (xs) => xs.filter((x) => x.offsetParent).map((x) => x.getAttribute('href') || x.dataset.proxy || x.id || (x.hasAttribute('data-lang-toggle') ? 'lang' : '')));
+        // (Stage 3: share, zoom to the print area, hide the guides and clear the side moved here from the bar.)
+        assert.deepStrictEqual(items, ['/cart', '/account', '/#products', 'lang', 'share-open', 'zoom-print', 'preview-toggle', 'ed-save', 'clear-side']);
         assert.strictEqual(await page.evaluate(() => [...document.querySelectorAll('#ed-menu a, #ed-menu button')].every((x) => x.getBoundingClientRect().height >= 44)), true);
         await page.keyboard.press('Escape');
         assert.strictEqual(await page.isVisible('#ed-menu'), false);

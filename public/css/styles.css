@@ -1608,6 +1608,7 @@ html[dir="ltr"] .hm-tile-link span { display: inline-block; transform: scaleX(-1
   .panel-foot { padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); gap: 12px; }
   .panel-foot .amount { font-size: 18px; line-height: 1.2; }
   .panel-foot .qty-chip, .panel-foot #save-draft, .panel-foot #preview-open-m { display: none !important; }
+  .panel-foot .price-line > div { min-width: 0; }
   .buy-sum { display: block; max-width: 100%; border: 0; background: none; padding: 2px 0; margin: 0; font: inherit; font-size: 12px; color: var(--ink-3); text-align: start; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; position: relative; }
   .buy-sum::after { content: ""; position: absolute; inset: -14px -4px -10px; }
   .buy-sum.ask { color: var(--accent); font-weight: 700; }
@@ -1622,4 +1623,75 @@ html[dir="ltr"] .hm-tile-link span { display: inline-block; transform: scaleX(-1
   #size-ask { place-items: end stretch; padding: 0; }
   #size-ask .pv-box, #size-ask > div { width: 100%; height: auto; max-height: 70%; border-radius: 18px 18px 0 0; padding: 18px 16px calc(16px + env(safe-area-inset-bottom)); }
   #size-ask .size-ask-foot .btn { flex: 1; min-height: 48px; }
+}
+
+/* ---------- Editor redesign, stage 3 (owner's go 26 Nov): bigger product, floating buttons, start prompt ---------- */
+.start-here { position: absolute; left: 0; top: 0; z-index: 4; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 10px; border: 0; background: none; font: inherit; color: var(--ink); cursor: pointer; text-align: center; overflow: hidden; }
+.start-here[hidden] { display: none; }
+.start-here .start-plus { width: 44px; height: 44px; border-radius: 50%; background: #fff; display: grid; place-items: center; box-shadow: 0 2px 10px rgba(16,24,40,.14); color: var(--ink); }
+.start-here b { font-size: 15px; }
+.start-here small { font-size: 12px; color: var(--ink-3); line-height: 1.4; }
+.start-here:hover .start-plus, .start-here:focus-visible .start-plus { background: var(--ink); color: #fff; }
+@media (max-width: 820px) {
+  /* The bar above the product becomes white buttons floating on the design area (booklets keep their page strip). */
+  .stage-bar:not(:has(.side-tabs.pages)) { position: absolute; inset: 0; z-index: 7; display: block; padding: 0; background: none; border: 0; overflow: visible; pointer-events: none; }
+  .stage-bar:not(:has(.side-tabs.pages)) > * { pointer-events: auto; position: absolute; }
+  .stage-bar:not(:has(.side-tabs.pages)) .zoom-group,
+  .stage-bar:not(:has(.side-tabs.pages)) #share-open,
+  .stage-bar:not(:has(.side-tabs.pages)) #preview-toggle,
+  .stage-bar:not(:has(.side-tabs.pages)) #clear-side { display: none !important; }
+  .stage-bar:not(:has(.side-tabs.pages)) .side-tabs { top: 8px; inset-inline-start: 8px; background: #fff; border-radius: 999px; padding: 0; box-shadow: 0 2px 10px rgba(16,24,40,.12); }
+  .stage-bar:not(:has(.side-tabs.pages)) .side-tab { border-radius: 999px; }
+  .stage-bar:not(:has(.side-tabs.pages)) .side-tab.active { background: var(--ink); color: #fff; box-shadow: none; }
+  .stage-bar:not(:has(.side-tabs.pages)) .side-tab.active .has { background: #fff; }
+  .stage-bar:not(:has(.side-tabs.pages)) .check-chip { top: 8px; inset-inline-end: 8px; border-radius: 999px; box-shadow: 0 2px 10px rgba(16,24,40,.12); background: #fff; }
+  .stage-bar:not(:has(.side-tabs.pages)) .check-chip.warn { background: #fff4e0; }
+  .stage-bar:not(:has(.side-tabs.pages)) .check-chip.bad { background: #fdecec; }
+  .stage-bar:not(:has(.side-tabs.pages)) #undo, .stage-bar:not(:has(.side-tabs.pages)) #redo { bottom: 8px; width: 48px; height: 44px; background: #fff; border: 0; box-shadow: 0 2px 10px rgba(16,24,40,.12); }
+  .stage-bar:not(:has(.side-tabs.pages)) #undo { inset-inline-start: 8px; border-start-start-radius: 999px; border-end-start-radius: 999px; border-start-end-radius: 0; border-end-end-radius: 0; }
+  .stage-bar:not(:has(.side-tabs.pages)) #redo { inset-inline-start: 56px; border-start-end-radius: 999px; border-end-end-radius: 999px; border-start-start-radius: 0; border-end-start-radius: 0; border-inline-start: 1px solid var(--line); }
+  html[dir="rtl"] .stage-bar:not(:has(.side-tabs.pages)) #undo svg, html[dir="rtl"] .stage-bar:not(:has(.side-tabs.pages)) #redo svg { transform: scaleX(-1); }
+  .stage-bar:not(:has(.side-tabs.pages)) #undo:disabled, .stage-bar:not(:has(.side-tabs.pages)) #redo:disabled { opacity: 1; color: #b9bcc2; }
+  .stage-bar:not(:has(.side-tabs.pages)) #preview-open { bottom: 8px; inset-inline-end: 8px; background: #fff; color: var(--ink); border: 0; border-radius: 999px; padding: 0 14px; gap: 6px; box-shadow: 0 2px 10px rgba(16,24,40,.12); }
+  .stage-bar:not(:has(.side-tabs.pages)) #preview-open .btn-label { display: inline !important; font-weight: 700; }
+  /* While a settings sheet is open the floating buttons step aside (the sheet has its own close). */
+  body.sheet-props .stage-bar:not(:has(.side-tabs.pages)), body.sheet-product .stage-bar:not(:has(.side-tabs.pages)), body.sheet-check .stage-bar:not(:has(.side-tabs.pages)) { display: none; }
+  /* Hidden while something is dragged, so nothing floats over the hand. */
+  body.dragging .stage-bar:not(:has(.side-tabs.pages)) > * { opacity: 0; pointer-events: none; transition: opacity .12s; }
+  .stage-hint { bottom: 64px; }
+  .overview { top: 60px; bottom: auto; }
+  .ed-menu .ed-sep { border-top: 1px solid var(--line); border-radius: 0; margin-top: 4px; padding-top: 10px; }
+  .ed-menu .ed-danger { color: var(--bad, #b42318); border-top: 1px solid var(--line); border-radius: 0 0 8px 8px; margin-top: 4px; }
+  .ed-menu .ed-danger svg { color: var(--bad, #b42318); }
+  .ed-menu [aria-pressed="true"] { background: var(--bg); }
+  .ed-menu #ed-save { border-top: 0; margin-top: 0; padding-top: 8px; }
+}
+.stage { scrollbar-width: none; }
+.stage::-webkit-scrollbar { display: none; }
+
+/* ---------- Editor redesign, stage 4 (owner's go 26 Nov): five tools, the rest in More ---------- */
+.more-list { display: flex; flex-direction: column; }
+.more-row { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 4px; border: 0; border-bottom: 1px solid var(--line); background: none; font: inherit; color: var(--ink); text-align: start; cursor: pointer; width: 100%; }
+.more-row:last-child { border-bottom: 0; }
+.more-row[hidden] { display: none; }
+.more-row:hover, .more-row:focus-visible { background: var(--bg); }
+.more-ic { width: 40px; height: 40px; border-radius: 10px; background: var(--bg); display: grid; place-items: center; flex: none; color: var(--ink-2); }
+.more-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.more-txt b { font-size: 15px; }
+.more-txt small { font-size: 13px; color: var(--ink-3); line-height: 1.4; }
+.more-chev { flex: none; color: var(--ink-3); }
+html[dir="rtl"] .more-chev { transform: scaleX(-1); }
+@media (max-width: 820px) {
+  /* Five wide tools: Text, Image, Templates, Stickers, More (shapes, library, AI and name lists are in More). */
+  .tools .tool[data-flyout="shapes"], .tools .tool[data-flyout="library"], .tools .tool[data-flyout="ai"], .tools #tool-names { display: none !important; }
+  .tools .tool[data-flyout="text"] { order: 1; }
+  .tools .tool[data-flyout="upload"] { order: 2; }
+  .tools .tool[data-flyout="templates"] { order: 3; }
+  .tools .tool[data-flyout="stickers"] { order: 4; }
+  .tools .tool-more { order: 5; }
+  .tools .tool svg { width: 22px; height: 22px; }
+  /* Tools under the thumb, just above the price bar (switched on per phone until checked on Android). */
+  html.tools-bottom .tools { order: 2; border-bottom: 0; border-top: 1px solid var(--line); }
+  html.tools-bottom .panel { order: 3; }
+  html.tools-bottom .stage-wrap { order: 1; }
 }
