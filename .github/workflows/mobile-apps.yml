@@ -255,8 +255,14 @@ jobs:
           set -e
           head=$(gh api "repos/$GH_REPO/commits/$GITHUB_REF_NAME" --jq .sha)
           if [ "$head" != "$GITHUB_SHA" ]; then
-            echo "Not published: a newer push ($head) is on the branch, and its run publishes the test app." | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 0
+            # A newer push that only changes tests or notes makes the same app: publish this one anyway.
+            files=$(gh api "repos/$GH_REPO/compare/$GITHUB_SHA...$head" --jq '.files[].filename' 2>/dev/null) || files="?"
+            app=$(printf '%s\n' "$files" | grep -vE '^mobile/(test/|README\.md$|store/)' | grep -v '^$' || true)
+            if [ -n "$app" ]; then
+              echo "Not published: a newer push ($head) changes the app, and its run publishes the test app." | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "A newer push ($head) only changes tests or notes: this app is published." >> "$GITHUB_STEP_SUMMARY"
           fi
           src=$(ls apk/*.apk | head -1)
           cp "$src" ebda3-android-test.apk

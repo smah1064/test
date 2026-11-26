@@ -74,12 +74,12 @@ function launchApp() {
   appProcess.stderr.on('data', (d) => { appOutput += d; });
 }
 
-/** The app's lines in the simulator's log (its messages, and the system's about its links). */
+/** The app's own lines in the simulator's log. */
 function systemLog() {
   try {
     const out = execFileSync('xcrun', ['simctl', 'spawn', udid, 'log', 'show', '--last', '15m', '--style', 'compact',
-      '--predicate', 'process == "App" OR eventMessage CONTAINS[c] "me.ebda3.app"'], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
-    const lines = out.split('\n').filter((l) => /Ebda3Shell|me\.ebda3\.app|⚡️|[Ee]rror|[Ff]ault/.test(l));
+      '--predicate', 'process == "App"'], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
+    const lines = out.split('\n').filter((l) => /Ebda3Shell|⚡️/.test(l));
     return `--- the simulator's log (last ${Math.min(lines.length, 100)} of ${lines.length} lines) ---\n${lines.slice(-100).join('\n')}`;
   } catch (e) {
     return `(no simulator log: ${e.message.split('\n')[0]})`;
