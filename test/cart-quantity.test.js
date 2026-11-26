@@ -42,12 +42,12 @@ test.after(() => {
   fs.rmSync(dataDir, { recursive: true, force: true });
 });
 const post = (url, body, headers = {}) => fetch(base + url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-lang': 'en', ...headers }, body: JSON.stringify(body) });
-async function makeDesign(body) {
+async function makeDesign(body, print = PRINT) {
   const res = await post('/api/designs', { sides: { front: { editor: { objects: [{ type: 'i-text', text: 'hi' }] } } }, ...body });
   assert.strictEqual(res.status, 201, await res.clone().text());
   const { id, uploadToken, files } = await res.json();
   for (const name of files) {
-    const up = await fetch(`${base}/api/designs/${id}/files/${name}`, { method: 'PUT', headers: { 'x-upload-token': uploadToken, 'Content-Type': 'application/octet-stream' }, body: name.endsWith('.svg') ? SVG : name.includes('print') ? PRINT : PREVIEW });
+    const up = await fetch(`${base}/api/designs/${id}/files/${name}`, { method: 'PUT', headers: { 'x-upload-token': uploadToken, 'Content-Type': 'application/octet-stream' }, body: name.endsWith('.svg') ? SVG : name.includes('print') ? print : PREVIEW });
     assert.strictEqual(up.status, 204, name);
   }
   const done = await fetch(`${base}/api/designs/${id}/complete`, { method: 'POST', headers: { 'x-upload-token': uploadToken } });
@@ -108,7 +108,7 @@ test('packs count copies: 10 single menus become one 10-pack; 9 say a pack costs
   assert.strictEqual(nine.switched, undefined, 'single copies: nothing to say');
   assert.ok(nine.cheaper && nine.cheaper.copies === 10 && nine.cheaper.price < nine.entry.price, JSON.stringify(nine.cheaper));
   const ten = await (await setQty(design.id, { copies: 10 }, key)).json();
-  assert.deepStrictEqual(ten.switched && ten.switched.qty, 1);
+  assert.deepStrictEqual(ten.switched && ten.switched.map((x) => x.qty), [1]);
   assert.strictEqual(ten.entry.sizeLabel.en.startsWith('A4'), true);
   assert.strictEqual(ten.entry.price < nine.entry.price, true, 'ten for less than nine');
   assert.strictEqual(ten.count.n, 10);
@@ -157,4 +157,56 @@ test('the account\'s cart keeps the key, so − / + works on another device too'
   assert.ok(put.ok, await put.clone().text());
   const got = await (await fetch(`${base}/api/account/cart`, { headers: { Cookie: cookie } })).json();
   assert.strictEqual(got.items[0].designKey, key);
+});
+
+test('envelopes (sizes mix): 900 is the cheapest mix of packs, and the cart says 1,000 cost less (owner, 26 Nov)', async () => {
+  const P = require('../src/products');
+  const env = P.PRODUCTS.find((p) => p.id === 'dlenvelopes');
+  const price = (id) => P.priceFor(env, id, 1);
+  const { design, key } = await makeDesign({ productId: 'dlenvelopes', color: env.colors[0].id, size: '100' });
+  const r = await (await setQty(design.id, { copies: 900 }, key)).json();
+  // 500 + 4 × 100, not 9 × 100.
+  const lines = Object.fromEntries(r.entry.quantities.map((l) => [l.size.id, l.qty]));
+  assert.deepStrictEqual(lines, { 100: 4, 500: 1 });
+  assert.strictEqual(r.entry.price, price('500') + 4 * price('100'));
+  assert.ok(r.entry.price < 9 * price('100'));
+  assert.ok(Array.isArray(r.switched), 'bigger packs taken for less: said');
+  // 1,000 (two 500s) costs less than 900: the tip, with the cart's prices too (it stays after a reload).
+  assert.deepStrictEqual([r.cheaper.copies, r.cheaper.price], [1000, 2 * price('500')]);
+  const q = (await quote([design.id])).items[0];
+  assert.deepStrictEqual(q.count.cheaper, { copies: 1000, price: 2 * price('500') });
+  assert.strictEqual(q.count.n, 900);
+  assert.strictEqual(q.count.step, 100);
+  // Taken: 1,000 = two 500s; − from there works on the mix (the counter stays).
+  const k = await (await setQty(design.id, { copies: 1000 }, key)).json();
+  assert.deepStrictEqual(k.entry.quantities.map((l) => [l.size.id, l.qty]), [['500', 2]]);
+  assert.strictEqual(k.count.n, 1000);
+  const back = await (await setQty(design.id, { copies: 900 }, key)).json();
+  assert.strictEqual(back.count.n, 900, 'a mix of packs keeps its counter');
+  // Ordered as it is: 500 + 4 × 100 at the cart's price.
+  const order = await post('/api/orders', { customer: { name: 'Sara Ahmed', phone: '01012345678', governorate: 'giza', city: 'Dokki', address: '12 Tahrir St' }, designIds: [design.id] });
+  assert.strictEqual(order.status, 201, await order.clone().text());
+  const o = await order.json();
+  assert.strictEqual(o.items[0].price, price('500') + 4 * price('100'));
+});
+
+test('sizes that are not packs of copies (banner sizes, photo-book pages) count pieces and never change size', async () => {
+  for (const [productId, size] of [['banners', '200x100'], ['photobook', '200'], ['windowstickers', '70']]) {
+    const P = require('../src/products');
+    const p = P.PRODUCTS.find((x) => x.id === productId);
+    // (A print file the size of this product's print area at about 100 DPI.)
+    const sd = p.sides[0];
+    const w = Math.round((sd.printWidthIn || 10) * 100);
+    const big = await require('sharp')({ create: { width: w, height: Math.round((w * sd.printArea.h) / sd.printArea.w), channels: 4, background: { r: 200, g: 60, b: 60, alpha: 1 } } }).png().toBuffer();
+    const { design, key } = await makeDesign({ productId, color: p.colors[0].id, size, sides: { [sd.id]: { editor: { objects: [{ type: 'i-text', text: 'hi' }] } } } }, big);
+    const c = (await quote([design.id])).items[0].count;
+    assert.deepStrictEqual([c.n, c.step, c.unit], [1, 1, 'piece'], productId);
+    const r = await (await setQty(design.id, { qty: 3 }, key)).json();
+    assert.ok(r.entry, `${productId}: ${JSON.stringify(r)}`);
+    assert.strictEqual(r.entry.quantities[0].size.id, size, `${productId} keeps its size`);
+    assert.strictEqual(r.entry.quantities[0].qty, 3);
+    assert.strictEqual(r.entry.price, P.priceFor(p, size, 1) * 3);
+    assert.strictEqual(r.switched, undefined);
+    assert.strictEqual(r.cheaper, undefined);
+  }
 });

@@ -743,7 +743,11 @@
         const c = counts.get(item.designId);
         if (!c || blocked.has(item.designId)) return '';
         const n = qtyDraft.has(item.designId) ? qtyDraft.get(item.designId) : c.n;
-        const note = qtyNotes.get(item.designId);
+        // A word from the last change, else the shop's lasting tip: a few more copies that cost less (owner, 26 Nov:
+        // "900 for this price while 1000 is cheaper?!").
+        const word = (x) => POD.plural(c.unit === 'packPiece' ? 'qty.unitPieces' : 'qty.copies', x);
+        const note = qtyNotes.get(item.designId) || (c.cheaper && !qtyDraft.has(item.designId)
+          ? { text: t('cart.qtyCheaper', { copies: word(c.cheaper.copies), price: money(c.cheaper.price) }), take: c.cheaper.copies } : null);
         const label = t(c.unit === 'copy' ? 'cart.qtyCopies' : c.unit === 'packPiece' ? 'cart.qtyPieces' : 'cart.qty');
         return `
               <div class="cart-qty" data-qty-for="${esc(item.designId)}">
@@ -830,9 +834,9 @@
           if (qtyTimers.has(id)) { clearTimeout(qtyTimers.get(id)); qtyTimers.delete(id); queueQty(nid, 0); }
         } else if (qtyDraft.get(id) === n) qtyDraft.delete(id);
         if (res.count) counts.set(nid, res.count);
-        const word = (x) => POD.plural(c.unit === 'packPiece' ? 'qty.unitPieces' : 'qty.copies', x);
-        if (res.switched) qtyNotes.set(nid, { text: t('cart.qtyPack', { pack: `${POD.num(res.switched.qty)} × ${tr(res.switched.label)}` }) });
-        else if (res.cheaper) qtyNotes.set(nid, { text: t('cart.qtyCheaper', { copies: word(res.cheaper.copies), price: money(res.cheaper.price) }), take: res.cheaper.copies });
+        // Packs taken for less: said (the lasting tip about more copies comes with the counter itself).
+        const packs = Array.isArray(res.switched) ? res.switched : res.switched ? [res.switched] : [];
+        if (packs.length) qtyNotes.set(nid, { text: t('cart.qtyPack', { pack: packs.map((x) => `${POD.num(x.qty)} × ${tr(x.label)}`).join(' + ') }) });
         else qtyNotes.delete(nid);
         POD.setCart(cart);
         // The proof shows the pieces: asked again (a copy's proof loads as the cart is drawn).

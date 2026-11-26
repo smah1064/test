@@ -4386,35 +4386,103 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   // and photo sets still go through the editor.
   /** Copies in one pack of a size (1 for a size that isn't a pack). */
   const packSize = (z) => (z && z.pack && z.copies > 0 ? z.copies : 1);
-  /** The design's one line (colour, size, how many), or null when it has several or isn't one artwork. */
-  function oneLine(d, product) {
-    if (!d || d.kind || d.merge || !product || (d.quantities && d.quantities.length > 1)) return null;
-    const line = d.quantities && d.quantities[0] ? d.quantities[0] : { color: d.color, size: d.size, qty: 1 };
-    const size = product.sizes.find((z) => z.id === (line.size && line.size.id));
-    const colour = product.colors.find((c) => c.id === (line.color && line.color.id));
-    return size && colour ? { line, size, colour, qty: Number(line.qty) || 1 } : null;
+  // A pack that counts copies (100 cards, 10 menus). Sizes marked as packs without a number of copies are physical
+  // sizes or page counts (banners 100 × 50 or 200 × 100, a 100-page photo book): counted as pieces, never switched
+  // for one another (as the editor counts them).
+  const counted = (z) => Boolean(z && z.pack && typeof z.copies === 'number' && z.copies > 0);
+  /**
+   * The design's pieces as the cart counts them, or null when they change in the editor: one colour, and one size —
+   * or, on a product that mixes sizes, packs of one family (500 + 4 × 100 envelopes).
+   */
+  function cartLines(d, product) {
+    if (!d || d.kind || d.merge || !product) return null;
+    const lines = d.quantities && d.quantities.length ? d.quantities : [{ color: d.color, size: d.size, qty: 1 }];
+    const colourId = lines[0].color && lines[0].color.id;
+    if (!lines.every((l) => l.color && l.color.id === colourId)) return null;
+    const colour = product.colors.find((c) => c.id === colourId);
+    const sizes = lines.map((l) => product.sizes.find((z) => z.id === (l.size && l.size.id)));
+    if (!colour || sizes.some((z) => !z)) return null;
+    if (lines.length > 1 && !(product.mix && product.mix.sizes && sizes.every((z) => counted(z) && z.family === sizes[0].family))) return null;
+    const copies = lines.reduce((n, l, i) => n + (Number(l.qty) || 1) * packSize(sizes[i]), 0);
+    return { lines, sizes, colour, size: sizes[0], copies };
   }
   /** A pack's family that can be printed in this colour now (the size itself first). */
-  const packFamily = (product, d, size, colour) => [size, ...product.sizes.filter((z) => z !== size && z.pack && z.family === size.family
+  const packFamily = (product, d, size, colour) => [size, ...product.sizes.filter((z) => z !== size && counted(z) && z.family === size.family
     && !catalog.unavailable(product, { colorId: colour.id, sizeId: z.id, sideIds: (d.sides || []).map((sd) => sd.id).filter((id) => id !== EMB) }))];
+  /** One pack of each size of the family for this design (its sides, options, embroidery), or null when it can't be had. */
+  const packPrices = (d, colour, family) => new Map(family.map((z) => [z.id, designPrice({ ...d, orderId: null, status: 'ready', quantities: [{ color: { id: colour.id }, size: { id: z.id }, qty: 1 }] })]));
   /**
-   * The cart's − / + for a design (owner, 26 Nov): { n, step, max, unit } where n counts pieces, or copies for packs
-   * ("8 pages × 10 copies" twice: 20, in steps of the family's smallest pack). null: changed in the editor.
+   * The cheapest packs that make exactly `copies`: [{ size, qty }] and their price, or null. Products that mix sizes
+   * take any mix of the family's packs (as the editor does); the others one size (the owner's choice, 25 Nov).
+   */
+  function bestPacks(product, family, prices, copies) {
+    const usable = family.filter((z) => prices.get(z.id) != null);
+    if (!usable.length || copies < 1) return null;
+    if (!(product.mix && product.mix.sizes)) {
+      let best = null;
+      for (const z of usable) {
+        const n = copies / packSize(z);
+        if (!Number.isInteger(n) || n < 1 || n > MAX_PIECES) continue;
+        const price = round2(prices.get(z.id) * n);
+        if (!best || price < best.price - 0.5) best = { picks: [{ size: z, qty: n }], price };
+      }
+      return best;
+    }
+    // Any mix: the cheapest way to exactly `copies` (in steps of the packs' common size).
+    const gcd = (a, b) => (b ? gcd(b, a % b) : a);
+    const g = usable.reduce((a, z) => gcd(a, packSize(z)), 0);
+    if (copies % g) return null;
+    const N = copies / g;
+    const cost = new Float64Array(N + 1).fill(Infinity);
+    const pick = new Int16Array(N + 1).fill(-1);
+    cost[0] = 0;
+    for (let n = 1; n <= N; n++) {
+      usable.forEach((z, i) => {
+        const k = packSize(z) / g;
+        if (k <= n && cost[n - k] + prices.get(z.id) < cost[n] - 1e-9) {
+          cost[n] = cost[n - k] + prices.get(z.id);
+          pick[n] = i;
+        }
+      });
+    }
+    if (!Number.isFinite(cost[N])) return null;
+    const count = new Map();
+    for (let n = N; n > 0; n -= packSize(usable[pick[n]]) / g) count.set(usable[pick[n]], (count.get(usable[pick[n]]) || 0) + 1);
+    const picks = usable.filter((z) => count.has(z)).map((z) => ({ size: z, qty: count.get(z) }));
+    if (picks.some((p) => p.qty > MAX_PIECES)) return null;
+    return { picks, price: round2(cost[N]) };
+  }
+  /** A bigger number of copies (a few steps up) that costs less than `price`: { copies, price } or null. */
+  function cheaperMore(product, family, prices, copies, step, price) {
+    for (let k = 1, c = copies + step; k <= 40 && c <= MAX_PACK_COPIES && c <= copies * 2 + Math.max(...family.map(packSize)); k++, c += step) {
+      const b = bestPacks(product, family, prices, c);
+      if (b && b.price < price - 0.5) return { copies: c, price: b.price };
+    }
+    return null;
+  }
+  /**
+   * The cart's − / + for a design (owner, 26 Nov): { n, step, max, unit, cheaper? } where n counts pieces, or copies for
+   * packs (in steps of the family's smallest pack), and `cheaper` a few more copies that cost less. null: changed in
+   * the editor.
    */
   function cartCount(d) {
     const product = d && getProduct(d.productId);
-    const one = oneLine(d, product);
-    if (!one || d.orderId) return null;
-    if (!one.size.pack) return { n: one.qty, step: 1, max: MAX_PIECES, unit: 'piece' };
-    const step = Math.min(...packFamily(product, d, one.size, one.colour).map(packSize));
-    return { n: one.qty * packSize(one.size), step, max: MAX_PACK_COPIES, unit: one.size.unit === 'piece' ? 'packPiece' : 'copy' };
+    const cl = cartLines(d, product);
+    if (!cl || d.orderId) return null;
+    if (!counted(cl.size)) return cl.lines.length === 1 ? { n: Number(cl.lines[0].qty) || 1, step: 1, max: MAX_PIECES, unit: 'piece' } : null;
+    const family = packFamily(product, d, cl.size, cl.colour);
+    const step = Math.min(...family.map(packSize));
+    const now = designPrice({ ...d, orderId: null, status: 'ready' });
+    const cheaper = now == null ? null : cheaperMore(product, family, packPrices(d, cl.colour, family), cl.copies, step, now);
+    return { n: cl.copies, step, max: MAX_PACK_COPIES, unit: cl.size.unit === 'piece' ? 'packPiece' : 'copy', ...(cheaper ? { cheaper } : {}) };
   }
-  /** The design with this line instead (price and pieces as the shop counts them). */
-  function withLine(x, product, colour, size, qty) {
-    const sameAsChosen = qty === 1 && colour.id === x.color.id && size.id === x.size.id;
-    if (size.id !== x.size.id) x.size = { ...x.size, id: size.id, label: withOptions(size.label, x.options) };
-    if (sameAsChosen) delete x.quantities;
-    else x.quantities = [{ color: { id: colour.id, name: colour.name, hex: colour.hex }, size: { id: size.id, label: withOptions(size.label, x.options), ...packOf(size) }, qty }];
+  /** The design with these packs (or pieces) instead: price and pieces as the shop counts them. */
+  function withPicks(x, product, colour, picks) {
+    const line = (z, qty) => ({ color: { id: colour.id, name: colour.name, hex: colour.hex }, size: { id: z.id, label: withOptions(z.label, x.options), ...packOf(z) }, qty });
+    // One size: the design's size follows (the editor's switch to a bigger pack does the same).
+    if (picks.length === 1 && picks[0].size.id !== x.size.id) x.size = { ...x.size, id: picks[0].size.id, label: withOptions(picks[0].size.label, x.options) };
+    if (picks.length === 1 && picks[0].qty === 1 && colour.id === x.color.id && picks[0].size.id === x.size.id) delete x.quantities;
+    else x.quantities = picks.map((p) => line(p.size, p.qty));
     x.price = designPrice({ ...x, orderId: null, status: 'ready' });
     return x;
   }
@@ -4423,45 +4491,38 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (!d || d.status !== 'ready') throw new HttpError(404, 'designNotFound');
     const product = getProduct(d.productId);
     if (!product) throw new HttpError(404, 'designNotFound');
-    const one = oneLine(d, product);
-    if (!one) throw new HttpError(409, 'qtyInEditor');
+    const cl = cartLines(d, product);
+    if (!cl || (!counted(cl.size) && cl.lines.length > 1)) throw new HttpError(409, 'qtyInEditor');
     const b = req.body || {};
-    // Pieces, or for packs the copies: the cheapest size of the pack's family that makes exactly that many (as the
-    // editor switches "10 × 1 copy" to "1 × 10 copies" when that costs less; the owner's choice, 25 Nov).
-    let pick;
+    // Pieces, or for packs the copies: the cheapest packs of the family that make exactly that many.
+    let picks;
     let cheaper = null;
-    let switchedTo = null;
-    if (!one.size.pack) {
+    let switched = null;
+    if (!counted(cl.size)) {
       const qty = Number(b.qty);
       if (!Number.isInteger(qty) || qty < 1 || qty > MAX_PIECES) throw new HttpError(400, 'qtyBad');
-      pick = { size: one.size, qty };
+      picks = [{ size: cl.size, qty }];
     } else {
       const copies = Number(b.copies);
       if (!Number.isInteger(copies) || copies < 1) throw new HttpError(400, 'qtyBad');
       if (copies > MAX_PACK_COPIES) throw new HttpError(400, 'qtyTooManyCopies', { max: MAX_PACK_COPIES.toLocaleString('en-US') });
-      const family = packFamily(product, d, one.size, one.colour);
-      const priced = family.map((z) => {
-        const qty = copies / packSize(z);
-        if (!Number.isInteger(qty) || qty < 1 || qty > MAX_PIECES) return null;
-        const price = withLine(JSON.parse(JSON.stringify(d)), product, one.colour, z, qty).price;
-        return price == null ? null : { size: z, qty, price };
-      }).filter(Boolean);
-      if (!priced.length) throw new HttpError(400, 'qtyBad');
-      // (Ties: the size already chosen.)
-      pick = priced.reduce((a, c) => (c.price < a.price - 0.5 ? c : a));
-      // Said only when a bigger pack was taken for less than the smallest ones that make that many.
-      const plain = priced.reduce((a, c) => (packSize(c.size) < packSize(a.size) ? c : a));
-      if (pick !== plain) switchedTo = pick;
-      // Fewer copies than a pack that costs less ("9 menus for 1,170; 10 are 250"): said, nothing changed.
-      const bigger = family.filter((z) => packSize(z) > copies).map((z) => ({ z, price: withLine(JSON.parse(JSON.stringify(d)), product, one.colour, z, 1).price }))
-        .filter((x) => x.price != null && x.price < pick.price - 0.5).sort((a, c) => a.price - c.price)[0];
-      if (bigger) cheaper = { copies: packSize(bigger.z), price: bigger.price, now: pick.price };
+      const family = packFamily(product, d, cl.size, cl.colour);
+      const prices = packPrices(d, cl.colour, family);
+      const best = bestPacks(product, family, prices, copies);
+      if (!best) throw new HttpError(400, 'qtyBad');
+      picks = best.picks;
+      // Said only when bigger packs were taken for less than the smallest ones that make that many.
+      const small = family.filter((z) => prices.get(z.id) != null).sort((a, c) => packSize(a) - packSize(c))[0];
+      if (picks.some((p) => p.size !== small)) switched = picks.map((p) => ({ label: p.size.label, qty: p.qty }));
+      // A few more copies that cost less ("1,000 for 2,100 against 900 for 2,450"): said, nothing changed.
+      cheaper = cheaperMore(product, family, prices, copies, Math.min(...family.map(packSize)), best.price);
+      if (cheaper) cheaper.now = best.price;
     }
     // (Stock is checked when the order is placed, as for any cart.)
     const key = String(req.get('x-design-key') || '');
     const own = !d.orderId && d.cartKeyHash && DESIGN_KEY_RE.test(key) && sameSecret(sha(key), d.cartKeyHash);
     const apply = (x) => {
-      withLine(x, product, one.colour, pick.size, pick.qty);
+      withPicks(x, product, cl.colour, picks);
       if (x.price == null) throw new HttpError(409, 'productUnavailable', { name: product.name[langOf(req)] || product.name.en });
       Object.assign(x, pieceInfo(product, x));
     };
@@ -4485,7 +4546,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       });
     }
     res.set('Cache-Control', 'no-store');
-    res.json({ entry: cartEntry(design, designKey), count: cartCount(design), copied: Boolean(designKey), ...(cheaper ? { cheaper } : {}), ...(switchedTo ? { switched: { label: switchedTo.size.label, qty: switchedTo.qty } } : {}) });
+    res.json({ entry: cartEntry(design, designKey), count: cartCount(design), copied: Boolean(designKey), ...(cheaper ? { cheaper } : {}), ...(switched ? { switched } : {}) });
   });
 
   app.post('/api/orders/:id/reorder', express.json({ limit: '8kb' }), (req, res) => {
