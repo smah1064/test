@@ -49,6 +49,7 @@ const accounting = require('./accounting');
 const bgremove = require('./bgremove');
 const coupons = require('./coupons');
 const customers = require('./customers');
+const { staffPassword } = require('./passwords');
 const oauth = require('./oauth');
 const importer = require('./importer');
 const assets = require('./assets');
@@ -3423,7 +3424,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       throw new HttpError(401, 'acctWrongCurrent');
     }
     // (Text only: {"a":1} was saved as "[object Object]". QA 25 Nov.)
-    const weak = typeof password !== 'string' ? 'acctPasswordShort' : customers.passwordProblem(password);
+    const weak = typeof password !== 'string' ? 'acctPasswordShort' : customers.passwordProblem(password, me);
     if (weak) throw new HttpError(400, weak);
     const { salt, hash } = customers.hashPassword(password);
     const updated = store.mutate((db) => {
@@ -3469,7 +3470,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const link = customers.readReset(auth.customerKey, token, findCustomer);
     if (!link) throw new HttpError(400, 'acctResetExpired');
     const cust = link.customer;
-    const weak = typeof password !== 'string' ? 'acctPasswordShort' : customers.passwordProblem(password);
+    const weak = typeof password !== 'string' ? 'acctPasswordShort' : customers.passwordProblem(password, cust);
     if (weak) throw new HttpError(400, weak);
     const { salt, hash } = customers.hashPassword(password);
     // An emailed link was opened: the account's email is proven to be theirs.
@@ -5001,21 +5002,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const s = typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f<>\u00ad\u061c\u115f\u1160\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2069\u3164\ufeff\uffa0]/g, '').trim().slice(0, 60) : '';
     return /[\p{L}\p{N}]/u.test(s) ? s : '';
   };
-  const COMMON_PASSWORDS = new Set(['password12', 'password123', 'password1234', 'qwertyuiop', 'qwerty1234', '1234567890', '0123456789', 'abcdefghij', 'abc1234567', 'iloveyou12', 'admin12345', 'admin123456', 'welcome123', 'ebda3ebda3', 'ebda312345']);
-  // (Parts that guess easily: what's left of a password without them, its owner's username and name, must still be
-  // six characters or more, four of them different. "mostafa.ali" for mostafa.ali, "qwerty12345", "password1234!"
-  // are refused. QA 25 Nov.)
-  const WEAK_PARTS = ['password', 'passw0rd', 'qwerty', 'azerty', 'asdfgh', 'zxcvbn', '1q2w3e4r', '1q2w3e', 'q1w2e3', 'abc123', '1234567890',
-    '123456', '12345', '654321', 'iloveyou', 'welcome', 'letmein', 'admin', 'ebda3', 'ebdaa', 'abcdef', '00000', '11111'];
-  const staffPassword = (pw, who) => {
-    if (!(typeof pw === 'string' && pw.length >= 10 && pw.length <= 200 && pw.trim().length >= 10
-      && new Set(pw).size >= 4 && !/^\d+$/.test(pw) && !COMMON_PASSWORDS.has(pw.toLowerCase()))) return false;
-    let rest = pw.toLowerCase();
-    const own = who ? [String(who.username || ''), ...String(who.name || '').split(/[\s._-]+/)].map((x) => x.toLowerCase()).filter((x) => x.length >= 3) : [];
-    for (const part of [...own.sort((a, b) => b.length - a.length), ...WEAK_PARTS]) rest = rest.split(part).join('');
-    // (What's left only digits and signs, "2024!!": a letter too, or ten of them.)
-    return rest.length >= 6 && new Set(rest).size >= 4 && (/\p{L}/u.test(rest) || rest.length >= 10);
-  };
+  // (The team's password check: src/passwords.js, with the list customers' passwords use too.)
   app.get('/api/admin/staff', requireAdmin, (req, res) => res.json({
     staff: staffAll().map(staffRow),
     roles: roles.ROLES.map((id) => ({ id, name: roles.ROLE_NAMES[id], perms: roles.ROLE_PERMS[id] })),
@@ -6946,7 +6933,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   app.get('/api/admin/accounts.csv', requireAdmin, (req, res) => {
     const r = reportFor(req);
     res.set('Content-Disposition', `attachment; filename="accounts-${r.from || 'start'}-to-${r.to || 'today'}.csv"`);
-    res.type('text/csv; charset=utf-8').send(accounting.reportCsv(r, nameOf));
+    res.type('text/csv; charset=utf-8').send(accounting.reportCsv(r, nameOf, { lang: langOf(req) }));
   });
   // (Only a cost sent clears or sets it: a request without the field changed nothing but cleared the saved cost. An
   // explicit null or empty clears it, as the dashboard's emptied box does. QA 26 Nov.)

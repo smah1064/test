@@ -109,7 +109,7 @@ test('Accounts CSV: the route answers a CSV in either language (BOM, numbers in 
 });
 
 // (Needs the route in src/app.js to pass the dashboard's language: accounting.reportCsv(r, nameOf, { lang: langOf(req) }).)
-test('Accounts CSV: the route follows the dashboard\'s language', { todo: 'src/app.js: reportCsv(r, nameOf, { lang: langOf(req) })' }, async () => {
+test('Accounts CSV: the route follows the dashboard\'s language', async () => {
   const got = await accountsCsv(['ar', 'en']);
   const ar = got.ar.toString('utf8');
   assert.ok(ar.includes(',2026-11-22,خامات ومنتجات,ink,120') && ar.includes('صافي الربح,-120'), ar);
@@ -182,10 +182,16 @@ test('customer passwords: the API refuses them at sign-up, change and reset, in 
     assert.deepStrictEqual([r.status, (await r.json()).code], [400, 'acctPasswordCommon']);
     r = await post('/api/account/password', { current: 'nile-river-9', password: 'qwerty123' }, { cookie });
     assert.strictEqual(r.status, 400);
+    for (const pw of ['01155554441', '+20 115 555 4441', 'test.person@example.com', 'test.person']) {
+      r = await post('/api/account/password', { current: 'nile-river-9', password: pw }, { cookie, 'x-lang': 'ar' });
+      assert.deepStrictEqual([r.status, (await r.json()).code], [400, 'acctPasswordPersonal'], pw);
+    }
     // Reset (the shop's link): a common one is refused, a good one works.
     const store = app.locals.store;
     const cust = store.db.customers.find((c) => c.phone === '01155554441');
     const link = customers.resetToken(app.locals.auth.customerKey, cust, 24, 'a');
+    r = await post('/api/account/reset', { token: link, password: '٠١١٥٥٥٥٤٤٤١' });
+    assert.deepStrictEqual([r.status, (await r.json()).code], [400, 'acctPasswordPersonal']);
     r = await post('/api/account/reset', { token: link, password: 'password1' });
     assert.deepStrictEqual([r.status, (await r.json()).code], [400, 'acctPasswordCommon']);
     // An account made before this with such a password still signs in (and can change it).
