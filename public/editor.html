@@ -405,6 +405,19 @@
   <div class="share-dialog" id="share-dialog" hidden>
     <div class="box" role="dialog" aria-modal="true" aria-labelledby="share-dialog-title">
       <div class="head"><h3 id="share-dialog-title" data-i18n="share.dialogTitle"></h3><button class="fly-close" id="share-close" data-i18n-aria="bar.close">✕</button></div>
+      <!-- View only (several pages or sides): to flip through, no replies; it follows the latest save. -->
+      <div class="view-share" id="view-share" hidden>
+        <h4 class="view-share-title" data-i18n="viewShare.title"></h4>
+        <p class="muted small" style="margin:0" data-i18n="viewShare.text"></p>
+        <div class="share-link-row"><input type="text" id="view-url" readonly><button class="btn btn-sm" id="view-copy" data-i18n="share.copy"></button></div>
+        <div class="share-actions">
+          <a class="btn btn-whatsapp" id="view-wa" target="_blank" rel="noopener" data-i18n="share.whatsapp"></a>
+          <a class="btn" id="view-mail" data-i18n="viewShare.email"></a>
+          <a class="btn" id="view-open" target="_blank" rel="noopener" data-i18n="viewShare.open"></a>
+        </div>
+        <button type="button" class="btn btn-sm btn-block" id="view-ask" data-i18n="viewShare.ask"></button>
+      </div>
+      <div id="opinion-share">
       <p class="muted small" style="margin:0" data-i18n="share.dialogText"></p>
       <div class="share-link-row"><input type="text" id="share-url" readonly><button class="btn btn-sm" id="share-copy" data-i18n="share.copy"></button></div>
       <div class="share-actions">
@@ -414,6 +427,7 @@
       <h3 class="share-replies-title" data-i18n="share.replies"></h3>
       <ul class="share-replies" id="share-dialog-replies"></ul>
       <button class="btn btn-sm btn-block" id="share-refresh" data-i18n="share.refresh"></button>
+      </div>
     </div>
   </div>
 
