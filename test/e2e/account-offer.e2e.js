@@ -58,6 +58,10 @@ test('"Save your orders" on the order page makes the account with a password onl
     assert.strictEqual(await page.locator('h1').innerText(), 'طلب رقم ١٠٠١');
     assert.strictEqual(await page.inputValue('#offer-phone'), '٠١٠٥٥٥٥٦٦٦٦');
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'no sideways scroll at 360 px');
+    // Under the order, one line until tapped (owner, 26 Nov); the password field then opens.
+    assert.strictEqual(await page.isVisible('#offer-pass'), false);
+    await page.click('#acct-offer-open');
+    assert.strictEqual(await page.evaluate(() => document.activeElement.id), 'offer-pass');
     // What is typed survives the page's own refresh.
     await page.fill('#offer-pass', 'sara-pass-2026');
     await page.evaluate(() => document.dispatchEvent(new Event('pod:langchange')));

@@ -1142,10 +1142,10 @@ window.POD_STRINGS = {
   'checkout.title': ['Delivery details', 'بيانات التوصيل'],
   'checkout.name': ['Full name', 'الاسم بالكامل'],
   'checkout.phone': ['Mobile number', 'رقم الموبايل'],
-  // An example in the page's digits, grouped the way it is usually written. The marks after the Arabic
-  // groups (\u200e, invisible) keep them left to right: a placeholder doesn't follow the field's own
-  // left-to-right setting (styles.css, input[type=tel]), and on its own "٠١٠ ١٢٣٤ ٥٦٧٨" shows its groups the other way round.
-  'checkout.phonePh': ['010 1234 5678', '٠١٠\u200e ١٢٣٤\u200e ٥٦٧٨'],
+  // Plainly an example, in the digits a phone keypad types, one number left to right (owner, 26 Nov: the dark
+  // "٠١٠ ١٢٣٤ ٥٦٧٨" looked like a number already typed in, and its groups read the wrong way round in Arabic).
+  // (The number in an isolate, \u2068 … \u2069: kept in the digits a keypad types, as POD.t keeps typed values.)
+  'checkout.phonePh': ['e.g. 01012345678', 'مثال: \u206801012345678\u2069'],
   'checkout.email': ['Email (optional)', 'البريد الإلكتروني (اختياري)'],
   'checkout.governorate': ['Governorate', 'المحافظة'],
   'checkout.choose': ['Choose…', 'اختر…'],
@@ -1212,6 +1212,13 @@ window.POD_STRINGS = {
   'delivery.feeFree': ['Free shipping', 'شحن مجاني'],
   'delivery.feeExpress': ['Shipping + {fee}', 'الشحن + {fee}'],
   'delivery.expressFee': ['Express delivery', 'التوصيل السريع'],
+  // Checkout (owner's OK, 26 Nov, from the 8:31 pm review): one short tick by "Place order" for the customer's own
+  // designs (none for a ready design added as it is), the colours note behind "Details"; the coupon field behind a link.
+  'checkout.proofOk': ['I’ve checked the preview and the design is how I want it', 'شفت المعاينة ومتأكد إن التصميم زي ما عايزه'],
+  'checkout.proofOkMore': ['Details', 'تفاصيل'],
+  'checkout.proofOkFirst': ['Tick it, then press Place order again.', 'علّم على المربع، وبعدين اضغط «تأكيد الطلب» تاني.'],
+  'proof.readyDesign': ['Ready design', 'تصميم جاهز'],
+  'coupon.open': ['Have a discount code?', 'عندك كود خصم؟'],
   'cart.sampleDate': ['With the sample first: expected by {date}', 'مع العينة الأول، الاستلام المتوقع: {date}'],
   // Checkout: errors shown at the field
   'checkout.needField': ['Please fill in: {field}', 'من فضلك اكتب: {field}'],

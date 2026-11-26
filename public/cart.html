@@ -50,10 +50,26 @@
     .photo-flags li { display: grid; gap: 2px; justify-items: center; font-size: 12px; font-weight: 700; }
     .photo-flags img { width: 60px; height: 60px; object-fit: cover; border-radius: 6px; border: 1px solid #f3d79b; background: #fff; }
     .photo-flags-hint { margin: 6px 0 0; font-size: 12.5px; }
-    /* A checked proof folds to one line (it opens again on demand) */
-    .proof-fold { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; }
-    .proof-fold .approve-check { flex: 1 1 180px; }
-    .approve-box .proof-toggle { justify-self: start; }
+    /* Checkout UX (owner, 26 Nov, 8:31 pm review) */
+    /* The one tick for the customer's own designs, right by "Place order"; the colours note behind "Details" */
+    .proof-ok { display: grid; gap: 8px; margin: 0 0 10px; }
+    .proof-ok[hidden], .proof-ok-note[hidden], #coupon-field[hidden], .coupon-open[hidden] { display: none; }
+    .proof-ok-line { display: flex; align-items: center; gap: 0 10px; flex-wrap: wrap; }
+    .proof-ok-line .approve-check { flex: 1 1 200px; min-height: 44px; align-items: center; }
+    .proof-ok-line .approve-check input { width: 22px; height: 22px; margin: 0; }
+    .proof-ok-more { min-height: 44px; padding: 0 4px; font-size: 13.5px; font-weight: 700; }
+    .proof-ok.nudge { padding: 10px 12px; border-radius: 12px; outline: 3px solid #f59e0b; box-shadow: 0 0 0 7px rgba(245, 158, 11, .2); background: #fffdf7; }
+    .sample-box { padding-top: 10px; }
+    /* Delivery: two big cards, each whole card a tap target, its full price at the end */
+    .delivery-pick .dlv-opt { align-items: center; gap: 10px; min-height: 56px; padding: 12px 14px; margin-bottom: 8px; border-radius: 12px; font-size: 14.5px; box-sizing: border-box; }
+    .delivery-pick .dlv-opt input { width: 22px; height: 22px; margin: 0; flex: none; }
+    .delivery-pick .dlv-opt:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .delivery-pick .dlv-fee { font-size: 16px; font-weight: 800; color: var(--ink); }
+    /* Coupon: "Have a discount code?" until the field is wanted */
+    .coupon-open { display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; font-weight: 700; }
+    .coupon-box .coupon-msg:empty { min-height: 0; margin: 0; }
+    /* The mobile number's example: light, and plainly an example */
+    #phone::placeholder { color: #8d94a0; opacity: 1; }
     .device-orders { margin-top: 16px; padding: 16px 18px; }
     .device-orders h2 { font-size: 17px; margin: 0 0 4px; }
     .device-orders ul { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
@@ -93,8 +109,7 @@
     .proof-short-st { margin: 0; font-size: 14.5px; font-weight: 800; color: var(--ok); }
     .proof-short-spec { margin: 0; font-size: 13px; color: var(--ink-3); line-height: 1.5; }
     .proof-more { font-size: 14px; font-weight: 700; padding: 8px 0; min-height: 36px; text-align: start; justify-self: start; }
-    /* "Place order" pressed too early: the box to tick, outlined, with a note */
-    .approve-box.nudge { border-top: 0; padding: 12px; border-radius: 12px; outline: 3px solid #f59e0b; box-shadow: 0 0 0 7px rgba(245, 158, 11, .2); background: #fffdf7; }
+    /* "Place order" pressed too early: the tick by it, outlined (.proof-ok.nudge), with a note */
     .nudge-note { display: grid; gap: 2px; margin: 0; padding: 10px 12px; border: 1px solid #f8d28a; border-radius: 10px; background: #fff4dc; color: #7a4a00; font-size: 13.5px; line-height: 1.5; }
     .nudge-note strong { font-size: 15px; color: #6b3d00; }
     /* Free shipping: what is left, with a bar (filling from the start side), or "ships free" */
@@ -191,10 +206,14 @@
         <div class="field"><label for="notes" data-i18n="checkout.notes"></label><input type="text" id="notes" name="notes" maxlength="500" dir="auto"></div>
 
         <div class="coupon-box">
+          <!-- "Have a discount code?": one small link that opens the field (kept open with a code in use or a word about one) -->
+          <button type="button" class="link-btn coupon-open" id="coupon-open" aria-expanded="false" aria-controls="coupon-field" data-i18n="coupon.open"></button>
+          <div id="coupon-field" hidden>
           <label for="coupon" class="small" style="font-weight:700" data-i18n="coupon.label"></label>
           <div class="coupon-row">
             <input type="text" id="coupon" maxlength="24" dir="ltr" autocomplete="off" autocapitalize="characters" data-i18n-placeholder="coupon.placeholder">
             <button class="btn btn-sm" type="button" id="coupon-apply" data-i18n="coupon.apply"></button>
+          </div>
           </div>
           <p class="small coupon-msg" id="coupon-msg"></p>
         </div>
@@ -202,10 +221,10 @@
           <legend data-i18n="delivery.title"></legend>
           <label class="dlv-opt"><input type="radio" name="delivery" value="standard" checked>
             <span class="dlv-main"><strong data-i18n="delivery.standard"></strong> · <span data-i18n="delivery.standardText"></span><span class="dlv-by small" id="dlv-by-standard"></span></span>
-            <span class="dlv-fee small" id="dlv-fee-standard"></span></label>
+            <span class="dlv-fee" id="dlv-fee-standard"></span></label>
           <label class="dlv-opt"><input type="radio" name="delivery" value="express">
             <span class="dlv-main"><strong data-i18n="delivery.express"></strong> · <span data-i18n="delivery.expressText"></span><span class="dlv-by small" id="dlv-by-express"></span></span>
-            <span class="dlv-fee small" id="dlv-fee-express"></span></label>
+            <span class="dlv-fee" id="dlv-fee-express"></span></label>
           <p class="muted small dlv-days" data-i18n="delivery.days"></p>
         </fieldset>
         <div class="line"><span data-i18n="checkout.subtotal"></span><span id="subtotal"></span></div>
@@ -218,6 +237,17 @@
         <div class="pay-box"><strong data-i18n="checkout.cod"></strong><span data-i18n="checkout.codText"></span></div>
         <div class="captcha-box" id="cap-order"></div>
         <p class="approve-status" id="approve-status" aria-live="polite"></p>
+        <!-- The customer's own designs: one short tick right by "Place order"; the colours note behind "Details". (None for
+             ready designs added as they are.) -->
+        <div class="proof-ok" id="proof-ok" hidden>
+          <p class="nudge-note" id="proof-ok-nudge" role="alert" hidden><strong data-i18n="cart.tickFirst"></strong><span data-i18n="checkout.proofOkFirst"></span></p>
+          <p class="approve-changed" id="proof-ok-changed" role="alert" data-i18n="proof.changed" hidden></p>
+          <div class="proof-ok-line">
+            <label class="approve-check" for="proof-ok-box"><input type="checkbox" id="proof-ok-box" aria-describedby="proof-ok-note"><span data-i18n="checkout.proofOk"></span></label>
+            <button type="button" class="link-btn proof-ok-more" id="proof-ok-more" aria-expanded="false" aria-controls="proof-ok-note" data-i18n="checkout.proofOkMore"></button>
+          </div>
+          <div class="proof-ok-note" id="proof-ok-note" hidden></div>
+        </div>
         <button class="btn btn-primary btn-lg btn-block" id="place-order" type="submit" data-i18n="checkout.place" aria-describedby="approve-status"></button>
       </form>
     </div>
@@ -480,8 +510,11 @@
       const blockedIn = (cart) => cart.filter((it) => blocked.has(it.designId));
 
       const proofOf = (id) => { const p = proofs.get(id); return p && p.state === 'ok' ? p.proof : null; };
+      /** A ready design added as it is (the shop's own, unchanged): nothing to tick (owner, 26 Nov). */
+      const isReady = (id) => Boolean(proofOf(id) && proofOf(id).ready);
       function isApproved(id) {
         const proof = proofOf(id);
+        if (proof && proof.ready) return true;
         const a = approvals.get(id);
         return Boolean(proof && a && a.ok && a.hash === proof.proofHash);
       }
@@ -510,8 +543,8 @@
         updateApproval();
         return entry.promise;
       }
-      // The item whose approval box "Place order" pointed to (pressed before every proof was approved).
-      let nudged = null;
+      // "Place order" was pressed before the tick next to it (it is outlined, with "Tick this first", until ticked).
+      let nudged = false;
       /** "White، 325 ml، Sublimation": the proof's colour and size (or its pieces), and how it is printed. */
       function proofSpecLine(proof) {
         const lines = Array.isArray(proof.quantities) ? proof.quantities.filter((l) => l && Number(l.qty) > 0) : [];
@@ -553,7 +586,8 @@
         const id = item.designId;
         const st = proofs.get(id);
         const ok = isApproved(id);
-        const head = `<h3 class="cart-proof-title" id="proof-h-${i}"><span>${esc(t('proof.title'))} · ${esc(tr(item.productName))}</span><span class="cart-proof-ok">✓ ${esc(t('proof.approved'))}</span></h3>`;
+        // (A ready design is "Ready design", not "Approved": the customer ticked nothing.)
+        const head = `<h3 class="cart-proof-title" id="proof-h-${i}"><span>${esc(t('proof.title'))} · ${esc(tr(item.productName))}</span><span class="cart-proof-ok">✓ ${esc(t(isReady(id) ? 'proof.readyDesign' : 'proof.approved'))}</span></h3>`;
         let body;
         if (!st || st.state === 'loading') {
           body = `<div class="cart-proof-state" role="status"><div class="spinner"></div>${esc(t('proof.loading'))}</div>`;
@@ -565,44 +599,30 @@
           const sample = Boolean(a && a.sample);
           const photos = Array.isArray(proof.photos);
           const sampleBy = sample && quote && quote.delivery && quote.delivery.sampleDays ? quote.delivery.by : null;
-          // "Tick this first": Place order was pressed while this proof wasn't approved (cleared once it is).
-          const nudge = nudged === id && !ok;
-          const nudgeNote = nudge ? `<p class="nudge-note" role="alert"><strong>${esc(t('cart.tickFirst'))}</strong><span>${esc(t('cart.tickFirstText'))}</span></p>` : '';
-          const approveBox = (note) => `
-              <div class="approve-box${nudge ? ' nudge' : ''}">
-                ${nudgeNote}
-                ${note}
-                <label class="approve-check" for="ok-${i}"><input type="checkbox" id="ok-${i}" data-approve="${esc(id)}"${ok ? ' checked' : ''}><span>${esc(t(photos ? 'proof.okPhotos' : 'proof.ok'))}</span></label>
-                ${PODProof.pieces(proof) > 1 && !photos ? `<label class="approve-check sample" for="sample-${i}"><input type="checkbox" id="sample-${i}" data-sample="${esc(id)}"${sample ? ' checked' : ''}><span>${esc(t('proof.sample'))}</span></label>` : ''}
+          // "Print one sample first" (more than one piece) stays with its item: a wish, not the approval. The approval
+          // itself is one short line next to "Place order" (owner, 26 Nov), with the colours note behind "Details".
+          const sampleBox = PODProof.pieces(proof) > 1 && !photos ? `
+              <div class="approve-box sample-box">
+                <label class="approve-check sample" for="sample-${i}"><input type="checkbox" id="sample-${i}" data-sample="${esc(id)}"${sample ? ' checked' : ''}><span>${esc(t('proof.sample'))}</span></label>
                 ${sampleBy ? `<p class="sample-date" role="status">${esc(t('cart.sampleDate', { date: POD.day(sampleBy) }))}</p>` : ''}
-                ${ok ? `<button class="btn btn-sm proof-toggle" type="button" id="tog-${i}" data-proof-toggle="${esc(id)}" aria-expanded="true">${esc(t('proof.hide'))}</button>` : ''}
-              </div>`;
+              </div>` : '';
           const changedNote = changed.has(id) ? `<p class="approve-changed" role="alert">${esc(t('proof.changed'))}</p>` : '';
-          if (ok && !expanded.has(id)) {
-            // Checked: one line (the box stays here to untick; the proof opens on demand).
-            body = `
-              <div class="proof-fold">
-                <label class="approve-check" for="ok-${i}"><input type="checkbox" id="ok-${i}" data-approve="${esc(id)}" checked><span>${esc(t('proof.checkedShort'))}</span></label>
-                ${sample ? `<span class="item-sample">${esc(t('item.sampleFirst'))}</span>` : ''}
-                <button class="btn btn-sm proof-toggle" type="button" id="tog-${i}" data-proof-toggle="${esc(id)}" aria-expanded="false">${esc(t('proof.show'))}</button>
-              </div>`;
-          } else if (!ok && !photos && !expanded.has(id)) {
-            // Not approved yet: a short card (picture, the checks' verdict, colour · size · printing), the whole
-            // proof one tap away. A warning or a problem is never folded away: its box is shown here in full.
+          if (!photos && !expanded.has(id)) {
+            // A short card (picture, the checks' verdict, colour · size · printing), the whole proof one tap away.
+            // A warning or a problem is never folded away: its box is shown here in full.
             body = `
               ${changedNote}
               ${shortProofHtml(proof, item, i)}
-              ${approveBox(PODProof.screenNote({ printColours: !proof.pages }))}`;
+              ${sampleBox}`;
           } else {
             body = `
               ${changedNote}
-              ${!ok && !photos ? `<button class="link-btn proof-toggle proof-more" type="button" id="tog-${i}" data-proof-toggle="${esc(id)}" aria-expanded="true">${esc(t('cart.proofDetailsHide'))}</button>` : ''}
+              ${!photos ? `<button class="link-btn proof-toggle proof-more" type="button" id="tog-${i}" data-proof-toggle="${esc(id)}" aria-expanded="true">${esc(t('cart.proofDetailsHide'))}</button>` : ''}
               ${photos ? photoProofHtml(proof, cartItemOf(id)) : PODProof.html(proof)}
-              ${approveBox(photos ? photoNote() : PODProof.screenNote({ printColours: !proof.pages }))}`;
+              ${sampleBox}`;
           }
         }
-        const folded = ok && st && st.state === 'ok' && !expanded.has(id);
-        return `<section class="cart-proof${ok ? ' ok' : ''}${folded ? ' folded' : ''}" data-proof-for="${esc(id)}" data-index="${i}" aria-labelledby="proof-h-${i}"><div class="cart-proof-inner">${head}${body}</div></section>`;
+        return `<section class="cart-proof${ok ? ' ok' : ''}" data-proof-for="${esc(id)}" data-index="${i}" aria-labelledby="proof-h-${i}"><div class="cart-proof-inner">${head}${body}</div></section>`;
       }
       const cartItemOf = (id) => POD.getCart().find((it) => it.designId === id) || null;
       const slotOf = (id) => [...document.querySelectorAll('[data-proof-for]')].find((el) => el.dataset.proofFor === id) || null;
@@ -619,28 +639,50 @@
         if (meta) meta.innerHTML = itemMeta(cart[i]);
         if (focused && document.getElementById(focused)) document.getElementById(focused).focus({ preventScroll: true });
       }
-      /** The order is placed only once every item's current proof is approved ("Place order" always looks ready: pressed
-          too early, it points to the box to tick). It is truly disabled only while an order is being placed. */
+      /** The items whose proof is here and is the customer's own (not a ready design): the ones the tick approves. */
+      const ownLoaded = (cart) => cart.filter((it) => !blocked.has(it.designId) && proofOf(it.designId) && !isReady(it.designId));
+      /** The order is placed only once every item's current proof is approved: ready designs as they are, the customer's
+          own with the one tick next to "Place order" ("Place order" always looks ready: pressed too early, it points to
+          the tick). It is truly disabled only while an order is being placed. */
       function updateApproval() {
         const cart = POD.getCart();
         const stuck = blockedIn(cart);
         const orderable = cart.filter((it) => !blocked.has(it.designId));
-        const done = orderable.filter((it) => isApproved(it.designId)).length;
-        const all = cart.length > 0 && !stuck.length && done === cart.length;
+        const failed = orderable.some((it) => (proofs.get(it.designId) || {}).state === 'error');
         const btn = document.getElementById('place-order');
         if (!placing) btn.disabled = false;
         const status = document.getElementById('approve-status');
-        status.classList.toggle('done', all);
         status.classList.toggle('blocked', stuck.length > 0);
         status.innerHTML = stuck.length
           ? `${esc(stuck.length === 1 ? t('checkout.blockedOne') : t('checkout.blockedMany', { n: POD.num(stuck.length) }))} <button type="button" class="link-btn" data-next-blocked>${esc(t('checkout.blockedGo'))}</button>`
-          : all ? `✓ ${esc(t('proof.approved'))}`
-          : `${esc(t('checkout.approveAll', { done: POD.num(done), total: POD.num(cart.length) }))} <button type="button" class="link-btn" data-next-proof>${esc(t('checkout.approveGo'))}</button>`;
+          : failed ? `${esc(t('proof.loadFailed'))} <button type="button" class="link-btn" data-next-proof>${esc(t('checkout.approveGo'))}</button>` : '';
         document.querySelectorAll('[data-proof-for]').forEach((el) => {
           const ok = isApproved(el.dataset.proofFor);
           el.classList.toggle('ok', ok);
           if (ok) el.classList.remove('needs');
         });
+        // The one tick for the customer's own designs, next to "Place order" (none for ready designs only).
+        const own = ownLoaded(cart);
+        const all = own.length > 0 && own.every((it) => isApproved(it.designId));
+        if (all) nudged = false;
+        document.getElementById('proof-ok').hidden = !own.length;
+        document.getElementById('proof-ok-box').checked = all;
+        document.getElementById('proof-ok').classList.toggle('nudge', nudged);
+        document.getElementById('proof-ok-nudge').hidden = !nudged;
+        document.getElementById('proof-ok-changed').hidden = !own.some((it) => changed.has(it.designId));
+        // "Details": the colours on screen and on paper (photo prints: on photo paper; kids books: no editor view).
+        const photos = own.some((it) => Array.isArray(proofOf(it.designId).photos));
+        const prints = own.filter((it) => !Array.isArray(proofOf(it.designId).photos));
+        const note = (prints.length ? PODProof.screenNote({ printColours: prints.some((it) => !proofOf(it.designId).pages) }) : '') + (photos ? photoNote() : '');
+        const box = document.getElementById('proof-ok-note');
+        if (box.innerHTML !== note) box.innerHTML = note;
+      }
+      /** The tick next to "Place order", shown and focused. */
+      function goToTick() {
+        const box = document.getElementById('proof-ok');
+        if (box.hidden) return;
+        box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        document.getElementById('proof-ok-box').focus({ preventScroll: true });
       }
       /** The first item that can't be ordered now: shown, with its buttons at hand. */
       function goToBlocked() {
@@ -652,31 +694,26 @@
         if (b) b.focus({ preventScroll: true });
         return true;
       }
-      /** "Place order" pressed with a proof not approved yet: its box is shown, outlined, with "Tick this first", and focused. */
+      /** "Place order" pressed before the tick: the tick, right there, outlined with "Tick this first", and focused. */
       function nudgeProof() {
         const next = POD.getCart().find((it) => !blocked.has(it.designId) && !isApproved(it.designId));
         if (!next || !proofOf(next.designId)) return goToNextProof(); // (still loading, or failed: its own message)
-        nudged = next.designId;
-        paintProof(next.designId);
-        const slot = slotOf(next.designId);
-        const box = slot && slot.querySelector('.approve-box');
-        const tick = slot && slot.querySelector('[data-approve]');
-        if (!box || !tick) return goToNextProof();
-        box.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        tick.focus({ preventScroll: true });
+        nudged = true;
+        updateApproval();
+        goToTick();
       }
+      /** The first proof not approved: one that didn't load (its "Try again"), else the tick. */
       function goToNextProof() {
-        const cart = POD.getCart();
-        const next = cart.find((it) => !isApproved(it.designId));
+        const next = POD.getCart().find((it) => !blocked.has(it.designId) && !isApproved(it.designId));
         if (!next) return;
-        const slot = [...document.querySelectorAll('[data-proof-for]')].find((el) => el.dataset.proofFor === next.designId);
+        if (proofOf(next.designId)) return goToTick();
+        const slot = slotOf(next.designId);
         if (!slot) return;
         slot.classList.add('needs');
         slot.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        const box = slot.querySelector('[data-approve]') || slot.querySelector('[data-proof-retry]');
-        if (box) box.focus({ preventScroll: true });
+        const retry = slot.querySelector('[data-proof-retry]');
+        if (retry) retry.focus({ preventScroll: true });
       }
-
       /** "My saved designs" under the cart (also when the cart itself is empty): kept out of this order, or not finished yet. */
       function renderSaved() {
         // Right under the cart's items, as one line that opens in place; with an empty cart, the whole list where the cart was.
@@ -1019,9 +1056,10 @@
         render.total = fresh && typeof quote.total === 'number' && quote.delivery && quote.delivery.speed === delivery
           ? quote.total : Math.round((subtotal - discount + shipping) * 100) / 100;
         document.querySelectorAll('input[name="delivery"]').forEach((r) => { r.checked = r.value === delivery; });
-        // Standard costs the normal shipping fee; express adds its fee on top.
-        document.getElementById('dlv-fee-standard').textContent = !orderable.length ? '' : baseShipping ? t('delivery.feeStandard', { price: money(baseShipping) }) : t('delivery.feeFree');
-        document.getElementById('dlv-fee-express').textContent = baseShipping ? t('delivery.feeExpress', { fee: money(expressFee()) }) : '+' + money(expressFee());
+        // Each option's whole delivery price (owner, 26 Nov: "Shipping + EGP 100" didn't say express is EGP 175):
+        // standard is the shipping fee (free over the free-shipping amount), express that plus its own fee.
+        document.getElementById('dlv-fee-standard').textContent = !orderable.length ? '' : baseShipping ? money(baseShipping) : t('delivery.feeFree');
+        document.getElementById('dlv-fee-express').textContent = !orderable.length ? '' : money(Math.round((baseShipping + expressFee()) * 100) / 100);
         for (const opt of (quote && quote.deliveryOptions) || []) {
           const el = document.getElementById('dlv-by-' + opt.speed);
           if (el) el.textContent = t('delivery.by', { date: POD.day(opt.by) });
@@ -1041,6 +1079,8 @@
         const beaten = Boolean(refusal && refusal.beaten);
         msg.classList.toggle('bad', Boolean(refused) && !beaten);
         markCoupon(Boolean(refused) && !beaten);
+        // The field folds into "Have a discount code?" until it is asked for, a code is in use or there is a word about one.
+        showCouponField(couponOpen || Boolean(couponCode) || Boolean(refused) || Boolean(couponNote && couponNote.code));
         document.getElementById('subtotal').textContent = money(subtotal);
         // (Nothing that can be ordered: no "free" shipping to show.)
         document.getElementById('shipping').textContent = !orderable.length ? t('cart.nothingToShip') : baseShipping ? money(baseShipping) : t('free');
@@ -1223,34 +1263,39 @@
         if (gone.length) return refreshPrices();
       }
 
-      document.getElementById('items').addEventListener('change', (e) => {
-        const box = e.target;
-        const id = box.dataset.approve || box.dataset.sample;
-        if (!id) return;
+      /** What the customer ticked for one design (its "ok" or its sample wish), against its current proof. */
+      function setApproval(id, what, on) {
         const proof = proofOf(id);
         if (!proof) return;
         const a = approvals.get(id) && approvals.get(id).hash === proof.proofHash ? approvals.get(id) : { hash: proof.proofHash, ok: false, sample: false };
-        if (box.dataset.approve) a.ok = box.checked;
-        else a.sample = box.checked;
+        a[what] = on;
         approvals.set(id, a);
-        if (box.dataset.approve && box.checked) {
-          changed.delete(id);
-          if (nudged === id) nudged = null;
-        }
+      }
+      // "Print one sample first", on its item.
+      document.getElementById('items').addEventListener('change', (e) => {
+        const id = e.target.dataset && e.target.dataset.sample;
+        if (!id || !proofOf(id)) return;
+        setApproval(id, 'sample', e.target.checked);
         saveApprovals();
         updateApproval();
-        if (box.dataset.approve) {
-          // Checked: the proof folds to one line (keeping its place on the page); unchecked: it opens again.
-          expanded.delete(id);
-          const slot = slotOf(id);
-          const top = slot ? slot.getBoundingClientRect().top : 0;
-          paintProof(id);
-          const now = slotOf(id);
-          if (now && box.checked && top < 70) now.scrollIntoView({ block: 'start' });
-        } else {
-          // A sample first moves the expected day: ask the shop again right away.
-          refreshPrices().then(render);
-        }
+        // A sample first moves the expected day: ask the shop again right away.
+        refreshPrices().then(render);
+      });
+      // The one tick next to "Place order": every one of the customer's own designs, as its proof is now.
+      document.getElementById('proof-ok-box').addEventListener('change', (e) => {
+        const own = ownLoaded(POD.getCart());
+        const seen = e.target.checked ? own.filter((it) => changed.delete(it.designId)) : [];
+        for (const it of own) setApproval(it.designId, 'ok', e.target.checked);
+        saveApprovals();
+        updateApproval();
+        // ("This design changed" goes from the items once the new proofs are approved.)
+        for (const it of seen) paintProof(it.designId);
+      });
+      // "Details": the note about colours on screen and on paper.
+      document.getElementById('proof-ok-more').addEventListener('click', (e) => {
+        const note = document.getElementById('proof-ok-note');
+        note.hidden = !note.hidden;
+        e.currentTarget.setAttribute('aria-expanded', String(!note.hidden));
       });
       document.getElementById('checkout').addEventListener('click', (e) => {
         if (e.target.closest('[data-next-proof]')) goToNextProof();
@@ -1651,6 +1696,21 @@
         showCode();
         rewordNote(); // the language was switched while the shop was answering
       };
+      // "Have a discount code?" opens the field (and, once open, it stays open on this page: a code taken off leaves
+      // the field there for another one).
+      let couponOpen = false;
+      function showCouponField(open) {
+        if (open) couponOpen = true;
+        const link = document.getElementById('coupon-open');
+        document.getElementById('coupon-field').hidden = !open;
+        link.hidden = open;
+        link.setAttribute('aria-expanded', String(open));
+      }
+      document.getElementById('coupon-open').addEventListener('click', () => {
+        couponOpen = true;
+        showCouponField(true);
+        document.getElementById('coupon').focus();
+      });
       document.getElementById('coupon-apply').addEventListener('click', applyCoupon);
       document.getElementById('coupon').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); applyCoupon(); } });
       // Typing another code: the old refusal goes.
@@ -1724,11 +1784,13 @@
       }
       window.addEventListener('resize', updateBar);
       document.getElementById('bar-go').addEventListener('click', () => {
-        // Items that can't be ordered now come first, then proofs left to check; then the first empty field, else the order button.
+        // Items that can't be ordered now come first, then proofs that didn't load; then the first empty field, then the
+        // tick next to the order button, else the button.
         if (blockedIn(POD.getCart()).length) return goToBlocked();
-        if (!POD.getCart().every((it) => isApproved(it.designId))) return goToNextProof();
+        if (!POD.getCart().every((it) => isApproved(it.designId) || proofOf(it.designId))) return goToNextProof();
         const empty = FIELDS.find((el) => el.required && !el.value.trim());
         if (empty) return goToField(empty);
+        if (!POD.getCart().every((it) => isApproved(it.designId))) return goToTick();
         const btn = document.getElementById('place-order');
         btn.scrollIntoView({ block: 'center', behavior: 'smooth' });
         btn.focus({ preventScroll: true });

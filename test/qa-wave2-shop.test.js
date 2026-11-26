@@ -68,8 +68,8 @@ test('every counted string comes in all four forms, in both languages', () => {
   assert.strictEqual(window.POD_STRINGS['home.found'], undefined, 'no uncounted form left to use by mistake');
 });
 
-test('the phone example follows the page\'s digits, its Arabic groups kept left to right', () => {
-  assert.strictEqual(loadPOD('en').t('checkout.phonePh'), '010 1234 5678');
-  // (Each group followed by a left-to-right mark: a placeholder doesn't take the field's left-to-right override.)
-  assert.strictEqual(loadPOD('ar').t('checkout.phonePh'), '٠١٠\u200e ١٢٣٤\u200e ٥٦٧٨');
+test('the phone example is plainly an example, one number in the digits a keypad types (owner, 26 Nov)', () => {
+  assert.strictEqual(loadPOD('en').t('checkout.phonePh'), 'e.g. 01012345678');
+  // (The number in an isolate, so the page's Arabic digits leave it as it is typed.)
+  assert.strictEqual(loadPOD('ar').t('checkout.phonePh'), 'مثال: \u206801012345678\u2069');
 });

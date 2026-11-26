@@ -45,9 +45,11 @@ test('cart with only a kids book: no "edit quantities / duplicate" tip and no "P
     await page.goto(`${srv.base}/cart`);
     const id = await bookInCart(page);
     await page.goto(`${srv.base}/cart`);
-    await page.waitForSelector(`[data-proof-for="${id}"] .proof-screen-note`, { timeout: 30000 });
+    // (The colours note is behind "Details" by the tick next to Place order: owner, 26 Nov.)
+    await page.waitForSelector(`[data-proof-for="${id}"] .proof-short, [data-proof-for="${id}"] .proof`, { timeout: 30000 });
+    await page.waitForSelector('#proof-ok-note .proof-screen-note', { state: 'attached', timeout: 30000 });
     assert.strictEqual(await page.isHidden('#cart-note'), true, 'the editor tip is hidden');
-    const note = await page.textContent(`[data-proof-for="${id}"] .proof-screen-note`);
+    const note = await page.textContent('#proof-ok-note .proof-screen-note');
     assert.doesNotMatch(note, /Print colours/, note);
     assert.deepStrictEqual(errors, []);
   } finally {
