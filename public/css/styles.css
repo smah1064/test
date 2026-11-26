@@ -1082,6 +1082,44 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
   .site-header .inner > nav { gap: 10px; font-size: 14px; }
   .site-header .lang-toggle { padding: 4px 8px; font-size: 12.5px; }
 }
+/* Search in the header (site-search.js): the magnifier before the account icon (a 44px tap target that takes less
+   room than it looks), and the bar it opens under the header: the box, then up to five products as you type. */
+.site-header .site-search-btn {
+  flex: none; display: inline-grid; place-items: center; width: 44px; height: 44px; margin-inline: -8px;
+  padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--ink); cursor: pointer;
+}
+.site-header .site-search-btn:hover, .site-header .site-search-btn[aria-expanded="true"] { background: #f1f3f5; }
+.site-header .site-search-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.site-search { border-top: 1px solid var(--line); padding: 10px 0 12px; }
+.site-search-form, .site-search-results { max-width: 760px; }
+.site-search-form { position: relative; display: flex; align-items: center; }
+.site-search-form > svg { position: absolute; inset-inline-start: 32px; color: var(--ink-3); pointer-events: none; }
+.site-search-form input[type=search] {
+  height: 46px; font-size: 16px; padding-inline: 42px 48px; border: 2px solid var(--accent); border-radius: 12px;
+}
+.site-search-form input[type=search]::-webkit-search-cancel-button { display: none; }
+.site-search-close {
+  position: absolute; inset-inline-end: 22px; width: 44px; height: 44px; display: grid; place-items: center;
+  padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--ink-2); cursor: pointer;
+}
+.site-search-close:hover { background: #f1f3f5; }
+.site-search-list {
+  list-style: none; margin: 8px 0 0; padding: 4px; background: #fff; border: 1px solid var(--line);
+  border-radius: 12px; box-shadow: 0 6px 20px rgba(20, 24, 33, .08);
+}
+.site-search-item {
+  display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 6px 8px; border-radius: 10px;
+  color: var(--ink); text-decoration: none;
+}
+.site-search-item:hover, .site-search-item:focus-visible { background: #f5f6f8; outline: none; }
+.site-search-item img { flex: none; width: 44px; height: 44px; border-radius: 8px; object-fit: cover; background: #f1f3f5; }
+.site-search-name { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.site-search-price { flex: none; color: var(--ink-3); font-size: 13.5px; white-space: nowrap; }
+.site-search-none { margin: 10px 4px 0; color: var(--ink-2); }
+@media (max-width: 600px) {
+  .site-search-form > svg { inset-inline-start: 28px; }
+  .site-search-close { inset-inline-end: 18px; }
+}
 
 /* CAPTCHA (Cloudflare Turnstile): takes no room unless Cloudflare asks the customer to tick a box. */
 .captcha-box:empty { display: none; }

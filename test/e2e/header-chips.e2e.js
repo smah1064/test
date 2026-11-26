@@ -40,7 +40,7 @@ const readHeader = () => {
     scrollW: document.documentElement.scrollWidth,
     clientW: document.documentElement.clientWidth,
     logo: [...document.querySelectorAll('.site-header .brand-logo')].filter(vis).map((i) => i.className.replace('brand-logo ', '')),
-    top: [...document.querySelectorAll('.site-header .inner > nav > *')].filter(vis).map((a) => a.getAttribute('href') || 'lang'),
+    top: [...document.querySelectorAll('.site-header .inner > nav > *')].filter(vis).map((a) => a.getAttribute('href') || (a.hasAttribute('data-site-search') ? 'search' : 'lang')),
     rowShown: vis(row),
     row: { left: rr.left, right: rr.right, scrollW: row.scrollWidth, clientW: row.clientWidth },
     chips: [...row.querySelectorAll('a')].filter(vis).map((a) => {
@@ -67,7 +67,7 @@ test('phones, both languages: full logo, top row, chips row; no sideways scroll 
           const where = `${lang} ${name} ${url}`;
           assert.ok(h.scrollW <= h.clientW, `${where}: no sideways scroll (${h.scrollW} > ${h.clientW})`);
           assert.deepStrictEqual(h.logo, [lang === 'ar' ? 'brand-ar' : 'brand-en'], `${where}: the full logo in the page's language`);
-          assert.deepStrictEqual(h.top, ['/account', '/cart', 'lang'], `${where}: account, Cart and the language button on top`);
+          assert.deepStrictEqual(h.top, ['search', '/account', '/cart', 'lang'], `${where}: search, account, Cart and the language button on top`);
           assert.ok(h.rowShown, `${where}: the chips row shows`);
           assert.deepStrictEqual(h.chips.map((c) => c.chip), ['products', 'designs', 'photos', 'books', 'tshirt', 'mug'], where);
           for (const c of h.chips) assert.ok(c.h >= 40, `${where}: ${c.chip} is ${c.h}px tall`);
@@ -144,7 +144,7 @@ test('computers (1366px): the one-row menu as before, no chips row', { timeout: 
       await page.waitForSelector('[data-account-link]');
       const h = await page.evaluate(readHeader);
       assert.strictEqual(h.rowShown, false, lang);
-      assert.deepStrictEqual(h.top, ['/#products', '/designs', '/photos', '/?cat=kids#products', '/account', '/cart', 'lang'], lang);
+      assert.deepStrictEqual(h.top, ['/#products', '/designs', '/photos', '/?cat=kids#products', 'search', '/account', '/cart', 'lang'], lang);
       assert.deepStrictEqual(h.logo, [lang === 'ar' ? 'brand-ar' : 'brand-en'], lang);
       assert.strictEqual(await page.evaluate(() => document.querySelector('.site-header').offsetHeight), 61, lang);
     } finally {
