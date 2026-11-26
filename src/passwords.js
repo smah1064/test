@@ -35,10 +35,13 @@ function withoutParts(lower, own = []) {
 
 /** A team member's password (`who`: { username, name }) is hard enough to guess. */
 function staffPassword(pw, who) {
-  if (!(typeof pw === 'string' && pw.length >= 10 && pw.length <= 200 && pw.trim().length >= 10
-    && new Set(pw).size >= 4 && !/^\d+$/.test(pw) && !COMMON_PASSWORDS.has(pw.toLowerCase()))) return false;
+  if (typeof pw !== 'string') return false;
+  // (Arabic or Persian digits are digits: "١٢٣٤٥٦٧٨٩٠١٢" is "123456789012", only numbers. QA 26 Nov.)
+  const n = normalizeDigits(pw);
+  if (!(pw.length >= 10 && pw.length <= 200 && pw.trim().length >= 10
+    && new Set(n).size >= 4 && !/^\d+$/.test(n) && !COMMON_PASSWORDS.has(n.toLowerCase()))) return false;
   const own = who ? [String(who.username || ''), ...String(who.name || '').split(/[\s._-]+/)].map((x) => x.toLowerCase()).filter((x) => x.length >= 3) : [];
-  const rest = withoutParts(pw.toLowerCase(), own);
+  const rest = withoutParts(n.toLowerCase(), own);
   // (What's left only digits and signs, "2024!!": a letter too, or ten of them.)
   return rest.length >= 6 && new Set(rest).size >= 4 && (/\p{L}/u.test(rest) || rest.length >= 10);
 }
