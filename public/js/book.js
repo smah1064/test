@@ -100,6 +100,8 @@
   // questions (QA 25 Nov: a red box said it too, before anything was typed); an error only on a field that has
   // such letters, as it is typed, and all of them at once when making the book.
   const RTL_RE = /[\u0590-\u08ff\ufb1d-\ufdff\ufe70-\ufeff]/;
+  // Symbols the story uses itself: a dedication can't print them (they are left out).
+  const NO_PRINT = /[{}[\]|]/;
   function markLatin(el) {
     if (!el || !el.dataset || !el.dataset.q || !/^(INPUT|TEXTAREA)$/.test(el.tagName) || el.type === 'date') return false;
     const bad = RTL_RE.test(el.value || '');
@@ -133,7 +135,8 @@
         </div></div>`;
       }
       if (q.type === 'textarea') {
-        return `<div class="field">${label}<textarea id="q-${q.id}" data-q="${q.id}" maxlength="${q.max}" rows="3" dir="auto" placeholder="${esc(t('book.dedicationHint'))}">${esc(v)}</textarea></div>`;
+        // (Symbols the book can't print are said, not silently left out. Owner, 26 Nov.)
+        return `<div class="field">${label}<textarea id="q-${q.id}" data-q="${q.id}" maxlength="${q.max}" rows="3" dir="auto" placeholder="${esc(t('book.dedicationHint'))}" aria-describedby="q-${q.id}-sym">${esc(v)}</textarea><p class="muted small bk-sym-note" id="q-${q.id}-sym"${NO_PRINT.test(v) ? '' : ' hidden'}>${esc(t('book.symbolsOut'))}</p></div>`;
       }
       const type = q.type === 'date' ? 'date' : 'text';
       return `<div class="field">${label}<input id="q-${q.id}" data-q="${q.id}" type="${type}" ${type === 'date' ? `max="${today}" min="${esc(q.min || '1900-01-01')}"` : `maxlength="${q.max || 40}" dir="auto" aria-describedby="bk-en-hint"`} value="${esc(v)}" placeholder="${q.placeholder ? esc(tr(q.placeholder)) : ''}"></div>`;
@@ -171,6 +174,8 @@
     const q = e.target.dataset.q;
     if (!q || e.target.tagName === 'BUTTON') return;
     state.answers[q] = e.target.value;
+    const sym = document.getElementById(`q-${q}-sym`);
+    if (sym) sym.hidden = !NO_PRINT.test(e.target.value);
     markLatin(e.target);
     changed();
   });

@@ -113,3 +113,21 @@ test('right after a ready design opens, Undo is off and Ctrl+Z keeps it', { time
     await ctx.close();
   }
 });
+
+test('Arabic dates have the month in words; paper, cover and fabric products say so instead of "Colour"', { timeout: 60000 }, async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1366, height: 900 } });
+  await ctx.addInitScript(() => { try { localStorage.setItem('pod-lang', 'ar'); } catch (e) { /* ignore */ } });
+  const page = await ctx.newPage();
+  try {
+    await page.goto(`${srv.base}/editor?product=booklets`);
+    await page.waitForFunction(() => window.__editor && window.__editor.st && window.__editor.st.product, null, { timeout: 30000 });
+    assert.match(await page.evaluate(() => POD.date('2026-11-26T13:02:00Z')), /٢٦ نوفمبر ٢٠٢٦/);
+    assert.strictEqual((await page.textContent('#color-label')).trim(), 'الغلاف:');
+    await page.goto(`${srv.base}/product?id=flyers`);
+    await page.waitForSelector('#pp-color-label');
+    await page.waitForFunction(() => document.getElementById('pp-color-label').textContent.trim() !== '');
+    assert.strictEqual((await page.textContent('#pp-color-label')).trim(), 'الورق:');
+  } finally {
+    await ctx.close();
+  }
+});

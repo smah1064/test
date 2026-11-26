@@ -260,7 +260,9 @@ function cleanAnswers(book, input) {
         throw err;
       }
     } else if (q.type === 'textarea') {
-      v = (typeof v === 'string' ? v : '').replace(INVISIBLE, '').replace(/[\u0000-\u0009\u000b-\u001f\u007f<>{}\[\]|]/g, ' ').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+      // (The dedication keeps < and > — "Love you <3" — the pages print text as text; { } [ ] | stay out: the story's own
+      // marks. Owner, 26 Nov.)
+      v = (typeof v === 'string' ? v : '').replace(INVISIBLE, '').replace(/[\u0000-\u0009\u000b-\u001f\u007f{}\[\]|]/g, ' ').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
       v = cut(v, q.max).trim();
     } else v = clean(v, q.max || 40);
     // The books are printed in English: Arabic letters would scramble the sentences.

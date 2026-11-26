@@ -853,6 +853,8 @@ PRODUCTS.push(
     id: 'invitations',
     category: 'occasions',
     name: t('Invitation Cards', 'كروت دعوة'),
+    // ("Colour" read wrong for paper, fabric or a finish: QA 26 Nov.)
+    colorLabel: t('Paper', 'الورق'),
     description: t('Flat 350 gsm invitation cards (13 × 18 cm) with white envelopes. For weddings, engagements, birthdays and events. Upload a list to print every guest\'s name.', 'كروت دعوة 350 جرام (13 × 18 سم) مع ظروف بيضاء. للأفراح والخطوبة وأعياد الميلاد والمناسبات. ارفع قائمة الأسماء ونطبع اسم كل ضيف على كارته.'),
     basePrice: 35,
     colors: [
@@ -1047,6 +1049,8 @@ PRODUCTS.push(
     id: 'flyers',
     category: 'business',
     name: t('Flyers', 'فلايرز'),
+    // ("Colour" read wrong for paper, fabric or a finish: QA 26 Nov.)
+    colorLabel: t('Paper', 'الورق'),
     description: t('Full-colour flyers on 150 gsm satin paper, one or both sides.', 'فلايرز ألوان كاملة على ورق 150 جرام ساتان، وجه أو وجهين.'),
     basePrice: 250,
     colors: [{ id: 'satin', name: t('Satin white', 'أبيض ساتان'), hex: '#ffffff' }, { id: 'gloss', name: t('Glossy white', 'أبيض لامع'), hex: '#ffffff' }],
@@ -1370,6 +1374,8 @@ PRODUCTS.push(
     id: 'fabric',
     category: 'textiles',
     name: t('Printed Fabric by the Metre', 'قماش مطبوع بالمتر'),
+    // ("Colour" read wrong for paper, fabric or a finish: QA 26 Nov.)
+    colorLabel: t('Fabric', 'القماش'),
     description: t('Your own pattern printed on fabric 145 cm wide, by the metre: for sewing, crafts, cushions and clothes.', 'نقشتك مطبوعة على قماش عرضه 145 سم، بالمتر: للخياطة والأشغال والمخدات والملابس.'),
     basePrice: 260,
     colors: [
@@ -1386,6 +1392,8 @@ PRODUCTS.push(
     id: 'upholstery',
     category: 'textiles',
     name: t('Upholstery Fabric by the Metre', 'قماش تنجيد بالمتر'),
+    // ("Colour" read wrong for paper, fabric or a finish: QA 26 Nov.)
+    colorLabel: t('Fabric', 'القماش'),
     description: t('Heavy, hard-wearing fabric 140 cm wide with your pattern: for sofas, chairs, headboards and cushions.', 'قماش تقيل ويستحمل، عرضه 140 سم، بنقشتك: للكنب والكراسي والأسرّة والمخدات.'),
     basePrice: 380,
     colors: [
@@ -2109,6 +2117,8 @@ PRODUCTS.push(
     id: 'brochures',
     category: 'business',
     name: t('Tri-fold Brochures', 'بروشورات 3 طيّات'),
+    // ("Colour" read wrong for paper, fabric or a finish: QA 26 Nov.)
+    colorLabel: t('Paper', 'الورق'),
     description: t('A4 brochures folded in three (to 10 × 21 cm) on 170 gsm satin paper, printed on both sides. Outside: the middle third is the back, and the front cover is the right-hand third (the left-hand one for Arabic brochures). Inside: the three panels seen when it opens.', 'بروشور A4 بيتطوي 3 طيّات (يبقى 10 × 21 سم) على ورق 170 جرام ساتان، مطبوع وشين. من بره: التلت اللي في النص هو الضهر، والغلاف هو التلت اليمين (أو الشمال لو البروشور عربي). من جوه: التلات أجزاء اللي بتبان لما يتفتح.'),
     basePrice: 500,
     extraSidePrice: 0,
@@ -2181,6 +2191,8 @@ PRODUCTS.push(
     id: 'booklets',
     category: 'business',
     name: t('Booklets & Catalogues (A5, stapled)', 'كتيبات وكتالوجات (A5 دبوس)'),
+    // ("Colour" read wrong for a cover: QA 26 Nov.)
+    colorLabel: t('Cover', 'الغلاف'),
     description: t('A5 booklets stapled on the spine, 8 to 32 pages on 115 gsm paper with a 250 gsm cover; the page count is part of the size. Design every page here: the covers and each inside page, bound on the right (Arabic) or the left (English).', 'كتيبات A5 متدبّسة من الجنب، من 8 لـ 32 صفحة على ورق 115 جرام بغلاف 250 جرام؛ عدد الصفحات جوه المقاس. صمم كل صفحة هنا: الغلافين وكل صفحة جوه، والتدبيس يمين (عربي) أو شمال (إنجليزي).'),
     basePrice: 900,
     extraSidePrice: 0,
@@ -2332,6 +2344,8 @@ PRODUCTS.push(
     id: 'magnets',
     category: 'home',
     name: t('Fridge Magnets', 'مغناطيس تلاجة'),
+    // ("Colour" read wrong for paper, fabric or a finish: QA 26 Nov.)
+    colorLabel: t('Finish', 'اللمعة'),
     description: t('Glossy printed magnets with a strong magnetic back and rounded corners: 6 × 9, 8 × 12 or 10 × 15 cm. For photos and gifts, or your restaurant\'s menu and delivery number on every fridge.', 'مغناطيس تلاجة مطبوع بضهر مغناطيس قوي وحواف مدورة: 6 × 9 أو 8 × 12 أو 10 × 15 سم. للصور والهدايا، أو منيو مطعمك ورقم الدليفري على كل تلاجة.'),
     basePrice: 50,
     colors: [{ id: 'gloss', name: t('Glossy', 'لامع'), hex: '#ffffff' }, { id: 'matte', name: t('Matte', 'مطفي'), hex: '#ffffff' }],

@@ -1622,6 +1622,7 @@ window.POD_STRINGS = {
   'book.latinField': ['Please type this in English letters: {field}', 'من فضلك اكتب الخانة دي بحروف إنجليزي: {field}'],
   'book.latinFields': ['Please type these in English letters: {fields}', 'اكتب دول بحروف إنجليزي من فضلك: {fields}'],
   'book.yourChild': ['Your child', 'طفلك'],
+  'book.symbolsOut': ['These symbols can\'t be printed in the book and will be left out: { } [ ] |', 'الرموز دي مش هتتطبع في الكتاب وهتتشال: { } [ ] |'],
   'book.dedicationHint': ['e.g. To our hero, with love from Baba and Mama', 'اكتبها بالإنجليزي (الكتاب بالإنجليزي)، مثال: To our hero, with love from Baba and Mama'],
   'book.privacy': ["Your child's photo is used only to print this book and is deleted automatically 30 days after the book is shipped (or after 7 days if you don't order).", 'صورة طفلك بتُستخدم لطباعة الكتاب ده بس، وبتتمسح تلقائيًا بعد 30 يوم من شحن الكتاب (أو بعد 7 أيام لو ما طلبتش).'],
   'fmt.booklet-imposed': ['Booklet, imposed for saddle stitching (PDF)', 'الكتيب مترتب للطباعة والتدبيس (PDF)'],

@@ -273,7 +273,9 @@
     }).format(v);
   }
   function date(iso) {
-    return new Date(iso).toLocaleString(lang === 'ar' ? 'ar-EG' : 'en-GB', { dateStyle: 'medium', timeStyle: 'short' });
+    // The month in words in both languages ("٢٦ نوفمبر ٢٠٢٦، ١:٠٢ م" as "26 Nov 2026, 13:02"); Arabic's medium style
+    // wrote it as numbers ("٢٦/١١/٢٠٢٦"). QA 26 Nov.
+    return new Date(iso).toLocaleString(lang === 'ar' ? 'ar-EG' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' });
   }
   /*
    * CAPTCHA (Cloudflare Turnstile) for a form: captcha(boxElement) gives { prepare, token, reset }.
