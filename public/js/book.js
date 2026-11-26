@@ -270,14 +270,20 @@
     const span = base() / crop.zoom; // image pixels across the square view
     const h = span * OVAL_RY * 2;
     const w = span * OVAL_RX * 2;
-    out.getContext('2d').drawImage(crop.img, crop.x - w / 2, crop.y - h / 2, w, h, 0, 0, 720, 900);
+    const g = out.getContext('2d');
+    // A cut-out photo (transparent around the person) gets white behind it: a JPEG has no see-through, it was black (QA 26 Nov).
+    g.fillStyle = '#ffffff';
+    g.fillRect(0, 0, 720, 900);
+    g.drawImage(crop.img, crop.x - w / 2, crop.y - h / 2, w, h, 0, 0, 720, 900);
     return out.toDataURL('image/jpeg', 0.9);
   }
   $('bk-file').addEventListener('change', (e) => {
     const file = e.target.files && e.target.files[0];
     e.target.value = '';
     if (!file) return;
-    if (!/^image\/(jpeg|png|webp)$/.test(file.type) || file.size > 25e6) return POD.toast(t('book.badPhoto'), 'error');
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return POD.toast(t('book.badPhoto'), 'error');
+    // (Too big is said as that: a 30 MB JPG was told "choose a JPG or PNG". QA 26 Nov.)
+    if (file.size > 25e6) return POD.toast(t('book.photoTooBig'), 'error');
     const url = URL.createObjectURL(file);
     const img = new Image();
     img.onload = () => {

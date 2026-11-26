@@ -1458,7 +1458,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         // The child's photo as the book page takes it; its drawings are made again (the cover now, the rest queued).
         const book = bookFor(d.bookId);
         keepOld('face.jpg');
-        const jpg = await sharp()(buf, { limitInputPixels: 80e6 }).rotate().resize(720, 900, { fit: 'cover' }).jpeg({ quality: 90 }).toBuffer();
+        const jpg = await sharp()(buf, { limitInputPixels: 80e6 }).rotate().resize(720, 900, { fit: 'cover' }).flatten({ background: '#ffffff' }).jpeg({ quality: 90 }).toBuffer();
         store.writeDesignFile(d.id, 'face.jpg', jpg);
         if (book.kind === 'coloring') store.writeDesignFile(d.id, 'face-line.png', await books.lineArt(jpg));
         for (const f of fs.readdirSync(store.designDir(d.id))) if (/^redraw-\d+\.jpg$/.test(f) || f === 'face-cartoon.jpg') fs.rmSync(store.designFile(d.id, f), { force: true });
@@ -2854,7 +2854,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const buf = Buffer.from(m[2], 'base64');
     if (buf.length < 100 || buf.length > 8e6) throw new HttpError(400, 'bookPhoto');
     try {
-      return await sharp()(buf, { limitInputPixels: 40e6 }).rotate().resize(720, 900, { fit: 'cover' }).jpeg({ quality: 90 }).toBuffer();
+      return await sharp()(buf, { limitInputPixels: 40e6 }).rotate().resize(720, 900, { fit: 'cover' }).flatten({ background: '#ffffff' }).jpeg({ quality: 90 }).toBuffer();
     } catch (e) {
       throw new HttpError(400, 'bookPhoto');
     }

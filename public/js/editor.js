@@ -2439,7 +2439,7 @@
         canvas.discardActiveObject();
         canvas.requestRenderAll();
         setSheet('product');
-        requestAnimationFrame(() => { const el = $(k === 'layers' ? 'sec-layers' : 'place-field'); if (el) el.scrollIntoView({ block: 'start' }); });
+        requestAnimationFrame(() => revealInPanel($(k === 'layers' ? 'sec-layers' : 'place-field'), { smooth: false }));
         return;
       }
       const tool = document.querySelector(`.tools .tool[data-flyout="${k}"]`);
@@ -3658,6 +3658,14 @@
     const wgt = (one && one.fontWeight) || o.fontWeight;
     return wgt === 'bold' || Number(wgt) >= 600;
   }
+  /** Colour letters start..end of a text (the selection stays, so the customer can go on). */
+  function colourRange(o, start, end, colour) {
+    o.setSelectionStyles({ fill: colour }, start, end);
+    o.dirty = true;
+    canvas.requestRenderAll();
+    commit();
+    if (o.isEditing) { o.selectionStart = start; o.selectionEnd = end; }
+  }
   function setWordColour(o, colour) {
     const words = wordsOf(o);
     followWordSel(o, words);
@@ -4047,7 +4055,9 @@
     if (pal) {
       const c = pal.dataset.c;
       ({
-        fill: () => setProp({ fill: c }, { commitNow: true }),
+        // Letters selected while typing: only those (as B does; it coloured the whole line. QA 26 Nov).
+        fill: () => (isText(o) && o.isEditing && o.setSelectionStyles && o.selectionEnd > o.selectionStart
+          ? colourRange(o, o.selectionStart, o.selectionEnd, c) : setProp({ fill: c }, { commitNow: true })),
         stroke: () => setProp({ stroke: c, strokeWidth: o.strokeWidth || 2, strokeUniform: true, paintFirst: 'stroke' }, { commitNow: true }),
         bg: () => setProp({ backgroundColor: c }, { commitNow: true }),
         border: () => setProp({ maskBorderColor: c, maskBorder: o.maskBorder || 4 }, { commitNow: true }),
@@ -5203,13 +5213,33 @@
     canvas.setActiveObject(issue.obj);
     canvas.requestRenderAll();
   });
+  /**
+   * Bring a part of the side panel into view by scrolling the panel only. scrollIntoView also scrolled the whole page
+   * on 1024–1199 px screens (the page is taller there with a tool open, and can't be scrolled back by hand: QA 26 Nov).
+   */
+  function revealInPanel(el, { smooth = true } = {}) {
+    if (!el) return;
+    for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+      const oy = getComputedStyle(p).overflowY;
+      if ((oy === 'auto' || oy === 'scroll') && p.scrollHeight > p.clientHeight + 1) {
+        const top = el.getBoundingClientRect().top - p.getBoundingClientRect().top + p.scrollTop - 8;
+        p.scrollTo({ top: Math.max(0, top), behavior: smooth ? 'smooth' : 'auto' });
+        break;
+      }
+    }
+    pageBack();
+  }
+  /** The editor page itself never stays scrolled where the customer can't scroll it back (its body doesn't scroll). */
+  function pageBack() {
+    if ((window.scrollY || window.scrollX) && getComputedStyle(document.body).overflowY === 'hidden') window.scrollTo(0, 0);
+  }
   $('check-chip').addEventListener('click', () => {
     if (MOBILE.matches) {
       // Phones: the check in a short sheet of its own (it was at the foot of the long Product sheet: stage 2).
       canvas.discardActiveObject();
       setSheet(st.sheet === 'check' ? null : 'check');
     } else {
-      $('sec-check').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      revealInPanel($('sec-check'));
     }
   });
 
@@ -5253,7 +5283,7 @@
       if (st.product.merge && st.mergeList) return openNames(); // a name list: one copy per name
       canvas.discardActiveObject();
       setSheet('product');
-      requestAnimationFrame(() => { const f = $('qty-field'); if (f) f.scrollIntoView({ block: 'start', behavior: 'smooth' }); });
+      requestAnimationFrame(() => revealInPanel($('qty-field')));
     });
   }
   /**
@@ -6070,7 +6100,7 @@
     }
     requestAnimationFrame(() => {
       const sec = $('sec-merge');
-      sec.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      revealInPanel(sec);
       sec.classList.remove('flash');
       void sec.offsetWidth;
       sec.classList.add('flash');
@@ -7297,7 +7327,9 @@
   };
   const phoneLayout = window.matchMedia('(max-width: 820px)');
   const unscroll = () => {
-    if (!phoneLayout.matches || typing()) return;
+    // (Bigger screens: only where the page can't be scrolled back by hand, see pageBack.)
+    if (!phoneLayout.matches) return pageBack();
+    if (typing()) return;
     if (window.scrollY || window.scrollX) window.scrollTo(0, 0);
     for (const el of [document.querySelector('main'), document.querySelector('.editor'), document.querySelector('.stage-wrap')]) {
       if (el && el.scrollTop) el.scrollTop = 0;

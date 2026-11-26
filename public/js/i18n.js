@@ -1564,6 +1564,7 @@ window.POD_STRINGS = {
   'book.zoom': ['Zoom', 'تكبير'],
   'book.cropHint': ['Drag and zoom so the face fills the oval: hairline at the top, chin at the bottom, eyes on the dotted line.', 'اسحب وكبّر لحد ما الوش يملأ البيضاوي: أول الشعر فوق، والدقن تحت، والعينين على الخط المنقّط.'],
   'book.badPhoto': ['Please choose a JPG or PNG photo.', 'من فضلك اختار صورة JPG أو PNG.'],
+  'book.photoTooBig': ['This photo is too big (over 25 MB). Please choose a smaller copy of it.', 'الصورة دي كبيرة قوي (أكتر من 25 ميجا). اختار نسخة أصغر منها.'],
   // The face in the oval has too few of the photo's own pixels for the size it prints in the book (as the photo prints
   // page warns). The customer can keep it or pick another photo.
   'book.lowRes': [
