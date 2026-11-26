@@ -278,11 +278,13 @@ const boxSide = (b) => Math.max(b.x1 - b.x0, b.y1 - b.y0);
 const overlap = (a, b) => boxArea({ x0: Math.max(a.x0, b.x0), y0: Math.max(a.y0, b.y0), x1: Math.min(a.x1, b.x1), y1: Math.min(a.y1, b.y1) });
 
 /**
- * The most pixels per point a picture (photo) of a PDF has when it fills `box`: its own width x height over
- * the box (0 when unknown, as for pictures inside PostScript). A picture's dictionary is never compressed.
+ * The pictures (photos) a PDF names, with their sizes: [{ w, h, mask }] (mask: the soft mask or mask of another
+ * picture, or a stencil). A picture's dictionary is never compressed.
  */
-function pictureDensity(text, box) {
-  let most = 0;
+function pdfPictures(text) {
+  // Pictures that are another picture's (soft) mask: "/SMask 12 0 R" in that picture's dictionary.
+  const masks = new Set([...text.matchAll(/\/S?Mask\s+(\d+)\s+\d+\s+R\b/g)].map((m) => m[1]));
+  const list = [];
   for (const m of text.matchAll(/\/Subtype\s*\/Image\b/g)) {
     const from = text.lastIndexOf('obj', m.index);
     const to = text.indexOf('stream', m.index);
@@ -290,9 +292,69 @@ function pictureDensity(text, box) {
     const dict = text.slice(from, to);
     const w = /\/Width\s+(\d+)\b(?!\s+\d+\s+R)/.exec(dict);
     const h = /\/Height\s+(\d+)\b(?!\s+\d+\s+R)/.exec(dict);
-    if (w && h) most = Math.max(most, Number(w[1]) * Number(h[1]));
+    const num = /(\d+)\s+\d+\s+$/.exec(text.slice(Math.max(0, from - 24), from));
+    if (w && h) list.push({ w: Number(w[1]), h: Number(h[1]), mask: Boolean(num && masks.has(num[1])) || /\/ImageMask\s+true\b/.test(dict) });
   }
+  return list;
+}
+
+/**
+ * The most pixels per point a picture (photo) of a PDF has when it fills `box`: its own width x height over
+ * the box (0 when unknown, as for pictures inside PostScript).
+ */
+function pictureDensity(text, box) {
+  const most = pdfPictures(text).reduce((big, p) => Math.max(big, p.w * p.h), 0);
   return most && boxArea(box) > 0 ? Math.sqrt(most / boxArea(box)) : 0;
+}
+
+/**
+ * Like pictureDensity, for saying how many real pixels a photo has (not for drawing it): the pixels of all the
+ * pictures together over the box, so a photo cut into strips, or several photos side by side, counts whole;
+ * masks are left out (a transparent PNG's soft mask has as many pixels as the photo itself).
+ */
+function photosDensity(text, box) {
+  const all = pdfPictures(text).reduce((sum, p) => sum + (p.mask ? 0 : p.w * p.h), 0);
+  return all && boxArea(box) > 0 ? Math.sqrt(all / boxArea(box)) : 0;
+}
+
+/**
+ * PostScript (EPS, older .ai) doesn't name its pictures' sizes: the file is run once more by Ghostscript, drawing
+ * nothing, with `image` and `colorimage` noting each picture's pixels and the area it covers (page points squared,
+ * from its matrix and the current one) before drawing it. Printed: "PICTUREPX w h area" for each picture bigger
+ * than all before it, and "PICTURESAREA a" (all pictures' areas) at the end. The notes are kept in global memory,
+ * which the file's own save / restore doesn't undo. A file that draws its pictures with the operators fetched
+ * from systemdict goes unnoticed (no answer: nothing is said about its pixels).
+ */
+const PS_PICTURES = `true setglobal /PXN.s 2 dict def false setglobal
+PXN.s /a 0 put PXN.s /sa 0 put
+/PXN.det { aload pop pop pop 3 index mul 3 1 roll mul sub exch pop abs } bind def
+/PXN.calc {
+  PXN.det matrix defaultmatrix PXN.det mul matrix currentmatrix PXN.det div
+  3 copy 3 1 roll mul exch div
+  PXN.s /sa 2 copy get 3 index add put
+  dup PXN.s /a get gt { PXN.s /a 2 index put (PICTUREPX ) print 3 index =only ( ) print 2 index =only ( ) print dup =only (\\n) print flush } if
+  pop pop pop pop
+} bind def
+/PXN.dict { dup /DataDict known { /DataDict get } if dup /Width get exch dup /Height get exch /ImageMatrix get PXN.calc } bind def
+/PXN.image systemdict /image get def
+/PXN.colorimage systemdict /colorimage get def
+/image { mark { 1 index type /dicttype eq { 1 index PXN.dict } { 5 index 5 index 4 index PXN.calc } ifelse } stopped pop cleartomark PXN.image } bind def
+/colorimage { mark { 2 index { 1 index } { 1 } ifelse dup 7 add index 1 index 7 add index 2 index 6 add index 4 -1 roll pop PXN.calc } stopped pop cleartomark PXN.colorimage } bind def
+{ (in.eps) run } stopped pop
+(PICTURESAREA ) print PXN.s /sa get =only (\\n) print flush
+`;
+/**
+ * The pixels per point of a PostScript file's biggest picture, from the log of PS_PICTURES; 0 when not known, or
+ * when the pictures noted cover less than half of `photos` (where the pictures were found to be drawn: the
+ * pictures that make it weren't all noticed).
+ */
+function psPhotoDensity(log, photos) {
+  const big = [...String(log || '').matchAll(/^PICTUREPX (\S+) (\S+) (\S+)\s*$/gm)].pop();
+  const all = /^PICTURESAREA (\S+)\s*$/m.exec(String(log || ''));
+  if (!big || !all) return 0;
+  const [w, h, area] = big.slice(1, 4).map(Number);
+  if (!(w > 0 && h > 0 && area > 0) || !(Number(all[1]) >= 0.5 * boxArea(photos))) return 0;
+  return Math.sqrt((w * h) / area);
 }
 
 /**
@@ -355,8 +417,10 @@ function pdfPageCount(text) {
 
 /**
  * Converts an AI/EPS/PDF file to a trimmed, transparent PNG whose longest side is
- * at most `px` pixels. Returns { png, width, height, pages } (pages: how many pages or artboards
- * a PDF-based file has, of which the first is drawn; null for PostScript or when not known).
+ * at most `px` pixels. Returns { png, width, height, pages, photoPx } (pages: how many pages or artboards
+ * a PDF-based file has, of which the first is drawn; null for PostScript or when not known. photoPx: { w, h },
+ * only for a drawing that is mostly photo and drawn finer than the photo's own pixels: the size the PNG would
+ * have at the photo's own pixels, for the print check; otherwise not there).
  *
  * The artwork itself gets the `px` pixels, not its page: a 7 cm logo on an empty A4 page is drawn as
  * finely as a page-sized one. Steps (each a Ghostscript run in the separate process, stopped after `timeoutMs`
@@ -482,7 +546,29 @@ async function drawArtwork({ data, kind }, px, timeoutMs) {
   } catch (e) {
     // Out of time or a finer drawing failed: the one we have is still good.
   }
-  return encode(best.pic, fit(best.pic, want / best.d));
+  const out = await encode(best.pic, fit(best.pic, want / best.d));
+  // A drawing that is mostly photo, drawn finer than the photo's own pixels (the whole page fitted into px wins
+  // over them): how many real pixels it has, for the editor's print check (the PNG's own size would pass a blurry
+  // photo). Only when where the photos are is known.
+  if (photos && Number.isFinite(photos.x0) && overlap(photos, best.at) >= 0.5 * boxArea(best.at)) {
+    const used = (best.d * Math.max(out.width, out.height)) / Math.max(best.pic.width, best.pic.height);
+    let real = 0;
+    if (kind === 'pdf') {
+      real = Math.max(own, photosDensity(text, photos));
+    } else {
+      try {
+        const ms = Math.min(timeoutMs, deadline - Date.now());
+        if (ms >= 250) real = psPhotoDensity((await runWorker(null, null, 0, ms, null, { inputs: { 'in.eps': data }, ps: PS_PICTURES, device: 'nullpage' })).log, photos);
+      } catch (e) {
+        // No answer: nothing is said about its pixels.
+      }
+    }
+    if (real > 0 && real * 1.02 < used) {
+      const side = (n, max) => Math.max(1, Math.min(max, Math.round((n * real) / best.d)));
+      out.photoPx = { w: side(best.pic.width, out.width), h: side(best.pic.height, out.height) };
+    }
+  }
+  return out;
 }
 
 /** A Ghostscript job in the separate process, one at a time with the others (see runJob in the worker). */
