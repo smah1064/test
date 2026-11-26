@@ -678,13 +678,31 @@
     fit();
   };
   /** Scroll so the middle of the print area is in the middle of the screen. */
+  /**
+   * The part of the design area the customer sees, on screen: on the computer the docked panel covers its start
+   * (the stage's padding makes way for it), so zooming and centring use the room beside it (QA 26 Nov).
+   */
+  function viewRect() {
+    const stage = $('stage');
+    const s = stage.getBoundingClientRect();
+    const cs = getComputedStyle(stage);
+    // (Only a wide padding is the panel's room; the few pixels round the product on a phone are part of the view.)
+    const padL = parseFloat(cs.paddingLeft) > 100 ? parseFloat(cs.paddingLeft) : 0;
+    const padR = parseFloat(cs.paddingRight) > 100 ? parseFloat(cs.paddingRight) : 0;
+    const left = s.left + stage.clientLeft + padL;
+    const top = s.top + stage.clientTop;
+    const w = Math.max(80, stage.clientWidth - padL - padR);
+    const h = stage.clientHeight;
+    return { left, top, w, h, right: left + w, bottom: top + h };
+  }
   function centerOnPrint() {
     const stage = $('stage');
     const a = area();
     const vt = canvas.viewportTransform;
     const r = canvas.wrapperEl.getBoundingClientRect();
     const s = stage.getBoundingClientRect();
-    stage.scrollLeft += r.left + (a.x + a.w / 2) * vt[0] + vt[4] - (s.left + stage.clientWidth / 2);
+    const v = viewRect();
+    stage.scrollLeft += r.left + (a.x + a.w / 2) * vt[0] + vt[4] - (v.left + v.w / 2);
     stage.scrollTop += r.top + (a.y + a.h / 2) * vt[3] + vt[5] - (s.top + stage.clientHeight / 2);
   }
   /** Zoom so the print area fills most of the screen (small prints: chest embroidery, a polo's chest...). */
@@ -693,7 +711,7 @@
     const a = area();
     const now = canvas.viewportTransform[0] || 1; // screen pixels per unit now
     // About half the screen: big enough to work on, with the product round it still in view.
-    const want = Math.min(((stage.clientWidth - 48) * 0.5) / a.w, ((stage.clientHeight - 48) * 0.5) / a.h);
+    const want = Math.min(((viewRect().w - 48) * 0.5) / a.w, ((stage.clientHeight - 48) * 0.5) / a.h);
     setZoom((st.zoom * want) / now);
     centerOnPrint();
   }
@@ -707,10 +725,11 @@
     const a = area();
     const vt = canvas.viewportTransform;
     const now = vt[0] || 1;
-    const short = Math.min(stage.clientWidth, stage.clientHeight);
+    const vw = viewRect().w;
+    const short = Math.min(vw, stage.clientHeight);
     // (The product now fills the screen, so only really small print areas, a chest logo, are zoomed onto: stage 3.)
     if (Math.max(a.w * vt[0], a.h * vt[3]) >= short * (productBox() ? 0.15 : 0.22)) return;
-    const want = Math.min(((stage.clientWidth - 48) * 0.3) / a.w, ((stage.clientHeight - 48) * 0.3) / a.h);
+    const want = Math.min(((vw - 48) * 0.3) / a.w, ((stage.clientHeight - 48) * 0.3) / a.h);
     setZoom(Math.min(3, (st.zoom * want) / now));
     centerOnPrint();
   }
@@ -731,9 +750,10 @@
     const stage = $('stage');
     const r = canvas.wrapperEl.getBoundingClientRect();
     const s = stage.getBoundingClientRect();
-    const x = Math.max(0, s.left + stage.clientLeft - r.left);
+    const v = viewRect(); // (beside the docked panel on the computer)
+    const x = Math.max(0, v.left - r.left);
     const y = Math.max(0, s.top + stage.clientTop - r.top);
-    return { x, y, w: Math.min(canvas.getWidth() - x, stage.clientWidth), h: Math.min(canvas.getHeight() - y, stage.clientHeight) };
+    return { x, y, w: Math.max(0, Math.min(canvas.getWidth(), v.right - r.left) - x), h: Math.min(canvas.getHeight() - y, stage.clientHeight) };
   }
   function overviewFrame() {
     const box = $('overview');
@@ -2305,45 +2325,60 @@
    */
   // (The panel's room is always kept on the computer, so choosing something never moves the product under the mouse:
   // with nothing chosen and no tool open it shows the Text list.)
+  // (Booklets and other products with pages keep the earlier layout: their pages and page tabs need the room. QA 26 Nov.)
+  const docked = () => DESK.matches && !(st.product && st.product.paged);
   function syncDock() {
     const dock = $('props-dock');
     if (!dock) return;
-    const desk = DESK.matches;
+    const desk = docked();
     const chosen = Boolean(canvas.getActiveObject() || crop);
     const text = $('flyout-text');
-    if (desk && chosen && text && !text.hidden && text.classList.contains('dock-default')) {
+    // (Another tool's list opened: the Text list shown by itself steps aside, it was drawn over Templates and Layers.)
+    const other = [...document.querySelectorAll('.flyout')].some((f) => f !== text && !f.hidden);
+    if (text && text.classList.contains('dock-default') && !text.hidden && ((desk && chosen) || other)) {
       text.hidden = true;
       text.classList.remove('dock-default');
       const b = document.querySelector('.tools .tool[data-flyout="text"]');
       if (b) b.classList.remove('open');
     }
     let flyOpen = [...document.querySelectorAll('.flyout')].some((f) => !f.hidden);
-    if (desk && !chosen && !flyOpen && text && !st.product.paged) {
+    if (desk && !chosen && !flyOpen && text) {
       text.hidden = false;
       text.classList.add('dock-default');
       flyOpen = true;
     }
     if (!desk && text && text.classList.contains('dock-default')) { text.hidden = true; text.classList.remove('dock-default'); }
     dock.hidden = !(desk && chosen && !flyOpen);
-    document.body.classList.toggle('dock-open', desk && !st.product.paged);
+    document.body.classList.toggle('dock-open', desk);
   }
   /** Computer or phone: the pieces that live in a different place on each are moved there. */
+  // (Each piece goes back exactly where it was when the window gets narrower again: a mark is left in its place.)
+  const deskSlots = {};
   function placeDesk() {
     const desk = DESK.matches;
-    const bar = document.querySelector('.stage-bar');
-    const move = (id, to) => { const e = $(id); if (e && to && e.parentElement !== to) to.appendChild(e); };
+    const dock = docked();
+    const move = (id, to) => {
+      const e = $(id);
+      if (!e || !to || e.parentElement === to) return;
+      if (!deskSlots[id]) { deskSlots[id] = document.createComment(id); e.before(deskSlots[id]); }
+      to.appendChild(e);
+    };
+    const back = (id) => { const e = $(id); if (e && deskSlots[id] && deskSlots[id].nextSibling !== e) deskSlots[id].after(e); };
+    // (Booklets: their layers stay in the right column, so the rail's Layers button is not shown.)
+    document.body.classList.toggle('paged-ed', Boolean(st.product && st.product.paged));
     if (desk) {
       move('undo', $('ed-hist'));
       move('redo', $('ed-hist'));
       move('share-open', $('ed-acts'));
       move('preview-open', $('ed-acts'));
+    } else ['undo', 'redo', 'share-open', 'preview-open'].forEach(back);
+    if (dock) {
       move('preview-toggle', document.querySelector('.zoom-group'));
       move('sec-props', $('props-dock'));
       move('sec-layers', $('layers-dock'));
     } else {
-      ['undo', 'redo', 'preview-open', 'share-open', 'preview-toggle'].forEach((id) => move(id, bar));
-      if ($('sec-props') && $('sec-props').parentElement === $('props-dock')) $('sec-check').after($('sec-props'));
-      if ($('sec-layers') && $('sec-layers').parentElement === $('layers-dock')) $('sec-props').after($('sec-layers'));
+      ['preview-toggle', 'sec-props', 'sec-layers'].forEach(back);
+      placeProps(propsFor); // (the chosen element's settings above the product again)
     }
     syncDock();
   }
@@ -3063,7 +3098,9 @@
     const r = o.getBoundingRect();
     const cv = canvas.upperCanvasEl.getBoundingClientRect();
     const wrap = bar.parentElement.getBoundingClientRect();
-    const stage = $('stage').getBoundingClientRect();
+    const sr = $('stage').getBoundingClientRect();
+    const v = viewRect(); // (kept beside the docked panel, it slid under it: QA 26 Nov)
+    const stage = { left: v.left, right: v.right, top: sr.top, bottom: sr.bottom };
     const bw = bar.offsetWidth;
     const bh = bar.offsetHeight;
     const gap = COARSE ? 30 : 18;
@@ -3103,7 +3140,9 @@
     const y = cv.top + a.y * vt[3] + vt[5] + h / 2 - bh / 2;
     btn.style.transform = `translate(${Math.round(x - wrap.left)}px, ${Math.round(y - wrap.top)}px)`;
   }
-  if ($('start-here')) $('start-here').addEventListener('click', () => { const tool = document.querySelector('.tools [data-flyout="text"]'); if (tool) tool.click(); });
+  // (A heading ready to type on every screen: on the computer it only clicked Text, whose list was already showing.
+  // QA 26 Nov.)
+  if ($('start-here')) $('start-here').addEventListener('click', () => { closeFlyouts(); quickText(); });
   $('stage').addEventListener('scroll', () => { positionFloatBar(); positionStartHere(); }, { passive: true });
   window.addEventListener('resize', () => requestAnimationFrame(positionFloatBar));
   $('float-bar').addEventListener('click', (e) => {
@@ -3258,7 +3297,7 @@
    */
   let propsFor = null;
   function placeProps(o) {
-    if (DESK.matches) { propsFor = o || null; return; } // (computer: in its own docked panel)
+    if (docked()) { propsFor = o || null; return; } // (computer: in its own docked panel)
     const sec = $('sec-props');
     const prod = $('sec-product');
     const check = $('sec-check');
@@ -4601,6 +4640,7 @@
     history.replaceState(null, '', url);
     renderOptions();
     await Promise.all([applyMockup(), loadObjects(st.designs[st.side])]);
+    placeDesk(); // (a booklet keeps the earlier layout on the computer)
     st.zoom = 1;
     fit();
     autoFocusPrint();
@@ -5224,7 +5264,7 @@
     const colourWord = colours.length > 1 ? t('buy.colours') : tr(c.name);
     const sizeWord = askSize ? '' : sizes.length > 1 ? t('buy.sizes') : p.sizes.length > 1 ? tr((p.sizes.find((z) => z.id === (sizes[0] || st.sizeId)) || {}).label || '') : '';
     const sep = POD.lang === 'ar' ? '، ' : ', ';
-    if ($('ed-dname')) $('ed-dname').textContent = tr(p.name);
+    if ($('ed-dname')) { $('ed-dname').textContent = tr(p.name); $('ed-dname').title = tr(p.name); }
     if ($('ed-prod-name')) {
       $('ed-prod-name').textContent = tr(p.name);
       $('ed-prod-sub').textContent = [colourWord, sizeWord].filter(Boolean).join(sep);
@@ -5470,6 +5510,8 @@
     toast(t(picks.length > 1 ? 'qty.packCheaperEach' : 'qty.packCheaperMix', { list, price: money(after), typed, now: money(before) }));
   }
   let qtyRedraw = false;
+  let qtyPressAt = 0;
+  if ($('qty-field')) $('qty-field').addEventListener('pointerdown', (e) => { if (e.target.closest && e.target.closest('.qty-in')) qtyPressAt = performance.now(); }, true);
   function renderQty({ force = false } = {}) {
     const box = $('qty-field');
     if (!box) return;
@@ -5477,8 +5519,12 @@
     // just tapped: they're drawn once the focus leaves them, QA 25 Nov. The price is kept up to date.
     // A new colour row asked for is drawn at once: force.)
     const typing = document.activeElement;
-    if (!force && typing && typing.classList && typing.classList.contains('qty-in') && box.contains(typing)) {
+    // (Also just as a quantity box is pressed, before it has the focus: the words box losing the focus redrew the
+    // table under the click and the number typed next was lost. QA 26 Nov.)
+    const pressing = performance.now() - qtyPressAt < 600;
+    if (!force && (pressing || (typing && typing.classList && typing.classList.contains('qty-in') && box.contains(typing)))) {
       qtyRedraw = true;
+      if (pressing) setTimeout(redrawQtyIfLeft, 700);
       return;
     }
     qtyRedraw = false;

@@ -906,7 +906,7 @@ window.POD_STRINGS = {
   'ed.shareMine': ['Share the design', 'ابعت التصميم لحد'],
   'ed.zoomPrint': ['Zoom to the print area', 'كبّر على منطقة الطباعة'],
   'ed.start': ['Start your design', 'ابدأ تصميمك'],
-  'ed.startNote': ['Tap to write, or pick a tool', 'دوس هنا واكتب، أو اختار أداة'],
+  'ed.startNote': ['Write here, or pick a tool', 'اكتب هنا، أو اختار أداة'],
   'ed.menu': ['Menu', 'القائمة'],
   'ed.saveMine': ['Save in My designs', 'احفظ في تصميماتي'],
   'ed.saveMineNote': ['It saves itself too, and you stay here', 'بيتحفظ لوحده كمان، وتفضل هنا'],

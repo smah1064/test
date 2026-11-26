@@ -1831,3 +1831,11 @@ html[dir="rtl"] .more-chev { transform: scaleX(-1); }
   /* A product with one side: no Front / Back switch to show. */
   .stage-bar:not(:has(.side-tabs.pages)) .side-tabs:not(:has(.side-tab + .side-tab)) { display: none; }
 }
+/* Desktop QA (26 Nov): "Which size?" buttons on one line in Arabic; the sample-text note beside the docked panel;
+   the Text list's ✕ hidden while the panel is docked (the list always comes back there). */
+#size-ask .size-ask-foot .btn { white-space: nowrap; }
+@media (min-width: 1200px) {
+  body.dock-open .sample-note { inset-inline-start: 332px; }
+  body.dock-open #flyout-text .fly-close { visibility: hidden; }
+  body.paged-ed .tools .desk-only { display: none !important; }
+}
