@@ -48,7 +48,7 @@ const designs = [
     T('HIS', 'Bebas Neue', 0.16, 0.5, 0.47, { spacing: 300 }),
     T('QUEEN', 'Abril Fatface', 0.26, 0.5, 0.67, { fill: SOFTGOLD }),
   ], 'black'),
-  D('wd-be-my-valentine', 'love', 'Be my Valentine', 'Be my Valentine', [
+  D('wd-be-my-valentine', 'love', 'Be my Valentine', 'تبقى الفالنتاين بتاعي؟', [
     K('heart-arrow', 0.34, 0.5, 0.27),
     T('Be my', 'Dancing Script', 0.13, 0.5, 0.55, { weight: 'bold' }),
     T('Valentine', 'Pacifico', 0.17, 0.5, 0.72, { fill: PINK }),
@@ -120,7 +120,7 @@ const designs = [
     T('PLAN.', 'Anton', 0.2, 0.5, 0.5),
     T('DO.', 'Anton', 0.2, 0.5, 0.7, { fill: ACCENT }),
   ], 'heather'),
-  D('wd-keep-going', 'motivation', 'Keep going', 'Keep going', [
+  D('wd-keep-going', 'motivation', 'Keep going', 'كمّل', [
     A('tabler:arrow-up-right', 0.2, 0.5, 0.24, { fill: SOFTGOLD }),
     T('KEEP', 'Bebas Neue', 0.26, 0.5, 0.48),
     T('GOING', 'Bebas Neue', 0.14, 0.5, 0.7, { spacing: 200, bg: '#e8590c', bgShape: 'banner', fill: WHITE }),
@@ -229,7 +229,7 @@ const designs = [
     S('ribbon', 0.2, 0.5, 0.45, { fill: GOLD }),
     T('ملوش جديد', 'Aref Ruqaa', 0.2, 0.5, 0.62, { weight: 'bold', fill: GOLD }),
   ], 'navy'),
-  D('wd-this-too-shall-pass', 'quotes', 'This too shall pass', 'This too shall pass', [
+  D('wd-this-too-shall-pass', 'quotes', 'This too shall pass', 'وده كمان هيعدّي', [
     A('tabler:hourglass', 0.16, 0.5, 0.2, { fill: GOLD }),
     T('this too', 'Playfair Display', 0.13, 0.5, 0.42, { weight: 'bold' }),
     T('shall pass', 'Dancing Script', 0.2, 0.5, 0.6, { weight: 'bold', fill: GOLD }),
@@ -278,12 +278,12 @@ const designs = [
     A('tabler:heart', 0.07, 0.72, 0.1, { fill: '#e03131' }),
     T('be kind', 'Playfair Display', 0.07, 0.72, 0.17, { weight: 'bold' }),
   ]),
-  D('wd-serenity', 'minimal', 'Serenity', 'Serenity', [
+  D('wd-serenity', 'minimal', 'Serenity', 'سكينة', [
     T('serenity', 'Playfair Display', 0.15, 0.5, 0.42),
     S('line', 0.12, 0.5, 0.54, { fill: TEAL }),
     T('(n.) calm, peaceful, untroubled', 'Montserrat', 0.042, 0.5, 0.6, { fill: '#495057' }),
   ]),
-  D('wd-breathe', 'minimal', 'Breathe', 'Breathe', [
+  D('wd-breathe', 'minimal', 'Breathe', 'خد نفسك', [
     A('ph:wind', 0.14, 0.5, 0.3, { fill: SAGE }),
     T('breathe', 'Dancing Script', 0.2, 0.5, 0.48, { weight: 'bold' }),
     T('SLOW DOWN', 'Montserrat', 0.045, 0.5, 0.62, { spacing: 800, fill: '#b2f2bb' }),

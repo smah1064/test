@@ -3655,7 +3655,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   app.post('/api/cart/quote', express.json({ limit: '20kb' }), (req, res) => {
     // Coupon codes that don't work count per visitor (codes can't be guessed by trying thousands);
     // a working code re-checked on every cart visit doesn't.
-    const tryingCode = typeof (req.body || {}).couponCode === 'string' && req.body.couponCode.trim() !== '';
+    // (Any code the coupon check reads counts as a try: a number too, which it takes since this morning. QA 26 Nov.)
+    const tryingCode = coupons.normCode((req.body || {}).couponCode) !== '';
     if (tryingCode) limitCheck(req, 'couponTry');
     const ids = Array.isArray((req.body || {}).designIds) ? req.body.designIds.slice(0, MAX_ITEMS_PER_ORDER) : [];
     const items = ids.map((id) => {

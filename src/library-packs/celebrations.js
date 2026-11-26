@@ -35,17 +35,17 @@ const designs = [
     A('fluent-emoji-flat:birthday-cake', 0.36, 0.5, 0.47),
     T('Ahmed', 'Pacifico', 0.15, 0.5, 0.8, { fill: ACCENT, sampleName: 'name' }),
   ]),
-  D('ce-birthday-girl', 'birthday', 'Birthday girl', 'Birthday girl', [
+  D('ce-birthday-girl', 'birthday', 'Birthday girl', 'صاحبة عيد الميلاد', [
     A('fluent-emoji-flat:crown', 0.24, 0.5, 0.22),
     T('Birthday', 'Pacifico', 0.17, 0.5, 0.5, { fill: PINK }),
     T('GIRL', 'Bebas Neue', 0.26, 0.5, 0.74, { spacing: 250 }),
   ]),
-  D('ce-birthday-boy', 'birthday', 'Birthday boy', 'Birthday boy', [
+  D('ce-birthday-boy', 'birthday', 'Birthday boy', 'صاحب عيد الميلاد', [
     K('party-hat', 0.22, 0.5, 0.2),
     T('BIRTHDAY', 'Bungee', 0.12, 0.5, 0.47),
     T('BOY', 'Bungee', 0.28, 0.5, 0.7, { fill: BLUE, extrude: DARK }),
   ]),
-  D('ce-30-fabulous', 'birthday', '30 and fabulous', '30 and fabulous', [
+  D('ce-30-fabulous', 'birthday', '30 and fabulous', '30 وفي أحلى حالاتي', [
     A('fluent-emoji-flat:sparkles', 0.13, 0.74, 0.2),
     T('30', 'Abril Fatface', 0.5, 0.5, 0.4, { fill: GOLD }),
     T('& FABULOUS', 'Playfair Display', 0.09, 0.5, 0.72, { spacing: 150 }),
@@ -166,7 +166,7 @@ const designs = [
     T('على وش جواز', 'Marhey', 0.13, 0.5, 0.56, { weight: 'bold' }),
     A('fluent-emoji-flat:sparkling-heart', 0.24, 0.5, 0.8),
   ]),
-  D('ce-just-married', 'wedding', 'Just married', 'Just married', [
+  D('ce-just-married', 'wedding', 'Just married', 'لسه متجوزين', [
     T('Just', 'Dancing Script', 0.2, 0.5, 0.28, { weight: 'bold', fill: ROSE }),
     T('MARRIED', 'Bebas Neue', 0.24, 0.5, 0.5, { spacing: 150 }),
     A('fluent-emoji-flat:two-hearts', 0.18, 0.5, 0.76),
@@ -195,7 +195,7 @@ const designs = [
   ], 'black'),
 
   // ---------- Graduation ----------
-  D('ce-class-of-2025', 'graduation', 'Class of 2025', 'Class of 2025', [
+  D('ce-class-of-2025', 'graduation', 'Class of 2025', 'دفعة 2025', [
     K('grad-cap', 0.28, 0.5, 0.2),
     T('CLASS OF', 'Bebas Neue', 0.15, 0.5, 0.46, { spacing: 250 }),
     T('2025', 'Anton', 0.32, 0.5, 0.7, { fill: GOLD }),
@@ -250,7 +250,7 @@ const designs = [
     T('25', 'Abril Fatface', 0.17, 0.5, 0.39, { fill: WHITE }),
     T('GRADUATE', 'Playfair Display', 0.1, 0.5, 0.76, { spacing: 250 }),
   ], 'forest'),
-  D('ce-tassel-hassle', 'graduation', 'The tassel was worth the hassle', 'The tassel was worth the hassle', [
+  D('ce-tassel-hassle', 'graduation', 'The tassel was worth the hassle', 'التخرج كان يستاهل التعب', [
     T('THE TASSEL', 'Bebas Neue', 0.2, 0.5, 0.26),
     T('WAS WORTH THE', 'Montserrat', 0.07, 0.5, 0.46, { weight: 'bold', spacing: 200 }),
     T('HASSLE', 'Bebas Neue', 0.3, 0.5, 0.66, { fill: GOLD }),

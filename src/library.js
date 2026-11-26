@@ -110,7 +110,7 @@ const BASE = [
     T('ملك الملعب', 'Changa', 0.12, 0.5, 0.14, { weight: 'bold' }),
     T('10', 'Anton', 0.66, 0.5, 0.58, { fill: ACCENT }),
   ]),
-  D('born-to-play', 'football', 'Born to play', 'Born to play', [
+  D('born-to-play', 'football', 'Born to play', 'اتولدت عشان ألعب', [
     T('BORN TO', 'Anton', 0.14, 0.5, 0.3),
     T('PLAY', 'Anton', 0.34, 0.5, 0.55, { fill: ACCENT }),
     K('ball', 0.15, 0.5, 0.84),
@@ -141,7 +141,7 @@ const BASE = [
     T('عيد ميلاد', 'Lalezar', 0.2, 0.5, 0.56),
     T('سعيد', 'Lalezar', 0.26, 0.5, 0.79, { fill: ACCENT }),
   ]),
-  D('birthday-squad', 'birthday', 'Birthday squad', 'Birthday squad', [
+  D('birthday-squad', 'birthday', 'Birthday squad', 'شلة عيد الميلاد', [
     K('party-hat', 0.22, 0.5, 0.2),
     T('BIRTHDAY', 'Bungee', 0.13, 0.5, 0.48),
     T('SQUAD', 'Bungee', 0.2, 0.5, 0.68, { fill: ACCENT }),
@@ -173,7 +173,7 @@ const BASE = [
     T('كمّل', 'Lalezar', 0.38, 0.5, 0.4, { fill: ACCENT }),
     T('ومتبصش وراك', 'Changa', 0.11, 0.5, 0.66, { weight: 'bold' }),
   ]),
-  D('dream-big', 'motivation', 'Dream big', 'Dream big', [
+  D('dream-big', 'motivation', 'Dream big', 'احلم كبير', [
     K('sparkle', 0.16, 0.2, 0.18),
     T('DREAM', 'Anton', 0.26, 0.5, 0.4),
     T('BIG', 'Anton', 0.32, 0.5, 0.66, { fill: ACCENT }),
