@@ -4150,6 +4150,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       // (An email another account already has: the new account starts without one; it can be added on the account page.)
       const email = fields.email && !db.customers.some((x) => x.email === fields.email) ? fields.email : '';
       const cust = { id: crypto.randomUUID(), name: fields.name, phone: fields.phone, email, salt, passHash: hash, pv: 1, createdAt: new Date().toISOString() };
+      // The order's delivery address is kept for next time, as for a signed-in customer's first order (QA 26 Nov).
+      const oc = o.customer || {};
+      if (oc.governorate && oc.address) cust.address = { governorate: oc.governorate, city: oc.city || '', address: oc.address, notes: oc.notes || '' };
       db.customers.push(cust);
       for (const x of db.orders || []) {
         const mine = x.id === o.id || (here.has(x.id) && x.linkKey && sameSecret(here.get(x.id), x.linkKey) && x.customer && x.customer.phone === fields.phone);
@@ -4463,13 +4466,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
 
   // Shipping details and delivery, set by the shop.
   app.patch('/api/admin/orders/:orderId/shipment', (req, res, next) => requireAdmin(req, res, next), express.json({ limit: '4kb' }), (req, res) => {
-    const order = UUID_RE.test(req.params.orderId) && store.getOrder(req.params.orderId);
+    let order = UUID_RE.test(req.params.orderId) && store.getOrder(req.params.orderId);
     if (!order) throw new HttpError(404, 'orderNotFound');
     const b = req.body || {};
     // (Text or a number only: a list or an object showed as "[object Object]" on the customer's page. QA 25 Nov.)
     for (const k of ['courier', 'trackingNumber', 'trackingUrl', 'eta']) if (b[k] != null && typeof b[k] !== 'string' && typeof b[k] !== 'number') throw new HttpError(400, 'badProductField', { field: k });
     const text = (v, max) => (v == null ? null : String(v).replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max) || null);
-    const s = { ...(order.shipment || {}) };
+    const s = {}; // (only the fields sent: the rest is taken from the latest order under the lock)
     if ('courier' in b) s.courier = text(b.courier, 60);
     // (Typed with Arabic or Persian digits: kept in Latin digits, as couriers and the English email show them.)
     if ('trackingNumber' in b) s.trackingNumber = text(typeof b.trackingNumber === 'string' ? b.trackingNumber.replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)) : b.trackingNumber, 80);
@@ -4487,12 +4490,20 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if ((b.shipped === true || b.delivered === true) && order.items.some((it) => REVIEW_STATUSES.includes(it.status))) throw new HttpError(409, 'notApproved');
     // …nor one whose corrected print file is being saved right now (it goes back to the customer for approval). QA 25 Nov.
     if ((b.shipped === true || b.delivered === true) && order.items.some((it) => replacingItems.has(it.id))) throw new HttpError(409, 'fileBeingReplaced');
-    order.shipment = s;
+    // Saved under the lock with the latest order (an item marked shipped on another copy meanwhile: told once).
     let first = false;
-    if (b.shipped === true || b.delivered === true) first = markShipped(order, req);
-    if (b.delivered === true) order.shipment.deliveredAt = order.shipment.deliveredAt || new Date().toISOString();
-    if (b.delivered === false) order.shipment.deliveredAt = null;
-    store.save();
+    store.mutate(() => {
+      const o = store.getOrder(order.id);
+      if (!o) throw new HttpError(404, 'orderNotFound');
+      if ((b.shipped === true || b.delivered === true) && o.items.some((it) => REVIEW_STATUSES.includes(it.status) || replacingItems.has(it.id))) {
+        throw new HttpError(409, o.items.some((it) => REVIEW_STATUSES.includes(it.status)) ? 'notApproved' : 'fileBeingReplaced');
+      }
+      o.shipment = { ...(o.shipment || {}), ...s };
+      if (b.shipped === true || b.delivered === true) first = markShipped(o, req);
+      if (b.delivered === true) o.shipment.deliveredAt = o.shipment.deliveredAt || new Date().toISOString();
+      if (b.delivered === false) o.shipment.deliveredAt = null;
+      order = o;
+    });
     if (first) sendShipped(order, req);
     res.json({ shipment: publicShipment(order), status: orderStatus(order), timeline: orderTimeline(order) });
   });
@@ -6647,22 +6658,30 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (!ITEM_STATUSES.includes(status)) throw new HttpError(400, 'badStatus', { list: ITEM_STATUSES.join(', ') });
     // (A button on a list that's out of date: someone else moved the job meanwhile. QA admin round.)
     const from = (req.body || {}).from;
-    if (typeof from === 'string' && from !== item.status) throw new HttpError(409, 'jobMoved');
-    // A job waiting for review or for the customer's approval is cleared from the Review tab, not here.
-    if (REVIEW_STATUSES.includes(item.status) && status !== item.status) throw new HttpError(409, 'notApproved');
-    // A corrected file for it is being processed (it then waits for the customer's approval): not now (QA 25 Nov).
-    if (replacingItems.has(item.id) && status !== item.status) throw new HttpError(409, 'fileBeingReplaced');
-    if (item.status !== status) {
-      item.status = status;
-      item.history.push({ status, at: new Date().toISOString() });
-      // Sent back from "shipped" (a mistake, or a reprint): the order isn't on its way any more.
-      if (status !== 'shipped' && order.shipment && order.shipment.shippedAt && !order.shipment.deliveredAt) order.shipment = { ...order.shipment, shippedAt: null };
-      // The last item shipped: the order is on its way (the customer is told once).
-      const first = order.items.every((it) => it.status === 'shipped') && markShipped(order, req);
-      store.save();
-      if (first) sendShipped(order, req);
-    }
-    res.json(adminItem(order, item, order.items.indexOf(item)));
+    // Checked and changed under the lock with the latest data: the last two jobs marked shipped at the same moment on
+    // two copies of the app both see the order complete there (it stayed "not shipped" before. QA 26 Nov).
+    let first = false;
+    const cur = store.mutate(() => {
+      const now = store.findItem(req.params.itemId);
+      if (!now) throw new HttpError(404, 'itemNotFound');
+      const { order: o, item: it } = now;
+      if (typeof from === 'string' && from !== it.status) throw new HttpError(409, 'jobMoved');
+      // A job waiting for review or for the customer's approval is cleared from the Review tab, not here.
+      if (REVIEW_STATUSES.includes(it.status) && status !== it.status) throw new HttpError(409, 'notApproved');
+      // A corrected file for it is being processed (it then waits for the customer's approval): not now (QA 25 Nov).
+      if (replacingItems.has(it.id) && status !== it.status) throw new HttpError(409, 'fileBeingReplaced');
+      if (it.status !== status) {
+        it.status = status;
+        it.history.push({ status, at: new Date().toISOString() });
+        // Sent back from "shipped" (a mistake, or a reprint): the order isn't on its way any more.
+        if (status !== 'shipped' && o.shipment && o.shipment.shippedAt && !o.shipment.deliveredAt) o.shipment = { ...o.shipment, shippedAt: null };
+        // The last item shipped: the order is on its way (the customer is told once).
+        first = o.items.every((x) => x.status === 'shipped') && markShipped(o, req);
+      }
+      return now;
+    });
+    if (first) sendShipped(cur.order, req);
+    res.json(adminItem(cur.order, cur.item, cur.order.items.indexOf(cur.item)));
   });
 
   // Print files in every format the shop may need. Derived files are made on

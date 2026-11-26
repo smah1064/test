@@ -106,8 +106,10 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 
 /* ---------- Toast ---------- */
 #toast-root { position: fixed; bottom: calc(20px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); z-index: 100; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
-/* (Taps go through a message to the button under it: on phones it sat over "Create account" for 8 seconds. QA 26 Nov.) */
+/* (Taps go through a message to the button under it: on phones it sat over "Create account" for 8 seconds. QA 26 Nov.)
+   A message's own buttons and links (Undo in the cart and on the photo prints page) still take taps. */
 .toast { background: var(--ink); color: #fff; padding: 11px 16px; border-radius: 10px; font-size: 14px; box-shadow: var(--shadow); animation: toast-in .2s ease-out; pointer-events: none; max-width: 90vw; }
+.toast button, .toast a, .toast-undo, .toast.ph-undo { pointer-events: auto; }
 .toast.error { background: var(--bad); }
 @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } }
 

@@ -19,7 +19,7 @@
   const MAX_VECTOR_BYTES = 40 * 1024 * 1024;
   const HISTORY_LIMIT = 60;
   const SNAP_PX = 7;
-  const EXTRA_PROPS = ['name', 'selectable', 'evented', 'curve', 'mask', 'maskBorder', 'maskBorderColor', 'lockRatio', 'bgShape', 'textFx', 'fxBase', 'boosted', 'importSource', 'mergeFit', 'pdfSrc', 'printSrc', 'printPx'];
+  const EXTRA_PROPS = ['name', 'selectable', 'evented', 'curve', 'mask', 'maskBorder', 'maskBorderColor', 'lockRatio', 'bgShape', 'textFx', 'fxBase', 'boosted', 'importSource', 'mergeFit', 'pdfSrc', 'printSrc', 'printPx', 'wordsFill'];
   const $ = (id) => document.getElementById(id);
   const { esc, money, toast, t, tr } = POD;
   const D = window.POD_DESIGN;
@@ -1445,6 +1445,14 @@
     if (snap.k && snap.k !== ink && !laser()) {
       const same = (c) => typeof c === 'string' && c.toLowerCase() === snap.k;
       snap.o = snap.o.map((o) => ({ ...o, ...(same(o.fill) ? { fill: ink } : {}), ...(same(o.stroke) ? { stroke: ink } : {}) }));
+      // A ready design's words keep their own rule for this colour (QA 26 Nov: after Undo they were near-black on black).
+      if (D.wordFill) {
+        snap.o = snap.o.map((o) => {
+          if (typeof o.wordsFill !== 'string' || typeof o.fill !== 'string') return o;
+          const was = String(D.wordFill(o.wordsFill, snap.k)).toLowerCase();
+          return o.fill.toLowerCase() === was || o.fill.toLowerCase() === o.wordsFill.toLowerCase() ? { ...o, fill: D.wordFill(o.wordsFill, ink) } : o;
+        });
+      }
     }
     await loadObjects(snap.o);
     st.designs[st.side] = snap.o;
@@ -1494,10 +1502,16 @@
     if (o.initDimensions) o.initDimensions();
     const w = o.getScaledWidth();
     const h = o.getScaledHeight();
-    if (!(w > maxW || h > maxH) || !w || !h) return;
+    if (!w || !h) return;
+    // Text made smaller to fit grows back towards the size it had before (a long line replaced by "Hi"), never past
+    // it (QA 26 Nov). A size changed by hand since (handles, size box) is the one kept.
+    if (o.__fit && Math.abs(o.scaleX - o.__fit.at) > 1e-6) o.__fit = null;
+    const from = o.__fit ? o.__fit.from : o.scaleX;
+    const k = Math.min(maxW / w, maxH / h, from / o.scaleX);
+    if (Math.abs(k - 1) < 1e-3 || (k > 1 && !o.__fit)) return;
     const c = o.getCenterPoint();
-    const k = Math.min(maxW / w, maxH / h);
     o.set({ scaleX: o.scaleX * k, scaleY: o.scaleY * k });
+    o.__fit = Math.abs(o.scaleX - from) < 1e-6 ? null : { from, at: o.scaleX };
     o.setPositionByOrigin(c, 'center', 'center');
     o.setCoords();
     canvas.requestRenderAll();
@@ -3818,9 +3832,9 @@
     const newInk = inkFor(surfaceHex());
     renderOptions();
     await applyMockup();
-    if (oldInk !== newInk && !laser()) swapInk(oldInk, newInk);
     // A ready design's near-black words on a product that became dark (or back): its own rule, as when the design is
-    // opened on that colour; a word the customer recoloured stays as they chose (QA 26 Nov).
+    // opened on that colour; a word the customer recoloured stays as they chose (QA 26 Nov). Before the default ink
+    // swap, so they go back to their own colour, not the default ink.
     if (oldInk !== newInk && !laser() && D.wordFill) {
       canvas.getObjects().forEach((o) => {
         if (typeof o.wordsFill !== 'string' || !isText(o)) return;
@@ -3833,6 +3847,7 @@
       });
       canvas.requestRenderAll();
     }
+    if (oldInk !== newInk && !laser()) swapInk(oldInk, newInk);
     retoneAll();
     schedulePatternPreview(0);
   }));
@@ -4730,12 +4745,36 @@
    */
   function hintBiggerPack(lines, before) {
     const p = st.product;
-    const first = sizeById(lines[0].size);
-    if (!first) return;
-    const copies = copiesIn(lines);
-    const best = p.sizes.filter((z) => counted(z) && z.family === first.family && z.copies >= copies && sizeOk(p, lines[0].color, z))
-      .map((z) => ({ z, cost: unitPrice(z.id) })).filter((x) => x.cost < before - 0.5).sort((a, b) => a.cost - b.cost)[0];
-    if (best) toast(t('qty.packCheaper', { n: POD.num(best.z.copies), price: money(best.cost), typed: POD.num(copies), now: money(before) }));
+    // Each colour (or finish) is its own pack: 5 matte + 4 glossy bookmarks need two 10-packs, not one (QA 26 Nov).
+    const groups = [];
+    for (const l of lines) {
+      const z = sizeById(l.size);
+      if (!z) return;
+      let g = groups.find((x) => x.color === l.color && x.family === z.family);
+      if (!g) groups.push((g = { color: l.color, family: z.family, lines: [] }));
+      g.lines.push(l);
+    }
+    let after = 0;
+    const picks = [];
+    for (const g of groups) {
+      const copies = copiesIn(g.lines);
+      const now = g.lines.reduce((a, l) => a + unitPrice(l.size) * l.qty, 0);
+      const best = p.sizes.filter((z) => counted(z) && z.family === g.family && z.copies >= copies && sizeOk(p, g.color, z))
+        .map((z) => ({ z, cost: unitPrice(z.id) })).filter((x) => x.cost < now - 0.5).sort((a, b) => a.cost - b.cost)[0];
+      after += best ? best.cost : now;
+      if (best) picks.push({ color: g.color, z: best.z });
+    }
+    if (!picks.length || !(after < before - 0.5)) return;
+    const word = packWordHere();
+    const typed = POD.plural(word, copiesIn(lines));
+    if (groups.length === 1) {
+      const n = POD.plural(word, picks[0].z.copies);
+      toast(t('qty.packCheaper', { copies: n, price: money(after), typed, now: money(before) }));
+      return;
+    }
+    const name = (cid) => tr((p.colors.find((c) => c.id === cid) || {}).name || '');
+    const list = picks.map((x) => t('qty.packOf', { copies: POD.plural(word, x.z.copies), color: name(x.color) })).join(' + ');
+    toast(t(picks.length > 1 ? 'qty.packCheaperEach' : 'qty.packCheaperMix', { list, price: money(after), typed, now: money(before) }));
   }
   let qtyRedraw = false;
   function renderQty({ force = false } = {}) {

@@ -300,7 +300,8 @@
   }
 
   // ---------- Pictures ----------
-  const shownOn = (d) => productById(state.product) || (fitting.has(d.product) && fitting.get(d.product).has(d.id) && productById(d.product)) || firstFor(d) || products[0];
+  let autoProduct = ''; // (the product a search named: "egypt mug")
+  const shownOn = (d) => productById(state.product || autoProduct) || (fitting.has(d.product) && fitting.get(d.product).has(d.id) && productById(d.product)) || firstFor(d) || products[0];
   const pictures = new Map(); // design id + product id -> promise of an image URL
   const ready = new Map(); // the same, once drawn
   function pictureFor(d, product) {
@@ -337,9 +338,40 @@
     sel.value = state.product;
   }
 
+  /**
+   * A theme searched on a product ("تيشيرت مصر", "egypt mug") that no design says in full: the product's words pick
+   * the product and the other words search its designs (QA 26 Nov). { id, rest } or null.
+   */
+  function productInSearch(terms) {
+    let best = null;
+    for (const p of products) {
+      const ok = fitting.get(p.id);
+      if (!ok) continue;
+      const h = SEARCH.index(`${p.name.en} ${p.name.ar}`);
+      const named = terms.filter((x) => SEARCH.match(h, [x]));
+      const rest = terms.filter((x) => !named.includes(x));
+      if (!named.length || !rest.length) continue;
+      const whole = named.filter((x) => SEARCH.match(h, [x], 'word')).length;
+      const score = named.length * 100 + whole * 10 - (p.name.en.split(' ').length);
+      if (best && best.score >= score) continue;
+      if (!lib.designs.some((d) => ok.has(d.id) && matches(d, rest))) continue;
+      best = { id: p.id, rest, score };
+    }
+    return best;
+  }
+
   function render() {
-    const terms = SEARCH.query(state.q);
-    const okProduct = state.product ? fitting.get(state.product) : null;
+    let terms = SEARCH.query(state.q);
+    let productId = state.product;
+    if (!productId && terms.length > 1 && !lib.designs.some((d) => matches(d, terms))) {
+      const split = productInSearch(terms);
+      if (split) {
+        productId = split.id;
+        terms = split.rest;
+      }
+    }
+    autoProduct = productId === state.product ? '' : productId;
+    const okProduct = productId ? fitting.get(productId) : null;
     const forProduct = lib.designs.filter((d) => !okProduct || okProduct.has(d.id));
     // Category chips: the ones with designs for the chosen product.
     const cats = lib.categories.filter((c) => forProduct.some((d) => d.category === c.id));
@@ -348,12 +380,12 @@
       .map((c) => `<button type="button" class="chip ${c.id === state.cat ? 'active' : ''}" data-cat="${c.id}" aria-pressed="${c.id === state.cat}">${esc(c.name ? tr(c.name) : t('cat.all'))}</button>`).join('');
     let list = forProduct.filter((d) => (state.cat === 'all' || d.category === state.cat) && (!terms.length || matches(d, terms)));
     // Designs made for the chosen product come first.
-    if (state.product) list = [...list.filter((d) => d.product === state.product), ...list.filter((d) => d.product !== state.product)];
+    if (productId) list = [...list.filter((d) => d.product === productId), ...list.filter((d) => d.product !== productId)];
 
-    const product = productById(state.product);
+    const product = productById(productId);
     // (No count over the empty state: it says so itself.)
     $('design-count').textContent = !list.length ? '' : product ? t('designs.countOn', { count: countText(list.length), product: tr(product.name) }) : countText(list.length);
-    const extra = state.product ? `&product=${encodeURIComponent(state.product)}` : '';
+    const extra = productId ? `&product=${encodeURIComponent(productId)}` : '';
     $('design-grid').innerHTML = list.map((d) => {
       const on = shownOn(d);
       const src = d.preview && on.id === d.product ? d.preview : ready.get(`${d.id}:${on.id}`);
