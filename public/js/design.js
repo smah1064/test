@@ -334,8 +334,15 @@
     $('dp-edit').dataset.i18n = hasFields ? 'design.fillIn' : hasWords ? 'design.customize' : 'design.customizePic';
     $('dp-edit').textContent = t($('dp-edit').dataset.i18n);
     document.title = `${tr(design.name)} · ${t('brand')}`;
+    // The chosen product's chip in the middle of its row: only the row scrolls (scrollIntoView also moved the page
+    // down on small phones, hiding the top of the picture. Tester 1, 26 Nov).
     const active = $('dp-products').querySelector('.active');
-    if (active) active.scrollIntoView({ block: 'nearest', inline: 'center' });
+    const row = active && active.parentElement;
+    if (row && row.scrollWidth > row.clientWidth) {
+      const r = row.getBoundingClientRect();
+      const a = active.getBoundingClientRect();
+      row.scrollLeft += (a.left + a.width / 2) - (r.left + r.width / 2);
+    }
   }
   /** The editor, on this product, colour and size, with the names typed here. */
   function editHref() {

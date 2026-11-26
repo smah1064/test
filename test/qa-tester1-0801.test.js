@@ -160,7 +160,7 @@ test('links to a product, a ready design, a kids book and a shared design previe
     assert.match(meta(tplPage, 'og:image')[0], /og-ebda3\.png$/);
     const pic = lib.designs.find((x) => x.kind === 'template' && raster(x));
     const picPage = await (await fetch(`${base}/design?id=${encodeURIComponent(pic.id)}`)).text();
-    assert.match(meta(picPage, 'og:image')[0], /\/img\/art\/.+\.(png|jpe?g|webp)$/);
+    assert.match(meta(picPage, 'og:image')[0], /\/img-w\/1200\/art\/.+\.(png|jpe?g|webp)$/);
     // Unknown ids and other pages keep the general card; nothing typed in the address is echoed.
     const odd = await (await fetch(`${base}/product?id=%22%3E%3Cscript%3E`)).text();
     assert.match(meta(odd, 'og:image')[0], /og-ebda3\.png$/);

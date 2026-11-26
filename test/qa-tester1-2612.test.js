@@ -21,10 +21,12 @@ test('link previews of the shop\'s own picture designs show their artwork; a dra
   };
   try {
     const img = await ogImage('xm-trees-holly-plaid');
-    assert.match(img || '', /\/img\/art\/christmas\/trees-holly-plaid\.png$/);
+    assert.match(img || '', /\/img-w\/1200\/art\/christmas\/trees-holly-plaid\.png$/);
+    // (A 1200 px copy, small enough for WhatsApp's preview, not the 2.4 MB original: tester 1, 26 Nov.)
     const r = await fetch(new URL(new URL(img).pathname, base));
     assert.strictEqual(r.status, 200);
-    assert.match(r.headers.get('content-type'), /image\/png/);
+    assert.match(r.headers.get('content-type'), /image\/webp/);
+    assert.ok(Number(r.headers.get('content-length') || (await r.clone().arrayBuffer()).byteLength) < 400000, 'small enough');
     // A drawing has no picture a link preview can show: the shop's card, as before.
     assert.match(await ogImage('sq-not-lazy') || '', /\/img\/og-ebda3\.png$/);
   } finally {

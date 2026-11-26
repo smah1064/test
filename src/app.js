@@ -531,6 +531,9 @@ const DEFAULT_LIMITS = {
   // WhatsApp/email alerts for the whole shop, so fake orders cannot flood the owner's phone.
   notify: [{ max: 30, ms: 3600e3 }, { max: 200, ms: 24 * 3600e3 }],
   couponTry: [{ max: 15, ms: 10 * 60e3 }, { max: 60, ms: 24 * 3600e3 }], // coupon codes that didn't work, per visitor
+  // "Prices changed" answers from placing an order, per visitor: they say whether a phone has had a once-per-customer
+  // offer, so they can't be asked for without end (tester 1, 26 Nov).
+  priceCheck: [{ max: 10, ms: 3600e3 }, { max: 30, ms: 24 * 3600e3 }],
   previewCode: [{ max: 10, ms: 15 * 60e3 }, { max: 40, ms: 24 * 3600e3 }], // private-preview codes that didn't work, per visitor
   staffSetup: [{ max: 10, ms: 15 * 60e3 }, { max: 40, ms: 24 * 3600e3 }], // team set-up links that didn't work, per visitor
   myPassword: [{ max: 5, ms: 15 * 60e3 }, { max: 20, ms: 24 * 3600e3 }], // wrong current passwords on "Change my password", per person
@@ -2569,8 +2572,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const product = getProduct(b.productId);
     if (!viewable(product)) throw new HttpError(400, 'viewProduct');
     const { pics, kind, rtl } = viewPictures(product, b);
-    Object.assign(v, { productId: product.id, kind, rtl }); // (its older pictures go: an update doesn't add to the disk)
-    views.put(v, pics);
+    // (Its older pictures go: an update doesn't add to the disk. Read again and written while no other copy of the app
+    // writes it: 16 updates on two copies ended at version 13. Tester 1, 26 Nov.)
+    v = store.exclusive(() => {
+      const now = views.read(v.id) || v;
+      Object.assign(now, { productId: product.id, kind, rtl });
+      return views.put(now, pics);
+    });
     res.set('Cache-Control', 'no-store');
     res.json({ id: v.id, url: `/view?id=${v.id}`, updatedAt: v.updatedAt });
   });
@@ -2643,10 +2651,16 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const comment = cut((typeof b.comment === 'string' ? b.comment : '').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').replace(BIDI, '').trim(), 500);
     const name = cut((typeof b.name === 'string' ? b.name : '').replace(/[\u0000-\u001f\u007f]/g, '').replace(BIDI, '').trim(), 40);
     if (vote === 'change' && !comment) throw new HttpError(400, 'feedbackEmpty');
-    sh.feedback = (sh.feedback || []).slice(-99);
-    sh.feedback.push({ vote, comment, name, at: new Date().toISOString() });
-    writeShare(sh);
-    res.status(201).json(publicShare(sh));
+    // (Read again, changed and written while no other copy of the app writes it: two copies taking replies at once
+    // lost some. Tester 1, 26 Nov.)
+    const saved = store.exclusive(() => {
+      const now = readShare(req.params.id) || sh;
+      now.feedback = (now.feedback || []).slice(-99);
+      now.feedback.push({ vote, comment, name, at: new Date().toISOString() });
+      writeShare(now);
+      return now;
+    });
+    res.status(201).json(publicShare(saved));
   });
 
   const proofHits = new Map();
@@ -3562,7 +3576,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         id: crypto.randomUUID(),
         // (Without hidden direction marks, as a typed name: "\u202Eevil\u202C" read backwards in the greeting and the
         // dashboard. Tester 2, 26 Nov.)
-        name: (String(prof.name || '').replace(/[\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/g, '').trim() || fallback).replace(/\s+/g, ' ').slice(0, 120).padEnd(2, '.'),
+        name: ((n) => (/[\p{L}\p{N}]/u.test(n.replace(/\u0640/g, '')) ? n : fallback))(String(prof.name || '').replace(/[\u061c\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/g, '').trim()).replace(/\s+/g, ' ').slice(0, 120).padEnd(2, '.'),
         phone: '',
         email: prof.email,
         ...(prof.email ? { emailVerified: true } : {}),
@@ -3675,9 +3689,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     // Text fields must be text (an object or a list is refused, not saved as "[object Object]").
     const text = (v) => (v == null ? '' : typeof v === 'string' ? v : (() => { throw new HttpError(400, 'badRequest'); })());
     // (Invisible characters don't count, as at sign-up.)
-    const name = text(b.name).replace(/[\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/g, '').trim().replace(/\s+/g, ' ').slice(0, 120);
+    const name = text(b.name).replace(/[\u061c\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/g, '').trim().replace(/\s+/g, ' ').slice(0, 120);
     const email = cleanEmail(text(b.email)).toLowerCase().slice(0, 200);
-    if (name.length < 2) throw new HttpError(400, 'acctName');
+    // (A letter or a digit, as at sign-up and checkout: "..", "!!!" or Arabic letter marks alone left the greeting
+    // blank. Tester 1, 26 Nov.)
+    if (name.length < 2 || !/[\p{L}\p{N}]/u.test(name.replace(/\u0640/g, ''))) throw new HttpError(400, 'acctName');
     if (email && !EMAIL_RE.test(email)) throw new HttpError(400, 'badEmail');
     // Mobile number: accounts made with Google/Facebook add it here.
     const phone = b.phone === undefined || b.phone === null || b.phone === '' ? null : normalizeEgyptMobile(b.phone);
@@ -3774,7 +3790,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   });
 
   // ---------- Coupons ----------
-  const findCoupon = (code) => (store.db.coupons || []).find((c) => c.code === coupons.normCode(code)) || null;
+  // (The code as saved first; else without its dashes and underscores: "SALE50", "SALE 50" or "SALE–50" typed for
+  // SALE-50 was "not valid". Tester 1, 26 Nov.)
+  const looseCode = (c) => String(c || '').replace(/[-_\u2010-\u2015\u2212]/g, '');
+  const findCoupon = (code) => {
+    const n = coupons.normCode(code);
+    const all = store.db.coupons || [];
+    return all.find((c) => c.code === n) || (looseCode(n).length >= 3 && all.find((c) => looseCode(c.code) === looseCode(n))) || null;
+  };
   const couponLine = (design, price) => {
     const product = design && getProduct(design.productId);
     return { productId: design ? design.productId : '', category: product ? product.category : '', price: price || 0 };
@@ -3796,11 +3819,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     e.phones.add(phone);
     return true;
   }
-  /** A phone this visitor ordered with (all their details, the order's own checks): its prices may be asked for. */
+  /** A phone this visitor ordered with (all their details, the order's own checks): its prices may be asked for. A
+   *  few a day past the usual three (tester 1, 26 Nov: no end to them, and the list of phones grew without a cap). */
   function allowPhoneCheck(ip, phone) {
     phoneCheckAllowed(ip, phone);
     const e = phoneChecks.get(ip);
-    if (e) e.phones.add(phone);
+    if (e && e.phones.size < 8) e.phones.add(phone);
   }
   app.post('/api/cart/quote', express.json({ limit: '20kb' }), (req, res) => {
     // Coupon codes that don't work count per visitor (codes can't be guessed by trying thousands);
@@ -3859,8 +3883,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const typed = typeof (req.body || {}).phone === 'string' ? normalizeEgyptMobile(req.body.phone) : null;
       const me = typed && currentCustomer(req);
       const phone = typed && ((me && normalizeEgyptMobile(me.phone || '') === typed) || phoneCheckAllowed(req.ip, typed)) ? typed : null;
-      const r = coupons.apply(findCoupon(code), { lines, orders: store.listOrders(), ...(phone ? { phone } : {}), shipping: lines.length ? shippingFor(subtotal) : 0 });
-      if (r.ok) coupon = { code, discount: r.discount, freeShipping: r.freeShipping };
+      const found = findCoupon(code);
+      const r = coupons.apply(found, { lines, orders: store.listOrders(), ...(phone ? { phone } : {}), shipping: lines.length ? shippingFor(subtotal) : 0 });
+      // (The code as the shop keeps it: "SALE50" typed is the coupon SALE-50.)
+      if (r.ok) coupon = { code: (found && found.code) || code, discount: r.discount, freeShipping: r.freeShipping };
       else couponError = format(r.reason, r.params || {}, langOf(req));
     }
     // Best value wins (owner, 26 Nov): an automatic coupon that saves more than the typed code (or any, with none
@@ -4185,6 +4211,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       // (An offer this phone has had already: the cart's next price check may use this phone, past the few a visitor
       // can have checked a day, or it kept showing the offer and every order ended here. Tester 2, 26 Nov: customers
       // on one mobile-network address share that limit. This answer already says the price differs for the phone.)
+      rateLimit(req, 'priceCheck');
       if (c.phone) allowPhoneCheck(req.ip, c.phone);
       throw new HttpError(409, 'priceChanged', { total });
     }
@@ -8005,7 +8032,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const art = d.kind === 'template' && (d.items || []).find((i) => i && i.kind === 'image' && /^\/img\/art\/[\w/-]+\.(png|jpe?g|webp)$/i.test(i.src || '')
         && fs.existsSync(path.join(publicDir, i.src)));
       const image = d.uploaded ? `${origin}/library-art/${d.id}/web.png` : d.kind === 'objects' && fs.existsSync(library.previewPath(d.id)) ? `${origin}/api/library/${d.id}/preview.png`
-        : art ? `${origin}${art.src}` : `${origin}/img/og-ebda3.png`;
+        // (Its 1200 px copy, as the product pages' pictures: the original artwork is up to 2.4 MB, and WhatsApp drops
+        // preview pictures much over 300 KB. Tester 1, 26 Nov.)
+        : art ? `${origin}${art.src.replace(/^\/img\/art\//, '/img-w/1200/art/')}` : `${origin}/img/og-ebda3.png`;
       return { title: `${both(d.name)} · إبداع`, description: 'تصميم جاهز تطبعه على منتجك، أو تعدّله على ذوقك · A ready design to print as it is, or make it yours', image, url: `${origin}/design?id=${encodeURIComponent(d.id)}` };
     }
     if (name === 'book') {

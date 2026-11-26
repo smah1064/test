@@ -3,7 +3,8 @@ Object.assign(window.POD_STRINGS, {
   'ship.manage': ['Shipping & payment', 'الشحن والدفع'],
   'ship.title': ['Shipping & payment · {number}', 'الشحن والدفع، {number}'],
   'ship.close': ['Close', 'إغلاق'],
-  'ship.status.received': ['Received', 'تم الاستلام'],
+  // (A new order, as its filter chip says: "تم الاستلام" read as delivered, next to "تم التسليم". Tester 1, 26 Nov.)
+  'ship.status.received': ['New', 'جديدة'],
   'ship.status.in_production': ['In production', 'قيد التنفيذ'],
   'ship.status.shipped': ['Shipped', 'تم الشحن'],
   'ship.status.delivered': ['Delivered', 'تم التسليم'],
