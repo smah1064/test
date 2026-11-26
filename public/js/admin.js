@@ -3231,6 +3231,160 @@
         }).join('')}
       </section>`;
   }
+  /*
+   * Kids' books: the child's face is fitted into the oval before it is sent, as the book page does (public/js/book.js:
+   * the same oval, view and 720 × 900 picture), so the book gets the face, not a whole phone photo (head, body and
+   * room) squeezed into the oval with a tiny face in it (QA 26 Nov). A square view of the photo with the oval; drag it
+   * (mouse or finger) or move it with the arrow keys; the slider (or + and −) zooms.
+   */
+  const FACE_RY = 0.42; // the oval's half height, of the square view (book.js OVAL_RY)
+  const FACE_RX = FACE_RY * 0.8;
+  /** The chosen face as the book takes it (a 720 × 900 JPEG), or null when cancelled; throws when the browser can't open the photo. */
+  async function rvFaceCrop(file, version) {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = await new Promise((resolve, reject) => {
+        const im = new Image();
+        im.onload = () => (im.naturalWidth && im.naturalHeight ? resolve(im) : reject(new Error('empty')));
+        im.onerror = () => reject(new Error('unreadable'));
+        im.src = url;
+      });
+      return await faceCropDialog(img, version);
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+  function faceCropDialog(img, version) {
+    const W = img.naturalWidth;
+    const H = img.naturalHeight;
+    const base = Math.min(W, H); // photo pixels across the square view at zoom 1
+    const crop = { zoom: 2, x: W / 2, y: H * 0.4 }; // x/y: the photo's point under the oval's centre (as book.js starts)
+    const span = () => base / crop.zoom;
+    const clamp = () => {
+      crop.zoom = Math.min(4, Math.max(1, crop.zoom));
+      const half = span() / 2;
+      crop.x = Math.min(Math.max(crop.x, half), W - half);
+      crop.y = Math.min(Math.max(crop.y, half), H - half);
+    };
+    const d = document.createElement('dialog');
+    d.className = 'pm-dlg rv-crop-dlg';
+    d.setAttribute('aria-labelledby', 'rv-crop-title');
+    d.innerHTML = `<form method="dialog" class="pm-dlg-form">
+        <h3 id="rv-crop-title">${esc(t('rv.cropTitle'))}</h3>
+        <p class="muted small" id="rv-crop-hint">${esc(t('rv.cropHint'))}</p>
+        <canvas class="rv-crop-view" width="600" height="600" tabindex="0" role="application" aria-label="${esc(t('rv.cropPhoto'))}" aria-describedby="rv-crop-hint"></canvas>
+        <div class="rv-crop-zoom"><label for="rv-crop-zoom">${esc(t('rv.cropZoom'))}</label><input type="range" id="rv-crop-zoom" min="1" max="4" step="0.01"></div>
+        <p class="muted small">${esc(t('rv.cropProof', { v: version }))}</p>
+        <div class="pm-dlg-btns"><button class="btn" type="button" data-crop-cancel>${esc(t('rv.cropCancel'))}</button><button class="btn btn-primary" type="submit" data-crop-use>${esc(t('rv.cropUse'))}</button></div>
+      </form>`;
+    document.body.appendChild(d);
+    const cv = d.querySelector('canvas');
+    const ctx = cv.getContext('2d');
+    const zoomIn = d.querySelector('#rv-crop-zoom');
+    function draw() {
+      const S = cv.width;
+      const k = S / span();
+      ctx.fillStyle = '#e9ecf1';
+      ctx.fillRect(0, 0, S, S);
+      ctx.drawImage(img, S / 2 - crop.x * k, S / 2 - crop.y * k, W * k, H * k);
+      // Everything outside the face oval (hairline to chin) dimmed; the oval and the eye line dotted.
+      ctx.save();
+      ctx.fillStyle = 'rgba(20,24,33,.55)';
+      ctx.beginPath();
+      ctx.rect(0, 0, S, S);
+      ctx.ellipse(S / 2, S / 2, S * FACE_RX, S * FACE_RY, 0, 0, Math.PI * 2, true);
+      ctx.fill('evenodd');
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 4;
+      ctx.setLineDash([12, 8]);
+      ctx.beginPath();
+      ctx.ellipse(S / 2, S / 2, S * FACE_RX, S * FACE_RY, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([6, 8]);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(S * (0.5 - FACE_RX * 0.8), S * (0.5 - FACE_RY * 0.12));
+      ctx.lineTo(S * (0.5 + FACE_RX * 0.8), S * (0.5 - FACE_RY * 0.12));
+      ctx.stroke();
+      ctx.restore();
+    }
+    const update = () => {
+      clamp();
+      zoomIn.value = String(crop.zoom);
+      draw();
+    };
+    /** The oval's bounding box (4:5) as a 720 × 900 JPEG, white behind a cut-out photo (as book.js exportFace). */
+    const exportFace = () => new Promise((resolve) => {
+      const out = document.createElement('canvas');
+      out.width = 720;
+      out.height = 900;
+      const h = span() * FACE_RY * 2;
+      const w = span() * FACE_RX * 2;
+      const g = out.getContext('2d');
+      g.fillStyle = '#ffffff';
+      g.fillRect(0, 0, 720, 900);
+      g.drawImage(img, crop.x - w / 2, crop.y - h / 2, w, h, 0, 0, 720, 900);
+      out.toBlob(resolve, 'image/jpeg', 0.9);
+    });
+    zoomIn.addEventListener('input', () => {
+      crop.zoom = Number(zoomIn.value) || 1;
+      update();
+    });
+    let drag = null;
+    cv.addEventListener('pointerdown', (e) => {
+      if (e.button > 0) return;
+      cv.setPointerCapture(e.pointerId);
+      cv.classList.add('dragging');
+      drag = { id: e.pointerId, x: e.clientX, y: e.clientY, cx: crop.x, cy: crop.y };
+    });
+    cv.addEventListener('pointermove', (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      const k = span() / (cv.getBoundingClientRect().width || 1); // photo pixels per screen pixel
+      crop.x = drag.cx - (e.clientX - drag.x) * k;
+      crop.y = drag.cy - (e.clientY - drag.y) * k;
+      update();
+    });
+    const endDrag = () => {
+      drag = null;
+      cv.classList.remove('dragging');
+    };
+    cv.addEventListener('pointerup', endDrag);
+    cv.addEventListener('pointercancel', endDrag);
+    cv.addEventListener('lostpointercapture', endDrag);
+    // Arrow keys move the photo the way it is dragged (a little; with Shift, more); + and − zoom.
+    cv.addEventListener('keydown', (e) => {
+      const step = span() * (e.shiftKey ? 0.1 : 0.02);
+      const moves = { ArrowLeft: [step, 0], ArrowRight: [-step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] };
+      if (moves[e.key]) {
+        crop.x += moves[e.key][0];
+        crop.y += moves[e.key][1];
+      } else if (e.key === '+' || e.key === '=') crop.zoom += 0.1;
+      else if (e.key === '-' || e.key === '_') crop.zoom -= 0.1;
+      else return;
+      e.preventDefault();
+      update();
+    });
+    return new Promise((resolve) => {
+      const form = d.querySelector('form');
+      d.querySelector('[data-crop-cancel]').addEventListener('click', () => d.close());
+      d.addEventListener('close', () => {
+        d.remove();
+        resolve(null);
+      });
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const ok = d.querySelector('[data-crop-use]');
+        ok.disabled = true;
+        const blob = await exportFace();
+        if (!blob) return void (ok.disabled = false);
+        resolve(blob);
+        d.close();
+      });
+      update();
+      d.showModal();
+      cv.focus();
+    });
+  }
   async function rvPhotoUpload(input) {
     const id = input.dataset.rvPhoto;
     const n = input.dataset.rvN;
@@ -3244,15 +3398,24 @@
     const changeNote = (rvNote[id] || '').trim();
     if (!changeNote) return fail(t('rv.replaceNoteNeeded'));
     const nextV = (Number(proofOf(item).version) || 0) + 1;
-    if (!confirm(t('rv.replaceConfirm', { v: nextV }))) { delete rvSideMsg[key]; renderReview(); return; }
+    let body = file;
+    if (item.kind === 'book') {
+      // The face fitted into the oval (the dialog says the customer gets it as the new proof): its 720 × 900 JPEG is sent.
+      try {
+        body = await rvFaceCrop(file, nextV);
+      } catch (err) {
+        return fail(t('rv.cropUnreadable'));
+      }
+      if (!body) { delete rvSideMsg[key]; renderReview(); return; }
+    } else if (!confirm(t('rv.replaceConfirm', { v: nextV }))) { delete rvSideMsg[key]; renderReview(); return; }
     rvBusy.add(id);
     rvSideMsg[key] = { text: t('rv.replaceUploading'), ok: true };
     renderReview();
     try {
       const r = await adminApi(`/api/admin/items/${encodeURIComponent(id)}/photo/${encodeURIComponent(n)}`, {
         method: 'PUT',
-        headers: { 'Content-Type': file.type || 'application/octet-stream', 'x-lang': POD.lang, 'x-review-note': encodeURIComponent(changeNote) },
-        body: file,
+        headers: { 'Content-Type': body.type || 'application/octet-stream', 'x-lang': POD.lang, 'x-review-note': encodeURIComponent(changeNote) },
+        body,
       });
       delete rvNote[id];
       await rvAfter(id, r);

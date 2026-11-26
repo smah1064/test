@@ -149,3 +149,14 @@
 
 /* A reason or note with a long link or unbroken text wraps inside the card on a phone (QA 25 Nov). */
 #rv-list .rv-box, #rv-list .rv-hint, #rv-list .rv-msg, #rv-list [dir="auto"] { overflow-wrap: anywhere; min-width: 0; }
+
+/* Kids' books: fitting the child's face into the oval before the photo is sent (admin.js faceCropDialog). */
+.rv-crop-dlg .rv-crop-view { display: block; inline-size: 100%; max-inline-size: 360px; aspect-ratio: 1; margin-inline: auto; border-radius: var(--radius); background: #e9ecf1; touch-action: none; cursor: grab; user-select: none; }
+.rv-crop-dlg .rv-crop-view.dragging { cursor: grabbing; }
+.rv-crop-dlg .rv-crop-view:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.rv-crop-zoom { display: flex; align-items: center; gap: 10px; max-inline-size: 360px; inline-size: 100%; margin-inline: auto; }
+.rv-crop-zoom label { color: var(--ink-2); font-size: 14px; }
+.rv-crop-zoom input[type=range] { flex: 1; min-inline-size: 0; accent-color: var(--accent); }
+@media (max-height: 640px) {
+  .rv-crop-dlg .rv-crop-view, .rv-crop-zoom { max-inline-size: min(360px, 48dvh); }
+}
