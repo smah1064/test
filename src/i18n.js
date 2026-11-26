@@ -194,6 +194,7 @@ const MESSAGES = {
   proofDone: { en: 'This proof was already answered.', ar: 'البروفة دي اترد عليها خلاص.' },
   badDecision: { en: 'Choose approve or request changes.', ar: 'اختار توافق أو تطلب تعديل.' },
   noteRequired: { en: 'Write what needs to change.', ar: 'اكتب التعديل المطلوب.' },
+  changesApproveNote: { en: 'The customer was asked for changes. To print it as it is, write why (e.g. "Customer said on WhatsApp to print it as it is").', ar: 'العميل مطلوب منه تعديل. عشان تطبعها زي ما هي، اكتب السبب (مثلاً "العميل قال على واتساب اطبعها زي ما هي").' },
   confirmNoteRequired: { en: 'Write how the customer confirmed this version (e.g. "Confirmed on WhatsApp").', ar: 'اكتب العميل أكّد النسخة دي إزاي (مثلاً "أكّد على واتساب").' },
   alreadyPrinting: { en: 'This item is already being printed.', ar: 'المنتج ده بيتطبع خلاص.' },
   replacementSize: { en: 'The corrected file must be exactly {w} × {h} pixels.', ar: 'الملف المعدّل لازم يكون {w} × {h} بكسل بالظبط.' },

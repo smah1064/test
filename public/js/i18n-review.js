@@ -128,6 +128,7 @@
     'rv.approve': ['Approve for printing', 'وافق على الطباعة'],
     'rv.askChanges': ['Ask the customer for changes', 'اطلب تعديلات من العميل'],
     'rv.noteRequired': ['Write what the customer should change.', 'اكتب العميل محتاج يعدّل إيه.'],
+    'rv.changesApproveNote': ['The customer was asked for changes. To print it as it is, write why in the note.', 'العميل مطلوب منه تعديل. عشان تطبعها زي ما هي، اكتب السبب في الملاحظة.'],
     'rv.approved': ['Approved for printing: it is in the print queue now.', 'اتوافق عليه: الطلب دلوقتي في طابور الطباعة.'],
     'rv.approvedProofSent': ['Checked. The customer had not approved these exact files, so they were sent the proof to approve first.', 'اتراجع. العميل ما وافقش على الملفات دي بالظبط، فاتبعتله البروفة يوافق عليها الأول.'],
     'rv.notYetApproved': ['The customer has not approved the current files yet: approving sends them this proof first, and the job prints after they approve.', 'العميل لسه ما وافقش على الملفات الحالية: لما توافق هيتبعتله البروفة دي الأول، والطلب يتطبع بعد موافقته.'],

@@ -37,7 +37,8 @@ const {
   pageSides,
 } = require('./products');
 const { GOVERNORATES, normalizeEgyptMobile } = require('./egypt');
-const { FIELDS, langOf, format } = require('./i18n');
+const i18n = require('./i18n');
+const { FIELDS, langOf, format } = i18n;
 const roles = require('./roles');
 // Loaded on first use: the shop keeps working even if the image library cannot load on a server.
 const thumbs = require('./thumbs');
@@ -1166,6 +1167,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         item.status = 'queued';
         item.review = { ...(item.review || { reasons: [] }), needed: true, status: 'done' };
       } else if (b.action === 'approve') {
+        // The customer was asked for changes (they have an edit link): printing it as it is needs a note saying why,
+        // like a version the customer confirmed another way. (It went to print with no word. QA 26 Nov.)
+        if (item.status === 'changes_requested' && !note) throw new HttpError(400, 'changesApproveNote');
         // Printed only from what the customer approved; otherwise they get the proof first.
         if (item.approval && d && approvedFilesMatch(item, d)) item.status = 'queued';
         else {
@@ -3073,7 +3077,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const [c, s] = combo.split('|');
     const col = p.colors.find((x) => x.id === c);
     const size = p.sizes.find((x) => x.id === s);
-    return `${name} (${[col && (col.name[lang] || col.name.en), size && (size.label[lang] || size.label.en)].filter(Boolean).join(' · ')})`;
+    // (In Arabic: the shop's digits and comma, "مج سيراميك (أبيض، ٣٢٥ مل)", as the pages show it. QA 26 Nov.)
+    const ar = lang === 'ar';
+    const parts = [col && (col.name[lang] || col.name.en), size && (size.label[lang] || size.label.en)].filter(Boolean).map((x) => (ar ? i18n.arabicDigits(x) : x));
+    return `${name} (${parts.join(ar ? '، ' : ' · ')})`;
   };
   /** What a design costs right now (prices the owner changed apply), or null if it can't be ordered. */
   const designPrice = (d) => {
@@ -4450,7 +4457,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         ...(res.locals.approvalId || who.approvalId ? { approvalId: res.locals.approvalId || who.approvalId } : {}),
         ...(who.approvedBy ? { approvedBy: who.approvedBy } : {}), ...(who.approvedByEmergency ? { approvedByEmergency: true } : {}),
         ...(() => {
-          const sum = res.locals.summary || (who.approvalId && (findApproval(who.approvalId) || {}).summary) || workAbout(route, req) || route.label;
+          const sum = res.locals.summary || (who.approvalId && (findApproval(who.approvalId) || {}).summary) || workAbout(route, req) || doneAbout(key, route, req) || route.label;
           return sum ? { summary: sum } : {};
         })(),
         // (Never a password: those routes log no body at all. A refused request: its field names only.)
@@ -4490,6 +4497,21 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     dtf: ['print method: DTF', 'طريقة الطباعة: DTF'], dtg: ['print method: DTG', 'طريقة الطباعة: DTG'], embroidery: ['embroidery', 'تطريز'],
     done: ['handled', 'اتعمل'], new: ['open again', 'اتفتح تاني'], whatsapp: ['WhatsApp', 'واتساب'], email: ['email', 'إيميل'],
   };
+  /**
+   * A change that needs the owner's approval when the team asks, made by someone allowed to make it directly (the
+   * owner): said in the same words as the request would be ("Ready design: 1 design: pause", the product and its
+   * prices), not only the bare label. QA 26 Nov.
+   */
+  function doneAbout(key, route, req) {
+    if (!route.approve || !route.label) return null;
+    try {
+      const about = approvalAbout(key, req);
+      if (!about || !(about.en || about.ar)) return null;
+      return { en: [route.label.en, about.en].filter(Boolean).join(': '), ar: [route.label.ar, about.ar].filter(Boolean).join(': ') };
+    } catch (e) {
+      return null;
+    }
+  }
   function workAbout(route, req) {
     if (!route.label || route.approve) return null;
     const b = req.body && !Buffer.isBuffer(req.body) && typeof req.body === 'object' ? req.body : {};
@@ -4515,22 +4537,27 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (!order && !Object.keys(b).length) return null;
     // (The product: of the job, or the one a printing house is set for.)
     const prod = (found && getProduct(found.item.productId)) || (typeof b.productId === 'string' && getProduct(b.productId)) || null;
-    const word = (v) => (WORK_WORDS[v] ? { en: WORK_WORDS[v][0], ar: WORK_WORDS[v][1] } : v == null ? null : { en: String(v).slice(0, 60), ar: String(v).slice(0, 60) });
+    // (A value someone typed is kept apart, in isolates (U+2068 … U+2069): its digits and direction stay as typed in the Arabic log,
+    // "مطبعة 01012345678", not "٠١٠١٢٣٤٥٦٧٨". QA 26 Nov.)
+    const typed = (v, n = 60) => { const x = String(v).trim().slice(0, n); return { en: x, ar: `\u2068${x}\u2069` }; };
+    const word = (v) => (WORK_WORDS[v] ? { en: WORK_WORDS[v][0], ar: WORK_WORDS[v][1] } : v == null ? null : typed(v));
     const bits = [];
     for (const k of ['status', 'decision', 'action', 'process', 'via', 'channel']) if (typeof b[k] === 'string') bits.push(word(b[k]));
     if (typeof b.houseId === 'string') {
       const h = (store.db.printHouses || []).find((x) => x.id === b.houseId);
-      if (h) bits.push({ en: h.name, ar: h.name });
+      if (h) bits.push(typed(h.name));
     }
-    for (const k of ['courier', 'trackingNumber']) if (typeof b[k] === 'string' && b[k].trim()) bits.push({ en: b[k].trim().slice(0, 40), ar: b[k].trim().slice(0, 40) });
+    // (The tracking number as it is saved: Arabic-Indic digits typed become 0-9.)
+    const latin = (x) => x.replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d));
+    for (const k of ['courier', 'trackingNumber']) if (typeof b[k] === 'string' && b[k].trim()) bits.push(typed(k === 'trackingNumber' ? latin(b[k]) : b[k], 40));
     // (A printing house: its name, as sent or as it was before it went.)
     if (/\/houses\b/.test(req.originalUrl)) {
       const h = typeof b.name === 'string' && b.name.trim() ? b.name.trim() : (req.locals_houseName || ((store.db.printHouses || []).find((x) => x.id === p.id) || {}).name);
-      if (h) bits.unshift({ en: String(h).slice(0, 60), ar: String(h).slice(0, 60) });
+      if (h) bits.unshift(typed(h));
     }
     // (A rights request: whose, about which link.)
     const td = /\/takedowns\//.test(req.originalUrl) && (store.db.takedowns || []).find((x) => x.id === p.id);
-    if (td) { const w = [td.name, td.link].filter(Boolean).join(' · ').slice(0, 80); if (w) bits.unshift({ en: w, ar: w }); }
+    if (td) { const w = [td.name, td.link].filter(Boolean).join(' · ').slice(0, 80); if (w) bits.unshift(typed(w, 80)); }
     // (In Arabic the number is kept left to right: "#POD-1001", not "POD-1001#". QA 25 Nov.)
     const head = order ? `#${order.number}` : '';
     const en = [route.label.en, [head, prod ? prod.name.en : ''].filter(Boolean).join(' · '), bits.map((x) => x.en).join(', ')].filter(Boolean);
@@ -5393,13 +5420,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const code = b.code ? coupons.normCode(b.code) : String((c && c.code) || '');
       // (Switching a coupon off or on says so.)
       const onOff = key.startsWith('PUT') && c && typeof b.active === 'boolean' && b.active !== (c.active !== false) ? (b.active ? enAr(' (switch on)', ' (تشغيل)') : enAr(' (pause)', ' (إيقاف)')) : enAr('', '');
-      return enAr(code + onOff.en, code + onOff.ar);
+      // (In Arabic the code keeps its own digits: "2026", not "٢٠٢٦", as the Coupons tab shows it.)
+      return enAr(code + onOff.en, (code ? `\u2068${code}\u2069` : '') + onOff.ar);
     }
     // (Each language on its own: its digits, its currency and its words.)
     const expense = (e) => {
       const cat = EXPENSE_NAMES[e.category] || EXPENSE_NAMES.other;
       const desc = String(e.description || e.note || '').trim().slice(0, 80);
-      return enAr([moneyIn(e.amount, 'en'), cat.en, desc].filter(Boolean).join(' — '), [moneyIn(e.amount, 'ar'), cat.ar, desc].filter(Boolean).join(' — '));
+      return enAr([moneyIn(e.amount, 'en'), cat.en, desc].filter(Boolean).join(' — '), [moneyIn(e.amount, 'ar'), cat.ar, desc ? `\u2068${desc}\u2069` : ''].filter(Boolean).join(' — '));
     };
     // (From the cleaned values, as they will be saved: "0x2710" is 10,000.)
     if (key === 'POST /api/admin/expenses') return expense(accounting.cleanExpense(b).expense || b);
@@ -5573,11 +5601,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (ship === undefined || ship === null) throw new HttpError(400, 'badCost');
     },
     'PATCH /api/admin/items/:itemId/cost': (req) => {
-      if (accounting.money((req.body || {}).actualCost) === undefined) throw new HttpError(400, 'badCost');
+      if (!hasKey(req.body, 'actualCost') || accounting.money(req.body.actualCost) === undefined) throw new HttpError(400, 'badCost');
       if (!store.findItem(req.params.itemId)) throw new HttpError(404, 'itemNotFound');
     },
     'PATCH /api/admin/orders/:orderId/shipping-cost': (req) => {
-      if (accounting.money((req.body || {}).actualShipping) === undefined) throw new HttpError(400, 'badCost');
+      if (!hasKey(req.body, 'actualShipping') || accounting.money(req.body.actualShipping) === undefined) throw new HttpError(400, 'badCost');
       if (!store.getOrder(req.params.orderId)) throw new HttpError(404, 'notFound');
     },
     'POST /api/admin/expenses': (req) => {
@@ -6518,7 +6546,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
           qtyLines.length > 1 || (qtyLines.length === 1 && Number(qtyLines[0].qty) > 1)
             ? qtyLines.map((l) => `${[l.color && pickEn(l.color.name), l.size && pickEn(l.size.label)].filter(Boolean).join(' · ')} ×${l.qty}`).join(', ')
             : [design.color && pickEn(design.color.name), design.size && pickEn(design.size.label)].filter(Boolean).join(' · '),
-          order ? `Ordered ${order.createdAt.slice(0, 10)}` : '',
+          order ? `Ordered ${SHOP_DAY.format(new Date(order.createdAt))}` : '', // (the Cairo day, as the invoice and accounts)
         ].filter(Boolean);
         let pages;
         if (design.kind === 'book') {
@@ -6837,8 +6865,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     res.set('Content-Disposition', `attachment; filename="accounts-${r.from || 'start'}-to-${r.to || 'today'}.csv"`);
     res.type('text/csv; charset=utf-8').send(accounting.reportCsv(r, nameOf));
   });
+  // (Only a cost sent clears or sets it: a request without the field changed nothing but cleared the saved cost. An
+  // explicit null or empty clears it, as the dashboard's emptied box does. QA 26 Nov.)
+  const hasKey = (b, k) => Boolean(b) && typeof b === 'object' && !Array.isArray(b) && Object.prototype.hasOwnProperty.call(b, k);
   app.patch('/api/admin/items/:itemId/cost', requireAdmin, express.json(), (req, res) => {
-    const v = accounting.money((req.body || {}).actualCost);
+    if (!hasKey(req.body, 'actualCost')) throw new HttpError(400, 'badCost');
+    const v = accounting.money(req.body.actualCost);
     if (v === undefined) throw new HttpError(400, 'badCost');
     store.mutate(() => {
       const found = store.findItem(req.params.itemId);
@@ -6849,7 +6881,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     res.json({ ok: true });
   });
   app.patch('/api/admin/orders/:orderId/shipping-cost', requireAdmin, express.json(), (req, res) => {
-    const v = accounting.money((req.body || {}).actualShipping);
+    if (!hasKey(req.body, 'actualShipping')) throw new HttpError(400, 'badCost');
+    const v = accounting.money(req.body.actualShipping);
     if (v === undefined) throw new HttpError(400, 'badCost');
     store.mutate(() => {
       const order = store.getOrder(req.params.orderId);

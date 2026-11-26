@@ -293,6 +293,9 @@
     if (draft.sizePicked) st.sizePicked = true;
     restoredDraft = true;
   }
+  // (The draft's colour and size, before the link's: its one piece follows them below.)
+  const draftColor = st.colorId;
+  const draftSize = st.sizeId;
   // A colour picked on the product page (?color=) wins over the draft's; a saved design keeps its own
   // (and so does a restored draft of a ready-made design: the link carries the design's first colour).
   if (!params.get('design') && !(restoredDraft && st.libraryId) && canPick(st.product.colors.find((c) => c.id === params.get('color')))) st.colorId = params.get('color');
@@ -305,6 +308,19 @@
     st.sizePicked = true;
   }
   st.sizeId = sizeOk(st.product, st.colorId, st.product.sizes.find((s) => s.id === st.sizeId)) ? st.sizeId : (st.product.sizes.find((z) => sizeOk(st.product, st.colorId, z)) || firstPick(st.product.sizes)).id;
+  // A restored draft's single piece follows the colour and size now on screen (the cart got the draft's L while
+  // XL showed. QA 26 Nov); a bigger order stays as typed, as with the chips.
+  if (restoredDraft && st.qty && (draftColor !== st.colorId || draftSize !== st.sizeId)) {
+    const one = Object.entries(st.qty).flatMap(([c, row]) => Object.entries(row || {}).filter(([, n]) => Number(n) > 0).map(([z, n]) => ({ c, z, n: Number(n) })));
+    if (one.length === 1 && one[0].c === draftColor && one[0].z === draftSize) st.qty = { [st.colorId]: { [st.sizeId]: one[0].n } };
+  }
+  // The link's colour and size are used once: a reload keeps what the customer picked after it.
+  if (!params.get('design') && (params.has('color') || params.has('size'))) {
+    const url = new URL(location.href);
+    url.searchParams.delete('color');
+    url.searchParams.delete('size');
+    history.replaceState(history.state, '', url);
+  }
   st.side = st.product.sides.find((s) => (st.designs[s.id] || []).length)?.id || st.product.sides[0].id;
   /** Fabric products: a valid { repeat, tileCm } for this product (or null for other products). */
   const REPEATS = ['straight', 'halfdrop', 'halfbrick', 'mirror'];

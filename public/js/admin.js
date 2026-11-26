@@ -3147,8 +3147,9 @@
   async function rvAction(id, act) {
     const note = (rvNote[id] || '').trim();
     const msgKey = act === 'resend' ? 'link:' + id : id;
-    if (act === 'changes' && !note) {
-      rvMsg[id] = { text: t('rv.noteRequired'), ok: false };
+    const waitingChanges = act === 'approve' && (rvFind(id) || {}).status === 'changes_requested';
+    if ((act === 'changes' || waitingChanges) && !note) {
+      rvMsg[id] = { text: t(waitingChanges ? 'rv.changesApproveNote' : 'rv.noteRequired'), ok: false };
       renderReview();
       const ta = document.getElementById('rv-note-' + id);
       if (ta) ta.focus();
