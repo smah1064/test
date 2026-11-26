@@ -2245,6 +2245,33 @@
   });
   canvas.on('mouse:down', closeFlyouts);
   document.querySelectorAll('.flyout .fly-close').forEach((b) => b.addEventListener('click', closeFlyouts));
+  // Phones (editor redesign stage 4): the rarer tools in one "More" list, each with a line saying what it does.
+  if ($('flyout-more')) {
+    const moreTool = document.querySelector('.tool[data-flyout="more"]');
+    if (moreTool) moreTool.addEventListener('click', () => {
+      const rows = (k) => $('flyout-more').querySelector(`[data-more="${k}"]`);
+      const ai = document.querySelector('.tool[data-flyout="ai"]');
+      rows('ai').hidden = !ai || ai.hidden;
+      rows('names').hidden = !$('tool-names') || $('tool-names').hidden;
+      rows('place').hidden = !$('place-field') || $('place-field').hidden;
+    });
+    $('flyout-more').addEventListener('click', (e) => {
+      const row = e.target.closest('[data-more]');
+      if (!row) return;
+      const k = row.dataset.more;
+      closeFlyouts();
+      if (k === 'names') return $('tool-names').click();
+      if (k === 'layers' || k === 'place') {
+        canvas.discardActiveObject();
+        canvas.requestRenderAll();
+        setSheet('product');
+        requestAnimationFrame(() => { const el = $(k === 'layers' ? 'sec-layers' : 'place-field'); if (el) el.scrollIntoView({ block: 'start' }); });
+        return;
+      }
+      const tool = document.querySelector(`.tools .tool[data-flyout="${k}"]`);
+      if (tool) tool.click();
+    });
+  }
 
   // ---------- Stickers ----------
   const SK = window.POD_STICKERS;

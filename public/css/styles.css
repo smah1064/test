@@ -1668,3 +1668,30 @@ html[dir="ltr"] .hm-tile-link span { display: inline-block; transform: scaleX(-1
 }
 .stage { scrollbar-width: none; }
 .stage::-webkit-scrollbar { display: none; }
+
+/* ---------- Editor redesign, stage 4 (owner's go 26 Nov): five tools, the rest in More ---------- */
+.more-list { display: flex; flex-direction: column; }
+.more-row { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 4px; border: 0; border-bottom: 1px solid var(--line); background: none; font: inherit; color: var(--ink); text-align: start; cursor: pointer; width: 100%; }
+.more-row:last-child { border-bottom: 0; }
+.more-row[hidden] { display: none; }
+.more-row:hover, .more-row:focus-visible { background: var(--bg); }
+.more-ic { width: 40px; height: 40px; border-radius: 10px; background: var(--bg); display: grid; place-items: center; flex: none; color: var(--ink-2); }
+.more-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.more-txt b { font-size: 15px; }
+.more-txt small { font-size: 13px; color: var(--ink-3); line-height: 1.4; }
+.more-chev { flex: none; color: var(--ink-3); }
+html[dir="rtl"] .more-chev { transform: scaleX(-1); }
+@media (max-width: 820px) {
+  /* Five wide tools: Text, Image, Templates, Stickers, More (shapes, library, AI and name lists are in More). */
+  .tools .tool[data-flyout="shapes"], .tools .tool[data-flyout="library"], .tools .tool[data-flyout="ai"], .tools #tool-names { display: none !important; }
+  .tools .tool[data-flyout="text"] { order: 1; }
+  .tools .tool[data-flyout="upload"] { order: 2; }
+  .tools .tool[data-flyout="templates"] { order: 3; }
+  .tools .tool[data-flyout="stickers"] { order: 4; }
+  .tools .tool-more { order: 5; }
+  .tools .tool svg { width: 22px; height: 22px; }
+  /* Tools under the thumb, just above the price bar (switched on per phone until checked on Android). */
+  html.tools-bottom .tools { order: 2; border-bottom: 0; border-top: 1px solid var(--line); }
+  html.tools-bottom .panel { order: 3; }
+  html.tools-bottom .stage-wrap { order: 1; }
+}
