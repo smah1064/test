@@ -73,7 +73,8 @@ test('Editor, nothing designed, Add to cart: the message hides the canvas hint, 
     if (phone) await c.addInitScript(() => { try { localStorage.setItem('pod-lang', 'en'); } catch (e) { /* ignore */ } });
     const page = await openEditor(c, srv.base, 'tshirt', '&color=white&size=M');
     try {
-      await page.waitForSelector('#stage-hint:not([hidden])');
+      // (Editor redesign stage 3: the empty design's prompt is "Start your design" inside the print area.)
+      await page.waitForSelector('#start-here:not([hidden])');
       await page.evaluate(() => document.getElementById('add-to-cart').click());
       await page.waitForSelector('#toast-root .toast.error');
       assert.strictEqual(await page.isVisible('#stage-hint'), false, 'the hint steps aside while the message shows');

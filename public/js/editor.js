@@ -545,6 +545,66 @@
   // The other layer of the side shown under the artwork (print under embroidery and back): see refreshGhost.
   const ghost = { el: null, key: '', token: 0, boxes: [] };
 
+  /**
+   * Where the product itself is in its picture, in canvas units (the empty space round a T-shirt photo is about a
+   * third of it), with the print area and its movable zone: worked out once per picture from its pixels.
+   */
+  const productBoxes = new WeakMap();
+  function productBox() {
+    const bg = canvas.backgroundImage;
+    const el = bg && bg.getElement && bg.getElement();
+    if (!el || !(el.naturalWidth || el.width)) return null;
+    let box = productBoxes.get(el);
+    if (box === undefined) {
+      box = null;
+      try {
+        const iw = el.naturalWidth || el.width;
+        const ih = el.naturalHeight || el.height;
+        const cw = 120;
+        const ch = Math.max(1, Math.round((cw * ih) / iw));
+        const c = document.createElement('canvas');
+        c.width = cw;
+        c.height = ch;
+        const g = c.getContext('2d', { willReadFrequently: true });
+        g.drawImage(el, 0, 0, cw, ch);
+        const px = g.getImageData(0, 0, cw, ch).data;
+        const at = (x, y) => (y * cw + x) * 4;
+        // What the empty background looks like: the corners (clear, or a plain colour).
+        const corners = [at(0, 0), at(cw - 1, 0), at(0, ch - 1), at(cw - 1, ch - 1)].map((i) => [px[i], px[i + 1], px[i + 2], px[i + 3]]);
+        const clear = corners.every((q) => q[3] < 24);
+        const ref = corners.reduce((m, q) => m.map((v, i) => v + q[i] / 4), [0, 0, 0, 0]);
+        let x0 = cw;
+        let y0 = ch;
+        let x1 = -1;
+        let y1 = -1;
+        for (let y = 0; y < ch; y++) {
+          for (let x = 0; x < cw; x++) {
+            const i = at(x, y);
+            const on = clear ? px[i + 3] > 40 : px[i + 3] > 40 && Math.abs(px[i] - ref[0]) + Math.abs(px[i + 1] - ref[1]) + Math.abs(px[i + 2] - ref[2]) > 36;
+            if (on) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+          }
+        }
+        if (x1 > x0 && y1 > y0) box = { x: x0 / cw, y: y0 / ch, w: (x1 - x0 + 1) / cw, h: (y1 - y0 + 1) / ch };
+      } catch (e) { box = null; /* a picture from elsewhere that can't be read: the whole picture */ }
+      productBoxes.set(el, box);
+    }
+    if (!box) return null;
+    const r = bg.getBoundingRect(true, true);
+    let x0 = r.left + box.x * r.width;
+    let y0 = r.top + box.y * r.height;
+    let x1 = x0 + box.w * r.width;
+    let y1 = y0 + box.h * r.height;
+    // A box that is nearly the whole picture (a flat card, a mug drawing): nothing to gain.
+    if ((x1 - x0) * (y1 - y0) > 0.85 * W * H) return null;
+    for (const q of [area(), zoneOf()].filter(Boolean)) {
+      x0 = Math.min(x0, q.x); y0 = Math.min(y0, q.y); x1 = Math.max(x1, q.x + q.w); y1 = Math.max(y1, q.y + q.h);
+    }
+    const m = 6;
+    return { x: Math.max(0, x0 - m), y: Math.max(0, y0 - m), w: Math.min(W, x1 + m) - Math.max(0, x0 - m), h: Math.min(H, y1 + m) - Math.max(0, y0 - m) };
+  }
+  /** Room kept free above and below the product for the floating buttons (phones; stage 3 of the editor redesign). */
+  // (Not while a settings sheet is open: the floating buttons step aside then, and the design keeps the room.)
+  const pillRoom = () => (MOBILE.matches && !st.product.paged && !st.sheet ? 56 : 0);
   function fit() {
     const stage = $('stage');
     // With the phone panel open there is little room: zoom in on the print area instead of the whole product.
@@ -554,14 +614,29 @@
     // drawn smaller around the middle (k), so the garment grows or shrinks
     // with the size while the print keeps its size on screen.
     const k = POD.sizeView(st.product, st.sizeId);
+    // The product, not its picture, fills the design area (it was drawn at about half the screen's width: editor
+    // redesign stage 3). Every size fills it, so the print box shows its true share of the size chosen (bigger on S).
+    // (Drawn k times its size round the middle of the picture: the product box is measured where it is drawn.)
+    const raw = !focus ? productBox() : null;
+    const prod = raw && { x: W / 2 + (raw.x - W / 2) * k, y: H / 2 + (raw.y - H / 2) * k, w: raw.w * k, h: raw.h * k };
+    const room = pillRoom();
     const base = focus
-      ? Math.min((stage.clientWidth - 16) / (a.w + 48), (stage.clientHeight - 16) / (a.h + 48 + (zoneOf() ? 40 : 0))) / k
-      : Math.min((stage.clientWidth - 32) / W, (stage.clientHeight - 32) / H, 1.6);
+      ? Math.min((stage.clientWidth - 16) / (a.w + 48), (stage.clientHeight - 16 - 2 * room) / (a.h + 48 + (zoneOf() ? 40 : 0))) / k
+      : prod
+        ? Math.min((stage.clientWidth - 24) / prod.w, (stage.clientHeight - 24 - 2 * room) / prod.h, 2.6)
+        : Math.min((stage.clientWidth - 32) / W, (stage.clientHeight - 32 - 2 * room) / H, 1.6);
     const z = Math.max(0.15, base) * st.zoom;
     canvas.setDimensions({ width: Math.round(W * z), height: Math.round(H * z) });
     canvas.setViewportTransform([z * k, 0, 0, z * k, (W * z * (1 - k)) / 2, (H * z * (1 - k)) / 2]);
+    if (prod && !focus && st.zoom <= 1.01) {
+      // The product in the middle of the room left between the buttons above and below it.
+      const pad = parseFloat(getComputedStyle(stage).paddingTop) || 0;
+      stage.scrollLeft = (prod.x + prod.w / 2) * z + pad - stage.clientWidth / 2;
+      stage.scrollTop = (prod.y + prod.h / 2) * z + pad - stage.clientHeight / 2;
+    }
     requestAnimationFrame(() => {
       if (typeof positionFloatBar === 'function') positionFloatBar();
+      if (typeof positionStartHere === 'function') positionStartHere();
       // The sample-text note placed again for where the design is now (the phone panel opening moved it under the
       // note: QA 26 Nov).
       if (st.issues && typeof paintSampleNote === 'function') paintSampleNote(st.issues);
@@ -610,7 +685,8 @@
     const vt = canvas.viewportTransform;
     const now = vt[0] || 1;
     const short = Math.min(stage.clientWidth, stage.clientHeight);
-    if (Math.max(a.w * vt[0], a.h * vt[3]) >= short * 0.22) return;
+    // (The product now fills the screen, so only really small print areas, a chest logo, are zoomed onto: stage 3.)
+    if (Math.max(a.w * vt[0], a.h * vt[3]) >= short * (productBox() ? 0.15 : 0.22)) return;
     const want = Math.min(((stage.clientWidth - 48) * 0.3) / a.w, ((stage.clientHeight - 48) * 0.3) / a.h);
     setZoom(Math.min(3, (st.zoom * want) / now));
     centerOnPrint();
@@ -624,10 +700,9 @@
   // ---------- The whole item in the corner while zoomed in ----------
   const overview = { busy: false, timer: null, scale: 1 };
   /** Is part of the product off screen (zoomed in)? */
-  const zoomedIn = () => {
-    const stage = $('stage');
-    return canvas.getWidth() > stage.clientWidth + 2 || canvas.getHeight() > stage.clientHeight + 2;
-  };
+  // (Zoomed in by the customer or onto a small print area: the product fitting the screen runs past the empty edges of
+  // its picture, which is not "zoomed in".)
+  const zoomedIn = () => st.zoom > 1.01;
   /** The part of the canvas on screen, in canvas pixels. */
   function visiblePart() {
     const stage = $('stage');
@@ -1262,6 +1337,8 @@
     if (token !== mockupToken) return;
     canvas.backgroundImage = bg;
     canvas.overlayImage = ov;
+    // Fitted again to where the product is in its new picture (editor redesign stage 3).
+    if (!st.exporting) fit();
     canvas.requestRenderAll();
     refreshGhost();
   }
@@ -1393,8 +1470,8 @@
     renderFloatBar();
   });
   // Hide the floating bar while dragging, bring it back afterwards.
-  ['object:moving', 'object:scaling', 'object:rotating'].forEach((ev) => canvas.on(ev, () => { st.dragging = true; hideFloatBar(); }));
-  canvas.on('mouse:up', () => { if (st.dragging) { st.dragging = false; renderFloatBar(); canvas.requestRenderAll(); } });
+  ['object:moving', 'object:scaling', 'object:rotating'].forEach((ev) => canvas.on(ev, () => { st.dragging = true; document.body.classList.add('dragging'); hideFloatBar(); }));
+  canvas.on('mouse:up', () => { document.body.classList.remove('dragging'); if (st.dragging) { st.dragging = false; renderFloatBar(); canvas.requestRenderAll(); } });
   /** Nothing selected any more (Escape, or a click on the empty grey around the product). */
   function deselectAll() {
     if (!canvas.getActiveObject()) return;
@@ -2682,7 +2759,34 @@
     y = Math.max(stage.top + 6, Math.min(y, stage.bottom - bh - 6));
     bar.style.transform = `translate(${Math.round(x - wrap.left)}px, ${Math.round(y - wrap.top)}px)`;
   }
-  $('stage').addEventListener('scroll', positionFloatBar, { passive: true });
+  /**
+   * An empty design: "Start your design" with a + in the middle of the print area (it was a grey line of text at the
+   * foot of the screen: editor redesign stage 3). A tap opens the Text tool.
+   */
+  function positionStartHere() {
+    const btn = $('start-here');
+    if (!btn) return;
+    const show = !st.preview && !st.exporting && canvas.getObjects().length === 0 && !crop && !st.shopEdit && !(MOBILE.matches && st.sheet) && !st.product.paged;
+    btn.hidden = !show;
+    const hint = $('stage-hint');
+    if (hint && show) hint.hidden = true;
+    if (!show) return;
+    const a = area();
+    const vt = canvas.viewportTransform;
+    const cv = canvas.upperCanvasEl.getBoundingClientRect();
+    const wrap = btn.parentElement.getBoundingClientRect();
+    const w = a.w * vt[0];
+    const h = a.h * vt[3];
+    btn.style.width = `${Math.max(120, Math.round(w - 16))}px`;
+    btn.style.maxHeight = `${Math.max(64, Math.round(h - 16))}px`;
+    const bw = btn.offsetWidth;
+    const bh = btn.offsetHeight;
+    const x = cv.left + a.x * vt[0] + vt[4] + w / 2 - bw / 2;
+    const y = cv.top + a.y * vt[3] + vt[5] + h / 2 - bh / 2;
+    btn.style.transform = `translate(${Math.round(x - wrap.left)}px, ${Math.round(y - wrap.top)}px)`;
+  }
+  if ($('start-here')) $('start-here').addEventListener('click', () => { const tool = document.querySelector('.tools [data-flyout="text"]'); if (tool) tool.click(); });
+  $('stage').addEventListener('scroll', () => { positionFloatBar(); positionStartHere(); }, { passive: true });
   window.addEventListener('resize', () => requestAnimationFrame(positionFloatBar));
   $('float-bar').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-fb]');
@@ -4263,6 +4367,8 @@
   function togglePreview() {
     st.preview = !st.preview;
     $('preview-toggle').classList.toggle('active', st.preview);
+    if ($('ed-guides')) $('ed-guides').setAttribute('aria-pressed', String(st.preview));
+    positionStartHere();
     if (st.preview) canvas.discardActiveObject();
     applyClips();
   }
@@ -4633,7 +4739,12 @@
     // and on a phone held sideways over the bottom sheet's ×): under the toolbar, else at the foot of the design
     // area, else not shown (the design check still lists it).
     const stage = note.offsetParent;
-    const top = (bar ? bar.offsetTop + bar.offsetHeight : 0) + 8;
+    // (Phones: the bar is floating buttons over the design; the note goes under the top ones.)
+    const pills = bar && getComputedStyle(bar).position === 'absolute' && !st.sheet;
+    const tabs = $('side-tabs');
+    const floating = bar && getComputedStyle(bar).position === 'absolute';
+    const top = (pills ? Math.max(tabs.offsetTop + tabs.offsetHeight, $('check-chip').offsetTop + $('check-chip').offsetHeight) : bar && !floating ? bar.offsetTop + bar.offsetHeight : 0) + 8;
+    const bottomPills = pills ? $('undo').offsetHeight + 14 : 0;
     const noteH = note.offsetHeight;
     const stageH = stage ? stage.clientHeight : window.innerHeight;
     let objTop = -1;
@@ -4656,9 +4767,9 @@
     /** Under the toolbar, else at the foot of the design area: where the note covers neither the text nor its handles. */
     const spot = () => {
       const noteH = note.offsetHeight;
-      const clear = (y) => !(y < objBottom && y + noteH > objTop) && y + noteH <= Math.min(stageH, fbTop) - 4 && y >= top;
+      const clear = (y) => !(y < objBottom && y + noteH > objTop) && y + noteH <= Math.min(stageH - bottomPills, fbTop) - 4 && y >= top;
       let y = top;
-      if (!clear(y)) y = Math.min(stageH, fbTop) - noteH - 8;
+      if (!clear(y)) y = Math.min(stageH - bottomPills, fbTop) - noteH - 8;
       return noteH * 2 > stageH || !clear(y) ? null : y;
     };
     let y = spot();
@@ -4791,6 +4902,7 @@
     renderPlacement();
     const hint = $('stage-hint');
     if (hint) hint.hidden = st.preview || canvas.getObjects().length > 0;
+    positionStartHere();
     const p = st.product;
     const size = p.sizes.find((s) => s.id === st.sizeId);
     const n = decoratedCount();
@@ -6652,6 +6764,13 @@
       if (open) { const first = $('ed-menu').querySelector('a, button'); if (first) first.focus(); }
     });
     document.addEventListener('click', (e) => { if (!e.target.closest('#ed-menu')) closeEdMenu(); });
+    $('ed-menu').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-proxy]');
+      if (!b) return;
+      closeEdMenu();
+      const real = $(b.dataset.proxy);
+      if (real && !real.disabled) real.click();
+    });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('ed-menu').hidden) { closeEdMenu(); $('ed-more').focus(); } });
   }
 

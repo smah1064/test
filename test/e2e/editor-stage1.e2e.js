@@ -74,7 +74,9 @@ test('phones: the text settings start with words, font, size and colour; every c
         assert.strictEqual(await page.evaluate(() => window.__editor.canvas.getActiveObject().fontSize), before + 2);
         await page.click('.basic-colour [data-pal="fill"][data-c="#e03131"]');
         assert.strictEqual(await page.evaluate(() => window.__editor.canvas.getActiveObject().fill), '#e03131');
-        // The print check in words.
+        // The print check in words (on the design, once the settings sheet is closed: stage 3 floats it there).
+        await page.click('#sheet-close');
+        await page.waitForTimeout(200);
         const chip = await page.evaluate(() => { const s = document.querySelector('#check-chip span'); return s && s.offsetWidth > 0 ? s.textContent.trim() : ''; });
         assert.ok(chip.length > 3, `check chip words ${label}: "${chip}"`);
         // No sideways scroll.
