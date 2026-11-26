@@ -8065,6 +8065,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   });
   app.get(/^\/(?:([a-z0-9-]+)(?:\.html)?)?$/, (req, res, next) => {
     const name = req.params[0] || 'index';
+    // The money-back guarantee's page is there only while the shop takes payment in advance (src/payment-wording.js;
+    // owner's decision, 26 Nov): otherwise it is not found, like any unknown address (and never served as a file).
+    if (name === 'guarantee' && !PAYMENT.prepayOnly) return notFound(req, res, () => res.status(404).end());
     const html = pageFor(name);
     if (!html) return next();
     const preview = (name === 'product' || name === 'design' || name === 'book') && previewFor(name, req);
@@ -8090,13 +8093,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
 
   app.use('/api', (req, res) => res.status(404).json({ error: format('notFound', {}, langOf(req)) }));
   // Any other unknown address: the shop's own "page not found" page.
-  app.use((req, res, next) => {
+  function notFound(req, res, next) {
     // (While private, a stranger asking for a missing file gets "Opening soon", not the shop's own 404.)
     if (previewOn() && !previewWho(req)) return previewClosed(req, res);
     const html = (req.method === 'GET' || req.method === 'HEAD') && req.accepts('html') && pageFor('404');
     if (!html) return next();
     sendPage(res.status(404), '404', html);
-  });
+  }
+  app.use(notFound);
 
   // ---------- Housekeeping ----------
   // Unordered designs (abandoned carts) and old share links are removed so

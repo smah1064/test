@@ -77,8 +77,12 @@ const L = {
     shippedSubject: (n) => `طلبك رقم ${n} في الطريق ليك · إبداع`,
     shippedBody: 'طلبك اتشحن وفي الطريق ليك! جهّز المبلغ للمندوب عند الاستلام.',
     shippedBodyPaid: 'طلبك اتشحن وفي الطريق ليك!',
-    // Paying in advance only (src/payment-wording.js, from launch): no method named, nothing for the courier.
+    // Paying in advance only (src/payment-wording.js, from launch): nothing for the courier.
     prepay: 'الدفع مقدّمًا', shippedBodyPrepay: 'طلبك اتشحن وفي الطريق ليك! ومفيش حاجة تدفعها للمندوب.',
+    // The money-back guarantee (paying in advance only; owner's decision, 26 Nov): how to use it.
+    guarTitle: '🛡️ ضمان استرجاع الفلوس',
+    guarHow: (n, wa, mail) => `لو المطبوع مش زي التصميم، أو القطعة وصلت بايظة أو غلط: صوّرها وابعت الصورة مع رقم الطلب ${n} على واتساب${wa ? ` (${wa})` : ''} أو الإيميل${mail ? ` (${mail})` : ''} خلال ${num(7, 'ar')} أيام من ما الطلب يوصلك، واختار: نطبعهالك تاني ببلاش أو ترجعلك فلوسك. ومش محتاج ترجّع القطعة.`,
+    guarMore: 'تفاصيل الضمان',
     courier: 'شركة الشحن', trackingNumber: 'رقم التتبع', trackingLink: 'تتبع الشحنة عند شركة الشحن', eta: 'الاستلام المتوقع',
     invoice: 'الفاتورة', copies: (n) => arCount(n, 'نسخة واحدة', 'نسختين', 'نسخ', 'نسخة'), order: 'الطلب', orderNo: 'طلب رقم',
     pieces: (n) => arCount(n, 'قطعة واحدة', 'قطعتين', 'قطع', 'قطعة'), photos: (n) => arCount(n, 'صورة واحدة', 'صورتين', 'صور', 'صورة'),
@@ -100,6 +104,9 @@ const L = {
     shippedBody: 'Your order has shipped and is on its way to you! Please have the amount ready for the courier on delivery.',
     shippedBodyPaid: 'Your order has shipped and is on its way to you!',
     prepay: 'Payment in advance', shippedBodyPrepay: 'Your order has shipped and is on its way to you! There is nothing to pay the courier.',
+    guarTitle: '🛡️ Money-back guarantee',
+    guarHow: (n, wa, mail) => `If the print doesn't match your design, or the item arrives damaged or wrong: send a photo of it with your order number ${n} on WhatsApp${wa ? ` (${wa})` : ''} or by email${mail ? ` (${mail})` : ''} within 7 days of delivery, and choose a free reprint or your money back. No need to send the item back.`,
+    guarMore: 'Guarantee details',
     courier: 'Courier', trackingNumber: 'Tracking number', trackingLink: 'Track the parcel with the courier', eta: 'Expected delivery',
     invoice: 'Invoice', copies: (n) => `${n} cop${n === 1 ? 'y' : 'ies'}`, order: 'Order', orderNo: 'Order no.',
     pieces: (n) => enCount(n, 'piece'), photos: (n) => enCount(n, 'photo'), names: (n) => `Name list: ${enCount(n, 'name')}`, listSep: ', ',
@@ -187,6 +194,28 @@ const addressOf = (c, lang) => [c.address, c.city, govName(c.governorate, lang)]
 /** How the order is paid, after its total: cash on delivery (the preview) or in advance (from launch). */
 const payWord = (t, prepayOnly) => (prepayOnly ? t.prepay : t.cod);
 
+/**
+ * The money-back guarantee, for the customer's emails while the shop takes payment in advance (owner's decision,
+ * 26 Nov): how to use it (a photo and the order number on WhatsApp or by email, within 7 days of delivery) and a
+ * link to its page. Empty otherwise: the emails are as they were.
+ */
+function guarantee(order, lang, base, prepayOnly) {
+  if (!prepayOnly) return { html: '', text: '' };
+  const t = L[lang];
+  const cfg = config();
+  const wa = cfg.shopWhatsApp ? `wa.me/${cfg.shopWhatsApp}` : '';
+  const how = t.guarHow(custNo(order.number, lang), wa, cfg.mailFrom);
+  const page = base ? `${String(base).replace(/\/+$/, '')}/guarantee` : '';
+  return {
+    html: `<div style="margin:16px 0 0;padding:12px 14px;border-radius:10px;background:#eef8f1;border:1px solid #bfe3cd">
+        <p style="margin:0 0 6px;font-weight:700;color:#0f6b3a">${esc(t.guarTitle)}</p>
+        <p style="margin:0;line-height:1.6">${esc(how)}</p>
+        ${page ? `<p style="margin:8px 0 0"><a href="${esc(page)}" style="color:#0f6b3a;font-weight:700">${esc(t.guarMore)}</a></p>` : ''}
+      </div>`,
+    text: [t.guarTitle, how, page ? `${t.guarMore}: ${page}` : ''].filter(Boolean).join('\n'),
+  };
+}
+
 // ---------- Messages ----------
 function adminWhatsAppText(order, links, lang, prepayOnly) {
   const t = L[lang];
@@ -208,6 +237,7 @@ function adminWhatsAppText(order, links, lang, prepayOnly) {
 
 function emailHtml(order, links, lang, forAdmin, prepayOnly) {
   const t = L[lang];
+  const guar = forAdmin ? '' : guarantee(order, lang, links.base, prepayOnly).html;
   const c = order.customer;
   const rows = order.items.map((it, i) => `
     <tr>
@@ -238,7 +268,7 @@ function emailHtml(order, links, lang, forAdmin, prepayOnly) {
         ${sum(`${t.total} (${payWord(t, prepayOnly)})`, money(order.total, lang), true)}
       </table>
       ${order.delivery ? `<p style="margin:12px 0 0;font-weight:700">🚚 ${esc(deliveryText(order, lang))}</p>` : ''}
-      ${details}
+      ${details}${guar}
       ${button}
     </div>
   </div></body></html>`;
@@ -258,6 +288,7 @@ const emailText = (order, links, lang, forAdmin, prepayOnly) => {
     `${t.total} (${payWord(t, prepayOnly)}): ${money(order.total, lang)}`,
     deliveryText(order, lang),
     forAdmin ? `${t.customer}: ${c.name} · ${c.phone}${c.email ? ' · ' + c.email : ''}\n${t.address}: ${addressOf(c, lang)}${c.notes ? `\n${t.notes}: ${c.notes}` : ''}` : `${t.address}: ${addressOf(c, lang)}`,
+    ...(!forAdmin && prepayOnly ? ['', guarantee(order, lang, links.base, prepayOnly).text] : []),
     '',
     forAdmin ? links.admin : links.track,
   ].filter((x) => x !== undefined).join('\n');
@@ -298,7 +329,7 @@ function orderLink(base, order, page = 'order') {
 async function orderPlaced(order, { origin, lang, admin = true, customer = true, prepayOnly = PREPAY_ONLY }) {
   const cfg = config();
   const base = cfg.siteUrl || origin || '';
-  const links = { admin: base ? `${base}/admin` : '', track: orderLink(base, order) };
+  const links = { admin: base ? `${base}/admin` : '', track: orderLink(base, order), base };
   const adminLang = cfg.adminLang;
   const custLang = lang === 'en' ? 'en' : 'ar';
   const result = {};
@@ -441,6 +472,7 @@ function shippedContent(order, links, lang, prepayOnly) {
   ].filter(Boolean);
   const items = (order.items || []).map((it, i) => `${num(i + 1, lang)}. ${safeLine(it, lang)}`);
   const end = lang === 'ar' ? 'left' : 'right';
+  const guar = guarantee(order, lang, links.base, prepayOnly);
   const button = (href, label, primary) => `<a href="${esc(href)}" style="${primary ? 'background:#ca3d1a;color:#fff;' : 'background:#fff;color:#16181d;border:1px solid #d5d8de;'}text-decoration:none;padding:11px 18px;border-radius:10px;display:inline-block;font-weight:700;margin:0 0 8px">${esc(label)}</a>`;
   const html = `<!doctype html><html lang="${lang}" dir="${t.dir}"><body style="margin:0;background:#f4f5f7;font-family:Tahoma,Arial,sans-serif;color:#16181d">
   <div style="max-width:560px;margin:0 auto;padding:24px 16px">
@@ -451,7 +483,7 @@ function shippedContent(order, links, lang, prepayOnly) {
       <p style="margin:0 0 12px;font-weight:700">${esc(t.orderNo)} ${esc(custNo(order.number, lang))}</p>
       ${facts.length ? `<table style="width:100%;border-collapse:collapse;margin:0 0 12px;background:#f8f9fb;border-radius:10px">${facts.map(([k, v]) => `<tr><td style="padding:8px 12px;color:#555">${esc(k)}</td><td style="padding:8px 12px;text-align:${end};font-weight:700"><bdi>${esc(v)}</bdi></td></tr>`).join('')}</table>` : ''}
       <table style="width:100%;border-collapse:collapse">${items.map((line) => `<tr><td style="padding:8px 0;border-bottom:1px solid #eee">${esc(line)}</td></tr>`).join('')}</table>
-      <p style="margin:12px 0 0;font-weight:700">${esc(t.total)}${paid ? '' : ` (${esc(payWord(t, prepayOnly))})`}: ${esc(money(order.total, lang))}</p>
+      <p style="margin:12px 0 0;font-weight:700">${esc(t.total)}${paid ? '' : ` (${esc(payWord(t, prepayOnly))})`}: ${esc(money(order.total, lang))}</p>${guar.html}
       <p style="margin:20px 0 0">${[
         trackingUrl ? button(trackingUrl, t.trackingLink, true) : '',
         links.track ? button(links.track, t.track, !trackingUrl) : '',
@@ -470,6 +502,7 @@ function shippedContent(order, links, lang, prepayOnly) {
     ...items,
     '',
     `${t.total}${paid ? '' : ` (${payWord(t, prepayOnly)})`}: ${money(order.total, lang)}`,
+    ...(guar.text ? ['', guar.text, ''] : []),
     links.track ? `${t.track}: ${links.track}` : '',
     links.invoice ? `${t.invoice}: ${links.invoice}` : '',
   ].join('\n').replace(/\n{3,}/g, '\n\n').trim();
@@ -488,7 +521,7 @@ async function orderShipped(order, { siteUrl, prepayOnly = PREPAY_ONLY } = {}) {
     if (!to) return { email: 'skipped', reason: 'noEmail' };
     if (!emailReady()) return { email: 'skipped', reason: 'emailOff' };
     const base = (cfg.siteUrl || String(siteUrl || '')).replace(/\/+$/, '');
-    const links = { track: orderLink(base, order), invoice: orderLink(base, order, 'invoice') };
+    const links = { track: orderLink(base, order), invoice: orderLink(base, order, 'invoice'), base };
     const lang = order.lang === 'en' ? 'en' : 'ar';
     const { subject, html, text } = shippedContent(order, links, lang, prepayOnly);
     await sendEmail(cfg, to, subject, html, text);

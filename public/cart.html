@@ -215,10 +215,12 @@
         <div class="line total"><span data-i18n="checkout.total"></span><span id="total"></span></div>
         <!-- Free shipping: how much is left (with a bar), or that the order ships free -->
         <div class="free-ship" id="free-note" hidden></div>
-        <div class="pay-box"><strong data-i18n="checkout.cod"></strong><span data-i18n="checkout.codText"></span></div>
+        <div class="pay-box"><strong data-i18n="checkout.cod"></strong><span data-i18n="checkout.codText"></span><span class="pay-methods" data-prepay-only data-prepay-i18n="pay.methods" hidden></span></div>
         <div class="captcha-box" id="cap-order"></div>
         <p class="approve-status" id="approve-status" aria-live="polite"></p>
         <button class="btn btn-primary btn-lg btn-block" id="place-order" type="submit" data-i18n="checkout.place" aria-describedby="approve-status"></button>
+        <!-- Paying in advance (src/payment-wording.js): the money-back guarantee, by the button -->
+        <a class="guar-badge" data-prepay-only data-prepay-href="/guarantee" hidden><strong data-prepay-only data-prepay-i18n="guar.badge" hidden></strong> <span data-prepay-only data-prepay-i18n="guar.badgeText" hidden></span></a>
       </form>
     </div>
   </main>
