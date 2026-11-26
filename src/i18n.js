@@ -206,6 +206,7 @@ const MESSAGES = {
   confirmNoteRequired: { en: 'Write how the customer confirmed this version (e.g. "Confirmed on WhatsApp").', ar: 'اكتب العميل أكّد النسخة دي إزاي (مثلاً "أكّد على واتساب").' },
   alreadyPrinting: { en: 'This item is already being printed.', ar: 'المنتج ده بيتطبع خلاص.' },
   replacementSize: { en: 'The corrected file must be exactly {w} × {h} pixels.', ar: 'الملف المعدّل لازم يكون {w} × {h} بكسل بالظبط.' },
+  couponAutoBetter: { en: 'The offer {offer} already on your order saves more than {code}, so it stays (one discount per order).', ar: 'العرض {offer} اللي على طلبك بيوفّر أكتر من {code}، فخليناه (خصم واحد لكل طلب).' },
   qtyBad: { en: 'Check the quantities: whole numbers, at least one piece.', ar: 'راجع الكميات: أرقام صحيحة وقطعة واحدة على الأقل.' },
   qtyNoColors: { en: 'This product can be ordered in one colour per design.', ar: 'المنتج ده بيتطلب بلون واحد لكل تصميم.' },
   qtyOnePageCount: { en: 'A booklet design is for one page count: order other page counts as their own design.', ar: 'تصميم الكتيب بيبقى لعدد صفحات واحد: اطلب أي عدد صفحات تاني كتصميم لوحده.' },

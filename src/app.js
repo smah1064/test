@@ -3820,6 +3820,25 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (r.ok) coupon = { code, discount: r.discount, freeShipping: r.freeShipping };
       else couponError = format(r.reason, r.params || {}, langOf(req));
     }
+    // Best value wins (owner, 26 Nov): an automatic coupon that saves more than the typed code (or any, with none
+    // typed) is the one applied; a typed code that saves less is told so (not a refusal: it doesn't count as a wrong
+    // try, and ordering goes on with the better offer).
+    const refused = Boolean(couponError);
+    let couponBeaten = false;
+    if (lines.length) {
+      const typedPhone = typeof (req.body || {}).phone === 'string' ? normalizeEgyptMobile(req.body.phone) : null;
+      const me = typedPhone && currentCustomer(req);
+      const autoPhone = typedPhone && ((me && normalizeEgyptMobile(me.phone || '') === typedPhone) || phoneCheckAllowed(req.ip, typedPhone)) ? typedPhone : null;
+      const ctx = { lines, orders: store.listOrders(), ...(autoPhone ? { phone: autoPhone } : {}), shipping: shippingFor(subtotal) };
+      const pick = coupons.best(store.db.coupons, coupon ? findCoupon(code) : null, coupon ? code : '', ctx);
+      if (pick.best && pick.best.auto) {
+        if (coupon) {
+          couponError = format('couponAutoBetter', { code, offer: pick.best.coupon.code }, langOf(req));
+          couponBeaten = true;
+        }
+        coupon = { code: pick.best.coupon.code, discount: pick.best.result.discount, freeShipping: pick.best.result.freeShipping, auto: true };
+      }
+    }
     const discount = coupon ? coupon.discount : 0;
     // "Print one sample first" adds about 2 business days to the promised day.
     const delivery = withSampleDays(deliveryFor((req.body || {}).delivery), (req.body || {}).sample === true);
@@ -3828,8 +3847,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     // `shipping` includes the express fee; `delivery` says how fast and by which day.
     const shipping = round2(baseShipping + (lines.length ? delivery.fee : 0));
     const deliveryOptions = ['standard', 'express'].map((s) => withSampleDays(deliveryFor(s), (req.body || {}).sample === true));
-    if (tryingCode && couponError) limitHit('couponTry', req.ip);
-    res.json({ items, subtotal, discount, coupon, couponError, shipping, baseShipping, delivery, deliveryOptions, total: round2(subtotal - discount + shipping), freeShippingOver: FREE_SHIPPING_OVER, shippingFlat: SHIPPING_FLAT });
+    if (tryingCode && refused) limitHit('couponTry', req.ip);
+    res.json({ items, subtotal, discount, coupon, couponError, ...(couponBeaten ? { couponBeaten } : {}), shipping, baseShipping, delivery, deliveryOptions, total: round2(subtotal - discount + shipping), freeShippingOver: FREE_SHIPPING_OVER, shippingFlat: SHIPPING_FLAT });
   });
 
   /** A sample printed and checked first: the expected day moves 2 business days later. */
@@ -4103,8 +4122,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (code) {
       const r = coupons.apply(findCoupon(code), { lines, orders: store.listOrders(), phone: c.phone, shipping: shippingFor(subtotal) });
       if (!r.ok) throw new HttpError(409, r.reason, r.params || {});
+    }
+    // Best value wins (owner, 26 Nov): the typed code, or an automatic coupon that saves more (one per order).
+    const pick = coupons.best(store.db.coupons, code ? findCoupon(code) : null, code, { lines, orders: store.listOrders(), phone: c.phone, shipping: shippingFor(subtotal) });
+    if (pick.best) {
+      const { coupon: cp, result: r } = pick.best;
       // The items it came off (a coupon for one product): the accounts charge the discount to those.
-      applied = { id: findCoupon(code).id, code, type: findCoupon(code).type, discount: r.discount, freeShipping: r.freeShipping, ...(r.freeShipping ? { shippingWaived: shippingFor(subtotal) } : {}), items: r.lines.map((i) => items[i].id) };
+      applied = { id: cp.id, code: cp.code, type: cp.type, discount: r.discount, freeShipping: r.freeShipping, ...(pick.best.auto ? { auto: true } : {}), ...(r.freeShipping ? { shippingWaived: shippingFor(subtotal) } : {}), items: r.lines.map((i) => items[i].id) };
     }
     const discount = applied ? applied.discount : 0;
     // Standard (5 business days) or express (2, for a fee added to the shipping).
@@ -6100,7 +6124,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (error) throw new HttpError(400, error);
       if ((store.db.coupons || []).some((c) => c.code === coupon.code && c.id !== req.params.id)) throw new HttpError(409, 'couponExists');
       // (Only the fields a coupon is made of: its id, dates and counts are the shop's own.)
-      const own = ['code', 'type', 'value', 'minOrder', 'maxDiscount', 'maxUses', 'perCustomer', 'startsOn', 'endsOn', 'active', 'products', 'categories', 'note'];
+      const own = ['code', 'type', 'value', 'minOrder', 'maxDiscount', 'maxUses', 'perCustomer', 'startsOn', 'endsOn', 'active', 'auto', 'products', 'categories', 'note'];
       req.body = Object.fromEntries(Object.entries(req.body || {}).filter(([k]) => own.includes(k)));
       // (A code already waiting in another request: one at a time.)
       if (approvalsAll().some((a) => (a.status === 'pending' || a.status === 'failed') && /^(POST|PUT) \/api\/admin\/coupons/.test(a.action) && a.body && coupons.normCode(a.body.code) === coupon.code && !a.path.endsWith(`/${req.params.id}`))) throw new HttpError(409, 'couponWaiting');

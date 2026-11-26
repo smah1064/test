@@ -79,6 +79,8 @@ function cleanCoupon(body, { products, categories, saved = null }) {
       products: onlyProducts,
       categories: onlyCategories,
       active: b.active !== false,
+      // Applied without a code, when it is the best value for the cart (owner, 26 Nov).
+      ...(b.auto === true ? { auto: true } : {}),
       note: String(b.note || '').trim().slice(0, 200),
     },
   };
@@ -139,4 +141,22 @@ function discountOf(coupon, eligible) {
   return round2(Math.max(0, Math.min(discount, eligible)));
 }
 
-module.exports = { cleanCoupon, apply, normCode, usesOf, usedOn, TYPES };
+/**
+ * Best value wins (owner, 26 Nov): of the code the customer typed (when it works) and every automatic coupon that
+ * applies to this cart, the one that saves the most — its discount, or for free shipping the shipping it saves. One per
+ * order (they don't add up); a tie goes to the typed code. Returns { best: { coupon, result, auto } | null, typed }
+ * where `typed` is the typed code's own result (null when none was typed).
+ */
+function best(all, typedCoupon, typedCode, ctx) {
+  const value = (r) => r.discount + (r.freeShipping && typeof ctx.shipping === 'number' ? ctx.shipping : 0);
+  const typed = typedCode ? apply(typedCoupon, ctx) : null;
+  let top = typed && typed.ok ? { coupon: typedCoupon, result: typed, auto: false } : null;
+  for (const c of all || []) {
+    if (!c || !c.auto || (typedCoupon && c.id === typedCoupon.id)) continue;
+    const r = apply(c, ctx);
+    if (r.ok && (!top || value(r) > value(top.result) + 0.009)) top = { coupon: c, result: r, auto: true };
+  }
+  return { best: top, typed, value: top ? value(top.result) : 0 };
+}
+
+module.exports = { cleanCoupon, apply, best, normCode, usesOf, usedOn, TYPES };

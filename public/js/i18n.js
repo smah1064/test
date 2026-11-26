@@ -333,6 +333,9 @@ window.POD_STRINGS = {
   'coupon.remove': ['Remove', 'إزالة'],
   'coupon.discount': ['Discount', 'الخصم'],
   'coupon.applied': ['Coupon applied ✓', 'الكوبون اتطبّق ✓'],
+  // Automatic offers (owner, 26 Nov: "best value wins").
+  'coupon.autoTag': ['(offer, applied for you)', '(عرض، اتطبّق لوحده)'],
+  'coupon.autoApplied': ['The best offer for your order is applied ✓', 'أحسن عرض لطلبك اتطبّق ✓'],
   'coupon.freeShipping': ['Free shipping', 'شحن مجاني'],
   // A code typed with Arabic letters ("عيد20"): the shop's codes are English letters and digits (public/cart.html).
   'coupon.latinOnly': ['Coupon codes are in English letters and numbers, like EID20', 'كود الخصم بيتكتب بحروف إنجليزي وأرقام، زي EID20'],
@@ -1308,6 +1311,9 @@ window.POD_STRINGS = {
   'cp.appliesHelp': ['None ticked = all products.', 'لو ماعلمتش على حاجة = كل المنتجات.'],
   'cp.note': ['Note (only you see it)', 'ملاحظة (تظهر لك بس)'],
   'cp.active': ['Active', 'شغال'],
+  'cp.auto': ['Apply automatically (no code needed)', 'يتطبّق لوحده (من غير كود)'],
+  'cp.autoHelp': ['Best value wins: at checkout the shop applies the one coupon that saves the customer the most — this one, another automatic one, or a code they typed. One discount per order.', 'الأوفر هو اللي يكسب: وقت الطلب الموقع بيطبّق الكوبون اللي بيوفّر للعميل أكتر — ده، أو كوبون تاني بيتطبّق لوحده، أو كود العميل كتبه. خصم واحد لكل طلب.'],
+  'cp.sumAuto': ['automatic', 'بيتطبّق لوحده'],
   'cp.pause': ['Pause', 'إيقاف'],
   'cp.resume': ['Activate', 'تشغيل'],
   'cp.empty': ['No coupons yet. Create the first one above.', 'مفيش كوبونات لسه. اعمل أول واحد فوق.'],

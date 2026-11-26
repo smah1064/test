@@ -209,7 +209,7 @@
           <p class="muted small dlv-days" data-i18n="delivery.days"></p>
         </fieldset>
         <div class="line"><span data-i18n="checkout.subtotal"></span><span id="subtotal"></span></div>
-        <div class="line discount-line" id="discount-line" hidden><span><span data-i18n="coupon.discount"></span> <bdi id="coupon-code" dir="ltr"></bdi> <button type="button" class="link-btn small" id="coupon-remove" data-i18n="coupon.remove"></button></span><span id="discount"></span></div>
+        <div class="line discount-line" id="discount-line" hidden><span><span data-i18n="coupon.discount"></span> <bdi id="coupon-code" dir="ltr"></bdi> <span class="muted small" id="coupon-auto" data-i18n="coupon.autoTag" hidden></span> <button type="button" class="link-btn small" id="coupon-remove" data-i18n="coupon.remove"></button></span><span id="discount"></span></div>
         <div class="line"><span data-i18n="checkout.shipping"></span><span id="shipping"></span></div>
         <div class="line" id="express-line" hidden><span data-i18n="delivery.expressFee"></span><span id="express-fee"></span></div>
         <div class="line total"><span data-i18n="checkout.total"></span><span id="total"></span></div>
@@ -978,7 +978,8 @@
         const orderable = cart.filter((it) => !blocked.has(it.designId));
         const subtotal = Math.round(orderable.reduce((s, i) => s + i.price, 0) * 100) / 100;
         const freeOver = quote ? quote.freeShippingOver : pricing.freeShippingOver;
-        const applied = quote && quote.coupon && couponCode ? quote.coupon : null;
+        // The code in use, or an automatic offer the shop applied as the best value (owner, 26 Nov).
+        const applied = quote && quote.coupon && (couponCode || quote.coupon.auto) ? quote.coupon : null;
         const discount = applied ? applied.discount : 0;
         // The shop's own numbers when its answer is for exactly this cart (same items, same coupon);
         // until then the same rule as the shop's: free shipping goes by the subtotal before any discount.
@@ -1000,14 +1001,19 @@
         }
         document.getElementById('discount-line').hidden = !applied;
         document.getElementById('coupon-code').textContent = applied ? applied.code : '';
+        // (An automatic offer: said as one, and nothing to take off: it is the best the cart can have.)
+        document.getElementById('coupon-auto').hidden = !(applied && applied.auto);
+        document.getElementById('coupon-remove').hidden = Boolean(applied && applied.auto);
         document.getElementById('discount').textContent = applied ? (applied.freeShipping && !discount ? t('coupon.freeShipping') : '-' + money(discount)) : '';
         const msg = document.getElementById('coupon-msg');
         // A code the shop refused: its reason stays under the field (with the code) until the customer changes it.
         const refusal = couponRefusal();
         const refused = refusal ? refusalText(refusal) : '';
-        msg.textContent = refused || (applied ? t('coupon.applied') : '');
-        msg.classList.toggle('bad', Boolean(refused));
-        markCoupon(Boolean(refused));
+        msg.textContent = refused || (applied ? t(applied.auto ? 'coupon.autoApplied' : 'coupon.applied') : '');
+        // (A code that saves less than the offer already applied: said, not as a mistake.)
+        const beaten = Boolean(refusal && refusal.beaten);
+        msg.classList.toggle('bad', Boolean(refused) && !beaten);
+        markCoupon(Boolean(refused) && !beaten);
         document.getElementById('subtotal').textContent = money(subtotal);
         // (Nothing that can be ordered: no "free" shipping to show.)
         document.getElementById('shipping').textContent = !orderable.length ? t('cart.nothingToShip') : baseShipping ? money(baseShipping) : t('free');
@@ -1076,7 +1082,7 @@
       const couponWords = new Map();
       /** The refusal shown at the coupon field: the code in use refused by today's prices (applied), or a code the shop refused. */
       function couponRefusal() {
-        if (couponCode && quote && quote.couponError) return { code: couponCode, msg: quote.couponError, lang: quote.lang, applied: true };
+        if (couponCode && quote && quote.couponError) return { code: couponCode, msg: quote.couponError, lang: quote.lang, applied: true, beaten: Boolean(quote.couponBeaten) };
         return !couponCode && couponNote && couponNote.msg ? couponNote : null;
       }
       const wordsFor = (r) => couponWords.get(`${r.code}\n${r.msg}`) || {};
@@ -1406,7 +1412,8 @@
           const codeBefore = couponCode;
           await refreshPrices();
           // The coupon no longer works (e.g. this phone already used it): say why, with the price without it, and order nothing.
-          if (codeBefore && quote && quote.couponError) throw Object.assign(new Error(quote.couponError), { code: 'couponRefused', lang: quote.lang });
+          // (A code that only saves less than the automatic offer doesn't stop the order: the offer is applied.)
+          if (codeBefore && quote && quote.couponError && !quote.couponBeaten) throw Object.assign(new Error(quote.couponError), { code: 'couponRefused', lang: quote.lang });
           render();
           if (!POD.getCart().length) throw new Error(t('cart.emptyTitle'));
           // Sold out or hidden while the customer was filling in the form.
@@ -1599,7 +1606,7 @@
           POD.toast(e.status && e.status < 500 && e.message ? e.message : t('msg.network'), 'error');
         }
         if (code && quote && quote.couponError) {
-          couponNote = { code, msg: quote.couponError, lang: quote.lang };
+          couponNote = { code, msg: quote.couponError, lang: quote.lang, beaten: Boolean(quote.couponBeaten) };
           setCoupon('');
         }
         render();

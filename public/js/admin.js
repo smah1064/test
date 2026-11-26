@@ -2608,6 +2608,8 @@
     // (Days in the page language, and in Arabic the arrow points the way it reads: "١ ديسمبر ← ٣١ ديسمبر". QA 25 Nov.)
     if (c.startsOn || c.endsOn) parts.push(`${c.startsOn ? day(c.startsOn, true) : '…'} ${POD.lang === 'ar' ? '←' : '→'} ${c.endsOn ? day(c.endsOn, true) : '…'}`);
     if (c.perCustomer) parts.push(t('cp.sumPer', { n: POD.num(c.perCustomer) }));
+    // Applied without a code when it is the cart's best value (owner, 26 Nov).
+    if (c.auto) parts.push(t('cp.sumAuto'));
     // Limited to some products and / or categories: name them in the page language.
     const only = [(c.products || []).length ? cpList(c.products, couponData.products) : '', c.categories.length ? cpList(c.categories, couponData.categories) : ''].filter(Boolean);
     if (only.length) parts.push(t('cp.sumOnly', { list: only.join(POD.lang === 'ar' ? '، ' : ', ') }));
@@ -2661,6 +2663,7 @@
     $('cp-form').reset();
     $('cp-id').value = '';
     $('cp-active').checked = true;
+    if ($('cp-auto')) $('cp-auto').checked = false;
     cpPicked.clear();
     $('cp-cats').querySelectorAll('input').forEach((i) => { i.checked = false; });
     cpProducts = [];
@@ -2679,7 +2682,7 @@
       const body = {
         code: $('cp-code').value, type: $('cp-type').value, value: numValue($('cp-value')), maxDiscount: numValue($('cp-max')), minOrder: numValue($('cp-min')),
         maxUses: numValue($('cp-uses')), perCustomer: numValue($('cp-per')), startsOn: $('cp-start').value, endsOn: $('cp-end').value,
-        categories: [...cpPicked], products: id ? cpProducts : [], active: $('cp-active').checked, note: $('cp-note').value,
+        categories: [...cpPicked], products: id ? cpProducts : [], active: $('cp-active').checked, auto: Boolean($('cp-auto') && $('cp-auto').checked), note: $('cp-note').value,
       };
       if (id && cpEditing && cpEditing.id === id) {
         for (const k of Object.keys(body)) if (JSON.stringify(cpNorm(body[k])) === JSON.stringify(cpNorm(cpEditing[k]))) delete body[k];
@@ -2724,6 +2727,7 @@
         $('cp-end').value = c.endsOn || '';
         $('cp-note').value = c.note || '';
         $('cp-active').checked = c.active;
+        if ($('cp-auto')) $('cp-auto').checked = Boolean(c.auto);
         cpPicked.clear();
         c.categories.forEach((x) => cpPicked.add(x));
         $('cp-cats').querySelectorAll('input').forEach((i) => { i.checked = cpPicked.has(i.value); });
