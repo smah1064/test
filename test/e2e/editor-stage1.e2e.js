@@ -42,7 +42,7 @@ const smallControls = (page) => page.evaluate(() => {
       const grow = -parseFloat(ring.top || '0') * 2;
       if (ring.content !== 'none' && r.width + grow >= 43.5 && r.height + grow >= 43.5) return;
     }
-    if (e.matches('.qty-chip') && getComputedStyle(e, '::after').content !== 'none') return;
+    if (e.matches('.qty-chip, .buy-sum') && getComputedStyle(e, '::after').content !== 'none') return;
     if (r.width < 43.5 || r.height < 43.5) out.push(`${e.tagName.toLowerCase()}#${e.id}.${String(e.className).split(' ')[0]} ${Math.round(r.width)}x${Math.round(r.height)}`);
   }));
   return out;

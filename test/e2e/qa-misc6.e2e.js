@@ -147,6 +147,7 @@ test('cart proof: white lettering is shown on dark checks, and "Dark background"
     await page.click('#add-to-cart');
     // "Which size?"
     await page.click('#size-ask [data-ask-size="M"]');
+    await page.click('#size-ask-ok'); // (a size is picked, then confirmed: editor redesign stage 2)
     await page.waitForURL(/\/cart/, { timeout: 60000 });
     // (Not approved yet: the proof is a short card; "See proof details" opens the whole of it.)
     await page.click('[data-proof-toggle]', { timeout: 30000 });

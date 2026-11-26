@@ -2288,12 +2288,13 @@
 
   // ---------- Phone layout: slide-up panel ----------
   function syncSheetTitle() {
-    if (st.sheet) $('sheet-title').textContent = st.sheet === 'product' ? t('sheet.product') : $('props-title').textContent;
+    if (st.sheet) $('sheet-title').textContent = st.sheet === 'product' ? t('sheet.product') : st.sheet === 'check' ? t('check.title') : $('props-title').textContent;
   }
   function setSheet(mode) {
     st.sheet = mode;
     document.body.classList.toggle('sheet-props', mode === 'props');
     document.body.classList.toggle('sheet-product', mode === 'product');
+    document.body.classList.toggle('sheet-check', mode === 'check');
     document.querySelectorAll('[data-sheet]').forEach((b) => b.classList.toggle('open', b.dataset.sheet === mode));
     syncSheetTitle();
     requestAnimationFrame(() => {
@@ -4705,9 +4706,9 @@
   });
   $('check-chip').addEventListener('click', () => {
     if (MOBILE.matches) {
+      // Phones: the check in a short sheet of its own (it was at the foot of the long Product sheet: stage 2).
       canvas.discardActiveObject();
-      setSheet('product');
-      requestAnimationFrame(() => $('sec-check').scrollIntoView({ block: 'start' }));
+      setSheet(st.sheet === 'check' ? null : 'check');
     } else {
       $('sec-check').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
@@ -4746,6 +4747,8 @@
       chip.textContent = copies != null ? POD.plural(`${packWordHere()}Chip`, copies) : plural(p.merge && st.mergeList ? 'qty.chipNames' : 'qty.chip', pieces);
     }
   }
+  // Phones: the line under the price opens the product sheet (colour, size, how many).
+  if ($('buy-sum')) $('buy-sum').addEventListener('click', () => { if (!$('qty-chip').hidden) $('qty-chip').click(); else { canvas.discardActiveObject(); setSheet('product'); } });
   if ($('qty-chip')) {
     $('qty-chip').addEventListener('click', () => {
       if (st.product.merge && st.mergeList) return openNames(); // a name list: one copy per name
@@ -4753,6 +4756,35 @@
       setSheet('product');
       requestAnimationFrame(() => { const f = $('qty-field'); if (f) f.scrollIntoView({ block: 'start', behavior: 'smooth' }); });
     });
+  }
+  /**
+   * Phones (editor redesign, stage 2): the product button in the top bar (colour dot, name, colour and size) and the
+   * line under the price ("White, M, 1 piece", or "Choose a size" in the accent colour while none is picked).
+   */
+  function renderTopBar() {
+    const p = st.product;
+    const c = color();
+    const lines = p.kind === 'book' || (p.merge && st.mergeList) ? [] : qtyLines();
+    const colours = [...new Set(lines.map((l) => l.color))];
+    const sizes = [...new Set(lines.map((l) => l.size))];
+    const askSize = needsSize();
+    const colourWord = colours.length > 1 ? t('buy.colours') : tr(c.name);
+    const sizeWord = askSize ? '' : sizes.length > 1 ? t('buy.sizes') : p.sizes.length > 1 ? tr((p.sizes.find((z) => z.id === (sizes[0] || st.sizeId)) || {}).label || '') : '';
+    const sep = POD.lang === 'ar' ? '، ' : ', ';
+    if ($('ed-prod-name')) {
+      $('ed-prod-name').textContent = tr(p.name);
+      $('ed-prod-sub').textContent = [colourWord, sizeWord].filter(Boolean).join(sep);
+      $('ed-prod-dot').style.background = c.hex || '#fff';
+      $('ed-prod').disabled = false;
+    }
+    const sum = $('buy-sum');
+    if (sum) {
+      const copies = packs() && !(p.merge && st.mergeList) ? copiesIn(qtyLines()) : null;
+      const pieces = p.merge && st.mergeList ? t('buy.names', { n: POD.num(mergeCount()) }) : copies != null ? POD.plural(packWordHere(), copies) : plural('qty.unitPieces', qtyTotal());
+      sum.classList.toggle('ask', askSize);
+      sum.hidden = p.kind === 'book';
+      sum.textContent = askSize ? `${colourWord}${sep}${t('buy.pickSize')}` : [colourWord, sizeWord, pieces].filter(Boolean).join(sep);
+    }
   }
   function refreshChrome() {
     if (bootDone) scheduleDraft();
@@ -4776,6 +4808,7 @@
     $('undo').disabled = h.i <= 0;
     $('redo').disabled = h.i >= h.stack.length - 1;
     $('add-to-cart').textContent = t(st.shopEdit ? 'shopEdit.button' : st.revise ? 'revise.send' : st.editingCartIndex !== null ? 'cart.update' : 'cart.add');
+    renderTopBar();
     renderSideTabs();
     renderLayers();
     renderCheck();
@@ -6088,7 +6121,19 @@
   function scheduleDraft() {
     if (!draftMode) return;
     clearTimeout(draftTimer);
-    draftTimer = setTimeout(saveDraft, 600);
+    draftTimer = setTimeout(() => { saveDraft().then((ok) => setSavedMark(ok ? 'saved' : 'failed')); }, 600);
+  }
+  /**
+   * The mark beside the logo on phones: "Saved" once the design is kept on this device (it saves itself a moment
+   * after each change). Not shown where nothing is kept as a draft (a cart item being changed, a shared design, the
+   * shop's own edit) or before anything is designed.
+   */
+  function setSavedMark(state) {
+    const mark = $('ed-saved');
+    if (!mark) return;
+    const show = draftMode && !st.shopEdit && !st.revise && st.editingCartIndex === null && designedSides().length > 0 && state !== 'failed';
+    mark.hidden = !show;
+    if (show) $('ed-saved-text').textContent = t('ed.saved');
   }
   // Leaving right after a change: save it now (quickly, without a new thumbnail), not after the short wait,
   // and keep a small copy in localStorage at once (written before the page goes; the real save may not finish).
@@ -6191,7 +6236,13 @@
     const n = lines.reduce((m, l) => m + l.qty, 0);
     $('size-ask-title').textContent = t('sizeAsk.title');
     $('size-ask-note').textContent = n > 1 ? t('sizeAsk.many', { n: POD.num(n) }) : t('sizeAsk.one');
-    $('size-ask-chips').innerHTML = st.product.sizes.filter((z) => sizeOk(st.product, st.colorId, z)).map((z) => `<button type="button" class="chip" data-ask-size="${esc(z.id)}">${esc(tr(z.label))}${POD.sizeNote(st.product, z) ? ` <span style="opacity:.7">${esc(POD.sizeNote(st.product, z))}</span>` : ''}</button>`).join('');
+    const p = st.product;
+    const extras = p.category === 'apparel' && !p.sizes.some((x) => (x.surcharge || 0) < 0) ? p.sizes.filter((x) => x.surcharge > 0 && sizeOk(p, st.colorId, x)) : [];
+    $('size-ask-chips').innerHTML = p.sizes.filter((z) => sizeOk(p, st.colorId, z)).map((z) => `<button type="button" class="chip" data-ask-size="${esc(z.id)}" aria-pressed="false">${esc(tr(z.label))}${!extras.includes(z) && POD.sizeNote(p, z) ? ` <span style="opacity:.7">${esc(POD.sizeNote(p, z))}</span>` : ''}</button>`).join('');
+    $('size-ask-extra').textContent = extras.map((x) => t('size.extra', { size: tr(x.label), price: money(x.surcharge) })).join(POD.lang === 'ar' ? '، ' : ', ');
+    $('size-ask-extra').hidden = !extras.length;
+    $('size-ask-ok').textContent = t(st.editingCartIndex !== null ? 'cart.update' : 'cart.add');
+    $('size-ask-ok').disabled = true;
     box.hidden = false;
     const first = box.querySelector('[data-ask-size]');
     if (first) first.focus();
@@ -6199,7 +6250,16 @@
   if ($('size-ask')) {
     $('size-ask').addEventListener('click', async (e) => {
       if (e.target.id === 'size-ask' || e.target.closest('#size-ask-cancel')) { $('size-ask').hidden = true; return; }
-      const b = e.target.closest('[data-ask-size]');
+      // A size is picked first, then confirmed (a tap on a size added to the cart at once, so a slip ordered the
+      // wrong size: editor redesign stage 2).
+      const pick = e.target.closest('[data-ask-size]');
+      if (pick) {
+        $('size-ask-chips').querySelectorAll('[data-ask-size]').forEach((x) => { x.classList.toggle('active', x === pick); x.setAttribute('aria-pressed', String(x === pick)); });
+        $('size-ask-ok').disabled = false;
+        return;
+      }
+      if (!e.target.closest('#size-ask-ok')) return;
+      const b = $('size-ask-chips').querySelector('[data-ask-size].active');
       if (!b) return;
       // Every colour keeps its number of pieces, all in the size picked.
       const perColour = {};
@@ -6571,8 +6631,29 @@
     busy(false);
     if (!ok) return toast(t('draft.saveFailed'), 'error');
     st.dirty = false;
-    location.href = '/?saved=' + encodeURIComponent(st.product.id) + '#products';
+    // The customer stays in the editor (it sent them to the home page without a word: editor redesign stage 2).
+    setSavedMark('saved');
+    toast(t('draft.savedHere'));
   }));
+  if ($('ed-save')) $('ed-save').addEventListener('click', () => { closeEdMenu(); $('save-draft').click(); });
+  // The ⋯ menu of the phone top bar: cart, account, products, language, save.
+  function closeEdMenu() {
+    if (!$('ed-menu') || $('ed-menu').hidden) return;
+    $('ed-menu').hidden = true;
+    $('ed-more').setAttribute('aria-expanded', 'false');
+  }
+  if ($('ed-more')) {
+    $('ed-more').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const open = $('ed-menu').hidden;
+      closeFlyouts();
+      $('ed-menu').hidden = !open;
+      $('ed-more').setAttribute('aria-expanded', String(open));
+      if (open) { const first = $('ed-menu').querySelector('a, button'); if (first) first.focus(); }
+    });
+    document.addEventListener('click', (e) => { if (!e.target.closest('#ed-menu')) closeEdMenu(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('ed-menu').hidden) { closeEdMenu(); $('ed-more').focus(); } });
+  }
 
   window.addEventListener('beforeunload', (e) => {
     if (draftMode && draftTimer) saveDraft();

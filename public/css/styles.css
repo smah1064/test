@@ -1564,3 +1564,60 @@ html[dir="ltr"] .hm-tile-link span { display: inline-block; transform: scaleX(-1
   #props > .pgroup[data-group="text"] > .pgroup-body { padding: 0; }
   #p-text { min-height: 48px; height: auto; field-sizing: content; max-height: 120px; }
 }
+
+/* ---------- Editor redesign, stage 2 (owner's go 26 Nov): top bar and buy bar on phones ---------- */
+.ed-top, .buy-sum { display: none; }
+#size-ask .size-ask-foot { justify-content: flex-end; gap: 8px; margin-top: 12px; }
+#size-ask .size-ask-extra { margin: 0; }
+#size-ask .size-ask-extra[hidden] { display: none; }
+#size-ask-chips .chip.active { border-color: var(--ink); background: var(--ink); color: #fff; }
+@media (max-width: 820px) {
+  body.editor-page .site-header { display: none; }
+  .ed-top { display: flex; align-items: center; gap: 6px; height: 56px; padding: 0 8px; background: #fff; border-bottom: 1px solid var(--line); flex: none; position: relative; z-index: 30; }
+  .ed-logo { display: inline-grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 10px; }
+  .ed-logo img { width: 32px; height: 32px; }
+  .ed-saved { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; color: var(--ink-3); flex: none; }
+  .ed-saved[hidden] { display: none; }
+  .ed-saved i { width: 7px; height: 7px; border-radius: 50%; background: var(--ok, #15803d); }
+  .ed-prod { flex: 1; min-width: 0; height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border: 1px solid var(--line); border-radius: 12px; background: #fff; font: inherit; color: var(--ink); cursor: pointer; text-align: start; }
+  .ed-prod.open { border-color: var(--ink); background: var(--bg); }
+  .ed-prod-dot { width: 20px; height: 20px; border-radius: 50%; flex: none; box-shadow: 0 0 0 1px rgba(0,0,0,.22), inset 0 0 0 2px #fff; }
+  .ed-prod-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
+  .ed-prod-txt b { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ed-prod-txt small { font-size: 11px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ed-prod-txt small:empty { display: none; }
+  .ed-prod.open .ed-chev { transform: rotate(180deg); }
+  .ed-chev { flex: none; color: var(--ink-3); }
+  .ed-more { width: 44px; height: 44px; flex: none; display: inline-grid; place-items: center; border: 0; border-radius: 12px; background: none; color: var(--ink); cursor: pointer; position: relative; }
+  .ed-more[aria-expanded="true"] { background: var(--bg); }
+  .ed-more .badge { position: absolute; top: 4px; inset-inline-end: 2px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; background: var(--bg); color: var(--ink); font-size: 11px; line-height: 16px; box-shadow: 0 0 0 2px #fff; }
+  .ed-menu { position: absolute; top: 52px; inset-inline-end: 8px; min-width: 220px; background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 32px rgba(16,24,40,.16); padding: 6px; display: flex; flex-direction: column; z-index: 45; }
+  .ed-menu[hidden] { display: none; }
+  .ed-menu a, .ed-menu button { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px 10px; border: 0; border-radius: 8px; background: none; font: inherit; font-size: 15px; font-weight: 600; color: var(--ink); text-decoration: none; cursor: pointer; text-align: start; width: 100%; }
+  .ed-menu a:hover, .ed-menu button:hover, .ed-menu a:focus-visible, .ed-menu button:focus-visible { background: var(--bg); }
+  .ed-menu svg { flex: none; color: var(--ink-2); }
+  .ed-menu .badge { margin-inline-start: auto; }
+  .ed-menu #ed-save { border-top: 1px solid var(--line); border-radius: 0 0 8px 8px; margin-top: 4px; padding-top: 10px; }
+  .ed-menu #ed-save > span { display: flex; flex-direction: column; }
+  .ed-menu small { font-size: 12px; font-weight: 400; color: var(--ink-3); }
+  /* The product button does the tool row's Product job. */
+  .tools .tool[data-sheet="product"] { display: none !important; }
+  /* Buy bar: the price, what is being bought, one orange button. Save is in the ⋯ menu, Preview above the product. */
+  .panel-foot { padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); gap: 12px; }
+  .panel-foot .amount { font-size: 18px; line-height: 1.2; }
+  .panel-foot .qty-chip, .panel-foot #save-draft, .panel-foot #preview-open-m { display: none !important; }
+  .buy-sum { display: block; max-width: 100%; border: 0; background: none; padding: 2px 0; margin: 0; font: inherit; font-size: 12px; color: var(--ink-3); text-align: start; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; position: relative; }
+  .buy-sum::after { content: ""; position: absolute; inset: -14px -4px -10px; }
+  .buy-sum.ask { color: var(--accent); font-weight: 700; }
+  .buy-sum[hidden] { display: none; }
+  .panel-foot #add-to-cart { min-width: 168px; padding: 0 18px; font-size: 15px; }
+  /* The print check in its own short sheet. */
+  body.sheet-check .panel-scroll { display: block; }
+  body.sheet-check .sheet-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px 8px; }
+  body.sheet-check #sec-check { display: block; border: 0; }
+  body.sheet-check #sec-check > h3 { display: none; }
+  /* The size question as a sheet from the bottom, with the design still in view above it. */
+  #size-ask { place-items: end stretch; padding: 0; }
+  #size-ask .pv-box, #size-ask > div { width: 100%; height: auto; max-height: 70%; border-radius: 18px 18px 0 0; padding: 18px 16px calc(16px + env(safe-area-inset-bottom)); }
+  #size-ask .size-ask-foot .btn { flex: 1; min-height: 48px; }
+}
