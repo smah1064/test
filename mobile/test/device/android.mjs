@@ -76,13 +76,32 @@ async function waitUrl(test, timeout = 30000, what = 'the page', since = 0) {
 }
 
 /** The text on the phone's screen (Android's accessibility view, which includes the web view's text). */
-function screenText() {
-  try {
-    adb('shell', 'uiautomator', 'dump', '/sdcard/e2e-ui.xml');
-    const xml = adb('shell', 'cat', '/sdcard/e2e-ui.xml');
-    return [...xml.matchAll(/(?:text|content-desc)="([^"]+)"/g)].map((m) => m[1]).join(' | ');
-  } catch (e) {
-    return `(no screen text: ${e.message.split('\n')[0]})`;
+async function screenText(tries = 4) {
+  let error = '';
+  for (let i = 0; i < tries; i++) {
+    try {
+      adb('shell', 'rm', '-f', '/sdcard/e2e-ui.xml');
+      adb('shell', 'uiautomator', 'dump', '/sdcard/e2e-ui.xml');
+      const xml = adb('shell', 'cat', '/sdcard/e2e-ui.xml');
+      return [...xml.matchAll(/(?:text|content-desc)="([^"]+)"/g)].map((m) => m[1]).join(' | ');
+    } catch (e) {
+      error = e.message.split('\n')[0]; // e.g. the screen was changing
+      await sleep(1000);
+    }
+  }
+  return `(no screen text: ${error})`;
+}
+
+/** Runs fn in the page, waiting out a page that is still loading (its old document can vanish mid-call). */
+async function inPage(page, fn, tries = 6) {
+  for (let i = 1; ; i++) {
+    try {
+      await page.waitForLoadState('load', { timeout: 10000 }).catch(() => {});
+      return await page.evaluate(fn);
+    } catch (e) {
+      if (i >= tries || !/context was destroyed|navigat|Target closed/i.test(e.message)) throw e;
+      await sleep(500);
+    }
   }
 }
 
@@ -129,7 +148,7 @@ try {
   let page = await connectPage();
   check(!!device, 'Playwright sees the emulator');
   await page.waitForLoadState('load');
-  const info = await page.evaluate(() => ({
+  const info = await inPage(page, () => ({
     app: window.ebda3App && { isApp: window.ebda3App.isApp, platform: window.ebda3App.platform, build: window.ebda3App.build },
     cls: document.documentElement.className,
     share: typeof navigator.share,
@@ -161,11 +180,11 @@ try {
   step('No connection: the app\'s own page, then back by itself');
   await shop.down();
   since = Date.now();
-  await page.evaluate(() => { setTimeout(() => { location.href = '/designs'; }, 0); });
+  await inPage(page, () => { setTimeout(() => { location.href = '/designs'; }, 0); });
   await waitUrl((u) => u.origin === 'https://localhost' && u.pathname === '/offline.html', 30000, 'the offline page', since);
   check(true, 'the "no connection" page is shown');
   await sleep(1500);
-  const words = screenText();
+  const words = await screenText();
   check(/مفيش اتصال/.test(words) && /No internet connection/.test(words), 'it says so in Arabic and English (read from the screen)');
   shot('3-no-connection');
   since = Date.now();
@@ -197,7 +216,7 @@ try {
 
   step('Other sites open outside the page');
   since = Date.now();
-  await page.evaluate(() => {
+  await inPage(page, () => {
     const a = document.createElement('a');
     a.href = 'https://example.com/';
     a.id = 'e2e-ext';
@@ -222,7 +241,7 @@ try {
   try {
     console.error(`Pages Playwright sees: ${context ? context.pages().map((p) => `${p.url()}${p.isClosed() ? ' (closed)' : ''}`).join(', ') : '-'}`);
     console.error(`Pages the app showed: ${shownList()}`);
-    console.error(`Text on the screen: ${screenText().slice(0, 800)}`);
+    console.error(`Text on the screen: ${(await screenText(2)).slice(0, 800)}`);
   } catch { /* nothing more to tell */ }
   process.exitCode = 1;
 } finally {
