@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>إبداع · ebda3</title>
+  <link rel="icon" href="/favicon.svg?v=ebda3" type="image/svg+xml">
+  <link rel="icon" href="/favicon.ico?v=ebda3" sizes="any">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=ebda3">
+  <link rel="manifest" href="/site.webmanifest?v=ebda3">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="إبداع">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="theme-color" content="#FAFAF7">
+  <meta name="description" content="إبداع: اطبع تصميمك على تيشيرتات، مجات، كروت، هدايا وأكتر. قطعة واحدة أو كمية، وتوصيل لكل مصر.">
+  <meta property="og:site_name" content="إبداع · ebda3">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="إبداع · ebda3">
+  <meta property="og:description" content="اطبع تصميمك على تيشيرتات، مجات، كروت، هدايا وأكتر. قطعة واحدة أو كمية، وتوصيل لكل مصر.">
+  <meta property="og:image" content="https://ebda3.me/img/og-ebda3.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <script>(function(){var l;try{l=localStorage.getItem('pod-lang')}catch(e){}l=l==='en'?'en':'ar';var d=document.documentElement;d.lang=l;d.dir=l==='ar'?'rtl':'ltr'})()</script>
+  <link rel="stylesheet" href="/fonts/fonts.css">
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/view.css">
+</head>
+<body data-title-key="view.pageTitle" class="vw-body">
+  <!-- A design shared to look at only (a booklet's pages, or a product's sides): no prices, no buttons to order or
+       approve, and no links into the shop besides the logo and "Make your own". -->
+  <header class="site-header vw-header">
+    <div class="container inner">
+      <a class="brand" href="/" aria-label="إبداع · ebda3"><img class="brand-logo brand-ar" src="/img/logo-ar-header.svg" alt="إبداع" width="61" height="40"><img class="brand-logo brand-en" src="/img/logo-en-header.svg" alt="ebda3" width="98" height="40"><img class="brand-logo brand-mark-logo" src="/img/logo-mark-header.svg" alt="ebda3" width="35" height="40"></a>
+      <nav>
+        <button type="button" class="btn btn-sm lang-toggle" data-lang-toggle data-i18n="lang.other"></button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container vw-main">
+    <div id="vw-loading" class="vw-loading" role="status">
+      <div class="spinner" aria-hidden="true"></div>
+      <span class="vw-sr" data-i18n="view.loading"></span>
+    </div>
+
+    <!-- 404 / 410: the link is old or wrong. -->
+    <div id="vw-gone" class="card empty vw-card" hidden>
+      <svg class="vw-card-icon" width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 0 1 4 8"/><path d="M8 12h4"/><path d="m3 3 18 18"/></svg>
+      <h1 data-i18n="view.goneTitle"></h1>
+      <p class="muted" data-i18n="view.goneText"></p>
+      <a class="btn btn-primary btn-lg" href="/" data-i18n="view.home"></a>
+    </div>
+
+    <!-- Anything else (no connection, a server error): try again. -->
+    <div id="vw-failed" class="card empty vw-card" hidden>
+      <h1 data-i18n="view.failTitle"></h1>
+      <p class="muted" id="vw-failed-text"></p>
+      <button type="button" class="btn btn-primary btn-lg" id="vw-retry" data-i18n="view.retry"></button>
+    </div>
+
+    <div id="vw-body" hidden>
+      <div class="vw-head">
+        <h1 id="vw-title"><bdi id="vw-name"></bdi></h1>
+        <p class="vw-sub muted"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span data-i18n="view.sub"></span></p>
+      </div>
+
+      <div class="side-tabs vw-tabs" id="vw-tabs" role="tablist" data-i18n-aria="view.sidesLabel" hidden></div>
+
+      <section class="vw-stage" id="vw-stage" aria-labelledby="vw-title">
+        <div class="vw-view" id="vw-view"></div>
+      </section>
+
+      <div class="vw-bar" id="vw-bar">
+        <button type="button" class="vw-nav" id="vw-prev"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
+        <p class="vw-count" id="vw-count" aria-live="polite" aria-atomic="true"></p>
+        <button type="button" class="vw-nav" id="vw-next"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
+      </div>
+
+      <div class="card vw-end" id="vw-end" hidden>
+        <p class="vw-end-title" id="vw-end-title" data-i18n="view.endTitle"></p>
+        <p class="muted" data-i18n="view.likeIt"></p>
+        <a class="btn btn-primary btn-lg" id="vw-make" href="/"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg><span data-i18n="view.makeOwn"></span></a>
+      </div>
+
+      <div class="vw-thumbs" id="vw-thumbs" role="group" data-i18n-aria="view.pagesLabel" hidden></div>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container" data-i18n="footer"></div>
+    <div class="container vw-foot" id="vw-foot" hidden>
+      <a class="vw-foot-make" id="vw-make-foot" href="/"><span data-i18n="view.made"></span><span class="vw-foot-sep" aria-hidden="true">·</span><strong data-i18n="view.makeOwnShort"></strong></a>
+    </div>
+  </footer>
+
+  <script src="/js/i18n.js"></script>
+  <script src="/js/i18n-view.js"></script>
+  <script src="/js/common.js"></script>
+  <script src="/js/view-page.js"></script>
+</body>
+</html>
