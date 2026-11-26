@@ -957,6 +957,7 @@ window.POD_STRINGS = {
   'pf.fieldText': ['{name} contains a name-list field in { } that would print as it is.', '{name} فيه خانة بين { } هتتطبع زي ما هي.'],
   'pf.sampleText': ['{name} is still the sample text and would print as it is.', '{name} لسه النص التجريبي، وهيتطبع زي ما هو.'],
   'check.hidden': ['{name} is hidden behind a picture or shape and won\'t show in print. Move the text above it (Layers) or move one of them.', '{name} مستخبي ورا صورة أو شكل ومش هيظهر في الطباعة. طلّع الكلام فوقه (الطبقات) أو حرّك واحد منهم.'],
+  'layer.art': ['Design picture', 'صورة التصميم'],
   'check.lowres': ['{name} is low resolution ({dpi} DPI) and will look blurry. Make it smaller or use a bigger image.', 'دقة {name} قليلة ({dpi} DPI) وهيطلع مش واضح. صغّره أو استخدم صورة أكبر.'],
   'check.okres': ['{name} is {dpi} DPI: OK, but 150+ looks sharper.', 'دقة {name} {dpi} DPI: مقبولة، بس من 150 وطالع بتبقى أوضح.'],
   'check.tiny': ['{name} is very small ({pt} pt) and may be hard to read.', '{name} صغير أوي ({pt} نقطة) وممكن يبقى صعب يتقري.'],

@@ -3483,6 +3483,8 @@
       const all = Array.from(o.text.replace(/\s+/g, ' '));
       return `“${all.length > 28 ? `${all.slice(0, 27).join('')}…` : all.join('')}”`;
     }
+    // (A ready design's picture: "Design picture", not its file name "art:trees-holly-plaid". Owner, 26 Nov.)
+    if (/^art:/.test(o.name || '')) return t('layer.art');
     if (o.type === 'image') return o.name || t('panel.image');
     return shapeName(o);
   }

@@ -7442,6 +7442,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       } else if (/[\\/]mockups[\\/]/.test(file)) {
         // The photo and its mask must arrive exactly as stored (no CDN resizing or recompression).
         res.set('Cache-Control', 'public, max-age=3600, no-transform');
+      } else if (/[\\/]img[\\/]art[\\/]/.test(file) || /[\\/]img[\\/]og-ebda3\.png$/.test(file)) {
+        // The ready designs' artwork goes into print files exactly as stored: the hosting's CDN shrank pictures
+        // for phones (a 3598 px design arrived 800 px wide, 68 DPI on a T-shirt, and printed blurred: owner, 26 Nov).
+        // (The link-preview picture too: public, so the live site can be checked from outside.)
+        res.set('Cache-Control', 'public, max-age=3600, no-transform');
       }
     },
   }));
