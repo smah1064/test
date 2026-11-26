@@ -1695,3 +1695,10 @@ html[dir="rtl"] .more-chev { transform: scaleX(-1); }
   html.tools-bottom .panel { order: 3; }
   html.tools-bottom .stage-wrap { order: 1; }
 }
+
+/* ---------- Editor redesign, stage 5 (owner's go 26 Nov): type straight onto the product ---------- */
+.type-catch { position: fixed; bottom: 0; left: 0; width: 1px; height: 1px; opacity: 0; font-size: 16px; border: 0; padding: 0; pointer-events: none; }
+.text-kinds { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; margin: 0 0 10px; padding: 2px 0; }
+.text-kinds::-webkit-scrollbar { display: none; }
+.text-kinds .chip { flex: none; min-height: 44px; padding: 0 14px; display: inline-flex; align-items: center; font-size: 14px; }
+.text-kinds .kind-all { background: none; border-style: dashed; }

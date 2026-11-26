@@ -1680,7 +1680,24 @@
   $('text-presets').addEventListener('click', serial(async (e) => {
     const btn = e.target.closest('[data-i]');
     if (!btn) return;
-    const p = D.TEXT_PRESETS[Number(btn.dataset.i)];
+    await addPreset(Number(btn.dataset.i));
+  }));
+  /** The look of a text preset (font, size for this print area, weight), for a new text or to restyle one. */
+  function presetLook(p, text) {
+    const font = typeof p.font === 'object' ? p.font[POD.lang] : p.font;
+    const arabic = D.ARABIC_RE.test(text);
+    return {
+      fontFamily: font,
+      // (Sized to the area's width, but never taller than about half its height: on a pen's thin barrel a heading
+      // started over the edges. QA 25 Nov.)
+      fontSize: Math.round(Math.min(area().w * p.size, area().h * 0.5)),
+      fontWeight: p.weight || 'normal',
+      fontStyle: p.italic ? 'italic' : 'normal',
+      charSpacing: arabic ? 0 : p.spacing || 0,
+    };
+  }
+  async function addPreset(i) {
+    const p = D.TEXT_PRESETS[i];
     const font = typeof p.font === 'object' ? p.font[POD.lang] : p.font;
     const text = p.text ? t(p.text) : p.sample;
     const arabic = D.ARABIC_RE.test(text);
@@ -1703,8 +1720,43 @@
       textAlign: 'center',
     });
     tx.placeholder = text; // typing replaces it (not saved with the design)
+    tx.kind = i;
     addObject(tx);
-  }));
+    return tx;
+  }
+
+  /**
+   * Phones (editor redesign stage 5): Text puts a heading straight onto the product, chosen, with its words selected
+   * in the box at the top of its settings and the keyboard open, so typing replaces the sample. Heading, subheading
+   * and a line of text are one tap above it; the full list of ready styles is one more tap.
+   * (The keyboard only opens from the tap itself: a hidden box takes the focus at once, and the text's box takes it
+   * over once the text is there.)
+   */
+  const quickText = serial(async () => {
+    const catcher = $('type-catch');
+    if (catcher) { try { catcher.focus({ preventScroll: true }); } catch (e) { /* none */ } }
+    const tx = await addPreset(0);
+    st.freshText = tx;
+    renderProps();
+    requestAnimationFrame(() => {
+      const f = $('p-text');
+      if (f && active() === tx) { try { f.focus({ preventScroll: true }); f.select(); } catch (e) { /* none */ } } else if (catcher) catcher.blur();
+    });
+  });
+  const KINDS = [0, 1, 2];
+  async function setKind(o, i) {
+    const p = D.TEXT_PRESETS[i];
+    const sample = p.text ? t(p.text) : p.sample;
+    const keep = !stillPlaceholder(o);
+    const look = presetLook(p, keep ? o.text : sample);
+    await D.ensureFont(look.fontFamily, look.fontWeight, look.fontStyle);
+    if (!keep) { o.set({ text: sample }); o.placeholder = sample; }
+    o.kind = i;
+    o.set({ scaleX: 1, scaleY: 1 });
+    setProp(look, { commitNow: true });
+    renderProps();
+    requestAnimationFrame(() => { const f = $('p-text'); if (f) { try { f.focus({ preventScroll: true }); if (!keep) f.select(); } catch (e) { /* none */ } } });
+  }
   // The example words of a new text ("Your Text"): selected when the customer starts typing, so typing replaces them.
   const stillPlaceholder = (o) => Boolean(o && o.placeholder && o.text === o.placeholder);
   canvas.on('text:editing:entered', (e) => {
@@ -2230,8 +2282,17 @@
     document.querySelectorAll('.tool').forEach((x) => x.classList.remove('open'));
   }
   let templatesRendered = false;
+  function openFlyout(name) {
+    const btn = document.querySelector(`.tools .tool[data-flyout="${name}"]`);
+    const fly = $('flyout-' + name);
+    if (!fly) return;
+    closeFlyouts();
+    fly.hidden = false;
+    if (btn) btn.classList.add('open');
+  }
   document.querySelectorAll('.tool[data-flyout]').forEach((btn) => {
     btn.addEventListener('click', () => {
+      if (btn.dataset.flyout === 'text' && MOBILE.matches && !crop && $('flyout-text').hidden) { closeFlyouts(); quickText(); return; }
       const fly = $('flyout-' + btn.dataset.flyout);
       const open = fly.hidden;
       closeFlyouts();
@@ -3053,7 +3114,9 @@
 
     if (text) {
       const arabic = D.ARABIC_RE.test(o.text);
-      html += group('text', t('grp.text'), `
+      // A text just added on a phone: heading, subheading or a line of text, and the full list of ready styles.
+      const kinds = o === st.freshText && MOBILE.matches ? `<div class="text-kinds" role="group" aria-label="${esc(t('kind.title'))}">${KINDS.map((i) => `<button type="button" class="chip ${o.kind === i ? 'active' : ''}" data-kind="${i}" aria-pressed="${o.kind === i}">${esc(t(['kind.heading', 'kind.sub', 'kind.line'][i]))}</button>`).join('')}<button type="button" class="chip kind-all" data-kind="all">${esc(t('kind.all'))}</button></div>` : '';
+      html += group('text', t('grp.text'), `${kinds}
         <div class="field"><textarea id="p-text" rows="2" dir="auto">${esc(o.text)}</textarea></div>
         <div class="field">${fontPicker(o)}</div>
         <div class="field row size-row">
@@ -3691,6 +3754,17 @@
     }
     const o = active();
     if (!o) return;
+    const kindBtn = e.target.closest('[data-kind]');
+    if (kindBtn) {
+      if (kindBtn.dataset.kind === 'all') {
+        // The full list: the sample just added makes room for the style picked there.
+        if (stillPlaceholder(o)) { st.freshText = null; canvas.remove(o); canvas.discardActiveObject(); canvas.requestRenderAll(); commit(); setSheet(null); }
+        openFlyout('text');
+        return;
+      }
+      await setKind(o, Number(kindBtn.dataset.kind));
+      return;
+    }
     const numStep = e.target.closest('[data-numstep]');
     if (numStep) {
       const box = $(numStep.dataset.for);
@@ -4848,7 +4922,7 @@
   document.addEventListener('focusout', (e) => { if (e.target.id === 'p-text') setTimeout(() => paintSampleNote(st.issues), 0); });
   canvas.on('text:editing:entered', () => paintSampleNote(st.issues));
   canvas.on('text:editing:exited', () => paintSampleNote(st.issues));
-  canvas.on('selection:cleared', () => paintSampleNote(st.issues));
+  canvas.on('selection:cleared', () => { st.freshText = null; paintSampleNote(st.issues); });
   canvas.on('selection:updated', () => paintSampleNote(st.issues));
   canvas.on('selection:created', () => paintSampleNote(st.issues));
   $('check-list').addEventListener('click', (e) => {

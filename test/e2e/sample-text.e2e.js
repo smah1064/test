@@ -21,8 +21,12 @@ test('an unchanged sample text is flagged in the editor and on the proof; typing
       await page.setViewportSize({ width: 360, height: 760 });
       await page.goto(`${srv.base}/editor?product=mug`);
       await page.waitForFunction(() => window.__editor);
-      await page.click('[data-flyout="text"]');
-      await page.locator('#text-presets button').first().click();
+      await page.click('.tools [data-flyout="text"]');
+      // (Phones, editor redesign stage 5: Text adds a heading at once; the computer opens the list of styles.)
+      if (await page.isVisible('#flyout-text')) await page.locator('#text-presets button').first().click();
+      await page.waitForSelector('#p-text');
+      // (Phones open the keyboard on the new text; the note shows once the customer leaves its box.)
+      await page.evaluate(() => document.activeElement && document.activeElement.blur());
       await page.waitForTimeout(500);
       const sample = lang === 'ar' ? 'نصك هنا' : 'Your Text';
       assert.ok(await page.locator('#sample-note').isVisible(), 'the note shows on the design');

@@ -22,8 +22,10 @@ async function openEditor(browser, base, { lang = 'ar', viewport = { width: 412,
   return { ctx, page, errors };
 }
 async function addText(page) {
-  await page.click('[data-flyout="text"]');
-  await page.locator('#text-presets button').first().click();
+  await page.click('.tools [data-flyout="text"]');
+  // (Phones, editor redesign stage 5: Text adds a heading at once; the computer opens the list of styles.)
+  if (await page.isVisible('#flyout-text')) await page.locator('#text-presets button').first().click();
+  await page.waitForSelector('#p-text');
   await page.waitForSelector('#p-text');
   await page.evaluate(() => document.activeElement && document.activeElement.blur());
   await page.waitForTimeout(300);

@@ -21,8 +21,10 @@ async function openPhone(browser, base, lang, viewport = { width: 412, height: 8
   return { ctx, page, errors };
 }
 async function addName(page, words) {
-  await page.click('[data-flyout="text"]');
-  await page.locator('#text-presets button').first().click();
+  await page.click('.tools [data-flyout="text"]');
+  // (Phones, editor redesign stage 5: Text adds a heading at once; the computer opens the list of styles.)
+  if (await page.isVisible('#flyout-text')) await page.locator('#text-presets button').first().click();
+  await page.waitForSelector('#p-text');
   await page.waitForSelector('#p-text');
   await page.fill('#p-text', words);
   await page.dispatchEvent('#p-text', 'input');
@@ -116,8 +118,10 @@ test('phones: the print check opens its own short sheet', { timeout: 90000 }, as
   const browser = await loadPlaywright().chromium.launch();
   try {
     const { ctx, page, errors } = await openPhone(browser, srv.base, 'ar');
-    await page.click('[data-flyout="text"]');
-    await page.locator('#text-presets button').first().click(); // the sample words, left as they are
+    await page.click('.tools [data-flyout="text"]');
+    // (Phones, editor redesign stage 5: Text adds a heading at once; the computer opens the list of styles.)
+    if (await page.isVisible('#flyout-text')) await page.locator('#text-presets button').first().click();
+    await page.waitForSelector('#p-text');
     await page.waitForTimeout(500);
     await page.evaluate(() => { document.activeElement && document.activeElement.blur(); const c = window.__editor.canvas; c.discardActiveObject(); c.requestRenderAll(); c.fire('selection:cleared'); });
     await page.waitForFunction(() => /warn|bad/.test(document.getElementById('check-chip').className));
