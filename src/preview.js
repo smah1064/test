@@ -69,6 +69,9 @@ function isOpen(p) {
   return /^\/(?:js|css|vendor|fonts)\/[^]*$/.test(p)
     || /^\/(?:favicon\.(?:ico|svg)|apple-touch-icon\.png|icon-(?:192|512|maskable-512)\.png|site\.webmanifest|robots\.txt)$/.test(p)
     || p === '/sw.js' || /^\/offline(?:\.html)?$/.test(p) // the installed app's worker and its "no connection" page
+    // The phone apps: Google's and Apple's checks that the shop's links may open in the app (fetched without cookies),
+    // and the apps' own settings, read before a person may be invited. (Owner's OK, 26 Nov.)
+    || p === '/.well-known/assetlinks.json' || p === '/.well-known/apple-app-site-association' || p === '/app/config.json'
     || /^\/img\/logo-[a-z-]+\.svg$/.test(p) || p === '/img/og-ebda3.png' // (the link preview on WhatsApp)
     || /^\/admin(?:\.html)?\/?$/i.test(p) // the dashboard: its own password, however the address is written
     || p.startsWith('/api/admin/')

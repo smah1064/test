@@ -7275,6 +7275,56 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     res.set({ 'Cache-Control': 'no-cache', 'Content-Security-Policy': "default-src 'self'; frame-ancestors 'none'; base-uri 'none'" });
     res.type('application/javascript').send(fs.readFileSync(swFile));
   });
+  // ---------- The phone apps (branch mobile-apps, folder mobile/): what Google, Apple and the apps read here ----------
+  // (Open while the shop is private, see src/preview.js. Owner's OK, 26 Nov.)
+  const APP_ID = 'me.ebda3.app';
+  // Android: order, proof and share links tapped in WhatsApp open in the app. The signing keys' fingerprints come from
+  // APP_ANDROID_SHA256 (comma-separated, "AA:BB:…"); until it is set, not found.
+  app.get('/.well-known/assetlinks.json', (req, res) => {
+    const prints = String(process.env.APP_ANDROID_SHA256 || '').split(',').map((x) => x.trim().toUpperCase()).filter((x) => /^(?:[0-9A-F]{2}:){31}[0-9A-F]{2}$/.test(x));
+    if (!prints.length) throw new HttpError(404, 'notFound');
+    res.set('Cache-Control', 'public, max-age=3600');
+    res.json([{ relation: ['delegate_permission/common.handle_all_urls'], target: { namespace: 'android_app', package_name: APP_ID, sha256_cert_fingerprints: [...new Set(prints)] } }]);
+  });
+  // iPhone: the same (universal links), for the Apple team in APP_APPLE_TEAM_ID; the dashboard, the API, sign-in and
+  // files stay in the browser. Until it is set, not found.
+  app.get('/.well-known/apple-app-site-association', (req, res) => {
+    const team = String(process.env.APP_APPLE_TEAM_ID || '').trim().toUpperCase();
+    if (!/^[A-Z0-9]{10}$/.test(team)) throw new HttpError(404, 'notFound');
+    const components = [...['/admin*', '/api/*', '/auth/*', '/files/*', '/dl/*'].map((x) => ({ '/': x, exclude: true })), { '/': '/*' }];
+    res.set('Cache-Control', 'public, max-age=3600');
+    res.type('application/json').send(JSON.stringify({ applinks: { details: [{ appIDs: [`${team}.${APP_ID}`], components }] } }));
+  });
+  // The apps' settings, so the shop can ask for an update or switch an app feature on without a new app version:
+  // the defaults here, with what DATA_DIR/app-config.json says on top (every field optional; anything else ignored).
+  const APP_CONFIG_FILE = path.join(dataDir, 'app-config.json');
+  const appBuild = (v, fallback) => (Number.isInteger(v) && v >= 0 && v <= 99999999 ? v : fallback);
+  const appUrl = (v) => (typeof v === 'string' && /^https:\/\/[^\s"<>]{4,300}$/.test(v) ? v : null);
+  function appConfig() {
+    let own = {};
+    try { own = JSON.parse(fs.readFileSync(APP_CONFIG_FILE, 'utf8')) || {}; } catch (e) { /* none yet, or unreadable: the defaults */ }
+    const side = (k, store) => {
+      const o = own[k] && typeof own[k] === 'object' ? own[k] : {};
+      const url = appUrl(o.storeUrl) || store;
+      return { minBuild: appBuild(o.minBuild, 10000), latestBuild: appBuild(o.latestBuild, 10000), ...(url ? { storeUrl: url } : {}) };
+    };
+    const msg = own.message && typeof own.message === 'object' ? own.message : null;
+    const text = (v) => (typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 300) : '');
+    const f = own.features && typeof own.features === 'object' ? own.features : {};
+    const social = f.socialLogin && typeof f.socialLogin === 'object' ? f.socialLogin : {};
+    const hosts = Array.isArray(own.inAppHosts) ? own.inAppHosts.map((h) => String(h).toLowerCase().trim()).filter((h) => /^(?=.{3,100}$)[a-z0-9-]+(?:\.[a-z0-9-]+)+$/.test(h)).slice(0, 10) : [];
+    return {
+      android: side('android', `https://play.google.com/store/apps/details?id=${APP_ID}`),
+      ios: side('ios', appUrl(process.env.APP_IOS_STORE_URL)),
+      ...(msg && (text(msg.ar) || text(msg.en)) ? { message: { ar: text(msg.ar) || text(msg.en), en: text(msg.en) || text(msg.ar) } } : {}),
+      features: { push: f.push === true, socialLogin: { android: social.android === true, ios: social.ios === true } },
+      inAppHosts: hosts,
+    };
+  }
+  app.get('/app/config.json', (req, res) => {
+    res.set('Cache-Control', 'no-cache');
+    res.json(appConfig());
+  });
   // The manifest: checked again too (a changed name or icon reaches installed apps), read as a web manifest.
   app.get('/site.webmanifest', (req, res, next) => {
     res.set('Cache-Control', 'no-cache');

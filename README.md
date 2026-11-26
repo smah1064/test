@@ -224,6 +224,24 @@ The site installs like an app ("Add to Home Screen"): its own icon, full screen,
 - While the shop is private, the manifest, icons, the worker and the offline page load for everyone (none of them shows the shop); the shop itself still needs an invitation.
 - The dashboard (`/admin`) opens inside the same app; it has no separate icon.
 
+## Phone apps: what the website serves for them
+
+The iPhone and Android apps (branch `mobile-apps`, folder `mobile/`) show this website in the app. Three addresses are
+for them; all three answer while the shop is private (Google and Apple fetch the first two without cookies):
+
+- `/.well-known/assetlinks.json` (Android): order, proof and share links tapped in WhatsApp open in the app. Set
+  `APP_ANDROID_SHA256` (Hostinger → Node.js → environment variables) to the app's signing-key fingerprints, comma
+  separated (`AA:BB:…`, 32 pairs): the Play App Signing key and the upload key from Play Console. Not found until set.
+- `/.well-known/apple-app-site-association` (iPhone, universal links): set `APP_APPLE_TEAM_ID` (10 letters/digits,
+  from the Apple developer account). The dashboard, `/api`, `/auth`, `/files` and `/dl` stay in the browser. Not found
+  until set.
+- `/app/config.json`: the apps' settings, so the shop can ask for an update or switch a feature on without a new app
+  version: `android` / `ios` (`minBuild`: below it the app asks to update first; `latestBuild`: below it a one-time
+  banner; `storeUrl`), `message` (`ar`, `en`), `features` (`push`, `socialLogin.android` / `.ios`) and `inAppHosts`
+  (hosts that may open inside the app, e.g. the payment page's). Defaults in `src/app.js` (`appConfig`); put any of
+  these in `DATA_DIR/app-config.json` to change them (anything else in the file is ignored). `APP_IOS_STORE_URL` sets the
+  App Store link. A build number is major×10000 + minor×100 + patch (1.0.0 → 10000).
+
 ## Backups
 
 Everything the shop saves is in one folder (`DATA_DIR`; on Hostinger `/home/u893141490/pod-data`, outside the website folder, so deploys never touch it): `db.json` (orders, customers, coupons, the team, approvals), `files/` (customers' designs and print files), `catalog-photos/`, `library/`, `shares/`, `approvals/`, `models/`, `pdf-uploads/`, `activity.jsonl`. The code is on GitHub; passwords and keys are in Hostinger's environment variables (keep a copy in a password manager).
