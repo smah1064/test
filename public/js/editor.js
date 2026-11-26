@@ -650,6 +650,7 @@
     const z = Math.max(0.15, base) * st.zoom;
     canvas.setDimensions({ width: Math.round(W * z), height: Math.round(H * z) });
     canvas.setViewportTransform([z * k, 0, 0, z * k, (W * z * (1 - k)) / 2, (H * z * (1 - k)) / 2]);
+    if (!focus && st.zoom > 1.01 && typeof centerOnPrint === 'function') requestAnimationFrame(centerOnPrint); // (QA 26 Nov)
     if (prod && !focus && st.zoom <= 1.01) {
       // The product in the middle of the room left between the buttons above and below it.
       const pad = parseFloat(scs.paddingTop) || 0;
@@ -2926,6 +2927,18 @@
     const strip = $('el-strip');
     if (!bar || !strip) return;
     const o = active();
+    // Cropping a photo: Cancel, Free / Square and Apply in the same place (QA 26 Nov: the photo bar's Crop left no way
+    // out on a phone).
+    if (MOBILE.matches && crop && st.sheet !== 'props') {
+      document.body.classList.add('el-on');
+      bar.hidden = false;
+      strip.hidden = true;
+      strip.innerHTML = '';
+      bar.innerHTML = `<button type="button" class="el-done" data-el="crop-cancel">${esc(t('props.cropCancel'))}</button>`
+        + ['free', 'square'].map((k) => `<button type="button" class="el-btn${(k === 'square') === Boolean(crop.square) ? ' active' : ''}" data-el="crop-${k}" aria-pressed="${(k === 'square') === Boolean(crop.square)}"><span>${esc(t(k === 'free' ? 'props.cropFree' : 'props.cropSquare'))}</span></button>`).join('')
+        + `<button type="button" class="el-done el-apply" data-el="crop-apply">${esc(t('props.cropApply'))}</button>`;
+      return;
+    }
     const on = Boolean(MOBILE.matches && o && !crop && !st.preview && !st.exporting && st.sheet !== 'product' && st.sheet !== 'check');
     document.body.classList.toggle('el-on', on);
     bar.hidden = !on;
@@ -2970,6 +2983,15 @@
   if ($('el-bar')) {
     $('el-bar').addEventListener('click', serial(async (e) => {
       const b = e.target.closest('[data-el]');
+      if (b && crop && /^crop-/.test(b.dataset.el)) {
+        const c = b.dataset.el;
+        if (c === 'crop-apply') applyCrop();
+        if (c === 'crop-cancel') cancelCrop();
+        if (c === 'crop-free') setCropSquare(false);
+        if (c === 'crop-square') setCropSquare(true);
+        renderElBar();
+        return;
+      }
       const o = active();
       if (!b || !o) return;
       const k = b.dataset.el;
@@ -3070,8 +3092,11 @@
     const wrap = btn.parentElement.getBoundingClientRect();
     const w = a.w * vt[0];
     const h = a.h * vt[3];
-    btn.style.width = `${Math.max(120, Math.round(w - 16))}px`;
-    btn.style.maxHeight = `${Math.max(64, Math.round(h - 16))}px`;
+    btn.classList.toggle('on-dark', POD.luminance(surfaceHex()) < 0.3);
+    btn.classList.toggle('short', h < 150);
+    btn.classList.toggle('tiny', h < 96 || w < 110);
+    btn.style.width = `${Math.max(56, Math.round(w - 12))}px`;
+    btn.style.maxHeight = `${Math.max(48, Math.round(h - 12))}px`;
     const bw = btn.offsetWidth;
     const bh = btn.offsetHeight;
     const x = cv.left + a.x * vt[0] + vt[4] + w / 2 - bw / 2;
@@ -4217,6 +4242,7 @@
   // ---------- Product options ----------
   function renderOptions() {
     const p = st.product;
+    requestAnimationFrame(() => { if (typeof renderTopBar === 'function') renderTopBar(); }); // (the new colour at once, QA 26 Nov)
     $('product-select').innerHTML = products.map((x) => `<option value="${x.id}" ${x === p ? 'selected' : ''}>${esc(tr(x.name))}</option>`).join('');
     // (An order's item, changed by the shop or by the customer, stays the product ordered: the server refuses another
     // one, but only after the note was typed and the files uploaded. QA 25 Nov.)
@@ -4677,7 +4703,11 @@
   function togglePreview() {
     st.preview = !st.preview;
     $('preview-toggle').classList.toggle('active', st.preview);
-    if ($('ed-guides')) $('ed-guides').setAttribute('aria-pressed', String(st.preview));
+    if ($('ed-guides')) {
+      $('ed-guides').setAttribute('aria-pressed', String(st.preview));
+      const word = $('ed-guides').querySelector('[data-i18n]');
+      if (word) { word.dataset.i18n = st.preview ? 'bar.showGuides' : 'bar.preview'; word.textContent = t(word.dataset.i18n); }
+    }
     positionStartHere();
     if (st.preview) canvas.discardActiveObject();
     applyClips();

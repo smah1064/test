@@ -1812,3 +1812,22 @@ html[dir="rtl"] .more-chev { transform: scaleX(-1); }
 @media (min-width: 1200px) { .props-dock .fx-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 @media (min-width: 1200px) { .flyout.dock-default .fly-close { visibility: hidden; } }
 .check-chip.idle { background: #fff; color: var(--ink-3); }
+
+/* QA 26 Nov (phones): start prompt on dark products and small print areas; labels that fit; thumb-size leftovers. */
+.start-here .start-plus { flex: none; }
+.start-here.on-dark { color: #fff; }
+.start-here.on-dark small { color: rgba(255,255,255,.8); }
+.start-here.short small { display: none; }
+.start-here.tiny b, .start-here.tiny small { display: none; }
+.el-apply { background: var(--ink) !important; color: #fff !important; border-color: var(--ink) !important; }
+@media (max-width: 820px) {
+  .el-btn { white-space: normal; line-height: 1.15; text-align: center; font-size: 10.5px; }
+  .el-btn span { display: block; max-width: 100%; overflow-wrap: anywhere; }
+  .float-bar button { min-width: 44px; justify-content: center; }
+  .layers li button { min-width: 44px; min-height: 44px; }
+  .place-field .btn, #place-field .btn { min-width: 44px; min-height: 44px; }
+  .tpl-cat, .small-chips .chip, .lib-types .chip, #sticker-cats .chip { min-height: 44px; }
+  .sample-note button { min-height: 44px; padding: 10px 4px; margin: -10px 0; }
+  /* A product with one side: no Front / Back switch to show. */
+  .stage-bar:not(:has(.side-tabs.pages)) .side-tabs:not(:has(.side-tab + .side-tab)) { display: none; }
+}
