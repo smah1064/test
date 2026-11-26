@@ -341,3 +341,38 @@ test('a big zip goes up in pieces: pieces sent again or out of order are told wh
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
 });
+
+test('published designs join the editable-words list (off without a Gemini key); their words-free pictures are served', async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pod-libupload-words-'));
+  const keyWas = process.env.GEMINI_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+  const { server, base, auth, get, ready } = await shop(dataDir, { zipWaitMs: 0 });
+  try {
+    const up = await fetch(`${base}/api/admin/library/uploads`, { method: 'POST', headers: { ...auth, 'Content-Type': 'application/zip' }, body: await pictureZip(1) });
+    const { batch } = await up.json();
+    const done = await ready(batch.id);
+    const pub = await (await fetch(`${base}/api/admin/library/uploads/${batch.id}/publish`, { method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' }, body: JSON.stringify({ items: done.items.map((i) => ({ id: i.id, products: ['tshirt'] })) }) })).json();
+    const id = pub.published[0].designId;
+    let state = null;
+    for (let i = 0; i < 50 && !(state && state.designs[id]); i++) {
+      state = await get('/api/admin/library/words');
+      if (!state.designs[id]) await new Promise((r) => setTimeout(r, 50));
+    }
+    assert.strictEqual(state.enabled, false);
+    assert.strictEqual(state.designs[id].status, 'off', JSON.stringify(state.designs[id]));
+    // Not for anyone signed out.
+    assert.strictEqual((await fetch(`${base}/api/admin/library/words`)).status, 401);
+    // The words-free copies are served like the originals once made; other names are not.
+    assert.strictEqual((await fetch(`${base}/library-art/${id}/nowords-web.png`)).status, 404);
+    const dir = path.join(dataDir, 'library', 'art', id);
+    fs.copyFileSync(path.join(dir, 'web.png'), path.join(dir, 'nowords-web.png'));
+    const r = await fetch(`${base}/library-art/${id}/nowords-web.png`);
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.headers.get('content-type'), 'image/png');
+    assert.strictEqual((await fetch(`${base}/library-art/${id}/other.png`)).status, 404);
+  } finally {
+    if (keyWas === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = keyWas;
+    server.close();
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});
