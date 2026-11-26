@@ -508,6 +508,8 @@ async function drawnThumb(svgTpl, hex) {
 const MERGE_MAX_ROWS = 1000;
 /** Pieces of one design (one artwork in several sizes / colours). */
 const MAX_PIECES = 1000;
+/** Products sold in packs (cards, flyers, booklets): the most copies of one design online; more on WhatsApp (owner, 26 Nov). */
+const MAX_PACK_COPIES = 10000;
 
 /** Per-visitor limits; tests and special setups can override them. */
 const DEFAULT_LIMITS = {
@@ -1649,6 +1651,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       total += qty;
     }
     if (total > MAX_PIECES) throw new HttpError(400, 'qtyTooMany', { max: MAX_PIECES });
+    // Packs: the copies count (1,000 packs of 100 booklets was 100,000 copies on cash on delivery. QA 26 Nov).
+    const copies = [...merged.values()].reduce((n, l) => n + l.qty * (l.sz.pack && l.sz.copies > 0 ? l.sz.copies : 1), 0);
+    if ([...merged.values()].some((l) => l.sz.pack) && copies > MAX_PACK_COPIES) throw new HttpError(400, 'qtyTooManyCopies', { max: MAX_PACK_COPIES.toLocaleString('en-US') });
     if (total === 1 && merged.size === 1) {
       const only = [...merged.values()][0];
       if (only.co.id === colorDef.id && only.sz.id === sizeDef.id) return null; // just one, as chosen
@@ -2169,6 +2174,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   // ---------- Photo quality boost ----------
   // Enlarge a low-resolution photo (Lanczos) and sharpen it, so it prints crisper.
   const enhanceHits = new Map();
+  /**
+   * A real photo file by its own first bytes (PNG, JPEG or WebP), whatever type the request says: the AI photo tools
+   * never get an SVG, PDF or anything else to decode (owner's OK, 26 Nov, from the security review).
+   */
+  const isPhotoFile = (b) => b.length >= 12 && (
+    (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47)
+    || (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff)
+    || (b.toString('latin1', 0, 4) === 'RIFF' && b.toString('latin1', 8, 12) === 'WEBP'));
   app.post('/api/enhance', express.raw({ type: ['image/png', 'image/jpeg', 'image/webp'], limit: '15mb' }), async (req, res, next) => {
     try {
       const now = Date.now();
@@ -2177,7 +2190,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       enhanceHits.set(req.ip, [...hits, now]);
       if (enhanceHits.size > 5000) enhanceHits.clear();
       const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
-      if (buf.length < 32) throw new HttpError(400, 'enhanceBad');
+      if (buf.length < 32 || !isPhotoFile(buf)) throw new HttpError(400, 'enhanceBad');
       const want = Math.min(4, Math.max(1, Number(req.get('x-scale')) || 2));
       const out = await printfiles.enhancePhoto(buf, want).catch(() => { throw new HttpError(400, 'enhanceBad'); });
       res.set('X-Scale', String(out.scale));
@@ -2193,7 +2206,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   app.post('/api/remove-bg', express.raw({ type: ['image/png', 'image/jpeg', 'image/webp'], limit: '15mb' }), async (req, res, next) => {
     try {
       const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
-      if (buf.length < 32) throw new HttpError(400, 'enhanceBad');
+      if (buf.length < 32 || !isPhotoFile(buf)) throw new HttpError(400, 'enhanceBad');
       rateLimit(req, 'removeBg');
       rateLimit(req, 'removeBgAll', '*');
       const t0 = Date.now();
@@ -2300,6 +2313,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       }
       // Several artboards (a logo "master" .ai): the first is drawn, and the editor says so.
       if (out.pages > 1) res.set('X-Artwork-Pages', String(Math.min(out.pages, 999)));
+      // A photo saved as PDF / EPS, drawn bigger than its own pixels: how many real pixels it has, for the print
+      // check (QA 26 Nov: a 300 x 200 photo passed as "ready to print").
+      if (out.photoPx && out.photoPx.w > 0 && out.photoPx.h > 0) res.set('X-Artwork-Photo-Px', `${Math.round(out.photoPx.w)}x${Math.round(out.photoPx.h)}`);
       res.type('image/png').send(out.png);
     } catch (e) {
       next(e);

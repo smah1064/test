@@ -965,6 +965,7 @@ window.POD_STRINGS = {
   'qty.packCheaperMix': ['Tip: buy {list} as a pack and it all comes to only {price} (you chose {typed} for {now}).', 'نصيحة: لو خدت {list} باكدج، الإجمالي يبقى {price} بس (انت مختار {typed} بـ {now}).'],
   'qty.packCheaperEach': ['Tip: buy {list}, each as a pack, and it all comes to only {price} (you chose {typed} for {now}).', 'نصيحة: لو خدت {list}، كل واحدة باكدج، الإجمالي يبقى {price} بس (انت مختار {typed} بـ {now}).'],
   'qty.packOf': ['{copies} of {color}', '{copies} {color}'],
+  'qty.maxCopies': ['Up to {n} copies of one design online. For more, please contact us on WhatsApp.', 'أقصى عدد أونلاين {n} نسخة للتصميم الواحد. لو محتاج أكتر، كلمنا على واتساب.'],
   'qty.max': ['Up to {n} pieces per colour and size online. For more, please contact us on WhatsApp.', 'أقصى عدد أونلاين {n} قطعة لكل لون ومقاس. لو محتاج أكتر، كلمنا على واتساب.'],
   'check.lowres': ['{name} is low resolution ({dpi} DPI) and will look blurry. Make it smaller or use a bigger image.', 'دقة {name} قليلة ({dpi} DPI) وهيطلع مش واضح. صغّره أو استخدم صورة أكبر.'],
   'check.okres': ['{name} is {dpi} DPI: OK, but 150+ looks sharper.', 'دقة {name} {dpi} DPI: مقبولة، بس من 150 وطالع بتبقى أوضح.'],
