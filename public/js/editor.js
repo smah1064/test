@@ -6730,11 +6730,24 @@
     return out;
   }
   /** Makes the link, or sends the latest pages to the one this design has. Returns st.view, or null when there is nothing to show. */
+  // The robot check for a new link (owner, 26 Nov): invisible to people; its box (in the "Making the link…" cover) shows
+  // only when Cloudflare wants a tick. Signed-in customers aren't asked by the shop.
+  const linkCap = POD.captcha && $('link-cap') ? POD.captcha($('link-cap')) : null;
+  async function linkToken() {
+    if (!linkCap) return {};
+    try {
+      const tok = await linkCap.token();
+      return tok ? { captchaToken: tok } : {};
+    } catch (e) {
+      return {};
+    }
+  }
   async function sendView() {
     if (!viewable() || !designedSides().length) return null;
     const pages = await viewPages();
     if (!pages.length) return null;
-    const body = JSON.stringify({ productId: st.product.id, options: st.options || {}, pages });
+    const data = { productId: st.product.id, options: st.options || {}, pages };
+    const body = JSON.stringify(data);
     if (viewOk(st.view)) {
       try {
         await POD.api('/api/views/' + encodeURIComponent(st.view.id), { method: 'PUT', headers: { 'Content-Type': 'application/json', 'x-view-key': st.view.key }, body });
@@ -6743,7 +6756,7 @@
         if (![403, 404, 410].includes(e.status)) throw e; // (gone, or made on another device: a new one below)
       }
     }
-    const made = await POD.api('/api/views', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+    const made = await POD.api('/api/views', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...data, ...(await linkToken()) }) }).finally(() => { if (linkCap) linkCap.reset(); });
     st.view = { id: made.id, key: made.key };
     return st.view;
   }
@@ -6830,7 +6843,7 @@
       const share = await POD.api('/api/shares', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productId: st.product.id, color: st.colorId, size: st.sizeId, sizePicked: Boolean(st.sizePicked), options: st.options || {}, sides: sidesPayload, previews }),
+        body: JSON.stringify({ productId: st.product.id, color: st.colorId, size: st.sizeId, sizePicked: Boolean(st.sizePicked), options: st.options || {}, sides: sidesPayload, previews, ...(await linkToken()) }),
       });
       try { localStorage.setItem(shareKey(), JSON.stringify({ id: share.id, sig })); } catch (e) { /* private mode */ }
       openShareDialog(share);
@@ -6838,6 +6851,7 @@
       await showSide(original).catch(() => {});
       toast(err.message, 'error');
     } finally {
+      if (linkCap) linkCap.reset(); // (a token works once)
       busy(false);
       if (st.zoom !== prevZoom) setZoom(prevZoom);
       canvas.requestRenderAll();

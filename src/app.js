@@ -2479,10 +2479,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   app.post('/api/shares', (req, res, next) => {
     rateLimit(req, 'shares');
     next();
-  }, express.json({ limit: '15mb' }), (req, res) => {
+  }, express.json({ limit: '15mb' }), asyncRoute(async (req, res) => {
     const b = req.body || {};
     const product = getProduct(b.productId);
     if (!product) throw new HttpError(400, 'unknownProduct', { id: String(b.productId || '').slice(0, 40) });
+    // A new link: the robot check (invisible to people), as at checkout; signed-in customers passed it at sign-up
+    // (owner, 26 Nov).
+    if (!currentCustomer(req)) await checkCaptcha(req);
     const color = product.colors.find((c) => c.id === b.color) || product.colors[0];
     const size = product.sizes.find((z) => z.id === b.size) || product.sizes[0];
     const has = (id) => b.sides && b.sides[id] && Array.isArray(b.sides[id].objects) && b.sides[id].objects.length;
@@ -2521,7 +2524,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     };
     writeShare(share);
     res.status(201).json(publicShare(share));
-  });
+  }));
   // ---------- View-only links: flip through a booklet, or see both sides (owner's decision, 26 Nov) ----------
   // Whoever has the link only looks (no approval, comments, prices or customer details); it shows the latest version
   // the customer saved (the editor sends the pictures again with the link's own key) and stops 60 days after that.
@@ -2536,16 +2539,18 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       throw viewErr(e);
     }
   }
-  app.post('/api/views', (req, res, next) => { rateLimit(req, 'views'); next(); }, express.json({ limit: '40mb' }), (req, res) => {
+  app.post('/api/views', (req, res, next) => { rateLimit(req, 'views'); next(); }, express.json({ limit: '40mb' }), asyncRoute(async (req, res) => {
     const b = req.body || {};
     const product = getProduct(b.productId);
     if (!viewable(product)) throw new HttpError(400, 'viewProduct');
     const { pics, kind, rtl } = viewPictures(product, b);
+    // A new link: the robot check (invisible to people); signed-in customers passed it at sign-up (owner, 26 Nov).
+    if (!currentCustomer(req)) await checkCaptcha(req);
     if (!takeShopBudget('viewsMB', LIMITS.viewsMB, Math.max(1, Math.ceil(pics.reduce((n, p) => n + p.data.length, 0) / 1e6)))) throw new HttpError(429, 'tooManyWait', { min: 60 });
     const { view, key } = views.create({ productId: product.id, kind, rtl, pics });
     res.set('Cache-Control', 'no-store');
     res.status(201).json({ id: view.id, key, url: `/view?id=${view.id}` });
-  });
+  }));
   // The customer's newer version (with the link's key): the same link shows it.
   app.put('/api/views/:id', (req, res, next) => { rateLimit(req, 'views'); next(); }, express.json({ limit: '40mb' }), (req, res) => {
     let v;
