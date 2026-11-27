@@ -232,15 +232,6 @@
     // A few pieces left (stock counted by the shop).
     $('pp-few').hidden = !product.fewLeft;
     $('pp-few').textContent = product.fewLeft ? t('pp.fewLeft', { n: POD.num(product.fewLeft) }) : '';
-    // Big or fragile pieces go by the shop's own van, in Cairo and Giza only: said before designing (CNC and UV
-    // products, 27 Nov). The whole product, or just its biggest sizes.
-    const govs = (catalog && catalog.governorates) || [];
-    const allAreas = POD.deliverAreas(product);
-    const vanSizes = product.sizes.filter((z) => Array.isArray(z.deliverTo) && z.deliverTo.length);
-    const areaText = allAreas ? t('deliver.only', { areas: POD.areaNames(allAreas, govs) })
-      : vanSizes.length ? t('deliver.onlySizes', { sizes: vanSizes.map((z) => tr(z.label)).join(POD.sep()), areas: POD.areaNames(vanSizes[0].deliverTo, govs) }) : '';
-    $('pp-area').hidden = !areaText;
-    $('pp-area').textContent = areaText;
     renderPicture();
     $('pp-color-name').textContent = tr(color.name);
     $('pp-color-label').textContent = product.colorLabel ? `${tr(product.colorLabel)}:` : t('panel.colour');

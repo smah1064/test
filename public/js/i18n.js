@@ -1275,10 +1275,6 @@ window.POD_STRINGS = {
   // Checkout: errors shown at the field
   'checkout.needField': ['Please fill in: {field}', 'من فضلك اكتب: {field}'],
   'checkout.needGov': ['Choose your governorate', 'اختار المحافظة'],
-  // Big or fragile pieces go by the shop's own van, in Cairo and Giza only (CNC and UV products, 27 Nov).
-  'checkout.deliverOnly': ['{name} is delivered in {areas} only (it goes by our own van). Choose an address there, or remove it from this order.', '{name} بيتوصّل في {areas} بس (بيروح بعربيتنا). اختار عنوان هناك، أو شيله من الطلب ده.'],
-  'deliver.only': ['Delivered in {areas} only, by our own van.', 'بيتوصّل في {areas} بس، بعربيتنا.'],
-  'deliver.onlySizes': ['{sizes}: delivered in {areas} only, by our own van.', '{sizes}: بيتوصّل في {areas} بس، بعربيتنا.'],
   'checkout.badPhone': ['Enter an Egyptian mobile number with 11 digits, e.g. 01012345678', 'اكتب رقم موبايل مصري من ١١ رقم، مثلًا ٠١٠١٢٣٤٥٦٧٨'],
   'checkout.badEmail': ['This email address doesn’t look right. Check it, or leave it empty.', 'الإيميل ده شكله مش مظبوط. راجعه، أو سيبه فاضي.'],
   'checkout.emailWhy': ['We send order updates there, and any proof we need you to approve.', 'بنبعتلك عليه تحديثات الطلب، وأي بروفة محتاجين موافقتك عليها.'],

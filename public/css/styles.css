@@ -1510,8 +1510,6 @@ html[dir="ltr"] .hm-tile-link span { display: inline-block; transform: scaleX(-1
 .dp-gone[hidden] { display: none; }
 /* Cart: an item the shop can't make now; checkout waits until it is removed or saved for later. */
 .cart-entry.is-blocked .cart-item img { opacity: .55; filter: grayscale(.6); }
-.cart-area-note { margin: 4px 0 6px; font-size: 13px; color: var(--ink-2); }
-.cart-area-note::before { content: '🚚 '; }
 .cart-unavail { margin: 8px 0 10px; padding: 9px 12px; border-radius: 10px; background: #fdecea; color: #8e1c1c; font-size: 13.5px; line-height: 1.6; border-inline-start: 3px solid var(--bad); }
 .cart-unavail strong { display: block; font-weight: 700; }
 .cart-unavail span { color: #6b2a2a; }

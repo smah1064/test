@@ -4385,14 +4385,7 @@
     // onto two: editor redesign stage 1). Packs, mugs and the rest keep the price on each chip.
     const extras = p.category === 'apparel' && !p.sizes.some((x) => (x.surcharge || 0) < 0) ? p.sizes.filter((x) => x.surcharge > 0 && sizeOk(p, st.colorId, x)) : [];
     const sizeNoteBox = $('size-note');
-    // Big or fragile pieces go by the shop's own van, in Cairo and Giza only: said with the sizes (CNC and UV products,
-    // 27 Nov). The size chosen, or which sizes.
-    const govs = (catalog && catalog.governorates) || [];
-    const vanNow = POD.deliverAreas(p, [st.sizeId]);
-    const vanSizes = p.sizes.filter((z) => Array.isArray(z.deliverTo) && z.deliverTo.length);
-    const vanText = vanNow ? t('deliver.only', { areas: POD.areaNames(vanNow, govs) })
-      : vanSizes.length ? t('deliver.onlySizes', { sizes: vanSizes.map((z) => tr(z.label)).join(POD.sep()), areas: POD.areaNames(vanSizes[0].deliverTo, govs) }) : '';
-    if (sizeNoteBox) sizeNoteBox.textContent = [extras.map((x) => t('size.extra', { size: tr(x.label), price: money(x.surcharge) })).join(POD.lang === 'ar' ? '، ' : ', '), vanText].filter(Boolean).join(' · ');
+    if (sizeNoteBox) sizeNoteBox.textContent = extras.map((x) => t('size.extra', { size: tr(x.label), price: money(x.surcharge) })).join(POD.lang === 'ar' ? '، ' : ', ');
     $('sizes').innerHTML = p.sizes.map((s) => {
       const out = !sizeOk(p, st.colorId, s);
       // (A garment whose size isn't chosen yet shows none as chosen: Add to cart asks for it, QA 25 Nov.)

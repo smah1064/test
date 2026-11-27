@@ -3451,27 +3451,6 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     }
     return m;
   };
-  /**
-   * Where a design can be delivered: the governorate ids its product, or one of the sizes ordered, is limited to
-   * (`deliverTo`), or null for anywhere. Big or fragile pieces go by the shop's own van in Cairo and Giza only
-   * (giant letters, glass awards, the biggest name art and plaques: CNC and UV products, owner's go 27 Nov).
-   */
-  const deliverAreasOf = (d) => {
-    const p = d && getProduct(d.productId);
-    if (!p) return null;
-    const sizes = d.quantities && d.quantities.length ? d.quantities.map((l) => l.size && l.size.id) : [d.size && d.size.id];
-    let areas = Array.isArray(p.deliverTo) && p.deliverTo.length ? p.deliverTo.slice() : null;
-    for (const id of sizes) {
-      const z = (p.sizes || []).find((x) => x.id === id);
-      if (z && Array.isArray(z.deliverTo) && z.deliverTo.length) areas = areas ? areas.filter((a) => z.deliverTo.includes(a)) : z.deliverTo.slice();
-    }
-    return areas;
-  };
-  /** "Cairo and Giza" / «القاهرة والجيزة». */
-  const areaNames = (ids, lang) => {
-    const names = ids.map((id) => { const g = governorate(id); return g ? g.name[lang] || g.name.en : id; });
-    return lang === 'ar' ? names.join(' و') : names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names.join('');
-  };
   /** How many are left now (from the product as laid over, or a saved edit). */
   const leftOf = (holder, combo) => (combo ? (holder.variantStock || {})[combo] : holder.stock);
   /** "Classic T-Shirt (Black · XL)" for a stock message. */
@@ -4221,14 +4200,6 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     for (const x of wanted.values()) {
       const left = leftOf(getProduct(x.pid), x.combo);
       if (typeof left === 'number' && left < x.n) throw new HttpError(409, 'notEnoughStock', { name: stockName(x.pid, x.combo, langOf(req)), left });
-    }
-    // Delivered only where the shop's van goes: refused for another governorate, naming the item and where it goes.
-    for (const d of designs) {
-      const areas = deliverAreasOf(d);
-      if (areas && !areas.includes(c.governorate)) {
-        const p = getProduct(d.productId);
-        throw new HttpError(409, 'deliverOnlyIn', { name: p.name[langOf(req)] || p.name.en, areas: areaNames(areas, langOf(req)), designId: d.id });
-      }
     }
 
     // Every item approved by the customer against its current proof (see /api/designs/:id/proof).
