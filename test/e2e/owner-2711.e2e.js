@@ -84,3 +84,23 @@ test('editor: 900 DL envelopes never cost more than 1,000', { timeout: 90000 }, 
     await ctx.close();
   }
 });
+
+// Owner's phone (Samsung, 384 px wide), 27 Nov: the whole editor sat shifted sideways. The buy bar's price could not
+// shrink beside the wide "Add to cart" button on screens 361–417 px, so the page was wider than the screen.
+test('editor on a 384 px and a 412 px phone: the page is never wider than the screen (Arabic and English)', { timeout: 120000 }, async () => {
+  for (const lang of ['ar', 'en']) {
+    for (const width of [384, 412]) {
+      const ctx = await browser.newContext({ viewport: { width, height: 800 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
+      await ctx.addInitScript((l) => { try { localStorage.setItem('pod-lang', l); } catch (e) { /* ignore */ } }, lang);
+      try {
+        const page = await openEditor(ctx, srv.base, 'calligraphy', '&library=cnc-cal-bismillah&color=walnut');
+        await page.waitForTimeout(1200);
+        const m = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth, x: window.scrollX }));
+        assert.ok(m.sw <= m.cw, `${lang} ${width}: page ${m.sw} px wide on a ${m.cw} px screen`);
+        assert.strictEqual(m.x, 0, `${lang} ${width}: scrolled sideways`);
+      } finally {
+        await ctx.close();
+      }
+    }
+  }
+});
