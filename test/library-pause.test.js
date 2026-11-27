@@ -28,7 +28,8 @@ const withServer = async (opts, fn) => {
 const shopIds = async (base) => new Set((await (await fetch(`${base}/api/library`)).json()).designs.map((d) => d.id));
 
 test('the starter designs: 155 drawn with real artwork, the rest only text, shapes and icons', () => {
-  assert.strictEqual(SEED.filter(usesArtwork).length, 155);
+  // (Not counting licensed collections: their own artwork, and a draft one isn't in the shop. src/licensed.js)
+  assert.strictEqual(SEED.filter((d) => usesArtwork(d) && !d.licensed).length, 155);
   assert.strictEqual(SEED.length - SEED.filter(usesArtwork).length, 418); // (+ 8 for the engraved pen and wallet, 25 Nov)
 });
 
@@ -72,7 +73,8 @@ test('the real shop: artwork designs only where there are some, text-only ones o
   await withServer({ libraryOnce: ['pause-no-artwork'] }, async ({ base, admin, dataDir }) => {
     const shop = (await (await fetch(`${base}/api/library`)).json()).designs;
     const ids = new Set(shop.map((d) => d.id));
-    assert.ok(SEED.filter(usesArtwork).every((d) => ids.has(d.id)), 'the 87 with artwork stay');
+    assert.ok(SEED.filter((d) => usesArtwork(d) && !d.licensed).every((d) => ids.has(d.id)), 'the 87 with artwork stay');
+    assert.ok(!shop.some((d) => d.licensed), 'a draft licensed collection is never in the shop');
     const on = (pid) => shop.filter((d) => (d.products || []).includes(pid));
     const text = (d) => !usesArtwork(SEED.find((x) => x.id === d.id) || {});
     // A T-shirt and a mug: only artwork designs. Business cards, invitations, cake toppers: their text designs stay.

@@ -104,6 +104,12 @@ const FLAGGED = {
   'st-luxury-monogram': [['S', 'initial'], ['SARA', 'name']],
   'st-luxury-mono-ar': [['م', 'initial'], ['محمد', 'name']],
   'wd-love-monogram': [['A', 'hisInitial'], ['S', 'herInitial']],
+  // The licensed birthday collection (draft): the child's name and age.
+  'lic-sm-invitation': [['عيد ميلاد يوسف', 'kid', 'يوسف'], ['الـ ٦ سنين', 'age', '٦']],
+  'lic-sm-welcome-sign': [['يوسف', 'kid'], ['الـ ٦ سنين', 'age', '٦']],
+  'lic-sm-stickers': [['عيد ميلاد يوسف', 'kid', 'يوسف'], ['الـ ٦ سنين', 'age', '٦']],
+  'lic-sm-thankyou': [['عيد ميلاد يوسف', 'kid', 'يوسف'], ['الـ ٦ سنين', 'age', '٦']],
+  'lic-sm-favor-bag': [['يوسف', 'kid'], ['الـ ٦ سنين', 'age', '٦']],
 };
 
 test('every flagged design really has its sample text, marked, and nothing else is marked', () => {
@@ -127,7 +133,7 @@ test('every flagged design really has its sample text, marked, and nothing else 
     }
   }
   assert.deepStrictEqual(problems, []);
-  assert.strictEqual(Object.keys(FLAGGED).length, 80); // (+ 6 pen and wallet designs with a name, 25 Nov)
+  assert.strictEqual(Object.keys(FLAGGED).length, 85); // (+ 6 pen and wallet designs with a name, 25 Nov; + 5 licensed birthday designs, 27 Nov)
 });
 
 test('the marks are well formed: a known kind, the name part inside the text once, never on {field} designs', () => {
@@ -141,7 +147,8 @@ test('the marks are well formed: a known kind, the name part inside the text onc
       if (it.kind !== 'text' || typeof it.text !== 'string' || !it.text.trim()) problems.push(`${d.id}: a mark on something that is not a text`);
       if (!D.NAME_ROLES.includes(it.sampleName)) problems.push(`${d.id}: unknown kind of name ${it.sampleName}`);
       if (it.samplePart !== undefined && (typeof it.samplePart !== 'string' || !it.samplePart.trim() || it.text.split(it.samplePart).length !== 2)) problems.push(`${d.id}: samplePart "${it.samplePart}" must be in "${it.text}" exactly once`);
-      if (!/[\p{L}]/u.test(it.samplePart || it.text)) problems.push(`${d.id}: "${it.text}" has no letters`);
+      // (An age is a number, not letters.)
+      if (it.sampleName !== 'age' && !/[\p{L}]/u.test(it.samplePart || it.text)) problems.push(`${d.id}: "${it.text}" has no letters`);
     }
     // The page finds them all, in the design's order.
     const found = D.sampleNames(d);
