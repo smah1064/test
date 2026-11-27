@@ -152,6 +152,8 @@ test('phones (Pixel 7 and 360px), Arabic and English: category chips, header chi
         assert.ok(cats.length >= 6, `${where}: the categories are all there (${cats.length})`);
         for (const c of cats) assert.ok(c.h >= 44 && c.w >= 48, `${where} "${c.label}": 44 px tall, 48 wide (${c.w}x${c.h})`);
         const side = await home.evaluate(() => {
+          // (On phones the chips are one swiped row since 27 Nov, home-ux.e2e.js: back to its start, where it opens.)
+          document.getElementById('cats').scrollLeft = 0;
           const row = document.getElementById('cats').getBoundingClientRect();
           const first = document.querySelector('#cats .chip').getBoundingClientRect();
           return { start: first.left - row.left, end: row.right - first.right };

@@ -20,8 +20,9 @@ test('home on a phone: the four points, sized photos, 8 products then "Show all"
       await page.goto(`${srv.base}/`);
       await page.waitForSelector('.hm-gcard');
       // B: four points, between the banner and the tiles.
-      assert.strictEqual(await page.locator('.hm-trust li').count(), 4);
-      assert.match(await page.locator('.hm-trust').innerText(), lang === 'ar' ? /بتشوف البروفة/ : /You see the proof/);
+      // (Today's four; the launch four under them are hidden while the shop takes cash on delivery: home-ux.e2e.js.)
+      assert.strictEqual(await page.locator('.hm-trust li:visible').count(), 4);
+      assert.match(await page.locator('.hm-trust:visible').innerText(), lang === 'ar' ? /بتشوف البروفة/ : /You see the proof/);
       // F: the price note shows on phones too.
       assert.ok(await page.locator('.hm-price-note').isVisible(), 'price note on phones');
       // D: 8 products, and a button for the rest.

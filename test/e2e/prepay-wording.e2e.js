@@ -99,7 +99,7 @@ const EXPECT = {
   },
   on: {
     ar: {
-      home: ['بنوصّل لأي مكان في مصر', 'الدفع مقدّمًا', 'ادفع وانت بتطلب، ومفيش حاجة للمندوب', 'بتدفع مقدّمًا وانت بتطلب، بالكارت أو فودافون كاش أو إنستاباي، ومفيش حاجة تدفعها للمندوب لما الطلب يوصلك.', 'ضمان استرجاع فلوسك لو المطبوع مش زي التصميم'],
+      home: ['بنوصّل لأي مكان في مصر', 'الدفع مقدّمًا', 'ادفع وانت بتطلب، ومفيش حاجة للمندوب', 'بتدفع مقدّمًا وانت بتطلب، بالكارت أو فودافون كاش أو إنستاباي، ومفيش حاجة تدفعها للمندوب لما الطلب يوصلك.', 'ادفع مقدّمًا', 'كارت، فودافون كاش، إنستاباي', 'ضمان ٧ أيام', 'نطبعهالك تاني أو ترجعلك فلوسك'],
       design: ['والدفع مقدّمًا وقت الطلب.', 'مضمون: لو المطبوع مش زي التصميم، نطبعهولك تاني ببلاش أو ترجعلك فلوسك.'],
       cart: ['الدفع مقدّمًا وقت الطلب', 'مفيش حاجة تدفعها للمندوب لما الطلب يوصلك.', 'ادفع بالكارت أو فودافون كاش أو إنستاباي.', 'ضمان استرجاع الفلوس', 'لو المطبوع مش زي التصميم'],
       order: ['الدفع مقدّمًا: ', 'مفيش حاجة تدفعها للمندوب لما الطلب يوصلك.', 'ضمان استرجاع الفلوس', 'على واتساب أو الإيميل خلال ٧ أيام من ما الطلب يوصلك', 'تفاصيل الضمان'],
@@ -108,7 +108,7 @@ const EXPECT = {
       editor: ['مضمون: لو المطبوع مش زي التصميم، نطبعهولك تاني ببلاش أو ترجعلك فلوسك.'],
     },
     en: {
-      home: ['Delivered anywhere in Egypt.', 'Pay in advance', 'Pay when you order, nothing to pay the courier', 'You pay in advance when you order, by card, Vodafone Cash or InstaPay', 'Money-back guarantee if the print doesn\'t match the design'],
+      home: ['Delivered anywhere in Egypt.', 'Pay in advance', 'Pay when you order, nothing to pay the courier', 'You pay in advance when you order, by card, Vodafone Cash or InstaPay', 'Pay in advance', 'Card, Vodafone Cash or InstaPay', '7-day guarantee', 'Reprint or your money back'],
       design: ['Pay when you order.', 'Guaranteed: if the print doesn\'t match your design, we reprint it free or give you your money back.'],
       cart: ['Pay when you order', 'Nothing to pay the courier when your order arrives.', 'Pay by card, Vodafone Cash or InstaPay.', 'Money-back guarantee', 'if the print doesn\'t match the design'],
       order: ['Payment in advance: ', 'Nothing to pay the courier when your order arrives.', 'Money-back guarantee', 'on WhatsApp or by email within 7 days of delivery', 'Guarantee details'],
@@ -185,6 +185,9 @@ for (const prepayOnly of [false, true]) {
             assert.deepStrictEqual(links, [], `${lang} ${p.name}: nothing links to the guarantee`);
             assert.strictEqual(await page.evaluate(() => [...document.querySelectorAll('[data-prepay-only]')].filter((el) => !el.hidden || el.textContent.trim()).length), 0, `${lang} ${p.name}: its parts hidden and empty`);
           }
+          // The home page's guarantee is in the points under the banner (UX item 1, 27 Nov); the lower box that said the
+          // same shows only while switched off.
+          if (p.name === 'home') assert.strictEqual(await page.isVisible('.hm-benefits'), !prepayOnly, `${lang} home: the lower box`);
           // A phone: no sideways scroll.
           assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), `${lang} ${p.name}: no sideways scroll`);
           if (p.name === 'order') {
@@ -201,7 +204,7 @@ for (const prepayOnly of [false, true]) {
           if (prepayOnly && lang === 'ar' && SHOTS) {
             fs.mkdirSync(SHOTS, { recursive: true });
             await page.evaluate(() => document.querySelectorAll('.hm-faq details').forEach((d) => { d.open = true; }));
-            const spot = { home: '.hm-benefits', design: '#dp-add', cart: '#place-order', order: '.guar-card', photos: '#ph-terms', editor: '#add-to-cart' }[p.name];
+            const spot = { home: '.hm-trust-prepay', design: '#dp-add', cart: '#place-order', order: '.guar-card', photos: '#ph-terms', editor: '#add-to-cart' }[p.name];
             if (spot && await page.$(spot)) await page.evaluate((sel) => document.querySelector(sel).scrollIntoView({ block: 'center' }), spot);
             await page.screenshot({ path: path.join(SHOTS, `on-ar-${p.name}.png`) });
           }
