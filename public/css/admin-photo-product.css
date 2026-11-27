@@ -1,0 +1,92 @@
+/* Admin → Products: "From measurements" form (cups, tumblers) and a drinkware product's Measurements section. */
+
+.dw-dlg {
+  --dw-paper: #fbfaf7; --dw-paper-line: #e3e0d8; --dw-cup: #ffffff; --dw-ink: #2b2f38; --dw-dim: #5b6270;
+  --dw-band: rgba(202, 61, 26, .22); --dw-band-line: #ca3d1a; --dw-over: rgba(198, 40, 40, .25); --dw-over-line: #c62828;
+  --dw-handle: #1d4fa8; --dw-guide: #9aa1ad;
+  width: min(980px, calc(100vw - 16px));
+}
+.dw-sec { --dw-paper: #fbfaf7; --dw-paper-line: #e3e0d8; --dw-cup: #ffffff; --dw-ink: #2b2f38; --dw-dim: #5b6270;
+  --dw-band: rgba(202, 61, 26, .22); --dw-band-line: #ca3d1a; --dw-over: rgba(198, 40, 40, .25); --dw-over-line: #c62828;
+  --dw-handle: #1d4fa8; --dw-guide: #9aa1ad; }
+/* The drawings carry their own paper, so they read the same on a light or a dark page (the admin is light today;
+   a dark theme would set data-theme="dark" on the page). */
+:root[data-theme="dark"] .dw-dlg, :root[data-theme="dark"] .dw-sec {
+  --dw-paper: #1d2129; --dw-paper-line: #3a404c; --dw-cup: #2a2f39; --dw-ink: #e8eaef; --dw-dim: #b5bcc8;
+  --dw-band: rgba(255, 122, 89, .28); --dw-band-line: #ff8a6a; --dw-handle: #8fb3ff; --dw-guide: #7d8594;
+}
+
+.dw-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+@media (min-width: 820px) {
+  .dw-layout { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: start; }
+  .dw-draw { position: sticky; top: 0; }
+}
+.dw-fields .pm-fs { margin-bottom: 10px; }
+.dw-fields .field input { width: 100%; }
+.dw-grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 12px; }
+.dw-radios { display: flex; flex-wrap: wrap; gap: 6px; }
+.dw-radios .pm-radio { min-height: 40px; }
+.dw-help { margin: 2px 0 0; }
+.dw-handle-fields { margin-top: 8px; }
+.dw-handle-fields[hidden] { display: none; }
+.dw-adv { margin: 0 0 10px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+.dw-adv summary { cursor: pointer; font-weight: 600; font-size: 14px; color: var(--ink-2); min-height: 28px; }
+.dw-adv[open] summary { margin-bottom: 8px; }
+.dw-form input[aria-invalid="true"] { border-color: var(--bad); box-shadow: 0 0 0 2px rgba(198, 40, 40, .12); }
+
+.dw-fig { margin: 0 0 12px; }
+.dw-fig figcaption { margin-bottom: 4px; }
+.dw-svg { display: block; width: 100%; height: auto; max-height: 300px; }
+.dw-paper { fill: var(--dw-paper); stroke: var(--dw-paper-line); }
+.dw-cup { fill: var(--dw-cup); stroke: var(--dw-ink); stroke-width: 2.5; stroke-linejoin: round; }
+.dw-rim { stroke: var(--dw-ink); stroke-width: 4; stroke-linecap: round; }
+.dw-band { fill: var(--dw-band); stroke: var(--dw-band-line); stroke-width: 1.5; stroke-dasharray: 5 3; }
+.dw-over { fill: var(--dw-over); stroke: var(--dw-over-line); stroke-width: 1.5; stroke-dasharray: 3 3; }
+.dw-handle { fill: none; stroke: var(--dw-handle); stroke-width: 9; stroke-linecap: round; opacity: .85; }
+.dw-tpl { fill: var(--dw-band); stroke: var(--dw-band-line); stroke-width: 2; stroke-linejoin: round; }
+.dw-guide { fill: none; stroke: var(--dw-guide); stroke-width: 1; stroke-dasharray: 4 4; }
+.dw-dim path { fill: none; stroke: var(--dw-dim); stroke-width: 1.2; }
+.dw-dim text, .dw-wait { fill: var(--dw-ink); font-size: 13px; font-weight: 600; font-family: inherit; font-variant-numeric: tabular-nums; }
+.dw-wait { fill: var(--dw-dim); font-weight: 500; }
+.dw-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 6px; }
+.dw-legend [data-dw-lg-handle] { display: inline-flex; align-items: center; gap: 6px; margin-inline-start: 8px; }
+.dw-legend [data-dw-lg-handle][hidden] { display: none; }
+.dw-lg { display: inline-block; width: 14px; height: 10px; border-radius: 3px; }
+.dw-lg-band { background: rgba(202, 61, 26, .22); border: 1.5px dashed #ca3d1a; }
+.dw-lg-handle { background: #1d4fa8; opacity: .85; }
+
+.dw-kindline { margin: 8px 0 4px; }
+.dw-facts, .dw-vals { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 14px; margin: 6px 0; }
+.dw-facts dt, .dw-vals dt { font-size: 12px; color: var(--ink-3); font-weight: 600; }
+.dw-facts dd, .dw-vals dd { margin: 0; font-size: 14px; font-variant-numeric: tabular-nums; }
+.dw-squeeze { margin: 6px 0 0; padding: 7px 10px; border-radius: 8px; background: #fff1d6; color: #6b4100; font-weight: 600; }
+.dw-problems { margin: 6px 0 0; padding: 8px 12px; padding-inline-start: 26px; border-radius: 8px; background: #fdecec; color: var(--bad); font-size: 13px; font-weight: 600; display: grid; gap: 6px; }
+.dw-problems[hidden] { display: none; }
+.dw-problems .btn { margin-inline-start: 6px; color: var(--ink); }
+
+/* The product's Measurements section */
+.dw-sec-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+@media (min-width: 760px) { .dw-sec-grid { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); } }
+.dw-vals { grid-template-columns: minmax(0, 1fr); }
+.dw-sec-draw { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; align-items: center; }
+.dw-sec-draw .dw-svg { max-height: 200px; }
+.dw-checked { margin: 10px 0; padding: 8px 12px; border-radius: 8px; background: #e3f5ea; color: #138a4a; font-weight: 700; }
+.dw-check-box { margin: 10px 0; padding: 10px 12px; border-radius: 10px; background: #fff1d6; color: #6b4100; display: grid; gap: 8px; justify-items: start; }
+.dw-check-box p { margin: 0; line-height: 1.6; }
+.dw-files-h { margin: 14px 0 6px; }
+.dw-files { display: flex; flex-wrap: wrap; gap: 8px; }
+.dw-files .btn { min-height: 40px; }
+.pm-pill-dw { background: #fff0eb; color: #a3300f; }
+.pm-banner .dw-banner-note { font-weight: 600; }
+
+@media (max-width: 560px) {
+  .dw-dlg { width: calc(100vw - 8px); max-height: calc(100dvh - 8px); }
+  .dw-grid3 { grid-template-columns: minmax(0, 1fr); }
+  .dw-fields .pm-grid2 { grid-template-columns: minmax(0, 1fr); }
+  .dw-sec-draw { grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); }
+}
+
+/* The entry in the New product dialog */
+.pm-dw-entry { display: grid; gap: 4px; padding: 10px 12px; border: 1px dashed var(--accent); border-radius: 12px; background: var(--accent-soft); }
+.pm-dw-entry .btn { justify-self: start; min-height: 40px; }
+.pm-dw-entry p { margin: 0; line-height: 1.6; }

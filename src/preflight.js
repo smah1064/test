@@ -5,11 +5,12 @@
  * preflight(design, { readFile, product }) -> { status, checks }
  *   checks: [ { id, level: 'info'|'warn'|'fail', side?, params } ]
  * Check ids and params follow the shared proof contract (resolution, exportSize,
- * empty, outsideSafe, semiTransparent, blankPages, fontNoArabic; fontFallback,
+ * empty, outsideSafe, semiTransparent, blankPages, fontNoArabic, fanMismatch, fanTemplate; fontFallback,
  * lowResImage, tinyText and fileType come from the editor through mergeClientChecks).
  */
 const sharp = require('sharp');
 const { pageSides } = require('./products');
+const drinkGeom = require('../public/js/drinkware-geom');
 
 const DPI_FAIL = 100;
 const DPI_WARN = 150;
@@ -32,6 +33,7 @@ const MIN_STRAY_PX = 3; // ignore fewer near-cut pixels than this (stray antiali
 const MAX_PIXELS = 130e6; // app.js refuses > 120 MP at upload
 const MM_PER_IN = 25.4;
 const GARMENT = ['dtf', 'dtg'];
+const FAN_TOLERANCE = 0.01; // the print's width against the fan's long arc (drinkware made from measurements)
 
 const round1 = (n) => Math.round(n * 10) / 10;
 
@@ -203,6 +205,18 @@ async function checkSide(design, side, { readFile, product }) {
   const bleed = Number(side.bleedIn) || 0;
   const physW = Number(side.widthIn) + 2 * bleed;
   const physH = Number(side.heightIn) + 2 * bleed;
+
+  // 0. Tapered drinkware: the rectangle is warped to a fan for printing. Its width must be the fan's long arc
+  // (φ·r1), or the print would not go round the cup (a design saved before the product was measured again).
+  // Params: widthMm (the print's), arcMm (the fan's); fanTemplate (info): squeezePct, how much narrower the design
+  // comes out at the narrow edge.
+  const fan = side.fan && typeof side.fan === 'object' ? side.fan : null;
+  if (fan) {
+    const arcMm = Number(fan.phi) * Number(fan.r1);
+    const widthMm = Number(side.widthIn) * MM_PER_IN;
+    if (!(arcMm > 0) || !(Math.abs(widthMm - arcMm) <= arcMm * FAN_TOLERANCE)) add('fanMismatch', 'fail', { widthMm: round1(widthMm), arcMm: round1(arcMm) || 0 });
+    if (Number(fan.r1) > 0 && Number(fan.r2) > 0) add('fanTemplate', 'info', { squeezePct: drinkGeom.squeezePct({ r1: Number(fan.r1), r2: Number(fan.r2) }) });
+  }
 
   let buf;
   try {
@@ -490,5 +504,5 @@ module.exports = {
   mergeClientChecks,
   statusOf,
   ARABIC_FOR,
-  THRESHOLDS: { DPI_FAIL, DPI_WARN, ASPECT_TOLERANCE, ALPHA_EMPTY, ALPHA_VISIBLE, ALPHA_SOLID, SEMI_WARN_PERCENT },
+  THRESHOLDS: { DPI_FAIL, DPI_WARN, ASPECT_TOLERANCE, ALPHA_EMPTY, ALPHA_VISIBLE, ALPHA_SOLID, SEMI_WARN_PERCENT, FAN_TOLERANCE },
 };

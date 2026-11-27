@@ -107,6 +107,13 @@ const ROUTES = {
   'POST /api/admin/catalog/:id/photos': { perm: 'catalog.edit', approve: true, raw: '15mb', label: L('Add a product photo', 'إضافة صورة منتج') },
   'PUT /api/admin/catalog/:id/photos': { perm: 'catalog.edit', approve: true, limit: '8kb', label: L('Product photos order', 'ترتيب صور المنتج') },
   'DELETE /api/admin/catalog/:id/photos/:photoId': { perm: 'catalog.edit', approve: true, label: L('Delete a product photo', 'مسح صورة منتج') },
+  // Cups and tumblers made from measurements (src/photo-product-routes.js). "Dimensions checked"
+  // (POST /api/admin/catalog/:id/drinkware/check) is not listed: it is the owners' own.
+  'POST /api/admin/photo-products/from-measurements': { perm: 'catalog.edit', approve: true, limit: '16kb', label: L('New product from measurements', 'منتج جديد من المقاسات') },
+  'PUT /api/admin/catalog/:id/drinkware': { perm: 'catalog.edit', approve: true, limit: '16kb', label: L('Product measurements', 'مقاسات منتج') },
+  'GET /api/admin/catalog/:id/template.svg': { perm: 'catalog.view' },
+  'GET /api/admin/catalog/:id/template.pdf': { perm: 'catalog.view' },
+  'GET /api/admin/catalog/:id/spec.pdf': { perm: 'catalog.view' },
   'GET /api/admin/library': { perm: 'library.view' },
   'POST /api/admin/library': { perm: 'library.edit', approve: true, limit: '8kb', label: L('Publish a ready design', 'نشر تصميم جاهز') },
   'PATCH /api/admin/library': { perm: 'library.edit', approve: true, limit: '64kb', label: L('Ready designs', 'تصميمات جاهزة') },

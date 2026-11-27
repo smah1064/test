@@ -7,6 +7,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from '/vendor/three/OrbitControls.js';
 import { RoomEnvironment } from '/vendor/three/RoomEnvironment.js';
+import { buildLathe, hasProfile } from '/js/preview3d-lathe.js';
 
 const S = 2; // design canvases are rendered at 2x the 500 x 600 mockup space
 const MATERIALS = {
@@ -2308,6 +2309,8 @@ export function mount(container, { product, color, textures, spin = true, viewSc
   let obj;
   // Laser products (cut ones come back as a promise: their outline is traced first).
   if (m.material === 'laser' || product.laser) obj = buildLaser(m, color, textures, renderer, product);
+  // Drinkware measured for "New product from photo": turned from its measured profile (tapered bodies stay tapered).
+  else if (hasProfile(m)) obj = buildLathe(m, hex, textures, renderer, product, product.sides[0], { THREE, canvas, texture, designCrop, mat });
   else if (m.type === 'mug' && product.sides.length > 1) {
     // A set of mugs (couple mugs): one per side, side by side.
     obj = new THREE.Group();

@@ -77,6 +77,8 @@ const security = require('./security');
 const books = require('./books');
 const cartoon = require('./cartoon');
 const wordsRoutes = require('./words-routes');
+const photoProductRoutes = require('./photo-product-routes');
+const fanFiles = require('./fan-files');
 const captchaMod = require('./captcha');
 let sharpModule = null;
 const sharp = () => (sharpModule ||= require('sharp'));
@@ -1972,6 +1974,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
         // With embroidery: this side is printed (DTF / DTG files, not stitches).
         ...(emb ? { process: product.process } : {}),
         ...(offset ? { offsetCm: offsetCm(product, side, sizeDef.id, offset) } : {}),
+        // A tapered cup: its fan, kept with the design (an order keeps its geometry if the cup is measured again).
+        ...(side.fan ? { fan: side.fan } : {}),
       });
       embHere();
     }
@@ -5628,6 +5632,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     res.set('Cache-Control', 'public, max-age=86400, no-transform');
     res.type('image/webp').send(fs.readFileSync(file));
   });
+  // New product from measurements (round drinkware: straight or tapered cups and tumblers; slice 1 of "from photo").
+  const photoProducts = photoProductRoutes.mount(app, {
+    store, guard: requireCatalog, HttpError, catalog, getProduct, PRODUCTS, syncCatalog, logCatalog,
+    adminProduct, saveProductEdit, approvalsAll: () => approvalsAll(),
+  });
 
   // ---------- The team (owners only): personal sign-ins, roles, set-up links ----------
   /** Cancels a person's changes still to decide (inside store.mutate), with why; their pictures go too. */
@@ -6123,6 +6132,16 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const o = store.getOrder(id) || (store.findItem(id) || {}).order;
       return o ? (ar ? `\u2066#${o.number}\u2069` : `#${o.number}`) : '';
     };
+    // (A product made from measurements: its code and name; a re-measure says so in words.)
+    if (key === 'POST /api/admin/photo-products/from-measurements') {
+      const nm = b.name && typeof b.name === 'object' ? b.name : {};
+      const id = String(b.id || '');
+      return enAr([id, nm.en].filter(Boolean).join(' — ') + ' (from measurements)', [id, nm.ar ? `\u2068${nm.ar}\u2069` : ''].filter(Boolean).join(' — ') + ' (من المقاسات)');
+    }
+    if (key === 'PUT /api/admin/catalog/:id/drinkware') {
+      const n = nameOfProduct(p.id);
+      return enAr(`${n.en} (measurements)`, `${n.ar} (المقاسات)`);
+    }
     if (key.includes('/catalog')) {
       const n = key === 'POST /api/admin/catalog' ? { en: String(b.id || ''), ar: String(b.id || '') } : nameOfProduct(p.id);
       // (A status names what it does: pause, stop selling, back in the shop.)
@@ -6347,6 +6366,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     },
     'DELETE /api/admin/expenses/:id': (req) => { if (!(store.db.expenses || []).some((e) => e.id === req.params.id)) throw new HttpError(404, 'notFound'); },
   };
+  Object.assign(APPROVAL_CHECKS, photoProducts.approvalChecks);
   const readBody = (req, res, route) => new Promise((resolve, reject) => {
     // (The route's own size limit: a request kept for approval is never one it would refuse.)
     const parse = route.raw ? express.raw({ type: () => true, limit: route.raw }) : express.json({ limit: route.limit || '100kb' });
@@ -7244,6 +7264,10 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     'laser-svg': { file: (sd) => `${sd}-laser.svg`, ext: 'svg', type: 'image/svg+xml', laser: true, make: (buf, side, design) => laserFiles.laserSvg(buf, laserSpec(side, design)) },
     'engrave-png': { file: (sd) => `${sd}-engrave.png`, ext: 'png', type: 'image/png', laser: true, make: (buf, side, design) => laserFiles.engravePng(buf, laserSpec(side, design)) },
     'cut-svg': { file: (sd) => `${sd}-cut.svg`, ext: 'svg', type: 'image/svg+xml', laser: true, make: (buf, side, design) => laserFiles.cutSvg(buf, laserSpec(side, design)) },
+    // A tapered cup (a product made from measurements): the design bent to the cup's fan, as it wraps the cone.
+    'fan-png': { file: (sd) => `${sd}-fan.png`, ext: 'png', type: 'image/png', fan: true, make: (buf, side) => fanFiles.fanPng(buf, side.fan, side.dpi) },
+    'fan-mirror': { file: (sd) => `${sd}-fan-mirrored.png`, ext: 'png', type: 'image/png', fan: true, make: (buf, side) => fanFiles.fanPng(buf, side.fan, side.dpi, { mirror: true }) },
+    'fan-pdf': { file: (sd) => `${sd}-fan.pdf`, ext: 'pdf', type: 'application/pdf', fan: true, make: async (buf, side, design) => fanFiles.fanPdf(await fanFiles.fanPng(buf, side.fan, side.dpi), side.fan, { title: `${design.productId} ${side.id}`, slug: `fan wrap · ${side.dpi} DPI · TOP = rim side` }) },
   };
   /** A laser side's physical size and the product's laser settings. */
   function laserSpec(side, design) {
@@ -7251,7 +7275,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     return { widthMm: Math.round(side.widthIn * 25.4 * 100) / 100, heightMm: Math.round(side.heightIn * 25.4 * 100) / 100, laser: (product && product.laser) || { kind: 'engrave' }, dpi: 254 };
   }
   // (Laser files each their own name: the LightBurn file, the cut lines and the plain SVG were all "…-front.svg". QA 25 Nov.)
-  const SUFFIX = { 'png-mirror': '-mirrored', 'pdf-marks': '-cropmarks', tiff: '-cmyk', 'dtf-film': '-dtf-film', 'dtf-pdf': '-dtf-film', 'dtg-white': '-dtg-white-underbase', 'sheet-pdf': '-film-mirrored', 'sheet-pdf-plain': '', proof: '-proof', 'laser-svg': '-laser-lightburn', 'engrave-png': '-engrave', 'cut-svg': '-cut-lines' };
+  const SUFFIX = { 'png-mirror': '-mirrored', 'pdf-marks': '-cropmarks', tiff: '-cmyk', 'dtf-film': '-dtf-film', 'dtf-pdf': '-dtf-film', 'dtg-white': '-dtg-white-underbase', 'sheet-pdf': '-film-mirrored', 'sheet-pdf-plain': '', proof: '-proof', 'laser-svg': '-laser-lightburn', 'engrave-png': '-engrave', 'cut-svg': '-cut-lines', 'fan-png': '-fan', 'fan-mirror': '-fan-mirrored', 'fan-pdf': '-fan' };
 
   /** Pieces of a customer's gang sheet, laid out exactly as they saw it. */
   async function gangSheetPdf(design, mirror) {
@@ -7439,6 +7463,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (!side || !fmt) throw new HttpError(404, 'notFound');
     if (format === 'svg' && design.replaced && design.replaced[sideId]) throw new HttpError(404, 'notFound');
     if (fmt.laser && !(getProduct(design.productId) || {}).laser) throw new HttpError(404, 'notFound');
+    if (fmt.fan && !(side && side.fan)) throw new HttpError(404, 'notFound');
     const target = store.designFile(designId, fmt.file(sideId));
     if (!fs.existsSync(target)) {
       const png = fs.readFileSync(store.designFile(designId, `${sideId}-print.png`));
@@ -7706,6 +7731,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   const SEND_FORMATS = new Set([...Object.keys(FORMATS), ...ONCE]);
   const FILE_LABELS = {
     pdf: t('Print PDF', 'ملف الطباعة PDF'), 'pdf-marks': t('Print PDF with crop marks', 'ملف الطباعة PDF بعلامات القص'), png: t('Print PNG (transparent)', 'ملف الطباعة PNG (خلفية شفافة)'), 'png-mirror': t('Print PNG (mirrored)', 'ملف الطباعة PNG (معكوس)'),
+    'fan-png': t('Fan print file PNG (tapered cup)', 'ملف المروحة PNG (كوباية بتضيق)'), 'fan-mirror': t('Fan print file PNG (mirrored)', 'ملف المروحة PNG (معكوس)'), 'fan-pdf': t('Fan print file PDF (true size)', 'ملف المروحة PDF بالمقاس الحقيقي'),
     tiff: t('Print TIFF (CMYK)', 'ملف الطباعة TIFF (CMYK)'), svg: t('Vector SVG', 'ملف فيكتور SVG'), 'dtf-film': t('DTF film PNG', 'فيلم DTF بصيغة PNG'), 'dtf-pdf': t('DTF film PDF', 'فيلم DTF بصيغة PDF'), 'dtg-white': t('DTG white underbase', 'طبقة الأبيض لطباعة DTG'),
     'laser-svg': t('Laser file for LightBurn (SVG)', 'ملف الليزر لـ LightBurn (SVG)'), 'engrave-png': t('Engraving bitmap (PNG)', 'صورة الحفر (PNG)'), 'cut-svg': t('Cut lines (SVG)', 'خطوط القص (SVG)'),
     'preview-pdf': t('Preview PDF (customer design)', 'معاينة PDF (تصميم العميل)'), repeat: t('Repeat preview (whole fabric piece)', 'معاينة التكرار (قطعة القماش كاملة)'), dst: t('Embroidery file (DST)', 'ملف التطريز (DST)'), stitches: t('Stitch preview', 'معاينة الغرز'), 'book-pdf': t('Book print PDF', 'ملف طباعة الكتاب PDF'), 'booklet-pdf': t('Booklet PDF (all pages in order)', 'الكتيب PDF (كل الصفحات بالترتيب)'), 'booklet-imposed': t('Booklet imposed for saddle stitching', 'الكتيب مترتب للطباعة والتدبيس'), 'source-pdf': t('Customer\'s original PDF', 'ملف الـ PDF الأصلي من العميل'), proof: t('Preview image', 'صورة المعاينة'), 'sheet-pdf': t('Gang sheet PDF (mirrored)', 'شيت DTF بصيغة PDF (معكوس)'), 'sheet-pdf-plain': t('Gang sheet PDF', 'شيت DTF بصيغة PDF'),

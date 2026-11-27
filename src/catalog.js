@@ -26,6 +26,11 @@
  * New products are made from an existing one (its drawing, 3D model and print setup)
  * and then changed: { template: 'tshirt', ... }.
  *
+ * Round drinkware made from measurements ("New product from photo") is such a clone of `tumbler` or `mug` that
+ * carries a `drinkware` spec (src/drinkware.js): its print side, 3D model and print geometry come from the measured
+ * numbers, so the manager can't move its print area or change its print size here (`photoProductGeometry`), and
+ * it can't be shown in the shop before the owner has checked the dimensions (`photoProductNotChecked`).
+ *
  * Products are never deleted from the list (old orders and designs still need them):
  * "removed" (archived) ones are left out of the shop and of new orders.
  */
@@ -51,6 +56,8 @@ const isDay = (d) => {
   const t = Date.parse(`${d}T00:00:00Z`);
   return Number.isFinite(t) && new Date(t).toISOString().slice(0, 10) === d; // no 30 February
 };
+const drinkware = require('./drinkware');
+
 const MAX_PHOTOS = 12;
 const MAX_ADDED = 200;
 
@@ -92,6 +99,14 @@ function canEmbroider(p) {
 function applyEdit(p, e) {
   if (!e) return p;
   if (e.template) p.base = e.template;
+  // Drinkware made from measurements: its own print side, 3D model and geometry (a bad spec leaves the template's).
+  if (isObj(e.drinkware)) {
+    try {
+      drinkware.applyTo(p, e.drinkware);
+    } catch (err) {
+      console.error(`catalog: drinkware spec of ${p.id} not applied: ${err.message}`);
+    }
+  }
   if (e.name) p.name = { ...p.name, ...e.name };
   if (e.description) p.description = { ...p.description, ...e.description };
   if (e.category) p.category = e.category;
@@ -324,6 +339,7 @@ function clean(p, body, { categories = [], prev = null } = {}) {
   const own = base.get(p.base || p.id);
   const out = {};
   const bad = (field, error = 'badProductField') => ({ error, field });
+  const drink = prev && isObj(prev.drinkware) ? prev.drinkware : null;
 
   if (b.name !== undefined) {
     const v = bilingual(b.name, 80);
@@ -341,6 +357,8 @@ function clean(p, body, { categories = [], prev = null } = {}) {
   }
   if (b.status !== undefined) {
     if (!STATUSES.includes(b.status)) return bad('status');
+    // Measured drinkware is shown in the shop only once the owner has checked its dimensions.
+    if (b.status === 'live' && drink && !drink.checkedAt) return bad('status', 'photoProductNotChecked');
     if (b.status !== 'live') {
       out.status = b.status;
       if (b.hiddenReason != null && b.hiddenReason !== '') {
@@ -358,6 +376,8 @@ function clean(p, body, { categories = [], prev = null } = {}) {
     const status = b.status !== undefined ? b.status : (prev && prev.status) || 'live';
     if (status === 'hidden') {
       if (b.showAgainOn < today()) return bad('showAgainOn');
+      // (A return day would put unchecked drinkware in the shop by itself.)
+      if (drink && !drink.checkedAt) return bad('showAgainOn', 'photoProductNotChecked');
       out.showAgainOn = b.showAgainOn;
     }
   }
@@ -430,6 +450,8 @@ function clean(p, body, { categories = [], prev = null } = {}) {
       if (!label || !label.en || !label.ar) return bad('addSizes');
       const sur = num(z.surcharge, -1e5, 1e6);
       const scale = num(z.printScale, 0.1, 10);
+      // Measured drinkware has one physical size: a bigger print would not fit the measured band.
+      if (drink && scale != null && scale !== 1) return bad('addSizes', 'photoProductGeometry');
       // A size never makes the product cost nothing (or less).
       if (sur === null || scale === null || (Number(p.basePrice) || 0) + (sur || 0) < 1) return bad('addSizes');
       list.push({ id: z.id, label, surcharge: sur || 0, ...(scale && scale !== 1 ? { printScale: scale } : {}) });
@@ -460,11 +482,23 @@ function clean(p, body, { categories = [], prev = null } = {}) {
   if (b.sides !== undefined) {
     if (!isObj(b.sides)) return bad('sides');
     const m = {};
-    for (const [id, o] of Object.entries(b.sides)) {
+    for (let [id, o] of Object.entries(b.sides)) { // eslint-disable-line prefer-const
       const sd = own.sides.find((s) => s.id === id);
       if (!sd || !isObj(o)) return bad('sides');
       const f = {};
       if (o.off) f.off = true;
+      if (drink) {
+        // The print size and area come from the measurements: the same values (as the edit screen sends them back)
+        // are fine, a change is refused (re-measure instead).
+        const cur = p.sides.find((s) => s.id === id) || sd;
+        const w = num(o.printWidthCm, 0.5, 1000);
+        if (w === null || (w !== undefined && Math.abs(w - cur.printWidthIn * 2.54) > 0.05)) return bad(`sides.${id}.printWidthCm`, 'photoProductGeometry');
+        if (o.area !== undefined) {
+          const a = isObj(o.area) ? o.area : {};
+          if (['x', 'y', 'w', 'h'].some((k) => num(a[k], -1e4, 1e4) == null || Math.abs(Number(a[k]) - cur.printArea[k]) > 0.15)) return bad(`sides.${id}.area`, 'photoProductGeometry');
+        }
+        o = { ...o, printWidthCm: undefined, area: undefined };
+      }
       const w = num(o.printWidthCm, 0.5, 1000);
       if (w === null) return bad(`sides.${id}.printWidthCm`);
       if (w !== undefined && Math.abs(w - sd.printWidthIn * 2.54) > 0.005) f.printWidthCm = r2(w);
@@ -532,7 +566,7 @@ function clean(p, body, { categories = [], prev = null } = {}) {
 /** Fields the manager may not change through clean() and that are kept as they were. */
 function keepFixed(prev, next) {
   const out = { ...next };
-  for (const k of ['template', 'createdAt', 'createdBy', 'photos', 'mainPhoto']) if (prev && prev[k] !== undefined) out[k] = prev[k];
+  for (const k of ['template', 'createdAt', 'createdBy', 'photos', 'mainPhoto', 'drinkware']) if (prev && prev[k] !== undefined) out[k] = prev[k];
   return out;
 }
 
@@ -586,12 +620,67 @@ function forAdmin(p, edit) {
       sides: own.sides.map((s) => ({ id: s.id, printArea: s.printArea, printWidthCm: r2(s.printWidthIn * 2.54), safeMm: r2((s.safeIn || 0) * 25.4), bleedMm: r2((s.bleedIn || 0) * 25.4) })),
     },
     edit: edit || null,
+    // Drinkware made from measurements: its spec (the measurements screen) and a badge.
+    drinkware: edit && isObj(edit.drinkware) ? edit.drinkware : null,
+    ...(edit && isObj(edit.drinkware) ? { fromPhotos: true } : {}),
   };
+}
+
+// ---------- Drinkware made from measurements (src/photo-product-routes.js) ----------
+/**
+ * A new hidden product made from a drinkware spec (from drinkware.buildSpec). body = { id, name: { en, ar }, spec,
+ * createdBy }. Returns { id, template, edit } (store it as db.catalog.products[id] = edit, then sync the catalogue)
+ * or { error, field } like cleanNew. Prices are not part of the edit (they go to the owner's price list).
+ */
+function newFromDrinkware(body, products) {
+  const b = isObj(body) ? body : {};
+  if (!isObj(b.spec) || b.spec.v !== 1 || !isObj(b.spec.print) || !Array.isArray(b.spec.profile)) return { error: 'badProductField', field: 'drinkware' };
+  const template = drinkware.templateFor(b.spec);
+  const n = cleanNew({ id: b.id, template, name: b.name }, products);
+  if (n.error) return n;
+  const from = base.get(template);
+  const name = isObj(b.name) && text(b.name.en, 80) && text(b.name.ar, 80)
+    ? { en: text(b.name.en, 80), ar: text(b.name.ar, 80) }
+    : { en: `${from.name.en} (new)`, ar: `${from.name.ar} (جديد)` };
+  const edit = {
+    template, createdAt: new Date().toISOString(), createdBy: text(String(b.createdBy || ''), 80) || undefined,
+    name,
+    status: 'hidden', hiddenReason: 'other', hiddenNote: 'New product from measurements: check the dimensions, then show it in the shop',
+    drinkware: { ...b.spec, checkedAt: null, checkedBy: null },
+  };
+  if (!edit.createdBy) delete edit.createdBy;
+  return { id: n.id, template, edit };
+}
+
+/**
+ * New measurements for a drinkware product: the edit with the new spec, its check cleared. A product that was in
+ * the shop is paused until the owner checks the new dimensions. Returns the new edit (or { error } when `prev`
+ * is not a drinkware product, or the new spec would need the other template: handle added or removed).
+ */
+function remeasure(prev, spec) {
+  if (!isObj(prev) || !isObj(prev.drinkware)) return { error: 'badProductField', field: 'drinkware' };
+  if (!isObj(spec) || spec.v !== 1) return { error: 'badProductField', field: 'drinkware' };
+  if (drinkware.templateFor(spec) !== (prev.template || drinkware.templateFor(prev.drinkware))) return { error: 'photoProductGeometry', field: 'handle' };
+  const next = { ...prev, drinkware: { ...spec, assetsVer: prev.drinkware.assetsVer || 0, mockup: prev.drinkware.mockup || spec.mockup || null, shootId: prev.drinkware.shootId || spec.shootId || null, checkedAt: null, checkedBy: null } };
+  if (!next.status || next.status === 'live' || next.showAgainOn) {
+    next.status = 'hidden';
+    next.hiddenReason = 'other';
+    next.hiddenNote = 'New measurements: check the dimensions, then show it in the shop';
+    delete next.showAgainOn;
+  }
+  return next;
+}
+
+/** The owner checked a drinkware product's dimensions: the edit with checkedAt / checkedBy set. */
+function markChecked(prev, who) {
+  if (!isObj(prev) || !isObj(prev.drinkware)) return { error: 'badProductField', field: 'drinkware' };
+  return { ...prev, drinkware: { ...prev.drinkware, checkedAt: new Date().toISOString(), checkedBy: text(String(who || ''), 80) || 'owner' } };
 }
 
 module.exports = {
   comboLeft,
   init, apply, visible, unavailable, shopState, today, forShop, forAdmin, clean, cleanNew, keepFixed, processChoices, canEmbroider,
+  newFromDrinkware, remeasure, markChecked,
   STATUSES, HIDE_REASONS, MAX_PHOTOS,
   isBuiltIn: (id) => Boolean(base && base.has(id)),
 };

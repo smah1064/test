@@ -19,7 +19,8 @@
   const H = 600;
   const MIN = 10;
   const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
-  const SECTIONS = ['basics', 'avail', 'colors', 'sizes', 'prices', 'print', 'tech', 'photos', 'danger'];
+  // 'measure': a drinkware product's measurements (public/js/admin-photo-product.js), shown instead of 'print' for it.
+  const SECTIONS = ['basics', 'avail', 'colors', 'sizes', 'prices', 'measure', 'print', 'tech', 'photos', 'danger'];
 
   let ctx = null;
   let root = null;
@@ -76,6 +77,10 @@
   const pill = (cls, text, title) => `<span class="pm-pill ${cls}"${title ? ` title="${esc(title)}"` : ''}>${esc(text)}</span>`;
   const when = (iso) => (iso ? new Date(iso).toLocaleString(POD.lang === 'ar' ? 'ar-EG' : 'en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
   const canEdit = (p) => p.kind !== 'book';
+  /** A cup or tumbler made from typed measurements: its print area comes from them (public/js/admin-photo-product.js). */
+  const DW = () => window.AdminPhotoProduct;
+  const isDrink = (p) => Boolean(p && p.drinkware && DW());
+  const dwPill = (p) => (p && (p.drinkware || p.fromPhotos) ? pill('pm-pill-dw', t('dw.badge')) : '');
 
   function loadPics() {
     if (!picsLoaded) {
@@ -100,7 +105,11 @@
   // ---------- Status ----------
   // status 'hidden' = Paused (for a while, maybe until a day), 'removed' = Stopped selling (Archived).
   const NEW_NOTE = 'New product: check it, then show it in the shop';
-  const isNew = (p) => p.status === 'hidden' && !p.builtIn && p.hiddenNote === NEW_NOTE;
+  // The server's own notes (src/catalog.js), said in the page's language: a new product, one from measurements, and
+  // one measured again (the owner checks its dimensions before it is shown).
+  const DW_NEW_NOTE = 'New product from measurements: check the dimensions, then show it in the shop';
+  const NOTE_KEYS = { [NEW_NOTE]: 'pm.newNote', [DW_NEW_NOTE]: 'dw.note.new', 'New measurements: check the dimensions, then show it in the shop': 'dw.note.remeasured' };
+  const isNew = (p) => p.status === 'hidden' && !p.builtIn && (p.hiddenNote === NEW_NOTE || p.hiddenNote === DW_NEW_NOTE);
   /** Paused now: its "show it again on" day (if any) hasn't come yet. */
   const isPaused = (p) => p.status === 'hidden' && !p.pausedUntilPassed;
   const isArchived = (p) => p.status === 'removed';
@@ -197,7 +206,7 @@
     if (p.stock <= p.lowStockAt) return pill('pm-pill-warn', t('pm.stock.low', { n: POD.num(p.stock) }));
     return pill('pm-pill-muted', t('pm.stock.n', { n: POD.num(p.stock) }));
   }
-  const noteOf = (p) => (p.hiddenNote && (isPaused(p) || isArchived(p)) ? (p.hiddenNote === NEW_NOTE ? t('pm.newNote') : p.hiddenNote) : '');
+  const noteOf = (p) => (p.hiddenNote && (isPaused(p) || isArchived(p)) ? (NOTE_KEYS[p.hiddenNote] ? t(NOTE_KEYS[p.hiddenNote]) : p.hiddenNote) : '');
   /** Who made a change: "owner" in the shop's own words, a staff member's name as given. */
   const whoName = (w) => (w === 'owner' ? t('pm.who.owner') : w || '—');
   const lastChange = (p) => (p.updatedAt ? t('pm.lastChange', { who: '\u2068' + whoName(p.updatedBy || (p.edit && p.edit.updatedBy)) + '\u2069', when: when(p.updatedAt) }) : '');
@@ -330,7 +339,7 @@
         <div class="pm-row-main">
           <div class="pm-row-title"><strong>${esc(tr(p.name))}</strong> <bdi class="pm-id" dir="ltr">${esc(p.id)}</bdi></div>
           <div class="muted small">${esc(catName(p.category))}${esc(SEP())}${esc(t('pm.priceFrom', { price: priceFrom(p) }))}${p.builtIn ? '' : `${esc(SEP())}${esc(t('pm.addedFrom', { name: tr((products().find((x) => x.id === p.base) || {}).name) || p.base }))}`}</div>
-          <div class="pm-pills">${statusPill(p)}${stockPill(p)}${p.builtIn ? '' : pill('pm-pill-added', t('pm.added'))}${p.edit && p.builtIn ? pill('pm-pill-muted', t('pm.edited')) : ''}</div>
+          <div class="pm-pills">${statusPill(p)}${stockPill(p)}${p.builtIn ? '' : pill('pm-pill-added', t('pm.added'))}${dwPill(p)}${p.edit && p.builtIn ? pill('pm-pill-muted', t('pm.edited')) : ''}</div>
           ${note ? `<div class="small pm-note">${esc(note)}</div>` : ''}
           ${p.updatedAt ? `<div class="muted small">${esc(lastChange(p))}</div>` : ''}
         </div>
@@ -339,7 +348,7 @@
           <button class="btn btn-sm btn-dark" type="button" data-pm-act="edit" data-id="${esc(p.id)}">${esc(t('role.view'))}</button>` : `
           ${statusActs(p)}
           <button class="btn btn-sm btn-dark" type="button" data-pm-act="edit" data-id="${esc(p.id)}">${esc(t('pm.edit'))}</button>
-          ${p.kind ? '' : `<button class="btn btn-sm" type="button" data-pm-act="copy" data-id="${esc(p.id)}">${esc(t('pm.copy'))}</button>`}`}
+          ${p.kind || p.drinkware ? '' : `<button class="btn btn-sm" type="button" data-pm-act="copy" data-id="${esc(p.id)}">${esc(t('pm.copy'))}</button>`}`}
         </div>
       </article>`;
   }
@@ -452,7 +461,7 @@
       const day = form.backOn.value;
       if (day && (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day < shopToday())) throw new Error(t('pm.backOnPast'));
       let note = form.note.value.trim();
-      if (cur && note === t('pm.newNote') && cur.hiddenNote === NEW_NOTE) note = NEW_NOTE;
+      if (cur && NOTE_KEYS[cur.hiddenNote] && note === t(NOTE_KEYS[cur.hiddenNote])) note = cur.hiddenNote;
       const body = { status: 'hidden', hiddenReason: form.reason.value, hiddenNote: note };
       if (day) body.showAgainOn = day;
       const P = await saveStatus(p, body);
@@ -495,6 +504,7 @@
   /** Back in the shop: a paused product ("Show in the shop") or an archived one ("Sell again"). */
   async function showInShop(p, then) {
     const again = isArchived(p);
+    if (isDrink(p) && DW().needsCheck(p)) return void toast(t('dw.notChecked'), 'error');
     try {
       const P = await saveStatus(p, { status: 'live' });
       toast(P.visible ? t(again ? 'pm.soldAgainOk' : 'pm.shownOk', { name: tr(P.name) }) : t('pm.shownButHidden', { why: whyHidden(P) }), P.visible ? undefined : 'error');
@@ -530,6 +540,7 @@
     };
     const d = dialog(`
       <h3>${esc(t('pm.newTitle'))}</h3>
+      ${!from && DW() ? `<div class="pm-dw-entry"><button class="btn" type="button" data-dlg-dw><b>${esc(t('dw.entry'))}</b></button><p class="muted small">${esc(t('dw.entryHelp'))}</p></div>` : ''}
       <p class="muted small">${esc(t('pm.newHelp'))}</p>
       ${from && !from.builtIn ? `<p class="notice small">${esc(t('pm.copyOfAdded', { name: tr(from.name) }))}</p>` : ''}
       <div class="field"><label for="pm-tpl-q">${esc(t('pm.template'))}</label>
@@ -560,6 +571,8 @@
       openEdit(P.id, P);
     }, { wide: true });
     d.querySelector('[data-dlg-ok]').textContent = t('pm.create');
+    const dw = d.querySelector('[data-dlg-dw]');
+    if (dw) dw.addEventListener('click', () => { d.close(); drinkForm(null); });
     const form = d.querySelector('form');
     const fill = () => {
       const p = tpls.find((x) => x.id === pick);
@@ -582,6 +595,44 @@
     ['en', 'ar', 'code'].forEach((k) => form[k].addEventListener('input', () => { touched = true; }));
     form.code.addEventListener('input', () => { form.code.value = form.code.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'); });
     if (pick) setTimeout(() => { const el = d.querySelector('.pm-tpl.is-on'); if (el) el.scrollIntoView({ block: 'nearest' }); }, 0);
+  }
+
+  /** "From measurements": a new cup or tumbler (product null), or new measurements for one. */
+  function drinkForm(product) {
+    if (!DW()) return;
+    DW().open({
+      api,
+      can,
+      product,
+      uniqueId,
+      templateOf: (id) => products().find((p) => p.id === id) || null,
+      onSaved: (P) => {
+        putProduct(P);
+        reloadLater();
+        if (product && S.view === 'edit' && S.P && S.P.id === P.id) return refreshDrink(P);
+        return openEdit(P.id, P);
+      },
+    });
+  }
+  /** The drinkware product changed (new measurements, checked): the page from the saved product. */
+  function refreshDrink(P) {
+    S.P = P;
+    putProduct(P);
+    initModels(P, SECTIONS.filter((s) => !S.dirty.has(s)));
+    refreshEdit('measure');
+    const sec = document.getElementById('pm-sec-measure');
+    if (sec) sec.scrollIntoView({ block: 'nearest' });
+  }
+  async function drinkCheck() {
+    try {
+      const P = await DW().check(api, S.P);
+      if (!P) return;
+      toast(t('dw.checkedOk'));
+      refreshDrink(P);
+      reloadLater();
+    } catch (e) {
+      if (!sentForApproval(e)) toast(e.message, 'error');
+    }
   }
 
   // =====================================================================
@@ -766,7 +817,8 @@
     const dirty = S.dirty.has(name);
     // Without catalog.edit the page is for looking: no Save, every box and button in the section off (the
     // prices have their own permission, prices.edit).
-    const looking = !editing() && name !== 'prices';
+    // (The Measurements section's only buttons are already for those allowed; its downloads are for everyone.)
+    const looking = !editing() && name !== 'prices' && name !== 'measure';
     if (looking) save = false;
     return `<section class="card pm-sec" data-sec="${name}" id="pm-sec-${name}">
       <header class="pm-sec-head"><h3>${esc(title)}</h3>${help ? `<p class="muted small">${esc(help)}</p>` : ''}</header>
@@ -783,6 +835,7 @@
     sizes: (P) => sec('sizes', t('pm.s.sizes'), t('pm.s.sizesHelp'), sizesBody(P)),
     // Selling prices: changed by those with prices.edit (owners, Finance); the others see them only.
     prices: (P) => sec('prices', t('pm.s.prices'), t(can('prices.edit') ? 'pm.s.pricesHelpOwner' : 'pm.s.pricesReadOnly'), pricesBody(P), { save: can('prices.edit') }),
+    measure: (P) => sec('measure', t('pm.s.measure'), t('dw.secHelp'), DW().sectionHtml(P, { editing: editing(), owner: owner() }), { save: false }),
     print: (P) => sec('print', t('pm.s.print'), t('pm.s.printHelp'), printBody(P)),
     tech: (P) => sec('tech', t('pm.s.tech'), '', techBody(P)),
     photos: (P) => sec('photos', t('pm.s.photos'), t('pm.s.photosHelp'), photosBody(P), { save: false }),
@@ -799,18 +852,19 @@
           <div class="pm-ehead-text">
             <h2>${esc(tr(P.name))}</h2>
             <div class="muted small"><bdi dir="ltr">${esc(P.id)}</bdi> · ${esc(catName(P.category))}${from ? ` · ${esc(t('pm.addedFrom', { name: tr(from.name) }))}` : ''}</div>
-            <div class="pm-pills">${statusPill(P)}${stockPill(P)}${P.builtIn ? '' : pill('pm-pill-added', t('pm.added'))}</div>
+            <div class="pm-pills">${statusPill(P)}${stockPill(P)}${P.builtIn ? '' : pill('pm-pill-added', t('pm.added'))}${dwPill(P)}</div>
             ${P.updatedAt ? `<div class="muted small">${esc(lastChange(P))}</div>` : ''}
           </div>
           <div class="pm-ehead-btns">
             ${P.visible && !P.kind ? `<a class="btn btn-sm" href="/product?id=${enc(P.id)}" target="_blank" rel="noopener">${esc(t('pm.viewShop'))}</a>` : ''}
-            ${P.kind || !editing() ? '' : `<button class="btn btn-sm" type="button" data-pm-act="copy" data-id="${esc(P.id)}">${esc(t('pm.copy'))}</button>`}
+            ${P.kind || P.drinkware || !editing() ? '' : `<button class="btn btn-sm" type="button" data-pm-act="copy" data-id="${esc(P.id)}">${esc(t('pm.copy'))}</button>`}
           </div>
         </div>
       </div>`;
   }
   /** The sections on the edit page (stop selling / undo all only for those who change products). */
-  const shownSections = () => SECTIONS.filter((s) => s !== 'danger' || editing());
+  // A drinkware product: its Measurements instead of the print-area editor (its print area comes from them).
+  const shownSections = () => SECTIONS.filter((s) => (s !== 'danger' || editing()) && (s === 'measure' ? isDrink(S.P) : s !== 'print' || !isDrink(S.P)));
   const jumpHtml = () => `<nav class="card pm-jump" aria-label="${esc(t('pm.sections'))}">${shownSections().map((s) => `<a href="#pm-sec-${s}" data-pm-jump="${s}">${esc(t('pm.s.' + s))}</a>`).join('')}</nav>`;
   function bannerHtml(P) {
     if (P.visible) return '';
@@ -818,6 +872,10 @@
     const arch = isArchived(P);
     const text = neu ? t('pm.newBanner') : arch ? t('pm.retiredBanner') : isOn(P) ? t('pm.liveButHidden', { why: whyHidden(P) }) : t('pm.hiddenBanner', { why: whyHidden(P) });
     const note = !neu && noteOf(P) ? `<div class="small">${esc(noteOf(P))}</div>` : '';
+    // Made from measurements: the owner checks the dimensions before it can be shown (the server refuses it before).
+    if (isDrink(P) && DW().needsCheck(P) && !arch) {
+      return `<div class="pm-banner is-new" id="pm-banner" role="status"><div><b>${esc(text)}</b>${note}<div class="small dw-banner-note">${esc(t('dw.bannerCheck'))}</div></div><a class="btn btn-sm" href="#pm-sec-measure" data-pm-jump="measure">${esc(t('pm.s.measure'))}</a></div>`;
+    }
     const btn = !editing() ? '' : arch ? `<button class="btn btn-primary btn-sm" type="button" data-pm-act="sell-again">${esc(t('pm.sellAgain'))}</button>`
       : !isOn(P) ? `<button class="btn btn-primary btn-sm" type="button" data-pm-act="publish">${esc(t(neu ? 'pm.publishNew' : 'pm.show'))}</button>`
         : `<a class="btn btn-sm" href="#pm-sec-avail">${esc(t('pm.s.avail'))}</a>`;
@@ -2092,6 +2150,8 @@
       case 'show':
       case 'sell-again': return showInShop(p, afterQuick);
       case 'publish': return showInShop(S.P, afterQuick);
+      case 'dw-remeasure': return drinkForm(S.P);
+      case 'dw-check': return drinkCheck();
       case 'staff':
         S.staffOpen = !S.staffOpen;
         a.setAttribute('aria-expanded', S.staffOpen);

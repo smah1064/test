@@ -1037,7 +1037,9 @@
     ctx.fillStyle = POD.luminance(surfaceHex()) < 0.3 ? '#f1f2f4' : '#5b6069';
     const dims = { w: POD.num(s.printWidthIn * 2.54), h: POD.num(s.printHeightIn * 2.54) };
     const stitched = embHere() || st.method === 'embroidery';
-    let label = t(stitched ? 'embArea' : 'printArea', dims);
+    // A tapered cup: the design is made flat and printed narrower towards the narrow end (the 3D view shows it).
+    const fan = s.fan && s.fan.r1 > 0 && s.fan.r2 > 0 ? Math.round((1 - s.fan.r2 / s.fan.r1) * 100) : 0;
+    let label = fan && !stitched ? t('printAreaFan', { ...dims, pct: POD.num(fan) }) : t(stitched ? 'embArea' : 'printArea', dims);
     if (ctx.measureText(label).width > a.w + 30 * px) label = t('printAreaShort', dims);
     const rtl = POD.lang === 'ar';
     ctx.textAlign = rtl ? 'right' : 'left';

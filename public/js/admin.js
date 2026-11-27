@@ -83,7 +83,7 @@
   let sessionAt = 0;
   const can = (perm) => AdminRoles.can(access, perm);
   /** The only admin routes an old product manager's token may use (the owner's answer 401 and would sign them out). */
-  const staffRoute = (url) => /^\/api\/admin\/(session|logout|catalog|library)(\/|\?|$)/.test(url) && !/^\/api\/admin\/library\/settings/.test(url);
+  const staffRoute = (url) => /^\/api\/admin\/(session|logout|catalog|library|photo-products)(\/|\?|$)/.test(url) && !/^\/api\/admin\/library\/settings/.test(url);
   /** Until the page knows who is signed in, and for an old product manager's sign-in, only those routes are called. */
   const mayCall = (url) => staffRoute(url) || Boolean(access && (access.system || access.owner));
   let tab = 'queue';
@@ -541,8 +541,9 @@
     }
     // Embroidered chest with a printed back: each side gets the files for how it is made.
     const proc = s.process || item.process;
-    const rec = RECOMMENDED[proc] || 'png';
-    const formats = (FORMATS_BY_METHOD[proc] || ['png', 'pdf', 'pdf-marks', 'png-mirror', 'tiff']).concat(s.hasSvg ? ['svg'] : []);
+    // A tapered cup (made from measurements): the design bent to the cup's fan comes first; the flat files stay below.
+    const rec = s.fan ? 'fan-pdf' : RECOMMENDED[proc] || 'png';
+    const formats = (s.fan ? ['fan-pdf', 'fan-png', 'fan-mirror'] : []).concat(FORMATS_BY_METHOD[proc] || ['png', 'pdf', 'pdf-marks', 'png-mirror', 'tiff']).concat(s.hasSvg ? ['svg'] : []);
     // Name list: every copy with its own name. Shown once (with the first side); the side files below show copy 1.
     const mergeBlock = item.merge && item.sides[0] === s ? `
       <div class="print-files-block">
