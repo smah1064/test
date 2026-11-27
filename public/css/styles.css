@@ -1285,7 +1285,6 @@ html[dir="rtl"] details.pgroup:not([open]) > summary::after { transform: rotate(
 /* Brand: the إبداع logo (Arabic pages) or ebda3 (English pages), with its magenta corner marks. */
 .brand-logo { display: block; height: 40px; width: auto; }
 html[lang="ar"] .brand-en, html:not([lang="ar"]) .brand-ar { display: none; }
-.brand-mark-logo { display: none; }
 /* Phones keep the full logo in the page's language (the menu links have their own row there, see .nav-chips). */
 @media (max-width: 640px) { .brand-logo { height: 34px; } }
 
@@ -1366,10 +1365,11 @@ html[dir="ltr"] .hm-tile-link span { display: inline-block; transform: scaleX(-1
 .hm-pic img.photo-thumb { object-fit: contain; padding: 8%; box-sizing: border-box; }
 .hm-card:hover .hm-pic img { transform: scale(1.04); }
 .hm-card h3 { font-size: 16px; margin: 4px 0 0; line-height: 1.35; }
-.hm-meta { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; font-size: 15px; }
+.hm-meta { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; font-size: 15px; }
 .hm-price { font-weight: 700; color: var(--ink); }
-/* The size or pack next to the price («٣٢٥ مل», "A5 × 100"): readable, not pale (owner's OK, UX item F, 26 Nov). */
-.hm-pack { color: var(--ink-2); font-size: 13.5px; }
+/* The size or pack («٣٢٥ مل», "A5 × 100") on its own small grey line under the price, the same on every card, so it
+   doesn't read as a second price (owner's OK, UX item 3, 27 Nov); still readable, not pale (UX item F, 26 Nov). */
+.hm-pack { display: block; color: #5f6368; font-size: 12.5px; line-height: 1.4; }
 /* "Prices include printing on one side": next to "All products", and under it on phones (it was hidden there). */
 #products .section-title { flex-wrap: wrap; gap: 2px 12px; }
 .hm-price-note { color: var(--ink-2); font-size: 14px; }
@@ -2028,3 +2028,51 @@ html[dir="rtl"] .more-chev { transform: scaleX(-1); }
   .site-header .nav-chips a { min-height: 44px; }
 }
 /* (end of Thumb-size buttons, step 2) */
+
+/* ==========================================================================
+   Home page, 27 Nov (owner's OK on the mock-ups: UX items 1, 2, 5 and 6)
+   Measured in test/e2e/home-ux.e2e.js.
+   ========================================================================== */
+/* 1. From launch, the guarantee point is a link to its page: green, a shield, a small arrow at its end. */
+.hm-trust .hm-trust-guar { padding: 0; }
+.hm-trust-guar a { display: flex; align-items: center; gap: 10px; min-width: 0; width: 100%; padding: 10px 12px; border-radius: 14px; color: inherit; text-decoration: none; }
+.hm-trust-guar a::after { content: ""; flex: none; margin-inline-start: auto; width: 7px; height: 7px; border: solid #7b8394; border-width: 0 2px 2px 0; transform: rotate(-45deg); }
+html[dir="rtl"] .hm-trust-guar a::after { transform: rotate(135deg); }
+.hm-trust .hm-trust-guar svg { color: #138a4a; }
+.hm-trust .hm-trust-guar small { color: #0f6b3a; }
+.hm-trust-guar a:hover strong { text-decoration: underline; }
+
+/* 2. Phones and small tablets: the categories above "All products" in one row that is swiped, fading out at its end
+   edge (left in Arabic, right in English) while there is more to see (.cats-more, set by the page). The chips keep
+   their 44 px (Thumb-size buttons, step 2). Computers: as before. */
+@media (max-width: 820px) {
+  #cats { flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; padding-block: 2px 4px; scrollbar-width: none; overscroll-behavior-x: contain; }
+  #cats::-webkit-scrollbar { display: none; }
+  #cats .chip { flex: none; white-space: nowrap; }
+  #cats.cats-more { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 56px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 56px), transparent); }
+  html[dir="rtl"] #cats.cats-more { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 56px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 56px), transparent); }
+}
+
+/* 5. "How it works" right after the points under the banner; on phones its three steps are compact (the number
+   beside the title, tighter), about half as tall as before. */
+.hm-how { margin: 0 0 40px; }
+/* (The questions keep the space "How it works" left above them, under "All products".) */
+#products + .hm-faq { margin-top: 44px; }
+@media (max-width: 760px) {
+  .hm-how { margin-bottom: 30px; }
+  .hm-how h2 { margin-bottom: 12px; }
+  .hm-steps { gap: 10px; }
+  .hm-step { display: grid; grid-template-columns: 30px minmax(0, 1fr); column-gap: 12px; align-items: start; padding: 14px 16px; border-radius: 16px; }
+  .hm-step .hm-num { width: 30px; height: 30px; font-size: 14px; grid-row: span 2; }
+  .hm-step h3 { margin: 3px 0 2px; font-size: 16px; }
+  .hm-step p { font-size: 13.5px; line-height: 1.55; }
+}
+
+/* 6a. "See all" next to a row: a pill button at least 44 px tall. */
+.hm-head { align-items: center; }
+.hm-more { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; padding: 0 16px; margin-inline-end: 0; border: 1px solid var(--line); border-radius: 999px; background: #fff; white-space: nowrap; text-decoration: none; }
+.hm-more:hover { border-color: var(--ink); }
+/* 6b. "All products" cards: the buttons at the bottom of each card, level across a row when a name wraps. */
+.hm-gcard .hm-meta { margin-bottom: 8px; }
+.hm-gcard .hm-gstart { margin-top: auto; }
+/* (end of Home page, 27 Nov) */

@@ -95,6 +95,21 @@ window.POD_STRINGS = {
   'hm.trust.oneS': ['to thousands', 'لحد آلاف'],
   'hm.trust.payT': ['Safe payment', 'دفع آمن'],
   'hm.trust.payS': ['and a clear price up front', 'والسعر واضح من الأول'],
+  // The four points from launch, when paying in advance is the only way (owner's OK, UX item 1, 27 Nov). Shown only
+  // while the switch is on (data-prepay-only in index.html). The delivery days are the shop's settings.
+  'hm.trust2.payT': ['Pay in advance', 'ادفع مقدّمًا'],
+  'hm.trust2.payS': ['Card, Vodafone Cash or InstaPay', 'كارت، فودافون كاش، إنستاباي'],
+  'hm.trust2.guarT': ['7-day guarantee', 'ضمان 7 أيام'],
+  'hm.trust2.guarS': ['Reprint or your money back', 'نطبعهالك تاني أو ترجعلك فلوسك'],
+  'hm.trust2.deliveryT': ['Delivery in {days}', 'توصيل خلال {days}'],
+  'hm.trust2.deliveryS': ['Express, or {days} standard', 'بالسريع، أو {days} للعادي'],
+  'hm.trust2.proofT': ['You see the proof', 'هتشوف البروفة'],
+  'hm.trust2.proofS': ['before we print', 'قبل ما نطبع'],
+  // Counted days: POD.plural('hm.days', n) (one / two / few, Arabic 3–10 / many).
+  'hm.days.one': ['1 day', 'يوم واحد'],
+  'hm.days.two': ['2 days', 'يومين'],
+  'hm.days.few': ['{n} days', '{n} أيام'],
+  'hm.days.many': ['{n} days', '{n} يوم'],
   // "All products": the first 8, then the rest on request (owner's OK, UX item D, 26 Nov).
   'home.showAll': ['Show all {n} products', 'اعرض كل المنتجات ({n})'],
   'home.showing': ['Showing {n} of {total}', 'عارضين {n} من {total} منتج'],
