@@ -84,8 +84,9 @@ test('kids book: Enter pressed again while the book is made makes one book; Back
     await page.click('#bk-add');
     await page.waitForFunction(() => JSON.parse(localStorage.getItem('pod-cart-v2') || '[]').length === 2, null, { timeout: 10000 });
     const cart = await cartLines();
-    assert.strictEqual(cart[0].designId, firstId, 'the first book is still in the cart');
-    assert.notStrictEqual(cart[1].designId, firstId, "the brother's book is a book of its own");
+    // (The newest is at the top of the cart: owner, 27 Nov.)
+    assert.strictEqual(cart[1].designId, firstId, 'the first book is still in the cart');
+    assert.notStrictEqual(cart[0].designId, firstId, "the brother's book is a book of its own");
     assert.strictEqual(made.length, 2);
     assert.deepStrictEqual(updated, [], 'the first book was not changed');
     assert.deepStrictEqual(page.errors, []);

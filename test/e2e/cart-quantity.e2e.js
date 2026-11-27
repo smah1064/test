@@ -57,7 +57,7 @@ test('a mug from the editor: + twice in the cart makes three, the same design, t
   }
 });
 
-test('menus added before the key: 10 copies become one 10-pack (a copy of the design); 9 offer the cheaper pack', { timeout: 120000 }, async () => {
+test('menus added before the key: 10 copies become one 10-pack (a copy of the design); 9 never cost more than 10', { timeout: 120000 }, async () => {
   // A design made through the shop's API, put in the cart the way older carts kept it (no key).
   const post = (url, body, headers = {}) => fetch(srv.base + url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
   const made = await (await post('/api/designs', { productId: 'menus', color: 'matte', size: 'A4-1', sides: { front: { editor: { objects: [{ type: 'i-text', text: 'Menu' }] } } } })).json();
@@ -87,17 +87,14 @@ test('menus added before the key: 10 copies become one 10-pack (a copy of the de
     assert.notStrictEqual(ten.designId, d.id, 'a copy (no key in the cart)');
     assert.match(ten.designKey || '', /^[a-f0-9]{48}$/, 'with its own key now');
     assert.ok(ten.price < d.price * 10, `${ten.price}`);
-    // One fewer: nine single menus, and the tip to take ten for less.
+    // One fewer: nine copies never cost more than ten (owner, 27 Nov: more copies never cheaper), so no tip to take ten.
     await page.click('.cart-qty [data-qstep="-1"]');
-    await page.waitForFunction(() => { const c = JSON.parse(localStorage.getItem('pod-cart-v2') || '[]'); return c[0] && c[0].quantities && c[0].quantities[0].qty === 9; }, null, { timeout: 30000 }).catch(() => {});
-    await page.waitForSelector('[data-qtake]', { timeout: 30000 });
+    await page.waitForFunction(() => { const c = JSON.parse(localStorage.getItem('pod-cart-v2') || '[]'); return c[0] && c[0].quantities && c[0].quantities[0].qty === 9; }, null, { timeout: 30000 });
+    await page.waitForTimeout(500);
     const [nine] = await cartNow(page);
     assert.strictEqual(nine.designId, ten.designId, 'changed in place with its key');
-    assert.strictEqual(nine.quantities[0].qty, 9);
-    assert.match(await page.textContent('[data-qtake]'), /10 copies/);
-    await page.click('[data-qtake]');
-    await page.waitForFunction(() => { const c = JSON.parse(localStorage.getItem('pod-cart-v2') || '[]'); return c[0] && /10/.test(c[0].sizeLabel.en); }, null, { timeout: 30000 });
-    assert.strictEqual(await page.inputValue('.cart-qty .qty-n'), '10');
+    assert.ok(nine.price <= ten.price + 0.001, `9 copies ${nine.price} > 10 copies ${ten.price}`);
+    assert.strictEqual(await page.$('[data-qtake]'), null, 'no "cheaper" tip');
     assert.deepStrictEqual(errors, []);
   } finally {
     await ctx.close();
