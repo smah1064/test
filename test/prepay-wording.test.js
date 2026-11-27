@@ -308,7 +308,7 @@ test('guarantee texts: English and Egyptian Arabic, the owner\'s rules, no cash 
 const pub = (f) => fs.readFileSync(path.join(__dirname, '../public', f), 'utf8');
 test('the pages\' guarantee parts are hidden, empty and link nowhere until the switch is on (data-prepay-only, common.js)', () => {
   const parts = {
-    'index.html': ['guar.home'],
+    'index.html': ['hm.trust2.payT', 'hm.trust2.payS', 'hm.trust2.guarT', 'hm.trust2.guarS', 'hm.trust2.proofT', 'hm.trust2.proofS'],
     'design.html': ['guar.add'],
     'editor.html': ['guar.add'],
     'cart.html': ['pay.methods', 'guar.badge', 'guar.badgeText'],

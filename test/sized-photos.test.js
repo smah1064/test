@@ -84,7 +84,8 @@ test('small text on the home cards is readable, and the price note shows on phon
   assert.match(html, /<span class="hm-price-note" data-i18n="home.priceNote"><\/span>/);
   assert.doesNotMatch(html, /hide-sm" data-i18n="home.priceNote"/);
   const css = fs.readFileSync(path.join(__dirname, '../public/css/styles.css'), 'utf8');
-  assert.match(css, /\.hm-pack \{ color: var\(--ink-2\); font-size: 13\.5px; \}/);
+  // (The size has its own small grey line under the price since UX item 3, 27 Nov: still 12.5 px, not pale.)
+  assert.match(css, /\.hm-pack \{ display: block; color: #5f6368; font-size: 12\.5px; line-height: 1\.4; \}/);
 });
 
 test('the shop\'s artwork in small copies for the Templates list: transparent, far lighter, only real art files', async () => {

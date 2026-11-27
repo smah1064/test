@@ -149,6 +149,8 @@
       }
       el.hidden = !prepayOnly;
     });
+    // (And the parts that give way to them: today's words, hidden once paying in advance.)
+    root.querySelectorAll('[data-prepay-hide]').forEach((el) => { el.hidden = prepayOnly; });
   }
 
   /** Translate a UI string key. */
@@ -187,9 +189,20 @@
       /* the choice just won't be remembered */
     }
     applyDir();
+    langLogos();
     applyI18n();
     updateCartBadge(); // (its number in the new language's digits)
     document.dispatchEvent(new CustomEvent('pod:langchange', { detail: { lang } }));
+  }
+
+  // ---------- The logo in the page's language ----------
+  // Each logo (header, footer) has its address in data-logo-src, and only the page language's logo gets it (in the
+  // header, the line right after the logos), so the logo that isn't shown is never downloaded (about 74 KB on a
+  // first visit). Switching language gives the new language's logo its address there and then.
+  function langLogos(root = document) {
+    root.querySelectorAll('img[data-logo-src]').forEach((img) => {
+      if (img.dataset.logoLang === lang && !img.getAttribute('src')) img.setAttribute('src', img.dataset.logoSrc);
+    });
   }
 
   // ---------- Catalog ----------
@@ -793,7 +806,8 @@
     text.className = 'footer-text';
     text.append(...f.childNodes);
     f.append(text);
-    f.insertAdjacentHTML('afterbegin', '<a class="footer-logo" href="/" data-i18n-aria="brand"><img class="for-ar" src="/img/logo-ar-white.svg" alt="" width="91" height="60"><img class="for-en" src="/img/logo-en-white.svg" alt="" width="147" height="60"></a>');
+    f.insertAdjacentHTML('afterbegin', '<a class="footer-logo" href="/" data-i18n-aria="brand"><img class="for-ar" data-logo-lang="ar" data-logo-src="/img/logo-ar-white.svg" alt="" width="91" height="60"><img class="for-en" data-logo-lang="en" data-logo-src="/img/logo-en-white.svg" alt="" width="147" height="60"></a>');
+    langLogos(f);
   }
   // ---------- The shop as an app ----------
   // Installed from the browser (Android, computers: the browser's own offer, or "Install the app" in the footer;
@@ -830,6 +844,7 @@
     addAccountLink();
     addFooterLinks();
     showInstall();
+    langLogos(); // (the header's line did it already; this is for a page where it couldn't)
     // The header logo's name for screen readers: the shop's name in the page's language (the pages say
     // "إبداع · ebda3" in both), switched with the language like every other label.
     document.querySelectorAll('.site-header .brand').forEach((a) => a.setAttribute('data-i18n-aria', 'brand'));

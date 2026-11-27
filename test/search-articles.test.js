@@ -98,12 +98,16 @@ function home() {
   // The page's own ordering line, run as it is: names first, whole words before words that only start with it.
   const rankLine = page.match(/const rank = \(p\) => [^\n]+;/);
   assert.ok(rankLine, 'index.html has rank');
+  // (With the gift and occasion order before it, and the page's own sorting line: UX item 4, 27 Nov.)
+  const occasionLine = page.match(/const byOccasion = \(h, tq\) => [^\n]+;/);
+  const sortLine = page.match(/if \(ts\.length\) list = list\.map\(\(p, i\) => \[rank\(p\), i, p\]\)[^\n]+;/);
+  assert.ok(occasionLine && sortLine, 'index.html has the occasion order and the sorting');
   /** What the home page lists for a search, in its order. */
   const find = (q) => {
     const ts = S.norm(q).split(' ').filter(Boolean);
     const qs = S.query(q);
-    const rank = vm.runInNewContext(`${rankLine[0]}\nrank`, { ...lines, ts, qs, SEARCH: S, loose: S.loose });
-    return PRODUCTS.filter((p) => found(p, qs)).map((p, i) => [rank(p), i, p.id]).sort((x, y) => x[0] - y[0] || x[1] - y[1]).map((x) => x[2]);
+    const list = vm.runInNewContext(`${occasionLine[0]}\n${rankLine[0]}\nlet list = products.filter((p) => found(p, qs));\n${sortLine[0]}\nlist`, { ...lines, ts, qs, SEARCH: S, loose: S.loose, products: PRODUCTS });
+    return list.map((p) => p.id);
   };
   return { S, PRODUCTS, find, hay };
 }

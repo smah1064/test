@@ -95,6 +95,21 @@ window.POD_STRINGS = {
   'hm.trust.oneS': ['to thousands', 'لحد آلاف'],
   'hm.trust.payT': ['Safe payment', 'دفع آمن'],
   'hm.trust.payS': ['and a clear price up front', 'والسعر واضح من الأول'],
+  // The four points from launch, when paying in advance is the only way (owner's OK, UX item 1, 27 Nov). Shown only
+  // while the switch is on (data-prepay-only in index.html). The delivery days are the shop's settings.
+  'hm.trust2.payT': ['Pay in advance', 'ادفع مقدّمًا'],
+  'hm.trust2.payS': ['Card, Vodafone Cash or InstaPay', 'كارت، فودافون كاش، إنستاباي'],
+  'hm.trust2.guarT': ['7-day guarantee', 'ضمان 7 أيام'],
+  'hm.trust2.guarS': ['Reprint or your money back', 'نطبعهالك تاني أو ترجعلك فلوسك'],
+  'hm.trust2.deliveryT': ['Delivery in {days}', 'توصيل خلال {days}'],
+  'hm.trust2.deliveryS': ['Express, or {days} standard', 'بالسريع، أو {days} للعادي'],
+  'hm.trust2.proofT': ['You see the proof', 'هتشوف البروفة'],
+  'hm.trust2.proofS': ['before we print', 'قبل ما نطبع'],
+  // Counted days: POD.plural('hm.days', n) (one / two / few, Arabic 3–10 / many).
+  'hm.days.one': ['1 day', 'يوم واحد'],
+  'hm.days.two': ['2 days', 'يومين'],
+  'hm.days.few': ['{n} days', '{n} أيام'],
+  'hm.days.many': ['{n} days', '{n} يوم'],
   // "All products": the first 8, then the rest on request (owner's OK, UX item D, 26 Nov).
   'home.showAll': ['Show all {n} products', 'اعرض كل المنتجات ({n})'],
   'home.showing': ['Showing {n} of {total}', 'عارضين {n} من {total} منتج'],
@@ -147,6 +162,7 @@ window.POD_STRINGS = {
   'home.noMatch': ['No products match "{q}"', 'مفيش منتجات بالاسم "{q}"'],
   'home.noMatchCat': ['No products here yet', 'مفيش منتجات هنا لسه'],
   'home.noMatchHint': ['Try another word, or look through all the products.', 'جرّب كلمة تانية، أو شوف كل المنتجات.'],
+  'home.noMatchTry': ['Try another word, or pick one of these:', 'جرّب كلمة تانية، أو اختار من دول:'],
   'home.searchDesigns': ['Search ready designs for "{q}"', 'دوّر على "{q}" في التصميمات الجاهزة'],
   'home.priceNote': ['Prices include printing on one side', 'الأسعار تشمل الطباعة على وجه واحد'],
   'home.from': ['From {price}', 'يبدأ من {price}'],
@@ -305,7 +321,11 @@ window.POD_STRINGS = {
   'search.close': ['Close search', 'اقفل البحث'],
   'search.suggestions': ['Suggestions', 'اقتراحات'],
   'search.from': ['from {price}', 'من {price}'],
-  'search.none': ['Nothing found with that name. Try another word.', 'مالقيناش حاجة بالاسم ده. جرّب كلمة تانية'],
+  'search.none': ['Nothing found with that name.', 'مالقيناش حاجة بالاسم ده.'],
+  // Nothing found: the best sellers, a few ready designs and the link to all of them (owner's OK, UX item 4, 27 Nov).
+  'search.try': ['Try these:', 'جرّب دول:'],
+  'search.tryDesigns': ['Or start from a ready design:', 'أو ابدأ من تصميم جاهز:'],
+  'search.allDesigns': ['See all ready designs', 'شوف كل التصميمات الجاهزة'],
   'home.designsTitle': ['Ready-made designs', 'تصميمات جاهزة'],
   'home.designsText': ['Ramadan, football, funny Egyptian phrases and more. Pick one, choose the product and colour, and order. No design work needed.', 'رمضان وكورة وجمل مصرية مضحكة وأكتر. اختار التصميم والمنتج واللون واطلب على طول من غير ما تصمم.'],
   'home.designsCta': ['Browse designs', 'تصفح التصميمات'],

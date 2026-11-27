@@ -29,7 +29,7 @@
 <body data-title-key="home.pageTitle">
   <header class="site-header">
     <div class="container inner">
-      <a class="brand" href="/" aria-label="إبداع · ebda3"><img class="brand-logo brand-ar" src="/img/logo-ar-header.svg" alt="إبداع" width="61" height="40"><img class="brand-logo brand-en" src="/img/logo-en-header.svg" alt="ebda3" width="98" height="40"><img class="brand-logo brand-mark-logo" src="/img/logo-mark-header.svg" alt="ebda3" width="35" height="40"></a>
+      <a class="brand" href="/" aria-label="إبداع · ebda3"><img class="brand-logo brand-ar" data-logo-lang="ar" data-logo-src="/img/logo-ar-header.svg" alt="إبداع" width="61" height="40"><img class="brand-logo brand-en" data-logo-lang="en" data-logo-src="/img/logo-en-header.svg" alt="ebda3" width="98" height="40"></a><script>(function(){var l=document.documentElement.lang==='en'?'en':'ar';document.querySelectorAll('.brand img[data-logo-src]').forEach(function(i){if(i.getAttribute('data-logo-lang')===l)i.src=i.getAttribute('data-logo-src')})})()</script>
       <nav>
         <a href="/#products" data-i18n="nav.products"></a>
         <a href="/designs"><span class="nav-long" data-i18n="nav.designs"></span><span class="nav-short" data-i18n="nav.designsShort"></span></a>
@@ -77,13 +77,32 @@
       <div class="hm-hero-art" id="hero-art" aria-hidden="true"></div>
     </section>
 
-    <!-- Why order here, right under the banner (owner's OK, UX item B, 26 Nov) -->
-    <ul class="hm-trust" aria-label="" data-i18n-aria="hm.trustLabel">
+    <!-- Why order here, right under the banner (owner's OK, UX item B, 26 Nov). These four while the shop takes cash
+         on delivery (today); from launch (paying in advance only, src/payment-wording.js) the four under them instead. -->
+    <ul class="hm-trust" aria-label="" data-i18n-aria="hm.trustLabel" data-prepay-hide>
       <li><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7z"/><circle cx="7" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/></svg><span><strong data-i18n="hm.trust.deliveryT"></strong><small data-i18n="hm.trust.deliveryS"></small></span></li>
       <li><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span><strong data-i18n="hm.trust.proofT"></strong><small data-i18n="hm.trust.proofS"></small></span></li>
       <li><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M11 9l2-1.5V16"/></svg><span><strong data-i18n="hm.trust.oneT"></strong><small data-i18n="hm.trust.oneS"></small></span></li>
       <li><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><span><strong data-i18n="hm.trust.payT"></strong><small data-i18n="hm.trust.payS"></small></span></li>
     </ul>
+    <!-- From launch (owner's OK, UX item 1, 27 Nov): pay in advance (the ways to pay), the 7-day guarantee (its page),
+         the real delivery days (filled from the shop's settings) and the proof. Hidden and empty until then. -->
+    <ul class="hm-trust hm-trust-prepay" aria-label="" data-i18n-aria="hm.trustLabel" data-prepay-only hidden>
+      <li><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19M6.5 15h4"/></svg><span><strong data-prepay-only data-prepay-i18n="hm.trust2.payT" hidden></strong><small data-prepay-only data-prepay-i18n="hm.trust2.payS" hidden></small></span></li>
+      <li class="hm-trust-guar"><a data-prepay-only data-prepay-href="/guarantee" hidden><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7.5 3v5.5c0 4.6-3.2 8.2-7.5 9.5-4.3-1.3-7.5-4.9-7.5-9.5V6z"/><path d="M8.8 12.2l2.2 2.2 4.3-4.4"/></svg><span><strong data-prepay-only data-prepay-i18n="hm.trust2.guarT" hidden></strong><small data-prepay-only data-prepay-i18n="hm.trust2.guarS" hidden></small></span></a></li>
+      <li><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7z"/><circle cx="7" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/></svg><span><strong data-prepay-only data-trust-days="title" hidden></strong><small data-prepay-only data-trust-days="text" hidden></small></span></li>
+      <li><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span><strong data-prepay-only data-prepay-i18n="hm.trust2.proofT" hidden></strong><small data-prepay-only data-prepay-i18n="hm.trust2.proofS" hidden></small></span></li>
+    </ul>
+
+    <!-- How it works, right after the points (owner's OK, UX item 5, 27 Nov; compact on phones). -->
+    <section class="hm-how" aria-labelledby="hm-how-title">
+      <h2 id="hm-how-title" data-i18n="hm.howTitle"></h2>
+      <div class="hm-steps">
+        <div class="hm-step"><span class="hm-num">1</span><h3 data-i18n="home.step1.title"></h3><p data-i18n="home.step1.text"></p></div>
+        <div class="hm-step"><span class="hm-num">2</span><h3 data-i18n="home.step2.title"></h3><p data-i18n="home.step2.text"></p></div>
+        <div class="hm-step"><span class="hm-num">3</span><h3 data-i18n="home.step3.title"></h3><p data-i18n="home.step3.text"></p></div>
+      </div>
+    </section>
 
     <!-- Three picture tiles -->
     <section class="hm-tiles" id="hm-tiles" aria-label="" data-i18n-aria="hm.tilesLabel"></section>
@@ -91,17 +110,17 @@
     <!-- New and best sellers, then rows by theme (filled from the catalogue). -->
     <div id="hm-rows"></div>
 
-    <!-- Why order here -->
-    <section class="hm-benefits" aria-label="" data-i18n-aria="hm.whyLabel">
+    <!-- Why order here (today; from launch the points under the banner say it, so this box is not shown) -->
+    <section class="hm-benefits" aria-label="" data-i18n-aria="hm.whyLabel" data-prepay-hide>
       <div class="hm-benefit"><span class="hm-ico" aria-hidden="true">⚡</span><div><strong data-i18n="hm.b1.title"></strong><p data-i18n="hm.b1.text"></p></div></div>
       <div class="hm-benefit"><span class="hm-ico" aria-hidden="true">✅</span><div><strong data-i18n="hm.b2.title"></strong><p data-i18n="hm.b2.text"></p></div></div>
-      <div class="hm-benefit"><span class="hm-ico" aria-hidden="true">💵</span><div><strong data-i18n="hm.b3.title"></strong><p data-i18n="hm.b3.text"></p><a class="guar-link" data-prepay-only data-prepay-i18n="guar.home" data-prepay-href="/guarantee" hidden></a></div></div>
+      <div class="hm-benefit"><span class="hm-ico" aria-hidden="true">💵</span><div><strong data-i18n="hm.b3.title"></strong><p data-i18n="hm.b3.text"></p></div></div>
       <div class="hm-benefit"><span class="hm-ico" aria-hidden="true">🧾</span><div><strong data-i18n="hm.b4.title"></strong><p data-i18n="hm.b4.text"></p></div></div>
     </section>
 
     <section id="products">
       <div class="section-title">
-        <h2 data-i18n="hm.allTitle"></h2>
+        <h2 id="hm-all-title" data-i18n="hm.allTitle"></h2>
         <span class="hm-price-note" data-i18n="home.priceNote"></span>
       </div>
       <form class="design-search home-search" id="home-search" role="search" autocomplete="off">
@@ -113,15 +132,6 @@
       <div class="cat-chips" id="cats"></div>
       <p class="muted small home-count" id="home-count" aria-live="polite"></p>
       <div class="product-grid" id="product-grid"></div>
-    </section>
-
-    <section class="hm-how" aria-labelledby="hm-how-title">
-      <h2 id="hm-how-title" data-i18n="hm.howTitle"></h2>
-      <div class="hm-steps">
-        <div class="hm-step"><span class="hm-num">1</span><h3 data-i18n="home.step1.title"></h3><p data-i18n="home.step1.text"></p></div>
-        <div class="hm-step"><span class="hm-num">2</span><h3 data-i18n="home.step2.title"></h3><p data-i18n="home.step2.text"></p></div>
-        <div class="hm-step"><span class="hm-num">3</span><h3 data-i18n="home.step3.title"></h3><p data-i18n="home.step3.text"></p></div>
-      </div>
     </section>
 
     <section class="hm-faq" aria-labelledby="hm-faq-title">
@@ -319,7 +329,7 @@
           gift: 'gift, gifts, present, هدية, هدايا, هديه',
           coffee: 'coffee, قهوة, قهوه, نسكافيه',
           tea: 'tea, شاي, شاى',
-          birthday: 'birthday, عيد ميلاد',
+          birthday: 'birthday, bday, عيد ميلاد, اعياد ميلاد',
           dog: 'dog, puppy, كلب, كلاب',
           cat: 'cat, kitten, قطة, قطط',
           kids: 'kids, kid, children, child, اطفال, طفل, ولاد, اولاد',
@@ -329,7 +339,10 @@
           // (Valentine's Day, Teacher's Day, a new baby and the prayer mat (مصلية), in either language. QA 25 Nov.)
           valentine: 'valentine, valentines, valentine day, عيد الحب, عيد حب, فالنتاين, فلانتين',
           teacher: 'teacher, teachers day, teacher day, معلم, المعلم, عيد المعلم, مدرس, يوم المعلم',
-          baby: 'baby, newborn, بيبي, نونو, مولود',
+          baby: 'baby, newborn, new baby, بيبي, نونو, مولود, سبوع',
+          // (Graduation and engagement gifts, in either language: the products' occasions, src/products.js. UX item 4, 27 Nov.)
+          graduation: 'graduation, graduate, تخرج, حفلة تخرج',
+          engagement: 'engagement, engaged, خطوبة',
           prayermat: 'prayer mat, prayer rug, سجادة صلاة, مصلية, مصلاية',
         };
         const sameAs = new Map();
@@ -471,7 +484,9 @@
         const named = SEARCH.index(name, true);
         // (true: everything the shop's search found before is still found.) The description on its own (see inText), and
         // the name also as it is spelt, without the forgiving ي (see rank).
-        return [p.id, { all: SEARCH.index(text, true), about: SEARCH.index([p.description && p.description.en, p.description && p.description.ar].join(' '), true), name: ` ${norm(name)} `, named, spelt: { ...named, loose: '' }, sized: SEARCH.index(sizeWords(p), true), colored: SEARCH.index(colorWords(p)) }];
+        // Its occasions (src/products.js, OCCASIONS: gift, birthday, mom…), as whole words or what they name, so "tea" is
+        // not the "teacher" of a mug and "men" not the "engagement" of a cushion.
+        return [p.id, { all: SEARCH.index(text, true), about: SEARCH.index([p.description && p.description.en, p.description && p.description.ar].join(' '), true), name: ` ${norm(name)} `, named, spelt: { ...named, loose: '' }, sized: SEARCH.index(sizeWords(p), true), colored: SEARCH.index(colorWords(p)), occasion: SEARCH.index((p.occasions || []).join(' ')) }];
       }));
       // The search, on product text only: markup typed into the box ("<b>") is not a word.
       const typed = () => q.replace(/<[^<>]*>/g, ' ');
@@ -489,8 +504,10 @@
       // cards") also count each in either place, as when they were one text.
       const inText = (h, term) => SEARCH.match(h.all, [term]) || SEARCH.match(h.about, [term], /[a-z]/.test(term.word || term.or[0].word) || undefined)
         || Boolean(term.or && term.or.every((x) => inText(h, x)));
-      // Every word is in the product's text, is one of its colours, or is a year for a calendar.
-      const found = (p, qs) => { const h = hay.get(p.id); return qs.every((term) => inText(h, term) || isColor(h, term) || forYear(h, term)); };
+      // Every word is in the product's text, is one of its colours, is a year for a calendar, or is one of its occasions
+      // («هدية عيد ميلاد», "birthday gift": the mug, the T-shirt, the cushion…).
+      const isOccasion = (h, term) => SEARCH.match(h.occasion, [term], 'word');
+      const found = (p, qs) => { const h = hay.get(p.id); return qs.every((term) => inText(h, term) || isColor(h, term) || forYear(h, term) || isOccasion(h, term)); };
 
       // Real product photos, recoloured on the server (small cached WebP);
       // the drawn mockup is the fallback if a picture can't load.
@@ -575,15 +592,15 @@
       // Ids that don't exist (yet) are skipped, so a row only shows what the shop sells.
       const BEST = ['tshirt', 'mug', 'bizcards', 'stickersheet', 'hoodie', 'cushion', 'invitations', 'tote'];
       const NEW = ['engrpen', 'engrwallet', 'menus', 'calendar', 'labels', 'postcards', 'photobook', 'magnets', 'wrappingpaper', 'brochures', 'engrplaque', 'caketopper'];
+      // Five rows, on phones and computers alike (owner's OK, UX item 5, 27 Nov: a shorter home page). The home,
+      // weddings & occasions and laser rows are not on the home page any more; their products are in "All products",
+      // its categories and the search.
       const ROWS = [
         { key: 'fresh', ids: [...NEW.slice(0, 4), ...BEST.slice(0, 6)], badge: (id) => (NEW.includes(id) || (byId(id) || {}).base ? 'new' : 'best') },
-        { key: 'cards', ids: ['invitations', 'greetingcard', 'postcards', 'foldedcards', 'giftvouchers', 'bookmarks', 'eidenvelopes', 'certificates'], link: '/?cat=occasions#products' },
         { key: 'wear', ids: ['tshirt', 'hoodie', 'sweatshirt', 'oversized', 'polo', 'kidstee', 'cap', 'tote', 'apron'], link: '/?cat=apparel#products' },
-        { key: 'home', ids: ['mug', 'cushion', 'poster', 'canvas', 'coasters', 'calendar', 'deskcalendar', 'bedsheet', 'curtains', 'magnets'], link: '/?cat=home#products' },
         { key: 'gifts', ids: ['magicmug', 'couplemugs', 'photobook', 'engrframe', 'engrwallet', 'engrpen', 'keychain', 'namepuzzle', 'tumbler', 'prayermat', 'wrappingpaper'], link: '/?cat=occasions#products' },
+        { key: 'cards', ids: ['invitations', 'greetingcard', 'postcards', 'foldedcards', 'giftvouchers', 'bookmarks', 'eidenvelopes', 'certificates'], link: '/?cat=occasions#products' },
         { key: 'biz', ids: ['bizcards', 'flyers', 'brochures', 'menus', 'labels', 'letterhead', 'logostickers', 'paperbags', 'booklets', 'rollup', 'banners', 'windowstickers', 'idcards', 'notepads', 'folders', 'giftvouchers'], link: '/?cat=business#products' },
-        { key: 'events', ids: ['weddingsign', 'tablenumbers', 'placecards', 'caketopper', 'ramadandecor', 'invitations', 'eidenvelopes', 'tablecloth'], link: '/?cat=occasions#products' },
-        { key: 'laser', ids: products.filter((p) => p.category === 'laser').map((p) => p.id), link: '/?cat=laser#products' },
       ];
       // Products the manager made from another one show in that one's rows, right after it.
       for (const row of ROWS) row.ids = row.ids.flatMap((id) => [id, ...products.filter((p) => p.base === id).map((p) => p.id)]);
@@ -654,15 +671,55 @@
         </a>`).join('');
       }
 
+      // ---------- The points under the banner, from launch ----------
+      // The delivery point says the shop's real days (its settings, as at checkout): "in 2 days: express, or 5 days
+      // standard". Only while paying in advance (today's four points show otherwise).
+      const days = catalog.delivery || {};
+      function paintTrust() {
+        const on = POD.payment.prepayOnly && days.expressDays > 0 && days.standardDays > 0;
+        document.querySelectorAll('[data-trust-days]').forEach((el) => {
+          el.textContent = !on ? '' : el.dataset.trustDays === 'title'
+            ? t('hm.trust2.deliveryT', { days: POD.plural('hm.days', days.expressDays) })
+            : t('hm.trust2.deliveryS', { days: POD.plural('hm.days', days.standardDays) });
+        });
+      }
+
+      // ---------- Categories ----------
+      // On phones (820px and less) one row that is swiped (styles.css, "Home page, 27 Nov"): a fade at its end edge
+      // while there is more to see, and the chosen category scrolled into view.
+      const catsRow = document.getElementById('cats');
+      function catsFade() {
+        const more = catsRow.scrollWidth - catsRow.clientWidth - Math.abs(catsRow.scrollLeft);
+        catsRow.classList.toggle('cats-more', more > 2);
+      }
+      catsRow.addEventListener('scroll', catsFade, { passive: true });
+      window.addEventListener('resize', catsFade);
+      /** The chosen chip into view, along the row only (the page itself doesn't move). */
+      function catsShowActive() {
+        const a = catsRow.querySelector('.chip.active');
+        if (!a || catsRow.scrollWidth <= catsRow.clientWidth) return;
+        const r = catsRow.getBoundingClientRect();
+        const c = a.getBoundingClientRect();
+        const rtl = getComputedStyle(catsRow).direction === 'rtl';
+        // (In view and clear of the fade at the end edge: left in Arabic, right in English.)
+        if (c.left >= r.left + (rtl ? 48 : 0) && c.right <= r.right - (rtl ? 0 : 48)) return;
+        catsRow.scrollLeft += c.left + c.width / 2 - (r.left + r.width / 2);
+      }
+
       function render() {
         renderRows();
         renderTiles();
+        paintTrust();
         // Only categories with something in them (hidden products are not in the list).
         const used = categories.filter((c) => products.some((p) => p.category === c.id));
         if (cat !== 'all' && !used.some((c) => c.id === cat)) cat = 'all';
         document.getElementById('cats').innerHTML = [{ id: 'all', name: null }, ...used]
           .map((c) => `<button class="chip ${c.id === cat ? 'active' : ''}" data-cat="${c.id}">${esc(c.name ? tr(c.name) : t('cat.all'))}</button>`)
           .join('');
+        // The heading says what is listed: "All products", or the chosen category's name (owner's OK, UX item 2).
+        document.getElementById('hm-all-title').textContent = cat === 'all' ? t('hm.allTitle') : tr(catName(cat));
+        catsShowActive();
+        catsFade();
         const ts = terms();
         const qs = SEARCH.query(typed());
         // A search with nothing to look for (only symbols, like "$&") matches nothing, not everything.
@@ -676,26 +733,45 @@
         // the product ("tshirt xl", "white t-shirt", "calendar 2027") is not looked for in the name, so the T-shirts still
         // come before the Sweatshirt. (A colour only when another word is left: in "card 100" the calendar, in "Matte card"
         // with 100 calendars, is not a card by name.)
-        const rank = (p) => { const h = hay.get(p.id); const tz = ts.filter((w) => ts.length < 2 || !SEARCH.match(h.sized, SEARCH.query(w))); const tc = tz.filter((w) => !SEARCH.query(w).every((term) => isColor(h, term) || forYear(h, term))); const tw = tc.length ? tc : tz; const tq = tw.length === ts.length ? qs : SEARCH.query(tw.join(' ')); return SEARCH.match(h.spelt, tq, 'word') ? 0 : tw.every((w) => h.name.includes(` ${w}`)) ? 1 : SEARCH.match(h.named, tq, 'word') || tw.every((w) => loose(h.name).includes(` ${loose(w)}`)) ? 2 : SEARCH.match(h.named, tq, true) ? 3 : 4; };
-        if (ts.length) list = list.map((p, i) => [rank(p), i, p]).sort((x, y) => x[0] - y[0] || x[1] - y[1]).map((x) => x[2]);
+        // Not by name: a gift search («هدية عيد ميلاد», "birthday gift", "هدايا عيد الأم") lists the products with all its
+        // words among their occasions first (4; one with a word in its name before the others: «هدية مولود», the baby onesie),
+        // the best gifts first (their order in src/products.js: the mugs, the T-shirt, the cushion…), then the rest (5); any
+        // other search lists what has the words in its own text first (5: «عيد ميلاد», the invitations), then what only its
+        // occasions find (6, in the same order). (Owner's OK, UX item 4, 27 Nov.)
+        const byOccasion = (h, tq) => (tq.some((term) => term.concepts.includes('gift')) ? (!SEARCH.match(h.occasion, tq, 'word') ? 5 : tq.some((term) => SEARCH.match(h.named, [term], 'word')) ? 4 : 4.5) : tq.every((term) => inText(h, term) || isColor(h, term) || forYear(h, term)) ? 5 : 6);
+        const rank = (p) => { const h = hay.get(p.id); const tz = ts.filter((w) => ts.length < 2 || !SEARCH.match(h.sized, SEARCH.query(w))); const tc = tz.filter((w) => !SEARCH.query(w).every((term) => isColor(h, term) || forYear(h, term))); const tw = tc.length ? tc : tz; const tq = tw.length === ts.length ? qs : SEARCH.query(tw.join(' ')); return SEARCH.match(h.spelt, tq, 'word') ? 0 : tw.every((w) => h.name.includes(` ${w}`)) ? 1 : SEARCH.match(h.named, tq, 'word') || tw.every((w) => loose(h.name).includes(` ${loose(w)}`)) ? 2 : SEARCH.match(h.named, tq, true) ? 3 : byOccasion(h, tq); };
+        if (ts.length) list = list.map((p, i) => [rank(p), i, p]).sort((x, y) => x[0] - y[0] || (x[0] > 3 && x[0] !== 5 ? (x[2].occasionRank || 99) - (y[2].occasionRank || 99) : 0) || x[1] - y[1]).map((x) => x[2]);
         document.getElementById('home-count').textContent = searching && list.length ? POD.plural('home.found', list.length, { q: q.trim() }) : '';
+        // A search that finds nothing: «جرّب دول:» under the message, the top best sellers (the same cards), then a few
+        // ready designs and the link to all of them (owner's OK, UX item 4, 27 Nov).
+        let before = '';
+        let after = '';
         if (!list.length) {
           const qq = q.trim();
-          grid.innerHTML = `<div class="card empty home-empty">
+          const tries = qq ? BEST.map(byId).filter(Boolean).slice(0, 4) : [];
+          const empty = `<div class="card empty home-empty">
             <h3>${qq ? esc(t('home.noMatch', { q: '\u0000' })).replace('\u0000', `<bdi>${esc(qq)}</bdi>`) : esc(t('home.noMatchCat'))}</h3>
-            <p class="muted">${esc(t('home.noMatchHint'))}</p>
+            <p class="muted">${esc(t(tries.length ? 'home.noMatchTry' : 'home.noMatchHint'))}</p>
             <div class="design-empty-actions">
               ${qq ? `<button type="button" class="btn btn-primary" data-clear-q>${esc(t('designs.clearSearch'))}</button>` : ''}
               ${cat !== 'all' ? `<button type="button" class="btn" data-all-cats>${esc(t('designs.allCats'))}</button>` : ''}
               ${qq ? `<a class="btn" href="/designs?q=${encodeURIComponent(qq)}">${esc(t('home.searchDesigns', { q: qq }))}</a>` : ''}
             </div>
           </div>`;
-          return;
+          if (!tries.length) {
+            grid.innerHTML = empty;
+            return;
+          }
+          before = `${empty}<h3 class="home-try-title">${esc(t('search.try'))}</h3>`;
+          after = `<div class="home-try-designs"><div class="home-try-box"></div>
+            <a class="btn home-try-all" href="/designs">${esc(t('search.allDesigns'))} <span aria-hidden="true">${document.documentElement.dir === 'rtl' ? '←' : '→'}</span></a></div>`;
+          list = tries;
+          showTryDesigns();
         }
         // Catalogue cards: the product with a design on, the name, the price, "Start designing" and "Details".
         const total = list.length;
         if (!searching && !showAll && total > FIRST + 2) list = list.slice(0, FIRST);
-        grid.innerHTML = list.map((p) => `
+        grid.innerHTML = before + list.map((p) => `
           <div class="hm-gcard" data-place="${esc(p.id)}">
             <a class="hm-gpic" href="${hrefOf(p)}" tabindex="-1" aria-hidden="true">${gridPicture(p)}</a>
             <h3><a href="${hrefOf(p)}">${esc(tr(p.name))}</a></h3>
@@ -706,7 +782,21 @@
           <div class="hm-showall">
             <button type="button" class="btn btn-lg" data-show-all>${esc(t('home.showAll', { n: POD.num(total) }))}</button>
             <span class="muted small">${esc(t('home.showing', { n: POD.num(list.length), total: POD.num(total) }))}</span>
-          </div>` : '');
+          </div>` : '') + after;
+      }
+      /** The ready designs under "Try these" (the shop's pictures of them, the header search's list: site-search.js). */
+      function showTryDesigns() {
+        const tries = POD.searchTries;
+        if (!tries) return;
+        tries.readyDesigns(4).then((ds) => {
+          const box = grid.querySelector('.home-try-box');
+          if (!box || !ds.length) return;
+          box.innerHTML = `<h3 class="home-try-title">${esc(t('search.tryDesigns'))}</h3>
+            <div class="home-try-grid">${ds.map((d) => `<a class="card product-card design-card" href="${esc(d.href)}" data-place="try:${esc(d.id)}">
+              <div class="thumb"><img alt="" loading="lazy" decoding="async" src="${esc(tries.sizedPic(d.file, 480))}"></div>
+              <div class="body"><h3 dir="auto">${esc(tr(d.name))}</h3></div>
+            </a>`).join('')}</div>`;
+        });
       }
       document.getElementById('cats').addEventListener('click', (e) => {
         const b = e.target.closest('[data-cat]');

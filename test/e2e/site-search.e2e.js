@@ -85,7 +85,8 @@ test('open, type, suggestions, Escape closes; header height unchanged; no sidewa
 
         await page.locator('.site-search input').fill('xyzq');
         await page.waitForSelector('.site-search-none:not([hidden])');
-        assert.strictEqual(await page.locator('.site-search-none').textContent(), lang === 'ar' ? 'مالقيناش حاجة بالاسم ده. جرّب كلمة تانية' : 'Nothing found with that name. Try another word.', where);
+        // (Since UX item 4, 27 Nov, things to tap follow it: test/e2e/search-ux.e2e.js.)
+        assert.strictEqual(await page.locator('.site-search-none').textContent(), lang === 'ar' ? 'مالقيناش حاجة بالاسم ده.' : 'Nothing found with that name.', where);
         assert.ok(await page.locator('.site-search-list').isHidden(), where);
 
         await page.keyboard.press('Escape');

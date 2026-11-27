@@ -142,7 +142,7 @@
       gift: 'gift, gifts, present, هدية, هدايا, هديه',
       coffee: 'coffee, قهوة, قهوه, نسكافيه',
       tea: 'tea, شاي, شاى',
-      birthday: 'birthday, عيد ميلاد',
+      birthday: 'birthday, bday, عيد ميلاد, اعياد ميلاد',
       dog: 'dog, puppy, كلب, كلاب',
       cat: 'cat, kitten, قطة, قطط',
       kids: 'kids, kid, children, child, اطفال, طفل, ولاد, اولاد',
@@ -152,7 +152,10 @@
       // (Valentine's Day, Teacher's Day, a new baby and the prayer mat (مصلية), in either language. QA 25 Nov.)
       valentine: 'valentine, valentines, valentine day, عيد الحب, عيد حب, فالنتاين, فلانتين',
       teacher: 'teacher, teachers day, teacher day, معلم, المعلم, عيد المعلم, مدرس, يوم المعلم',
-      baby: 'baby, newborn, بيبي, نونو, مولود',
+      baby: 'baby, newborn, new baby, بيبي, نونو, مولود, سبوع',
+      // (Graduation and engagement gifts, in either language: the products' occasions, src/products.js. UX item 4, 27 Nov.)
+      graduation: 'graduation, graduate, تخرج, حفلة تخرج',
+      engagement: 'engagement, engaged, خطوبة',
       prayermat: 'prayer mat, prayer rug, سجادة صلاة, مصلية, مصلاية',
     };
     const sameAs = new Map();
