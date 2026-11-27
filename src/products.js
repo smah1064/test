@@ -874,13 +874,26 @@ PRODUCTS.push(
     id: 'plaque',
     category: 'occasions',
     name: t('Acrylic Photo Plaque', 'بلاك أكريليك للصور'),
-    description: t('Thin crystal-clear acrylic plaque. For weddings, graduation and memories.', 'بلاك أكريليك شفاف ورفيع. للأفراح والتخرج والذكريات.'),
+    description: t('Crystal-clear acrylic plaque, 5 mm thin or a thick 15 mm photo block. The small sizes stand on a desk; the biggest hangs on the wall. For weddings, graduation and memories.', 'بلاك أكريليك شفاف كريستال، رفيع 5 مم أو بلوك صور تخين 15 مم. المقاسات الصغيرة بتقف على المكتب، والكبيرة بتتعلق على الحيطة. للأفراح والتخرج والذكريات.'),
     basePrice: 450,
     colors: [{ id: 'clear', name: t('Crystal clear', 'شفاف كريستال'), hex: '#ffffff' }],
+    // (Owner's go, 27 Nov: two big sizes and a thick block. Every size keeps the 13 × 18 shape, so the big ones are
+    // 28.9 × 40 and 43.3 × 60 cm: a print the editor draws is the plaque's real shape.)
     sizes: [
       { id: '13x18', label: t('13 × 18 cm', '13 × 18 سم'), surcharge: 0 },
       { id: '18x25', label: t('18 × 25 cm', '18 × 25 سم'), surcharge: 250 },
+      { id: '30x40', label: t('29 × 40 cm', '29 × 40 سم'), surcharge: 650 },
+      { id: '40x60', label: t('43 × 60 cm, with wall standoffs', '43 × 60 سم، بمسامير ديكور للحيطة'), surcharge: 1350 },
     ],
+    options: [{
+      id: 'thickness',
+      name: t('Thickness', 'التُخن'),
+      help: t('The standard plaque is 5 mm. The photo block is a solid 15 mm piece: heavier, with deep glassy edges.', 'البلاك العادي 5 مم. بلوك الصور قطعة مصمتة 15 مم: أتقل وحوافها عميقة ولامعة زي الإزاز.'),
+      choices: [
+        { id: 'standard', name: t('Standard, 5 mm', 'عادي، 5 مم'), price: 0 },
+        { id: 'block', name: t('Thick photo block, 15 mm', 'بلوك صور تخين، 15 مم'), price: { '13x18': 250, '18x25': 350, '30x40': 600, '40x60': 900 } },
+      ],
+    }],
     sides: [{ id: 'front', name: FRONT, svg: flat(140, 90, 220, 305, 4), printArea: { x: 140, y: 90, w: 220, h: 305 }, printWidthIn: 5.12 }],
   },
   {
@@ -2349,6 +2362,16 @@ PRODUCTS.push(
     description: t('Glossy printed magnets with a strong magnetic back and rounded corners: 6 × 9, 8 × 12 or 10 × 15 cm. For photos and gifts, or your restaurant\'s menu and delivery number on every fridge.', 'مغناطيس تلاجة مطبوع بضهر مغناطيس قوي وحواف مدورة: 6 × 9 أو 8 × 12 أو 10 × 15 سم. للصور والهدايا، أو منيو مطعمك ورقم الدليفري على كل تلاجة.'),
     basePrice: 50,
     colors: [{ id: 'gloss', name: t('Glossy', 'لامع'), hex: '#ffffff' }, { id: 'matte', name: t('Matte', 'مطفي'), hex: '#ffffff' }],
+    // A clear acrylic face over the print (owner's go, 27 Nov): about 60% on top of each pack's price.
+    options: [{
+      id: 'finish',
+      name: t('Top layer', 'الوش'),
+      help: t('A clear 3 mm acrylic face over the print: thicker, glossier and wipes clean.', 'طبقة أكريليك شفافة 3 مم فوق الطباعة: أتقل وألمع وبتتمسح بسهولة.'),
+      choices: [
+        { id: 'paper', name: t('Printed paper', 'ورق مطبوع'), price: 0 },
+        { id: 'acrylic', name: t('Acrylic-faced', 'بوش أكريليك'), price: { '60x90-1': 30, '60x90-100': 900, '80x120-1': 45, '80x120-100': 1320, '100x150-1': 60, '100x150-100': 1800 } },
+      ],
+    }],
     sizes: qty([
       ['60x90-1', '6 × 9 cm', '6 × 9 سم', 0], ['60x90-100', '6 × 9 cm × 100', '6 × 9 سم × 100', 1450],
       ['80x120-1', '8 × 12 cm', '8 × 12 سم', 25], ['80x120-100', '8 × 12 cm × 100', '8 × 12 سم × 100', 2150],
@@ -2404,6 +2427,378 @@ PRODUCTS.push(
       { id: 'back', name: BACK, svg: tentSvg(PLACE_CARD, true), printArea: { ...PLACE_CARD }, printWidthIn: cmIn(9) },
     ],
     cardArt: '<rect x="52" y="200" width="396" height="220" fill="#fff9f0"/><path d="M200 250 Q250 220 300 250" fill="none" stroke="#c9a227" stroke-width="4"/><rect x="130" y="290" width="240" height="26" rx="13" fill="#2b2d42"/><rect x="190" y="340" width="120" height="10" rx="5" fill="#c9a227"/>',
+  },
+);
+
+// ---------- CNC routing and UV printing (owner's go, 27 Nov) ----------
+// Made by partner workshops. CNC products use the one-tone mode (`laser`, see the laser products above): the editor
+// draws them in the material's carved tone and the dashboard offers the vector files (LightBurn SVG, cut lines) the
+// router needs; their process is 'cnc'. The UV products print in full colour on acrylic, glass, wood or transfer film.
+// Every printArea has the real piece's proportions and printWidthIn is its real width; bigger sizes are the same shape
+// (SIZE_PRINT_SCALE). `cardArt` is a sample design for the shop's card picture until the product has a studio photo.
+const WALL = (hex) => `<rect x="0" y="0" width="500" height="600" fill="${hex}"/>`;
+const DESK = '<rect x="0" y="0" width="500" height="600" fill="#f1ede7"/><rect x="0" y="420" width="500" height="180" fill="#e2d3bd"/>';
+const CLEAR_EDGE = '#a9bfc6';
+// A few stand-offs (the screws that hold a plate off the wall), drawn over the design.
+const standoffs = (pts) => sv(pts.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="9" fill="#d9dcdf" stroke="#8d939b" stroke-width="2"/><circle cx="${x}" cy="${y}" r="3" fill="#8d939b"/>`).join(''));
+const NAMEART = { x: 30, y: 200, w: 440, h: 220 };
+const NAMEART_SCREWS = standoffs([[48, 218], [452, 218], [48, 402], [452, 402]]);
+const TAG = { x: 100, y: 150, w: 300, h: 300, rx: 150 };
+const TAG_HOLE = sv('<circle cx="250" cy="178" r="10" fill="#f1ede7" stroke="#a9bfc6" stroke-width="2"/>');
+PRODUCTS.push(
+  {
+    id: 'calligraphy',
+    category: 'home',
+    name: t('Layered Calligraphy Wall Art', 'لوحة كاليجرافي خشب طبقات'),
+    description: t('Arabic calligraphy carved in layers of wood on a round board, the words raised in gold. A name, a verse or a duaa for the living room, Ramadan or a new home.', 'خط عربي محفور طبقات خشب على لوح مدوّر، والكلام بارز بالدهبي. اسم أو آية أو دعاء للصالة أو رمضان أو بيت جديد.'),
+    basePrice: 1500,
+    colorLabel: t('Material', 'الخامة'),
+    colors: [
+      WOOD('natural', 'Natural oak wood + gold', 'خشب أرو طبيعي + دهبي', '#d9b88a', '#8f6b12'),
+      { id: 'black', name: t('Black wood + gold', 'خشب أسود + دهبي'), hex: '#26231f', ink: '#d4af37' },
+      { id: 'white', name: t('White wood + gold', 'خشب أبيض + دهبي'), hex: '#f2eee7', ink: '#c9a227' },
+      WOOD('walnut', 'Walnut + gold', 'خشب جوزي + دهبي', '#7a5232', '#d4af37'),
+    ],
+    sizes: [
+      { id: '40', label: t('40 cm round', 'دايرة 40 سم'), surcharge: 0 },
+      { id: '50', label: t('50 cm round', 'دايرة 50 سم'), surcharge: 450 },
+    ],
+    sides: [{
+      id: 'front',
+      name: FRONT,
+      svg: sv(WALL('#ece7df') + '<circle cx="256" cy="318" r="180" fill="#000" opacity=".12"/><circle cx="250" cy="310" r="180" fill="{{C}}" stroke="{{L}}" stroke-width="3"/>' + GRAIN(130, 200, 240, 220)),
+      printArea: { x: 70, y: 130, w: 360, h: 360, rx: 180 },
+      printWidthIn: cmIn(40),
+    }],
+    cardArt: '<circle cx="250" cy="310" r="150" fill="none" stroke="{{I}}" stroke-width="5"/><path d="M150 335 q50 -95 100 -22 t100 -32" fill="none" stroke="{{I}}" stroke-width="16" stroke-linecap="round"/><circle cx="212" cy="252" r="10" fill="{{I}}"/><circle cx="292" cy="258" r="10" fill="{{I}}"/><rect x="175" y="380" width="150" height="10" rx="5" fill="{{I}}"/>',
+    // A round board: a rounded cut whose radius is half the board.
+    laser: { kind: 'engrave', cut: 'rounded', radiusMm: 250 },
+  },
+  {
+    id: 'villasign',
+    category: 'home',
+    name: t('Villa & House Sign', 'يافطة فيلا وبيت'),
+    description: t('Your family name and house number carved into a sturdy outdoor board with rounded corners, ready to fix by the gate or the front door.', 'اسم العيلة ورقم البيت محفورين على لوح متين بيستحمل الشمس والمطر، بحواف مدوّرة وجاهز يتركب جنب البوابة أو باب البيت.'),
+    basePrice: 1200,
+    colorLabel: t('Material', 'الخامة'),
+    colors: [
+      WOOD('teak', 'Teak wood, dark letters', 'خشب تيك، حروف غامقة', '#a0703f', '#3a2210'),
+      { id: 'black', name: t('Black board, white letters', 'لوح أسود، حروف بيضا'), hex: '#232326', ink: '#f1f1f1' },
+      { id: 'brass', name: t('Black board, brass letters', 'لوح أسود، حروف نحاسي'), hex: '#232326', ink: '#c2a25a' },
+      { id: 'white', name: t('White board, black letters', 'لوح أبيض، حروف سودا'), hex: '#f4f4f2', ink: '#1f1f22' },
+    ],
+    // (40 × 30 is 4:3; the bigger one keeps that shape.)
+    sizes: [
+      { id: '40x30', label: t('40 × 30 cm', '40 × 30 سم'), surcharge: 0 },
+      { id: '50x35', label: t('50 × 37.5 cm', '50 × 37.5 سم'), surcharge: 400 },
+    ],
+    sides: [{
+      id: 'front',
+      name: FRONT,
+      svg: sv(WALL('#d9cfc2') + '<g stroke="#c7baa9" stroke-width="3">' + [80, 160, 240, 320, 400, 480, 560].map((y) => `<path d="M0 ${y} H500"/>`).join('') + '</g>' + shadowRect(70, 165, 360, 270, 10) + '<rect x="70" y="165" width="360" height="270" rx="10" fill="{{C}}" stroke="{{L}}" stroke-width="3"/>' + GRAIN(70, 165, 360, 270)),
+      printArea: { x: 70, y: 165, w: 360, h: 270, rx: 10 },
+      printWidthIn: cmIn(40),
+    }],
+    cardArt: '<path d="M250 205 l50 40 v50 h-100 v-50z" fill="none" stroke="{{I}}" stroke-width="7" stroke-linejoin="round"/><rect x="140" y="320" width="220" height="16" rx="8" fill="{{I}}"/><rect x="200" y="352" width="100" height="26" rx="6" fill="{{I}}"/>',
+    laser: { kind: 'engrave', cut: 'rounded', radiusMm: 10 },
+  },
+  {
+    id: 'acrylicnameplate',
+    category: 'business',
+    name: t('Acrylic Desk Nameplate', 'اسم مكتب أكريليك'),
+    description: t('A thick crystal-clear acrylic block with your name and job title printed in full colour. It stands on its own on a desk or a reception counter.', 'بلوك أكريليك شفاف تخين مطبوع عليه اسمك ووظيفتك بالألوان. بيقف لوحده على المكتب أو الريسيبشن.'),
+    basePrice: 650,
+    colors: [{ id: 'clear', name: t('Crystal clear', 'شفاف كريستال'), hex: '#ffffff' }],
+    // (20 × 7 cm; the bigger one keeps that shape.)
+    sizes: [
+      { id: '20x7', label: t('20 × 7 cm', '20 × 7 سم'), surcharge: 0 },
+      { id: '25x8', label: t('25 × 8.75 cm', '25 × 8.75 سم'), surcharge: 120 },
+    ],
+    options: [{
+      id: 'backing',
+      name: t('Backing', 'الضهر'),
+      help: t('A white layer printed behind your design makes the colours bold; see-through lets the desk show through.', 'طبقة بيضا ورا التصميم بتخلي الألوان أقوى؛ والشفاف بيبان من وراه المكتب.'),
+      choices: [
+        { id: 'clear', name: t('See-through', 'شفاف'), price: 0 },
+        { id: 'white', name: t('White-backed', 'بضهر أبيض'), price: 50 },
+      ],
+    }],
+    sides: [{
+      id: 'front',
+      name: FRONT,
+      svg: sv(DESK + shadowRect(50, 230, 400, 140, 4) + `<path d="M50 370 L66 394 L466 394 L450 370 Z" fill="#cfe2e4" stroke="${CLEAR_EDGE}" stroke-width="2"/><rect x="50" y="230" width="400" height="140" rx="4" fill="{{C}}" stroke="${CLEAR_EDGE}" stroke-width="3"/>`),
+      overlay: sv('<path d="M62 238 L132 238 L84 362 L62 362 Z" fill="#ffffff" opacity=".25"/>'),
+      printArea: { x: 50, y: 230, w: 400, h: 140 },
+      printWidthIn: cmIn(20),
+    }],
+    cardArt: '<rect x="110" y="262" width="280" height="34" rx="6" fill="#1f3b73"/><rect x="160" y="314" width="180" height="16" rx="8" fill="#c9a227"/>',
+  },
+  {
+    id: 'woodnameplate',
+    category: 'business',
+    name: t('Wooden Desk Nameplate', 'اسم مكتب خشب'),
+    description: t('A solid wooden bar for the desk, carved with a name and a job title. A smart gift for a new manager, doctor or engineer.', 'قطعة خشب مصمت للمكتب، محفور عليها الاسم والوظيفة. هدية شيك لمدير جديد أو دكتور أو مهندس.'),
+    basePrice: 1200,
+    colorLabel: t('Wood', 'الخشب'),
+    colors: [
+      WOOD('walnut', 'Walnut', 'خشب جوزي', '#7a5232', '#2b170a'),
+      WOOD('beech', 'Beech wood', 'خشب زان', '#e0c08f', '#6b4220'),
+    ],
+    // (20 × 6 cm; the bigger one keeps that shape.)
+    sizes: [
+      { id: '20x6', label: t('20 × 6 cm', '20 × 6 سم'), surcharge: 0 },
+      { id: '25x7', label: t('25 × 7.5 cm', '25 × 7.5 سم'), surcharge: 200 },
+    ],
+    options: [{
+      id: 'giftbox',
+      name: t('Gift box', 'علبة هدية'),
+      help: t('A wooden box that slides open, so it is ready to give.', 'علبة خشب بتتفتح سحب، عشان تبقى جاهزة للهدية.'),
+      choices: [
+        { id: 'none', name: t('No box', 'من غير علبة'), price: 0 },
+        { id: 'wood', name: t('Wooden gift box', 'علبة هدية خشب'), price: 200 },
+      ],
+    }],
+    sides: [{
+      id: 'front',
+      name: FRONT,
+      svg: sv(DESK + shadowRect(50, 240, 400, 120, 6) + '<rect x="56" y="356" width="400" height="30" rx="5" fill="#000" opacity=".1"/><rect x="50" y="352" width="400" height="30" rx="5" fill="{{S}}" stroke="{{L}}" stroke-width="2"/><rect x="50" y="240" width="400" height="120" rx="6" fill="{{C}}" stroke="{{L}}" stroke-width="3"/>' + GRAIN(50, 240, 400, 120)),
+      printArea: { x: 50, y: 240, w: 400, h: 120 },
+      printWidthIn: cmIn(20),
+    }],
+    cardArt: '<rect x="120" y="268" width="260" height="28" rx="7" fill="{{I}}"/><rect x="170" y="312" width="160" height="12" rx="6" fill="{{I}}"/>',
+    laser: { kind: 'engrave', cut: null },
+  },
+  {
+    id: 'shield',
+    category: 'business',
+    name: t('Acrylic Honour Shield', 'درع تكريم أكريليك'),
+    description: t('A thick crystal-clear acrylic shield printed in full colour, on its own stand. For honouring staff, teachers, graduates and partners.', 'درع أكريليك شفاف تخين مطبوع بالألوان، واقف على قاعدته. لتكريم الموظفين والمدرسين والخريجين والشركا.'),
+    basePrice: 350,
+    colors: [{ id: 'clear', name: t('Crystal clear', 'شفاف كريستال'), hex: '#ffffff' }],
+    // (4:5, so every size is the same shape: 16 × 20, 20 × 25 and 24 × 30 cm.)
+    sizes: [
+      { id: '15x20', label: t('16 × 20 cm', '16 × 20 سم'), surcharge: 0 },
+      { id: '20x25', label: t('20 × 25 cm', '20 × 25 سم'), surcharge: 200 },
+      { id: '25x30', label: t('24 × 30 cm', '24 × 30 سم'), surcharge: 400 },
+    ],
+    options: [
+      {
+        id: 'backing',
+        name: t('Backing', 'الضهر'),
+        help: t('A white layer printed behind your design makes the colours bold; see-through looks like glass.', 'طبقة بيضا ورا التصميم بتخلي الألوان أقوى؛ والشفاف شكله زي الإزاز.'),
+        choices: [
+          { id: 'clear', name: t('See-through', 'شفاف'), price: 0 },
+          { id: 'white', name: t('White-backed', 'بضهر أبيض'), price: 40 },
+        ],
+      },
+      {
+        id: 'box',
+        name: t('Box', 'العلبة'),
+        help: t('A velvet-lined box for handing it over on stage.', 'علبة مبطنة قطيفة عشان تتسلم على المسرح.'),
+        choices: [
+          { id: 'none', name: t('No box', 'من غير علبة'), price: 0 },
+          { id: 'velvet', name: t('Velvet gift box', 'علبة قطيفة'), price: 150 },
+        ],
+      },
+    ],
+    sides: [{
+      id: 'front',
+      name: FRONT,
+      svg: sv(DESK + '<rect x="140" y="362" width="220" height="44" rx="5" fill="#1f2023"/><rect x="140" y="362" width="220" height="10" fill="#3a3b40"/>' + shadowRect(130, 70, 240, 300, 8) + `<rect x="130" y="70" width="240" height="300" rx="8" fill="{{C}}" stroke="${CLEAR_EDGE}" stroke-width="3"/>`),
+      overlay: sv('<path d="M142 80 L200 80 L142 190 Z" fill="#ffffff" opacity=".25"/>'),
+      printArea: { x: 130, y: 70, w: 240, h: 300, rx: 8 },
+      printWidthIn: cmIn(16),
+    }],
+    cardArt: '<circle cx="250" cy="160" r="46" fill="#c9a227"/><path d="M250 132 l9 19 21 3 -15 15 4 21 -19 -10 -19 10 4 -21 -15 -15 21 -3z" fill="#ffffff"/><rect x="170" y="240" width="160" height="16" rx="8" fill="#1f3b73"/><rect x="190" y="270" width="120" height="10" rx="5" fill="#1f3b73" opacity=".6"/>',
+  },
+  {
+    id: 'quranbox',
+    category: 'occasions',
+    name: t('Quran Gift Box with a Printed Lid', 'صندوق مصحف بغطا مطبوع'),
+    description: t('A wooden box for keeping a Quran, its lid printed with a name, a verse or a duaa. A lovely gift for Ramadan, Hajj or a new baby. This is the box only: the Quran isn’t included.', 'صندوق خشب تحفظ فيه المصحف، وغطاه مطبوع عليه اسم أو آية أو دعاء. هدية حلوة لرمضان أو الحج أو المولود الجديد. ده الصندوق بس: المصحف مش معاه.'),
+    basePrice: 850,
+    colorLabel: t('Wood', 'الخشب'),
+    colors: [
+      { id: 'natural', name: t('Natural beech', 'خشب زان طبيعي'), hex: '#e0c08f' },
+      { id: 'walnut', name: t('Walnut', 'خشب جوزي'), hex: '#7a5232' },
+      { id: 'white', name: t('White wood', 'خشب أبيض'), hex: '#f4f1ec' },
+    ],
+    sizes: [
+      { id: '20x28', label: t('Lid 20 × 28 cm', 'غطا 20 × 28 سم'), surcharge: 0 },
+      { id: '25x35', label: t('Lid 25 × 35 cm', 'غطا 25 × 35 سم'), surcharge: 250 },
+    ],
+    sides: [{
+      id: 'front',
+      name: t('Lid', 'الغطا'),
+      svg: sv(shadowRect(95, 95, 310, 422, 10) + '<rect x="95" y="95" width="310" height="422" rx="10" fill="{{S}}" stroke="{{L}}" stroke-width="3"/><rect x="110" y="110" width="280" height="392" fill="{{C}}" stroke="{{L}}" stroke-width="2"/>'),
+      printArea: { x: 110, y: 110, w: 280, h: 392 },
+      printWidthIn: cmIn(20),
+    }],
+    cardArt: '<rect x="110" y="110" width="280" height="392" fill="#0f5132"/><rect x="128" y="128" width="244" height="356" fill="none" stroke="#d4af37" stroke-width="4"/><circle cx="250" cy="270" r="60" fill="none" stroke="#d4af37" stroke-width="6"/><circle cx="250" cy="270" r="36" fill="#d4af37" opacity=".35"/><rect x="180" y="380" width="140" height="14" rx="7" fill="#d4af37"/><rect x="205" y="410" width="90" height="9" rx="4.5" fill="#d4af37" opacity=".7"/>',
+  },
+  {
+    id: 'nameart',
+    category: 'home',
+    name: t('Arabic Name Art on a Plate', 'اسم كاليجرافي على لوح'),
+    description: t('Your name in Arabic calligraphy, cut from mirror acrylic, coloured acrylic or wood and fixed on a white acrylic plate, ready for the wall. For a child’s room, a bride or a new home.', 'اسمك بالخط العربي مقصوص من أكريليك مراية أو ملوّن أو خشب ومتثبت على لوح أكريليك أبيض، جاهز يتعلق. لأوضة الأطفال أو العروسة أو البيت الجديد.'),
+    basePrice: 1200,
+    colorLabel: t('Letters', 'الحروف'),
+    colors: [
+      { id: 'pink', name: t('Pink acrylic', 'أكريليك بينك'), hex: '#f3a6c0', ink: '#e8649a' },
+      { id: 'gold', name: t('Gold mirror acrylic', 'أكريليك مراية دهبي'), hex: '#d4af37', ink: '#d4af37' },
+      { id: 'white', name: t('White acrylic', 'أكريليك أبيض'), hex: '#f7f7f5', ink: '#ffffff' },
+      { id: 'black', name: t('Black acrylic', 'أكريليك أسود'), hex: '#1f1f22', ink: '#1f1f22' },
+      WOOD('wood', 'Wood', 'خشب', '#d8b183', '#c99a66'),
+    ],
+    // (All 2:1.)
+    sizes: [
+      { id: '40x20', label: t('40 × 20 cm', '40 × 20 سم'), surcharge: 0 },
+      { id: '60x30', label: t('60 × 30 cm', '60 × 30 سم'), surcharge: 300 },
+      { id: '80x40', label: t('80 × 40 cm', '80 × 40 سم'), surcharge: 600 },
+      { id: '100x50', label: t('100 × 50 cm', '100 × 50 سم'), surcharge: 800 },
+    ],
+    sides: [{
+      id: 'front',
+      name: FRONT,
+      svg: sv(WALL('#e9e4dc') + shadowRect(NAMEART.x, NAMEART.y, NAMEART.w, NAMEART.h, 6) + `<rect x="${NAMEART.x}" y="${NAMEART.y}" width="${NAMEART.w}" height="${NAMEART.h}" rx="6" fill="#fbfbfa" stroke="#d5d7da" stroke-width="2"/>`),
+      overlay: NAMEART_SCREWS,
+      printArea: { ...NAMEART },
+      printWidthIn: cmIn(40),
+    }],
+    cardArt: '<path d="M90 340 q40 -110 90 -40 q30 40 70 -20 q40 -60 80 0 q30 40 80 -10" fill="none" stroke="{{I}}" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/><circle cx="170" cy="255" r="10" fill="{{I}}"/><circle cx="330" cy="250" r="10" fill="{{I}}"/><circle cx="352" cy="250" r="10" fill="{{I}}"/>',
+    // The letters come out as separate pieces (dots too) and are fixed on the plate; its outline is cut with them.
+    laser: { kind: 'cut', bridgeMm: 1.5, pieces: 'many', board: true },
+  },
+  {
+    id: 'rehal',
+    category: 'occasions',
+    name: t('Personalised Quran Stand', 'رحل مصحف بالاسم'),
+    description: t('A folding wooden Quran stand, 30 cm, with a name or a short duaa carved on its panel. A gift for Ramadan, Hajj or finishing the Quran.', 'رحل مصحف خشب بيتطبق، 30 سم، محفور على لوحته اسم أو دعاء قصير. هدية لرمضان أو الحج أو ختم القرآن.'),
+    basePrice: 550,
+    colorLabel: t('Wood', 'الخشب'),
+    colors: [
+      WOOD('beech', 'Beech wood', 'خشب زان', '#e0c08f', '#6b4220'),
+      WOOD('walnut', 'Walnut', 'خشب جوزي', '#7a5232', '#2b170a'),
+    ],
+    sizes: [{ id: '30', label: t('30 cm stand · name panel 12 × 6 cm', 'رحل 30 سم · لوحة الاسم 12 × 6 سم'), surcharge: 0 }],
+    sides: [{
+      id: 'front',
+      name: t('Name panel', 'لوحة الاسم'),
+      svg: sv(DESK + '<path d="M130 120 L370 120 L392 452 L108 452 Z" fill="{{S}}" stroke="{{L}}" stroke-width="3"/><path d="M96 224 L404 224 L436 540 L64 540 Z" fill="#000" opacity=".1" transform="translate(6 8)"/><path d="M96 224 L404 224 L436 540 L64 540 Z" fill="{{C}}" stroke="{{L}}" stroke-width="3"/>' + GRAIN(100, 240, 300, 280) + '<rect x="124" y="324" width="252" height="132" rx="6" fill="none" stroke="{{L}}" stroke-width="2" opacity=".6"/>'),
+      printArea: { x: 130, y: 330, w: 240, h: 120 },
+      printWidthIn: cmIn(12),
+    }],
+    cardArt: '<path d="M250 344 l6 12 13 2 -10 9 3 13 -12 -6 -12 6 3 -13 -10 -9 13 -2z" fill="{{I}}"/><rect x="165" y="384" width="170" height="16" rx="8" fill="{{I}}"/><rect x="195" y="414" width="110" height="10" rx="5" fill="{{I}}"/>',
+    laser: { kind: 'engrave', cut: null },
+  },
+  {
+    id: 'glassaward',
+    category: 'business',
+    name: t('Crystal Glass Award', 'درع كريستال'),
+    description: t('A heavy crystal glass award on a black base, printed in full colour with your logo and words. For the employee of the year, sponsors and big moments.', 'درع كريستال تقيل على قاعدة سودا، مطبوع بالألوان باللوجو والكلام بتاعك. لموظف السنة والرعاة واللحظات الكبيرة.'),
+    basePrice: 600,
+    colors: [{ id: 'clear', name: t('Crystal on a black base', 'كريستال على قاعدة سودا'), hex: '#ffffff' }],
+    // The crystal's face (2:3): 10 × 15, 13.3 × 20 and 16.7 × 25 cm.
+    sizes: [
+      { id: '15', label: t('15 cm tall', 'طول 15 سم'), surcharge: 0 },
+      { id: '20', label: t('20 cm tall', 'طول 20 سم'), surcharge: 300 },
+      { id: '25', label: t('25 cm tall', 'طول 25 سم'), surcharge: 600 },
+    ],
+    sides: [{
+      id: 'front',
+      name: FRONT,
+      svg: sv(DESK + '<rect x="126" y="376" width="260" height="84" rx="6" fill="#000" opacity=".12"/><rect x="120" y="368" width="260" height="84" rx="6" fill="#1f2023"/><rect x="120" y="368" width="260" height="12" fill="#3a3b40"/>' + shadowRect(150, 70, 200, 300, 4) + `<rect x="150" y="70" width="200" height="300" rx="4" fill="{{C}}" stroke="${CLEAR_EDGE}" stroke-width="3"/>`),
+      overlay: sv('<path d="M160 78 L214 78 L160 200 Z" fill="#ffffff" opacity=".3"/><path d="M338 78 L346 78 L346 362 L338 362 Z" fill="#cfe2e4" opacity=".7"/>'),
+      printArea: { x: 150, y: 70, w: 200, h: 300 },
+      printWidthIn: cmIn(10),
+    }],
+    cardArt: '<circle cx="250" cy="160" r="44" fill="#1f3b73"/><path d="M228 160 l16 16 30 -32" fill="none" stroke="#ffffff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/><rect x="185" y="236" width="130" height="14" rx="7" fill="#c9a227"/><rect x="200" y="264" width="100" height="9" rx="4.5" fill="#1f3b73" opacity=".7"/>',
+  },
+  {
+    id: 'qrstand',
+    category: 'business',
+    name: t('Acrylic Menu & QR Table Stand', 'ستاند أكريليك للمنيو والـ QR'),
+    description: t('A clear acrylic A6 stand for tables and counters, printed with your menu, a QR code, the Wi-Fi password or your social pages. It stands on its own; cheaper per stand in sets.', 'ستاند أكريليك شفاف A6 للترابيزات والكاشير، مطبوع عليه المنيو أو كود QR أو باسورد الواي فاي أو صفحاتك. بيقف لوحده؛ وأرخص للستاند في الأطقم.'),
+    basePrice: 220,
+    colors: [{ id: 'clear', name: t('Crystal clear', 'شفاف كريستال'), hex: '#ffffff' }],
+    // One stand, or sets for a café or restaurant: cheaper per stand (220, 190, 170, 150 EGP).
+    sizes: qty([['1', '1 stand (A6)', 'ستاند واحد (A6)', 0], ['5', '5 stands (A6)', '5 ستاندات (A6)', 730], ['10', '10 stands (A6)', '10 ستاندات (A6)', 1480], ['20', '20 stands (A6)', '20 ستاند (A6)', 2780]]),
+    sides: [{
+      id: 'front',
+      name: FRONT,
+      svg: sv(DESK + `<rect x="126" y="384" width="260" height="40" rx="6" fill="#000" opacity=".1"/><rect x="120" y="370" width="260" height="44" rx="6" fill="#e8f1f3" stroke="${CLEAR_EDGE}" stroke-width="2"/>` + shadowRect(145, 80, 210, 296, 4) + `<rect x="145" y="80" width="210" height="296" rx="4" fill="{{C}}" stroke="${CLEAR_EDGE}" stroke-width="3"/>`),
+      printArea: { x: 145, y: 80, w: 210, h: 296 },
+      printWidthIn: cmIn(10.5),
+    }],
+    cardArt: '<rect x="185" y="110" width="130" height="18" rx="9" fill="#2b2d42"/><g fill="#2b2d42"><rect x="190" y="160" width="120" height="120" fill="#ffffff" stroke="#2b2d42" stroke-width="6"/><rect x="202" y="172" width="32" height="32"/><rect x="266" y="172" width="32" height="32"/><rect x="202" y="236" width="32" height="32"/><rect x="246" y="216" width="14" height="14"/><rect x="266" y="246" width="14" height="14"/><rect x="284" y="226" width="14" height="14"/></g><rect x="195" y="310" width="110" height="12" rx="6" fill="#e8590c"/>',
+  },
+  {
+    id: 'favourtags',
+    category: 'occasions',
+    name: t('Acrylic Favour Tags', 'تاجات أكريليك للتوزيعات'),
+    description: t('Small round acrylic tags, 5 cm, printed with names and a date and drilled for a ribbon. For wedding, engagement, sebou’ and Ramadan favours.', 'تاجات أكريليك صغيرة مدوّرة 5 سم، مطبوع عليها الأسامي والتاريخ ومخرومة للشريطة. لتوزيعات الفرح والخطوبة والسبوع ورمضان.'),
+    basePrice: 750,
+    colors: [
+      { id: 'clear', name: t('Crystal clear', 'شفاف كريستال'), hex: '#ffffff' },
+      { id: 'white', name: t('White acrylic', 'أكريليك أبيض'), hex: '#fbfbfa' },
+    ],
+    // Packs of tags: cheaper per tag (30, 26, 23 EGP).
+    sizes: qty([['25', '25 tags (5 cm round)', '25 تاج (دايرة 5 سم)', 0], ['50', '50 tags (5 cm round)', '50 تاج (دايرة 5 سم)', 550], ['100', '100 tags (5 cm round)', '100 تاج (دايرة 5 سم)', 1550]]),
+    sides: [{
+      id: 'front',
+      name: t('Tag', 'التاج'),
+      svg: sv(WALL('#f1ede7') + '<path d="M250 0 C230 60 270 110 250 168" fill="none" stroke="#d6a2b4" stroke-width="5"/>' + '<circle cx="256" cy="308" r="150" fill="#000" opacity=".1"/>' + `<circle cx="250" cy="300" r="150" fill="{{C}}" stroke="${CLEAR_EDGE}" stroke-width="3"/>`),
+      overlay: TAG_HOLE,
+      printArea: { ...TAG },
+      printWidthIn: cmIn(5),
+    }],
+    cardArt: withArt('<circle cx="250" cy="300" r="150" fill="#fff4f6"/><circle cx="250" cy="300" r="128" fill="none" stroke="#c9a227" stroke-width="4"/><path d="M250 318 c-14 -18 -40 -4 -27 18 l27 25 l27 -25 c14 -22 -14 -36 -27 -18z" fill="#d6336c"/><rect x="170" y="250" width="160" height="16" rx="8" fill="#2b2d42"/><rect x="200" y="380" width="100" height="10" rx="5" fill="#c9a227"/>', TAG_HOLE),
+  },
+  {
+    id: 'uvdtf',
+    category: 'school',
+    name: t('UV DTF Sticker Sheet', 'شيت ستيكرز UV DTF'),
+    description: t('Rub-on UV DTF stickers with no background: peel, press and they stick to cups, bottles, phones, glass and wood. Waterproof and slightly raised to the touch.', 'ستيكرات UV DTF من غير خلفية: قشّر واضغط وتلزق على الكوبايات والزمزميات والموبايلات والإزاز والخشب. ضد المياه وبارزة شوية في الإيد.'),
+    basePrice: 150,
+    colorLabel: t('Film', 'الفيلم'),
+    colors: [{ id: 'clear', name: t('Transparent', 'شفاف'), hex: '#ffffff' }],
+    sizes: [
+      { id: 'A5', label: t('A5 sheet', 'شيت A5'), surcharge: 0 },
+      { id: 'A4', label: t('A4 sheet', 'شيت A4'), surcharge: 100 },
+      { id: 'A3', label: t('A3 sheet', 'شيت A3'), surcharge: 270 },
+    ],
+    // (222 × 314: the A sizes' shape, so A5, A4 and A3 are all within a millimetre.)
+    sides: [{ id: 'front', name: t('Sheet', 'الشيت'), svg: flat(139, 80, 222, 314, 4), printArea: { x: 139, y: 80, w: 222, h: 314 }, printWidthIn: cmIn(14.8) }],
+    cardArt: '<circle cx="200" cy="170" r="44" fill="#ff922b"/><rect x="262" y="130" width="76" height="76" rx="16" fill="#4dabf7"/><path d="M270 300 c-24 -30 -70 -6 -46 30 l46 42 l46 -42 c24 -36 -22 -60 -46 -30z" fill="#e64980"/><polygon points="200,250 210,272 234,274 216,290 222,314 200,302 178,314 184,290 166,274 190,272" fill="#fcc419"/><rect x="270" y="250" width="70" height="30" rx="15" fill="#51cf66"/>',
+  },
+  {
+    id: 'eventletters',
+    category: 'occasions',
+    name: t('Giant Event Letters', 'حروف كبيرة للمناسبات'),
+    description: t('Giant letters or numbers, 60 or 90 cm tall, that stand on the floor: initials, a short name or an age for weddings, engagements, birthdays and photo corners. Up to 3 characters.', 'حروف أو أرقام عملاقة طولها 60 أو 90 سم وبتقف على الأرض: حروف الأسامي أو اسم قصير أو السن للفرح والخطوبة وأعياد الميلاد وركن التصوير. لحد 3 حروف.'),
+    basePrice: 3000,
+    colorLabel: t('Material', 'الخامة'),
+    colors: [
+      { id: 'white', name: t('White', 'أبيض'), hex: '#f7f7f5', ink: '#ffffff' },
+      { id: 'gold', name: t('Gold', 'دهبي'), hex: '#d4af37', ink: '#d4af37' },
+      { id: 'rosegold', name: t('Rose gold', 'روز جولد'), hex: '#d8a08c', ink: '#cf8f7a' },
+      WOOD('wood', 'Natural wood', 'خشب طبيعي', '#d8b183', '#c99a66'),
+    ],
+    // Up to 3 characters side by side: the whole set is 150 × 60 (or 225 × 90) cm.
+    sizes: [
+      { id: '60', label: t('Up to 3 characters, 60 cm tall', 'لحد 3 حروف، طول 60 سم'), surcharge: 0 },
+      { id: '90', label: t('Up to 3 characters, 90 cm tall', 'لحد 3 حروف، طول 90 سم'), surcharge: 1500 },
+    ],
+    sides: [{
+      id: 'front',
+      name: FRONT,
+      svg: sv(WALL('#f3eee8') + '<rect x="0" y="380" width="500" height="220" fill="#e2d6c6"/><ellipse cx="250" cy="392" rx="230" ry="12" fill="#000" opacity=".08"/>'),
+      printArea: { x: 25, y: 200, w: 450, h: 180 },
+      printWidthIn: cmIn(150),
+    }],
+    cardArt: '<g fill="{{I}}" stroke="#000" stroke-opacity=".15" stroke-width="2"><path d="M40 380 V210 h36 l34 70 l34 -70 h36 v170 h-34 v-104 l-36 70 l-36 -70 v104 z"/><path d="M250 372 c-30 -26 -66 -54 -66 -96 c0 -40 50 -56 66 -22 c16 -34 66 -18 66 22 c0 42 -36 70 -66 96z"/><path d="M334 380 l52 -170 h34 l52 170 h-38 l-10 -36 h-42 l-10 36 z M396 312 h22 l-11 -42 z" fill-rule="evenodd"/></g>',
+    // Every character is its own freestanding piece; the bridge only joins the parts of one letter.
+    laser: { kind: 'cut', bridgeMm: 3, pieces: 'many' },
   },
 );
 
@@ -2511,6 +2906,20 @@ const PRODUCTION = {
   banners: { process: 'uv', safeIn: 1.2, bleedIn: 0, model: { type: 'banner', depthIn: 0.03, radiusIn: 0.01, edge: '#f2f2f2', material: 'paper', plainBack: '#e9eaec' } },
   tablenumbers: { process: 'paper', safeIn: 0.15, bleedIn: 0.08, model: { type: 'tent', depthIn: 0.03, radiusIn: 0.02, edge: '#f6f6f4', material: 'paper' } },
   placecards: { process: 'paper', safeIn: 0.1, bleedIn: 0.06, model: { type: 'tent', depthIn: 0.03, radiusIn: 0.02, edge: '#f6f6f4', material: 'paper' } },
+  // CNC (router: carved or cut wood, MDF and acrylic) and UV (full colour on acrylic, crystal, wood, film).
+  calligraphy: { process: 'cnc', safeIn: 0.4, bleedIn: 0, model: { type: 'block', depthIn: 0.71, radiusIn: 99, material: 'laser' } },
+  villasign: { process: 'cnc', safeIn: 0.6, bleedIn: 0, model: { type: 'block', depthIn: 0.71, radiusIn: 0.39, material: 'laser' } },
+  acrylicnameplate: { process: 'uv', safeIn: 0.2, bleedIn: 0, model: { type: 'block', depthIn: 0.59, radiusIn: 0.04, material: 'plastic', clear: true } },
+  woodnameplate: { process: 'cnc', safeIn: 0.2, bleedIn: 0, model: { type: 'block', depthIn: 0.79, radiusIn: 0.04, material: 'laser' } },
+  shield: { process: 'uv', safeIn: 0.3, bleedIn: 0, model: { type: 'block', depthIn: 0.39, radiusIn: 0.12, material: 'plastic', clear: true } },
+  quranbox: { process: 'uv', safeIn: 0.4, bleedIn: 0, model: { type: 'block', depthIn: 2.4, radiusIn: 0.1, edge: '#c49a6c', material: 'paper', plainBack: 'color' } },
+  nameart: { process: 'cnc', safeIn: 0.4, bleedIn: 0, model: { type: 'cutout', depthIn: 0.12, material: 'laser' } },
+  rehal: { process: 'cnc', safeIn: 0.15, bleedIn: 0, model: { type: 'block', depthIn: 0.3, radiusIn: 0.04, material: 'laser' } },
+  glassaward: { process: 'uv', safeIn: 0.3, bleedIn: 0, model: { type: 'block', depthIn: 0.75, radiusIn: 0.04, material: 'plastic', clear: true } },
+  qrstand: { process: 'uv', safeIn: 0.15, bleedIn: 0, model: { type: 'block', depthIn: 0.12, radiusIn: 0.06, material: 'plastic', clear: true } },
+  favourtags: { process: 'uv', safeIn: 0.1, bleedIn: 0, model: { type: 'block', depthIn: 0.12, radiusIn: 99, material: 'plastic', clear: true } },
+  uvdtf: { process: 'uv', safeIn: 0.15, bleedIn: 0, model: { type: 'pad', depthIn: 0.02, radiusIn: 0.05, edge: '#eef1f4', material: 'plastic' } },
+  eventletters: { process: 'cnc', safeIn: 0, bleedIn: 0, model: { type: 'cutout', depthIn: 0.79, material: 'laser' } },
 };
 /** Garments can be printed either way; the shop picks per order item. */
 const GARMENT_METHODS = ['dtg', 'dtf'];
@@ -2682,7 +3091,7 @@ const SIZE_PRINT_SCALE = {
   cushion: { 50: 50 / 40 },
   greetingcard: { A5: 14.8 / 10.5 },
   certificates: { A3: 42 / 29.7 },
-  plaque: { '18x25': 18 / 13 },
+  plaque: { '18x25': 18 / 13, '30x40': 40 / 18, '40x60': 60 / 18 },
   engrplaque: { '18x25': 18 / 13 },
   engrtray: { '45x32': 45 / 35 },
   engrframe: { '20x25': 20 / 13 },
@@ -2702,6 +3111,16 @@ const SIZE_PRINT_SCALE = {
   photobook: { 200: 24 / 20 },
   magnets: { '80x120-1': 8 / 6, '80x120-100': 8 / 6, '100x150-1': 10 / 6, '100x150-100': 10 / 6 },
   banners: { '150x75': 1.5, '200x100': 2 },
+  calligraphy: { 50: 50 / 40 },
+  villasign: { '50x35': 50 / 40 },
+  acrylicnameplate: { '25x8': 25 / 20 },
+  woodnameplate: { '25x7': 25 / 20 },
+  shield: { '20x25': 20 / 16, '25x30': 24 / 16 },
+  quranbox: { '25x35': 25 / 20 },
+  nameart: { '60x30': 1.5, '80x40': 2, '100x50': 2.5 },
+  glassaward: { 20: 20 / 15, 25: 25 / 15 },
+  uvdtf: { A4: 21 / 14.8, A3: 29.7 / 14.8 },
+  eventletters: { 90: 1.5 },
   // Phone models are different sizes (back of the phone, w × h mm): iPhone 16 71.6 × 147.6 is the reference.
   phonecase: { iphone16pro: 1.006, iphone16promax: 1.094, galaxys25: 0.99, galaxya55: 1.086 },
 };
@@ -2975,7 +3394,7 @@ function pageSides(product, sizeId) {
 // books count photos: not copies.
 const NOT_COPIES = new Set(['windowstickers', 'photobook']);
 // Packs of things, not printed copies: "10 pens", "5 wallets" add up as pieces ("الإجمالي ١٠ قطع", not "١٠ نسخ").
-const PIECE_PACKS = new Set(['engrpen', 'engrwallet']);
+const PIECE_PACKS = new Set(['engrpen', 'engrwallet', 'qrstand', 'favourtags']);
 for (const p of PRODUCTS) {
   if (NOT_COPIES.has(p.id) || !p.sizes.length || !p.sizes.every((z) => z.pack)) continue;
   const parsed = p.sizes.map((z) => /^(?:(.+)-)?(\d+)$/.exec(z.id));

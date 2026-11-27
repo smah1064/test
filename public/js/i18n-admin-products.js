@@ -283,6 +283,7 @@ Object.assign(window.POD_STRINGS, {
   'pm.proc.textile': ['Textile roll', 'طباعة قماش بالمتر'],
   'pm.proc.engrave': ['Laser engraving', 'حفر ليزر'],
   'pm.proc.lasercut': ['Laser cutting', 'قص ليزر'],
+  'pm.proc.cnc': ['CNC routing', 'حفر وقص CNC'],
   'pm.emb': ['Embroidery', 'التطريز'],
   'pm.embOn': ['Offer embroidery', 'اعرض التطريز'],
   'pm.embAt': ['Where', 'فين'],

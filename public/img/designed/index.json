@@ -358,5 +358,57 @@
  "engrwallet": {
   "file": "/img/designed/engrwallet.webp",
   "design": "lz-wallet-monogram"
+ },
+ "calligraphy": {
+  "file": "/img/designed/calligraphy.webp",
+  "design": "cnc-cal-bismillah"
+ },
+ "villasign": {
+  "file": "/img/designed/villasign.webp",
+  "design": "cnc-villa-family-ar"
+ },
+ "acrylicnameplate": {
+  "file": "/img/designed/acrylicnameplate.webp",
+  "design": "cnc-acr-name-ar"
+ },
+ "woodnameplate": {
+  "file": "/img/designed/woodnameplate.webp",
+  "design": "cnc-wood-name-ar"
+ },
+ "shield": {
+  "file": "/img/designed/shield.webp",
+  "design": "cnc-shield-school-ar"
+ },
+ "quranbox": {
+  "file": "/img/designed/quranbox.webp",
+  "design": "cnc-qbox-ramadan"
+ },
+ "nameart": {
+  "file": "/img/designed/nameart.webp",
+  "design": "cnc-name-nour-ar"
+ },
+ "rehal": {
+  "file": "/img/designed/rehal.webp",
+  "design": "cnc-rehal-name-ar"
+ },
+ "glassaward": {
+  "file": "/img/designed/glassaward.webp",
+  "design": "cnc-glass-employee-ar"
+ },
+ "qrstand": {
+  "file": "/img/designed/qrstand.webp",
+  "design": "cnc-qr-menu-ar"
+ },
+ "favourtags": {
+  "file": "/img/designed/favourtags.webp",
+  "design": "cnc-tag-wedding-initials"
+ },
+ "uvdtf": {
+  "file": "/img/designed/uvdtf.webp",
+  "design": "cnc-dtf-school-ar"
+ },
+ "eventletters": {
+  "file": "/img/designed/eventletters.webp",
+  "design": "cnc-letters-sm-en"
  }
 }

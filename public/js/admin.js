@@ -500,7 +500,7 @@
     return html;
   }
 
-  const RECOMMENDED = { dtg: 'png', dtf: 'dtf-film', sublimation: 'png-mirror', uv: 'pdf', paper: 'pdf-marks', canvas: 'pdf', textile: 'png', embroidery: 'dst', engrave: 'laser-svg', lasercut: 'laser-svg' };
+  const RECOMMENDED = { dtg: 'png', dtf: 'dtf-film', sublimation: 'png-mirror', uv: 'pdf', paper: 'pdf-marks', canvas: 'pdf', textile: 'png', embroidery: 'dst', engrave: 'laser-svg', lasercut: 'laser-svg', cnc: 'laser-svg' };
   const FORMATS_BY_METHOD = {
     dtg: ['png', 'dtg-white', 'pdf', 'tiff'],
     dtf: ['dtf-film', 'dtf-pdf', 'png', 'pdf'],
@@ -512,6 +512,7 @@
     embroidery: ['dst', 'stitches', 'png', 'pdf'],
     engrave: ['laser-svg', 'engrave-png', 'cut-svg', 'png'],
     lasercut: ['laser-svg', 'cut-svg', 'png'],
+    cnc: ['laser-svg', 'cut-svg', 'engrave-png', 'png'],
   };
   const isDark = (hex) => {
     const n = parseInt(String(hex || '#ffffff').slice(1), 16);

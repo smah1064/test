@@ -503,6 +503,15 @@ Twelve laser products (category `laser` in `src/products.js`; production files f
 - **Engraved leather wallet** (`engrwallet`, 25 Nov): a bifold in black, brown, tan or burgundy, engraved on the front (7 × 4 cm); 1, 5 or 10 (450, 410, 400 EGP each).
 - Packs of these two count pieces ("الإجمالي ١١ قطعة"), not copies as cards do (`unit: 'piece'` on their sizes). Four ready designs each (names, monogram, "thank you, teacher", "the best dad", his name and your date). Prices are starting points: change them in the dashboard.
 
+## CNC and UV products (27 Nov)
+
+Thirteen products made by partner workshops (in their own categories in `src/products.js`, section "CNC routing and UV printing"). Every one ships to every governorate; prices are starting points to change in the dashboard.
+
+- **CNC** (process `cnc`; carved or cut wood, MDF and acrylic): layered calligraphy wall art (`calligraphy`, a round board, 40 / 50 cm, gold on oak, black, white or walnut), villa and house sign (`villasign`, 40 × 30 / 50 × 37.5 cm, rounded corners), wooden desk nameplate (`woodnameplate`, walnut or beech, optional wooden gift box), Arabic name art on a white acrylic plate (`nameart`, 40 × 20 to 100 × 50 cm), personalised Quran stand (`rehal`, a 12 × 6 cm name panel) and giant event letters (`eventletters`, up to 3 characters, 60 / 90 cm tall). They use the laser products' one-tone mode (`laser`): the editor draws them in each material's carved tone, and the dashboard offers the LightBurn SVG and cut lines the router needs. Name art and event letters are cut out as separate pieces (`pieces: 'many'`), so dots and separate letters are fine.
+- **UV** (full colour): acrylic desk nameplate (`acrylicnameplate`, see-through or white-backed), acrylic honour shield (`shield`, three sizes, white backing and a velvet box as options), Quran gift box with a printed lid (`quranbox`, the box only), crystal glass award on a black base (`glassaward`, 15 / 20 / 25 cm tall), A6 menu and QR table stands (`qrstand`, 1 / 5 / 10 / 20), round acrylic favour tags (`favourtags`, 25 / 50 / 100) and UV DTF rub-on sticker sheets (`uvdtf`, A5 / A4 / A3).
+- Every size of a product has the same shape as its drawing, so where the sizes the owner listed were different shapes the bigger ones keep the first one's (villa sign 50 × 37.5, nameplates 25 × 8.75 and 25 × 7.5, shield 16 × 20 / 20 × 25 / 24 × 30 cm); the label says the real size.
+- Existing products: the acrylic photo plaque has two big sizes (29 × 40 and 43 × 60 cm with wall standoffs) and a thick 15 mm photo block priced per size; fridge magnets can have an acrylic face (about 60% on each pack).
+
 ## Photo mockups
 
 Each photo is a white (or natural) product on a light background, plus a mask from background removal. To add or replace one:

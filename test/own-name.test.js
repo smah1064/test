@@ -117,7 +117,49 @@ const FLAGGED = {
   'lic-sm-round-seal': [['شكرًا · يوسف', 'kid', 'يوسف'], ['الـ ٦ سنين', 'age', '٦']],
   'lic-sm-kids-tee': [['يوسف', 'kid'], ['الـ ٦ سنين', 'age', '٦']],
   'lic-sm-mug': [['يوسف', 'kid'], ['الـ ٦ سنين', 'age', '٦']],
-  'lic-sm-activity-sheet': [['عيد ميلاد يوسف', 'kid', 'يوسف'], ['الـ ٦ سنين', 'age', '٦']],
+  'lic-sm-activity-sheet': [['عيد ميلاد يوسف', 'kid', 'يوسف'], ['الـ ٦ سنين', 'age', '٦']],  // CNC and UV products (27 Nov): names, families, honorees, initials and an age.
+  'cnc-cal-bismillah': [['بيت عائلة محمود', 'family', 'محمود']],
+  'cnc-cal-mashallah': [['عائلة المصري', 'family', 'المصري']],
+  'cnc-cal-alhamdulillah': [['THE HASSANS', 'family', 'HASSANS']],
+  'cnc-cal-fadl-rabbi': [['فيلا عائلة الشريف', 'family', 'الشريف']],
+  'cnc-villa-family-ar': [['عائلة الشريف', 'family', 'الشريف']],
+  'cnc-villa-big-number': [['الشريف', 'family']],
+  'cnc-villa-family-en': [['THE SHERIFS', 'family', 'SHERIFS']],
+  'cnc-villa-bismillah': [['بيت عائلة محمود', 'family', 'محمود']],
+  'cnc-acr-name-ar': [['م. أحمد حسن', 'name']],
+  'cnc-acr-name-en': [['Ahmed Hassan', 'name']],
+  'cnc-acr-name-bilingual': [['د. سارة محمود', 'name'], ['Dr. Sara Mahmoud', 'name']],
+  'cnc-wood-name-ar': [['م. أحمد حسن', 'name']],
+  'cnc-wood-name-en': [['AHMED HASSAN', 'name']],
+  'cnc-wood-name-bilingual': [['أ. منى السيد', 'name'], ['Mona El Sayed', 'name']],
+  'cnc-shield-school-ar': [['أ. منى السيد', 'honoree']],
+  'cnc-shield-company-ar': [['م. أحمد حسن', 'honoree']],
+  'cnc-shield-recognition-en': [['Eng. Ahmed Hassan', 'honoree']],
+  'cnc-shield-student-ar': [['عمر خالد', 'name']],
+  'cnc-qbox-ramadan': [['هدية إلى سارة', 'name', 'سارة']],
+  'cnc-qbox-star-pattern': [['ليلى', 'name']],
+  'cnc-qbox-ramadan-en': [['For Omar', 'name', 'Omar']],
+  'cnc-qbox-khatma': [['يا يوسف', 'kid', 'يوسف']],
+  'cnc-name-nour-ar': [['نور', 'name']],
+  'cnc-name-yassin-ar': [['ياسين', 'name']],
+  'cnc-name-nour-en': [['Nour', 'name']],
+  'cnc-name-mariam-ar': [['مريم', 'name']],
+  'cnc-rehal-name-ar': [['ليلى', 'name']],
+  'cnc-rehal-family-ar': [['عائلة محمود', 'family', 'محمود']],
+  'cnc-rehal-name-en': [['Omar', 'name']],
+  'cnc-glass-employee-ar': [['أ. محمد علي', 'honoree']],
+  'cnc-glass-employee-en': [['Mohamed Ali', 'honoree']],
+  'cnc-glass-top-sales-ar': [['أ. سارة محمود', 'honoree']],
+  'cnc-tag-wedding-initials': [['A & S', 'initials']],
+  'cnc-tag-wedding-ar': [['أحمد & سارة', 'names']],
+  'cnc-tag-sebou': [['آدم', 'baby']],
+  'cnc-tag-eid': [['عائلة محمود', 'family', 'محمود']],
+  'cnc-dtf-school-ar': [['ليلى', 'kid']],
+  'cnc-dtf-boy-en': [['ADAM', 'kid']],
+  'cnc-dtf-girl-ar': [['سارة', 'kid']],
+  'cnc-letters-sm-en': [['S&M', 'initials']],
+  'cnc-letters-ms-ar': [['م & س', 'initials']],
+  'cnc-letters-30': [['30', 'age']],
 };
 
 test('every flagged design really has its sample text, marked, and nothing else is marked', () => {
@@ -141,7 +183,7 @@ test('every flagged design really has its sample text, marked, and nothing else 
     }
   }
   assert.deepStrictEqual(problems, []);
-  assert.strictEqual(Object.keys(FLAGGED).length, 93); // (+ 6 pen and wallet designs with a name, 25 Nov; + 13 licensed birthday designs, 27 Nov)
+  assert.strictEqual(Object.keys(FLAGGED).length, 135); // (+ 6 pen and wallet designs with a name, 25 Nov; + 13 licensed birthday designs, 27 Nov; + 42 CNC and UV designs, 27 Nov)
 });
 
 test('the marks are well formed: a known kind, the name part inside the text once, never on {field} designs', () => {

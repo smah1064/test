@@ -55,11 +55,13 @@ async function design(productId, color, size, joined = true) {
 const file = (id, format) => fetch(`${base}/api/admin/files/${id}/front?format=${format}`, { headers: { Authorization: `Bearer ${token}` } });
 
 test('every laser product has materials with an engraved tone, a laser kind and a laser process', () => {
-  const laser = PRODUCTS.filter((p) => p.laser);
+  // (The CNC products, 27 Nov, use the same one-tone mode in their own categories, made by 'cnc'.)
+  const laser = PRODUCTS.filter((p) => p.laser && p.process !== 'cnc');
   assert.strictEqual(laser.length, 12); // (+ the engraved pen and wallet, 25 Nov)
-  for (const p of laser) {
-    assert.strictEqual(p.category, 'laser');
-    assert.ok(['engrave', 'lasercut'].includes(p.process), p.id);
+  assert.deepStrictEqual(PRODUCTS.filter((p) => p.laser && p.process === 'cnc').map((p) => p.id), ['calligraphy', 'villasign', 'woodnameplate', 'nameart', 'rehal', 'eventletters']);
+  for (const p of PRODUCTS.filter((x) => x.laser)) {
+    if (p.process !== 'cnc') assert.strictEqual(p.category, 'laser');
+    assert.ok(['engrave', 'lasercut', 'cnc'].includes(p.process), p.id);
     assert.strictEqual(p.mix.colors, false, `${p.id}: one design is one material`);
     for (const c of p.colors) assert.match(c.ink, /^#[0-9a-f]{6}$/i, `${p.id}/${c.id}`);
     assert.ok(p.cardArt.includes('{{I}}'), p.id);

@@ -341,7 +341,8 @@ test('home search: "hat" is the cap, not the "that" of a description; English wo
   assert.deepStrictEqual(find('hat'), ['cap']);
   assert.deepStrictEqual(find('hats'), ['cap']);
   // Inside a word of a description: "sign" is not "design", "pen" not "opens", "tee" not "steel", "bed" not "combed".
-  assert.deepStrictEqual(find('sign'), ['sign', 'weddingsign', 'doorsign']);
+  // (The villa sign and the desk nameplates, 27 Nov, are signs too.)
+  assert.deepStrictEqual(find('sign'), ['sign', 'weddingsign', 'doorsign', 'villasign', 'acrylicnameplate', 'woodnameplate']);
   assert.deepStrictEqual(find('pen'), ['engrpen', 'pencilcase']);
   assert.ok(!find('tee').includes('bottle') && find('tee').includes('tshirt'));
   assert.deepStrictEqual(find('bed'), ['bedsheet']);

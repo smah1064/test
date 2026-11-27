@@ -138,7 +138,8 @@ test('gift words: «هدية عيد ميلاد» / "birthday gift" list the mug,
   // A gift alone: the gift vouchers and the wrapping paper (هدايا in their names) first, then the gifts.
   // ("present" alone also starts the name of the Presentation Folders, as before.)
   for (const q of ['هدية', 'هدايا', 'gift', 'gifts']) {
-    const got = ids(q);
+    // (The Quran Gift Box, 27 Nov, has "Gift" in its English name: found by its name, before the gifts.)
+    const got = ids(q).filter((id) => id !== 'quranbox');
     assert.deepStrictEqual(got.slice(0, 2), ['giftvouchers', 'wrappingpaper'], q);
     assert.deepStrictEqual(got.slice(2, 5), ['mug', 'tshirt', 'cushion'], q);
   }

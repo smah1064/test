@@ -3512,7 +3512,7 @@
   function laserNote() {
     const c = color();
     return `<div class="field laser-note"><span class="laser-swatch" style="background:${esc(c.hex)}"><i style="background:${esc(inkOf())}"></i></span>
-      <p class="small" style="margin:0">${esc(t(laser().kind === 'cut' ? 'laser.noteCut' : 'laser.noteEngrave', { material: tr(c.name) }))}</p></div>`;
+      <p class="small" style="margin:0">${esc(t(`${st.product.process === 'cnc' ? 'cnc' : 'laser'}.${laser().kind === 'cut' ? 'noteCut' : 'noteEngrave'}`, { material: tr(c.name) }))}</p></div>`;
   }
   function toHex(c) {
     if (typeof c !== 'string') return '#000000';
@@ -4924,7 +4924,7 @@
       else if (i.key === 'check.fieldText') out.push({ id: 'fieldText', level: 'fail', side: sideId, params: { name: short(i.params.name) } });
       else if (i.key === 'check.sampleText') out.push({ id: 'sampleText', level: 'warn', side: sideId, params: { name: short(i.params.name) } });
       else if (i.key === 'check.cutPieces') out.push({ id: 'cutPieces', level: 'warn', side: sideId, params: { n: Number(st.cutPieces) || 0 } });
-      else if (i.key === 'check.cutPhoto') out.push({ id: 'cutPhoto', level: 'warn', side: sideId, params: { name: short(i.params.name) } });
+      else if (i.key === 'check.cutPhoto' || i.key === 'cnc.cutPhoto') out.push({ id: 'cutPhoto', level: 'warn', side: sideId, params: { name: short(i.params.name) } });
       // Past the edge, and the embroidery warnings: on the proof too, never "nothing to fix" (QA 25 Nov).
       else if (i.key === 'check.cut') out.push({ id: 'cutEdge', level: 'warn', side: sideId, params: { name: short(i.params.name) } });
       else if (i.key === 'check.embSmallText') out.push({ id: 'embSmallText', level: 'warn', side: sideId, params: { name: short(i.params.name) } });
@@ -5153,7 +5153,7 @@
       for (const o of canvas.getObjects()) {
         if (o.name === '__cropper' || o.visible === false) continue;
         const name = layerName(o);
-        if (L.kind === 'cut' && o.type === 'image') issues.push({ level: 'warn', key: 'check.cutPhoto', obj: o, params: { name } });
+        if (L.kind === 'cut' && o.type === 'image') issues.push({ level: 'warn', key: st.product.process === 'cnc' ? 'cnc.cutPhoto' : 'check.cutPhoto', obj: o, params: { name } });
         if (isText(o) && o.fontSize * Math.abs(o.scaleY || 1) * 0.7 < minMm * ppmm) issues.push({ level: 'warn', key: L.kind === 'cut' ? 'check.cutSmallText' : 'check.laserSmallText', obj: o, params: { name, mm: POD.num(minMm) } });
       }
       measureCut();

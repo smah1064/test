@@ -18,6 +18,7 @@ Object.assign(window.POD_STRINGS, {
   'proof.process.uv': ['UV print', 'طباعة UV'],
   'proof.process.engrave': ['Laser engraving', 'حفر بالليزر'],
   'proof.process.lasercut': ['Laser cut', 'قص بالليزر'],
+  'proof.process.cnc': ['CNC routing (carved or cut)', 'حفر وقص CNC'],
   'proof.process.canvas': ['Canvas print', 'طباعة على الكانفاس'],
   'proof.process.embroidery': ['Embroidery', 'تطريز'],
   'proof.sides': ['What will be printed', 'اللي هيتطبع'],

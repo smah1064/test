@@ -30,6 +30,13 @@
       notepads: 'notepad pad بلوك نوت مفكرة', postcards: 'postcard thank you card بوستكارد كارت شكر', giftvouchers: 'voucher gift card كوبون قسيمة جيفت كارد',
       magnets: 'magnet fridge مغناطيس مغنطيس تلاجة ثلاجة', wrappingpaper: 'gift wrap ورق هدايا تغليف', windowstickers: 'window decal vinyl ستيكر فاترينة زجاج',
       photobook: 'album photo book البوم صور', tablenumbers: 'wedding table number ارقام ترابيزات فرح', placecards: 'wedding place name card كروت اسامي فرح معازيم', bookmarks: 'bookmark فاصل كتاب', invoicebook: 'invoice receipt فاتورة فاتوره فواتير ايصال إيصال', letterhead: 'letter head ليتر هيد ليترهيد ورق مراسلات',
+      calligraphy: 'calligraphy islamic arabic art خط عربي كاليجرافي كاليجرافى تابلوه خشب', nameart: 'name art calligraphy wall decor اسم بالخط العربي اسم كاليجرافي ديكور اسم',
+      villasign: 'villa house home gate sign number فيلا بيت بوابة رقم البيت اسم العيلة', eventletters: 'giant big letters numbers photo booth حروف كبيرة ارقام كبيرة حروف عملاقة ركن تصوير',
+      acrylicnameplate: 'nameplate name plate desk sign office اسم مكتب نيم بليت بلوك اكريليك', woodnameplate: 'nameplate name plate desk sign office wood اسم مكتب نيم بليت خشب',
+      shield: 'shield award trophy honour honor درع دروع تكريم تذكاري', glassaward: 'crystal glass award trophy درع كريستال زجاج دروع تكريم',
+      quranbox: 'quran koran box mushaf قران قرآن مصحف صندوق علبة مصحف', rehal: 'quran koran stand holder rehal rahl رحل حامل مصحف قران قرآن',
+      qrstand: 'qr code menu table stand wifi ستاند منيو كود كيو ار باركود ترابيزة', favourtags: 'favor favour tags giveaways توزيعات تاج تاجات سبوع',
+      uvdtf: 'uv dtf transfer rub on stickers ستيكر ستيكرز يو في دي تي اف نقل',
     };
     // search-kit:start (the same lines are in public/index.html and public/js/designs.js; test/search-kit.test.js checks both)
     // Forgiving search: what the typed words find, plus plurals (hoodies, تيشيرتات), one word or two (t-shirt, tshirt),

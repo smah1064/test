@@ -5880,7 +5880,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     process: {
       dtg: enAr('DTG (direct to garment)', 'DTG (طباعة مباشرة على القماش)'), dtf: enAr('DTF transfer', 'DTF (طباعة بالنقل الحراري)'),
       sublimation: enAr('Sublimation', 'سبلميشن (طباعة حرارية)'), uv: enAr('UV printing', 'طباعة UV'), paper: enAr('Paper (offset / digital)', 'ورق (أوفست / ديجيتال)'),
-      canvas: enAr('Canvas', 'كانفاس'), textile: enAr('Textile roll', 'طباعة قماش بالمتر'), engrave: enAr('Laser engraving', 'حفر ليزر'), lasercut: enAr('Laser cutting', 'قص ليزر'),
+      canvas: enAr('Canvas', 'كانفاس'), textile: enAr('Textile roll', 'طباعة قماش بالمتر'), engrave: enAr('Laser engraving', 'حفر ليزر'), lasercut: enAr('Laser cutting', 'قص ليزر'), cnc: enAr('CNC routing', 'حفر وقص CNC'),
     },
     hiddenReason: {
       stock: enAr('out of stock', 'المخزون خلص'), season: enAr('out of season', 'مش موسمه'), quality: enAr('quality problem', 'مشكلة في الجودة'),

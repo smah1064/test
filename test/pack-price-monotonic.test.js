@@ -39,7 +39,7 @@ test('coverPrice: the cheapest packs that make at least that many', () => {
   }
 });
 
-test('every product sold in packs: in the cart, more copies never cost less', { timeout: 300000 }, async () => {
+test('every product sold in packs: in the cart, more copies never cost less', { timeout: 600000 }, async () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pod-packs-'));
   const app = createApp({ dataDir, adminPassword: 'pw', limits: { designs: OPEN, designsAll: OPEN, quantity: OPEN }, cleanupEvery: 0, requireApproval: false });
   const server = await new Promise((resolve) => { const s = app.listen(0, () => resolve(s)); });

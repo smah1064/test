@@ -35,7 +35,7 @@ const HIDE_REASONS = ['stock', 'season', 'quality', 'supplier', 'other'];
 /** What each kind of product can be made with (the first family that holds its own process). */
 const PROCESS_FAMILIES = [
   ['dtg', 'dtf'],
-  ['engrave', 'lasercut'],
+  ['engrave', 'lasercut', 'cnc'],
   ['sublimation', 'uv'],
   ['paper'],
   ['canvas'],

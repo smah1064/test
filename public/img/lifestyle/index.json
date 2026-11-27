@@ -649,5 +649,96 @@
       "en": "Brown leather wallet with an engraved monogram",
       "ar": "محفظة جلد بني محفور عليها حروف في دايرة"
     }
+  },
+  "calligraphy": {
+    "file": "/img/lifestyle/calligraphy.webp",
+    "alt": {
+      "en": "Round layered oak wall art with a gold centre above a light oak console",
+      "ar": "لوحة خشب طبقات مدورة بوسط دهبي فوق كونسول خشب فاتح"
+    }
+  },
+  "villasign": {
+    "file": "/img/lifestyle/villasign.webp",
+    "alt": {
+      "en": "Teak house sign with an engraved number on a stone gate pillar",
+      "ar": "يافطة بيت خشب تيك محفور عليها رقم على عمود بوابة حجر"
+    }
+  },
+  "acrylicnameplate": {
+    "file": "/img/lifestyle/acrylicnameplate.webp",
+    "alt": {
+      "en": "Clear acrylic desk nameplate printed with a name and job title on an oak desk",
+      "ar": "اسم مكتب أكريليك شفاف مطبوع عليه اسم ووظيفة على مكتب خشب"
+    }
+  },
+  "woodnameplate": {
+    "file": "/img/lifestyle/woodnameplate.webp",
+    "alt": {
+      "en": "Walnut desk nameplate with an engraved name beside its wooden gift box",
+      "ar": "اسم مكتب خشب جوز محفور جنب علبة الهدية الخشب"
+    }
+  },
+  "shield": {
+    "file": "/img/lifestyle/shield.webp",
+    "alt": {
+      "en": "Clear acrylic honour shield printed with a gold wreath and star on a desk",
+      "ar": "درع تكريم أكريليك شفاف مطبوع عليه إكليل دهبي ونجمة على مكتب"
+    }
+  },
+  "quranbox": {
+    "file": "/img/lifestyle/quranbox.webp",
+    "alt": {
+      "en": "Beech wood box with a green and gold patterned lid beside a lantern and dates",
+      "ar": "صندوق خشب زان بغطا منقوش أخضر ودهبي جنب فانوس وتمر"
+    }
+  },
+  "nameart": {
+    "file": "/img/lifestyle/nameart.webp",
+    "alt": {
+      "en": "Pink script name cut out on a white acrylic plate above a baby crib",
+      "ar": "اسم بخط مشبوك وردي مقصوص على لوح أكريليك أبيض فوق سرير بيبي"
+    }
+  },
+  "rehal": {
+    "file": "/img/lifestyle/rehal.webp",
+    "alt": {
+      "en": "Folding beech Quran stand with an engraved panel on a prayer rug",
+      "ar": "رحل خشب زان بلوحة محفورة على سجادة صلاة"
+    }
+  },
+  "glassaward": {
+    "file": "/img/lifestyle/glassaward.webp",
+    "alt": {
+      "en": "Faceted crystal award on a black base on a desk in daylight",
+      "ar": "درع كريستال مشطوف على قاعدة سودا على مكتب في نور النهار"
+    }
+  },
+  "qrstand": {
+    "file": "/img/lifestyle/qrstand.webp",
+    "alt": {
+      "en": "Clear acrylic table stand with a café logo and QR code next to a cappuccino",
+      "ar": "ستاند أكريليك شفاف بلوجو كافيه وكود QR جنب كابتشينو"
+    }
+  },
+  "favourtags": {
+    "file": "/img/lifestyle/favourtags.webp",
+    "alt": {
+      "en": "Round clear acrylic tags printed with initials tied to white favour boxes",
+      "ar": "تاجات أكريليك شفافة مدورة مطبوع عليها حروف متربطة في علب توزيعات بيضا"
+    }
+  },
+  "uvdtf": {
+    "file": "/img/lifestyle/uvdtf.webp",
+    "alt": {
+      "en": "Glossy UV DTF stickers on a kids lunch box and bottle with a sticker sheet",
+      "ar": "ستيكرز UV DTF لامعة على علبة أكل وزمزمية أطفال مع شيت ستيكرز"
+    }
+  },
+  "eventletters": {
+    "file": "/img/lifestyle/eventletters.webp",
+    "alt": {
+      "en": "Giant white freestanding letters with roses at a garden wedding",
+      "ar": "حروف بيضا كبيرة واقفة بورود في فرح في جنينة"
+    }
   }
 }

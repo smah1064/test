@@ -277,6 +277,13 @@
         notepads: 'notepad pad بلوك نوت مفكرة', postcards: 'postcard thank you card بوستكارد كارت شكر', giftvouchers: 'voucher gift card كوبون قسيمة جيفت كارد',
         magnets: 'magnet fridge مغناطيس مغنطيس تلاجة ثلاجة', wrappingpaper: 'gift wrap ورق هدايا تغليف', windowstickers: 'window decal vinyl ستيكر فاترينة زجاج',
         photobook: 'album photo book البوم صور', tablenumbers: 'wedding table number ارقام ترابيزات فرح', placecards: 'wedding place name card كروت اسامي فرح معازيم', bookmarks: 'bookmark فاصل كتاب', invoicebook: 'invoice receipt فاتورة فاتوره فواتير ايصال إيصال', letterhead: 'letter head ليتر هيد ليترهيد ورق مراسلات',
+        calligraphy: 'calligraphy islamic arabic art خط عربي كاليجرافي كاليجرافى تابلوه خشب', nameart: 'name art calligraphy wall decor اسم بالخط العربي اسم كاليجرافي ديكور اسم',
+        villasign: 'villa house home gate sign number فيلا بيت بوابة رقم البيت اسم العيلة', eventletters: 'giant big letters numbers photo booth حروف كبيرة ارقام كبيرة حروف عملاقة ركن تصوير',
+        acrylicnameplate: 'nameplate name plate desk sign office اسم مكتب نيم بليت بلوك اكريليك', woodnameplate: 'nameplate name plate desk sign office wood اسم مكتب نيم بليت خشب',
+        shield: 'shield award trophy honour honor درع دروع تكريم تذكاري', glassaward: 'crystal glass award trophy درع كريستال زجاج دروع تكريم',
+        quranbox: 'quran koran box mushaf قران قرآن مصحف صندوق علبة مصحف', rehal: 'quran koran stand holder rehal rahl رحل حامل مصحف قران قرآن',
+        qrstand: 'qr code menu table stand wifi ستاند منيو كود كيو ار باركود ترابيزة', favourtags: 'favor favour tags giveaways توزيعات تاج تاجات سبوع',
+        uvdtf: 'uv dtf transfer rub on stickers ستيكر ستيكرز يو في دي تي اف نقل',
       };
       // search-kit:start (the same lines are in public/index.html and public/js/designs.js; test/search-kit.test.js checks both)
       // Forgiving search: what the typed words find, plus plurals (hoodies, تيشيرتات), one word or two (t-shirt, tshirt),
@@ -591,16 +598,16 @@
       // ---------- Rows: new and best sellers, then by theme ----------
       // Ids that don't exist (yet) are skipped, so a row only shows what the shop sells.
       const BEST = ['tshirt', 'mug', 'bizcards', 'stickersheet', 'hoodie', 'cushion', 'invitations', 'tote'];
-      const NEW = ['engrpen', 'engrwallet', 'menus', 'calendar', 'labels', 'postcards', 'photobook', 'magnets', 'wrappingpaper', 'brochures', 'engrplaque', 'caketopper'];
+      const NEW = ['calligraphy', 'nameart', 'acrylicnameplate', 'shield', 'quranbox', 'qrstand', 'eventletters', 'villasign', 'engrpen', 'engrwallet', 'menus', 'calendar', 'labels', 'postcards', 'photobook', 'magnets', 'wrappingpaper', 'brochures', 'engrplaque', 'caketopper'];
       // Five rows, on phones and computers alike (owner's OK, UX item 5, 27 Nov: a shorter home page). The home,
       // weddings & occasions and laser rows are not on the home page any more; their products are in "All products",
       // its categories and the search.
       const ROWS = [
         { key: 'fresh', ids: [...NEW.slice(0, 4), ...BEST.slice(0, 6)], badge: (id) => (NEW.includes(id) || (byId(id) || {}).base ? 'new' : 'best') },
         { key: 'wear', ids: ['tshirt', 'hoodie', 'sweatshirt', 'oversized', 'polo', 'kidstee', 'cap', 'tote', 'apron'], link: '/?cat=apparel#products' },
-        { key: 'gifts', ids: ['magicmug', 'couplemugs', 'photobook', 'engrframe', 'engrwallet', 'engrpen', 'keychain', 'namepuzzle', 'tumbler', 'prayermat', 'wrappingpaper'], link: '/?cat=occasions#products' },
+        { key: 'gifts', ids: ['magicmug', 'couplemugs', 'photobook', 'nameart', 'calligraphy', 'quranbox', 'rehal', 'engrframe', 'engrwallet', 'engrpen', 'keychain', 'namepuzzle', 'tumbler', 'prayermat', 'wrappingpaper'], link: '/?cat=occasions#products' },
         { key: 'cards', ids: ['invitations', 'greetingcard', 'postcards', 'foldedcards', 'giftvouchers', 'bookmarks', 'eidenvelopes', 'certificates'], link: '/?cat=occasions#products' },
-        { key: 'biz', ids: ['bizcards', 'flyers', 'brochures', 'menus', 'labels', 'letterhead', 'logostickers', 'paperbags', 'booklets', 'rollup', 'banners', 'windowstickers', 'idcards', 'notepads', 'folders', 'giftvouchers'], link: '/?cat=business#products' },
+        { key: 'biz', ids: ['bizcards', 'flyers', 'brochures', 'menus', 'labels', 'letterhead', 'logostickers', 'paperbags', 'booklets', 'rollup', 'banners', 'windowstickers', 'idcards', 'notepads', 'folders', 'giftvouchers', 'acrylicnameplate', 'woodnameplate', 'shield', 'glassaward', 'qrstand'], link: '/?cat=business#products' },
       ];
       // Products the manager made from another one show in that one's rows, right after it.
       for (const row of ROWS) row.ids = row.ids.flatMap((id) => [id, ...products.filter((p) => p.base === id).map((p) => p.id)]);

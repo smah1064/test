@@ -8,13 +8,15 @@ const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { SEED, FITS, CATEGORIES, Library, productsFor } = require('../src/library');
+const { SEED, FITS, CATEGORIES, Library, productsFor, noGeneralDesigns } = require('../src/library');
 const { PRODUCTS } = require('../src/products');
 const laserPack = require('../src/library-packs/laser');
+const cncPack = require('../src/library-packs/cnc-uv');
 
 const byId = (id) => SEED.find((d) => d.id === id);
 const onProduct = (pid) => SEED.filter((d) => productsFor(d).includes(pid));
-const general = (p) => !(p.laser || p.pattern || p.kind);
+// (The CNC and UV products take only their own designs, like the laser ones: src/library-packs/cnc-uv.js.)
+const general = (p) => !noGeneralDesigns(p);
 // Products that take general designs but have only a few, or none because of
 // their shape (a tall design looks lost on a very wide desk mat or DL envelope).
 const FEW = { bizcards: 10, letterhead: 6, invoicebook: 6, rollup: 10, deskmat: 0, dlenvelopes: 0,
@@ -76,18 +78,18 @@ test('designs go where a customer would buy them', () => {
   assert.ok(on('eid-mubarak', 'eidenvelopes') && !on('kammel', 'eidenvelopes'), 'Eid envelopes');
 });
 
-test('laser designs keep their own product lists', () => {
-  for (const d of laserPack.designs) {
+test('laser, CNC and UV designs keep their own product lists', () => {
+  for (const d of [...laserPack.designs, ...cncPack.designs]) {
     assert.strictEqual(byId(d.id), d);
     assert.deepStrictEqual(productsFor(d), [d.product]);
     assert.strictEqual(productsFor(d), d.products);
   }
 });
 
-test('no general design on fabric, photo prints, books or laser products', () => {
-  const laserIds = new Set(laserPack.designs.map((d) => d.id));
+test('no general design on fabric, photo prints, books, laser, CNC or UV products', () => {
+  const own = new Set([...laserPack.designs, ...cncPack.designs].map((d) => d.id));
   for (const p of PRODUCTS.filter((x) => !general(x))) {
-    const bad = onProduct(p.id).filter((d) => !(p.laser && laserIds.has(d.id)));
+    const bad = onProduct(p.id).filter((d) => !(own.has(d.id) && d.product === p.id));
     assert.deepStrictEqual(bad.map((d) => d.id), [], p.id);
   }
 });

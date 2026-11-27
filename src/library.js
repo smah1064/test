@@ -238,7 +238,7 @@ for (const d of SEED) {
 // On top of the table:
 //  - products that get no general designs at all: fabric by the metre and other
 //    printed textiles (`pattern`), books and photo prints (`kind`), laser products
-//    (`laser`: they have their own pack);
+//    (`laser`: they have their own pack), and the CNC and UV products (OWN_DESIGNS_ONLY);
 //  - designs with {Name} fields (filled from a list) go only on name-list products;
 //  - the print area's shape must suit the design's (see fitsShape).
 const WEAR = ['tshirt', 'oversized', 'hoodie', 'sweatshirt', 'ziphoodie']; // everyday adult clothes
@@ -311,8 +311,11 @@ const readyPart = (a) => (a && a.readyZone ? { w: a.w * a.readyZone.w, h: a.h * 
 const productShape = (p) => SEEN_SHAPE[p.id] || areaShape(readyPart(p.sides && p.sides[0] && p.sides[0].printArea)) || 0.75;
 const MERGE_FIELD = /\{[^{}]+\}/;
 const hasNameFields = (d) => (d.items || []).some((i) => i.kind === 'text' && MERGE_FIELD.test(i.text || ''));
+// The CNC and UV products (27 Nov 2026) take only the designs drawn for their own shape and material
+// (src/library-packs/cnc-uv.js): no T-shirt slogan on a villa sign, no shop logo on an honour shield.
+const OWN_DESIGNS_ONLY = new Set(['calligraphy', 'villasign', 'acrylicnameplate', 'woodnameplate', 'shield', 'quranbox', 'nameart', 'rehal', 'glassaward', 'qrstand', 'favourtags', 'uvdtf', 'eventletters']);
 /** Products that take no general ready designs. */
-const noGeneralDesigns = (p) => Boolean(p.laser || p.pattern || p.kind);
+const noGeneralDesigns = (p) => Boolean(p.laser || p.pattern || p.kind || OWN_DESIGNS_ONLY.has(p.id) || (p.base && OWN_DESIGNS_ONLY.has(p.base)));
 
 function designShape(d) {
   if (d.aspect) return d.aspect;
@@ -395,8 +398,10 @@ function productsFor(d) {
   // Products the manager made from another one take that product's designs too.
   for (const p of PRODUCTS) if (p.base && want.has(p.base)) want.add(p.id);
   const fields = hasNameFields(d);
-  const list = PRODUCTS.filter((p) => !noGeneralDesigns(p) && ((d.kind === 'objects' && p.id === d.product)
-    || (want.has(p.id) && (!fields || p.merge) && fitsShape(d, p) && fitsColour(d, p)))).map((p) => p.id);
+  // (An owner's design made on a CNC / UV product stays offered there.)
+  const list = PRODUCTS.filter((p) => (d.kind === 'objects' && p.id === d.product && OWN_DESIGNS_ONLY.has(p.id))
+    || (!noGeneralDesigns(p) && ((d.kind === 'objects' && p.id === d.product)
+    || (want.has(p.id) && (!fields || p.merge) && fitsShape(d, p) && fitsColour(d, p))))).map((p) => p.id);
   fitCache.set(d, list);
   return list;
 }
@@ -938,4 +943,4 @@ const ONCE = {
   },
 };
 
-module.exports = { Library, catalogChanged, CATEGORIES, SEED, FITS, productsFor, fitsColour, productShape, usesArtwork, hasArtwork, ARTWORK_ENOUGH };
+module.exports = { Library, catalogChanged, CATEGORIES, SEED, FITS, productsFor, fitsColour, productShape, usesArtwork, hasArtwork, ARTWORK_ENOUGH, OWN_DESIGNS_ONLY, noGeneralDesigns };

@@ -128,6 +128,7 @@ const METHOD_NAMES = {
   embroidery: { en: 'Embroidery', ar: 'تطريز' },
   engrave: { en: 'Laser engraving', ar: 'حفر بالليزر' },
   lasercut: { en: 'Laser cutting', ar: 'قص بالليزر' },
+  cnc: { en: 'CNC routing', ar: 'حفر وقص CNC' },
   photo: { en: 'Photo prints (photo paper)', ar: 'طباعة صور (ورق فوتوغرافي)' },
   book: { en: 'Printed book', ar: 'كتاب مطبوع' },
 };
