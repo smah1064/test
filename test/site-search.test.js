@@ -54,7 +54,8 @@ test('the words: English and Arabic, kept together right after nav.sections', ()
     assert.doesNotMatch(S[k][1], /محل/, `${k}: the site is never called محل`);
   }
   assert.deepStrictEqual([...S['search.open']], ['Search', 'دوّر']);
-  assert.deepStrictEqual([...S['search.none']], ['Nothing found with that name. Try another word.', 'مالقيناش حاجة بالاسم ده. جرّب كلمة تانية']);
+  // (Since UX item 4, 27 Nov, «جرّب دول:» and things to tap follow it: the line says only that nothing was found.)
+  assert.deepStrictEqual([...S['search.none']], ['Nothing found with that name.', 'مالقيناش حاجة بالاسم ده.']);
   assert.deepStrictEqual([...S['search.from']], ['from {price}', 'من {price}']);
 });
 
@@ -102,4 +103,92 @@ test('the header finds the jersey by كرة and جرسيه, the invoice book by 
   for (const [q, id] of [['كرة', 'jersey'], ['جرسيه', 'jersey'], ['فاتورة', 'invoicebook'], ['فاتوره', 'invoicebook'], ['ليتر هيد', 'letterhead']]) {
     assert.ok(ids(q).includes(id), `${q} → ${id} (${ids(q).slice(0, 5)})`);
   }
+});
+
+// ---------- UX item 4 (owner's OK, 27 Nov): nothing found offers things to tap; gift and occasion words ----------
+
+test('nothing found: the home page\'s best sellers (the same list), the words in both languages', () => {
+  const line = (src) => (src.match(/^ *const BEST = \[[^\n]*\];$/m) || [])[0];
+  assert.ok(line(SRC), 'site-search.js has the best sellers');
+  assert.strictEqual(line(SRC).trim(), line(pub('index.html')).trim(), 'the same best sellers as the home page');
+  assert.match(SRC, /const TRY_BEST = 4;/, 'the top 4');
+  const window = {};
+  vm.runInNewContext(pub('js/i18n.js'), { window });
+  const S = window.POD_STRINGS;
+  assert.deepStrictEqual([...S['search.try']], ['Try these:', 'جرّب دول:']);
+  assert.deepStrictEqual([...S['search.allDesigns']], ['See all ready designs', 'شوف كل التصميمات الجاهزة']);
+  for (const k of ['search.try', 'search.tryDesigns', 'search.allDesigns', 'home.noMatchTry']) {
+    assert.ok(S[k][0] && S[k][1], k);
+    assert.doesNotMatch(S[k][1], /محل/, `${k}: never محل`);
+    assert.doesNotMatch(S[k].join(' '), /عند الاستلام|on delivery|cash/i, `${k}: no cash on delivery`);
+  }
+  // The ready designs are the shop's own pictures (no drawing in the dropdown), and each one offered has one.
+  const designed = JSON.parse(pub('img/designed/index.json'));
+  const picks = SRC.match(/const TRY_DESIGNS = \[([^\]]*)\]/)[1].match(/'([a-z0-9]+)'/g).map((x) => x.slice(1, -1));
+  assert.ok(picks.length >= 4);
+  for (const id of picks.slice(0, 4)) assert.ok(designed[id] && designed[id].file && designed[id].design, `${id} has a picture with a ready design`);
+});
+
+test('gift words: «هدية عيد ميلاد» / "birthday gift" list the mug, the T-shirt and the cushion first', () => {
+  for (const q of ['هدية عيد ميلاد', 'birthday gift', 'هدايا عيد ميلاد', 'birthday present', 'هديه عيد ميلاد']) {
+    assert.deepStrictEqual(ids(q).slice(0, 5), ['mug', 'tshirt', 'cushion', 'magicmug', 'couplemugs'], q);
+    // The invitation cards and the wrapping paper are still found, after the gifts.
+    for (const id of ['invitations', 'wrappingpaper']) assert.ok(ids(q).indexOf(id) > ids(q).indexOf('couplemugs'), `${q}: ${id} after the gifts`);
+  }
+  // A gift alone: the gift vouchers and the wrapping paper (هدايا in their names) first, then the gifts.
+  // ("present" alone also starts the name of the Presentation Folders, as before.)
+  for (const q of ['هدية', 'هدايا', 'gift', 'gifts']) {
+    const got = ids(q);
+    assert.deepStrictEqual(got.slice(0, 2), ['giftvouchers', 'wrappingpaper'], q);
+    assert.deepStrictEqual(got.slice(2, 5), ['mug', 'tshirt', 'cushion'], q);
+  }
+});
+
+test('occasion words find the gifts in either language (they found nothing before)', () => {
+  const firstThree = (q, want) => assert.deepStrictEqual(ids(q).slice(0, want.length), want, `${q}: ${ids(q).slice(0, 6)}`);
+  for (const q of ['عيد الأم', 'عيد الام', "mother's day", 'هدية عيد الأم', 'هدية لأمي']) firstThree(q, ['mug', 'tshirt', 'cushion']);
+  for (const q of ['عيد الحب', 'فالنتاين', 'valentine', "valentine's day", 'هدية عيد الحب']) firstThree(q, ['mug', 'tshirt', 'cushion']);
+  for (const q of ['تخرج', 'هدية تخرج', 'graduation gift']) assert.ok(['mug', 'tshirt', 'keychain'].every((id) => ids(q).includes(id)), q);
+  firstThree('هدية تخرج', ['mug', 'tshirt', 'magicmug']);
+  // A new baby: the baby onesie (a baby in its name) first, then the cushion and the photo album.
+  for (const q of ['هدية مولود', 'baby gift', 'هدية سبوع']) firstThree(q, ['onesie', 'cushion', 'photobook']);
+  // A wedding (فرح / جواز): its own things first (the welcome sign, the couple mugs, the invitations), then the gifts.
+  for (const q of ['فرح', 'جواز', 'wedding']) {
+    const got = ids(q);
+    assert.strictEqual(got[0], 'weddingsign', q);
+    assert.ok(got.indexOf('invitations') < got.indexOf('mug') && got.includes('cushion'), `${q}: ${got}`);
+  }
+  firstThree('هدية جواز', ['mug', 'cushion', 'couplemugs']);
+  // A birthday without "gift": the invitations first (they say it themselves), the gifts after.
+  for (const q of ['عيد ميلاد', 'birthday']) {
+    const got = ids(q);
+    assert.strictEqual(got[0], 'invitations', q);
+    assert.ok(got.includes('mug') && got.includes('caketopper'), `${q}: ${got}`);
+  }
+});
+
+test('occasion words are whole words: "tea" is not "teacher", "men" not "engagement", and the old searches stay', () => {
+  assert.ok(!ids('tea').includes('keychain') && !ids('tea').includes('tote'), `tea: ${ids('tea')}`);
+  assert.ok(!ids('men').includes('mug') && !ids('men').includes('cushion'), `men: ${ids('men')}`);
+  assert.deepStrictEqual(ids('day'), [], 'day alone: nothing');
+  assert.deepStrictEqual(ids('مج').slice(0, 3), ['mug', 'magicmug', 'couplemugs']);
+  assert.strictEqual(ids('تيشيرت')[0], 'tshirt');
+  assert.deepStrictEqual(ids('xyzq'), []);
+});
+
+test('the occasions are data on the products (src/products.js), in their order', () => {
+  const byId = Object.fromEntries(PRODUCTS.map((p) => [p.id, p]));
+  for (const id of ['mug', 'tshirt', 'cushion', 'magicmug', 'couplemugs', 'keychain', 'photobook', 'engrframe', 'canvas', 'namepuzzle']) {
+    assert.ok(byId[id].occasions.includes('gift'), `${id} is a gift`);
+  }
+  assert.deepStrictEqual(['mug', 'tshirt', 'cushion'].map((id) => byId[id].occasionRank), [1, 2, 3]);
+  // The words are the search's own names for each occasion (the shared kit's SAME), so both languages find them.
+  const kit = SRC.slice(SRC.indexOf('// search-kit:start'), SRC.indexOf('// search-kit:end'));
+  const S = vm.runInNewContext(`${kit}\nSEARCH`);
+  for (const p of PRODUCTS.filter((x) => x.occasions)) {
+    for (const w of p.occasions) assert.ok(S.match(S.index(w), S.query(w)) && S.query(w)[0].concepts.includes(w), `${p.id}: ${w} is one of the search's occasions`);
+  }
+  // Nothing about the invitations or the wrapping paper is a "gift" of their own: they come after the gifts.
+  assert.ok(!byId.invitations.occasions.includes('gift'));
+  assert.ok(!byId.wrappingpaper.occasions);
 });

@@ -2531,6 +2531,53 @@ for (const p of PRODUCTS) {
   }
 }
 
+// ---------- Gifts and occasions (the shop's search) ----------
+// What a product makes a good gift for, so the search finds it by the occasion: «هدية عيد ميلاد», "birthday gift",
+// «عيد الأم», "valentine", «هدية تخرج», «هدية مولود» (owner's OK, UX item 4, 27 Nov). The words are the search's own
+// names for each occasion (SAME in the search kit: gift = هدية، هدايا، present; birthday = عيد ميلاد; mom = ماما، عيد الأم;
+// dad = بابا، عيد الأب; valentine = عيد الحب، فالنتاين; wedding = فرح، جواز، زواج; engagement = خطوبة; graduation = تخرج;
+// baby = مولود، سبوع; teacher = عيد المعلم), so one word finds the product in both languages. The order counts: when
+// every word of a search is one of a product's occasions and no product has the words in its name, these products come
+// first, in this order (the mugs, the T-shirt and the cushion first), before what only mentions the words elsewhere
+// (invitation cards, wrapping paper). Each product's words become `occasions`, its place `occasionRank` (1 first).
+const OCCASIONS = [
+  ['mug', 'gift birthday mom dad valentine wedding engagement graduation teacher'],
+  ['tshirt', 'gift birthday mom dad valentine graduation'],
+  ['cushion', 'gift birthday mom dad valentine wedding engagement baby'],
+  ['magicmug', 'gift birthday mom dad valentine graduation teacher'],
+  ['couplemugs', 'gift birthday valentine wedding engagement'],
+  ['keychain', 'gift birthday valentine graduation teacher'],
+  ['photobook', 'gift birthday mom dad valentine wedding engagement graduation baby'],
+  ['engrframe', 'gift birthday mom dad valentine wedding engagement graduation baby'],
+  ['canvas', 'gift birthday mom dad valentine wedding engagement graduation baby'],
+  ['canvaswide', 'gift birthday mom dad valentine wedding engagement graduation baby'],
+  ['plaque', 'gift birthday mom dad valentine wedding engagement graduation'],
+  ['namepuzzle', 'gift birthday baby'],
+  ['storybook', 'gift birthday'],
+  ['coloringbook', 'gift birthday'],
+  ['kidstee', 'gift birthday'],
+  ['onesie', 'gift baby'],
+  ['hoodie', 'gift birthday valentine graduation'],
+  ['poster', 'gift birthday mom dad valentine graduation'],
+  ['tumbler', 'gift birthday dad graduation teacher'],
+  ['engrwallet', 'gift birthday dad valentine graduation'],
+  ['engrpen', 'gift dad graduation teacher'],
+  ['engrcardholder', 'gift dad graduation'],
+  ['tote', 'gift birthday mom teacher'],
+  ['prayermat', 'gift mom dad'],
+  ['engrplaque', 'gift wedding engagement graduation teacher'],
+  ['engrtray', 'engagement wedding'],
+  ['caketopper', 'birthday wedding engagement'],
+  ['invitations', 'birthday wedding engagement baby'],
+  ['greetingcard', 'birthday mom dad valentine wedding graduation baby'],
+];
+OCCASIONS.forEach(([id, words], i) => {
+  const p = PRODUCTS.find((x) => x.id === id);
+  if (!p) return;
+  p.occasions = words.split(' ');
+  p.occasionRank = i + 1;
+});
+
 // ---------- Embroidery ----------
 // Garments, caps, totes and aprons can be embroidered instead of printed: a
 // smaller area (left chest, cap front...), up to 6 thread colours, made into

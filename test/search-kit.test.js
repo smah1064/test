@@ -132,3 +132,21 @@ test('word forms: plurals become singular, short words stay as they are', () => 
   // Nothing to look for: no words.
   assert.strictEqual(SEARCH.query('<> $&').length, 0);
 });
+
+// UX item 4 (owner's OK, 27 Nov): gift and occasion words, the same in either language (the products' occasions).
+test('gift and occasion words: each language finds the other', () => {
+  const finds = (text, q) => assert.ok(SEARCH.match(SEARCH.index(text), SEARCH.query(q)), `"${q}" finds "${text}"`);
+  for (const q of ['هدية', 'هدايا', 'هديه', 'gift', 'gifts', 'present', 'presents']) finds('gift', q);
+  for (const q of ['عيد ميلاد', 'birthday', 'bday', 'اعياد ميلاد']) finds('birthday', q);
+  for (const q of ['عيد الأم', 'عيد الام', "mother's day", 'ماما']) finds('mom', q);
+  for (const q of ['عيد الحب', 'فالنتاين', "valentine's day"]) finds('valentine', q);
+  for (const q of ['فرح', 'جواز', 'زواج', 'wedding']) finds('wedding', q);
+  for (const q of ['خطوبة', 'خطوبه', 'engagement']) finds('engagement', q);
+  for (const q of ['تخرج', 'التخرج', 'حفلة تخرج', 'graduation', 'graduate']) finds('graduation', q);
+  for (const q of ['مولود', 'سبوع', 'new baby', 'newborn', 'بيبي']) finds('baby', q);
+  // And the other way round: an Arabic design or product text is found by the English word.
+  finds('هدية تخرج', 'graduation gift');
+  finds('هدية للمولود', 'baby');
+  // Not inside other words: «خرج» is not the graduation.
+  assert.ok(!SEARCH.match(SEARCH.index('graduation'), SEARCH.query('خرج')));
+});

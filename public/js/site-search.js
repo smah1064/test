@@ -82,7 +82,7 @@
         gift: 'gift, gifts, present, هدية, هدايا, هديه',
         coffee: 'coffee, قهوة, قهوه, نسكافيه',
         tea: 'tea, شاي, شاى',
-        birthday: 'birthday, عيد ميلاد',
+        birthday: 'birthday, bday, عيد ميلاد, اعياد ميلاد',
         dog: 'dog, puppy, كلب, كلاب',
         cat: 'cat, kitten, قطة, قطط',
         kids: 'kids, kid, children, child, اطفال, طفل, ولاد, اولاد',
@@ -92,7 +92,10 @@
         // (Valentine's Day, Teacher's Day, a new baby and the prayer mat (مصلية), in either language. QA 25 Nov.)
         valentine: 'valentine, valentines, valentine day, عيد الحب, عيد حب, فالنتاين, فلانتين',
         teacher: 'teacher, teachers day, teacher day, معلم, المعلم, عيد المعلم, مدرس, يوم المعلم',
-        baby: 'baby, newborn, بيبي, نونو, مولود',
+        baby: 'baby, newborn, new baby, بيبي, نونو, مولود, سبوع',
+        // (Graduation and engagement gifts, in either language: the products' occasions, src/products.js. UX item 4, 27 Nov.)
+        graduation: 'graduation, graduate, تخرج, حفلة تخرج',
+        engagement: 'engagement, engaged, خطوبة',
         prayermat: 'prayer mat, prayer rug, سجادة صلاة, مصلية, مصلاية',
       };
       const sameAs = new Map();
@@ -234,7 +237,9 @@
       const named = SEARCH.index(name, true);
       // (true: everything the shop's search found before is still found.) The description on its own (see inText), and
       // the name also as it is spelt, without the forgiving ي (see rank).
-      return [p.id, { all: SEARCH.index(text, true), about: SEARCH.index([p.description && p.description.en, p.description && p.description.ar].join(' '), true), name: ` ${norm(name)} `, named, spelt: { ...named, loose: '' }, sized: SEARCH.index(sizeWords(p), true), colored: SEARCH.index(colorWords(p)) }];
+      // Its occasions (src/products.js, OCCASIONS: gift, birthday, mom…), as whole words or what they name, so "tea" is
+      // not the "teacher" of a mug and "men" not the "engagement" of a cushion.
+      return [p.id, { all: SEARCH.index(text, true), about: SEARCH.index([p.description && p.description.en, p.description && p.description.ar].join(' '), true), name: ` ${norm(name)} `, named, spelt: { ...named, loose: '' }, sized: SEARCH.index(sizeWords(p), true), colored: SEARCH.index(colorWords(p)), occasion: SEARCH.index((p.occasions || []).join(' ')) }];
     }));
     // The search, on product text only: markup typed into the box ("<b>") is not a word.
     const typed = () => q.replace(/<[^<>]*>/g, ' ');
@@ -252,20 +257,67 @@
     // cards") also count each in either place, as when they were one text.
     const inText = (h, term) => SEARCH.match(h.all, [term]) || SEARCH.match(h.about, [term], /[a-z]/.test(term.word || term.or[0].word) || undefined)
       || Boolean(term.or && term.or.every((x) => inText(h, x)));
-    // Every word is in the product's text, is one of its colours, or is a year for a calendar.
-    const found = (p, qs) => { const h = hay.get(p.id); return qs.every((term) => inText(h, term) || isColor(h, term) || forYear(h, term)); };
+    // Every word is in the product's text, is one of its colours, is a year for a calendar, or is one of its occasions
+    // («هدية عيد ميلاد», "birthday gift": the mug, the T-shirt, the cushion…).
+    const isOccasion = (h, term) => SEARCH.match(h.occasion, [term], 'word');
+    const found = (p, qs) => { const h = hay.get(p.id); return qs.every((term) => inText(h, term) || isColor(h, term) || forYear(h, term) || isOccasion(h, term)); };
     return (words) => { // header only
       q = String(words || '').slice(0, 60); // header only
       const ts = terms();
       const qs = SEARCH.query(typed());
       const searching = Boolean(q.trim());
       let list = products.filter((p) => (cat === 'all' || p.category === cat) && (!searching || (ts.length && found(p, qs))));
-      const rank = (p) => { const h = hay.get(p.id); const tz = ts.filter((w) => ts.length < 2 || !SEARCH.match(h.sized, SEARCH.query(w))); const tc = tz.filter((w) => !SEARCH.query(w).every((term) => isColor(h, term) || forYear(h, term))); const tw = tc.length ? tc : tz; const tq = tw.length === ts.length ? qs : SEARCH.query(tw.join(' ')); return SEARCH.match(h.spelt, tq, 'word') ? 0 : tw.every((w) => h.name.includes(` ${w}`)) ? 1 : SEARCH.match(h.named, tq, 'word') || tw.every((w) => loose(h.name).includes(` ${loose(w)}`)) ? 2 : SEARCH.match(h.named, tq, true) ? 3 : 4; };
-      if (ts.length) list = list.map((p, i) => [rank(p), i, p]).sort((x, y) => x[0] - y[0] || x[1] - y[1]).map((x) => x[2]);
+      // Not by name: a gift search («هدية عيد ميلاد», "birthday gift", "هدايا عيد الأم") lists the products with all its
+      // words among their occasions first (4; one with a word in its name before the others: «هدية مولود», the baby onesie),
+      // the best gifts first (their order in src/products.js: the mugs, the T-shirt, the cushion…), then the rest (5); any
+      // other search lists what has the words in its own text first (5: «عيد ميلاد», the invitations), then what only its
+      // occasions find (6, in the same order). (Owner's OK, UX item 4, 27 Nov.)
+      const byOccasion = (h, tq) => (tq.some((term) => term.concepts.includes('gift')) ? (!SEARCH.match(h.occasion, tq, 'word') ? 5 : tq.some((term) => SEARCH.match(h.named, [term], 'word')) ? 4 : 4.5) : tq.every((term) => inText(h, term) || isColor(h, term) || forYear(h, term)) ? 5 : 6);
+      const rank = (p) => { const h = hay.get(p.id); const tz = ts.filter((w) => ts.length < 2 || !SEARCH.match(h.sized, SEARCH.query(w))); const tc = tz.filter((w) => !SEARCH.query(w).every((term) => isColor(h, term) || forYear(h, term))); const tw = tc.length ? tc : tz; const tq = tw.length === ts.length ? qs : SEARCH.query(tw.join(' ')); return SEARCH.match(h.spelt, tq, 'word') ? 0 : tw.every((w) => h.name.includes(` ${w}`)) ? 1 : SEARCH.match(h.named, tq, 'word') || tw.every((w) => loose(h.name).includes(` ${loose(w)}`)) ? 2 : SEARCH.match(h.named, tq, true) ? 3 : byOccasion(h, tq); };
+      if (ts.length) list = list.map((p, i) => [rank(p), i, p]).sort((x, y) => x[0] - y[0] || (x[0] > 3 && x[0] !== 5 ? (x[2].occasionRank || 99) - (y[2].occasionRank || 99) : 0) || x[1] - y[1]).map((x) => x[2]);
       return list; // header only
     }; // header only
   } // header only
   // site-search:end
+
+  // ---------- Nothing found: "Try these" (owner's OK, UX item 4, 27 Nov) ----------
+  // A search that finds nothing offers the home page's top best sellers (its own list, the same line as in
+  // public/index.html: test/site-search.test.js keeps them the same) and a few ready designs. A ready design is shown as
+  // the shop's own picture of a product printed with it (public/img/designed/, made by scripts/render-designed.js), a
+  // small finished picture: nothing is drawn in the browser, so the dropdown stays light and fast.
+  const BEST = ['tshirt', 'mug', 'bizcards', 'stickersheet', 'hoodie', 'cushion', 'invitations', 'tote'];
+  const TRY_BEST = 4;
+  // The products whose picture shows the ready design offered, in this order (the birthday card, the prayer mat for
+  // mum, the couple mugs, the football polo…). One the shop doesn't sell now, or a design no longer shown, is skipped.
+  const TRY_DESIGNS = ['greetingcard', 'prayermat', 'couplemugs', 'polo', 'canvas', 'magicmug'];
+  let tryDesigns = null;
+  /** Up to n ready designs to try: [{ id, name, product, file, href }] (asked for once, when first needed). */
+  function readyDesigns(n) {
+    if (!tryDesigns) {
+      tryDesigns = (async () => {
+        const [catalog, pics] = await Promise.all([
+          POD.loadCatalog(),
+          fetch('/img/designed/index.json').then((r) => (r.ok ? r.json() : {})).catch(() => ({})),
+        ]);
+        const sold = new Set((catalog.products || []).map((p) => p.id));
+        const picks = TRY_DESIGNS.filter((pid) => sold.has(pid) && pics[pid] && pics[pid].file && pics[pid].design);
+        const designs = await Promise.all(picks.map((pid) => fetch(`/api/library/${encodeURIComponent(pics[pid].design)}`)
+          .then((r) => (r.ok ? r.json() : null)).catch(() => null)));
+        return picks.map((pid, i) => {
+          const d = designs[i];
+          return d && d.name ? { id: d.id, name: d.name, product: pid, file: pics[pid].file, href: `/design?id=${encodeURIComponent(d.id)}&product=${encodeURIComponent(pid)}` } : null;
+        }).filter(Boolean);
+      })().catch(() => {
+        tryDesigns = null; // (no connection: the next time asks again)
+        return [];
+      });
+    }
+    return tryDesigns.then((list) => list.slice(0, n));
+  }
+  /** A picture of the shop's at about the width it is shown (the server's smaller copies, /img-w/). */
+  const sizedPic = (file, w) => (/^\/img\/designed\/[A-Za-z0-9_-][A-Za-z0-9_.-]*\.(webp|jpe?g|png)$/i.test(String(file || '')) ? `/img-w/${w}/${file.slice(5)}` : file);
+  // (The home page's full results use the same ready designs.)
+  POD.searchTries = { readyDesigns, sizedPic };
 
   const MAX = 5;
   const btn = document.querySelector('[data-site-search]');
@@ -275,6 +327,12 @@
   const input = panel.querySelector('input');
   const list = panel.querySelector('.site-search-list');
   const none = panel.querySelector('.site-search-none');
+  const results = panel.querySelector('.site-search-results');
+  // "Try these" when nothing is found: made here, so the bar's markup stays the same in every page.
+  const tries = document.createElement('div');
+  tries.className = 'site-search-try';
+  tries.hidden = true;
+  results.append(tries);
 
   // The catalogue (asked for once, when the bar first opens) and the lifestyle photos the home page shows.
   let ready = null;
@@ -302,6 +360,43 @@
     return `<img alt="" width="48" height="48" loading="lazy" decoding="async" src="${esc(src)}" data-pid="${esc(p.id)}">`;
   }
 
+  /** A product as the dropdown lists it: picture, name, from-price. */
+  const item = (p, life) => `<li><a class="site-search-item" href="${hrefOf(p)}">${picture(p, life)}<span class="site-search-name">${esc(tr(p.name))}</span><span class="site-search-price">${esc(t('search.from', { price: money(POD.fromPrice(p)) }))}</span></a></li>`;
+  // The arrow after "See all ready designs" points onwards, in the reading direction.
+  const onwards = () => (document.documentElement.dir === 'rtl' ? '←' : '→');
+
+  /**
+   * Nothing found for `words`: «جرّب دول:», the top best sellers, then a few ready designs (pictures) and the link to
+   * all of them. The designs come a moment later (asked for once); the rest at once.
+   */
+  function showTries(data, words) {
+    const best = BEST.map((id) => data.products.find((p) => p.id === id)).filter(Boolean).slice(0, TRY_BEST);
+    tries.innerHTML = `${best.length ? `<p class="site-search-try-title">${esc(t('search.try'))}</p>
+      <ul class="site-search-try-list" aria-label="${esc(t('search.try'))}">${best.map((p) => item(p, data.life)).join('')}</ul>` : ''}
+      <div class="site-search-designs-box"></div>
+      <a class="site-search-all" href="/designs">${esc(t('search.allDesigns'))} <span aria-hidden="true">${onwards()}</span></a>`;
+    tries.hidden = false;
+    readyDesigns(3).then((ds) => {
+      const box = tries.querySelector('.site-search-designs-box');
+      if (shown !== words || tries.hidden || !box || !ds.length) return;
+      box.innerHTML = `<p class="site-search-try-title">${esc(t('search.tryDesigns'))}</p>
+        <ul class="site-search-designs">${ds.map((d) => `<li><a class="site-search-design" href="${esc(d.href)}"><img alt="" width="160" height="120" decoding="async" src="${esc(sizedPic(d.file, 320))}"><span dir="auto">${esc(tr(d.name))}</span></a></li>`).join('')}</ul>`;
+      fit();
+    });
+  }
+  function hideTries() {
+    tries.hidden = true;
+    tries.innerHTML = '';
+  }
+  // The results scroll on their own when taller than the screen under the bar (the header stays put; the phone's
+  // keyboard takes half the screen).
+  function fit() {
+    if (panel.hidden) return;
+    const vv = window.visualViewport;
+    const bottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+    results.style.maxHeight = `${Math.max(180, Math.floor(bottom - results.getBoundingClientRect().top - 8))}px`;
+  }
+
   let shown = '';
   let typing = null;
   async function suggest() {
@@ -311,6 +406,7 @@
       list.hidden = true;
       list.innerHTML = '';
       none.hidden = true;
+      hideTries();
       return;
     }
     let data;
@@ -323,10 +419,13 @@
     const found = data.find(words).slice(0, MAX);
     none.hidden = found.length > 0;
     list.hidden = !found.length;
-    list.innerHTML = found.map((p) => `<li><a class="site-search-item" href="${hrefOf(p)}">${picture(p, data.life)}<span class="site-search-name">${esc(tr(p.name))}</span><span class="site-search-price">${esc(t('search.from', { price: money(POD.fromPrice(p)) }))}</span></a></li>`).join('');
+    list.innerHTML = found.map((p) => item(p, data.life)).join('');
+    if (found.length) hideTries();
+    else showTries(data, words);
+    fit();
   }
-  // A picture that doesn't load: the drawn product instead.
-  list.addEventListener('error', (e) => {
+  // A picture that doesn't load: the drawn product instead (a ready design's picture has no product: left as it is).
+  results.addEventListener('error', (e) => {
     const img = e.target;
     if (!(img instanceof HTMLImageElement) || img.dataset.fallback || !ready) return;
     img.dataset.fallback = '1';
@@ -342,6 +441,7 @@
     btn.setAttribute('aria-expanded', 'true');
     input.focus(); // (in the tap itself, so phones open the keyboard)
     load().catch(() => {});
+    fit();
     if (input.value.trim()) suggest();
   }
   function close(focusButton) {
@@ -373,7 +473,7 @@
       return;
     }
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
-    const links = list.hidden ? [] : [...list.querySelectorAll('a')];
+    const links = [...results.querySelectorAll('a')].filter((a) => a.getClientRects().length);
     if (!links.length) return;
     const at = links.indexOf(document.activeElement);
     e.preventDefault();
@@ -388,6 +488,8 @@
   document.addEventListener('pod:langchange', () => {
     if (isOpen() && input.value.trim()) suggest();
   });
+  window.addEventListener('resize', fit);
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', fit);
   // Coming back to a page (Back): the bar is closed, as the page was left.
   window.addEventListener('pageshow', (e) => {
     if (e.persisted) close(false);
