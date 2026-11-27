@@ -26,13 +26,18 @@ export function launchBrowser() {
  * @param {object|null} [o.config] what /app/config.json returns (null: 404, undefined: the real site)
  * @param {'ar'|'en'} [o.lang] the site's language (localStorage pod-lang)
  * @param {object} [o.devices] requests to /api/app/devices are captured in this array when given
+ * @param {{width: number, height: number}} [o.viewport] a phone screen of another size (CSS pixels)
  * @param {string} [o.prelude] script run before the app's (e.g. what a web view already has)
  * @param {boolean} [o.capacitorLate] add the stand-in bridge after the glue instead of before
  */
 export async function appPage(browser, site, o = {}) {
   const platform = o.platform || 'android';
   const device = platform === 'ios' ? devices['iPhone 13'] : devices['Pixel 7'];
-  const context = await browser.newContext({ ...device, locale: 'ar-EG' });
+  const context = await browser.newContext({
+    ...device,
+    ...(o.viewport ? { viewport: o.viewport, screen: o.viewport } : {}),
+    locale: 'ar-EG',
+  });
   const appConfig = {
     platform,
     version: '1.0.0',
