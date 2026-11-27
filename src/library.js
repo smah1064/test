@@ -256,7 +256,7 @@ const FITS = {
   eid: { products: [...WEAR, ...KIDS_WEAR, ...MUGS, 'cushion', 'poster', 'tablecloth', 'apron', 'coasters', 'tote', 'eidenvelopes', 'greetingcard', 'sign', 'logostickers', 'paperbags', 'flyers', 'postcards', 'foldedcards', 'magnets'] },
   love: { products: [...WEAR, 'denim', ...MUGS, 'couplemugs', 'tumbler', 'cushion', ...WALL, 'plaque', 'keychain', 'phonecase', 'tote', 'coasters', 'greetingcard', 'postcards', 'foldedcards', 'photobook', 'magnets'] },
   // Licensed collections (src/licensed.js): each design names its own product (`products`).
-  'licensed-spiderman': { products: ['invitations', 'sign', 'stickersheet', 'postcards', 'paperbags'] },
+  'licensed-spiderman': { products: ['invitations', 'sign', 'stickersheet', 'postcards', 'paperbags', 'poster', 'tablenumbers', 'idcards', 'logostickers', 'kidstee', 'mug', 'flyers'] },
   birthday: { products: [...WEAR, ...KIDS_WEAR, ...MUGS, 'tumbler', 'cushion', 'poster', 'plaque', 'sign', 'greetingcard', 'invitations', 'logostickers', 'paperbags', 'tote', 'postcards', 'foldedcards', 'tablenumbers', 'banners'] },
   // Kids' clothes only for the son / daughter / siblings designs, the prayer mat only
   // for the gifts to mum, dad and the grandparents (alsoProducts in the packs).

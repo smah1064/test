@@ -110,6 +110,14 @@ const FLAGGED = {
   'lic-sm-stickers': [['عيد ميلاد يوسف', 'kid', 'يوسف'], ['الـ ٦ سنين', 'age', '٦']],
   'lic-sm-thankyou': [['عيد ميلاد يوسف', 'kid', 'يوسف'], ['الـ ٦ سنين', 'age', '٦']],
   'lic-sm-favor-bag': [['يوسف', 'kid'], ['الـ ٦ سنين', 'age', '٦']],
+  'lic-sm-guestbook': [['وقّعوا هنا لعيد ميلاد يوسف', 'kid', 'يوسف'], ['الـ ٦ سنين', 'age', '٦']],
+  'lic-sm-keepsake': [['يوسف', 'kid'], ['عيد ميلاد سعيد · الـ ٦ سنين', 'age', '٦']],
+  'lic-sm-table-sign': [['عيد ميلاد يوسف', 'kid', 'يوسف'], ['الـ ٦ سنين', 'age', '٦']],
+  'lic-sm-party-pass': [['يوسف', 'kid'], ['حفلة الـ ٦ سنين', 'age', '٦']],
+  'lic-sm-round-seal': [['شكرًا · يوسف', 'kid', 'يوسف'], ['الـ ٦ سنين', 'age', '٦']],
+  'lic-sm-kids-tee': [['يوسف', 'kid'], ['الـ ٦ سنين', 'age', '٦']],
+  'lic-sm-mug': [['يوسف', 'kid'], ['الـ ٦ سنين', 'age', '٦']],
+  'lic-sm-activity-sheet': [['عيد ميلاد يوسف', 'kid', 'يوسف'], ['الـ ٦ سنين', 'age', '٦']],
 };
 
 test('every flagged design really has its sample text, marked, and nothing else is marked', () => {
@@ -133,7 +141,7 @@ test('every flagged design really has its sample text, marked, and nothing else 
     }
   }
   assert.deepStrictEqual(problems, []);
-  assert.strictEqual(Object.keys(FLAGGED).length, 85); // (+ 6 pen and wallet designs with a name, 25 Nov; + 5 licensed birthday designs, 27 Nov)
+  assert.strictEqual(Object.keys(FLAGGED).length, 93); // (+ 6 pen and wallet designs with a name, 25 Nov; + 13 licensed birthday designs, 27 Nov)
 });
 
 test('the marks are well formed: a known kind, the name part inside the text once, never on {field} designs', () => {

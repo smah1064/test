@@ -51,7 +51,7 @@ test('the team: name and age, the notice, no editor, a full test order with its 
 
   const lib = await page.evaluate(() => POD.api('/api/library'));
   const mine = lib.designs.filter((d) => d.licensed);
-  assert.deepStrictEqual(mine.map((d) => d.id).sort(), ['lic-sm-favor-bag', 'lic-sm-invitation', 'lic-sm-stickers', 'lic-sm-thankyou', 'lic-sm-welcome-sign']);
+  assert.deepStrictEqual(mine.map((d) => d.id).sort(), ['lic-sm-activity-sheet', 'lic-sm-favor-bag', 'lic-sm-guestbook', 'lic-sm-invitation', 'lic-sm-keepsake', 'lic-sm-kids-tee', 'lic-sm-mug', 'lic-sm-party-pass', 'lic-sm-round-seal', 'lic-sm-stickers', 'lic-sm-table-sign', 'lic-sm-thankyou', 'lic-sm-welcome-sign']);
   for (const d of mine) assert.strictEqual(d.products.length, 1, `${d.id}: one product only`);
   const forEditor = await page.evaluate(() => POD.api('/api/library?for=editor'));
   assert.ok(!forEditor.designs.some((d) => d.licensed), 'never offered in the editor');

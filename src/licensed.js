@@ -30,7 +30,7 @@ const COLLECTIONS = {
       ar: '© [نص حقوق صاحب الترخيص من العقد]. مستخدم بموجب ترخيص.',
     },
     // The only products its designs are offered on (also listed on each design).
-    products: ['invitations', 'sign', 'stickersheet', 'postcards', 'paperbags'],
+    products: ['invitations', 'sign', 'stickersheet', 'postcards', 'paperbags', 'poster', 'tablenumbers', 'idcards', 'logostickers', 'kidstee', 'mug', 'flyers'],
   },
 };
 
