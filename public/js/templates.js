@@ -853,9 +853,9 @@
   // text item has `sampleName`, the kind of name (one of NAME_ROLES), and `samplePart` when only part of the
   // text is the name ('محمود' in 'عائلة محمود'). The design page (public/js/design.js) asks for the customer's
   // own, and withNames puts it in: the preview, the cart and the print files are all made from that design.
-  const NAME_ROLES = ['name', 'his', 'her', 'names', 'family', 'initial', 'initials', 'hisInitial', 'herInitial', 'kid', 'baby', 'cat', 'dog', 'teacher', 'honoree'];
+  const NAME_ROLES = ['name', 'his', 'her', 'names', 'family', 'initial', 'initials', 'hisInitial', 'herInitial', 'kid', 'baby', 'cat', 'dog', 'teacher', 'honoree', 'age'];
   // Letters; others NAME_LEN (a four-part Egyptian name, "عبد الرحمن محمد عبد الفتاح الشربيني", fits; fitName sets it smaller).
-  const NAME_MAX = { initial: 3, hisInitial: 3, herInitial: 3, initials: 9, names: 60 };
+  const NAME_MAX = { initial: 3, hisInitial: 3, herInitial: 3, initials: 9, names: 60, age: 3 };
   const NAME_LEN = 45;
   /** A ready design's sample names, in order: { index (of its item), role, sample, caps (printed in capitals), max (letters) }. */
   function sampleNames(design) {

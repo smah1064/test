@@ -194,7 +194,7 @@
     if (!box.firstChild) {
       box.innerHTML = samples.map((s, k) => `<div class="field"><label for="dp-name-${k}"></label>`
         // (The box takes more than fits, so a long name is never cut inside a word: cleanName keeps whole words.)
-        + `<input type="text" id="dp-name-${k}" data-name="${k}" maxlength="${s.max + 30}" autocomplete="off" autocapitalize="words" spellcheck="false" enterkeyhint="done" aria-describedby="dp-names-hint"${s.caps ? ' class="dp-caps"' : ''}></div>`).join('')
+        + `<input type="text" id="dp-name-${k}" data-name="${k}" maxlength="${s.max + 30}"${s.role === 'age' ? ' inputmode="numeric"' : ''} autocomplete="off" autocapitalize="words" spellcheck="false" enterkeyhint="done" aria-describedby="dp-names-hint"${s.caps ? ' class="dp-caps"' : ''}></div>`).join('')
         // (Phones: the big picture is above, out of sight while typing; a small copy of the design here.)
         + '<img class="dp-names-peek" id="dp-names-peek" alt="" aria-hidden="true"><p class="muted small" id="dp-names-hint"></p>'
         + '<p class="small dp-names-long" id="dp-names-long" role="status" hidden></p>'
@@ -336,6 +336,14 @@
     $('dp-edit').classList.toggle('btn-lg', hasFields);
     $('dp-edit').dataset.i18n = hasFields ? 'design.fillIn' : hasWords ? 'design.customize' : 'design.customizePic';
     $('dp-edit').textContent = t($('dp-edit').dataset.i18n);
+    // Licensed artwork stays exactly as it is: no editor (only the name and age boxes), and its legal notice.
+    const lic = design.licensed;
+    if (lic) $('dp-edit').hidden = true;
+    $('dp-licensed').hidden = !lic;
+    if (lic) {
+      $('dp-lic-draft').hidden = !lic.draft;
+      $('dp-lic-notice').textContent = tr(lic.notice);
+    }
     document.title = `${tr(design.name)} · ${t('brand')}`;
     // The chosen product's chip in the middle of its row: only the row scrolls (scrollIntoView also moved the page
     // down on small phones, hiding the top of the picture. Tester 1, 26 Nov).

@@ -248,6 +248,11 @@
   if (!params.get('design') && params.get('library')) {
     try {
       libraryDesign = await POD.api('/api/library/' + encodeURIComponent(params.get('library')));
+      // Licensed artwork (src/licensed.js) is never changed in the editor: back to its own page (name and age only).
+      if (libraryDesign && libraryDesign.licensed) {
+        location.replace('/design?id=' + encodeURIComponent(libraryDesign.id));
+        return;
+      }
       // The customer's own name(s) typed on the ready-design page (/design: &name=…, one per sample name, in order).
       if (params.has('name') && D.withNames) libraryDesign = D.withNames(libraryDesign, params.getAll('name'));
       if (params.get('color')) st.colorId = params.get('color');
@@ -1900,7 +1905,7 @@
   };
   async function loadTemplateList() {
     if (tplState.list) return tplState.list;
-    const lib = await POD.api('/api/library').catch(() => ({ categories: [], designs: [] }));
+    const lib = await POD.api('/api/library?for=editor').catch(() => ({ categories: [], designs: [] }));
     const ready = (lib.designs || []).map((d) => ({
       key: 'lib:' + d.id, name: d.name, cat: d.category, design: d,
       tpl: d.kind === 'template' ? { id: d.id, items: d.items, aspect: d.aspect } : null,
@@ -2547,7 +2552,7 @@
   }
   /** Templates and ready designs whose names match (searched here, they are few). */
   async function libTemplates(q) {
-    if (!lib.designs) lib.designs = await POD.api('/api/library').then((r) => r.designs).catch(() => []);
+    if (!lib.designs) lib.designs = await POD.api('/api/library?for=editor').then((r) => r.designs).catch(() => []);
     const norm = (x) => String(x || '').toLowerCase().replace(/[ً-ٟـ]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي');
     const words = norm(q).split(/\s+/).filter(Boolean);
     const hit = (names) => !words.length || words.every((w) => names.some((n) => norm(n).includes(w)));

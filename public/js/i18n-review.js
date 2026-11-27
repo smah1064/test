@@ -35,6 +35,7 @@
     'rv.reason.nameList': ['Name list: every piece has its own name', 'قائمة أسماء: كل قطعة باسم مختلف'],
     'rv.reason.embroidery': ['Embroidery: check the stitch file', 'تطريز: راجع ملف الغرز'],
     'rv.reason.imported': ['Imported artwork: check quality and rights', 'تصميم مستورد: راجع الجودة وحقوق الاستخدام'],
+    'rv.reason.licensed': ['Licensed artwork: check the art is unchanged and the © notice is right', 'رسم مرخّص: اتأكد إن الرسم زي ما هو وإن إشعار الحقوق صح'],
     'rv.reason.bulk': ['Large order', 'طلب كمية كبيرة'],
     'rv.reason.revised': ['The customer sent a new version after your change request: check it, then approve to send them its proof', 'العميل بعت نسخة جديدة بعد طلب التعديل: راجعها، ووافق عشان تتبعتله البروفة'],
     'rv.reason.sample': ['Customer wants a printed sample first', 'العميل عايز عينة مطبوعة الأول'],

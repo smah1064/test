@@ -67,6 +67,7 @@ accounting.initPricing(PRODUCTS, EXTRA_SIDE_PRICE);
 const { Library, CATEGORIES: DESIGN_CATEGORIES, catalogChanged: libraryCatalogChanged, hasArtwork, SEED: LIBRARY_SEED } = require('./library');
 const { Views, ViewError } = require('./views');
 const preview = require('./preview');
+const licensed = require('./licensed');
 const { Backups } = require('./backup');
 // Zip uploads of designs (admin): loaded when first used.
 let designUploadMod = null;
@@ -695,6 +696,16 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     return !(order.linkKey ? orderOpenFor(req, order) : false);
   }
   /**
+   * A browser signed in to the dashboard (the owner or staff): it sees licensed collections still in draft
+   * (src/licensed.js) and may place test orders with them. Everyone else never sees them.
+   */
+  function teamBrowser(req) {
+    const pw = previewWho(req);
+    return Boolean(pw && (pw.startsWith('owner-') || pw.startsWith('s-')));
+  }
+  /** A ready design this request may see: never a draft licensed one, except for the team. */
+  const libraryOpenFor = (req, d) => Boolean(d) && (!licensed.isDraft(d) || teamBrowser(req));
+  /**
    * Where to send someone back to on this site: a path starting with exactly one "/" (never
    * "//other.site" or "/\\other.site"), else the home page; `code` adds ?code=wrong / wait.
    */
@@ -966,6 +977,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (d.merge) r.push('nameList');
     if (d.method === 'embroidery') r.push('embroidery');
     if (d.imports && d.imports.length) r.push('imported');
+    // Licensed artwork: checked by hand before printing (art unchanged, the right legal notice).
+    if (d.licensed) r.push('licensed');
     // Photo sets are many prints by nature: no check by hand just for the number.
     if (copiesOf(d) >= LARGE_ORDER && d.kind !== 'photoset') r.push('bulk');
     if (sample) r.push('sample');
@@ -1978,6 +1991,13 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const libIds = [...new Set(sideIds.map((id) => sides[id] && sides[id].editor && sides[id].editor.library))];
     const readyFrom = libIds.length === 1 && typeof libIds[0] === 'string' && !mergeList && !emb && !imported.length
       && !sideIds.some((id) => sides[id].editor.named) && library.shown(libIds[0]) ? libIds[0] : null;
+    // Licensed collections (src/licensed.js): a draft one only from the team's browsers; the design remembers its
+    // collection (Review flags it, and the royalty figures come from it).
+    const licIds = [...new Set(libIds.map((id) => (typeof id === 'string' ? library.get(id) : null)).filter((x) => x && x.licensed).map((x) => x.licensed))];
+    for (const id of libIds) {
+      const lib = typeof id === 'string' ? library.get(id) : null;
+      if (lib && !libraryOpenFor(req, lib)) throw new HttpError(404, 'notFound');
+    }
 
     const token = crypto.randomBytes(24).toString('hex');
     const design = {
@@ -2009,6 +2029,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       ...(imported.length ? { imports: imported, rightsConfirmedAt: new Date().toISOString() } : {}),
       ...(pattern ? { pattern } : {}),
       ...(readyFrom ? { readyFrom } : {}),
+      ...(licIds.length ? { licensed: licIds[0], ...(licensed.isDraft({ licensed: licIds[0] }) ? { licensedDraft: true } : {}) } : {}),
     };
     design.price = designPrice({ ...design, status: 'ready' });
     if (design.price == null) throw new HttpError(400, 'unknownSize');
@@ -2205,16 +2226,23 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     // Made for certain products only (laser designs: one tone, cut pieces joined up).
     ...(Array.isArray(d.products) ? { products: d.products.filter((id) => catalog.visible(getProduct(id))) } : {}),
     ...(d.kind === 'template' ? { items: d.items, aspect: d.aspect } : { preview: `/api/library/${d.id}/preview.png` }),
+    ...(d.licensed ? { licensed: licensed.publicInfo(d) } : {}),
   });
   app.get('/api/library', (req, res) => {
     res.set('Cache-Control', 'no-cache');
-    res.json({ categories: DESIGN_CATEGORIES, designs: library.visible().map(libraryCard) });
+    const all = library.visible();
+    // (The editor's lists never offer licensed artwork: it is only ever ordered from its own page, unchanged.)
+    const designs = all.filter((d) => libraryOpenFor(req, d) && !(req.query.for === 'editor' && d.licensed));
+    // (A draft licensed collection's category isn't named to anyone who can't see its designs.)
+    const shownCats = new Set(designs.map((d) => d.category));
+    const closed = new Set(all.filter((d) => !shownCats.has(d.category) && licensed.isDraft(d)).map((d) => d.category));
+    res.json({ categories: DESIGN_CATEGORIES.filter((c) => !closed.has(c.id)), designs: designs.map(libraryCard) });
   });
   app.get('/api/library/:id', (req, res) => {
     const d = library.shown(req.params.id);
-    if (!d) throw new HttpError(404, 'notFound');
+    if (!d || !libraryOpenFor(req, d)) throw new HttpError(404, 'notFound');
     const { hidden, deleted, ...pub } = d; // eslint-disable-line no-unused-vars
-    res.json(pub);
+    res.json({ ...pub, ...(d.licensed ? { licensed: licensed.publicInfo(d) } : {}) });
   });
   app.get('/api/library/:id/preview.png', (req, res) => {
     const d = library.shown(req.params.id);
@@ -4152,6 +4180,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const d = typeof id === 'string' && UUID_RE.test(id) && store.getDesign(id);
       if (!d || (d.status && d.status !== 'ready')) throw new HttpError(400, 'designGone');
       if (d.orderId) throw new HttpError(409, 'designOrdered');
+      // A draft licensed collection's design: test orders from the team's browsers only.
+      if (d.licensedDraft && !teamBrowser(req)) throw new HttpError(400, 'designGone');
       // A kids book being saved (another tab, or another copy of the app): ordered once the save is done, never
       // half saved (QA 25 and 26 Nov).
       if (bookSaves.has(d.id) || (d.kind === 'book' && bookLocked(d.id))) throw new HttpError(409, 'bookSaving');
@@ -8082,7 +8112,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     }
     if (name === 'design') {
       const d = library.shown(String(req.query.id || ''));
-      if (!d) return null;
+      if (!d || licensed.isDraft(d)) return null; // (a draft licensed design: never in a link preview)
       // A picture of the design itself when the shop has one; else the shop's card (never a blank product, which
       // would look like the design is missing, QA 25 Nov).
       // (The shop's own picture designs: their artwork, a PNG or JPG in the shop's files. Shown only as the logo

@@ -367,6 +367,17 @@ The garment itself is also drawn at its size: the biggest size fills the picture
 
 In the editor, "Remove background (AI)" on a selected photo, or "Remove the background of my photos" in the upload panel, cuts people, pets and products out of any background. The server runs ISNet (general use, Apache-2.0, the model the free rembg tool uses) with `onnxruntime-node`, one photo at a time in a short-lived process (`src/bgremove.js`, ~2-3 s and ~650 MB per photo). The 178 MB model is downloaded once into `DATA_DIR/models` (checked against its SHA-256) a little after start-up. If the AI isn't available, the editor falls back to the quick plain-background remover. `.npmrc` skips onnxruntime's GPU downloads. Set `BG_REMOVAL=off` to turn it off; `BG_MODEL_PATH` / `BG_MODEL_URL` point to another copy of the model.
 
+## Licensed collections (draft until the license is confirmed)
+
+Ready designs built on a licensor's official artwork (`src/licensed.js`, designs in `src/library-packs/licensed-*.js`). The first one, **Spider-Man birthday** (`spiderman-bnd`), is a **draft**: the artwork is grey placeholders, and only browsers signed in to the dashboard (owner and staff) see it. Visitors don't see its designs or category, can't open its pages, add it to the cart or order it, and link previews never show it.
+
+- **Products:** invitation cards, welcome sign, sticker sheet (bag seals), thank-you cards and paper favor bags; each design is offered on its own product only.
+- **Personalisation:** the child's name and age only (two boxes on the design page; the age box opens the number keyboard). The artwork can't be moved, stretched or recoloured: the design page has no editor button, the editor's lists never offer licensed designs, and opening one in the editor goes back to its page.
+- **Legal notice:** shown under every product of the collection (`notice` in `src/licensed.js`; to be filled in with the wording from the license).
+- **Orders and print files:** made exactly like other ready designs (300 DPI print PNG, SVG, PDF/TIFF in the dashboard). Each design remembers its collection (`licensed`, and `licensedDraft` for test orders placed while it is a draft), and Review flags it ("Licensed artwork: check the art is unchanged and the © notice is right").
+- **Replacing the placeholders:** put the approved files in `public/img/art/licensed-spiderman/` with the same names (`pose-crouch`, `pose-web`, `pose-swing`, `title`, `emblem`), or change the paths in `ART` in `src/library-packs/licensed-spiderman.js` (a `.png` gets its print size by itself). Check each file's resolution at the largest print size (the A1 welcome sign).
+- **Publishing:** set `status: 'live'` in `src/licensed.js`, only after the owner confirms the license in writing (licensor, products, territory, personalisation, approved artwork, notice).
+
 ## Editable words in uploaded designs
 
 Designs uploaded by the owner or the Catalogue role (Ready designs → Upload designs (zip)) get the words drawn in them made into ordinary editable text, automatically, in the background after publishing: in the editor the customer types over "Happy birthday Sara" and the drawing is its own layer. Customers' own uploads never get this (too costly).

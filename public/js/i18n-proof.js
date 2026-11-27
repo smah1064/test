@@ -76,6 +76,7 @@ Object.assign(window.POD_STRINGS, {
   'proof.reason.preflight': ['the automatic checks found something', 'الفحص التلقائي لقى حاجة'],
   'proof.reason.nameList': ['it has a name list', 'فيه قائمة أسماء'],
   'proof.reason.embroidery': ['embroidery', 'تطريز'],
+  'proof.reason.licensed': ['it uses licensed artwork, which we check by hand', 'فيه رسم مرخّص بنراجعه بإيدينا'],
   'proof.reason.imported': ['the artwork came from a converted file', 'التصميم جاي من ملف متحوّل'],
   'proof.reason.bulk': ['a large order', 'كمية كبيرة'],
   'proof.reason.sample': ['you asked for a sample first', 'طلبت عينة الأول'],
