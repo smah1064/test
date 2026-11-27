@@ -5369,6 +5369,47 @@
   }
   /** How many sides of the product carry something (the embroidery counts as the side it is on), as the shop prices it. */
   const decoratedCount = () => new Set(designedSides().map((s) => hostOf(s.id))).size;
+  /**
+   * More copies never cost less than fewer (owner, 27 Nov: 900 envelopes as 500 + 4 × 100 were 2,450 while 1,000 were
+   * 2,100): each colour's packs of one family cost at most the cheapest packs that make at least as many copies. The
+   * same rule as the shop's (src/pack-price.js).
+   */
+  function packCover(packs, copies) {
+    const usable = packs.filter((x) => x.copies > 0 && Number.isFinite(x.price));
+    if (!usable.length || !(copies > 0)) return null;
+    const gcd = (a, b) => (b ? gcd(b, a % b) : a);
+    const g = usable.reduce((a, x) => gcd(a, x.copies), 0);
+    const need = Math.ceil(copies / g);
+    const top = need + Math.max(...usable.map((x) => x.copies / g));
+    if (top > 2e6) return null;
+    const cost = new Float64Array(top + 1).fill(Infinity);
+    cost[0] = 0;
+    for (let n = 1; n <= top; n++) for (const x of usable) { const k = x.copies / g; if (k <= n && cost[n - k] + x.price < cost[n]) cost[n] = cost[n - k] + x.price; }
+    let best = Infinity;
+    for (let n = need; n <= top; n++) if (cost[n] < best) best = cost[n];
+    return Number.isFinite(best) ? Math.round(best * 100) / 100 : null;
+  }
+  function cappedTotal(lines) {
+    const p = st.product;
+    const isPack = (z) => Boolean(z && z.pack && typeof z.copies === 'number' && z.copies > 0);
+    let total = 0;
+    const groups = new Map();
+    for (const l of lines) {
+      const z = p.sizes.find((x) => x.id === l.size);
+      const u = unitPrice(l.size) * l.qty;
+      if (!isPack(z)) { total += u; continue; }
+      const k = `${l.color}|${z.family || ''}`;
+      const gr = groups.get(k) || { family: z.family, copies: 0, sum: 0 };
+      gr.copies += z.copies * l.qty;
+      gr.sum += u;
+      groups.set(k, gr);
+    }
+    for (const gr of groups.values()) {
+      const cover = packCover(p.sizes.filter((x) => isPack(x) && x.family === gr.family && !x.off).map((x) => ({ copies: x.copies, price: unitPrice(x.id) })), gr.copies);
+      total += cover != null && cover < gr.sum ? cover : gr.sum;
+    }
+    return total;
+  }
   /** The full price: every piece at its size's price (or every name of the list). */
   function refreshPrice(notes = null) {
     const p = st.product;
@@ -5383,7 +5424,7 @@
     } else {
       const lines = qtyLines();
       pieces = lines.reduce((a, l) => a + l.qty, 0);
-      total = lines.reduce((a, l) => a + unitPrice(l.size) * l.qty, 0);
+      total = cappedTotal(lines);
     }
     $('price').textContent = money(total);
     // Packs (100 cards, A5 × 500…): counted in copies ("for 300 copies"), not pieces.
@@ -7419,14 +7460,18 @@
       // The cart may have changed in another tab since this item was opened: replace it where it is now.
       const at = st.editingCartIndex !== null ? cart.findIndex((it) => it.designId === st.editingDesignId) : -1;
       if (at >= 0) cart[at] = entry;
-      else cart.push(entry);
+      else cart.unshift(entry); // (the newest on top of the cart: owner, 27 Nov)
       // The browser refused to keep the cart (storage blocked): stay here, the message says so.
       if (POD.setCart(cart) === false) return;
       st.dirty = false;
       if (draftMode) {
         clearTimeout(draftTimer);
-        await draftSaving;
-        await POD.drafts.remove(st.product.id);
+        // Tidying the draft away never holds the customer up: the item is in the cart already. On an iPad whose storage
+        // was refusing (or stuck), waiting for it kept "Checking print files…" on screen for 2 minutes (owner, 27 Nov).
+        const soon = (p) => Promise.race([Promise.resolve(p).catch(() => null), new Promise((r) => setTimeout(r, 3000))]);
+        startingOver = true; // (no more draft saves while leaving)
+        await soon(draftSaving);
+        await soon(POD.drafts.remove(st.product.id));
         try { localStorage.removeItem('pod-rescue:' + st.product.id); } catch (err) { /* private mode */ }
       }
       // (An item changed from the cart says "updated", not "added", QA 25 Nov. And Back from the cart doesn't

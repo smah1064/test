@@ -37,6 +37,7 @@ const {
   pageSides,
 } = require('./products');
 const { GOVERNORATES, normalizeEgyptMobile } = require('./egypt');
+const { coverPrice } = require('./pack-price');
 const i18n = require('./i18n');
 const { FIELDS, langOf, format } = i18n;
 const roles = require('./roles');
@@ -3506,19 +3507,42 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const p = priceFor(product, sizeId, decoratedSides(d));
       return p == null ? null : p + embExtra(product, d, sizeId);
     };
+    // Packs of copies (100 envelopes, 10 menus): each colour's packs of one family never cost more than the cheapest
+    // packs that make at least as many copies (owner, 27 Nov: 900 envelopes were 2,450 and 1,000 were 2,100).
+    const isPack = (z) => Boolean(z && z.pack && typeof z.copies === 'number' && z.copies > 0);
+    const capped = (lines) => {
+      const groups = new Map();
+      let total = 0;
+      for (const l of lines) {
+        const z = product.sizes.find((x) => x.id === l.size.id);
+        const u = unit(l.size.id);
+        if (u == null) return null;
+        if (!isPack(z)) { total += u * l.qty; continue; }
+        const k = `${l.color.id}|${z.family || ''}`;
+        const g = groups.get(k) || { family: z.family, copies: 0, sum: 0 };
+        g.copies += z.copies * l.qty;
+        g.sum += u * l.qty;
+        groups.set(k, g);
+      }
+      for (const g of groups.values()) {
+        const packs = product.sizes.filter((x) => isPack(x) && x.family === g.family && !x.off).map((x) => ({ copies: x.copies, price: unit(x.id) }));
+        const cover = coverPrice(packs, g.copies);
+        total += cover != null && cover < g.sum ? cover : g.sum;
+      }
+      return total;
+    };
     // Several colours / sizes: each line at its size's price.
     if (d.quantities && d.quantities.length) {
-      let sum = 0;
-      for (const l of d.quantities) {
-        const u = unit(l.size.id);
-        if (u == null || !product.colors.some((c) => c.id === l.color.id)) return null;
-        sum += u * l.qty;
-      }
-      return round2(sum);
+      if (!d.quantities.every((l) => product.colors.some((c) => c.id === l.color.id))) return null;
+      const sum = capped(d.quantities);
+      return sum == null ? null : round2(sum);
     }
     const u = unit(d.size.id);
     // A price of nothing (or less) can't be ordered (a mistake in the shop's prices).
-    return u == null || u < 1 ? null : round2(u * copiesOf(d));
+    if (u == null || u < 1) return null;
+    // (A name list prints each copy differently: priced per copy as before.)
+    const one = d.merge ? null : capped([{ color: d.color || {}, size: d.size, qty: copiesOf(d) }]);
+    return round2(one == null ? u * copiesOf(d) : one);
   };
   /** Pieces in a design: one per row of its name list, else the quantities asked for, else one. */
   const copiesOf = (d) => (!d ? 1 : d.kind === 'photoset' ? d.photos.reduce((n, p) => n + p.copies, 0) : d.merge ? d.merge.count : d.quantities ? d.quantities.reduce((n, l) => n + l.qty, 0) : 1);

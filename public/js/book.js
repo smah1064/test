@@ -574,7 +574,7 @@
     // The line of this very book wherever it is now (opened from the cart, or added a moment ago).
     const at = cart.findIndex((c) => c.designId === d.id);
     if (at >= 0) cart[at] = item;
-    else cart.push(item);
+    else cart.unshift(item); // (the newest on top of the cart: owner, 27 Nov)
     // The browser refused to keep the cart (storage blocked): stay here, the message says so.
     if (POD.setCart(cart) === false) return false;
     state.added = true; // (the next visit to this page, even by Back, is a new book)

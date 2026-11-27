@@ -1420,7 +1420,7 @@ if (typeof window !== 'undefined' && window.POD) (async () => {
     progress(t('photos.finishing'), 1);
     const done = await completeJob(job);
     const cart = POD.getCart();
-    cart.push({
+    cart.unshift({ // (the newest on top of the cart: owner, 27 Nov)
       designId: done.id,
       productId: done.productId,
       productName: done.productName,

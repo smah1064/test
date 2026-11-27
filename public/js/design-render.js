@@ -281,7 +281,7 @@
     onProgress('finish');
     const done = await POD.api(`/api/designs/${created.id}/complete`, { method: 'POST', headers: { 'x-upload-token': created.uploadToken } });
     const cart = POD.getCart();
-    cart.push({
+    cart.unshift({ // (the newest on top of the cart: owner, 27 Nov)
       designId: done.id,
       productId: done.productId,
       productName: done.productName,
