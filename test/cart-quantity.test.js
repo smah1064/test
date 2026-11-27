@@ -106,17 +106,19 @@ test('packs count copies: 10 single menus become one 10-pack; 9 say a pack costs
   assert.strictEqual(nine.entry.quantities[0].size.id, 'A4-1');
   assert.strictEqual(nine.entry.quantities[0].qty, 9);
   assert.strictEqual(nine.switched, undefined, 'single copies: nothing to say');
-  assert.ok(nine.cheaper && nine.cheaper.copies === 10 && nine.cheaper.price < nine.entry.price, JSON.stringify(nine.cheaper));
+  // (9 never cost more than 10: priced as the 10-pack, owner 27 Nov; so nothing cheaper to suggest.)
+  assert.strictEqual(nine.cheaper, undefined, JSON.stringify(nine.cheaper));
   const ten = await (await setQty(design.id, { copies: 10 }, key)).json();
   assert.deepStrictEqual(ten.switched && ten.switched.map((x) => x.qty), [1]);
   assert.strictEqual(ten.entry.sizeLabel.en.startsWith('A4'), true);
-  assert.strictEqual(ten.entry.price < nine.entry.price, true, 'ten for less than nine');
+  assert.strictEqual(ten.entry.price, nine.entry.price, 'nine cost what ten cost, never more');
   assert.strictEqual(ten.count.n, 10);
   assert.strictEqual(ten.count.step, 1, 'single copies still in the family');
   // 11: a 10-pack and a single (packs of one paper size mix on every product: owner, 26 Nov; it was 11 singles).
   const eleven = await (await setQty(design.id, { copies: 11 }, key)).json();
   assert.deepStrictEqual(eleven.entry.quantities.map((l) => [l.size.id, l.qty]).sort(), [['A4-1', 1], ['A4-10', 1]]);
-  assert.ok(eleven.entry.price < nine.entry.price * 11 / 9, `${eleven.entry.price}: far less than 11 singles`);
+  const single = require('../src/products').priceFor(require('../src/products').PRODUCTS.find((x) => x.id === 'menus'), 'A4-1', 1);
+  assert.ok(eleven.entry.price < single * 11, `${eleven.entry.price}: far less than 11 singles`);
   assert.deepStrictEqual(eleven.switched && eleven.switched.map((x) => x.qty).sort(), [1, 1]);
   assert.strictEqual(eleven.count.n, 11);
   // The order takes the design as it is now (one paper size, A4, as the menus need).
@@ -169,13 +171,14 @@ test('envelopes (sizes mix): 900 is the cheapest mix of packs, and the cart says
   // 500 + 4 × 100, not 9 × 100.
   const lines = Object.fromEntries(r.entry.quantities.map((l) => [l.size.id, l.qty]));
   assert.deepStrictEqual(lines, { 100: 4, 500: 1 });
-  assert.strictEqual(r.entry.price, price('500') + 4 * price('100'));
+  // (Never more than 1,000 cost: the price of two 500s, owner 27 Nov.)
+  assert.strictEqual(r.entry.price, Math.min(price('500') + 4 * price('100'), 2 * price('500')));
   assert.ok(r.entry.price < 9 * price('100'));
   assert.ok(Array.isArray(r.switched), 'bigger packs taken for less: said');
-  // 1,000 (two 500s) costs less than 900: the tip, with the cart's prices too (it stays after a reload).
-  assert.deepStrictEqual([r.cheaper.copies, r.cheaper.price], [1000, 2 * price('500')]);
+  // 1,000 no longer costs less than 900, so there is no tip.
+  assert.strictEqual(r.cheaper, undefined);
   const q = (await quote([design.id])).items[0];
-  assert.deepStrictEqual(q.count.cheaper, { copies: 1000, price: 2 * price('500') });
+  assert.strictEqual(q.count.cheaper, undefined);
   assert.strictEqual(q.count.n, 900);
   assert.strictEqual(q.count.step, 100);
   // Taken: 1,000 = two 500s; − from there works on the mix (the counter stays).
@@ -188,7 +191,7 @@ test('envelopes (sizes mix): 900 is the cheapest mix of packs, and the cart says
   const order = await post('/api/orders', { customer: { name: 'Sara Ahmed', phone: '01012345678', governorate: 'giza', city: 'Dokki', address: '12 Tahrir St' }, designIds: [design.id] });
   assert.strictEqual(order.status, 201, await order.clone().text());
   const o = await order.json();
-  assert.strictEqual(o.items[0].price, price('500') + 4 * price('100'));
+  assert.strictEqual(o.items[0].price, Math.min(price('500') + 4 * price('100'), 2 * price('500')));
 });
 
 test('sizes that are not packs of copies (banner sizes, photo-book pages) count pieces and never change size', async () => {

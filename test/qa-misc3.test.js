@@ -69,7 +69,7 @@ test('kids book: one tap at a time on "Add to cart", and a book already in the c
   const handler = src.slice(src.indexOf("$('bk-add').addEventListener('click'"), src.indexOf('renderForm();\n  renderThumbs();'));
   assert.match(handler, /if \(state\.adding\) return;\s*state\.adding = true;/);
   // The line of the same design is replaced where it is; a new line only for a design not in the cart.
-  assert.match(handler, /const at = cart\.findIndex\(\(c\) => c\.designId === d\.id\);\s*if \(at >= 0\) cart\[at\] = item;\s*else cart\.push\(item\);/);
+  assert.match(handler, /const at = cart\.findIndex\(\(c\) => c\.designId === d\.id\);\s*if \(at >= 0\) cart\[at\] = item;\s*else cart\.unshift\(item\);/);
   assert.doesNotMatch(handler, /cart\[state\.cartIndex\] = item/);
   // The button shows it is busy (and the busy state survives the redraw when the book is made first).
   assert.match(src, /\$\('bk-add'\)\.disabled = !state\.design \|\| !!state\.adding;/);

@@ -3513,7 +3513,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     // Several colours / sizes: each line at its size's price.
     if (d.quantities && d.quantities.length) {
       if (!d.quantities.every((l) => product.colors.some((c) => c.id === l.color.id))) return null;
-      const sum = capped(d.quantities);
+      // (A name list prints each person's pieces on their own: priced line by line, as before.)
+      const sum = d.merge ? d.quantities.reduce((n, l) => n + (unit(l.size.id) == null ? NaN : unit(l.size.id) * l.qty), 0) : capped(d.quantities);
+      if (Number.isNaN(sum)) return null;
       return sum == null ? null : round2(sum);
     }
     const u = unit(d.size.id);
@@ -4689,8 +4691,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const small = family.filter((z) => prices.get(z.id) != null).sort((a, c) => packSize(a) - packSize(c))[0];
       if (picks.some((p) => p.size !== small)) switched = picks.map((p) => ({ label: p.size.label, qty: p.qty }));
       // A few more copies that cost less ("1,000 for 2,100 against 900 for 2,450"): said, nothing changed.
-      cheaper = cheaperMore(product, family, prices, copies, Math.min(...family.map(packSize)), best.price);
-      if (cheaper) cheaper.now = best.price;
+      // (Compared with what these copies cost now: never more than the cheapest packs making at least as many.)
+      const cover = coverPrice(family.filter((z) => prices.get(z.id) != null).map((z) => ({ copies: packSize(z), price: prices.get(z.id) })), copies);
+      const now = cover != null && cover < best.price ? cover : best.price;
+      cheaper = cheaperMore(product, family, prices, copies, Math.min(...family.map(packSize)), now);
+      if (cheaper) cheaper.now = now;
     }
     // (Stock is checked when the order is placed, as for any cart.)
     const key = String(req.get('x-design-key') || '');
