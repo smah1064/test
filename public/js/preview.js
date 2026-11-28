@@ -1205,6 +1205,8 @@
     // The "On a model" tab only for clothing that has model photos.
     const withModels = data.sides.some((s) => modelsFor(data.product, s.side.id).length);
     document.querySelectorAll('[data-pv-tab="model"]').forEach((b) => { b.hidden = !withModels; });
+    // No 3D for a product whose 3D would mislead (a lantern shown as its name plaque only: QA 28 Nov).
+    document.querySelectorAll('[data-pv-tab="3d"]').forEach((b) => { b.hidden = Boolean(data.product.model && data.product.model.no3d); });
     if (!data.sides.find((s) => s.side.id === state.sideId && s.hasDesign)) {
       const withDesign = data.sides.find((s) => s.hasDesign);
       if (withDesign) state.sideId = withDesign.side.id;

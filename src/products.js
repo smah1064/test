@@ -3150,7 +3150,8 @@ function glassModel(g, extra = {}) {
     lid: false,
     profile: spec.profile.map(([y, r]) => [r3(y / 25.4), r3(r / 25.4)]),
     band: { y0In: r3(g.printTopMm / 25.4), y1In: r3((g.printTopMm + g.printHeightMm) / 25.4), phi: r4(fan.phi) },
-    finish: 'gloss',
+    // Clear glass: seen through, with the wrap on it (QA 28 Nov: it looked like a white mug).
+    finish: 'glass',
     handleBand: null,
     ...extra,
   };
@@ -3354,8 +3355,8 @@ const PRODUCTION = {
   couplestand: { process: 'lasercut', safeIn: 0, bleedIn: 0, model: { type: 'cutout', depthIn: 0.16, material: 'laser', stand: true } },
   woodinvite: { process: 'engrave', safeIn: 0.25, bleedIn: 0, model: { type: 'block', depthIn: 0.12, radiusIn: 0.12, material: 'laser', raised: 0.08, base: 'wood' } },
   // The Ramadan lanterns: the plaque is engraved; the 3D view shows the engraved plaque.
-  familyfanous: { process: 'engrave', safeIn: 0.08, bleedIn: 0, model: { type: 'block', depthIn: 0.2, radiusIn: 0.3, material: 'laser' } },
-  arabesquelantern: { process: 'engrave', safeIn: 0.06, bleedIn: 0, model: { type: 'block', depthIn: 0.2, radiusIn: 0.3, material: 'laser' } },
+  familyfanous: { process: 'engrave', safeIn: 0.08, bleedIn: 0, model: { type: 'block', depthIn: 0.2, radiusIn: 0.3, material: 'laser', no3d: true } },
+  arabesquelantern: { process: 'engrave', safeIn: 0.06, bleedIn: 0, model: { type: 'block', depthIn: 0.2, radiusIn: 0.3, material: 'laser', no3d: true } },
   // UV DTF cup wraps (clear film, cut to each glass) and the plain glasses they go on: turned from each glass's profile.
   uvwrap16: { process: 'uv', safeIn: 0.118, bleedIn: 0, model: glassModel(GLASSES.can16) },
   uvwrap20: { process: 'uv', safeIn: 0.118, bleedIn: 0, model: glassModel(GLASSES.can20) },

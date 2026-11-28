@@ -192,6 +192,7 @@ export function handleOf(m) {
 /** Body material by finish: gloss → ceramic, matte → plastic at roughness 0.6, metal → metal. */
 export function finishOf(m) {
   const f = m.finish || (m.material === 'metal' ? 'metal' : 'gloss');
+  if (f === 'glass') return { kind: 'glass', opts: {} };
   if (f === 'metal') return { kind: 'metal', opts: {} };
   if (f === 'matte') return { kind: 'plastic', opts: { roughness: 0.6 } };
   return { kind: 'ceramic', opts: {} };
@@ -214,26 +215,39 @@ export function buildLathe(m, hex, tex, renderer, product, side, helpers) {
   const size = wrapSize(prof);
   const wrap = canvas(size.w, size.h);
   const ctx = wrap.getContext('2d');
-  ctx.fillStyle = hex;
-  ctx.fillRect(0, 0, wrap.width, wrap.height);
+  const { kind, opts } = finishOf(m);
+  const clear = kind === 'glass';
+  // (Clear glass: only the design on the wrap; the glass itself is a see-through body under it.)
+  if (!clear) {
+    ctx.fillStyle = hex;
+    ctx.fillRect(0, 0, wrap.width, wrap.height);
+  }
   const crop = designCrop(tex && side && tex[side.id]);
   if (crop) {
     const r = bandRect(m, side, wrap.width, wrap.height);
     ctx.drawImage(crop, r.x, r.y, r.w, r.h);
   }
 
-  const { kind, opts } = finishOf(m);
   const geo = new THREE.LatheGeometry(lathePoints(prof).map(([r, y]) => new THREE.Vector2(r, y)), SEGMENTS, Math.PI, TAU);
   geo.setAttribute('uv', new THREE.BufferAttribute(latheUVs(prof), 2));
-  const body = new THREE.Mesh(geo, mat(kind, { ...opts, map: texture(wrap, renderer) }));
+  const glassMat = (o = {}) => new THREE.MeshPhysicalMaterial({ color: '#eef6f8', roughness: 0.05, metalness: 0, transparent: true, opacity: 0.28, clearcoat: 1, clearcoatRoughness: 0.03, depthWrite: false, ...o });
+  let body;
+  if (clear) {
+    // The glass, then the wrap just outside it (transparent where nothing is printed).
+    body = new THREE.Group();
+    body.add(new THREE.Mesh(geo, glassMat({ side: THREE.DoubleSide })));
+    const decal = new THREE.Mesh(geo, mat('plastic', { map: texture(wrap, renderer), transparent: true, alphaTest: 0.02, roughness: 0.35 }));
+    decal.scale.set(1.004, 1, 1.004);
+    body.add(decal);
+  } else body = new THREE.Mesh(geo, mat(kind, { ...opts, map: texture(wrap, renderer) }));
   body.userData.lathe = true;
-  const plain = mat(kind, { ...opts, color: hex });
+  const plain = clear ? glassMat() : mat(kind, { ...opts, color: hex });
 
   // Wall thickness, the inner wall (seen from inside) down to the floor, the floor, the base and a rounded rim.
   const wall = Math.max(0.05, Math.min(0.14, R * 0.06));
   const floorT = Math.max(0.2, Math.min(0.4, H * 0.06));
   const innerPts = lathePoints(prof, { inset: wall, toY: y0 + H - floorT });
-  const inner = new THREE.Mesh(new THREE.LatheGeometry(innerPts.map(([r, y]) => new THREE.Vector2(r, y)), 64, Math.PI, TAU), mat(kind === 'metal' ? 'metal' : 'ceramic', { color: hex, side: THREE.BackSide }));
+  const inner = new THREE.Mesh(new THREE.LatheGeometry(innerPts.map(([r, y]) => new THREE.Vector2(r, y)), 64, Math.PI, TAU), clear ? glassMat({ side: THREE.BackSide }) : mat(kind === 'metal' ? 'metal' : 'ceramic', { color: hex, side: THREE.BackSide }));
   const floorR = innerPts.length ? innerPts[0][0] : Math.max(0.01, rBot - wall);
   const innerBottom = new THREE.Mesh(new THREE.CircleGeometry(floorR, 64), plain);
   innerBottom.rotation.x = -Math.PI / 2;
