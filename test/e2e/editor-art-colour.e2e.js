@@ -93,6 +93,11 @@ test('phone: the Santa drawing gets Colour (whole drawing) and Change drawing', 
     assert.ok(Math.abs(layout.r.width - (B.r - B.l)) <= 3 && Math.abs(layout.r.height - (B.b - B.t)) <= 3, `its box is its pieces: ${JSON.stringify({ r: layout.r, B })}`);
     // Only drawings that stand alone are offered.
     assert.ok(await page.$$eval('#el-strip [data-swapart], [data-swap-list] [data-swapart]', (l) => l.length) <= 10);
+    // One Undo goes straight back to the drawing before the change (QA 28 Nov: the first Undo left no drawing).
+    await page.evaluate(() => { const b = document.querySelector('#undo, [data-act="undo"], button[aria-label*="Undo"], button[aria-label*="تراجع"]'); if (b) b.click(); else document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true })); });
+    await page.waitForTimeout(800);
+    const back = await art(page);
+    assert.ok(back && back.src === onBlack.src, `one Undo: ${back && back.src}`);
     // The small pictures are cut to the drawing.
     const thumb = await page.evaluate(async (s) => { const r = await fetch('/api/art-thumb?src=' + encodeURIComponent(s)); return [r.status, r.headers.get('content-type')]; }, first);
     assert.deepStrictEqual(thumb, [200, 'image/webp']);

@@ -1,6 +1,8 @@
 /* Product page: start a design from scratch, or pick one of the ready-made
  * designs (shown on this product, in the chosen colour) to order as it is or
- * to edit in the editor. */
+ * to edit in the editor. A plain product sold without printing (`blank: true`,
+ * the plain glasses) has no editor: "Add to cart" with a quantity instead
+ * (POST /api/blanks). `pair` links a UV DTF wrap and the glass it fits. */
 (async () => {
   const { t, tr, esc, money } = POD;
   const $ = (id) => document.getElementById(id);
@@ -252,7 +254,76 @@
       $('pp-names').href = `/editor?${q()}&names=1`;
       $('pp-names-text').textContent = t(aid === 'bizcards' || aid === 'idcards' ? 'pp.namesTextCards' : 'pp.namesText');
     }
+    renderPair();
+    renderBlank();
   }
+
+  // ---------- A wrap and its glass (product.pair) ----------
+  // A UV DTF wrap says its glass is sold separately and links to it; a plain glass links to its wrap.
+  function renderPair() {
+    const other = product.pair && catalog.products.find((p) => p.id === product.pair);
+    $('pp-pair').hidden = !other;
+    if (!other) return;
+    const lead = t(product.blank ? 'pair.wrapFor' : 'pair.glassSold');
+    $('pp-pair').innerHTML = `${esc(lead)} <a href="/product?id=${encodeURIComponent(other.id)}">${esc(tr(other.name))}</a> <span class="muted">(${esc(t('home.from', { price: money(POD.fromPrice(other)) }))})</span>`;
+  }
+
+  // ---------- Plain products (product.blank): no editor, straight to the cart ----------
+  const BLANK_MAX = 20;
+  let blankBusy = false;
+  /** The size a plain product is bought in: the first one still in stock in the chosen colour. */
+  const blankSize = () => product.sizes.find((s) => POD.sizeOk(product, color.id, s)) || null;
+  function renderBlank() {
+    const blank = Boolean(product.blank);
+    $('pp-blank').hidden = !blank;
+    $('pp-choices').hidden = blank;
+    if (!blank) return;
+    const sel = $('pp-blank-qty');
+    const was = Number(sel.value) || 1;
+    sel.innerHTML = Array.from({ length: BLANK_MAX }, (_, i) => `<option value="${i + 1}"${i + 1 === was ? ' selected' : ''}>${esc(POD.num(i + 1))}</option>`).join('');
+    const size = blankSize();
+    $('pp-blank-add').disabled = blankBusy || !size || !colorOk(color);
+    $('pp-blank-add').textContent = t(blankBusy ? 'blank.adding' : 'blank.add');
+    const qty = Number(sel.value) || 1;
+    $('pp-blank-total').textContent = size && qty > 1 ? t('blank.total', { price: money((product.basePrice + (size.surcharge || 0)) * qty) }) : '';
+  }
+  async function addBlank() {
+    const size = blankSize();
+    if (blankBusy || !size) return;
+    const qty = Math.min(BLANK_MAX, Math.max(1, Math.round(Number($('pp-blank-qty').value) || 1)));
+    blankBusy = true;
+    renderBlank();
+    try {
+      const done = await POD.api('/api/blanks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId: product.id, color: color.id, size: size.id, qty, options: null }),
+      });
+      const cart = POD.getCart();
+      cart.unshift({ // (the newest on top of the cart: owner, 27 Nov)
+        designId: done.id,
+        productId: product.id,
+        productName: done.productName || product.name,
+        colorName: (done.color && done.color.name) || color.name,
+        sizeLabel: (done.size && done.size.label) || size.label,
+        sides: [],
+        price: done.price,
+        previewUrl: done.previewUrl || (life ? life.file : plainUrl()),
+        addedAt: new Date().toISOString(),
+        kind: 'blank',
+        qty: done.qty || qty,
+        ...((done.qty || qty) > 1 ? { copies: done.qty || qty } : {}),
+      });
+      POD.setCart(cart);
+      location.href = '/cart?added=1';
+    } catch (e) {
+      blankBusy = false;
+      renderBlank();
+      POD.toast(e && e.message && e.status !== 404 ? e.message : t('blank.failed'), 'error');
+    }
+  }
+  $('pp-blank-qty').addEventListener('change', renderBlank);
+  $('pp-blank-add').addEventListener('click', addBlank);
 
   // Places for the customer's own details ({Name}, {Phone}…), as the editor finds them in a text.
   const textsOf = (list) => (list || []).flatMap((o) => (!o || typeof o !== 'object' ? []

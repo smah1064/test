@@ -12,6 +12,7 @@ const { SEED, FITS, CATEGORIES, Library, productsFor, noGeneralDesigns } = requi
 const { PRODUCTS } = require('../src/products');
 const laserPack = require('../src/library-packs/laser');
 const cncPack = require('../src/library-packs/cnc-uv');
+const wrapPack = require('../src/library-packs/uv-wraps');
 
 const byId = (id) => SEED.find((d) => d.id === id);
 const onProduct = (pid) => SEED.filter((d) => productsFor(d).includes(pid));
@@ -88,8 +89,10 @@ test('laser, CNC and UV designs keep their own product lists', () => {
 
 test('no general design on fabric, photo prints, books, laser, CNC or UV products', () => {
   const own = new Set([...laserPack.designs, ...cncPack.designs].map((d) => d.id));
+  // (The UV DTF cup wraps' own pack is drawn once for all four wraps: src/library-packs/uv-wraps.js.)
+  const wraps = new Set(wrapPack.designs.map((d) => d.id));
   for (const p of PRODUCTS.filter((x) => !general(x))) {
-    const bad = onProduct(p.id).filter((d) => !(own.has(d.id) && d.product === p.id));
+    const bad = onProduct(p.id).filter((d) => !(own.has(d.id) && d.product === p.id) && !(wraps.has(d.id) && wrapPack.WRAPS.includes(p.id)));
     assert.deepStrictEqual(bad.map((d) => d.id), [], p.id);
   }
 });

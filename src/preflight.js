@@ -393,6 +393,39 @@ async function arabicFontChecks(design, readFile) {
 }
 
 /**
+ * 9. Products sold by the number of letters at the size's height (Giant Event Letters: `laser.maxPieces`,
+ * `laser.fillHeight`; QA 28 Nov), from the editor's layout: tooManyPieces (fail; params n, max) counts the letters of
+ * every text (spaces left out) and one for every other shape; lettersSmall (fail; params name) a text whose box is
+ * under 75 % of the print area's height.
+ */
+async function letterSetChecks(design, readFile, product) {
+  const L = product && product.laser;
+  if (!L || !(L.maxPieces || L.fillHeight) || typeof readFile !== 'function') return [];
+  let editor;
+  try {
+    editor = JSON.parse(String(await readFile('editor.json')));
+  } catch (e) {
+    return [];
+  }
+  const out = [];
+  for (const side of Array.isArray(design.sides) ? design.sides : []) {
+    const ed = editor && editor[side.id];
+    const objs = (ed && Array.isArray(ed.objects) ? ed.objects : []).filter((o) => o && typeof o === 'object' && o.visible !== false);
+    const isText = (o) => typeof o.text === 'string' && /text/i.test(String(o.type || ''));
+    const pieces = objs.reduce((n, o) => n + (isText(o) ? [...o.text.replace(/\s+/g, '')].length : 1), 0);
+    if (L.maxPieces && pieces > L.maxPieces) out.push({ id: 'tooManyPieces', level: 'fail', side: side.id, params: { n: pieces, max: L.maxPieces } });
+    const def = (product.sides || []).find((sd) => sd.id === side.id);
+    const areaH = def && def.printArea && Number(def.printArea.h);
+    if (L.fillHeight && areaH > 0) {
+      for (const o of objs.filter(isText)) {
+        if ((Number(o.height) || 0) * Math.abs(Number(o.scaleY) || 1) < areaH * 0.75) out.push({ id: 'lettersSmall', level: 'fail', side: side.id, params: { name: textName(o.text) } });
+      }
+    }
+  }
+  return out;
+}
+
+/**
  * Checks every printed side of a saved design. Never throws for bad or
  * missing files: those come back as a failed `exportSize` check.
  */
@@ -423,6 +456,7 @@ async function preflight(design, { readFile, product } = {}) {
     const blank = blankPages(design, product);
     if (blank) checks.push(blank);
     checks.push(...(await arabicFontChecks(design, readFile)));
+    checks.push(...(await letterSetChecks(design, readFile, product)));
   } catch (e) {
     // (Only warnings: a layout that can't be read never fails the print files' own checks.)
   }

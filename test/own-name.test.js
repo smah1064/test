@@ -160,6 +160,12 @@ const FLAGGED = {
   'cnc-letters-sm-en': [['S&M', 'initials']],
   'cnc-letters-ms-ar': [['م & س', 'initials']],
   'cnc-letters-30': [['30', 'age']],
+  // UV DTF cup wraps (src/library-packs/uv-wraps.js, 28 Nov).
+  'uvwrap-name-floral-ar': [['مريم', 'name']],
+  'uvwrap-name-floral-en': [['Sarah', 'name']],
+  'uvwrap-birthday': [['Omar', 'name'], ['7', 'age']],
+  'uvwrap-birthday-ar': [['يا يوسف', 'name', 'يوسف']],
+  'uvwrap-monogram': [['M', 'initial'], ['MARIAM', 'name']],
 };
 
 test('every flagged design really has its sample text, marked, and nothing else is marked', () => {
@@ -183,7 +189,7 @@ test('every flagged design really has its sample text, marked, and nothing else 
     }
   }
   assert.deepStrictEqual(problems, []);
-  assert.strictEqual(Object.keys(FLAGGED).length, 135); // (+ 6 pen and wallet designs with a name, 25 Nov; + 13 licensed birthday designs, 27 Nov; + 42 CNC and UV designs, 27 Nov)
+  assert.strictEqual(Object.keys(FLAGGED).length, 140); // (+ 6 pen and wallet designs with a name, 25 Nov; + 13 licensed birthday designs, 27 Nov; + 42 CNC and UV designs, 27 Nov; + 5 UV DTF cup wraps, 28 Nov)
 });
 
 test('the marks are well formed: a known kind, the name part inside the text once, never on {field} designs', () => {

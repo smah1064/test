@@ -314,8 +314,11 @@ const hasNameFields = (d) => (d.items || []).some((i) => i.kind === 'text' && ME
 // The CNC and UV products (27 Nov 2026) take only the designs drawn for their own shape and material
 // (src/library-packs/cnc-uv.js): no T-shirt slogan on a villa sign, no shop logo on an honour shield.
 const OWN_DESIGNS_ONLY = new Set(['calligraphy', 'villasign', 'acrylicnameplate', 'woodnameplate', 'shield', 'quranbox', 'nameart', 'rehal', 'glassaward', 'qrstand', 'favourtags', 'uvdtf', 'eventletters']);
-/** Products that take no general ready designs. */
-const noGeneralDesigns = (p) => Boolean(p.laser || p.pattern || p.kind || OWN_DESIGNS_ONLY.has(p.id) || (p.base && OWN_DESIGNS_ONLY.has(p.base)));
+// The UV DTF cup wraps (28 Nov 2026) too: their own pack (src/library-packs/uv-wraps.js), drawn for a band round a glass.
+const WRAP_DESIGNS_ONLY = new Set(['uvwrap16', 'uvwrap20', 'uvwraptumbler', 'uvwraptaper']);
+const ownOnly = (id) => OWN_DESIGNS_ONLY.has(id) || WRAP_DESIGNS_ONLY.has(id);
+/** Products that take no general ready designs (plain glasses sold without printing, `blank`, take none at all). */
+const noGeneralDesigns = (p) => Boolean(p.laser || p.pattern || p.kind || p.blank || ownOnly(p.id) || (p.base && ownOnly(p.base)));
 
 function designShape(d) {
   if (d.aspect) return d.aspect;
@@ -399,7 +402,7 @@ function productsFor(d) {
   for (const p of PRODUCTS) if (p.base && want.has(p.base)) want.add(p.id);
   const fields = hasNameFields(d);
   // (An owner's design made on a CNC / UV product stays offered there.)
-  const list = PRODUCTS.filter((p) => (d.kind === 'objects' && p.id === d.product && OWN_DESIGNS_ONLY.has(p.id))
+  const list = PRODUCTS.filter((p) => (d.kind === 'objects' && p.id === d.product && ownOnly(p.id))
     || (!noGeneralDesigns(p) && ((d.kind === 'objects' && p.id === d.product)
     || (want.has(p.id) && (!fields || p.merge) && fitsShape(d, p) && fitsColour(d, p))))).map((p) => p.id);
   fitCache.set(d, list);
@@ -943,4 +946,4 @@ const ONCE = {
   },
 };
 
-module.exports = { Library, catalogChanged, CATEGORIES, SEED, FITS, productsFor, fitsColour, productShape, usesArtwork, hasArtwork, ARTWORK_ENOUGH, OWN_DESIGNS_ONLY, noGeneralDesigns };
+module.exports = { Library, catalogChanged, CATEGORIES, SEED, FITS, productsFor, fitsColour, productShape, usesArtwork, hasArtwork, ARTWORK_ENOUGH, OWN_DESIGNS_ONLY, WRAP_DESIGNS_ONLY, noGeneralDesigns };

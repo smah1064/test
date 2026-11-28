@@ -2798,9 +2798,154 @@ PRODUCTS.push(
     }],
     cardArt: '<g fill="{{I}}" stroke="#000" stroke-opacity=".15" stroke-width="2"><path d="M40 380 V210 h36 l34 70 l34 -70 h36 v170 h-34 v-104 l-36 70 l-36 -70 v104 z"/><path d="M250 372 c-30 -26 -66 -54 -66 -96 c0 -40 50 -56 66 -22 c16 -34 66 -18 66 22 c0 42 -36 70 -66 96z"/><path d="M334 380 l52 -170 h34 l52 170 h-38 l-10 -36 h-42 l-10 36 z M396 312 h22 l-11 -42 z" fill-rule="evenodd"/></g>',
     // Every character is its own freestanding piece; the bridge only joins the parts of one letter.
-    laser: { kind: 'cut', bridgeMm: 3, pieces: 'many' },
+    laser: { kind: 'cut', bridgeMm: 3, pieces: 'many', maxPieces: 3, fillHeight: true },
   },
 );
+
+// ---------- UV DTF cup wraps and the plain glasses they go on (owner, 28 Nov 2026) ----------
+// The owner sells the printed UV DTF wrap (a decal on clear film, no background, stuck on cold) and the plain
+// glasses separately. Each wrap size is its own product, because each glass has its own shape and the editor
+// takes one shape per product. The wrap is drawn the way src/drinkware.js applyTo() lays out a measured cup:
+// the band UNROLLED to a rectangle (Wrect × Hrect, public/js/drinkware-geom.js fanOf) with a 5 mm seam gap,
+// the glass seen from the front for the previews (wrap.view) and a lathe 3D model. The tapered glass's band is
+// part of a cone, so its side carries `fan` as applyTo() sets it: the shop's fan print files ('fan-png',
+// 'fan-mirror', 'fan-pdf') are made for it, and the film is printed and cut in that arc.
+// The plain glasses (`blank: true`) are sold without printing: their page has "Add to cart" (POST /api/blanks)
+// instead of the editor. They keep the normal product shape (one side, one colour, one size) so shared code works.
+// `pair`: the matching glass of a wrap, and the matching wrap of a glass.
+const DRINKGEOM = require('../public/js/drinkware-geom');
+const GLASS_TINT = '#eaf1f3';
+const GLASSES = {
+  // Libbey-style 16 oz glass can: Ø 70 mm, 130 mm tall; the wrap 215 × 110 mm (with the 5 mm seam gap).
+  can16: { heightMm: 130, topDiaMm: 70, bottomDiaMm: 70, printTopMm: 10, printHeightMm: 110 },
+  // 20 oz glass can: Ø 75 mm, 150 mm tall; the wrap ≈ 230 × 130 mm.
+  can20: { heightMm: 150, topDiaMm: 75, bottomDiaMm: 75, printTopMm: 10, printHeightMm: 130 },
+  // 20 oz straight glass tumbler (lid and straw): Ø 75 mm, 200 mm tall; the wrap ≈ 230 × 190 mm.
+  tumbler20: { heightMm: 200, topDiaMm: 75, bottomDiaMm: 75, printTopMm: 5, printHeightMm: 190 },
+  // 12 oz tapered glass cup: 120 mm tall, Ø 85 at the rim, Ø 65 at the base; the band from 15 to 105 mm.
+  taper12: { heightMm: 120, topDiaMm: 85, bottomDiaMm: 65, printTopMm: 15, printHeightMm: 90 },
+};
+const r2mm = (n) => Math.round(n * 100) / 100;
+const r3 = (n) => Math.round(n * 1000) / 1000;
+const r4 = (n) => Math.round(n * 10000) / 10000;
+/** A glass's drinkware spec: { print, profile, handle: null } (as src/drinkware.js buildSpec makes one). */
+function glassSpec(g) {
+  const diaAt = (y) => g.topDiaMm + ((g.bottomDiaMm - g.topDiaMm) * y) / g.heightMm;
+  return {
+    print: { topMm: g.printTopMm, heightMm: g.printHeightMm, d1Mm: r2mm(diaAt(g.printTopMm)), d2Mm: r2mm(diaAt(g.printTopMm + g.printHeightMm)), gapMm: 5, safeMm: 3 },
+    profile: [[0, r2mm(g.topDiaMm / 2)], [g.heightMm, r2mm(g.bottomDiaMm / 2)]],
+    handle: null,
+  };
+}
+/** The print side for a glass: the unrolled wrap (as drinkware.applyTo), with `fan` on a tapered glass. */
+function glassSide(g, name, { plain = false } = {}) {
+  const spec = glassSpec(g);
+  const fan = DRINKGEOM.fanOf(spec.print, null);
+  const view = DRINKGEOM.silhouetteSvg(spec.profile, { print: spec.print });
+  const side = {
+    id: 'front',
+    name,
+    // (A plain glass is shown as the glass; a wrap as the unrolled film.)
+    svg: plain ? view : DRINKGEOM.unrolledSvg(spec),
+    printArea: DRINKGEOM.fitArea(fan.Wrect, fan.Hrect),
+    printWidthIn: r3(fan.Wrect / 25.4),
+  };
+  if (!plain) side.wrap = { view };
+  if (!plain && fan.template === 'fan') {
+    side.fan = { r1: r4(fan.r1), r2: r4(fan.r2), s: r4(fan.s), Ro: r4(fan.Ro), Ri: r4(fan.Ri), theta: r4(fan.theta), phi: r4(fan.phi), wideTop: fan.wideTop, gapMm: fan.gapMm, safeMm: fan.safeMm };
+  }
+  return side;
+}
+/** The 3D model of a glass: turned from its profile (preview3d-lathe.js), the band where the wrap goes. */
+function glassModel(g, extra = {}) {
+  const spec = glassSpec(g);
+  const fan = DRINKGEOM.fanOf(spec.print, null);
+  return {
+    type: 'mug',
+    diameterIn: r3(Math.max(g.topDiaMm, g.bottomDiaMm) / 25.4),
+    heightIn: r3(g.heightMm / 25.4),
+    material: 'ceramic',
+    handle: false,
+    lid: false,
+    profile: spec.profile.map(([y, r]) => [r3(y / 25.4), r3(r / 25.4)]),
+    band: { y0In: r3(g.printTopMm / 25.4), y1In: r3((g.printTopMm + g.printHeightMm) / 25.4), phi: r4(fan.phi) },
+    finish: 'gloss',
+    handleBand: null,
+    ...extra,
+  };
+}
+const WRAP_NAME = t('Wrap', 'الستيكر');
+const FILM = [{ id: 'clear', name: t('Transparent film', 'فيلم شفاف'), hex: GLASS_TINT }];
+const CLEAR_GLASS = [{ id: 'clear', name: t('Clear glass', 'إزاز شفاف'), hex: GLASS_TINT }];
+// "Stick it on for me": the shop applies the wrap to a glass bought in the same order (+40 EGP).
+const APPLY_OPTION = {
+  id: 'apply',
+  name: t('Applying', 'اللزق'),
+  help: t('We stick the wrap on a glass you add to the same order, so it arrives ready to use. Add the matching glass to your cart too.', 'إحنا نلزق الستيكر على كوباية من نفس الأوردر وتوصلك جاهزة. ضيف الكوباية المناسبة للسلة كمان.'),
+  choices: [
+    { id: 'none', name: t('I will apply it myself', 'هلزقها بنفسي'), price: 0 },
+    { id: 'apply', name: t('Stick it on a glass from this order for me', 'لزقها لي على كوباية من نفس الأوردر'), price: 40 },
+  ],
+};
+const UV_CARE_EN = 'Peel off the backing, press it onto a clean, dry glass, rub it down firmly and slowly peel away the top film: no heat or tools needed. Water-resistant; hand washing keeps it looking new longest (top rack of the dishwasher at most, no soaking or scrubbing).';
+const UV_CARE_AR = 'قشّر الورقة اللي ورا، حطّه على كوباية نضيفة وناشفة، ادعكه كويس وبعدين شيل الفيلم اللي فوق بالراحة: من غير حرارة ولا أدوات. بيستحمل المية؛ والغسيل بالإيد بيحافظ عليه أطول (في غسالة الأطباق الرف اللي فوق بس، ومن غير نقع ولا ليفة خشنة).';
+const wrapCard = (bg, accent) => `<rect x="120" y="190" width="260" height="140" rx="10" fill="${bg}" opacity=".85"/><circle cx="175" cy="260" r="26" fill="${accent}"/><circle cx="250" cy="250" r="18" fill="#f783ac"/><circle cx="325" cy="262" r="24" fill="#74c0fc"/><path d="M150 305 h200" stroke="#2b2d42" stroke-width="8" stroke-linecap="round" opacity=".6"/>`;
+const WRAPS = [
+  ['uvwrap16', 'glasscan16', GLASSES.can16, 120, '16oz', ['UV DTF Wrap for a 16 oz Glass Can', 'ستيكر لف UV DTF لكوباية إزاز 16 أونصة'], ['For a 16 oz glass can · 21.5 × 11 cm', 'لكوباية إزاز 16 أونصة · 21.5 × 11 سم'],
+    ['a 16 oz glass can (the Libbey-style can glass, about 7 cm across): 21.5 × 11 cm', 'كوباية الإزاز 16 أونصة (شكل الكانز، قطرها حوالي 7 سم): 21.5 × 11 سم'], ['16 oz glass can', 'كوباية إزاز 16 أونصة']],
+  ['uvwrap20', 'glasscan20', GLASSES.can20, 140, '20oz', ['UV DTF Wrap for a 20 oz Glass Can', 'ستيكر لف UV DTF لكوباية إزاز 20 أونصة'], ['For a 20 oz glass can · 23 × 13 cm', 'لكوباية إزاز 20 أونصة · 23 × 13 سم'],
+    ['a 20 oz glass can (about 7.5 cm across): 23 × 13 cm', 'كوباية الإزاز 20 أونصة (قطرها حوالي 7.5 سم): 23 × 13 سم'], ['20 oz glass can', 'كوباية إزاز 20 أونصة']],
+  ['uvwraptumbler', 'glasstumbler20', GLASSES.tumbler20, 160, '20oz', ['UV DTF Wrap for a 20 oz Glass Tumbler', 'ستيكر لف UV DTF لتمبلر إزاز 20 أونصة'], ['For a 20 oz straight glass tumbler · 23 × 19 cm', 'لتمبلر إزاز مستقيم 20 أونصة · 23 × 19 سم'],
+    ['a 20 oz straight glass tumbler with a lid and straw (about 7.5 cm across): 23 × 19 cm', 'تمبلر الإزاز المستقيم 20 أونصة بالغطا والشفاطة (قطره حوالي 7.5 سم): 23 × 19 سم'], ['20 oz glass tumbler', 'تمبلر إزاز 20 أونصة']],
+  ['uvwraptaper', 'glasstaper', GLASSES.taper12, 130, '12oz', ['UV DTF Wrap for a Tapered Glass Cup', 'ستيكر لف UV DTF لكوباية إزاز مسحوبة'], ['For a 12 oz tapered glass · 9 cm band', 'لكوباية إزاز مسحوبة 12 أونصة · شريط 9 سم'],
+    ['a 12 oz tapered glass cup (8.5 cm across the rim, 6.5 cm at the base): a 9 cm band, printed as a curved arc so it sits level on the tapered glass', 'كوباية الإزاز المسحوبة 12 أونصة (قطرها 8.5 سم من فوق و6.5 سم من تحت): شريط 9 سم، بيتطبع على شكل قوس عشان يلف مستوي على الكوباية المسحوبة'], ['12 oz tapered glass', 'كوباية إزاز مسحوبة 12 أونصة']],
+];
+const BLANKS = [
+  ['glasscan16', 'uvwrap16', GLASSES.can16, 180, ['16 oz', '16 أونصة'], ['Glass Can 16 oz with Bamboo Lid & Straw', 'كوباية إزاز كانز 16 أونصة بغطا بامبو وشفاطة'], ['16 oz (≈ 470 ml)', '16 أونصة (حوالي 470 مل)'],
+    ['A plain clear 16 oz glass can (about 7 × 13 cm) with a bamboo lid and a glass straw, sold without printing.', 'كوباية إزاز شفافة سادة 16 أونصة (حوالي 7 × 13 سم) بغطا بامبو وشفاطة إزاز، من غير طباعة.']],
+  ['glasscan20', 'uvwrap20', GLASSES.can20, 220, ['20 oz', '20 أونصة'], ['Glass Can 20 oz with Bamboo Lid & Straw', 'كوباية إزاز كانز 20 أونصة بغطا بامبو وشفاطة'], ['20 oz (≈ 590 ml)', '20 أونصة (حوالي 590 مل)'],
+    ['A plain clear 20 oz glass can (about 7.5 × 15 cm) with a bamboo lid and a glass straw, sold without printing.', 'كوباية إزاز شفافة سادة 20 أونصة (حوالي 7.5 × 15 سم) بغطا بامبو وشفاطة إزاز، من غير طباعة.']],
+  ['glasstumbler20', 'uvwraptumbler', GLASSES.tumbler20, 280, ['20 oz', '20 أونصة'], ['Glass Tumbler 20 oz with Lid & Straw', 'تمبلر إزاز 20 أونصة بغطا وشفاطة'], ['20 oz (≈ 590 ml)', '20 أونصة (حوالي 590 مل)'],
+    ['A plain clear straight 20 oz glass tumbler (about 7.5 × 20 cm) with a lid and a straw, sold without printing.', 'تمبلر إزاز شفاف سادة مستقيم 20 أونصة (حوالي 7.5 × 20 سم) بغطا وشفاطة، من غير طباعة.']],
+  ['glasstaper', 'uvwraptaper', GLASSES.taper12, 120, ['12 oz', '12 أونصة'], ['Tapered Glass Cup 12 oz', 'كوباية إزاز مسحوبة 12 أونصة'], ['12 oz (≈ 350 ml)', '12 أونصة (حوالي 350 مل)'],
+    ['A plain clear 12 oz tapered glass cup (8.5 cm across the rim, 12 cm tall), sold without printing.', 'كوباية إزاز شفافة سادة مسحوبة 12 أونصة (قطرها 8.5 سم من فوق وطولها 12 سم)، من غير طباعة.']],
+];
+const WRAP_ART = { uvwrap16: ['#fff0f6', '#e64980'], uvwrap20: ['#fff4e6', '#a0522d'], uvwraptumbler: ['#fff9db', '#f2c94c'], uvwraptaper: ['#e7f5ff', '#c9a227'] };
+for (const [id, glassId, g, price, sizeId, [en, ar], [sizeEn, sizeAr], [fitEn, fitAr], [glassEn, glassAr]] of WRAPS) {
+  PRODUCTS.push({
+    id,
+    category: 'home',
+    name: t(en, ar),
+    description: t(
+      `Your design printed as a UV DTF wrap: full colour on clear film with no background, cut to fit ${fitEn}. ${UV_CARE_EN} The glass is sold separately (${glassEn}).`,
+      `تصميمك مطبوع ستيكر لف UV DTF: ألوان كاملة على فيلم شفاف من غير خلفية، متقصوص على مقاس ${fitAr}. ${UV_CARE_AR} الكوباية بتتباع لوحدها (${glassAr}).`,
+    ),
+    basePrice: price,
+    colorLabel: t('Film', 'الفيلم'),
+    colors: FILM.map((c) => ({ ...c })),
+    sizes: [{ id: sizeId, label: t(sizeEn, sizeAr), surcharge: 0 }],
+    options: [{ ...APPLY_OPTION, choices: APPLY_OPTION.choices.map((c) => ({ ...c })) }],
+    sides: [glassSide(g, WRAP_NAME)],
+    pair: glassId,
+    cardArt: wrapCard(...WRAP_ART[id]),
+  });
+}
+for (const [id, wrapId, g, price, , [en, ar], [sizeEn, sizeAr], [descEn, descAr]] of BLANKS) {
+  const wrap = WRAPS.find((w) => w[0] === wrapId);
+  PRODUCTS.push({
+    id,
+    category: 'home',
+    name: t(en, ar),
+    description: t(`${descEn} Make it yours with our ${wrap[5][0]}, or add "stick it on for me" to the wrap.`, `${descAr} خليها بتصميمك بـ${wrap[5][1]}، أو اختار «لزقها لي» مع الستيكر.`),
+    basePrice: price,
+    blank: true,
+    colorLabel: t('Glass', 'الإزاز'),
+    colors: CLEAR_GLASS.map((c) => ({ ...c })),
+    sizes: [{ id: wrap[4], label: t(sizeEn, sizeAr), surcharge: 0 }],
+    sides: [glassSide(g, FRONT, { plain: true })],
+    pair: wrapId,
+  });
+}
 
 /**
  * Print production details per product:
@@ -2920,6 +3065,15 @@ const PRODUCTION = {
   favourtags: { process: 'uv', safeIn: 0.1, bleedIn: 0, model: { type: 'block', depthIn: 0.12, radiusIn: 99, material: 'plastic', clear: true } },
   uvdtf: { process: 'uv', safeIn: 0.15, bleedIn: 0, model: { type: 'pad', depthIn: 0.02, radiusIn: 0.05, edge: '#eef1f4', material: 'plastic' } },
   eventletters: { process: 'cnc', safeIn: 0, bleedIn: 0, model: { type: 'cutout', depthIn: 0.79, material: 'laser' } },
+  // UV DTF cup wraps (clear film, cut to each glass) and the plain glasses they go on: turned from each glass's profile.
+  uvwrap16: { process: 'uv', safeIn: 0.118, bleedIn: 0, model: glassModel(GLASSES.can16) },
+  uvwrap20: { process: 'uv', safeIn: 0.118, bleedIn: 0, model: glassModel(GLASSES.can20) },
+  uvwraptumbler: { process: 'uv', safeIn: 0.118, bleedIn: 0, model: glassModel(GLASSES.tumbler20) },
+  uvwraptaper: { process: 'uv', safeIn: 0.118, bleedIn: 0, model: glassModel(GLASSES.taper12) },
+  glasscan16: { process: 'uv', safeIn: 0.118, bleedIn: 0, model: glassModel(GLASSES.can16) },
+  glasscan20: { process: 'uv', safeIn: 0.118, bleedIn: 0, model: glassModel(GLASSES.can20) },
+  glasstumbler20: { process: 'uv', safeIn: 0.118, bleedIn: 0, model: glassModel(GLASSES.tumbler20) },
+  glasstaper: { process: 'uv', safeIn: 0.118, bleedIn: 0, model: glassModel(GLASSES.taper12) },
 };
 /** Garments can be printed either way; the shop picks per order item. */
 const GARMENT_METHODS = ['dtg', 'dtf'];

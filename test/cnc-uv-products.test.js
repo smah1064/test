@@ -143,7 +143,8 @@ test('CNC products are one-tone (engraved or cut) with a carved tone per materia
   assert.strictEqual(byId('calligraphy').sides[0].printArea.rx, byId('calligraphy').sides[0].printArea.w / 2);
   assert.deepStrictEqual(byId('villasign').laser, { kind: 'engrave', cut: 'rounded', radiusMm: 10 });
   assert.deepStrictEqual(byId('nameart').laser, { kind: 'cut', bridgeMm: 1.5, pieces: 'many', board: true });
-  assert.deepStrictEqual(byId('eventletters').laser, { kind: 'cut', bridgeMm: 3, pieces: 'many' });
+  // (Up to 3 characters, each the chosen 60 / 90 cm tall: QA on the live site, 28 Nov.)
+  assert.deepStrictEqual(byId('eventletters').laser, { kind: 'cut', bridgeMm: 3, pieces: 'many', maxPieces: 3, fillHeight: true });
   assert.strictEqual(byId('woodnameplate').laser.cut, null);
   assert.strictEqual(byId('rehal').laser.cut, null);
   // The admin can switch a CNC product between the CNC and laser processes, and a laser one to CNC.

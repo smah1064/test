@@ -507,3 +507,30 @@ test('QA tester 1 (4:01 pm): a product field that doesn\'t exist is refused at o
   assert.strictEqual(r.status, 400);
   assert.strictEqual(r.json.field, 'pricing');
 });
+
+// QA 28 Nov: a team member's cup made from measurements, and a re-measure, read in words for the owner (no raw keys,
+// no JSON), in both languages; a re-measure lists only what changes, as was → now.
+test('approvals: cups from measurements are described in words, a re-measure as was → now', async () => {
+  const cat = await addMember('cat2811', ['catalogue']);
+  const body = { kind: 'tumbler', material: 'metal', handle: null, id: 'qa-staff-cup', name: { en: 'QA cup', ar: 'كوب اختبار' }, typed: { heightMm: 180, topDiaMm: 85, bottomDiaMm: 70, printTopMm: 15, printHeightMm: 120 } };
+  const r = await call('/api/admin/photo-products/from-measurements', 'POST', body, cat.token);
+  assert.strictEqual(r.status, 202, JSON.stringify(r.json));
+  const list = (await call('/api/admin/approvals', 'GET', undefined, owner)).json;
+  const a = (list.approvals || list).find((x) => x.action === 'POST /api/admin/photo-products/from-measurements' && x.status === 'pending');
+  const text = a.changes.map((c) => `${c.field.en}: ${c.value.en} | ${c.field.ar}: ${c.value.ar}`).join('\n');
+  assert.ok(!/heightMm|typed|[{}"]/.test(text), text);
+  assert.match(text, /Height/);
+  assert.match(text, /الارتفاع/);
+  assert.match(text, /تمبلر/);
+  assert.match(text, /180 mm/);
+  // The owner makes one, then the team measures it again: only the changed numbers, was → now.
+  const own = await call('/api/admin/photo-products/from-measurements', 'POST', { ...body, id: 'qa-owner-cup' }, owner);
+  assert.strictEqual(own.status, 201, JSON.stringify(own.json));
+  const again = await call('/api/admin/catalog/qa-owner-cup/drinkware', 'PUT', { typed: { ...body.typed, heightMm: 190 } }, cat.token);
+  assert.strictEqual(again.status, 202, JSON.stringify(again.json));
+  const list2 = (await call('/api/admin/approvals', 'GET', undefined, owner)).json;
+  const b = (list2.approvals || list2).find((x) => x.action === 'PUT /api/admin/catalog/:id/drinkware' && x.status === 'pending');
+  const t2 = b.changes.map((c) => `${c.field.en}: ${c.value.en} | ${c.field.ar}: ${c.value.ar}`).join('\n');
+  assert.match(t2, /180 mm → 190 mm/, t2);
+  assert.ok(!/Top diameter/.test(t2), 'unchanged numbers are left out');
+});

@@ -80,7 +80,7 @@
   /** A cup or tumbler made from typed measurements: its print area comes from them (public/js/admin-photo-product.js). */
   const DW = () => window.AdminPhotoProduct;
   const isDrink = (p) => Boolean(p && p.drinkware && DW());
-  const dwPill = (p) => (p && (p.drinkware || p.fromPhotos) ? pill('pm-pill-dw', t('dw.badge')) : '');
+  const dwPill = (p) => (p && (p.drinkware || p.fromPhotos) ? pill('pm-pill-dw', t(p.drinkware && (p.drinkware.shootId || p.drinkware.photo) ? 'pp.badge' : 'dw.badge')) : '');
 
   function loadPics() {
     if (!picsLoaded) {
@@ -541,6 +541,7 @@
     const d = dialog(`
       <h3>${esc(t('pm.newTitle'))}</h3>
       ${!from && DW() ? `<div class="pm-dw-entry"><button class="btn" type="button" data-dlg-dw><b>${esc(t('dw.entry'))}</b></button><p class="muted small">${esc(t('dw.entryHelp'))}</p></div>` : ''}
+      ${!from && DW() && DW().openShoot ? `<div class="pm-dw-entry pp-entry"><button class="btn" type="button" data-dlg-pp><b>${esc(t('pp.entry'))}</b></button><p class="muted small">${esc(t('pp.entryHelp'))}</p><div data-pp-shoots></div></div>` : ''}
       <p class="muted small">${esc(t('pm.newHelp'))}</p>
       ${from && !from.builtIn ? `<p class="notice small">${esc(t('pm.copyOfAdded', { name: tr(from.name) }))}</p>` : ''}
       <div class="field"><label for="pm-tpl-q">${esc(t('pm.template'))}</label>
@@ -573,6 +574,17 @@
     d.querySelector('[data-dlg-ok]').textContent = t('pm.create');
     const dw = d.querySelector('[data-dlg-dw]');
     if (dw) dw.addEventListener('click', () => { d.close(); drinkForm(null); });
+    // From photos: a new photo session, or one to carry on with (listed under it).
+    const pp = d.querySelector('[data-dlg-pp]');
+    if (pp) {
+      pp.addEventListener('click', () => { d.close(); photoWizard(null); });
+      const slot = d.querySelector('[data-pp-shoots]');
+      DW().listShoots(api).then((list) => { if (d.open) slot.innerHTML = DW().shootsHtml(list); }).catch(() => {});
+      slot.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-pp-resume]');
+        if (b) { d.close(); photoWizard(b.dataset.ppResume); }
+      });
+    }
     const form = d.querySelector('form');
     const fill = () => {
       const p = tpls.find((x) => x.id === pick);
@@ -611,6 +623,21 @@
         reloadLater();
         if (product && S.view === 'edit' && S.P && S.P.id === P.id) return refreshDrink(P);
         return openEdit(P.id, P);
+      },
+    });
+  }
+  /** "From photos": the photo wizard, new (sid null) or carried on; the hidden product it makes opens here. */
+  function photoWizard(sid) {
+    if (!DW() || !DW().openShoot) return;
+    DW().openShoot({
+      api,
+      can,
+      sid,
+      uniqueId,
+      onCreated: (P) => {
+        putProduct(P);
+        reloadLater();
+        openEdit(P.id, P);
       },
     });
   }

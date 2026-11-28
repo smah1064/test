@@ -247,7 +247,8 @@
    * The product whose pictures (photos, lifestyle and ready-design pictures, model photos)
    * a product uses: products the manager made from another one use that one's.
    */
-  const assetId = (p) => (p ? p.base || p.id : '');
+  // (A cup made from measurements has its own pictures, not its template's: QA 28 Nov.)
+  const assetId = (p) => (p ? (p.drink ? p.id : p.base || p.id) : '');
   /** A choice (colour or size) that can be picked: listed and not sold out. */
   const canPick = (x) => Boolean(x) && !x.soldOut;
   /** The first colour / size that can be picked (or the first one when all are sold out). */

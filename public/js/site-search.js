@@ -37,6 +37,10 @@
       quranbox: 'quran koran box mushaf قران قرآن مصحف صندوق علبة مصحف', rehal: 'quran koran stand holder rehal rahl رحل حامل مصحف قران قرآن',
       qrstand: 'qr code menu table stand wifi ستاند منيو كود كيو ار باركود ترابيزة', favourtags: 'favor favour tags giveaways توزيعات تاج تاجات سبوع',
       uvdtf: 'uv dtf transfer rub on stickers ستيكر ستيكرز يو في دي تي اف نقل',
+      uvwrap16: 'uv dtf wrap decal cup glass can libbey tumbler sticker ستيكر لف كوباية كوبايه ازاز كانز يو في دي تي اف', uvwrap20: 'uv dtf wrap decal cup glass can libbey tumbler sticker ستيكر لف كوباية كوبايه ازاز كانز يو في دي تي اف',
+      uvwraptumbler: 'uv dtf wrap decal cup glass tumbler sticker ستيكر لف تمبلر كوباية ازاز يو في دي تي اف', uvwraptaper: 'uv dtf wrap decal cup glass tapered sticker ستيكر لف كوباية كوبايه ازاز مسحوبة يو في دي تي اف',
+      glasscan16: 'glass can cup libbey bamboo lid straw plain blank كوباية كوبايه ازاز كانز سادة شفاطة', glasscan20: 'glass can cup libbey bamboo lid straw plain blank كوباية كوبايه ازاز كانز سادة شفاطة',
+      glasstumbler20: 'glass tumbler cup lid straw plain blank تمبلر كوباية ازاز سادة شفاطة', glasstaper: 'glass cup tapered plain blank كوباية كوبايه ازاز سادة مسحوبة',
     };
     // search-kit:start (the same lines are in public/index.html and public/js/designs.js; test/search-kit.test.js checks both)
     // Forgiving search: what the typed words find, plus plurals (hoodies, تيشيرتات), one word or two (t-shirt, tshirt),

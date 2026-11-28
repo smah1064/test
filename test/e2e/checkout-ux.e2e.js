@@ -126,7 +126,8 @@ test('phone, Arabic: a ready design has no tick and is ordered; full delivery pr
     await page.waitForSelector('[data-proof-for].ok');
     // #8: no tick at all, "Ready design" on its proof.
     assert.strictEqual(await page.isVisible('#proof-ok'), false);
-    assert.strictEqual(await page.locator('#cart-layout input[type="checkbox"]:visible').count(), 0, 'nothing to tick');
+    // (The item's own "in this order" box, cart-select.e2e.js, is not a proof tick.)
+    assert.strictEqual(await page.locator('#cart-layout input[type="checkbox"]:not([data-sel]):visible').count(), 0, 'nothing to tick');
     assert.match(await page.textContent('[data-proof-for] .cart-proof-ok'), /تصميم جاهز/);
     assert.strictEqual(await page.textContent('#approve-status'), '');
 

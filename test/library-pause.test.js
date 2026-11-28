@@ -30,7 +30,7 @@ const shopIds = async (base) => new Set((await (await fetch(`${base}/api/library
 test('the starter designs: 155 drawn with real artwork, the rest only text, shapes and icons', () => {
   // (Not counting licensed collections: their own artwork, and a draft one isn't in the shop. src/licensed.js)
   assert.strictEqual(SEED.filter((d) => usesArtwork(d) && !d.licensed).length, 155);
-  assert.strictEqual(SEED.length - SEED.filter(usesArtwork).length, 464); // (+ 8 for the engraved pen and wallet, 25 Nov; + 46 for the CNC and UV products, 27 Nov)
+  assert.strictEqual(SEED.length - SEED.filter(usesArtwork).length, 472); // (+ 8 for the engraved pen and wallet, 25 Nov; + 46 for the CNC and UV products, 27 Nov; + 8 for the UV DTF cup wraps, 28 Nov)
 });
 
 test('pause, delete and bring back one design, or many at once', async () => {

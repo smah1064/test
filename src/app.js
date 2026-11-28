@@ -471,6 +471,8 @@ function adminItem(order, item, index) {
     })),
     orderId: order.id,
     orderNumber: order.number,
+    // A design raised as its own layer (calligraphy board): the files for that layer too.
+    ...(((getProduct(item.productId) || {}).model || {}).raised ? { raised: true } : {}),
     // The customer asked for one printed sample first (at checkout).
     sample: Boolean(item.sampleWanted || (item.approval && item.approval.sample)),
     position: index + 1,
@@ -708,6 +710,16 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   }
   /** A ready design this request may see: never a draft licensed one, except for the team. */
   const libraryOpenFor = (req, d) => Boolean(d) && (!licensed.isDraft(d) || teamBrowser(req));
+  // Licensed artwork files (public/img/art/licensed-*/, and their resized copies): while a licensed collection is still
+  // a draft, only for the team, like its designs (QA 28 Nov: the files answered anyone by address). Never kept in shared
+  // caches. (The art folders aren't named after their collection, so any draft collection keeps them all private.)
+  app.use((req, res, next) => {
+    if (!/^\/(?:img-w\/\d+\/)?(?:img\/)?art\/licensed-[^/]*\//i.test(req.path)) return next();
+    const draft = Object.values(licensed.COLLECTIONS).some((c) => c.status !== 'live');
+    if (draft && !teamBrowser(req)) return res.status(404).type('text/plain').send('Not found');
+    res.set('Cache-Control', 'private, no-store');
+    return next();
+  });
   /**
    * Where to send someone back to on this site: a path starting with exactly one "/" (never
    * "//other.site" or "/\\other.site"), else the home page; `code` adds ?code=wrong / wait.
@@ -827,7 +839,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (!color) throw new HttpError(404, 'notFound');
       if (product.kind === 'book') return res.redirect(302, `/api/books/${product.book}/sample/0.jpg`);
       if (product.kind === 'photoset') return res.redirect(302, '/mockups/photoprints-card.webp');
-      let img = product.pattern ? await thumbs.patternImage(product, color.hex) : await thumbs.cardImage(product.base || product.id, product.sides[0].id, color.hex);
+      // (A cup made from measurements is not its template: no tumbler photo, its own drawn picture. QA 28 Nov.)
+      let img = product.pattern ? await thumbs.patternImage(product, color.hex) : product.drink ? null : await thumbs.cardImage(product.base || product.id, product.sides[0].id, color.hex);
       // No product photo yet: the drawn product in its colour, trimmed, on white.
       // Laser products: with a sample engraving (or cut piece) in the material's tone.
       const drawn = product.cardArt ? product.sides[0].svg.replace('</svg>', `${product.cardArt.replace(/\{\{I\}\}/g, color.ink || '#000000')}</svg>`) : product.sides[0].svg;
@@ -1037,6 +1050,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   const LARGE_ORDER = 50;
   /** Why a design needs the shop to look at it before printing (empty: approval at checkout is enough). */
   function reviewReasons(d, { sample = false } = {}) {
+    // A plain item: nothing printed, nothing to check.
+    if (d.kind === 'blank') return [];
     const r = [];
     if (d.preflight && d.preflight.status === 'fail') r.push('preflight');
     if (d.merge) r.push('nameList');
@@ -2917,6 +2932,58 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     store.createDesign(design, { 'editor.json': '{}' });
     res.status(201).json({ id: design.id, uploadToken: token, files, price: design.price });
   });
+  // A plain item (a glass sold without printing, owner 28 Nov): a ready "design" of kind 'blank' with no print files;
+  // its picture (cart, order page, proof, admin) is the product's photo.
+  app.post('/api/blanks', (req, res, next) => {
+    rateLimit(req, 'designs');
+    rateLimit(req, 'designsAll', '*');
+    next();
+  }, express.json({ limit: '8kb' }), asyncRoute(async (req, res) => {
+    const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {};
+    const product = typeof body.productId === 'string' && getProduct(body.productId);
+    if (!product || !product.blank || product.status === 'removed') throw new HttpError(404, 'unknownProduct');
+    const name = product.name[langOf(req)] || product.name.en;
+    const colorDef = product.colors.find((c) => c.id === (body.color || product.colors[0].id));
+    if (!colorDef) throw new HttpError(400, 'unknownColor');
+    const sizeDef = product.sizes.find((z) => z.id === (body.size || product.sizes[0].id));
+    if (!sizeDef) throw new HttpError(400, 'unknownSize');
+    const off = catalog.unavailable(product, { colorId: colorDef.id, sizeId: sizeDef.id });
+    if (off) throw new HttpError(409, off, { name });
+    const qty = body.qty === undefined ? 1 : Number(body.qty);
+    if (!Number.isInteger(qty) || qty < 1 || qty > 20) throw new HttpError(400, 'qtyBad');
+    const picked = cleanOptions(product, body.options);
+    if (picked.error) throw new HttpError(400, 'badOption');
+    const design = {
+      id: crypto.randomUUID(),
+      kind: 'blank',
+      createdAt: new Date().toISOString(),
+      status: 'ready',
+      productId: product.id,
+      productName: product.name,
+      process: 'blank',
+      ...(picked.options ? { options: picked.options } : {}),
+      color: { id: colorDef.id, name: colorDef.name, hex: colorDef.hex },
+      size: { id: sizeDef.id, label: withOptions(sizeDef.label, picked.options) },
+      sides: [{ id: 'front', name: product.sides[0].name }],
+      copies: qty,
+      price: 0,
+      version: 1,
+      currency: CURRENCY,
+      orderId: null,
+    };
+    design.price = designPrice(design);
+    if (design.price == null) throw new HttpError(400, 'unknownSize');
+    // Its picture: the product's photo (or a plain tile when it has none yet).
+    const photo = path.join(__dirname, '..', 'public', 'img', 'lifestyle', `${product.base || product.id}.webp`);
+    let png;
+    try {
+      png = await sharp()(photo).resize(600, 750, { fit: 'cover' }).png().toBuffer();
+    } catch (e) {
+      png = await sharp()({ create: { width: 600, height: 750, channels: 3, background: '#eef0f2' } }).png().toBuffer();
+    }
+    store.createDesign(design, { 'editor.json': '{}', 'front-preview.png': png, 'front-proof.png': png });
+    res.status(201).json({ id: design.id, price: design.price, qty, productId: product.id, productName: product.name, color: design.color, size: design.size, previewUrl: `/files/designs/${design.id}/front-preview.png` });
+  }));
   /** On /complete: every photo the exact size, then the contact sheet shown in the cart, proof and admin. */
   async function completePhotoset(design) {
     for (const p of design.photos) {
@@ -3538,6 +3605,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     if (d.kind === 'gangsheet') return d.price;
     const product = getProduct(d.productId);
     if (!product) return null;
+    // A plain item (a glass sold without printing): its price, with its options, times how many.
+    if (d.kind === 'blank') {
+      const u = priceFor(product, d.size && d.size.id, 1);
+      return u == null ? null : round2((u + optionsPrice(product, d.options, d.size.id)) * (d.copies || 1));
+    }
     if (d.kind === 'photoset') {
       // Each photo: its size's price (prices the owner changed apply) times its copies.
       let sum = 0;
@@ -3592,7 +3664,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     return round2(one == null ? u * copiesOf(d) : one);
   };
   /** Pieces in a design: one per row of its name list, else the quantities asked for, else one. */
-  const copiesOf = (d) => (!d ? 1 : d.kind === 'photoset' ? d.photos.reduce((n, p) => n + p.copies, 0) : d.merge ? d.merge.count : d.quantities ? d.quantities.reduce((n, l) => n + l.qty, 0) : 1);
+  const copiesOf = (d) => (!d ? 1 : d.kind === 'blank' ? d.copies || 1 : d.kind === 'photoset' ? d.photos.reduce((n, p) => n + p.copies, 0) : d.merge ? d.merge.count : d.quantities ? d.quantities.reduce((n, l) => n + l.qty, 0) : 1);
   /** A size label followed by the chosen options ({ en, ar }). */
   const withOptions = (label, options) => {
     if (!options) return label;
@@ -4275,7 +4347,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     // A ready design added as it is is taken as approved, and recorded the same way as a ticked one (its sample wish
     // kept); the customer's own designs still need theirs (owner, 26 Nov).
     for (const d of designs) {
-      if (!readyDesign(d)) continue;
+      // (A plain item has nothing to approve.)
+      if (!readyDesign(d) && d.kind !== 'blank') continue;
       const a = approvals[d.id];
       approvals[d.id] = { proofHash: proofHashOf(d), ...(a && typeof a === 'object' && a.sample === true ? { sample: true } : {}) };
     }
@@ -4305,6 +4378,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
             unitPrice: round2(priceFor(product, z.id, 1) + optionsPrice(product, d.options, z.id)),
           })).filter((l) => l.qty),
           ...(d.options ? { options: JSON.parse(JSON.stringify(d.options)) } : {}),
+          status: 'queued', history: [{ status: 'queued', at: now }],
+        };
+      }
+      if (d.kind === 'blank') {
+        return {
+          id: crypto.randomUUID(), designId: d.id, kind: 'blank', productId: d.productId, productName: d.productName,
+          color: d.color, size: d.size, sides: d.sides, process: 'blank', price: designPrice({ ...d, status: 'ready', orderId: null }),
+          copies: d.copies || 1, ...(d.options ? { options: JSON.parse(JSON.stringify(d.options)) } : {}),
           status: 'queued', history: [{ status: 'queued', at: now }],
         };
       }
@@ -4731,6 +4812,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   app.post('/api/designs/:id/quantity', express.json({ limit: '2kb' }), (req, res) => {
     const d = UUID_RE.test(req.params.id) && store.getDesign(req.params.id);
     if (!d || d.status !== 'ready') throw new HttpError(404, 'designNotFound');
+      // (A plain item's number is chosen on its page.)
+      if (d.kind === 'blank') throw new HttpError(409, 'qtyInEditor');
     const product = getProduct(d.productId);
     if (!product) throw new HttpError(404, 'designNotFound');
     const cl = cartLines(d, product);
@@ -5698,6 +5781,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   const photoProducts = photoProductRoutes.mount(app, {
     store, guard: requireCatalog, HttpError, catalog, getProduct, PRODUCTS, syncCatalog, logCatalog,
     adminProduct, saveProductEdit, approvalsAll: () => approvalsAll(),
+    // Slice 2 (from photos): the shoots' folders, pictures, the cut-out, and the catalogue photo folder.
+    dataDir, sharp, bgremove, photoDir,
   });
 
   // ---------- The team (owners only): personal sign-ins, roles, set-up links ----------
@@ -6105,6 +6190,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   /** Pictures of the designs a change publishes (zip uploads, a share link), for the owner to look at. */
   const picsOf = (a) => {
     if (!(a.status === 'pending' || a.status === 'failed')) return [];
+    // A product made from photos: its front and 3/4 photos.
+    if (a.action === 'POST /api/admin/photo-products/:sid/product') return photoProducts.approvalPics(a);
     const b = bodyOf(a) || {};
     // The shop's edit to print without asking: the new version next to the one the customer approved.
     if (a.action === 'POST /api/admin/items/:itemId/shop-edit/print') {
@@ -6147,7 +6234,51 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     return [];
   };
   /** The values a kept change asks for, field by field. */
+  // A cup made or measured again from measurements: in words, in the owner's language; a re-measure says was → now.
+  const DW_KIND = { tumbler: enAr('Tumbler', 'تمبلر'), cup: enAr('Cup', 'كوباية'), mug: enAr('Mug', 'مج'), bottle: enAr('Bottle', 'زمزمية') };
+  const DW_MATERIAL = { gloss: enAr('Glossy (ceramic, glass)', 'لامع (سيراميك، زجاج)'), matte: enAr('Matte', 'مطفي'), metal: enAr('Metal (stainless steel)', 'معدن (ستانلس ستيل)') };
+  const drinkwareChanges = (a, body) => {
+    const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+    const mmE = (v) => (v == null ? '—' : `${v} mm`);
+    const mmA = (v) => (v == null ? '—' : `${arNum(v)} مم`);
+    const prevEdit = a.action === 'PUT /api/admin/catalog/:id/drinkware' ? (((store.db.catalog || {}).products || {})[(/\/catalog\/([^/]+)\/drinkware/.exec(a.path || '') || [])[1]] || {}).drinkware : null;
+    const was = prevEdit ? {
+      kind: prevEdit.kind, material: prevEdit.material,
+      heightMm: num((prevEdit.dims || {}).heightMm), topDiaMm: num((prevEdit.dims || {}).topDiaMm), bottomDiaMm: num((prevEdit.dims || {}).bottomDiaMm),
+      printTopMm: num((prevEdit.print || {}).topMm), printHeightMm: num((prevEdit.print || {}).heightMm), gapMm: num((prevEdit.print || {}).gapMm), safeMm: num((prevEdit.print || {}).safeMm),
+    } : null;
+    const typed = body.typed && typeof body.typed === 'object' ? body.typed : {};
+    const now = { kind: body.kind, material: body.material, heightMm: num(typed.heightMm), topDiaMm: num(typed.topDiaMm), bottomDiaMm: num(typed.bottomDiaMm), printTopMm: num(typed.printTopMm), printHeightMm: num(typed.printHeightMm), gapMm: num(body.gapMm), safeMm: num(body.safeMm) };
+    const out = [];
+    const row = (field, w, n, fmtE, fmtA) => {
+      if (n === undefined || n === null || n === '') return;
+      const changed = was && w !== undefined && w !== null && w !== n;
+      if (was && !changed) return; // (a re-measure lists what changes)
+      out.push({ field, value: enAr(changed ? `${fmtE(w)} → ${fmtE(n)}` : fmtE(n), changed ? `${fmtA(w)} ← ${fmtA(n)}` : fmtA(n)) });
+    };
+    const word = (map) => [(v) => (map[v] || enAr(String(v), String(v))).en, (v) => (map[v] || enAr(String(v), String(v))).ar];
+    if (!was && body.id) out.push({ field: enAr('Code', 'الكود'), value: enAr(String(body.id), String(body.id)) });
+    if (!was && body.name && typeof body.name === 'object') out.push({ field: enAr('Name', 'الاسم'), value: enAr(String(body.name.en || ''), String(body.name.ar || '')) });
+    row(enAr('Kind', 'النوع'), was && was.kind, now.kind, ...word(DW_KIND));
+    row(enAr('Material', 'الخامة'), was && was.material, now.material, ...word(DW_MATERIAL));
+    row(enAr('Height', 'الارتفاع'), was && was.heightMm, now.heightMm, mmE, mmA);
+    row(enAr('Top diameter', 'القطر من فوق'), was && was.topDiaMm, now.topDiaMm, mmE, mmA);
+    row(enAr('Bottom diameter', 'القطر من تحت'), was && was.bottomDiaMm, now.bottomDiaMm, mmE, mmA);
+    row(enAr('Print band starts below the rim', 'منطقة الطباعة بتبدأ تحت الحافة بـ'), was && was.printTopMm, now.printTopMm, mmE, mmA);
+    row(enAr('Print band height', 'ارتفاع منطقة الطباعة'), was && was.printHeightMm, now.printHeightMm, mmE, mmA);
+    row(enAr('Seam gap', 'فراغ اللحام'), was && was.gapMm, now.gapMm, mmE, mmA);
+    row(enAr('Safe margin', 'هامش الأمان'), was && was.safeMm, now.safeMm, mmE, mmA);
+    const h = body.handle && typeof body.handle === 'object' ? body.handle : null;
+    if (h) out.push({ field: enAr('Handle', 'الإيد'), value: enAr(`${mmE(num(h.widthMm))} wide, ${mmE(num(h.y0Mm))} to ${mmE(num(h.y1Mm))} below the rim`, `عرض ${mmA(num(h.widthMm))}، من ${mmA(num(h.y0Mm))} لـ ${mmA(num(h.y1Mm))} تحت الحافة`) });
+    else if (!was && 'handle' in body) out.push({ field: enAr('Handle', 'الإيد'), value: enAr('none', 'مفيش') });
+    if (was && !out.length) out.push({ field: enAr('Measurements', 'المقاسات'), value: enAr('the same numbers sent again', 'نفس الأرقام اتبعتت تاني') });
+    return out;
+  };
   const changesOf = (a) => {
+    if (a.action === 'POST /api/admin/photo-products/from-measurements' || a.action === 'PUT /api/admin/catalog/:id/drinkware') {
+      const b = bodyOf(a);
+      if (b && typeof b === 'object' && !Array.isArray(b)) return drinkwareChanges(a, b);
+    }
     if (a.file) return [{ field: enAr('photo', 'صورة'), value: enAr(`${Math.max(1, Math.round((a.bytes || 0) / 1024))} KB`, `${Math.max(1, Math.round((a.bytes || 0) / 1024))} KB`) }];
     const kept = bodyOf(a);
     // (An expense as it will be saved: the amount read as a number, the category one of the list.)
@@ -7326,6 +7457,15 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     'laser-svg': { file: (sd) => `${sd}-laser.svg`, ext: 'svg', type: 'image/svg+xml', laser: true, make: (buf, side, design) => laserFiles.laserSvg(buf, laserSpec(side, design)) },
     'engrave-png': { file: (sd) => `${sd}-engrave.png`, ext: 'png', type: 'image/png', laser: true, make: (buf, side, design) => laserFiles.engravePng(buf, laserSpec(side, design)) },
     'cut-svg': { file: (sd) => `${sd}-cut.svg`, ext: 'svg', type: 'image/svg+xml', laser: true, make: (buf, side, design) => laserFiles.cutSvg(buf, laserSpec(side, design)) },
+    // A raised layer (calligraphy board's gold words; owner, 28 Nov: offer both ways): the design's own outlines to cut
+    // that layer, and one LightBurn file with the carving, the board and those outlines.
+    'letters-svg': { file: (sd) => `${sd}-raised-cut.svg`, ext: 'svg', type: 'image/svg+xml', laser: true, raised: true, make: (buf, side, design) => laserFiles.cutSvg(buf, { ...laserSpec(side, design), laser: { kind: 'cut', pieces: 'many' } }) },
+    'layers-svg': { file: (sd) => `${sd}-layers.svg`, ext: 'svg', type: 'image/svg+xml', laser: true, raised: true, make: async (buf, side, design) => {
+      const both = await laserFiles.laserSvg(buf, laserSpec(side, design));
+      const raised = await laserFiles.cutSvg(buf, { ...laserSpec(side, design), laser: { kind: 'cut', pieces: 'many' } });
+      const inner = (/<g id="cut">([\s\S]*?)<\/g>/.exec(raised) || [])[1] || '';
+      return both.replace('</svg>', `<g id="raised" stroke="#0000ff">${inner.replace(/stroke="#ff0000"/g, 'stroke="#0000ff"')}</g>\n</svg>`);
+    } },
     // A tapered cup (a product made from measurements): the design bent to the cup's fan, as it wraps the cone.
     'fan-png': { file: (sd) => `${sd}-fan.png`, ext: 'png', type: 'image/png', fan: true, make: (buf, side) => fanFiles.fanPng(buf, side.fan, side.dpi) },
     'fan-mirror': { file: (sd) => `${sd}-fan-mirrored.png`, ext: 'png', type: 'image/png', fan: true, make: (buf, side) => fanFiles.fanPng(buf, side.fan, side.dpi, { mirror: true }) },
@@ -7337,7 +7477,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     return { widthMm: Math.round(side.widthIn * 25.4 * 100) / 100, heightMm: Math.round(side.heightIn * 25.4 * 100) / 100, laser: (product && product.laser) || { kind: 'engrave' }, dpi: 254 };
   }
   // (Laser files each their own name: the LightBurn file, the cut lines and the plain SVG were all "…-front.svg". QA 25 Nov.)
-  const SUFFIX = { 'png-mirror': '-mirrored', 'pdf-marks': '-cropmarks', tiff: '-cmyk', 'dtf-film': '-dtf-film', 'dtf-pdf': '-dtf-film', 'dtg-white': '-dtg-white-underbase', 'sheet-pdf': '-film-mirrored', 'sheet-pdf-plain': '', proof: '-proof', 'laser-svg': '-laser-lightburn', 'engrave-png': '-engrave', 'cut-svg': '-cut-lines', 'fan-png': '-fan', 'fan-mirror': '-fan-mirrored', 'fan-pdf': '-fan' };
+  const SUFFIX = { 'png-mirror': '-mirrored', 'pdf-marks': '-cropmarks', tiff: '-cmyk', 'dtf-film': '-dtf-film', 'dtf-pdf': '-dtf-film', 'dtg-white': '-dtg-white-underbase', 'sheet-pdf': '-film-mirrored', 'sheet-pdf-plain': '', proof: '-proof', 'laser-svg': '-laser-lightburn', 'engrave-png': '-engrave', 'cut-svg': '-cut-lines', 'letters-svg': '-raised-letters-cut', 'layers-svg': '-both-layers-lightburn', 'fan-png': '-fan', 'fan-mirror': '-fan-mirrored', 'fan-pdf': '-fan' };
 
   /** Pieces of a customer's gang sheet, laid out exactly as they saw it. */
   async function gangSheetPdf(design, mirror) {
@@ -7521,11 +7661,17 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (!fs.existsSync(target)) store.writeDesignFile(designId, name, (await gangSheetPdf(design, f === 'sheet-pdf')).pdf);
       return { path: target, name: `${base}${SUFFIX[f]}.pdf` };
     }
+    // A plain item: no print files, only its picture.
+    if (design.kind === 'blank') {
+      if (format !== 'proof') throw new HttpError(404, 'notFound');
+      return { path: store.designFile(designId, 'front-proof.png'), name: `${base}-picture.png` };
+    }
     const fmt = Object.hasOwn(FORMATS, format || 'png') ? FORMATS[format || 'png'] : null;
     if (!side || !fmt) throw new HttpError(404, 'notFound');
     if (format === 'svg' && design.replaced && design.replaced[sideId]) throw new HttpError(404, 'notFound');
     if (fmt.laser && !(getProduct(design.productId) || {}).laser) throw new HttpError(404, 'notFound');
     if (fmt.fan && !(side && side.fan)) throw new HttpError(404, 'notFound');
+    if (fmt.raised && !((getProduct(design.productId) || {}).model || {}).raised) throw new HttpError(404, 'notFound');
     const target = store.designFile(designId, fmt.file(sideId));
     if (!fs.existsSync(target)) {
       const png = fs.readFileSync(store.designFile(designId, `${sideId}-print.png`));
@@ -7793,6 +7939,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   const SEND_FORMATS = new Set([...Object.keys(FORMATS), ...ONCE]);
   const FILE_LABELS = {
     pdf: t('Print PDF', 'ملف الطباعة PDF'), 'pdf-marks': t('Print PDF with crop marks', 'ملف الطباعة PDF بعلامات القص'), png: t('Print PNG (transparent)', 'ملف الطباعة PNG (خلفية شفافة)'), 'png-mirror': t('Print PNG (mirrored)', 'ملف الطباعة PNG (معكوس)'),
+    'letters-svg': t('Raised letters: cut lines', 'الحروف البارزة: خطوط القص'), 'layers-svg': t('Both layers: LightBurn (carving + board + raised letters)', 'الطبقتين: LightBurn (الحفر + اللوح + الحروف البارزة)'),
     'fan-png': t('Fan print file PNG (tapered cup)', 'ملف المروحة PNG (كوباية بتضيق)'), 'fan-mirror': t('Fan print file PNG (mirrored)', 'ملف المروحة PNG (معكوس)'), 'fan-pdf': t('Fan print file PDF (true size)', 'ملف المروحة PDF بالمقاس الحقيقي'),
     tiff: t('Print TIFF (CMYK)', 'ملف الطباعة TIFF (CMYK)'), svg: t('Vector SVG', 'ملف فيكتور SVG'), 'dtf-film': t('DTF film PNG', 'فيلم DTF بصيغة PNG'), 'dtf-pdf': t('DTF film PDF', 'فيلم DTF بصيغة PDF'), 'dtg-white': t('DTG white underbase', 'طبقة الأبيض لطباعة DTG'),
     'laser-svg': t('Laser file for LightBurn (SVG)', 'ملف الليزر لـ LightBurn (SVG)'), 'engrave-png': t('Engraving bitmap (PNG)', 'صورة الحفر (PNG)'), 'cut-svg': t('Cut lines (SVG)', 'خطوط القص (SVG)'),

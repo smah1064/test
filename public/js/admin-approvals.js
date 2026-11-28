@@ -96,7 +96,7 @@ window.AdminApprovals = (() => {
         <p class="ap-summary" dir="${dirOf(inLang(a.summary) || a.action || '')}">${esc(inLang(a.summary) || a.action || '')}</p>
         ${a.changedSince && open(a) ? `<p class="small ap-changed" role="note">⚠ ${esc(t('ap.changedSince'))}</p>` : ''}
         ${a.thumb && /^data:image\/webp;base64,/.test(a.thumb) ? `<button type="button" class="ap-thumb-btn" data-ap-zoom aria-pressed="false" title="${esc(t('ap.photoZoom'))}"><img class="ap-thumb" src="${esc(a.thumb)}" alt="${esc(t('ap.photoAlt'))}" loading="lazy"></button>` : ''}
-        ${Array.isArray(a.pics) && a.pics.length ? `<div class="ap-pics">${a.pics.filter((p) => p && /^\/(library-upload|api\/shares|catalog-photos|files\/designs)\//.test(p.url)).map((p) => `<figure class="ap-pic"><img src="${esc(p.url)}" alt="${esc(inLang(p.name) || t('ap.photoAlt'))}" loading="lazy"><figcaption dir="auto">${esc(inLang(p.name) || '')}</figcaption></figure>`).join('')}</div>` : ''}
+        ${Array.isArray(a.pics) && a.pics.length ? `<div class="ap-pics">${a.pics.filter((p) => p && /^\/(library-upload|api\/shares|catalog-photos|files\/designs|photo-shoot-pics)\//.test(p.url)).map((p) => `<figure class="ap-pic"><img src="${esc(p.url)}" alt="${esc(inLang(p.name) || t('ap.photoAlt'))}" loading="lazy"><figcaption dir="auto">${esc(inLang(p.name) || '')}</figcaption></figure>`).join('')}</div>` : ''}
         ${changes ? `<div class="ap-details"><div class="muted small">${esc(t('ap.details'))}</div>${changes}</div>` : ''}
         ${details ? `<div class="ap-details"><div class="muted small">${esc(t('ap.details'))}</div><div class="ap-details-text" dir="${dirOf(details)}">${esc(details)}</div></div>` : ''}
         ${st !== 'pending' ? decidedHtml(a) : ''}

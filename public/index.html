@@ -284,6 +284,10 @@
         quranbox: 'quran koran box mushaf قران قرآن مصحف صندوق علبة مصحف', rehal: 'quran koran stand holder rehal rahl رحل حامل مصحف قران قرآن',
         qrstand: 'qr code menu table stand wifi ستاند منيو كود كيو ار باركود ترابيزة', favourtags: 'favor favour tags giveaways توزيعات تاج تاجات سبوع',
         uvdtf: 'uv dtf transfer rub on stickers ستيكر ستيكرز يو في دي تي اف نقل',
+        uvwrap16: 'uv dtf wrap decal cup glass can libbey tumbler sticker ستيكر لف كوباية كوبايه ازاز كانز يو في دي تي اف', uvwrap20: 'uv dtf wrap decal cup glass can libbey tumbler sticker ستيكر لف كوباية كوبايه ازاز كانز يو في دي تي اف',
+        uvwraptumbler: 'uv dtf wrap decal cup glass tumbler sticker ستيكر لف تمبلر كوباية ازاز يو في دي تي اف', uvwraptaper: 'uv dtf wrap decal cup glass tapered sticker ستيكر لف كوباية كوبايه ازاز مسحوبة يو في دي تي اف',
+        glasscan16: 'glass can cup libbey bamboo lid straw plain blank كوباية كوبايه ازاز كانز سادة شفاطة', glasscan20: 'glass can cup libbey bamboo lid straw plain blank كوباية كوبايه ازاز كانز سادة شفاطة',
+        glasstumbler20: 'glass tumbler cup lid straw plain blank تمبلر كوباية ازاز سادة شفاطة', glasstaper: 'glass cup tapered plain blank كوباية كوبايه ازاز سادة مسحوبة',
       };
       // search-kit:start (the same lines are in public/index.html and public/js/designs.js; test/search-kit.test.js checks both)
       // Forgiving search: what the typed words find, plus plurals (hoodies, تيشيرتات), one word or two (t-shirt, tshirt),
@@ -598,14 +602,14 @@
       // ---------- Rows: new and best sellers, then by theme ----------
       // Ids that don't exist (yet) are skipped, so a row only shows what the shop sells.
       const BEST = ['tshirt', 'mug', 'bizcards', 'stickersheet', 'hoodie', 'cushion', 'invitations', 'tote'];
-      const NEW = ['calligraphy', 'nameart', 'acrylicnameplate', 'shield', 'quranbox', 'qrstand', 'eventletters', 'villasign', 'engrpen', 'engrwallet', 'menus', 'calendar', 'labels', 'postcards', 'photobook', 'magnets', 'wrappingpaper', 'brochures', 'engrplaque', 'caketopper'];
+      const NEW = ['uvwrap16', 'calligraphy', 'nameart', 'acrylicnameplate', 'shield', 'quranbox', 'qrstand', 'eventletters', 'villasign', 'engrpen', 'engrwallet', 'menus', 'calendar', 'labels', 'postcards', 'photobook', 'magnets', 'wrappingpaper', 'brochures', 'engrplaque', 'caketopper'];
       // Five rows, on phones and computers alike (owner's OK, UX item 5, 27 Nov: a shorter home page). The home,
       // weddings & occasions and laser rows are not on the home page any more; their products are in "All products",
       // its categories and the search.
       const ROWS = [
         { key: 'fresh', ids: [...NEW.slice(0, 4), ...BEST.slice(0, 6)], badge: (id) => (NEW.includes(id) || (byId(id) || {}).base ? 'new' : 'best') },
         { key: 'wear', ids: ['tshirt', 'hoodie', 'sweatshirt', 'oversized', 'polo', 'kidstee', 'cap', 'tote', 'apron'], link: '/?cat=apparel#products' },
-        { key: 'gifts', ids: ['magicmug', 'couplemugs', 'photobook', 'nameart', 'calligraphy', 'quranbox', 'rehal', 'engrframe', 'engrwallet', 'engrpen', 'keychain', 'namepuzzle', 'tumbler', 'prayermat', 'wrappingpaper'], link: '/?cat=occasions#products' },
+        { key: 'gifts', ids: ['magicmug', 'couplemugs', 'photobook', 'nameart', 'calligraphy', 'quranbox', 'rehal', 'engrframe', 'engrwallet', 'engrpen', 'keychain', 'namepuzzle', 'tumbler', 'uvwrap16', 'uvwrap20', 'uvwraptumbler', 'uvwraptaper', 'glasscan16', 'glasstumbler20', 'prayermat', 'wrappingpaper'], link: '/?cat=occasions#products' },
         { key: 'cards', ids: ['invitations', 'greetingcard', 'postcards', 'foldedcards', 'giftvouchers', 'bookmarks', 'eidenvelopes', 'certificates'], link: '/?cat=occasions#products' },
         { key: 'biz', ids: ['bizcards', 'flyers', 'brochures', 'menus', 'labels', 'letterhead', 'logostickers', 'paperbags', 'booklets', 'rollup', 'banners', 'windowstickers', 'idcards', 'notepads', 'folders', 'giftvouchers', 'acrylicnameplate', 'woodnameplate', 'shield', 'glassaward', 'qrstand'], link: '/?cat=business#products' },
       ];
@@ -622,7 +626,8 @@
         if (g && g.file) return `<img class="hm-designed" alt="${esc(tr(p.name))}" loading="lazy" decoding="async" ${photoSrc(g.file, 'card')}>`;
         return thumbImg(p, POD.firstPick(p.colors));
       }
-      const editorHref = (p) => (p.kind === 'book' ? `/book?b=${encodeURIComponent(p.book)}` : p.kind === 'photoset' ? '/photos' : `/editor?product=${encodeURIComponent(p.id)}`);
+      // (Plain products sold without printing, `blank`, have no editor: their own page, with "Add to cart".)
+      const editorHref = (p) => (p.kind === 'book' ? `/book?b=${encodeURIComponent(p.book)}` : p.kind === 'photoset' ? '/photos' : p.blank ? `/product?id=${encodeURIComponent(p.id)}` : `/editor?product=${encodeURIComponent(p.id)}`);
       function rowCard(p, badge) {
         return `<a class="hm-card" href="${hrefOf(p)}">
           <div class="hm-pic">${cardPicture(p)}${badge ? `<span class="hm-badge hm-badge-${badge}">${esc(t('hm.badge.' + badge))}</span>` : ''}</div>
@@ -783,7 +788,7 @@
             <a class="hm-gpic" href="${hrefOf(p)}" tabindex="-1" aria-hidden="true">${gridPicture(p)}</a>
             <h3><a href="${hrefOf(p)}">${esc(tr(p.name))}</a></h3>
             <div class="hm-meta">${priceLine(p)}</div>
-            <a class="btn btn-primary hm-gstart" href="${editorHref(p)}">${esc(t(p.kind ? 'hm.open' : 'home.start'))}</a>
+            <a class="btn btn-primary hm-gstart" href="${editorHref(p)}">${esc(t(p.kind || p.blank ? 'hm.open' : 'home.start'))}</a>
             <a class="btn hm-gdetails" href="${hrefOf(p)}">${esc(t('hm.details'))}</a>
           </div>`).join('') + (list.length < total ? `
           <div class="hm-showall">

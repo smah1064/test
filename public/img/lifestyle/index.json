@@ -740,5 +740,61 @@
       "en": "Giant white freestanding letters with roses at a garden wedding",
       "ar": "حروف بيضا كبيرة واقفة بورود في فرح في جنينة"
     }
+  },
+  "uvwrap16": {
+    "file": "/img/lifestyle/uvwrap16.webp",
+    "alt": {
+      "en": "A 16 oz glass can wrapped with a UV DTF wildflower decal, next to the clear decal sheet",
+      "ar": "كوباية إزاز 16 أونصة ملزوق عليها ستيكر UV DTF ورد، وجنبها شيت الستيكر الشفاف"
+    }
+  },
+  "uvwrap20": {
+    "file": "/img/lifestyle/uvwrap20.webp",
+    "alt": {
+      "en": "A 20 oz glass can of iced coffee wrapped with a UV DTF coffee-cup decal, next to the clear decal sheet",
+      "ar": "كوباية إزاز 20 أونصة فيها آيس كوفي وملزوق عليها ستيكر UV DTF فناجين قهوة، وجنبها شيت الستيكر الشفاف"
+    }
+  },
+  "uvwraptumbler": {
+    "file": "/img/lifestyle/uvwraptumbler.webp",
+    "alt": {
+      "en": "A straight glass tumbler wrapped with a UV DTF lemon decal, with the clear decal sheet in front",
+      "ar": "تمبلر إزاز مستقيم ملزوق عليه ستيكر UV DTF ليمون، وقدامه شيت الستيكر الشفاف"
+    }
+  },
+  "uvwraptaper": {
+    "file": "/img/lifestyle/uvwraptaper.webp",
+    "alt": {
+      "en": "A tapered glass of mint lemonade with a UV DTF crescent and lantern band, next to the curved decal sheet",
+      "ar": "كوباية إزاز مسحوبة فيها ليمون بالنعناع وعليها شريط UV DTF هلال وفوانيس، وجنبها شيت الستيكر المقوّس"
+    }
+  },
+  "glasscan16": {
+    "file": "/img/lifestyle/glasscan16.webp",
+    "alt": {
+      "en": "A plain 16 oz glass can with a bamboo lid and a glass straw on an oak desk",
+      "ar": "كوباية إزاز سادة 16 أونصة بغطا بامبو وشفاطة إزاز على مكتب خشب"
+    }
+  },
+  "glasscan20": {
+    "file": "/img/lifestyle/glasscan20.webp",
+    "alt": {
+      "en": "A plain 20 oz glass can of iced water with a bamboo lid and a glass straw",
+      "ar": "كوباية إزاز سادة 20 أونصة فيها مية بتلج بغطا بامبو وشفاطة إزاز"
+    }
+  },
+  "glasstumbler20": {
+    "file": "/img/lifestyle/glasstumbler20.webp",
+    "alt": {
+      "en": "A plain straight 20 oz glass tumbler with a white lid and a straw",
+      "ar": "تمبلر إزاز سادة مستقيم 20 أونصة بغطا أبيض وشفاطة"
+    }
+  },
+  "glasstaper": {
+    "file": "/img/lifestyle/glasstaper.webp",
+    "alt": {
+      "en": "Two plain tapered glass cups, one with water and mint",
+      "ar": "كوبايتين إزاز سادة مسحوبين، واحدة فيها مية ونعناع"
+    }
   }
 }

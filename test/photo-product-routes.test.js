@@ -382,3 +382,10 @@ test('the real print-file module makes the template and the spec sheet (when it 
   const sheet = Buffer.from(await fanFiles.specSheetPdf(p, spec));
   assert.strictEqual(sheet.subarray(0, 5).toString(), '%PDF-');
 });
+
+// QA 28 Nov: a seam gap and safe margin that leave no room to print are refused (each was within its own range).
+test('no room to print inside the safe margin: refused', () => {
+  const drinkware = require('../src/drinkware');
+  assert.throws(() => drinkware.buildSpec({ kind: 'cup', material: 'gloss', typed: { heightMm: 30, topDiaMm: 20, bottomDiaMm: 20, printTopMm: 0, printHeightMm: 30 }, gapMm: 49, safeMm: 20 }), (e) => e.key === 'photoProductNoRoom');
+  assert.ok(drinkware.buildSpec({ kind: 'cup', material: 'gloss', typed: { heightMm: 110, topDiaMm: 90, bottomDiaMm: 60, printTopMm: 10, printHeightMm: 80 } }));
+});

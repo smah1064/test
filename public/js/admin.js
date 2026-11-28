@@ -474,8 +474,10 @@
           ${(item.methods || []).length > 1 ? `<div class="btn-group" style="max-width:180px;margin-bottom:6px">${item.methods.map((m) => `<button class="btn btn-sm ${m === item.process ? 'active' : ''}" data-item="${item.id}" data-method="${m}">${esc(t('method.' + m))}</button>`).join('')}</div>` : ''}
           ${processesOf(item).length > 1
     ? `<div class="method-both"><strong>${esc(methodBoth(processesOf(item)))}</strong></div>${processesOf(item).map((p) => `<div class="method-step">${esc(t('process.' + p))}</div>`).join('')}`
-    : esc(t(item.kind === 'photoset' ? 'process.photo' : item.kind === 'book' ? 'process.book' : 'process.' + item.process))}
-          ${(item.sides || []).some((sd) => sd.fan) ? `<div class="small" style="color:var(--warn);margin-top:4px"><strong>${esc(t('process.fan'))}</strong></div>` : ''}
+    : (item.sides || []).some((sd) => sd.fan)
+      // (A tapered cup: the fan instruction instead of the flat one, not under it. QA 28 Nov.)
+      ? `<strong style="color:var(--warn)">${esc(`${hasStr('method.' + item.process) ? t('method.' + item.process) : String(item.process).toUpperCase()}. ${t('process.fan')}`)}</strong>`
+      : esc(t(item.kind === 'photoset' ? 'process.photo' : item.kind === 'book' ? 'process.book' : 'process.' + item.process))}
           ${processesOf(item).includes('dtg') && anyDark(item) ? `<div class="small" style="color:var(--warn);margin-top:4px">${esc(t('admin.darkHint'))}</div>` : ''}
           ${item.filmBatch ? `<div><span class="pill printed">${esc(t('admin.onFilm', { id: item.filmBatch.id }))}</span></div>` : ''}
         </dd>` : ''}
@@ -534,6 +536,8 @@
           ${['photos-zip', 'proof'].map((f, k) => `<button class="btn btn-sm ${k === 0 ? 'btn-primary' : ''}" data-download="${esc(s.printUrl)}?format=${f}">⬇ ${esc(t('fmt.' + f))}${k === 0 ? ` <span class="rec">· ${esc(t('admin.recommended'))}</span>` : ''}</button>`).join('')}
         </div></div>`;
     }
+    // A plain item (a glass from stock): nothing to print.
+    if (item.kind === 'blank') return `<div class="print-files-block small muted">${esc(t('process.blank'))}</div>`;
     if (item.kind === 'gangsheet') {
       return `
         <div class="print-files-block"><div class="print-files">
@@ -544,7 +548,7 @@
     const proc = s.process || item.process;
     // A tapered cup (made from measurements): the design bent to the cup's fan comes first; the flat files stay below.
     const rec = s.fan ? 'fan-pdf' : RECOMMENDED[proc] || 'png';
-    const formats = (s.fan ? ['fan-pdf', 'fan-png', 'fan-mirror'] : []).concat(FORMATS_BY_METHOD[proc] || ['png', 'pdf', 'pdf-marks', 'png-mirror', 'tiff']).concat(s.hasSvg ? ['svg'] : []);
+    const formats = (s.fan ? ['fan-pdf', 'fan-png', 'fan-mirror'] : []).concat(item.raised ? ['layers-svg', 'letters-svg'] : []).concat(FORMATS_BY_METHOD[proc] || ['png', 'pdf', 'pdf-marks', 'png-mirror', 'tiff']).concat(s.hasSvg ? ['svg'] : []);
     // Name list: every copy with its own name. Shown once (with the first side); the side files below show copy 1.
     const mergeBlock = item.merge && item.sides[0] === s ? `
       <div class="print-files-block">
@@ -591,6 +595,10 @@
     if (item.merge) return [...mergeFormats(item), 'preview-pdf'];
     if (item.kind === 'photoset') return ['photos-zip', 'proof'];
     if (item.kind === 'gangsheet') return ['sheet-pdf', 'sheet-pdf-plain', 'preview-pdf', 'proof'];
+    // A plain item (a glass from stock): nothing to send but its picture.
+    if (item.kind === 'blank') return ['proof'];
+    // A tapered cup: its fan files first (QA 28 Nov: the flat PDF went, which prints as a rectangle).
+    if (item.sides.some((sd) => sd.fan)) return ['fan-pdf', 'fan-png', 'fan-mirror', 'preview-pdf', 'pdf', 'png'];
     const procs = [...new Set([item.process, ...item.sides.map((sd) => sd.process)].filter(Boolean))];
     if (item.paged) return ['booklet-imposed', 'booklet-pdf', ...(item.pdfSource ? ['source-pdf'] : []), 'preview-pdf'];
     const more = procs.flatMap((p) => FORMATS_BY_METHOD[p] || ['png', 'pdf-marks', 'png-mirror', 'tiff']).concat(item.sides.some((sd) => sd.hasSvg) ? ['svg'] : []);
@@ -610,7 +618,7 @@
     // the wrong way round on the transfer. Tester 1, 26 Nov.)
     const procs = [...new Set([item.process, ...item.sides.map((sd) => sd.process)].filter(Boolean))];
     const transfer = !item.kind && !item.merge && procs.length === 1 && ['sublimation', 'dtf'].includes(procs[0]) ? RECOMMENDED[procs[0]] : null;
-    const main = item.paged ? ['booklet-imposed'] : [...(stitched ? ['dst', 'stitches'] : []), ...(!stitched || printedToo ? [transfer || printPdfKey(item)] : [])];
+    const main = item.sides.some((sd) => sd.fan) ? ['fan-pdf'] : item.kind === 'blank' ? ['proof'] : item.paged ? ['booklet-imposed'] : [...(stitched ? ['dst', 'stitches'] : []), ...(!stitched || printedToo ? [transfer || printPdfKey(item)] : [])];
     return { houseId, channel: house ? house.prefer : 'email', formats: new Set([...main, 'preview-pdf'].filter((f) => offered.includes(f))), note: '', msg: '', busy: false };
   }
   const when = (iso) => new Date(iso).toLocaleString(POD.lang === 'ar' ? 'ar-EG' : 'en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -2910,7 +2918,8 @@
       [t('rv.product'), esc(tr((proof.product && proof.product.name) || item.productName))],
       hasQty(item) ? [t('adminQty.title'), qtySummary(item)] : [t('rv.colourSize'), `${color.hex ? `<span class="qty-dot" style="background:${esc(color.hex)}"></span>` : ''}${esc(tr(color.name))}${SEP()}${esc(tr(size.label))}`],
       procs.length > 1 ? [t('rv.method'), `<strong>${esc(methodBoth(procs))}</strong>${procs.filter((p) => hasStr('process.' + p)).map((p) => `<div class="method-step">${esc(t('process.' + p))}</div>`).join('')}`]
-        : process && hasStr('process.' + process) ? [t('rv.method'), esc(t('process.' + process)) + ((item.sides || []).some((sd) => sd.fan) ? `<div class="small" style="color:var(--warn)"><strong>${esc(t('process.fan'))}</strong></div>` : '')] : null,
+        : process && (item.sides || []).some((sd) => sd.fan) ? [t('rv.method'), `<strong style="color:var(--warn)">${esc(`${hasStr('method.' + process) ? t('method.' + process) : process.toUpperCase()}. ${t('process.fan')}`)}</strong>`]
+        : process && hasStr('process.' + process) ? [t('rv.method'), esc(t('process.' + process))] : null,
     ].filter(Boolean);
     return `
       <div class="rv-detail">

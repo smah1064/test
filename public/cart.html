@@ -186,6 +186,8 @@
     <div class="cart-layout" id="cart-layout" hidden>
       <div>
         <div class="card" id="items"></div>
+        <!-- The robot check for a new view-only link made from the cart's Share (invisible to people; a box only if Cloudflare asks) -->
+        <div class="captcha-box" id="cap-share"></div>
         <!-- My saved designs: ones kept out of this order and ones not finished yet (public/js/saved-designs.js).
              Under the items as one short line that opens in place; with an empty cart it moves above, open. -->
         <section class="card saved-box" id="saved" hidden></section>
@@ -227,7 +229,7 @@
             <span class="dlv-fee" id="dlv-fee-express"></span></label>
           <p class="muted small dlv-days" data-i18n="delivery.days"></p>
         </fieldset>
-        <div class="line"><span data-i18n="checkout.subtotal"></span><span id="subtotal"></span></div>
+        <div class="line"><span><span data-i18n="checkout.subtotal"></span> <span class="muted small" id="sel-count"></span></span><span id="subtotal"></span></div>
         <div class="line discount-line" id="discount-line" hidden><span><span data-i18n="coupon.discount"></span> <bdi id="coupon-code" dir="ltr"></bdi> <span class="muted small" id="coupon-auto" data-i18n="coupon.autoTag" hidden></span> <button type="button" class="link-btn small" id="coupon-remove" data-i18n="coupon.remove"></button></span><span id="discount"></span></div>
         <div class="line"><span data-i18n="checkout.shipping"></span><span id="shipping"></span></div>
         <div class="line" id="express-line" hidden><span data-i18n="delivery.expressFee"></span><span id="express-fee"></span></div>
@@ -237,6 +239,8 @@
         <div class="pay-box"><strong data-i18n="checkout.cod"></strong><span data-i18n="checkout.codText"></span><span class="pay-methods" data-prepay-only data-prepay-i18n="pay.methods" hidden></span></div>
         <div class="captcha-box" id="cap-order"></div>
         <p class="approve-status" id="approve-status" aria-live="polite"></p>
+        <!-- Nothing ticked in the cart: nothing to order (the button is disabled with this word) -->
+        <p class="sel-nothing" id="sel-nothing" role="status" hidden></p>
         <!-- The customer's own designs: one short tick right by "Place order"; the colours note behind "Details". (None for
              ready designs added as they are.) -->
         <div class="proof-ok" id="proof-ok" hidden>
@@ -248,7 +252,7 @@
           </div>
           <div class="proof-ok-note" id="proof-ok-note" hidden></div>
         </div>
-        <button class="btn btn-primary btn-lg btn-block" id="place-order" type="submit" data-i18n="checkout.place" aria-describedby="approve-status"></button>
+        <button class="btn btn-primary btn-lg btn-block" id="place-order" type="submit" data-i18n="checkout.place" aria-describedby="approve-status sel-nothing"></button>
         <!-- Paying in advance (src/payment-wording.js): the money-back guarantee, by the button -->
         <a class="guar-badge" data-prepay-only data-prepay-href="/guarantee" hidden><strong data-prepay-only data-prepay-i18n="guar.badge" hidden></strong> <span data-prepay-only data-prepay-i18n="guar.badgeText" hidden></span></a>
       </form>
@@ -257,7 +261,7 @@
 
   <!-- Phones: the total and the way to the order form, always at hand on a long cart -->
   <div class="cart-bar" id="cart-bar" hidden>
-    <div class="cart-bar-total"><span class="small muted" data-i18n="checkout.total"></span><strong id="bar-total"></strong></div>
+    <div class="cart-bar-total"><span class="small muted"><span data-i18n="checkout.total"></span> <span id="bar-count"></span></span><strong id="bar-total"></strong></div>
     <button class="btn btn-primary" type="button" id="bar-go" data-i18n="cart.barGo"></button>
   </div>
 
@@ -267,6 +271,7 @@
   <script src="/js/i18n-aftercare.js"></script>
   <script src="/js/i18n-quantities.js"></script>
   <script src="/js/i18n-proof.js"></script>
+  <script src="/js/i18n-cart.js"></script>
   <script src="/js/common.js"></script>
   <script src="/js/site-search.js"></script>
   <script src="/js/proof-ui.js"></script>
@@ -458,6 +463,11 @@
           const border = photoBorder(proof);
           return `${esc(tr(item.colorName))}${border ? `${SEP()}${esc(border)}` : ''}${photoSizesHtml(photoSizes(proof, item))}`;
         }
+        // A plain item (kind 'blank', sold without printing): colour, size, how many, and "no printing".
+        if (item.kind === 'blank') {
+          const n = Math.max(1, Number(item.qty || item.copies) || 1);
+          return `${esc(tr(item.colorName))}${SEP()}${esc(tr(item.sizeLabel))}${n > 1 ? `${SEP()}<span class="qty-pieces">${esc(piecesText(n))}</span>` : ''}<br>${esc(t('cartSel.plain'))}`;
+        }
         const lines = qtyLines(item);
         const isNames = Boolean(item.merge) || (!lines.length && item.copies > 1);
         const names = isNames ? (item.merge && item.merge.count) || item.copies : 0;
@@ -510,6 +520,46 @@
       // the shop stopped selling, or { backOn } the day a paused one comes back.
       let outOfShop = new Map();
       const blockedIn = (cart) => cart.filter((it) => blocked.has(it.designId));
+
+      // ---------- Which items go in this order (owner, 28 Nov: "like Amazon") ----------
+      // Every item is ticked, new ones too; an item the customer unticks stays in the cart exactly as it is (its
+      // number, keys, proof) and is left out of the sums and of the order. Only the unticked ones are remembered, by
+      // designId, on this device (the cart follows the customer's account; the ticks stay with the device).
+      const OFF_KEY = 'pod-cart-off';
+      let off = new Set();
+      function readOff() {
+        try {
+          const v = JSON.parse(localStorage.getItem(OFF_KEY) || '[]');
+          off = new Set(Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []);
+        } catch (e) {
+          off = new Set();
+        }
+      }
+      readOff();
+      const saveOff = () => {
+        try { if (off.size) localStorage.setItem(OFF_KEY, JSON.stringify([...off])); else localStorage.removeItem(OFF_KEY); } catch (e) { /* private mode: for this visit */ }
+      };
+      const isOn = (id) => !off.has(id);
+      /** The items ticked for this order, in cart order. */
+      const chosenIn = (cart) => cart.filter((it) => isOn(it.designId));
+      const chosen = () => chosenIn(POD.getCart());
+      /** Unticks kept for items no longer in the cart are forgotten (one saved for later comes back ticked). */
+      function pruneOff(cart) {
+        const ids = new Set(cart.map((it) => it.designId));
+        let dropped = false;
+        for (const id of [...off]) if (!ids.has(id)) { off.delete(id); dropped = true; }
+        if (dropped) saveOff();
+      }
+      /** Tick or untick items (one, or all): the sums and the shop's prices follow. */
+      function setOn(ids, on) {
+        for (const id of ids) if (on) off.delete(id); else off.add(id);
+        saveOff();
+        render();
+        refreshPrices().then(render);
+      }
+      const itemsWord = (n) => counted('cartSel.items', n);
+      /** "Place order (2 items)": what will be ordered. */
+      const placeLabel = () => { const n = chosen().length; return n ? t('cartSel.place', { items: itemsWord(n) }) : t('checkout.place'); };
 
       const proofOf = (id) => { const p = proofs.get(id); return p && p.state === 'ok' ? p.proof : null; };
       /** A ready design added as it is (the shop's own, unchanged): nothing to tick (owner, 26 Nov). */
@@ -647,12 +697,19 @@
           own with the one tick next to "Place order" ("Place order" always looks ready: pressed too early, it points to
           the tick). It is truly disabled only while an order is being placed. */
       function updateApproval() {
-        const cart = POD.getCart();
+        const cart = chosen();
         const stuck = blockedIn(cart);
         const orderable = cart.filter((it) => !blocked.has(it.designId));
         const failed = orderable.some((it) => (proofs.get(it.designId) || {}).state === 'error');
         const btn = document.getElementById('place-order');
         if (!placing) btn.disabled = false;
+        // Nothing ticked: nothing to order (said by the button).
+        const none = POD.getCart().length > 0 && !cart.length;
+        if (!placing && none) btn.disabled = true;
+        const nothing = document.getElementById('sel-nothing');
+        nothing.hidden = !none;
+        nothing.textContent = none ? t('cartSel.nothing') : '';
+        if (!placing) btn.textContent = placeLabel();
         const status = document.getElementById('approve-status');
         status.classList.toggle('blocked', stuck.length > 0);
         status.innerHTML = stuck.length
@@ -688,7 +745,7 @@
       }
       /** The first item that can't be ordered now: shown, with its buttons at hand. */
       function goToBlocked() {
-        const it = blockedIn(POD.getCart())[0];
+        const it = blockedIn(chosen())[0];
         const el = it && [...document.querySelectorAll('[data-entry-for]')].find((x) => x.dataset.entryFor === it.designId);
         if (!el) return false;
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -698,7 +755,7 @@
       }
       /** "Place order" pressed before the tick: the tick, right there, outlined with "Tick this first", and focused. */
       function nudgeProof() {
-        const next = POD.getCart().find((it) => !blocked.has(it.designId) && !isApproved(it.designId));
+        const next = chosen().find((it) => !blocked.has(it.designId) && !isApproved(it.designId));
         if (!next || !proofOf(next.designId)) return goToNextProof(); // (still loading, or failed: its own message)
         nudged = true;
         updateApproval();
@@ -706,7 +763,7 @@
       }
       /** The first proof not approved: one that didn't load (its "Try again"), else the tick. */
       function goToNextProof() {
-        const next = POD.getCart().find((it) => !blocked.has(it.designId) && !isApproved(it.designId));
+        const next = chosen().find((it) => !blocked.has(it.designId) && !isApproved(it.designId));
         if (!next) return;
         if (proofOf(next.designId)) return goToTick();
         const slot = slotOf(next.designId);
@@ -794,7 +851,8 @@
       const qtyBefore = new Map();
       function qtyBox(item, i) {
         const c = counts.get(item.designId);
-        if (!c || blocked.has(item.designId)) return '';
+        // (A plain item's number is fixed: the shop refuses − / + for it.)
+        if (!c || blocked.has(item.designId) || item.kind === 'blank') return '';
         const n = qtyDraft.has(item.designId) ? qtyDraft.get(item.designId) : c.n;
         // A word from the last change, else the shop's lasting tip: a few more copies that cost less (owner, 26 Nov:
         // "900 for this price while 1000 is cheaper?!").
@@ -881,6 +939,8 @@
           // A copy at the new number: it takes the item's place, with its tick (the same artwork and proof).
           qtyMoved.set(id, nid);
           if (approvals.has(id)) { approvals.set(nid, approvals.get(id)); approvals.delete(id); saveApprovals(); }
+          // (Unticked, it stays unticked.)
+          if (off.delete(id)) { off.add(nid); saveOff(); }
           if (expanded.delete(id)) expanded.add(nid);
           if (openMenu === id) openMenu = null;
           counts.delete(id);
@@ -951,7 +1011,8 @@
        * no menu when nothing does). An item the shop can't make now keeps "Save for later" in sight: it is the way on.
        */
       function itemActions(item, i) {
-        const editable = item.productId !== 'dtfsheet' && item.productId !== 'photoprints';
+        // (A plain item, kind 'blank', has no editor: its colour, size and number are chosen on its page.)
+        const editable = item.productId !== 'dtfsheet' && item.productId !== 'photoprints' && item.kind !== 'blank';
         const edit = !editable ? '' : item.bookId
           ? `<a class="btn btn-sm" href="/book?b=${encodeURIComponent(item.bookId)}&cart=${i}">${esc(t('cart.edit'))}</a>`
           : `<a class="btn btn-sm" href="/editor?design=${encodeURIComponent(item.designId)}&cart=${i}">${esc(t('cart.edit'))}</a>`;
@@ -962,17 +1023,21 @@
           stuck ? '' : `<button class="more-item" type="button" data-later="${esc(item.designId)}">${esc(t('cart.saveLater'))}</button>`,
         ].filter(Boolean);
         const open = openMenu === item.designId && menu.length > 0;
+        // Share its picture (an item with no picture has nothing to share).
+        const share = item.previewUrl ? `<button class="btn btn-sm share-btn" type="button" id="share-${i}" data-share="${esc(item.designId)}" aria-label="${esc(t('cartShare.label', { product: tr(item.productName) }))}">${SHARE_ICON}<span>${esc(t('cartShare.button'))}</span></button>` : '';
         return `
               <div class="actions">
                 ${edit}
                 ${stuck ? later : ''}
                 <button class="btn btn-sm btn-danger" type="button" id="rm-${i}" data-remove="${i}">${esc(t('cart.remove'))}</button>
+                ${share}
                 ${menu.length ? `<div class="more-wrap">
                   <button class="btn btn-sm more-btn" type="button" id="more-${i}" data-more="${esc(item.designId)}" aria-label="${esc(t('cart.more'))}" aria-haspopup="true" aria-expanded="${open}" aria-controls="more-menu-${i}"><span aria-hidden="true">⋯</span></button>
                   <div class="more-menu" id="more-menu-${i}"${open ? '' : ' hidden'}>${menu.join('')}</div>
                 </div>` : ''}
               </div>`;
       }
+      const SHARE_ICON = '<svg class="share-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg>';
       // The item whose "⋯" menu is open (kept open when the cart is drawn again, e.g. today's prices arriving).
       let openMenu = null;
       /** Open one item's "⋯" menu (null: close it); `focus` the first choice, or back on the "⋯" button when closing. */
@@ -1008,9 +1073,231 @@
         if (wrap && openMenu && e.relatedTarget && !wrap.contains(e.relatedTarget)) setMenu(null);
       });
 
+      // ---------- Share an item's picture (owner, 28 Nov: "share button to share preview to someone") ----------
+      // Phones: the picture(s) themselves through the phone's share sheet, with a short line. Where pictures can't be
+      // shared: a view-only link (the shop's /view page: pictures only, no prices, keys, order or customer details),
+      // shared or copied. An item that page can't show (one side only, books, photo sets, sheets, plain items): its
+      // picture saved to the device, to send from there.
+      const shareCache = new Map(); // designId -> { key, files, promise }
+      const VIEW_ID_RE = /^[A-Za-z0-9_-]{12}$/;
+      const VIEW_KEY_RE = /^[A-Za-z0-9_-]{32}$/;
+      // The link on show under an item (when it couldn't be shared or copied by itself): { id, url }.
+      let shownLink = null;
+      const shareCap = POD.captcha(document.getElementById('cap-share'));
+      /** The pictures to share: every printed side's preview (up to 4), else the item's own picture. */
+      function sharePicUrls(item) {
+        const proof = proofOf(item.designId);
+        const sides = proof && Array.isArray(proof.sides) ? proof.sides.map((sd) => sd.previewUrl || sd.artworkUrl).filter(Boolean) : [];
+        return sides.length > 1 ? sides.slice(0, 4) : item.previewUrl ? [item.previewUrl] : [];
+      }
+      /** The pictures as files (fetched once, ahead of the tap where possible: a phone shares only right after it). */
+      function shareFilesOf(item) {
+        const urls = sharePicUrls(item);
+        const key = urls.join('\n');
+        let c = shareCache.get(item.designId);
+        if (c && c.key === key) return c;
+        const base = `ebda3-${String(item.productId || 'design').replace(/[^a-z0-9-]/gi, '').slice(0, 30) || 'design'}`;
+        c = { key, files: null };
+        c.promise = Promise.all(urls.map(async (url, n) => {
+          const r = await fetch(url);
+          if (!r.ok) throw new Error(String(r.status));
+          const blob = await r.blob();
+          const type = /^image\/(png|jpeg|webp)$/.test(blob.type) ? blob.type : 'image/png';
+          return new File([blob], `${base}${urls.length > 1 ? `-${n + 1}` : ''}.${type === 'image/jpeg' ? 'jpg' : type.split('/')[1]}`, { type });
+        })).then((files) => { c.files = files; return files; });
+        c.promise.catch(() => { if (shareCache.get(item.designId) === c) shareCache.delete(item.designId); });
+        shareCache.set(item.designId, c);
+        return c;
+      }
+      /** Can the view page show this item? (As the shop's own rule: two sides or more, or a booklet; not a book.) */
+      function viewableItem(item) {
+        if (item.kind || item.bookId || item.productId === 'photoprints' || item.productId === 'dtfsheet') return false;
+        const p = products.find((x) => x.id === item.productId);
+        return Boolean(p) && p.kind !== 'book' && (Boolean(p.paged) || (p.sides || []).length >= 2);
+      }
+      /** A picture as the data URL the view link takes (PNG or JPEG under its size limit). */
+      async function dataUrlOf(blob) {
+        if (/^image\/(png|jpeg)$/.test(blob.type) && blob.size < 2.3e6) {
+          return new Promise((resolve, reject) => {
+            const fr = new FileReader();
+            fr.onload = () => resolve(fr.result);
+            fr.onerror = () => reject(fr.error);
+            fr.readAsDataURL(blob);
+          });
+        }
+        const bmp = await createImageBitmap(blob);
+        const k = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(bmp.width * k));
+        c.height = Math.max(1, Math.round(bmp.height * k));
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, c.width, c.height);
+        ctx.drawImage(bmp, 0, 0, c.width, c.height);
+        return c.toDataURL('image/jpeg', 0.88);
+      }
+      /** The item's view-only link id: the one it has (made in the editor, still there), else a new one kept with it. */
+      async function viewLinkOf(item) {
+        const v = item.view;
+        if (v && VIEW_ID_RE.test(v.id || '') && VIEW_KEY_RE.test(v.key || '')) {
+          try {
+            await POD.api('/api/views/' + encodeURIComponent(v.id));
+            return v.id;
+          } catch (e) {
+            if (![404, 410].includes(e.status)) throw e; // (gone or expired: a new one below)
+          }
+        }
+        if (!proofOf(item.designId)) await loadProof(item.designId);
+        const proof = proofOf(item.designId);
+        const p = products.find((x) => x.id === item.productId);
+        const ids = new Set(p.sides.map((sd) => sd.id));
+        const sides = (proof ? proof.sides || [] : []).filter((sd) => ids.has(sd.id) && (sd.previewUrl || sd.artworkUrl));
+        if (!sides.length) return null;
+        const pages = await Promise.all(sides.map(async (sd) => {
+          const r = await fetch(sd.previewUrl || sd.artworkUrl);
+          if (!r.ok) throw new Error(String(r.status));
+          return { side: sd.id, image: await dataUrlOf(await r.blob()) };
+        }));
+        // The robot check for a new link (as the editor's): invisible to people; signed-in customers aren't asked.
+        let tok = null;
+        try { tok = await shareCap.token(); } catch (e) { if (e && e.code === 'captchaLoad') throw e; }
+        const made = await POD.api('/api/views', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ productId: p.id, options: {}, pages, ...(tok ? { captchaToken: tok } : {}) }),
+        }).finally(() => shareCap.reset());
+        // Kept with the item, as the editor keeps it: saving the design again updates what the link shows.
+        const cart = POD.getCart();
+        const at = cart.findIndex((it) => it.designId === item.designId);
+        if (at >= 0 && VIEW_ID_RE.test(made.id || '')) {
+          cart[at] = { ...cart[at], view: { id: made.id, key: made.key } };
+          POD.setCart(cart);
+        }
+        return made.id;
+      }
+      /** Copy text; false when the browser won't. */
+      async function copyText(text) {
+        try {
+          await navigator.clipboard.writeText(text);
+          return true;
+        } catch (e) {
+          return false;
+        }
+      }
+      /** The link through the share sheet, else copied ("Link copied"), else shown under the item to copy by hand. */
+      async function shareLink(item, url, title, text) {
+        if (navigator.share) {
+          try {
+            await navigator.share({ title, text, url });
+            return;
+          } catch (e) {
+            if (e && e.name === 'AbortError') return; // (closed by the customer)
+          }
+        }
+        shownLink = { id: item.designId, url };
+        if (await copyText(url)) POD.toast(t('cartShare.copied'));
+        render();
+        const box = document.querySelector('[data-share-url]');
+        if (box) box.focus();
+      }
+      /** The pictures saved to the device (to send from the photos or a chat). */
+      function savePictures(files) {
+        for (const f of files) {
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(f);
+          a.download = f.name;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+        }
+        POD.toast(t('cartShare.saved'));
+      }
+      let sharing = false;
+      async function shareItem(id) {
+        const item = POD.getCart().find((it) => it.designId === id);
+        if (!item || sharing) return;
+        sharing = true;
+        const busy = (on) => { const b = document.querySelector(`[data-share="${CSS.escape(id)}"]`); if (b) { if (on) b.setAttribute('aria-busy', 'true'); else b.removeAttribute('aria-busy'); } };
+        busy(true);
+        const product = tr(item.productName);
+        const text = t('cartShare.text', { product });
+        try {
+          const c = shareFilesOf(item);
+          const ready = Boolean(c.files);
+          if (navigator.share && navigator.canShare) {
+            const files = c.files || await c.promise.catch(() => null);
+            let can = false;
+            try { can = Boolean(files && files.length && navigator.canShare({ files })); } catch (e) { can = false; }
+            if (can) {
+              try {
+                await navigator.share({ files, title: product, text });
+                return;
+              } catch (e) {
+                if (e && e.name === 'AbortError') return;
+                // (The pictures took too long for the phone to count it as the tap: they are ready for the next one.)
+                if (e && e.name === 'NotAllowedError' && !ready) { POD.toast(t('cartShare.again')); return; }
+              }
+            }
+          }
+          if (viewableItem(item)) {
+            const viewId = await viewLinkOf(item);
+            if (viewId) {
+              await shareLink(item, `${location.origin}/view?id=${encodeURIComponent(viewId)}`, product, text);
+              return;
+            }
+          }
+          savePictures(c.files || await c.promise);
+        } catch (e) {
+          POD.toast(e && e.status && e.message ? e.message : t('cartShare.failed'), 'error');
+        } finally {
+          sharing = false;
+          busy(false);
+        }
+      }
+      // The pictures start loading as the finger touches the button (or it gets the keyboard's focus).
+      const warmShare = (e) => {
+        const b = e.target.closest && e.target.closest('[data-share]');
+        const item = b && POD.getCart().find((it) => it.designId === b.dataset.share);
+        if (item) shareFilesOf(item).promise.catch(() => {});
+      };
+      document.getElementById('items').addEventListener('pointerdown', warmShare);
+      document.getElementById('items').addEventListener('focusin', warmShare);
+      document.getElementById('items').addEventListener('click', async (e) => {
+        const b = e.target.closest('[data-share]');
+        if (b) return shareItem(b.dataset.share);
+        if (e.target.closest('[data-share-close]')) {
+          const back = shownLink && document.querySelector(`[data-share="${CSS.escape(shownLink.id)}"]`);
+          shownLink = null;
+          render();
+          const again = back && document.getElementById(back.id);
+          if (again) again.focus();
+          return;
+        }
+        if (e.target.closest('[data-share-copy]') && shownLink) {
+          const field = document.querySelector('[data-share-url]');
+          if (field) field.select();
+          let ok = await copyText(shownLink.url);
+          if (!ok) { try { ok = document.execCommand('copy'); } catch (err) { ok = false; } }
+          if (ok) POD.toast(t('cartShare.copied'));
+        }
+      });
+      /** The link under its item, to copy by hand. */
+      const linkBox = (item, i) => (shownLink && shownLink.id === item.designId ? `
+              <div class="share-link" role="group" aria-labelledby="sl-h-${i}">
+                <p class="share-link-title" id="sl-h-${i}">${esc(t('cartShare.linkTitle'))}</p>
+                <div class="share-link-row">
+                  <input type="text" id="sl-${i}" data-share-url readonly dir="ltr" value="${esc(shownLink.url)}" aria-labelledby="sl-h-${i}">
+                  <button type="button" class="btn btn-sm" id="sl-copy-${i}" data-share-copy>${esc(t('cartShare.copy'))}</button>
+                  <button type="button" class="link-btn share-link-close" id="sl-close-${i}" data-share-close>${esc(t('cartShare.close'))}</button>
+                </div>
+              </div>` : '');
+
       function render() {
         renderSaved();
         const cart = POD.getCart();
+        pruneOff(cart);
+        const picked = chosenIn(cart);
         const focused = document.activeElement && document.activeElement.closest && document.activeElement.closest('#items') ? document.activeElement.id : null;
         document.getElementById('empty').hidden = cart.length > 0;
         // The note about editing quantities and duplicating designs doesn't apply to photo sets or kids books
@@ -1019,18 +1306,30 @@
         document.getElementById('cart-layout').hidden = cart.length === 0;
         // An empty cart: the orders placed from this device, to find them again.
         document.getElementById('device-orders').innerHTML = cart.length ? '' : PODAftercare.deviceOrdersHtml();
-        document.getElementById('items').innerHTML = cart.map((item, i) => `
-          <div class="cart-entry${blocked.has(item.designId) ? ' is-blocked' : ''}" data-entry-for="${esc(item.designId)}">
+        // The tick on each item, and "Deselect all" / "Select all" above them (owner, 28 Nov).
+        const allOn = picked.length === cart.length;
+        const selBar = cart.length ? `
+          <div class="sel-bar">
+            <span class="sel-sum" id="sel-sum">${esc(t('cartSel.chosen', { chosen: POD.num(picked.length), total: POD.num(cart.length) }))}</span>
+            <button type="button" class="link-btn sel-all" id="sel-all" data-sel-all="${allOn ? 'off' : 'on'}">${esc(t(allOn ? 'cartSel.deselectAll' : 'cartSel.selectAll'))}</button>
+          </div>` : '';
+        document.getElementById('items').innerHTML = selBar + cart.map((item, i) => `
+          <div class="cart-entry${blocked.has(item.designId) ? ' is-blocked' : ''}${isOn(item.designId) ? '' : ' is-off'}" data-entry-for="${esc(item.designId)}">
           <div class="cart-item">
-            <img src="${esc(item.previewUrl)}" alt="${esc(t('cart.preview', { product: tr(item.productName) }))}">
+            <div class="cart-pic">
+              <img src="${esc(item.previewUrl)}" alt="${esc(t('cart.preview', { product: tr(item.productName) }))}">
+              <label class="sel-check" for="sel-${i}"><input type="checkbox" id="sel-${i}" data-sel="${esc(item.designId)}"${isOn(item.designId) ? ' checked' : ''}><span class="visually-hidden">${esc(t('cartSel.pick', { product: tr(item.productName) }))}</span></label>
+            </div>
             <div>
               <div class="item-head"><h3>${esc(tr(item.productName))}${blocked.has(item.designId) ? ` <span class="saved-state blocked">${esc(t('cart.blocked'))}</span>` : ''}</h3><div class="price">${itemPrice(item)}</div></div>
               <div class="meta" data-meta-for="${esc(item.designId)}">${itemMeta(item)}</div>
+              ${isOn(item.designId) ? '' : `<p class="sel-off-note">${esc(t('cartSel.off'))}</p>`}
               ${qtyBox(item, i)}
               ${blocked.has(item.designId) ? `<div class="cart-unavail" role="alert"><strong>${esc(blocked.get(item.designId))}</strong> ${(outOfShop.get(item.designId) || {}).similar
     ? `<a class="cart-similar" href="${esc(outOfShop.get(item.designId).similar)}">${esc(POD.similarLabel(outOfShop.get(item.designId).similar))}</a>`
     : `<span>${(outOfShop.get(item.designId) || {}).backOn ? `${esc(t('avail.backOnLong', { date: POD.backOnDay(outOfShop.get(item.designId).backOn) }))} ` : ''}${esc(t(cart.some((x) => !blocked.has(x.designId)) ? 'cart.blockedHint' : 'cart.blockedHintOnly'))}</span>`}</div>` : ''}
               ${itemActions(item, i)}
+              ${linkBox(item, i)}
             </div>
           </div>
           ${blocked.has(item.designId) ? '' : proofSlot(item, i)}
@@ -1041,7 +1340,7 @@
         updateApproval();
         // Only what can be ordered counts, as in the shop's own sums: an item it can't make now (the shop's
         // last answer) is left out of the subtotal, free shipping and the total until it is back, removed or saved for later.
-        const orderable = cart.filter((it) => !blocked.has(it.designId));
+        const orderable = picked.filter((it) => !blocked.has(it.designId));
         const subtotal = Math.round(orderable.reduce((s, i) => s + i.price, 0) * 100) / 100;
         const freeOver = quote ? quote.freeShippingOver : pricing.freeShippingOver;
         // The code in use, or an automatic offer the shop applied as the best value (owner, 26 Nov).
@@ -1049,7 +1348,7 @@
         const discount = applied ? applied.discount : 0;
         // The shop's own numbers when its answer is for exactly this cart (same items, same coupon);
         // until then the same rule as the shop's: free shipping goes by the subtotal before any discount.
-        const fresh = quoteFits(cart) && Boolean(quote.coupon) === Boolean(applied);
+        const fresh = quoteFits(picked) && Boolean(quote.coupon) === Boolean(applied);
         // (Nothing that can be ordered: no shipping either.)
         const baseShipping = fresh && typeof quote.baseShipping === 'number' ? quote.baseShipping
           : !orderable.length || (applied && applied.freeShipping) || subtotal >= freeOver ? 0 : (quote ? quote.shippingFlat : pricing.shipping);
@@ -1084,6 +1383,8 @@
         // The field folds into "Have a discount code?" until it is asked for, a code is in use or there is a word about one.
         showCouponField(couponOpen || Boolean(couponCode) || Boolean(refused) || Boolean(couponNote && couponNote.code));
         document.getElementById('subtotal').textContent = money(subtotal);
+        document.getElementById('sel-count').textContent = t('cartSel.count', { items: itemsWord(picked.length) });
+        document.getElementById('bar-count').textContent = t('cartSel.count', { items: itemsWord(picked.length) });
         // (Nothing that can be ordered: no "free" shipping to show.)
         document.getElementById('shipping').textContent = !orderable.length ? t('cart.nothingToShip') : baseShipping ? money(baseShipping) : t('free');
         document.getElementById('express-line').hidden = !expressNow;
@@ -1169,7 +1470,7 @@
       async function rewordNote() {
         const note = couponNote;
         const lang = POD.lang;
-        const cart = POD.getCart();
+        const cart = chosen();
         if (!note || !note.msg || !needsWords(note) || !cart.length) return;
         let q;
         try {
@@ -1203,11 +1504,20 @@
         forgetRemoved(cart);
         quoteFailed = null;
         if (!cart.length) { quote = null; return; }
+        // The shop's sums (coupon, shipping, total) are for the ticked items only; the unticked ones are asked about on
+        // their own (today's price, gone, can't be made now, their − / +), without a coupon.
+        const picked = chosenIn(cart);
+        const rest = cart.filter((it) => !isOn(it.designId));
         // The shop answers in the page's language: kept with its answer (see couponRefusal).
         const lang = POD.lang;
+        let restQuote = null;
         try {
-          quote = await POD.api('/api/cart/quote', quoteRequest(cart, couponCode));
-          quote.lang = lang;
+          const asks = [
+            picked.length ? POD.api('/api/cart/quote', quoteRequest(picked, couponCode)) : Promise.resolve(null),
+            rest.length ? POD.api('/api/cart/quote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ designIds: rest.map((i) => i.designId), delivery }) }).catch(() => null) : Promise.resolve(null),
+          ];
+          [quote, restQuote] = await Promise.all(asks);
+          if (quote) quote.lang = lang;
         } catch (e) {
           quote = null;
           quoteFailed = e || new Error('');
@@ -1225,9 +1535,12 @@
         let ordered = false;
         let changed = false;
         let synced = false;
-        const keep = cart.filter((item, i) => {
-          const q = quote.items[i];
-          if (!q || q.designId !== item.designId) return true;
+        // Each item's answer, from whichever question it was in.
+        const answers = [...((quote && quote.items) || []), ...((restQuote && restQuote.items) || [])].filter(Boolean);
+        const answerOf = (id) => answers.find((q) => q.designId === id) || null;
+        const keep = cart.filter((item) => {
+          const q = answerOf(item.designId);
+          if (!q) return true;
           // Already ordered (the answer to that order got lost, or another tab ordered it): not in the cart any more.
           if (q.gone && (q.ordered || q.orderedIn)) { ordered = true; return false; }
           if (q.gone) { gone.push(tr(item.productName)); return false; }
@@ -1239,12 +1552,15 @@
           return true;
         });
         // Hidden or sold out since it was added: the shop's message on the item (cleared when it is back).
-        blocked = new Map(quote.items.filter((q) => q && q.unavailable && keep.some((it) => it.designId === q.designId))
+        // (An unticked item the shop wasn't asked about just now keeps what it had.)
+        const before = blocked;
+        blocked = new Map(answers.filter((q) => q.unavailable && keep.some((it) => it.designId === q.designId))
           .map((q) => [q.designId, q.unavailableText || t('cart.blocked')]));
+        for (const it of keep) if (!answerOf(it.designId) && before.has(it.designId)) blocked.set(it.designId, before.get(it.designId));
         // The product isn't in the shop: no longer sold, "See similar products" (the shop on that kind of
         // product); paused with a day to come back, that day.
         const nowOut = new Map();
-        const out = keep.filter((it) => quote.items.some((q) => q && q.designId === it.designId && ['productRetired', 'productUnavailable'].includes(q.unavailable)));
+        const out = keep.filter((it) => answers.some((q) => q.designId === it.designId && ['productRetired', 'productUnavailable'].includes(q.unavailable)));
         if (out.length) {
           const shop = await POD.loadCatalog().catch(() => null);
           await Promise.all(out.map(async (it) => {
@@ -1273,6 +1589,16 @@
         a[what] = on;
         approvals.set(id, a);
       }
+      // An item's tick: in this order or not (it stays in the cart either way).
+      document.getElementById('items').addEventListener('change', (e) => {
+        const id = e.target.dataset && e.target.dataset.sel;
+        if (id) setOn([id], e.target.checked);
+      });
+      // "Deselect all items" / "Select all items".
+      document.getElementById('items').addEventListener('click', (e) => {
+        const all = e.target.closest('[data-sel-all]');
+        if (all) setOn(POD.getCart().map((it) => it.designId), all.dataset.selAll === 'on');
+      });
       // "Print one sample first", on its item.
       document.getElementById('items').addEventListener('change', (e) => {
         const id = e.target.dataset && e.target.dataset.sample;
@@ -1339,12 +1665,13 @@
         const [gone] = cart.splice(at, 1);
         if (!gone) return;
         const approval = approvals.get(gone.designId);
+        const wasOff = off.has(gone.designId);
         POD.setCart(cart);
         render();
         // The coupon and shipping depend on what is left: ask the shop again.
         refreshPrices().then(render);
         // (A key press on Remove: the keyboard goes on at "Undo".)
-        undoRemove(gone, at, approval, e.detail === 0);
+        undoRemove(gone, at, approval, e.detail === 0, wasOff);
       });
 
       // ---------- Removed by mistake: "Undo" puts it back where it was, for a few seconds ----------
@@ -1361,7 +1688,7 @@
         }
         return root;
       }
-      function undoRemove(item, at, approval, focus) {
+      function undoRemove(item, at, approval, focus, wasOff) {
         const el = document.createElement('div');
         el.className = 'toast toast-undo';
         const paint = () => { el.innerHTML = `<span>${esc(t('cart.removed'))}</span><button type="button">${esc(t('cart.undo'))}</button>`; };
@@ -1393,6 +1720,8 @@
               approvals.set(item.designId, approval);
               saveApprovals();
             }
+            // (Unticked before, unticked again.)
+            if (wasOff) { off.add(item.designId); saveOff(); }
             render();
             refreshPrices().then(render);
           }
@@ -1468,11 +1797,13 @@
         const askedIn = POD.lang;
         if (placing) return;
         // As the phones' bar: items that can't be ordered now, then proofs left to approve, then the form's fields.
-        if (blockedIn(POD.getCart()).length) {
+        // (Nothing ticked: nothing to order. The button says so.)
+        if (!chosen().length) return updateApproval();
+        if (blockedIn(chosen()).length) {
           goToBlocked();
-          return POD.toast(blocked.get(blockedIn(POD.getCart())[0].designId), 'error');
+          return POD.toast(blocked.get(blockedIn(chosen())[0].designId), 'error');
         }
-        if (!POD.getCart().every((it) => isApproved(it.designId))) return nudgeProof();
+        if (!chosen().every((it) => isApproved(it.designId))) return nudgeProof();
         const bad = checkFields();
         if (bad) return goToField(bad);
         const btn = document.getElementById('place-order');
@@ -1499,11 +1830,13 @@
           if (codeBefore && quote && quote.couponError && !quote.couponBeaten) throw Object.assign(new Error(quote.couponError), { code: 'couponRefused', lang: quote.lang });
           render();
           if (!POD.getCart().length) throw new Error(t('cart.emptyTitle'));
+          if (!chosen().length) throw new Error(t('cartSel.nothing'));
           // Sold out or hidden while the customer was filling in the form.
-          const stuckNow = blockedIn(POD.getCart());
+          const stuckNow = blockedIn(chosen());
           if (stuckNow.length) throw Object.assign(new Error(blocked.get(stuckNow[0].designId)), { code: 'itemUnavailable' });
           if (Math.abs(render.total - before) > 0.009) throw Object.assign(new Error(t('cart.pricesUpdated')), { code: 'priceChanged' });
-          const cartNow = POD.getCart();
+          // Only the ticked items are ordered; the others stay in the cart as they are.
+          const cartNow = chosen();
           // Each item's approval, against the exact proof the customer saw (and whether they want a sample first).
           const approvalsBody = Object.fromEntries(cartNow.map((it) => {
             const a = approvals.get(it.designId);
@@ -1536,10 +1869,10 @@
             render();
           }
           placing = false;
-          btn.textContent = t('checkout.place');
+          btn.textContent = placeLabel();
           if (err.code === 'proofChanged' || err.code === 'approvalRequired') {
             // Fetch every proof again: the ones that changed lose their approval and are shown anew.
-            await Promise.all(POD.getCart().map((it) => loadProof(it.designId, { force: true })));
+            await Promise.all(chosen().map((it) => loadProof(it.designId, { force: true })));
             render();
             goToNextProof();
             POD.toast(err.code === 'proofChanged' ? t('proof.changed') : err.message || t('checkout.approvalRequired'), 'error');
@@ -1556,7 +1889,7 @@
             else if (unavailable) goToBlocked();
           }
           // Also above the order button (a toast goes away): the shop's own words.
-          if (unavailable && !blockedIn(POD.getCart()).length) {
+          if (unavailable && !blockedIn(chosen()).length) {
             const status = document.getElementById('approve-status');
             updateApproval();
             status.classList.add('blocked');
@@ -1615,9 +1948,10 @@
         // Kept on this device: a guest's way back to the order (account page, empty cart).
         PODAftercare.rememberOrder(order);
         const ordered = new Set((order.items || []).map((i) => i.designId));
+        // Only what was ordered leaves the cart: the unticked items stay, with their ticks and approvals.
         POD.setCart(POD.getCart().filter((it) => !ordered.has(it.designId)));
         try { sessionStorage.removeItem(KEY); sessionStorage.removeItem(DETAILS_KEY); } catch (e) { /* private mode */ }
-        approvals.clear();
+        for (const id of ordered) approvals.delete(id);
         saveApprovals();
         location.href = POD.orderPath('order', order.id, order.key) + '&new=1';
       }
@@ -1788,11 +2122,17 @@
       document.getElementById('bar-go').addEventListener('click', () => {
         // Items that can't be ordered now come first, then proofs that didn't load; then the first empty field, then the
         // tick next to the order button, else the button.
-        if (blockedIn(POD.getCart()).length) return goToBlocked();
-        if (!POD.getCart().every((it) => isApproved(it.designId) || proofOf(it.designId))) return goToNextProof();
+        // (Nothing ticked: the ticks, to choose what to order.)
+        if (!chosen().length) {
+          const all = document.getElementById('sel-all');
+          if (all) { all.scrollIntoView({ behavior: 'smooth', block: 'center' }); all.focus({ preventScroll: true }); }
+          return;
+        }
+        if (blockedIn(chosen()).length) return goToBlocked();
+        if (!chosen().every((it) => isApproved(it.designId) || proofOf(it.designId))) return goToNextProof();
         const empty = FIELDS.find((el) => el.required && !el.value.trim());
         if (empty) return goToField(empty);
-        if (!POD.getCart().every((it) => isApproved(it.designId))) return goToTick();
+        if (!chosen().every((it) => isApproved(it.designId))) return goToTick();
         const btn = document.getElementById('place-order');
         btn.scrollIntoView({ block: 'center', behavior: 'smooth' });
         btn.focus({ preventScroll: true });
@@ -1831,7 +2171,11 @@
         }
       });
       // The cart changed in another tab (an order placed there, an item added).
-      window.addEventListener('storage', (e) => { if (e.key === 'pod-cart-v2') refreshPrices().then(render); });
+      window.addEventListener('storage', (e) => {
+        if (e.key === 'pod-cart-v2') refreshPrices().then(render);
+        // (Ticked or unticked in another tab.)
+        if (e.key === OFF_KEY) { readOff(); render(); refreshPrices().then(render); }
+      });
       // The account's cart arrived (items added on another device, or removed there).
       document.addEventListener('pod:cartsynced', () => refreshPrices().then(render).then(refreshSaved));
     })();

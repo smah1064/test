@@ -92,7 +92,13 @@
     return;
   }
   // Books and photo prints have their own pages, not the editor.
-  const products = catalog.products.filter((x) => !x.kind);
+  // A plain glass (sold without printing) has no editor: its own page (owner, 28 Nov).
+  const plainAsked = catalog.products.find((x) => x.blank && x.id === new URLSearchParams(location.search).get('product'));
+  if (plainAsked) {
+    location.replace('/product?id=' + encodeURIComponent(plainAsked.id));
+    return;
+  }
+  const products = catalog.products.filter((x) => !x.kind && !x.blank);
   {
     const asked = catalog.products.find((x) => x.id === new URLSearchParams(location.search).get('product'));
     if (asked && asked.kind === 'book') location.replace('/book?b=' + encodeURIComponent(asked.book));
@@ -4691,8 +4697,15 @@
     if (o.artRecoloured && o.artColour) recolourArt(n, o.artColour);
     n.setCoords();
     const idx = canvas.getObjects().indexOf(o);
-    canvas.remove(o);
-    canvas.insertAt(n, idx, false);
+    // One step to undo (QA 28 Nov: the removal was its own step, so the first Undo showed no drawing at all).
+    const was = st.silent;
+    st.silent = true;
+    try {
+      canvas.remove(o);
+      canvas.insertAt(n, idx, false);
+    } finally {
+      st.silent = was;
+    }
     canvas.setActiveObject(n);
     canvas.requestRenderAll();
     commit();
@@ -5321,6 +5334,14 @@
         const name = layerName(o);
         if (L.kind === 'cut' && o.type === 'image') issues.push({ level: 'warn', key: st.product.process === 'cnc' ? 'cnc.cutPhoto' : 'check.cutPhoto', obj: o, params: { name } });
         if (isText(o) && o.fontSize * Math.abs(o.scaleY || 1) * 0.7 < minMm * ppmm) issues.push({ level: 'warn', key: L.kind === 'cut' ? 'check.cutSmallText' : 'check.laserSmallText', obj: o, params: { name, mm: POD.num(minMm) } });
+      }
+      // Sold by the number of letters, at the size's height (Giant Event Letters: up to 3, 60 or 90 cm tall; QA 28 Nov).
+      if (L.maxPieces || L.fillHeight) {
+        const objs = canvas.getObjects().filter((o) => o.name !== '__cropper' && o.visible !== false && !o.excludeFromExport);
+        const pieces = objs.reduce((n, o) => n + (isText(o) ? [...String(o.text || '').replace(/\s+/g, '')].length : 1), 0);
+        if (L.maxPieces && pieces > L.maxPieces) issues.push({ level: 'error', key: 'check.tooManyPieces', obj: null, params: { n: POD.num(pieces), max: POD.num(L.maxPieces) } });
+        const areaH = rects().trim.h;
+        if (L.fillHeight) for (const o of objs) if (isText(o) && (o.height * Math.abs(o.scaleY || 1)) / areaH < 0.75) issues.push({ level: 'error', key: 'check.lettersSmall', obj: o, params: { name: layerName(o) } });
       }
       measureCut();
       if (L.kind === 'cut' && L.pieces === 'one' && st.cutPieces > 1) issues.push({ level: 'warn', key: 'check.cutPieces', obj: null, params: { n: POD.num(st.cutPieces) } });
@@ -7480,12 +7501,14 @@
       const blankBefore = blankPages();
       if (blankBefore) problems.push(`• ${blankBefore}`);
       const clientChecks = []; // the same checks, kept with the design for the proof and the shop
+      const stops = []; // what can't be ordered as it is (more letters than the size is sold for, letters too small)
       let overlapAt = null; // print and embroidery on top of each other: not sent
       for (const s of sides) {
         await showSide(s.id);
         const issues = checkIssues();
         if (!overlapAt && issues.some((i) => i.overlap)) overlapAt = s.id;
         issues.forEach((i) => problems.push(`• ${tr(s.name)}: ${t(i.key === 'check.outside' ? 'check.outsideList' : i.key, { ...i.params, dpi: i.params.dpi, pt: i.params.pt })}`));
+        issues.filter((i) => i.key === 'check.tooManyPieces' || i.key === 'check.lettersSmall').forEach((i) => stops.push(t(i.key, i.params)));
         clientChecks.push(...(await reportChecks(s.id, issues)));
         sidesPayload[s.id] = { editor: { version: fabric.version, objects: await inlineImages(st.designs[s.id]), ...(st.offsets[s.id] ? { offset: st.offsets[s.id] } : {}), ...(st.pattern ? { pattern: { ...st.pattern } } : {}), area: xywh(baseArea(s.id)) } };
         const withFields = useMerge && mergeSides.some((x) => x.id === s.id);
@@ -7530,6 +7553,12 @@
         busy(false);
         if (overlapAt !== st.side) { await showSide(overlapAt); renderOptions(); refreshChrome(); }
         toast(t('check.overlapStop', { side: tr(baseSide(hostOf(overlapAt)).name) }), 'error');
+        return;
+      }
+      // (Sold by the letter at the size's height: not ordered with more letters or smaller ones. QA 28 Nov.)
+      if (stops.length) {
+        busy(false);
+        toast([...new Set(stops)].join(' '), 'error');
         return;
       }
       if (problems.length) {

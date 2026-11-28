@@ -512,6 +512,16 @@ Thirteen products made by partner workshops (in their own categories in `src/pro
 - Every size of a product has the same shape as its drawing, so where the sizes the owner listed were different shapes the bigger ones keep the first one's (villa sign 50 × 37.5, nameplates 25 × 8.75 and 25 × 7.5, shield 16 × 20 / 20 × 25 / 24 × 30 cm); the label says the real size.
 - Existing products: the acrylic photo plaque has two big sizes (29 × 40 and 43 × 60 cm with wall standoffs) and a thick 15 mm photo block priced per size; fridge magnets can have an acrylic face (about 60% on each pack).
 
+## UV DTF cup wraps and plain glasses (28 Nov)
+
+The owner sells the printed UV DTF wrap (full colour on clear film, no background, peel and stick, no heat) and the plain glasses separately. Section "UV DTF cup wraps" in `src/products.js`; prices are starting points to change in the dashboard.
+
+- **Wraps** (process `uv`, colour `clear` "Transparent film", one size each, option `apply` "Stick it on a glass from this order for me" +40 EGP): `uvwrap16` 16 oz glass can (Ø 70 mm, wrap 215 × 110 mm, 120 EGP), `uvwrap20` 20 oz glass can (Ø 75, 230 × 130 mm, 140), `uvwraptumbler` 20 oz straight glass tumbler (Ø 75, 230 × 190 mm, 160), `uvwraptaper` 12 oz tapered glass (120 mm tall, Ø 85 → 65, band 15–105 mm from the rim, 130). Each is its own product because each glass has its own shape. The print side is the band unrolled, made with `public/js/drinkware-geom.js` exactly as `src/drinkware.js` `applyTo()` lays out a measured cup (5 mm seam gap, 3 mm safe margin, `wrap.view` for the previews, a lathe 3D model). The tapered glass's side carries `fan`, so the order page offers the fan print files (`fan-png`, `fan-mirror`, `fan-pdf`) for it.
+- **Plain glasses** (`blank: true`, sold without printing): `glasscan16` (bamboo lid and glass straw, 180 EGP), `glasscan20` (220), `glasstumbler20` (lid and straw, 280), `glasstaper` (120). They keep the normal product shape (one `front` side like the matching wrap, colour `clear`, one size). Their product page has a quantity (1–20) and "Add to cart" instead of the editor: `POST /api/blanks` `{ productId, color, size, qty, options }` → `201 { id, price, qty }`, then a cart entry of `kind: 'blank'`. They take no ready designs.
+- `pair` links each wrap and its glass both ways: the wrap's page says "The glass is sold separately" with a link, the glass's page links to its wrap (strings in `public/js/i18n-blanks.js`).
+- Ready designs: `src/library-packs/uv-wraps.js` (8: names with flowers, "قهوتي الأول" / "But first, coffee", Ramadan, birthdays, a monogram), offered only on the four wraps (`WRAP_DESIGNS_ONLY` in `src/library.js`).
+- Photos: `public/img/lifestyle/<id>.webp` for all eight (Creative Claw), in `index.json`.
+
 ## Photo mockups
 
 Each photo is a white (or natural) product on a light background, plus a mask from background removal. To add or replace one:

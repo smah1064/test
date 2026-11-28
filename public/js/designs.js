@@ -283,6 +283,19 @@
     return [d.id, SEARCH.index(words.join(' '))];
   }));
   const matches = (d, terms) => SEARCH.match(haystack.get(d.id), terms);
+  // Ranking (QA 28 Nov: "Ho! Ho! Ho!" came 21st of 24, after hot chocolate and holly): the name typed as it is first,
+  // then names with every word as a whole word, then names with every word at all, then the rest (tags, words printed
+  // on the design); the usual order breaks ties.
+  const nameIndex = new Map(lib.designs.map((d) => [d.id, SEARCH.index(both(d.name).join(' '))]));
+  const flat = (v) => SEARCH.norm(v).replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  const nameFlat = new Map(lib.designs.map((d) => [d.id, both(d.name).map((n) => ` ${flat(n)} `)]));
+  function score(d, terms, q) {
+    const typed = flat(q);
+    if (typed && nameFlat.get(d.id).some((n) => n.includes(` ${typed} `))) return 3;
+    if (SEARCH.match(nameIndex.get(d.id), terms, 'word')) return 2;
+    if (SEARCH.match(nameIndex.get(d.id), terms)) return 1;
+    return 0;
+  }
 
   // ---------- State (kept in the address, so Back returns to the same list) ----------
   const params = new URLSearchParams(location.search);
@@ -423,6 +436,11 @@
     if (state.cat === 'all') list = mixed(list);
     // Designs made for the chosen product come first.
     if (productId) list = [...list.filter((d) => d.product === productId), ...list.filter((d) => d.product !== productId)];
+    // The best matches of a search first (the order above breaks ties: sort is stable).
+    if (terms.length) {
+      const sc = new Map(list.map((d) => [d.id, score(d, terms, state.q)]));
+      list = list.slice().sort((a, b) => sc.get(b.id) - sc.get(a.id));
+    }
 
     const product = productById(productId);
     // (No count over the empty state: it says so itself.)

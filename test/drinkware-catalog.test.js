@@ -211,3 +211,80 @@ test('a broken spec leaves the template as it is (the shop keeps working)', () =
   assert.strictEqual(p.sides[0].fan, undefined);
   assert.strictEqual(p.drink, undefined);
 });
+
+test('description follows the kind and material, never the template\'s (QA: a gloss cup said "stainless steel")', () => {
+  const make = (id, over) => {
+    const spec = drinkware.buildSpec({ ...INPUT, ...over });
+    const n = catalog.newFromDrinkware({ id, name: { en: 'Measured', ar: 'مقاس' }, spec }, PRODUCTS);
+    return n;
+  };
+  const gloss = make('desc-gloss', { kind: 'cup', material: 'gloss' });
+  const matte = make('desc-matte', { kind: 'cup', material: 'matte' });
+  const bottle = make('desc-bottle', { kind: 'bottle', material: 'gloss' });
+  const steel = make('desc-steel', { kind: 'tumbler', material: 'metal' });
+  const mug = make('desc-mug', { kind: 'mug', material: 'matte', handle: { widthMm: 15, y0Mm: 20, y1Mm: 100 } });
+  const owned = make('desc-own', { kind: 'cup', material: 'gloss' });
+  owned.edit.description = { en: 'My own words', ar: 'كلامي أنا' };
+  withEdits(Object.fromEntries([gloss, matte, bottle, steel, mug, owned].map((n) => [n.id, n.edit])));
+  const tpl = product('tumbler').description;
+  const steelWord = (d) => /stainless|steel/i.test(d.en) || /ستانلس|ستيل/.test(d.ar);
+  for (const id of ['desc-gloss', 'desc-matte', 'desc-bottle', 'desc-mug']) {
+    const p = product(id);
+    assert.notDeepStrictEqual(p.description, tpl, id);
+    assert.ok(!steelWord(p.description), `${id}: ${JSON.stringify(p.description)}`);
+    assert.ok(!/محل/.test(p.description.ar));
+    assert.ok(!/lid|hot for hours|غطا|سخنة/i.test(`${p.description.en} ${p.description.ar}`), id);
+    // No template photo: the product has none of its own until the owner (or the shoot) adds some.
+    assert.strictEqual(p.photos, undefined);
+    assert.strictEqual(p.mainPhoto, undefined);
+  }
+  assert.match(product('desc-gloss').description.en, /^Cup with a glossy finish/);
+  assert.match(product('desc-gloss').description.ar, /^كوباية لامعة/);
+  assert.match(product('desc-matte').description.en, /^Cup with a matte finish/);
+  assert.match(product('desc-matte').description.ar, /^كوباية مطفية/);
+  assert.match(product('desc-bottle').description.en, /^Bottle/);
+  assert.match(product('desc-bottle').description.ar, /^زمزمية/);
+  assert.match(product('desc-mug').description.en, /^Mug with a matte finish, with a handle/);
+  assert.match(product('desc-mug').description.ar, /^مج مطفي بإيد/);
+  assert.match(product('desc-gloss').description.en, /130 mm tall, 90 mm across the top/);
+  assert.ok(steelWord(product('desc-steel').description), 'metal says stainless steel');
+  // The owner's own description wins.
+  assert.deepStrictEqual(product('desc-own').description, { en: 'My own words', ar: 'كلامي أنا' });
+});
+
+test('one size named from the measurements and one colour named after the material (QA: "20 oz" and the tumbler colours)', () => {
+  // A straight 110 mm × 90 mm cup: π·45²·110 = 699.8 ml → "≈ 700 ml · 11 × 9 cm".
+  const straight = drinkware.buildSpec({ ...INPUT, typed: { heightMm: 110, topDiaMm: 90, bottomDiaMm: 90, printTopMm: 5, printHeightMm: 100 } });
+  assert.deepStrictEqual(drinkware.sizeLabel(straight), { en: '≈ 700 ml · 11 × 9 cm', ar: 'حوالي 700 مل · 11 × 9 سم' });
+  // A cone: π·h/3·(R² + Rr + r²) with h 130, R 45, r 32 → 609.4 ml → 610.
+  near(drinkware.volumeMl(drinkware.buildSpec(INPUT).profile), (Math.PI * 130 * (45 * 45 + 45 * 32 + 32 * 32)) / 3 / 1000, 0.01, 'frustum');
+  const mk = (id, over) => catalog.newFromDrinkware({ id, name: { en: 'M', ar: 'م' }, spec: drinkware.buildSpec({ ...INPUT, ...over }) }, PRODUCTS);
+  const gloss = mk('col-gloss', { material: 'gloss' });
+  const matte = mk('col-matte', { material: 'matte' });
+  const steel = mk('col-steel', { kind: 'tumbler', material: 'metal' });
+  const mug = mk('col-mug', { kind: 'mug', material: 'gloss', handle: { widthMm: 15, y0Mm: 20, y1Mm: 100 } });
+  withEdits(Object.fromEntries([gloss, matte, steel, mug].map((n) => [n.id, n.edit])));
+  assert.deepStrictEqual(product('col-gloss').sizes.map((z) => z.label), [{ en: '≈ 610 ml · 13 × 9 cm', ar: 'حوالي 610 مل · 13 × 9 سم' }]);
+  assert.strictEqual(product('col-gloss').sizes[0].id, '20oz', 'the template size id (prices) stays');
+  assert.strictEqual(product('col-mug').sizes.length, 1);
+  assert.ok(!/oz/.test(product('col-mug').sizes[0].label.en));
+  assert.deepStrictEqual(product('col-gloss').colors.map((c) => [c.id, c.name.en, c.name.ar]), [['white', 'White, glossy', 'أبيض لامع']]);
+  assert.deepStrictEqual(product('col-matte').colors.map((c) => [c.id, c.name.en]), [['white', 'White, matte']]);
+  assert.deepStrictEqual(product('col-steel').colors.map((c) => [c.id, c.name.en, c.hex]), [['steel', 'Stainless steel', '#c9ccd1']]);
+  assert.deepStrictEqual(product('col-mug').colors.map((c) => c.id), ['white']);
+  assert.ok(product('tumbler').colors.length > 1, 'the template keeps its colours');
+  assert.deepStrictEqual(catalog.forAdmin(product('col-steel'), steel.edit).original.colors.map((c) => c.id), ['steel']);
+
+  // The owner adds a colour (and may switch the material one off): clean() takes the drinkware colour as the own one.
+  const p = product('col-gloss');
+  const c = catalog.clean(p, { addColors: [{ id: 'black', name: { en: 'Black', ar: 'أسود' }, hex: '#222222' }], colors: { white: { off: true } } }, { prev: gloss.edit });
+  assert.ok(!c.error, JSON.stringify(c));
+  assert.strictEqual(catalog.clean(p, { colors: { white: { off: true } } }, { prev: gloss.edit }).error, 'needOneColor');
+  assert.strictEqual(catalog.clean(p, { addColors: [{ id: 'white', name: { en: 'W', ar: 'و' }, hex: '#ffffff' }] }, { prev: gloss.edit }).error, 'badProductField', 'its own colour can\'t be added again');
+  assert.ok(!catalog.clean(p, { variantStock: { 'white|20oz': 4 } }, { prev: gloss.edit }).error);
+  withEdits({ 'col-gloss': { ...gloss.edit, ...c.edit } });
+  assert.deepStrictEqual(product('col-gloss').colors.map((x) => [x.id, Boolean(x.off)]), [['white', true], ['black', false]]);
+  // The owner's own size name still wins.
+  withEdits({ 'col-gloss': { ...gloss.edit, sizes: { '20oz': { label: { en: 'Big cup', ar: 'كوباية كبيرة' } } } } });
+  assert.deepStrictEqual(product('col-gloss').sizes[0].label, { en: 'Big cup', ar: 'كوباية كبيرة' });
+});

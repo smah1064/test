@@ -82,11 +82,24 @@
           <div class="pp-price"><span class="amount" id="pp-price"></span> <span class="muted small" id="pp-sizes"></span></div>
           <p class="pp-few" id="pp-few" role="status" hidden></p>
           <p class="delivery-note" data-i18n="delivery.note"></p>
+          <!-- A wrap's glass, or a glass's wrap (product.pair): a link to the other one (public/js/product.js) -->
+          <p class="pp-pair small" id="pp-pair" hidden></p>
           <div class="field">
             <label><span id="pp-color-label" data-i18n="panel.colour"></span> <span class="muted" id="pp-color-name"></span></label>
             <div class="swatches" id="pp-swatches"></div>
           </div>
-          <div class="pp-choices">
+          <!-- Plain products sold without printing (product.blank): straight to the cart, no editor -->
+          <div class="card pp-blank" id="pp-blank" hidden>
+            <p class="muted small" data-i18n="blank.plain"></p>
+            <div class="pp-blank-row">
+              <label class="pp-blank-qty"><span data-i18n="blank.qty"></span>
+                <select id="pp-blank-qty"></select>
+              </label>
+              <span class="muted small" id="pp-blank-total" role="status"></span>
+            </div>
+            <button type="button" class="btn btn-primary" id="pp-blank-add" data-i18n="blank.add"></button>
+          </div>
+          <div class="pp-choices" id="pp-choices">
             <a class="card pp-choice pp-scratch" id="pp-scratch">
               <span class="pp-choice-icon">✏️</span>
               <span><strong id="pp-scratch-title"></strong><br><span class="muted small" data-i18n="pp.scratchText"></span></span>
@@ -120,6 +133,7 @@
 
   <script src="/vendor/fabric-5.3.0.min.js"></script>
   <script src="/js/i18n.js"></script>
+  <script src="/js/i18n-blanks.js"></script>
   <script src="/js/common.js"></script>
   <script src="/js/site-search.js"></script>
   <script src="/js/fabric-ext.js"></script>

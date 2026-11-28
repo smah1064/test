@@ -390,7 +390,7 @@ function clean(p, body, { categories = [], prev = null } = {}) {
   if (b.variantStock !== undefined && b.variantStock !== null) {
     if (!isObj(b.variantStock)) return bad('variantStock');
     const m = {};
-    const colorIds = new Set([...own.colors.map((c) => c.id), ...((b.addColors !== undefined ? b.addColors : prev && prev.addColors) || []).map((c) => c && c.id)]);
+    const colorIds = new Set([...ownColorsOf(own, drink).map((c) => c.id), ...((b.addColors !== undefined ? b.addColors : prev && prev.addColors) || []).map((c) => c && c.id)]);
     const sizeIds = new Set([...own.sizes.map((z) => z.id), ...((b.addSizes !== undefined ? b.addSizes : prev && prev.addSizes) || []).map((z) => z && z.id)]);
     for (const [k, n] of Object.entries(b.variantStock)) {
       const [c, z, extra] = k.split('|');
@@ -412,7 +412,7 @@ function clean(p, body, { categories = [], prev = null } = {}) {
   }
 
   // Colours.
-  const ownColors = new Set(own.colors.map((c) => c.id));
+  const ownColors = new Set(ownColorsOf(own, drink).map((c) => c.id));
   if (b.addColors !== undefined) {
     if (!Array.isArray(b.addColors) || b.addColors.length > 30) return bad('addColors');
     const list = [];
@@ -563,6 +563,14 @@ function clean(p, body, { categories = [], prev = null } = {}) {
   return { edit: out };
 }
 
+/** A product's own colours: a measured drinkware product has one, named after its material (src/drinkware.js). */
+function ownColorsOf(own, drink) {
+  if (drink) {
+    try { return drinkware.colorsFor(drink); } catch (e) { /* the template's */ }
+  }
+  return own.colors;
+}
+
 /** Fields the manager may not change through clean() and that are kept as they were. */
 function keepFixed(prev, next) {
   const out = { ...next };
@@ -613,7 +621,7 @@ function forAdmin(p, edit) {
       description: own.description,
       category: own.category,
       sizes: own.sizes.map((z) => ({ id: z.id, label: z.label })),
-      colors: own.colors.map((c) => ({ id: c.id, name: c.name, hex: c.hex })),
+      colors: ownColorsOf(own, edit && isObj(edit.drinkware) ? edit.drinkware : null).map((c) => ({ id: c.id, name: c.name, hex: c.hex })),
       embroiderySpec: own.embroidery ? { ...(embSpecs[own.id] || { at: 'center', cm: [r2(own.embroidery.widthIn * 2.54), r2(own.embroidery.heightIn * 2.54)] }), surcharge: own.embroidery.surcharge, maxColors: own.embroidery.maxColors || 6 } : null,
       process: own.process,
       methods: own.methods,
@@ -661,7 +669,7 @@ function remeasure(prev, spec) {
   if (!isObj(prev) || !isObj(prev.drinkware)) return { error: 'badProductField', field: 'drinkware' };
   if (!isObj(spec) || spec.v !== 1) return { error: 'badProductField', field: 'drinkware' };
   if (drinkware.templateFor(spec) !== (prev.template || drinkware.templateFor(prev.drinkware))) return { error: 'photoProductGeometry', field: 'handle' };
-  const next = { ...prev, drinkware: { ...spec, assetsVer: prev.drinkware.assetsVer || 0, mockup: prev.drinkware.mockup || spec.mockup || null, shootId: prev.drinkware.shootId || spec.shootId || null, checkedAt: null, checkedBy: null } };
+  const next = { ...prev, drinkware: { ...spec, assetsVer: prev.drinkware.assetsVer || 0, mockup: prev.drinkware.mockup || spec.mockup || null, shootId: prev.drinkware.shootId || spec.shootId || null, ...(prev.drinkware.photo || spec.photo ? { photo: prev.drinkware.photo || spec.photo } : {}), checkedAt: null, checkedBy: null } };
   if (!next.status || next.status === 'live' || next.showAgainOn) {
     next.status = 'hidden';
     next.hiddenReason = 'other';
@@ -671,10 +679,20 @@ function remeasure(prev, spec) {
   return next;
 }
 
-/** The owner checked a drinkware product's dimensions: the edit with checkedAt / checkedBy set. */
-function markChecked(prev, who) {
+/**
+ * The owner checked a drinkware product's dimensions: the edit with checkedAt / checkedBy set. `front` (a product made
+ * from photos, the overlay check): the owner's nudges { axisXpx, rimYpx, pxPerMm } for spec.photo.front, already
+ * checked by the route (src/photo-product-routes.js); they replace those three numbers.
+ */
+function markChecked(prev, who, front = null) {
   if (!isObj(prev) || !isObj(prev.drinkware)) return { error: 'badProductField', field: 'drinkware' };
-  return { ...prev, drinkware: { ...prev.drinkware, checkedAt: new Date().toISOString(), checkedBy: text(String(who || ''), 80) || 'owner' } };
+  const d = { ...prev.drinkware, checkedAt: new Date().toISOString(), checkedBy: text(String(who || ''), 80) || 'owner' };
+  if (isObj(front)) {
+    if (!isObj(d.photo) || !isObj(d.photo.front)) return { error: 'badProductField', field: 'photo' };
+    // (The measured numbers stay as `original`: every later nudge is bounded by them, not by the last nudge.)
+    d.photo = { ...d.photo, original: d.photo.original || d.photo.front, front: { ...d.photo.front, ...front }, nudgedAt: d.checkedAt };
+  }
+  return { ...prev, drinkware: d };
 }
 
 module.exports = {

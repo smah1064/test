@@ -1,0 +1,28 @@
+/* Cart: ticking the items to order now (the rest stay in the cart) and sharing an item's picture (owner, 28 Nov).
+ * English, Arabic. Loaded before common.js on public/cart.html. */
+Object.assign(window.POD_STRINGS, {
+  'cartSel.pick': ['Order {product} now', 'اطلب {product} دلوقتي'],
+  'cartSel.selectAll': ['Select all items', 'اختار كل المنتجات'],
+  'cartSel.deselectAll': ['Deselect all items', 'شيل الاختيار من الكل'],
+  'cartSel.chosen': ['{chosen} of {total} items selected', 'مختار {chosen} من {total}'],
+  'cartSel.items.one': ['1 item', 'منتج واحد'],
+  'cartSel.items.two': ['2 items', 'منتجين'],
+  'cartSel.items.few': ['{n} items', '{n} منتجات'],
+  'cartSel.items.many': ['{n} items', '{n} منتج'],
+  'cartSel.count': ['({items})', '({items})'],
+  'cartSel.place': ['Place order ({items})', 'تأكيد الطلب ({items})'],
+  'cartSel.nothing': ['Tick at least one item in your cart to place an order.', 'علّم على منتج واحد على الأقل في السلة علشان تطلب.'],
+  'cartSel.plain': ['Plain, no printing', 'سادة، من غير طباعة'],
+  'cartSel.off': ['Not in this order: it stays in your cart.', 'مش في الطلب ده: هيفضل في السلة.'],
+  'cartShare.button': ['Share', 'شارك'],
+  'cartShare.label': ['Share a picture of your {product}', 'شارك صورة {product}'],
+  'cartShare.text': ['My {product} design, made on ebda3.me', 'تصميم {product} بتاعي، معمول على ebda3.me'],
+  'cartShare.making': ['Getting it ready…', 'بنجهّزها…'],
+  'cartShare.again': ['Ready: tap Share again.', 'جاهزة: اضغط «شارك» تاني.'],
+  'cartShare.copied': ['Link copied: send it to anyone. They can only look at it.', 'اتنسخ اللينك: ابعته لأي حد. هيقدر يتفرج بس.'],
+  'cartShare.linkTitle': ['A link to look at it (no prices, nothing to order):', 'لينك للفُرجة بس (من غير أسعار ولا طلب):'],
+  'cartShare.copy': ['Copy', 'انسخ'],
+  'cartShare.close': ['Close', 'اقفل'],
+  'cartShare.saved': ['Picture saved: send it from your photos or chats.', 'الصورة اتحفظت: ابعتها من الصور أو الشات.'],
+  'cartShare.failed': ['Couldn’t share it. Please try again.', 'ماقدرناش نشاركها. جرّب تاني.'],
+});
