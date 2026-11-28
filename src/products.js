@@ -2998,17 +2998,15 @@ PRODUCTS.push(
 // ---------- Ramadan lanterns with a name (owner's request, 28 Nov 2026; CNC & Laser chat) ----------
 // Two wooden lanterns from the owner's reference picture: Family Fanous (a square lantern with geometric lattice and
 // a big plaque: crescent and star above the family name, one or two lines) and Arabesque Arch (a pointed arch with
-// floral arabesque cutouts and a small nameplate: one first name). The customer's text is engraved on the plaque;
-// the print area is the part of the plaque the name goes in (the crescent and star are part of the lantern).
-// DRAFTS: the price, the sizes and the stock are not confirmed, so they are not written here (basePrice 0, one size
-// without measurements, no stock) and the products are paused ("hidden") until the owner sets a price in
-// admin → Prices and shows them in admin → Products. A product without a price is never in the shop (catalog.visible).
-// printWidthIn (the plaque's name area) is a working estimate for the engraving file's scale: TO CONFIRM.
+// floral arabesque cutouts and a small nameplate: one first name). Both 30 cm tall (base to the top of the hanging
+// ring), 3 mm plywood, with a battery LED (prototype drawings: docs/lanterns/). The customer's text is engraved on the
+// plaque; the print area is the part of the plaque the name goes in (the crescent and star are part of the lantern).
+// Prices: the owner said "add them like the other products" (28 Nov) without prices; these are the shop's proposal,
+// changed any time in admin → Prices. Made to order, so no stock is counted.
 // `nameplate.lines`: how many lines the name may take; with `fitText` the editor won't add a design to the cart while
 // any text runs past the plaque (main chat request, 28 Nov).
-const LANTERN_DRAFT = { status: 'hidden', hiddenReason: 'other', hiddenNote: 'Draft: set the price, size and stock, then show it in the shop' };
 const LANTERN_WOOD = [{ id: 'wood', name: t('Wood with warm LED light', 'خشب بإضاءة LED دافية'), hex: '#9c6a3a', ink: '#4a2a12' }];
-const LANTERN_SIZE = [{ id: 'std', label: t('Standard size', 'المقاس العادي'), surcharge: 0 }];
+const LANTERN_SIZE = [{ id: '30', label: t('30 cm tall, LED included', 'طول 30 سم، بالإضاءة LED'), surcharge: 0 }];
 const LANTERN_GLOW = '<radialGradient id="lg" cx="50%" cy="55%" r="60%"><stop offset="0" stop-color="#ffe7a3"/><stop offset="1" stop-color="#f0a83c"/></radialGradient>';
 // A strip of the lattice: eight-point stars outlined in wood over the glow.
 const latticeStars = (x0, y0, w, h, step) => {
@@ -3030,8 +3028,7 @@ PRODUCTS.push(
     category: 'laser',
     name: t('Family Fanous', 'فانوس العيلة'),
     description: t('A tall square wooden Ramadan lantern with geometric lattice panels, a pierced domed roof, a hanging ring and a warm LED light. On the front, a large wooden plaque with a crescent and star above your family name, engraved in Arabic or English on up to two lines.', 'فانوس رمضان خشب مربع وطويل بشبابيك هندسية وقبة مخرّمة وحلقة للتعليق وإضاءة LED دافية. في الواجهة لوحة خشب كبيرة عليها هلال ونجمة وتحتهم اسم العيلة محفور، عربي أو إنجليزي، على سطر أو سطرين.'),
-    basePrice: 0,
-    ...LANTERN_DRAFT,
+    basePrice: 550,
     colorLabel: t('Finish', 'التشطيب'),
     colors: LANTERN_WOOD,
     sizes: LANTERN_SIZE,
@@ -3047,8 +3044,9 @@ PRODUCTS.push(
         + `<path d="${FANOUS_PLAQUE}" fill="#e7c48e" stroke="#a7773f" stroke-width="3"/>`
         + '<path d="M236 248 a16 16 0 1 0 14 26 a12 12 0 1 1 -14 -26 z" fill="#5a3418"/><path d="M266 252 l3 7 7 1 -5 5 1 7 -6 -4 -6 4 1 -7 -5 -5 7 -1z" fill="#5a3418"/>'
         + '<rect x="150" y="510" width="200" height="24" rx="3" fill="#8a5a2b"/><rect x="158" y="534" width="22" height="12" fill="#7a4a22"/><rect x="320" y="534" width="22" height="12" fill="#7a4a22"/>'),
+      // The name area under the crescent: about 63 × 45 mm on the 30 cm lantern.
       printArea: { x: 195, y: 292, w: 110, h: 78 },
-      printWidthIn: cmIn(11),
+      printWidthIn: cmIn(6.3),
     }],
     cardArt: '<rect x="200" y="300" width="100" height="16" rx="8" fill="{{I}}"/><rect x="215" y="330" width="70" height="12" rx="6" fill="{{I}}"/>',
     laser: { kind: 'engrave', cut: null },
@@ -3059,8 +3057,7 @@ PRODUCTS.push(
     category: 'laser',
     name: t('Arabesque Arch Lantern', 'فانوس الأرابيسك'),
     description: t('A tall wooden Ramadan lantern with a pierced domed roof, a pointed arch around the front panel, floral arabesque cutouts and a warm LED light. A small nameplate in the middle of the arch carries one first name, engraved in Arabic or English.', 'فانوس رمضان خشب طويل بقبة مخرّمة وقوس مدبب حوالين الواجهة وزخارف أرابيسك ورد وإضاءة LED دافية. في نص القوس لوحة صغيرة محفور عليها اسم واحد، عربي أو إنجليزي.'),
-    basePrice: 0,
-    ...LANTERN_DRAFT,
+    basePrice: 500,
     colorLabel: t('Finish', 'التشطيب'),
     colors: LANTERN_WOOD,
     sizes: LANTERN_SIZE,
@@ -3076,8 +3073,9 @@ PRODUCTS.push(
         + '<g fill="none" stroke="#7a4a22" stroke-width="6">' + [260, 330, 400, 470].map((y) => `<path d="M206 ${y} q22 -30 44 0 t44 0"/><circle cx="228" cy="${y + 18}" r="9"/><circle cx="272" cy="${y + 18}" r="9"/>`).join('') + '</g>'
         + `<path d="${ARCH_PLAQUE}" fill="#e7c48e" stroke="#a7773f" stroke-width="3"/>` + FLORET(250, 352) + FLORET(250, 420)
         + '<rect x="150" y="520" width="200" height="24" rx="3" fill="#8a5a2b"/><rect x="158" y="544" width="22" height="10" fill="#7a4a22"/><rect x="320" y="544" width="22" height="10" fill="#7a4a22"/>'),
+      // The name area between the florets: about 61 × 24 mm on the 30 cm lantern.
       printArea: { x: 210, y: 370, w: 80, h: 32 },
-      printWidthIn: cmIn(8),
+      printWidthIn: cmIn(6.1),
     }],
     cardArt: '<rect x="205" y="380" width="90" height="16" rx="8" fill="{{I}}"/>',
     laser: { kind: 'engrave', cut: null },
@@ -3355,7 +3353,7 @@ const PRODUCTION = {
   ramadanlight: { process: 'lasercut', safeIn: 0, bleedIn: 0, model: { type: 'cutout', depthIn: 0.16, material: 'laser', stand: true, candle: true } },
   couplestand: { process: 'lasercut', safeIn: 0, bleedIn: 0, model: { type: 'cutout', depthIn: 0.16, material: 'laser', stand: true } },
   woodinvite: { process: 'engrave', safeIn: 0.25, bleedIn: 0, model: { type: 'block', depthIn: 0.12, radiusIn: 0.12, material: 'laser', raised: 0.08, base: 'wood' } },
-  // The Ramadan lanterns (drafts): the plaque is engraved; the 3D view shows the engraved plaque.
+  // The Ramadan lanterns: the plaque is engraved; the 3D view shows the engraved plaque.
   familyfanous: { process: 'engrave', safeIn: 0.08, bleedIn: 0, model: { type: 'block', depthIn: 0.2, radiusIn: 0.3, material: 'laser' } },
   arabesquelantern: { process: 'engrave', safeIn: 0.06, bleedIn: 0, model: { type: 'block', depthIn: 0.2, radiusIn: 0.3, material: 'laser' } },
   // UV DTF cup wraps (clear film, cut to each glass) and the plain glasses they go on: turned from each glass's profile.

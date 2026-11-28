@@ -523,14 +523,14 @@ Six products (section "Two-layer wood pieces" in `src/products.js`; ready design
 - Tests: `test/twolayer-products.test.js`, `test/library-cnc-twolayer.test.js`, `test/e2e/twolayer-3d.e2e.js`.
 - Multi-layer wall art (3–5 coloured layers) is planned, not built: `docs/multilayer-plan.md`.
 
-## Ramadan lanterns (28 Nov, drafts)
+## Ramadan lanterns (28 Nov)
 
-Family Fanous `familyfanous` (square lantern, big scalloped plaque: crescent and star above the family name, up to two lines) and Arabesque Arch `arabesquelantern` (pointed arch, small plaque: one first name). Section "Ramadan lanterns" in `src/products.js`; ready names in `src/library-packs/lanterns.js` (only on these two); gallery photos `public/img/lifestyle/<id>.webp` (crops of the owner's reference); live preview on the reference photo with the sample name taken off the plaque (`public/mockups/photos/<id>-front.webp`, `public/js/photo-mockups.js`).
+Family Fanous `familyfanous` (550 EGP; square lantern, big scalloped plaque: crescent and star above the family name, up to two lines) and Arabesque Arch `arabesquelantern` (500 EGP; pointed arch, small plaque: one first name). Both 30 cm tall with a battery LED, made to order (no stock counted); the prices are the shop's proposal (the owner asked to add them like the other products without giving prices) and change in admin → Prices. Section "Ramadan lanterns" in `src/products.js`; ready names in `src/library-packs/lanterns.js` (only on these two); gallery photos `public/img/lifestyle/<id>.webp` (crops of the owner's reference); live preview on the reference photo with the sample name taken off the plaque (`public/mockups/photos/<id>-front.webp`, `public/js/photo-mockups.js`).
 
-- **Drafts**: price, size and stock are not confirmed, so `basePrice` is 0, there is one size without measurements, no stock, and `status: 'hidden'`. A product without a price is never in the shop (`catalog.visible`). To publish: set the price (admin → Prices), then show it (admin → Products); a draft from the code keeps "live" once shown (`catalog.clean`).
 - `nameplate: { lines, fitText }`: how many lines the name may take, and the editor stops an order whose text runs past the plaque (main chat request, 28 Nov). On a ready design's page the name is fitted to its box as for every design.
-- The plaque's `printWidthIn` is a working estimate until the prototype drawings and the workshop confirm the plaque.
-- Tests: `test/ramadan-lanterns.test.js`, `test/e2e/ramadan-lanterns.e2e.js` (prices and shows them in a test shop, then an Arabic and an English name through the cart).
+- The plaque's name area: about 63 × 45 mm (Family Fanous) and 61 × 24 mm (Arabesque), from the 30 cm proportions; the prototype drawings (`docs/lanterns/`) and the workshop confirm it.
+- A product without a price is never in the shop (`catalog.visible`), and a product written as a draft (`status: 'hidden'`) keeps "live" once the manager shows it (`catalog.clean`).
+- Tests: `test/ramadan-lanterns.test.js`, `test/e2e/ramadan-lanterns.e2e.js` (product pages, an Arabic and an English name through the cart).
 
 ## UV DTF cup wraps and plain glasses (28 Nov)
 

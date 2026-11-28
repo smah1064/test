@@ -1,9 +1,7 @@
 'use strict';
 
 /**
- * The Ramadan lanterns (28 Nov 2026): Family Fanous and Arabesque Arch. They are drafts (no price, size or stock
- * confirmed), so they are not in the shop until the owner prices and shows them; this test does that in a test shop
- * with a test price, then checks:
+ * The Ramadan lanterns (28 Nov 2026): Family Fanous and Arabesque Arch, in the shop like the other products:
  *   - each product page: its name in both languages and its own gallery photo (the reference crop);
  *   - an Arabic family name on Family Fanous and an English first name on Arabesque Arch, typed on the ready
  *     design's page: the typed words are what is stored with the design the cart item points to;
@@ -56,16 +54,11 @@ async function addWithName(page, designId, name) {
   return doneId(res);
 }
 
-test('drafts: not in the shop until priced and shown', async () => {
+test('both lanterns are in the shop; a product shown without a price is not', async () => {
   const ids = await shopIds();
-  assert.ok(!ids.includes('familyfanous') && !ids.includes('arabesquelantern'));
-  // Shown without a price: still not sold.
-  await put('familyfanous', { status: 'live' });
-  assert.ok(!(await shopIds()).includes('familyfanous'), 'no price, not in the shop');
-  // Priced and shown (test prices only; the real ones are the owner's).
-  assert.strictEqual((await put('familyfanous', { status: 'live', prices: { basePrice: 500 } })).status, 200);
-  assert.strictEqual((await put('arabesquelantern', { status: 'live', prices: { basePrice: 400 } })).status, 200);
-  assert.ok((await shopIds()).includes('familyfanous') && (await shopIds()).includes('arabesquelantern'));
+  assert.ok(ids.includes('familyfanous') && ids.includes('arabesquelantern'));
+  // (A price of 0 is refused; the guard itself is in test/ramadan-lanterns.test.js.)
+  assert.strictEqual((await put('familyfanous', { prices: { basePrice: 0 } })).status, 400);
 });
 
 test('product pages: bilingual names and each lantern\'s own photo', { timeout: 60000 }, async () => {

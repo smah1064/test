@@ -1,8 +1,7 @@
 'use strict';
 
 /**
- * The Ramadan lanterns (28 Nov 2026): Family Fanous and Arabesque Arch, drafts until the owner confirms the price,
- * size and stock. See src/products.js "Ramadan lanterns" and test/e2e/ramadan-lanterns.e2e.js.
+ * The Ramadan lanterns (28 Nov 2026): Family Fanous and Arabesque Arch, in the shop like the other products. See src/products.js "Ramadan lanterns" and test/e2e/ramadan-lanterns.e2e.js.
  */
 const test = require('node:test');
 const assert = require('node:assert');
@@ -15,21 +14,20 @@ const { designs } = require('../src/library-packs/lanterns');
 const byId = (id) => PRODUCTS.find((p) => p.id === id);
 const IDS = ['familyfanous', 'arabesquelantern'];
 
-test('two bilingual laser products, drafts: no price, one size without measurements, no stock, not in the shop', () => {
+test('two bilingual laser products in the shop: priced, 30 cm with the LED, made to order', () => {
   assert.deepStrictEqual(byId('familyfanous').name, { en: 'Family Fanous', ar: 'فانوس العيلة' });
   assert.deepStrictEqual(byId('arabesquelantern').name, { en: 'Arabesque Arch Lantern', ar: 'فانوس الأرابيسك' });
+  assert.strictEqual(byId('familyfanous').basePrice, 550);
+  assert.strictEqual(byId('arabesquelantern').basePrice, 500);
   for (const id of IDS) {
     const p = byId(id);
     assert.strictEqual(p.category, 'laser');
-    assert.strictEqual(p.basePrice, 0, `${id}: price not set`);
-    assert.strictEqual(p.status, 'hidden');
-    assert.strictEqual(p.stock, undefined);
-    assert.deepStrictEqual(p.sizes.map((z) => z.id), ['std']);
-    assert.ok(!/\d\s*(cm|سم)/.test(JSON.stringify(p.sizes)), `${id}: no unconfirmed measurements in the size`);
-    assert.strictEqual(catalog.visible(p), false);
-    // Even shown by mistake, a product without a price is never sold.
-    assert.strictEqual(catalog.visible({ ...p, status: 'live' }), false);
-    assert.strictEqual(catalog.visible({ ...p, status: 'live', basePrice: 450 }), true);
+    assert.strictEqual(p.status, undefined);
+    assert.strictEqual(p.stock, undefined, `${id}: made to order`);
+    assert.deepStrictEqual(p.sizes.map((z) => [z.id, z.label.en]), [['30', '30 cm tall, LED included']]);
+    assert.strictEqual(catalog.visible(p), true);
+    // A product without a price is never sold (a guard for drafts).
+    assert.strictEqual(catalog.visible({ ...p, basePrice: 0 }), false);
   }
 });
 
