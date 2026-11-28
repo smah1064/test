@@ -1365,11 +1365,22 @@ function beam(a, b, sw, sd, material) {
   return mesh;
 }
 
+/** A board's outline: rounded corners, or a true circle when the radius is half a square board (roundedRect's corners would bulge). */
+function boardShape(w, h, r) {
+  if (Math.abs(w - h) < 0.01 && r >= w / 2 - 0.01) {
+    const s = new THREE.Shape();
+    s.absarc(0, 0, w / 2, 0, Math.PI * 2, false);
+    return s;
+  }
+  return roundedRect(w, h, r);
+}
 /** Signs and plaques: a board cut rounded or as an arch, engraved; plaques on a wooden stand, signs on an easel. */
-function laserBlock(look, mats, crop, w, h, m, renderer) {
+function laserBlock(look, mats, crop, w, h, m, renderer, color) {
+  // Raised lettering (the layered calligraphy panel): the design stands up from the board in the ink colour.
+  if (m.raised && crop && look !== 'clear') return raisedBlock(mats, crop, w, h, m, renderer, color);
   const arch = m.shape === 'arch';
   const r = Math.min(m.radiusIn != null ? m.radiusIn : 0.1, w / 2 - 0.001, h / 2 - 0.001);
-  const shape = arch ? archShape(w, h) : roundedRect(w, h, r);
+  const shape = arch ? archShape(w, h) : boardShape(w, h, r);
   const depth = m.depthIn || 0.2;
   let board;
   if (look === 'clear') {
@@ -1421,6 +1432,28 @@ function laserBlock(look, mats, crop, w, h, m, renderer) {
   } else {
     g.add(board);
   }
+  g.rotation.y = -0.3;
+  return g;
+}
+
+/**
+ * A board with the design as a second layer on top of it: the design's outline is traced
+ * (as for cut pieces) and stands `m.raised` inches proud, in the ink colour (gold on the
+ * calligraphy panel). If the outline can't be traced, the flat engraved board is shown.
+ */
+async function raisedBlock(mats, crop, w, h, m, renderer, color) {
+  const o = await designOutline(crop, w).catch(traceFailed);
+  if (!o) return laserBlock('wood', mats, crop, w, h, { ...m, raised: 0 }, renderer, color);
+  const r = Math.min(m.radiusIn != null ? m.radiusIn : 0.1, w / 2 - 0.001, h / 2 - 0.001);
+  const depth = m.depthIn || 0.2;
+  const g = new THREE.Group();
+  g.add(cutSheet(boardShape(w, h, r), depth, mats));
+  const ink = (color && color.ink) || '#c9a227';
+  const face = new THREE.MeshStandardMaterial({ color: ink, metalness: 0.7, roughness: 0.34, envMapIntensity: 1 });
+  const edge = new THREE.MeshStandardMaterial({ color: new THREE.Color(ink).multiplyScalar(0.78), metalness: 0.6, roughness: 0.45, envMapIntensity: 0.8 });
+  const top = extrudeShapes(solidShapes(o.list), m.raised, { face, edge });
+  top.position.z = depth / 2 + m.raised / 2;
+  g.add(top);
   g.rotation.y = -0.3;
   return g;
 }
@@ -2261,7 +2294,7 @@ function buildLaser(m, color, tex, renderer, product) {
   if (m.type === 'cardholder') return laserCardholder(mats, crop, w, h, m, k, renderer, color);
   if (m.type === 'pen') return laserPen(look, mats, crop, w, h, m, renderer);
   if (m.type === 'wallet') return laserWallet(mats, crop, w, h, m, renderer, color, side);
-  return laserBlock(look, mats, crop, w, h, m, renderer);
+  return laserBlock(look, mats, crop, w, h, m, renderer, color);
 }
 
 function contactShadow(width, y, depth = width * 0.55) {
