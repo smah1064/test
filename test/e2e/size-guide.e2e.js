@@ -51,6 +51,21 @@ test('product page (phone, Arabic and English): Size guide, the table and the fi
       await page.click('.sg-finder button[type=submit]');
       await page.waitForFunction(() => /L/.test(document.querySelector('.sg-result').textContent));
       assert.match(await page.textContent('.sg-result'), lang === 'en' ? /We suggest L\./ : /بنقترح مقاس L/);
+      // QA 28 Nov: Arabic-Indic digits typed on a phone are read (the boxes dropped them), and impossible numbers
+      // get no size.
+      await page.fill('.sg-finder input[name=height]', '١٧٨');
+      await page.fill('.sg-finder input[name=weight]', '٧٥');
+      await page.click('.sg-finder button[type=submit]');
+      assert.strictEqual(await page.inputValue('.sg-finder input[name=height]'), '١٧٨', 'the typed digits stay');
+      assert.match(await page.textContent('.sg-result'), lang === 'en' ? /We suggest L\./ : /بنقترح مقاس L/);
+      await page.fill('.sg-finder input[name=height]', '250');
+      await page.fill('.sg-finder input[name=weight]', '300');
+      await page.click('.sg-finder button[type=submit]');
+      assert.match(await page.textContent('.sg-result'), lang === 'en' ? /Check the height and weight/ : /راجع الطول والوزن/);
+      assert.strictEqual(await page.locator('.sg-table tr.sg-hint').count(), 0, 'no size marked');
+      await page.fill('.sg-finder input[name=height]', '178');
+      await page.fill('.sg-finder input[name=weight]', '75');
+      await page.click('.sg-finder button[type=submit]');
       // Nothing to choose on this page (sizes are chosen in the editor).
       assert.strictEqual(await page.$('[data-sg-use]'), null);
       const scroll = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

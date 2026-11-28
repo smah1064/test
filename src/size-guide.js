@@ -36,6 +36,8 @@ const KIDS_HEIGHT = {
 };
 const BABY_HEIGHT = { '0-3': [50, 62], '3-6': [62, 68], '6-12': [68, 80], '12-18': [80, 86] };
 
+// What the finder takes as a real person: adults' height (cm) and weight (kg), a child's and a baby's height (cm).
+const RANGE = { height: [120, 220], weight: [30, 200], kids: [80, 170], baby: [40, 100] };
 const ADULT = ['S', 'M', 'L', 'XL', '2XL', '3XL'];
 const rows = (ids, cols) => Object.fromEntries(ids.map((id, i) => [id, Object.fromEntries(Object.entries(cols).map(([k, v]) => [k, v[i]]))]));
 
@@ -77,6 +79,9 @@ function suggest(productId, sizeIds, by) {
   const h = Number(by.height);
   if (!Number.isFinite(h) || h <= 0) return null;
   if (g.finder === 'kids') {
+    // (A height no child or baby of these sizes has: no answer. QA 28 Nov.)
+    const [lo, hi] = productId === 'onesie' ? RANGE.baby : RANGE.kids;
+    if (h < lo || h > hi) return null;
     const bands = productId === 'onesie' ? BABY_HEIGHT : KIDS_HEIGHT;
     const ids = sizeIds.filter((id) => bands[id]);
     // The first size whose band reaches this height; taller than every band: the biggest.
@@ -84,6 +89,9 @@ function suggest(productId, sizeIds, by) {
   }
   const w = Number(by.weight);
   if (!Number.isFinite(w) || w <= 0) return null;
+  // (Impossible numbers get no size: 50 cm / 20 kg answered S, 250 cm / 300 kg answered 3XL. QA 28 Nov.)
+  const kidsToo = Boolean(g.kidsSize && sizeIds.includes(g.kidsSize));
+  if (h < (kidsToo ? RANGE.kids[0] : RANGE.height[0]) || h > RANGE.height[1] || w < (kidsToo ? 15 : RANGE.weight[0]) || w > RANGE.weight[1]) return null;
   // A child's height asked on a jersey that has a kids size: the kids size.
   if (g.kidsSize && sizeIds.includes(g.kidsSize) && h < 150 && w < 45) return g.kidsSize;
   const ids = sizeIds.filter((id) => ADULT_BANDS[id]);
@@ -104,6 +112,8 @@ function guideFor(product) {
   const ids = product.sizes.map((s) => s.id);
   return {
     approx: true,
+    range: g.finder === 'kids' ? { height: product.id === 'onesie' ? RANGE.baby : RANGE.kids }
+      : { height: [g.kidsSize ? RANGE.kids[0] : RANGE.height[0], RANGE.height[1]], weight: [g.kidsSize ? 15 : RANGE.weight[0], RANGE.weight[1]] },
     fit: g.fit,
     finder: g.finder,
     cols: g.cols,
@@ -114,4 +124,4 @@ function guideFor(product) {
   };
 }
 
-module.exports = { GUIDES, suggest, guideFor, ADULT_BANDS, KIDS_HEIGHT, BABY_HEIGHT };
+module.exports = { GUIDES, RANGE, suggest, guideFor, ADULT_BANDS, KIDS_HEIGHT, BABY_HEIGHT };

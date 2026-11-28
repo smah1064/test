@@ -33,6 +33,11 @@ test('size finder: adults by height and weight (the bigger of the two), kids and
   assert.strictEqual(suggest('tshirt', ADULT, { height: 190, weight: 70 }), '2XL', 'tall and slim: the length decides');
   assert.strictEqual(suggest('tshirt', ADULT, { height: 165, weight: 95 }), '2XL', 'short and heavy: the chest decides');
   assert.strictEqual(suggest('tshirt', ADULT, { height: 210, weight: 140 }), '3XL');
+  // QA 28 Nov: impossible numbers get no size.
+  assert.strictEqual(suggest('tshirt', ADULT, { height: 50, weight: 20 }), null);
+  assert.strictEqual(suggest('tshirt', ADULT, { height: 250, weight: 300 }), null);
+  assert.strictEqual(suggest('kidstee', ['2-4', '4-6', '6-8', '8-10', '10-12'], { height: 250 }), null);
+  assert.strictEqual(suggest('onesie', ['0-3', '3-6', '6-12', '12-18'], { height: 150 }), null);
   assert.strictEqual(suggest('tshirt', ADULT, { height: 178 }), null, 'adults need both');
   assert.strictEqual(suggest('kidstee', ['2-4', '4-6', '6-8', '8-10', '10-12'], { height: 120 }), '6-8');
   assert.strictEqual(suggest('kidstee', ['2-4', '4-6', '6-8', '8-10', '10-12'], { height: 160 }), '10-12');

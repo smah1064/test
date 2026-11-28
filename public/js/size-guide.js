@@ -15,6 +15,9 @@
     if (!g || !by) return null;
     const h = Number(by.height);
     if (!Number.isFinite(h) || h <= 0) return null;
+    // (Numbers no real person has get no size. QA 28 Nov.)
+    const R = g.range || {};
+    if (R.height && (h < R.height[0] || h > R.height[1])) return null;
     const ids = g.rows.map((r) => r.id);
     if (g.finder === 'kids') {
       const list = ids.filter((id) => g.heights && g.heights[id]);
@@ -22,6 +25,7 @@
     }
     const w = Number(by.weight);
     if (!Number.isFinite(w) || w <= 0) return null;
+    if (R.weight && (w < R.weight[0] || w > R.weight[1])) return null;
     if (g.kidsSize && ids.includes(g.kidsSize) && h < 150 && w < 45) return g.kidsSize;
     const list = ids.filter((id) => g.bands && g.bands[id]);
     if (!list.length) return null;
@@ -78,8 +82,8 @@
           <form class="sg-finder" novalidate>
             <h4>${esc(t('sg.finder'))}</h4>
             <div class="sg-fields">
-              <label>${esc(t(kids ? 'sg.childHeight' : 'sg.height'))} <input type="number" inputmode="numeric" min="40" max="220" name="height" required></label>
-              ${kids ? '' : `<label>${esc(t('sg.weight'))} <input type="number" inputmode="numeric" min="3" max="250" name="weight" required></label>`}
+              <label>${esc(t(kids ? 'sg.childHeight' : 'sg.height'))} <input type="text" inputmode="numeric" autocomplete="off" maxlength="5" dir="ltr" name="height" required></label>
+              ${kids ? '' : `<label>${esc(t('sg.weight'))} <input type="text" inputmode="numeric" autocomplete="off" maxlength="5" dir="ltr" name="weight" required></label>`}
               <button type="submit" class="btn btn-sm btn-primary">${esc(t('sg.suggest'))}</button>
             </div>
             <p class="sg-result" role="status" aria-live="polite"></p>
@@ -102,11 +106,16 @@
     box.querySelector('.sg-finder').addEventListener('submit', (e) => {
       e.preventDefault();
       const f = e.target;
-      const latin = (v) => (window.POD.latinDigits ? window.POD.latinDigits(String(v)) : String(v));
+      // Arabic-Indic (٠-٩) and Persian (۰-۹) digits, as phones in Egypt type them, and a comma for a decimal point.
+      const latin = (v) => String(v || '').replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x660)).replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x6f0)).replace(/[٫,]/g, '.').trim();
       const by = { height: latin(f.height.value), weight: f.weight ? latin(f.weight.value) : null };
       const out = box.querySelector('.sg-result');
+      box.querySelectorAll('[data-sg-row]').forEach((r) => r.classList.remove('sg-hint'));
+      const typed = (v) => v !== '' && v != null;
+      if (!typed(by.height) || (!kids && !typed(by.weight))) { out.textContent = t(kids ? 'sg.needHeight' : 'sg.needBoth'); return; }
       const id = suggest(g, by);
-      if (!id) { out.textContent = t(kids ? 'sg.needHeight' : 'sg.needBoth'); return; }
+      // Typed, but not a real height or weight (letters, 50 cm, 300 kg): said so, nothing suggested.
+      if (!id) { out.textContent = t(kids ? 'sg.checkHeight' : 'sg.checkBoth'); return; }
       const label = sizeLabel(product, id);
       out.innerHTML = `${esc(t('sg.result', { size: label }))}${onPick ? ` <button type="button" class="btn btn-sm" data-sg-use="${esc(id)}">${esc(t('sg.use', { size: label }))}</button>` : ''}`;
       box.querySelectorAll('[data-sg-row]').forEach((r) => r.classList.toggle('sg-hint', r.dataset.sgRow === id));

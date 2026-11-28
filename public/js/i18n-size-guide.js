@@ -26,6 +26,8 @@ Object.assign(window.POD_STRINGS, {
   'sg.use': ['Choose {size}', 'اختار {size}'],
   'sg.chosen': ['Size {size} chosen.', 'اخترت مقاس {size}.'],
   'sg.needBoth': ['Type the height and the weight.', 'اكتب الطول والوزن.'],
+  'sg.checkBoth': ['Check the height and weight: they don’t look right.', 'راجع الطول والوزن: الأرقام مش مظبوطة.'],
+  'sg.checkHeight': ['Check the height: it doesn’t look right.', 'راجع الطول: الرقم مش مظبوط.'],
   'sg.needHeight': ['Type the height.', 'اكتب الطول.'],
   'sg.noReturn': ['Every piece is printed for you, so it can’t be exchanged for another size. Please check before ordering.', 'كل قطعة بتتطبع مخصوص ليك، فمش هينفع تتبدل بمقاس تاني. اتأكد قبل ما تطلب.'],
   // The cart: one tick for the clothing's sizes (owner, 28 Nov).
