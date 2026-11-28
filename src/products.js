@@ -3044,9 +3044,9 @@ PRODUCTS.push(
         + `<path d="${FANOUS_PLAQUE}" fill="#e7c48e" stroke="#a7773f" stroke-width="3"/>`
         + '<path d="M236 248 a16 16 0 1 0 14 26 a12 12 0 1 1 -14 -26 z" fill="#5a3418"/><path d="M266 252 l3 7 7 1 -5 5 1 7 -6 -4 -6 4 1 -7 -5 -5 7 -1z" fill="#5a3418"/>'
         + '<rect x="150" y="510" width="200" height="24" rx="3" fill="#8a5a2b"/><rect x="158" y="534" width="22" height="12" fill="#7a4a22"/><rect x="320" y="534" width="22" height="12" fill="#7a4a22"/>'),
-      // The name area under the crescent: about 63 × 45 mm on the 30 cm lantern.
-      printArea: { x: 195, y: 292, w: 110, h: 78 },
-      printWidthIn: cmIn(6.3),
+      // The name area under the crescent: 65 × 45 mm (prototype drawing, docs/lanterns/familyfanous-body.svg).
+      printArea: { x: 195, y: 292, w: 110, h: 76 },
+      printWidthIn: cmIn(6.5),
     }],
     cardArt: '<rect x="200" y="300" width="100" height="16" rx="8" fill="{{I}}"/><rect x="215" y="330" width="70" height="12" rx="6" fill="{{I}}"/>',
     laser: { kind: 'engrave', cut: null },
@@ -3073,9 +3073,9 @@ PRODUCTS.push(
         + '<g fill="none" stroke="#7a4a22" stroke-width="6">' + [260, 330, 400, 470].map((y) => `<path d="M206 ${y} q22 -30 44 0 t44 0"/><circle cx="228" cy="${y + 18}" r="9"/><circle cx="272" cy="${y + 18}" r="9"/>`).join('') + '</g>'
         + `<path d="${ARCH_PLAQUE}" fill="#e7c48e" stroke="#a7773f" stroke-width="3"/>` + FLORET(250, 352) + FLORET(250, 420)
         + '<rect x="150" y="520" width="200" height="24" rx="3" fill="#8a5a2b"/><rect x="158" y="544" width="22" height="10" fill="#7a4a22"/><rect x="320" y="544" width="22" height="10" fill="#7a4a22"/>'),
-      // The name area between the florets: about 61 × 24 mm on the 30 cm lantern.
-      printArea: { x: 210, y: 370, w: 80, h: 32 },
-      printWidthIn: cmIn(6.1),
+      // The name area between the florets: 68 × 20 mm (prototype drawing, docs/lanterns/arabesquelantern-body.svg).
+      printArea: { x: 208, y: 374, w: 84, h: 25 },
+      printWidthIn: cmIn(6.8),
     }],
     cardArt: '<rect x="205" y="380" width="90" height="16" rx="8" fill="{{I}}"/>',
     laser: { kind: 'engrave', cut: null },

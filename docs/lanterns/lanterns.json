@@ -1,0 +1,119 @@
+{
+  "generator": "scripts/lantern-drawings.js",
+  "prototype": true,
+  "warning": {
+    "en": "PROTOTYPE – not for production until the workshop confirms material thickness, joint fit and LED dimensions",
+    "ar": "نموذج أولي – ليس للإنتاج قبل تأكيد الورشة لسُمك الخامة وتركيب الوصلات ومقاس الـ LED"
+  },
+  "params": {
+    "thicknessMm": 3,
+    "slotMm": 3.1,
+    "kerfMm": 0.15,
+    "minWebMm": 3,
+    "ledDiaMm": 40,
+    "ledHeightMm": 20,
+    "ledPocketMm": 41
+  },
+  "models": {
+    "familyfanous": {
+      "title": "Family Fanous",
+      "overallMm": {
+        "W": 134,
+        "D": 134,
+        "H": 300
+      },
+      "bodyMm": {
+        "W": 116,
+        "D": 116,
+        "H": 194
+      },
+      "stackMm": {
+        "base": 24,
+        "body": 194,
+        "cap": 3,
+        "dome": 46,
+        "collar": 3,
+        "ringStem": 4,
+        "ringOD": 26
+      },
+      "heightCheckMm": 300,
+      "plaqueMm": {
+        "w": 96,
+        "h": 133,
+        "kind": "scallop"
+      },
+      "nameAreaMm": {
+        "w": 65,
+        "h": 45,
+        "fromPlaqueTopMm": 62
+      },
+      "led": {
+        "pocketDiaMm": 41,
+        "access": "bayonet hatch under the base (turn 60°)",
+        "bayonetDiaMm": 50
+      },
+      "sheetMm": {
+        "w": 600,
+        "h": 662
+      },
+      "parts": 36,
+      "roofTiers": 4
+    },
+    "arabesquelantern": {
+      "title": "Arabesque Arch Lantern",
+      "overallMm": {
+        "W": 142,
+        "D": 142,
+        "H": 300
+      },
+      "bodyMm": {
+        "W": 122,
+        "D": 122,
+        "H": 188
+      },
+      "stackMm": {
+        "base": 26,
+        "body": 188,
+        "cap": 6,
+        "dome": 52,
+        "collar": 3,
+        "ringStem": 3,
+        "ringOD": 22
+      },
+      "heightCheckMm": 300,
+      "plaqueMm": {
+        "w": 85,
+        "h": 70,
+        "kind": "cartouche"
+      },
+      "nameAreaMm": {
+        "w": 68,
+        "h": 20,
+        "fromPlaqueTopMm": 25
+      },
+      "led": {
+        "pocketDiaMm": 41,
+        "access": "bayonet hatch under the base (turn 60°)",
+        "bayonetDiaMm": 50
+      },
+      "sheetMm": {
+        "w": 600,
+        "h": 882
+      },
+      "parts": 39,
+      "roofTiers": 4
+    }
+  },
+  "files": [
+    "familyfanous-body.svg",
+    "familyfanous-body.dxf",
+    "familyfanous-assembly.svg",
+    "arabesquelantern-body.svg",
+    "arabesquelantern-body.dxf",
+    "arabesquelantern-assembly.svg",
+    "slot-fit-test.svg",
+    "slot-fit-test.dxf",
+    "lanterns.json",
+    "README.md"
+  ]
+}

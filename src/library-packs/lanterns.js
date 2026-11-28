@@ -11,8 +11,8 @@ const { T, D } = require('../library-dsl');
 const categories = [];
 const forProduct = (product, aspect) => (id, category, en, ar, items) => D(id, category, en, ar, items, 'wood', { product, aspect, products: [product] });
 // Print areas (src/products.js): width / height.
-const fanous = forProduct('familyfanous', 110 / 78);
-const arch = forProduct('arabesquelantern', 80 / 32);
+const fanous = forProduct('familyfanous', 110 / 76);
+const arch = forProduct('arabesquelantern', 84 / 25);
 
 const designs = [
   // ---------- Family Fanous: the family name under the crescent and star ----------
@@ -37,16 +37,16 @@ const designs = [
 
   // ---------- Arabesque Arch: one first name on the small plaque ----------
   arch('lan-arch-name-ruqaa', 'ramadan', 'Arabesque lantern: لارا', 'فانوس الأرابيسك: لارا', [
-    T('لارا', 'Aref Ruqaa', 0.3, 0.5, 0.5, { weight: 'bold', sampleName: 'name' }),
+    T('لارا', 'Aref Ruqaa', 0.32, 0.5, 0.5, { weight: 'bold', sampleName: 'name' }),
   ]),
   arch('lan-arch-name-messiri', 'ramadan', 'Arabesque lantern: لارا in El Messiri', 'فانوس الأرابيسك: لارا خط المسيري', [
-    T('لارا', 'El Messiri', 0.28, 0.5, 0.5, { weight: 'bold', sampleName: 'name' }),
+    T('لارا', 'El Messiri', 0.27, 0.5, 0.5, { weight: 'bold', sampleName: 'name' }),
   ]),
   arch('lan-arch-name-en', 'ramadan', 'Arabesque lantern: Lara', 'فانوس الأرابيسك: Lara', [
-    T('Lara', 'Playfair Display', 0.28, 0.5, 0.5, { weight: 'bold', sampleName: 'name' }),
+    T('Lara', 'Playfair Display', 0.26, 0.5, 0.5, { weight: 'bold', sampleName: 'name' }),
   ]),
   arch('lan-arch-name-script', 'ramadan', 'Arabesque lantern: Lara in script', 'فانوس الأرابيسك: Lara خط يد', [
-    T('Lara', 'Pacifico', 0.24, 0.5, 0.5, { sampleName: 'name' }),
+    T('Lara', 'Pacifico', 0.22, 0.5, 0.5, { sampleName: 'name' }),
   ]),
 ];
 
