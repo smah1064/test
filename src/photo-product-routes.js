@@ -1060,7 +1060,8 @@ function mount(app, deps) {
   });
 
   // ---- The owner's approvals list: the photos of a product waiting, behind a key only this server makes ----
-  const picKeySecret = crypto.randomBytes(32);
+  // Stable across restarts and copies when the shop's secret is passed (QA 28 Nov); random only in bare tests.
+  const picKeySecret = deps.picsKey || crypto.randomBytes(32);
   const picKey = (sid) => crypto.createHmac('sha256', picKeySecret).update(`shoot-pics:${sid}`).digest('hex').slice(0, 32);
   app.get('/photo-shoot-pics/:sid/:key/:file', (req, res) => {
     const { sid, key, file } = req.params;

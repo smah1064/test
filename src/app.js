@@ -5821,7 +5821,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     res.type('image/webp').send(fs.readFileSync(file));
   });
   // New product from measurements (round drinkware: straight or tapered cups and tumblers; slice 1 of "from photo").
-  const photoProducts = photoProductRoutes.mount(app, {
+  const photoProducts = photoProductRoutes.mount(app, { picsKey: auth.picsKey,
     store, guard: requireCatalog, HttpError, catalog, getProduct, PRODUCTS, syncCatalog, logCatalog,
     adminProduct, saveProductEdit, approvalsAll: () => approvalsAll(),
     // Slice 2 (from photos): the shoots' folders, pictures, the cut-out, and the catalogue photo folder.

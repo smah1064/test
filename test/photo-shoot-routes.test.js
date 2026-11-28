@@ -61,6 +61,8 @@ async function picture(w, h, { box = [0.3, 0.2, 0.4, 0.6], alpha = false } = {})
 const jpegWithExif = async (w, h) => (await picture(w, h)).jpeg()
   .withMetadata({ orientation: 6 }).withExif({ IFD0: { Copyright: 'secret-gps-owner', Artist: 'phone' } }).toBuffer();
 
+// The shop's stable key (src/security.js Auth.picsKey); the same in every copy of the app.
+const PICS_KEY = Buffer.alloc(32, 7);
 function makeApp() {
   const app = express();
   const syncCatalog = () => catalog.apply(PRODUCTS, store.db.catalog);
@@ -111,6 +113,7 @@ function makeApp() {
   };
   const calibrationCard = { cardPdf: async () => { card.calls++; return Buffer.from('%PDF-1.4 card'); } };
   const r = photoRoutes.mount(app, {
+    picsKey: PICS_KEY,
     store, guard, HttpError, catalog, getProduct, PRODUCTS, syncCatalog, logCatalog,
     adminProduct: (p) => catalog.forAdmin(p, edits()[p.id]),
     saveProductEdit: (req, product, body) => store.mutate((db) => { db.pricing ||= {}; db.pricing[product.id] = body.prices; }),
@@ -474,6 +477,17 @@ test('the product: held for an owner, made from the session as approved, photos 
   const pic = await call(pics[0].url, 'GET', undefined, null);
   assert.strictEqual(pic.status, 200);
   assert.match(pic.headers.get('content-type'), /image\/webp/);
+  // QA 28 Nov: another copy of the app (or the same one after a restart) opens the same link.
+  {
+    const other = makeApp();
+    const s2 = await new Promise((resolve) => { const s = other.app.listen(0, () => resolve(s)); });
+    try {
+      const r2 = await fetch(`http://127.0.0.1:${s2.address().port}${pics[0].url}`);
+      assert.strictEqual(r2.status, 200, 'the link works after a restart');
+    } finally {
+      s2.close();
+    }
+  }
   assert.strictEqual((await call(pics[0].url.replace(/\/[a-f0-9]{32}\//, `/${'0'.repeat(32)}/`), 'GET', undefined, null)).status, 404);
   assert.strictEqual((await call(pics[0].url.replace('front-thumb.webp', 'front.jpg'), 'GET', undefined, null)).status, 404);
   assert.deepStrictEqual(mounted.approvalPics({ action: 'PUT /api/admin/catalog/:id', status: 'pending', path: '/api/admin/catalog/x' }), []);
