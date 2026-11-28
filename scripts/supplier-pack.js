@@ -119,6 +119,15 @@ td.k{background:#f8f9fa;font-weight:700;width:34mm}
 .prod table.sides{font-size:9.5pt;margin:3mm 0 0}
 .prod table.sides th,.prod table.sides td{text-align:center;white-space:normal}
 .prod .ask{margin-top:2.5mm;background:#fff6ef;border-radius:2mm;padding:2.5mm 3.5mm;font-size:9.5pt}
+.prod.compact{padding:3mm;margin-bottom:3mm}
+.prod.compact img.photo{width:26mm;height:32.5mm}
+.prod.compact svg.draw{width:25mm;height:29.3mm}
+.prod.compact figure{font-size:8pt}
+.prod.compact .info .m{font-size:9pt;margin-bottom:.8mm;line-height:1.5}
+.prod.compact table.sides{font-size:9pt;margin-top:2mm}
+.prod.compact table.sides th,.prod.compact table.sides td{padding:1mm 2mm}
+.prod.compact .ask{font-size:9pt;margin-top:2mm;padding:2mm 3mm}
+.prod.compact h3{font-size:11pt;margin-bottom:1mm}
 .chips span{display:inline-block;border:.3mm solid #c9cdd4;border-radius:10mm;padding:0 2.2mm;margin:0 0 1mm 1mm;font-size:9pt;white-space:nowrap}
 .chips i{display:inline-block;width:2.6mm;height:2.6mm;border-radius:50%;border:.2mm solid #8b909a;margin-left:1mm;vertical-align:-.3mm}
 .legend{font-size:9.5pt;color:#5d636e;margin-bottom:4mm}
@@ -151,7 +160,7 @@ async function productBlock(p, pack) {
   const sizes = p.sizes.filter((z) => z.id !== 'one').map((z) => (z.label && z.label.ar) || z.id);
   const extra = (pack.productNotes && pack.productNotes[p.id]) || {};
   const meta = [
-    ['الخامة', esc(extra.material || p.description.ar)],
+    ['الخامة', extra.material || esc(p.description.ar)], // a pack's own material text may carry markup
     [pack.coloursLabel || 'ألوان القطعة', `<span class="chips">${p.colors.map((c) => `<span><i style="background:${c.hex}"></i>${esc(c.name.ar)}</span>`).join('')}</span>`],
     ...(sizes.length && !extra.hideSizes ? [[extra.sizesLabel || 'المقاسات', `<span class="chips">${sizes.map((z) => `<span${/[\u0600-\u06ff]/.test(z) ? '' : ' dir="ltr"'}>${esc(z)}</span>`).join('')}</span>`]] : []),
   ];
@@ -162,10 +171,10 @@ async function productBlock(p, pack) {
   const showDpi = pack.dpiColumn !== false;
   const head = [pack.sideLabel || 'الوجه', pack.areaLabel || 'مقاس الطباعة', ...(anyBleed ? [pack.bleedLabel || 'زيادة القص'] : []), ...(showDpi ? ['دقة الملف'] : []), ...(anySafe ? ['هامش الأمان'] : []), ...(anyZone ? ['مساحة تحريك التصميم'] : [])];
   const body = sides.map(({ s, f }) => [
-    `<b>${esc(s.name.ar)}</b>`, `<b>${wh(f.wCm, f.hCm)}</b>`, ...(anyBleed ? [`${ltr(f.bleedMm)} مم`] : []), ...(showDpi ? [ltr(`${extra.dpi || f.dpi} DPI`)] : []), ...(anySafe ? [f.safeMm ? `${ltr(f.safeMm)} مم` : '-'] : []),
+    `<b>${esc(s.name.ar)}</b>`, `<b>${wh(f.wCm, f.hCm)}</b>`, ...(anyBleed ? [`${ltr(f.bleedMm)} مم`] : []), ...(showDpi ? [extra.noFile ? '-' : ltr(`${extra.dpi || f.dpi} DPI`)] : []), ...(anySafe ? [f.safeMm ? `${ltr(f.safeMm)} مم` : '-'] : []),
     ...(anyZone ? [f.zone ? `${wh(Math.round(f.zone.wCm), Math.round(f.zone.hCm))} تقريبًا` : 'مكان ثابت'] : []),
   ]);
-  return `<div class="prod">
+  return `<div class="prod${pack.compact ? ' compact' : ''}">
     <h3>${esc(p.name.ar)} <span class="small" dir="ltr">(${esc(p.name.en)})</span></h3>
     <div class="top">
       ${photo ? `<img class="photo" src="${photo}" alt="">` : ''}
