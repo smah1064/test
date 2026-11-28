@@ -1,11 +1,6 @@
 'use strict';
-/* The parts every supplier pack shares: who we are, what we ask for, and the general questions. Never names ebda3 or its website. */
+/* The parts every supplier pack shares: what we ask for and the general questions. They do not say who we are or describe the website (owner, 28 Nov 2026). */
 module.exports = (opts) => ({
-  about:
-    (opts.brand && (opts.brand.name.ar || opts.brand.name.en) ? `<b>${opts.brand.name.ar || opts.brand.name.en}</b> بتستقبل` : 'بنستقبل') +
-    ' طلبات طباعة حسب الطلب من أفراد وشركات: كل قطعة بتتنفّذ بتصميم العميل الخاص، وإحنا بنجهّز ملف الطباعة ونبعته للتنفيذ. ' +
-    'أغلب الشغل قطعة واحدة أو كميات صغيرة ومتكررة على مدار اليوم، ومعاها أحيانًا طلبات كميات للشركات والمناسبات. ' +
-    'العميل بيدفع مقدمًا قبل التنفيذ، فالجودة والالتزام بالميعاد أساس الشغل بينّا.',
   steps: (pack) => [
     'راجعوا مواصفات الملفات (قسم ١) ومقاسات الطباعة لكل منتج (قسم ٢).',
     'جاوبوا على الأسئلة (قسم ٣ و٤): اكتبوا على الملف نفسه أو ابعتوا الإجابات بأرقام الأسئلة على واتساب.',

@@ -7,9 +7,10 @@
  *
  *   NODE_PATH=$(npm root -g) node scripts/supplier-pack.js <method | all> [--brand <id>] [--contact "name · phone"] [--no-prices]
  *
- * The packs never name ebda3 (owner, 28 Nov 2026: he stays hidden and sends them under a partner's name). A brand
- * is scripts/supplier-packs/brands/<id>.json: { "name": { "ar", "en" }, "logo": "file next to the json (svg/png)",
- * "site": "example.com", "contact": "..." }, all optional. Without --brand the pack carries no name or logo.
+ * Owner, 28 Nov 2026: the packs carry the Arabic ebda3 logo but do not say who we are (no "about us", no
+ * description of the website). A brand is scripts/supplier-packs/brands/<id>.json: { "name": { "ar", "en" },
+ * "logo": "path from the json's folder (svg/png)", "site": "example.com", "contact": "..." }, all optional.
+ * The default brand is ebda3.
  *
  * Writes docs/supplier-packs/<brand | unbranded>/<method>-ar.pdf and, for methods with a test print,
  * <method>-test-*.png next to it. Needs Playwright (pre-installed globally).
@@ -184,7 +185,6 @@ async function buildHtml(pack, opts) {
   <section class="cover">
     ${brand.logoUri ? `<img class="logo" src="${brand.logoUri}" alt="">` : brand.name.ar || brand.name.en ? `<div class="brandname">${esc(brand.name.ar || brand.name.en)}${brand.name.ar && brand.name.en ? ` <span dir="ltr">${esc(brand.name.en)}</span>` : ''}</div>` : ''}
     <div class="band"><div class="kicker">ملف المواصفات الفنية للموردين</div><h1>${pack.title}</h1><div class="sub">${pack.subtitle}</div></div>
-    <div class="box"><h3>مين إحنا</h3><p>${general.about}</p></div>
     <div class="box"><h3>المطلوب منكم</h3><ol class="steps">${general.steps(pack).map((s) => `<li>${s}</li>`).join('')}</ol></div>
     <div class="box tint"><h3>ليه الملف ده</h3><p>${general.why}</p></div>
     <div class="foot">${contact ? `للتواصل: <b>${esc(contact)}</b> · ` : ''}${brand.site ? `${ltr(esc(brand.site))} · ` : ''}إصدار ${ltr(opts.date)} · ${products.length} منتجات في الملف ده</div>
@@ -242,7 +242,7 @@ async function testPrint(browser, pack, opts) {
   const flag = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : ''; };
   const all = fs.readdirSync(PACKS).filter((f) => f.endsWith('.js') && f !== 'general.js').map((f) => f.slice(0, -3));
   if (!which || (which !== 'all' && !all.includes(which))) throw new Error(`usage: supplier-pack.js <${all.join(' | ')} | all> [--contact "..."] [--no-prices]`);
-  const brandId = flag('--brand');
+  const brandId = flag('--brand') || 'ebda3';
   const brandDir = path.join(PACKS, 'brands');
   const brand = { name: {}, ...(brandId ? JSON.parse(fs.readFileSync(path.join(brandDir, `${brandId}.json`), 'utf8')) : {}) };
   brand.name = brand.name || {};
@@ -252,7 +252,7 @@ async function testPrint(browser, pack, opts) {
     if (!type) throw new Error(`logo must be svg, png, jpg or webp: ${brand.logo}`);
     brand.logoUri = `data:${type};base64,${fs.readFileSync(f).toString('base64')}`;
   }
-  const out = path.join(OUT, brandId || 'unbranded');
+  const out = path.join(OUT, brandId);
   const opts = { brand, out, contact: flag('--contact'), prices: !args.includes('--no-prices'), date: new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' }) };
   const { chromium } = require('playwright');
   const browser = await chromium.launch();
