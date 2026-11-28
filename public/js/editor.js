@@ -7521,6 +7521,14 @@
         if (!overlapAt && issues.some((i) => i.overlap)) overlapAt = s.id;
         issues.forEach((i) => problems.push(`• ${tr(s.name)}: ${t(i.key === 'check.outside' ? 'check.outsideList' : i.key, { ...i.params, dpi: i.params.dpi, pt: i.params.pt })}`));
         issues.filter((i) => i.key === 'check.tooManyPieces' || i.key === 'check.lettersSmall').forEach((i) => stops.push(t(i.key, i.params)));
+        // A name plaque (Ramadan lanterns): the name must fit inside it, in no more lines than it holds (owner, via the
+        // CNC & Laser chat, 28 Nov).
+        const plate = st.product.nameplate;
+        if (plate && plate.fitText) {
+          if (issues.some((i) => (i.key === 'check.cut' || i.key === 'check.outside') && i.obj && isText(i.obj))) stops.push(t('check.nameplateFit'));
+          const lines = canvas.getObjects().filter((o) => isText(o) && o.visible !== false && String(o.text || '').trim()).reduce((n, o) => n + String(o.text).split('\n').filter((l) => l.trim()).length, 0);
+          if (plate.lines && lines > plate.lines) stops.push(t('check.nameplateLines', { max: POD.num(plate.lines) }));
+        }
         clientChecks.push(...(await reportChecks(s.id, issues)));
         sidesPayload[s.id] = { editor: { version: fabric.version, objects: await inlineImages(st.designs[s.id]), ...(st.offsets[s.id] ? { offset: st.offsets[s.id] } : {}), ...(st.pattern ? { pattern: { ...st.pattern } } : {}), area: xywh(baseArea(s.id)) } };
         const withFields = useMerge && mergeSides.some((x) => x.id === s.id);

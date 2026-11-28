@@ -2316,7 +2316,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     res.set('Cache-Control', 'no-cache');
     const all = library.visible();
     // (The editor's lists never offer licensed artwork: it is only ever ordered from its own page, unchanged.)
-    const designs = all.filter((d) => libraryOpenFor(req, d) && !(req.query.for === 'editor' && d.licensed));
+    const designs = all.filter((d) => libraryOpenFor(req, d) && !(req.query.for === 'editor' && d.licensed))
+      // (A design offered only on products that are paused or drafts — the Ramadan lanterns — is not listed.)
+      .filter((d) => !Array.isArray(d.products) || !d.products.length || d.products.some((id) => catalog.visible(getProduct(id))));
     // (A draft licensed collection's category isn't named to anyone who can't see its designs.)
     const shownCats = new Set(designs.map((d) => d.category));
     const closed = new Set(all.filter((d) => !shownCats.has(d.category) && licensed.isDraft(d)).map((d) => d.category));
