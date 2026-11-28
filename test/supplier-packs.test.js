@@ -19,16 +19,16 @@ test('every supplier pack lists exactly the products of its method', () => {
   }
 });
 
-test('supplier packs have their texts, and never promise cash on delivery or call the site a shop', () => {
+test('supplier packs have their texts, never name ebda3, and never promise cash on delivery or call the site a shop', () => {
   const general = require(path.join(DIR, 'general.js'));
   for (const prices of [true, false]) {
-    const g = general({ prices });
+    const g = general({ prices, brand: { name: { ar: 'اسم', en: 'Name' } } });
     assert.strictEqual(g.questions.some((q) => /الأسعار/.test(q.q)), prices);
     for (const [id, pack] of packs) {
       for (const k of ['title', 'subtitle', 'short', 'filesIntro']) assert.ok(pack[k], `${id}.${k}`);
       assert.ok(pack.files.length && pack.questions.length && pack.confirm.length);
-      const all = JSON.stringify([pack, g, g.steps(pack)]);
-      assert.doesNotMatch(all, /محل|عند الاستلام/);
+      const all = JSON.stringify([pack, g, g.steps(pack), pack.test ? pack.test.html('Name') : '']);
+      assert.doesNotMatch(all, /محل|عند الاستلام|ebda3|إبداع|الموقع/i);
     }
   }
 });

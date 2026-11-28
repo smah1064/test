@@ -13,11 +13,11 @@ const area = (id, sideId = 'front') => {
 // The test print: 20 × 25 cm, transparent background. Sizes are in cm through --cm.
 const SW = [['#00aeef', 'C'], ['#ec008c', 'M'], ['#fff200', 'Y'], ['#000000', 'K'], ['#ed1c24', 'R'], ['#00a651', 'G'], ['#2e3192', 'B'], ['#f7941d', 'Orange'], ['#f5c9a8', 'Skin 1'], ['#a86b45', 'Skin 2']];
 const u = (n) => `calc(var(--cm)*${n})`;
-const TEST_HTML = `
+const TEST_HTML = (brandName) => `
 <div style="position:relative;width:${u(20)};height:${u(25)};color:#000">
   <div style="position:absolute;inset:0;border:${u(0.05)} solid #000"></div>
   <div style="position:absolute;left:${u(0.6)};top:${u(0.4)};right:${u(0.6)};display:flex;justify-content:space-between;align-items:baseline">
-    <b style="font-size:${u(0.75)}">ebda3.me · DTG test</b><span style="font-size:${u(0.4)}">frame = 20.0 × 25.0 cm · 300 DPI · sRGB</span></div>
+    <b style="font-size:${u(0.75)}">${brandName ? `${brandName} · ` : ''}DTG test</b><span style="font-size:${u(0.4)}">frame = 20.0 × 25.0 cm · 300 DPI · sRGB</span></div>
 
   <div style="position:absolute;left:${u(0.6)};top:${u(1.9)};display:flex;gap:${u(0.2)}">
     ${SW.map(([c, n]) => `<div style="width:${u(1.7)};text-align:center;font-size:${u(0.3)}"><div style="height:${u(1.7)};background:${c}"></div>${n}</div>`).join('')}</div>

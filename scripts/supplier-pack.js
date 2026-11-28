@@ -5,10 +5,14 @@
  * print size, margins, colours, sizes: read from src/products.js, so it always matches the site),
  * the files the dashboard produces for it, and the questions the printer should answer.
  *
- *   NODE_PATH=$(npm root -g) node scripts/supplier-pack.js <method | all> [--contact "name · phone"] [--no-prices]
+ *   NODE_PATH=$(npm root -g) node scripts/supplier-pack.js <method | all> [--brand <id>] [--contact "name · phone"] [--no-prices]
  *
- * Writes docs/supplier-packs/ebda3-<method>-ar.pdf and, for methods with a test print,
- * docs/supplier-packs/test-files/<method>-test-*.png. Needs Playwright (pre-installed globally).
+ * The packs never name ebda3 (owner, 28 Nov 2026: he stays hidden and sends them under a partner's name). A brand
+ * is scripts/supplier-packs/brands/<id>.json: { "name": { "ar", "en" }, "logo": "file next to the json (svg/png)",
+ * "site": "example.com", "contact": "..." }, all optional. Without --brand the pack carries no name or logo.
+ *
+ * Writes docs/supplier-packs/<brand | unbranded>/<method>-ar.pdf and, for methods with a test print,
+ * <method>-test-*.png next to it. Needs Playwright (pre-installed globally).
  * The text of each pack lives in scripts/supplier-packs/<method>.js.
  */
 const fs = require('fs');
@@ -89,7 +93,9 @@ p{margin:0 0 2.5mm}
 .cover .band{background:#1b1d21;color:#fff;border-radius:4mm;padding:12mm 10mm;margin-bottom:8mm}
 .cover .band .kicker{color:#ffb38a;font-weight:700;font-size:11pt;margin-bottom:2mm}
 .cover .band .sub{font-size:12pt;color:#d6d9de}
-.cover img.logo{height:16mm;margin-bottom:8mm;align-self:flex-start}
+.cover img.logo{height:20mm;max-width:80mm;object-fit:contain;margin-bottom:8mm;align-self:flex-start}
+.cover .brandname{font-size:20pt;font-weight:700;margin-bottom:8mm}
+.cover .brandname span{font-size:13pt;color:#5d636e;font-weight:400;margin-right:3mm}
 .box{border:.3mm solid #d5d8de;border-radius:3mm;padding:4mm 5mm;margin-bottom:4mm;break-inside:avoid}
 .box.tint{background:#fff6ef;border-color:#f3c4a4}
 .steps{margin:0;padding:0 5mm 0 0}
@@ -167,20 +173,21 @@ async function productBlock(p, pack) {
 
 async function buildHtml(pack, opts) {
   const products = pack.products.map((id) => PRODUCTS.find((p) => p.id === id)).filter(Boolean);
-  const logo = fs.readFileSync(path.join(ROOT, 'public', 'img', 'logo-ar-header.svg')).toString('base64');
+  const brand = opts.brand;
   const general = require(path.join(PACKS, 'general.js'))(opts);
+  const contact = opts.contact || brand.contact;
   let n = 0;
   const qs = (list) => list.map((q) => question(q, ++n)).join('');
   const blocks = [];
   for (const p of products) blocks.push(await productBlock(p, pack));
   return latinDigits(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>${esc(pack.title)}</title><style>${fontFace()}${CSS}</style></head><body>
   <section class="cover">
-    <img class="logo" src="data:image/svg+xml;base64,${logo}" alt="إبداع">
+    ${brand.logoUri ? `<img class="logo" src="${brand.logoUri}" alt="">` : brand.name.ar || brand.name.en ? `<div class="brandname">${esc(brand.name.ar || brand.name.en)}${brand.name.ar && brand.name.en ? ` <span dir="ltr">${esc(brand.name.en)}</span>` : ''}</div>` : ''}
     <div class="band"><div class="kicker">ملف المواصفات الفنية للموردين</div><h1>${pack.title}</h1><div class="sub">${pack.subtitle}</div></div>
     <div class="box"><h3>مين إحنا</h3><p>${general.about}</p></div>
     <div class="box"><h3>المطلوب منكم</h3><ol class="steps">${general.steps(pack).map((s) => `<li>${s}</li>`).join('')}</ol></div>
     <div class="box tint"><h3>ليه الملف ده</h3><p>${general.why}</p></div>
-    <div class="foot">${opts.contact ? `للتواصل: <b>${esc(opts.contact)}</b> · ` : ''}الموقع: ${ltr('ebda3.me')} · إصدار ${ltr(opts.date)} · ${products.length} منتجات في الملف ده</div>
+    <div class="foot">${contact ? `للتواصل: <b>${esc(contact)}</b> · ` : ''}${brand.site ? `${ltr(esc(brand.site))} · ` : ''}إصدار ${ltr(opts.date)} · ${products.length} منتجات في الملف ده</div>
   </section>
 
   <section class="sec"><h2>١ · الملفات اللي بنبعتها لكم</h2>
@@ -198,7 +205,7 @@ async function buildHtml(pack, opts) {
 
   <section class="sec"><h2>٣ · أسئلة عامة عن الورشة</h2>${qs(general.questions)}</section>
   <section class="sec"><h2>٤ · أسئلة ${pack.short}</h2>${qs(pack.questions)}</section>
-  ${pack.confirm && pack.confirm.length ? `<section class="sec"><h2>٥ · نقط محتاجين تأكيدكم عليها</h2><p>الأرقام دي هي اللي الموقع شغال بيها دلوقتي. لو عندكم رقم أنسب لماكيناتكم اكتبوه، وإحنا نعدّل الموقع عليه.</p>
+  ${pack.confirm && pack.confirm.length ? `<section class="sec"><h2>٥ · نقط محتاجين تأكيدكم عليها</h2><p>الأرقام دي هي اللي ملفاتنا متجهّزة عليها دلوقتي. لو عندكم رقم أنسب لماكيناتكم اكتبوه، وإحنا نعدّل ملفاتنا عليه.</p>
     <table><tr><th>البند</th><th>عندنا دلوقتي</th><th>مناسب؟ / الأنسب عندكم</th></tr>${pack.confirm.map(([k, v]) => `<tr class="fill"><td class="k">${k}</td><td>${v}</td><td style="width:60mm"></td></tr>`).join('')}</table>
     ${pack.test ? `<div class="box tint"><h3>ملف التجربة</h3><p>${pack.test.text}</p></div>` : ''}
     <div class="box"><h3>ملاحظات إضافية منكم</h3>${'<div class="line"></div>'.repeat(5)}</div>
@@ -208,8 +215,9 @@ async function buildHtml(pack, opts) {
 
 // ---------- Test print ----------
 /** A transparent PNG at exactly wCm × hCm and 300 DPI, drawn from the pack's HTML (so it uses the site's fonts). */
-async function testPrint(browser, pack) {
-  const { wCm, hCm, html } = pack.test;
+async function testPrint(browser, pack, opts) {
+  const { wCm, hCm } = pack.test;
+  const html = pack.test.html(opts.brand.name.en || '');
   const W = Math.round((wCm / 2.54) * 300);
   const H = Math.round((hCm / 2.54) * 300);
   const page = await browser.newPage({ viewport: { width: Math.ceil(W / 2), height: Math.ceil(H / 2) }, deviceScaleFactor: 2 });
@@ -219,8 +227,7 @@ async function testPrint(browser, pack) {
   const shot = await page.screenshot({ omitBackground: true, type: 'png' });
   await page.close();
   const exact = await sharp(shot).resize(W, H, { fit: 'fill' }).png().toBuffer();
-  const dir = path.join(OUT, 'test-files');
-  fs.mkdirSync(dir, { recursive: true });
+  const dir = opts.out;
   const base = `${pack.id}-test-${wCm}x${hCm}cm`;
   const out = [[`${base}.png`, await printfiles.finalizePrintPng(exact, 300)]];
   if (pack.test.white) out.push([`${base}-white-underbase.png`, await printfiles.dtgUnderbase(exact, 300, 2)]);
@@ -235,25 +242,36 @@ async function testPrint(browser, pack) {
   const flag = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : ''; };
   const all = fs.readdirSync(PACKS).filter((f) => f.endsWith('.js') && f !== 'general.js').map((f) => f.slice(0, -3));
   if (!which || (which !== 'all' && !all.includes(which))) throw new Error(`usage: supplier-pack.js <${all.join(' | ')} | all> [--contact "..."] [--no-prices]`);
-  const opts = { contact: flag('--contact'), prices: !args.includes('--no-prices'), date: new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' }) };
+  const brandId = flag('--brand');
+  const brandDir = path.join(PACKS, 'brands');
+  const brand = { name: {}, ...(brandId ? JSON.parse(fs.readFileSync(path.join(brandDir, `${brandId}.json`), 'utf8')) : {}) };
+  brand.name = brand.name || {};
+  if (brand.logo) {
+    const f = path.join(brandDir, brand.logo);
+    const type = { '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' }[path.extname(f).toLowerCase()];
+    if (!type) throw new Error(`logo must be svg, png, jpg or webp: ${brand.logo}`);
+    brand.logoUri = `data:${type};base64,${fs.readFileSync(f).toString('base64')}`;
+  }
+  const out = path.join(OUT, brandId || 'unbranded');
+  const opts = { brand, out, contact: flag('--contact'), prices: !args.includes('--no-prices'), date: new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' }) };
   const { chromium } = require('playwright');
   const browser = await chromium.launch();
   try {
-    fs.mkdirSync(OUT, { recursive: true });
+    fs.mkdirSync(out, { recursive: true });
     for (const id of which === 'all' ? all : [which]) {
       const pack = { id, ...require(path.join(PACKS, `${id}.js`)) };
       const page = await browser.newPage();
       await page.setContent(await buildHtml(pack, opts), { waitUntil: 'load' });
       await page.evaluate(() => document.fonts.ready);
-      const file = path.join(OUT, `ebda3-${id}-ar.pdf`);
+      const file = path.join(out, `${id}-ar.pdf`);
       await page.pdf({
         path: file, format: 'A4', printBackground: true, displayHeaderFooter: true, margin: { top: '14mm', bottom: '16mm', left: '13mm', right: '13mm' },
         headerTemplate: '<span></span>',
-        footerTemplate: `<div style="width:100%;font-size:7pt;color:#777;padding:0 13mm;display:flex;justify-content:space-between;font-family:sans-serif"><span>ebda3.me · ${id.toUpperCase()} supplier pack · ${opts.date}</span><span><span class="pageNumber"></span> / <span class="totalPages"></span></span></div>`,
+        footerTemplate: `<div style="width:100%;font-size:7pt;color:#777;padding:0 13mm;display:flex;justify-content:space-between;font-family:sans-serif"><span>${esc(brand.name.en || '')}${brand.name.en ? ' · ' : ''}${id.toUpperCase()} supplier pack · ${opts.date}</span><span><span class="pageNumber"></span> / <span class="totalPages"></span></span></div>`,
       });
       await page.close();
       console.log('wrote', path.relative(ROOT, file));
-      if (pack.test) for (const name of await testPrint(browser, pack)) console.log('wrote', path.join('docs/supplier-packs/test-files', name));
+      if (pack.test) for (const name of await testPrint(browser, pack, opts)) console.log('wrote', path.relative(ROOT, path.join(out, name)));
     }
   } finally {
     await browser.close();
