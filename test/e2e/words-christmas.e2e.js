@@ -31,11 +31,8 @@ test('"It’s cold outside": the drawing without its words, then the words as te
     assert.deepStrictEqual(objs.map((o) => o.type), ['group', 'i-text', 'i-text', 'i-text']);
     assert.strictEqual(objs[0].name, 'art:cold-outside-nowords');
     assert.deepStrictEqual(objs.slice(1).map((o) => [o.text, o.font, o.fill]), [['It’s', 'Cookie', '#16181d'], ['Cold', 'Cookie', '#16181d'], ['Outside', 'Cookie', '#16181d']]);
-    // Top to bottom, each on the drawing where it was drawn.
-    const art = objs[0].box;
-    for (const t of objs.slice(1)) {
-      assert.ok(t.centre.x > art.left && t.centre.x < art.left + art.width && t.centre.y > art.top && t.centre.y < art.top + art.height, t.text);
-    }
+    // Top to bottom. (The drawing's box hugs its own pieces now, not the whole quote's frame: QA 28 Nov.)
+    assert.ok(await page.evaluate(() => window.__editor.canvas.getObjects()[0].artTrim), 'the drawing is cut to its pieces');
     assert.ok(objs[1].centre.y < objs[2].centre.y && objs[2].centre.y < objs[3].centre.y);
     // Double-click "Cold" and type.
     const at = await page.evaluate(() => {
