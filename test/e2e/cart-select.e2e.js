@@ -308,7 +308,7 @@ test('an unticked item whose number changes into a copy (new design) stays untic
   }
 });
 
-test('a plain item (kind \'blank\') in the cart: ticked, no − / +, no editor, its fixed number shown; unticking it changes the sums', { timeout: 180000 }, async () => {
+test('a plain item (kind \'blank\') in the cart: ticked, with − / +, no editor, its number shown; unticking it changes the sums', { timeout: 180000 }, async () => {
   const { chromium } = loadPlaywright();
   const srv = await startServer();
   const browser = await chromium.launch();
@@ -337,7 +337,8 @@ test('a plain item (kind \'blank\') in the cart: ticked, no − / +, no editor, 
       assert.strictEqual(s.subtotal, await page.evaluate((x) => POD.money(x), glass.price + cup.price));
       // No − / + and no editor for the plain item (the shop refuses − / + for it); the mug keeps its own.
       const g = page.locator('.cart-entry').nth(0);
-      assert.strictEqual(await g.locator('[data-qstep]').count(), 0);
+      // Its − / + (owner, 28 Nov: plain glasses get the cart's buttons too).
+      assert.strictEqual(await g.locator('[data-qstep]').count(), 2);
       assert.strictEqual(await g.locator('a[href^="/editor"]').count(), 0);
       const meta = await g.locator('.meta').textContent();
       assert.match(meta, lang === 'en' ? /3 pieces/ : /٣ قطع/);
