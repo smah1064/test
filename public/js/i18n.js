@@ -595,7 +595,7 @@ window.POD_STRINGS = {
   'emb.noteN': ['Embroidered with thread on a {w} × {h} cm area, up to {colours}. Bold text and simple logos with flat colours look best; photos and gradients can\'t be stitched.', 'بيتطرّز بالخيط على مساحة {w} × {h} سم، لحد {colours}. الكلام التخين واللوجوهات البسيطة بألوان سادة بتطلع أحلى حاجة؛ الصور والتدرجات مش بتتطرز.'],
   'check.cutPieces': ['The cut would fall apart into {n} pieces. Make the letters and shapes touch (move them closer, or add a bar under the words) so it comes out as one piece.', 'القص هيطلع {n} حتت منفصلة. خلي الحروف والأشكال لازقة في بعض (قربها، أو حط خط تحت الكلام) عشان تطلع قطعة واحدة.'],
   'check.nameplateFit': ['The name doesn\'t fit the plaque: make it shorter or smaller so it is all inside the dashed box.', 'الاسم مش داخل في اللوحة: صغّره أو قصّره لحد ما يبقى كله جوه المربع المتقطع.'],
-  'check.nameplateLines': ['The plaque holds {max} line(s) of text: put the name on fewer lines.', 'اللوحة بتاخد {max} سطر بس: خلّي الاسم في سطور أقل.'],
+  'check.nameplateLines': ['Too many lines for the plaque: put the name on fewer lines.', 'السطور كتير على اللوحة: خلّي الاسم في سطور أقل.'],
   'check.tooManyPieces': ['{n} letters: this size is up to {max}. Use fewer letters or pick a bigger set.', '{n} حروف: المقاس ده لحد {max}. قلّل الحروف أو اختار مقاس أكبر.'],
   'check.lettersSmall': ['{name}: the letters must fill the height you chose (make the text as tall as the area).', '{name}: الحروف لازم تكون بطول المقاس اللي اخترته (كبّر الكلام لحد ما ياخد طول المساحة).'],
   'pf.tooManyPieces': ['{n} letters, but this size is up to {max}.', '{n} حروف، والمقاس ده لحد {max}.'],

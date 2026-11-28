@@ -7527,7 +7527,7 @@
         if (plate && plate.fitText) {
           if (issues.some((i) => (i.key === 'check.cut' || i.key === 'check.outside') && i.obj && isText(i.obj))) stops.push(t('check.nameplateFit'));
           const lines = canvas.getObjects().filter((o) => isText(o) && o.visible !== false && String(o.text || '').trim()).reduce((n, o) => n + String(o.text).split('\n').filter((l) => l.trim()).length, 0);
-          if (plate.lines && lines > plate.lines) stops.push(t('check.nameplateLines', { max: POD.num(plate.lines) }));
+          if (plate.lines && lines > plate.lines) stops.push(t('check.nameplateLines'));
         }
         clientChecks.push(...(await reportChecks(s.id, issues)));
         sidesPayload[s.id] = { editor: { version: fabric.version, objects: await inlineImages(st.designs[s.id]), ...(st.offsets[s.id] ? { offset: st.offsets[s.id] } : {}), ...(st.pattern ? { pattern: { ...st.pattern } } : {}), area: xywh(baseArea(s.id)) } };
