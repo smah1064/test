@@ -127,7 +127,8 @@ test('1. print PNG size matches the physical print size (every product, every pr
   const page = await openEditor(ctx, srv.base, 'tshirt');
   const results = [];
   try {
-    for (const product of PRODUCTS.filter((p) => !p.kind)) {
+    // (Plain glasses sold without printing have no editor and nothing to print: owner, 28 Nov.)
+    for (const product of PRODUCTS.filter((p) => !p.kind && !p.blank)) {
       // One size per distinct printScale; garments (print box resized per size) also their biggest size.
       const seen = new Set();
       const sizes = product.sizes.filter((z) => {
