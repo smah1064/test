@@ -74,3 +74,17 @@ test('no cash-on-delivery promise and no «مجسم» (it reads as «مج», the
     assert.ok(!all.includes('مجسم'), id);
   }
 });
+
+test('the door hanger is cut as a true circle at 30 and 40 cm; the invitation is A5 (14.8 × 21 cm)', async () => {
+  const laserFiles = require('../src/laser');
+  const sharp = require('sharp');
+  const hanger = byId('doorhanger');
+  assert.ok(hanger.laser.radiusMm >= 200, 'half of the 40 cm board or more');
+  // A blank 40 cm board: its cut is two half-circle arcs' worth (four arcs of radius 200), no straight sides.
+  const png = await sharp({ create: { width: 400, height: 400, channels: 4, background: { r: 255, g: 255, b: 255, alpha: 0 } } }).png().toBuffer();
+  const svg = await laserFiles.cutSvg(png, { widthMm: 400, heightMm: 400, laser: hanger.laser });
+  assert.match(svg, /A200 200 0 0 1/);
+  assert.doesNotMatch(svg, /H(?!200)\d/, 'no straight edges');
+  const a = byId('woodinvite').sides[0].printArea;
+  assert.ok(Math.abs((14.8 * a.h) / a.w - 21) < 0.02, `A5 height ${((14.8 * a.h) / a.w).toFixed(2)} cm`);
+});

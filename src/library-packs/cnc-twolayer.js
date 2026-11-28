@@ -33,7 +33,7 @@ const hanger = forProduct('doorhanger', 1, 'olive');
 const keys = forProduct('keyholder', 400 / 160, 'walnut');
 const light = forProduct('ramadanlight', 1, 'wood');
 const couple = forProduct('couplestand', 1, 'wood');
-const invite = forProduct('woodinvite', 210 / 297, 'maple');
+const invite = forProduct('woodinvite', 210 / 298, 'maple');
 
 // Our own solid ornaments.
 const art = (id) => `/img/art/svg/twolayer-${id}.svg`;

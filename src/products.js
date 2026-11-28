@@ -2816,7 +2816,8 @@ const PANEL = { x: 140, y: 60, w: 220, h: 440, rx: 6 };
 const HANGER = { x: 100, y: 170, w: 300, h: 300, rx: 150 };
 const KEYS = { x: 50, y: 190, w: 400, h: 160, rx: 12 };
 const SCENE = { x: 75, y: 70, w: 350, h: 350 };
-const INVITE = { x: 145, y: 80, w: 210, h: 297, rx: 4 };
+// A5 is 148 × 210 mm, so 210 wide is 298 high (297 made the card 20.9 cm).
+const INVITE = { x: 145, y: 80, w: 210, h: 298, rx: 4 };
 // The jute rope a door hanger hangs from, and the hooks under a key holder (drawn over the design).
 const ROPE = '<path d="M250 40 L150 236 M250 40 L350 236" fill="none" stroke="#b39a6a" stroke-width="5" stroke-linecap="round"/><circle cx="250" cy="40" r="7" fill="#8d939b"/>';
 const HOOKS = (n, x0, x1, y) => Array.from({ length: n }, (_, i) => {
@@ -2880,7 +2881,8 @@ PRODUCTS.push(
       printWidthIn: cmIn(30),
     }],
     cardArt: '<circle cx="250" cy="320" r="118" fill="none" stroke="{{I}}" stroke-width="6"/><path d="M175 320 q40 -50 75 0 t75 0" fill="none" stroke="{{I}}" stroke-width="14" stroke-linecap="round"/><rect x="200" y="365" width="100" height="10" rx="5" fill="{{I}}"/>',
-    laser: { kind: 'engrave', cut: 'rounded', radiusMm: 150 },
+    // A true circle at every size: the cut's corner radius is clamped to half the board (src/laser.js roundedRect).
+    laser: { kind: 'engrave', cut: 'rounded', radiusMm: 1000 },
   },
   {
     id: 'keyholder',
