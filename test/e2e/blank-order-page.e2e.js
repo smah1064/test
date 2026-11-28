@@ -30,6 +30,14 @@ test('order page: plain glasses read as pieces, with no print side or proof', { 
       assert.doesNotMatch(text, /print file is missing|could not be read/i, text);
       assert.strictEqual(await page.$('.cart-proof-title'), null, 'no proof box for a plain glass');
       assert.ok(await page.isHidden('#proof-ok'), 'nothing to tick');
+      // The cart's − / + (owner, 28 Nov): 1 → 2 glasses, the price doubles.
+      const before = await page.evaluate(() => JSON.parse(localStorage.getItem('pod-cart-v2') || '[]')[0]);
+      assert.ok(await page.$('[data-qstep="1"]'), 'a + button for the plain glass');
+      await page.click('[data-qstep="1"]');
+      await page.waitForFunction((p) => { const c = JSON.parse(localStorage.getItem('pod-cart-v2') || '[]')[0]; return c && c.price === p * 2; }, before.price, { timeout: 15000 });
+      const after = await page.evaluate(() => JSON.parse(localStorage.getItem('pod-cart-v2') || '[]')[0]);
+      assert.strictEqual(after.kind, 'blank');
+      assert.strictEqual(after.designId, before.designId, 'the same item, changed in place');
       assert.deepStrictEqual(errors, []);
       await ctx.close();
     }

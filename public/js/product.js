@@ -302,6 +302,8 @@
       const cart = POD.getCart();
       cart.unshift({ // (the newest on top of the cart: owner, 27 Nov)
         designId: done.id,
+        // (The cart's key to change how many with − / +: owner, 28 Nov.)
+        ...(typeof done.designKey === 'string' ? { designKey: done.designKey } : {}),
         productId: product.id,
         productName: done.productName || product.name,
         colorName: (done.color && done.color.name) || color.name,

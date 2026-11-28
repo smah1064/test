@@ -2958,7 +2958,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const off = catalog.unavailable(product, { colorId: colorDef.id, sizeId: sizeDef.id });
     if (off) throw new HttpError(409, off, { name });
     const qty = body.qty === undefined ? 1 : Number(body.qty);
-    if (!Number.isInteger(qty) || qty < 1 || qty > 20) throw new HttpError(400, 'qtyBad');
+    if (!Number.isInteger(qty) || qty < 1 || qty > MAX_BLANK_QTY) throw new HttpError(400, 'qtyBad');
     const picked = cleanOptions(product, body.options);
     if (picked.error) throw new HttpError(400, 'badOption');
     const design = {
@@ -2989,8 +2989,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     } catch (e) {
       png = await sharp()({ create: { width: 600, height: 750, channels: 3, background: '#eef0f2' } }).png().toBuffer();
     }
+    // The cart's key to change how many with − / + (owner, 28 Nov), as for a customer's own design.
+    const designKey = crypto.randomBytes(24).toString('hex');
+    design.cartKeyHash = sha(designKey);
     store.createDesign(design, { 'editor.json': '{}', 'front-preview.png': png, 'front-proof.png': png });
-    res.status(201).json({ id: design.id, price: design.price, qty, productId: product.id, productName: product.name, color: design.color, size: design.size, previewUrl: `/files/designs/${design.id}/front-preview.png` });
+    res.status(201).json({ id: design.id, designKey, price: design.price, qty, productId: product.id, productName: product.name, color: design.color, size: design.size, previewUrl: `/files/designs/${design.id}/front-preview.png` });
   }));
   /** On /complete: every photo the exact size, then the contact sheet shown in the cart, proof and admin. */
   async function completePhotoset(design) {
@@ -4713,6 +4716,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   }
   // The cart's key for one design (its upload token): changes how many from the cart.
   const DESIGN_KEY_RE = /^[a-f0-9]{48}$/;
+  /** Plain items (glasses sold unprinted): 1 to this many in one cart item, on their page and with the cart's − / +. */
+  const MAX_BLANK_QTY = 20;
   /** An exact copy of a saved design (files included), not ordered yet. Returns { design, token }. */
   function copyDesign(src) {
     const token = crypto.randomBytes(24).toString('hex');
@@ -4723,7 +4728,7 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     delete copy.orderedAt;
     if (copy.kind === 'book') copy.uploadTokenHash = sha(token); // the book page edits with this token
     // One artwork (not a name list, book or set): the token is the cart's key to change how many.
-    if (!copy.kind && !copy.merge) copy.cartKeyHash = sha(token);
+    if ((!copy.kind || copy.kind === 'blank') && !copy.merge) copy.cartKeyHash = sha(token);
     // A name list: the copy's own key, kept with its new cart item.
     const listKey = copy.merge ? crypto.randomBytes(18).toString('base64url') : null;
     if (listKey) copy.listKeyHash = sha(listKey);
@@ -4737,12 +4742,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     designId: d.id,
     ...(d.kind === 'book' ? { bookId: d.bookId, editToken: token } : {}),
     ...(d.merge && listKey ? { listKey } : {}),
-    ...(!d.kind && !d.merge && DESIGN_KEY_RE.test(token || '') ? { designKey: token } : {}),
+    ...((!d.kind || d.kind === 'blank') && !d.merge && DESIGN_KEY_RE.test(token || '') ? { designKey: token } : {}),
+    // A plain item: as the product page puts it in the cart (no print sides; how many).
+    ...(d.kind === 'blank' ? { kind: 'blank', qty: d.copies || 1 } : {}),
     productId: d.productId,
     productName: d.productName,
     colorName: d.color.name,
     sizeLabel: d.size.label,
-    sides: d.sides.map((sd) => sd.name),
+    sides: d.kind === 'blank' ? [] : d.sides.map((sd) => sd.name),
     price: d.price,
     // (A photo set's prints are of different sizes and prices: no "price each" in the cart.)
     ...(copiesOf(d) > 1 && d.kind !== 'photoset' ? { copies: copiesOf(d) } : {}),
@@ -4833,6 +4840,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
    * the editor.
    */
   function cartCount(d) {
+    // A plain item: 1 to 20 pieces (owner, 28 Nov: − / + in the cart).
+    if (d && d.kind === 'blank') return d.orderId ? null : { n: d.copies || 1, step: 1, max: MAX_BLANK_QTY, unit: 'piece' };
     const product = d && getProduct(d.productId);
     const cl = cartLines(d, product);
     if (!cl || d.orderId) return null;
@@ -4856,18 +4865,22 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   app.post('/api/designs/:id/quantity', express.json({ limit: '2kb' }), (req, res) => {
     const d = UUID_RE.test(req.params.id) && store.getDesign(req.params.id);
     if (!d || d.status !== 'ready') throw new HttpError(404, 'designNotFound');
-      // (A plain item's number is chosen on its page.)
-      if (d.kind === 'blank') throw new HttpError(409, 'qtyInEditor');
     const product = getProduct(d.productId);
     if (!product) throw new HttpError(404, 'designNotFound');
-    const cl = cartLines(d, product);
-    if (!cl || (!counted(cl.size) && cl.lines.length > 1)) throw new HttpError(409, 'qtyInEditor');
     const b = req.body || {};
+    const blank = d.kind === 'blank';
+    const cl = blank ? null : cartLines(d, product);
+    if (!blank && (!cl || (!counted(cl.size) && cl.lines.length > 1))) throw new HttpError(409, 'qtyInEditor');
     // Pieces, or for packs the copies: the cheapest packs of the family that make exactly that many.
     let picks;
     let cheaper = null;
     let switched = null;
-    if (!counted(cl.size)) {
+    if (blank) {
+      // A plain item: how many glasses (1 to 20), as on its page (owner, 28 Nov).
+      const qty = Number(b.qty);
+      if (!Number.isInteger(qty) || qty < 1 || qty > MAX_BLANK_QTY) throw new HttpError(400, 'qtyBad');
+      picks = qty;
+    } else if (!counted(cl.size)) {
       const qty = Number(b.qty);
       if (!Number.isInteger(qty) || qty < 1 || qty > MAX_PIECES) throw new HttpError(400, 'qtyBad');
       picks = [{ size: cl.size, qty }];
@@ -4894,6 +4907,12 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     const key = String(req.get('x-design-key') || '');
     const own = !d.orderId && d.cartKeyHash && DESIGN_KEY_RE.test(key) && sameSecret(sha(key), d.cartKeyHash);
     const apply = (x) => {
+      if (blank) {
+        x.copies = picks;
+        x.price = designPrice({ ...x, orderId: null, status: 'ready' });
+        if (x.price == null) throw new HttpError(409, 'productUnavailable', { name: product.name[langOf(req)] || product.name.en });
+        return;
+      }
       withPicks(x, product, cl.colour, picks);
       if (x.price == null) throw new HttpError(409, 'productUnavailable', { name: product.name[langOf(req)] || product.name.en });
       Object.assign(x, pieceInfo(product, x));

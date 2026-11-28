@@ -855,8 +855,7 @@
       const qtyBefore = new Map();
       function qtyBox(item, i) {
         const c = counts.get(item.designId);
-        // (A plain item's number is fixed: the shop refuses − / + for it.)
-        if (!c || blocked.has(item.designId) || item.kind === 'blank') return '';
+        if (!c || blocked.has(item.designId)) return '';
         const n = qtyDraft.has(item.designId) ? qtyDraft.get(item.designId) : c.n;
         // A word from the last change, else the shop's lasting tip: a few more copies that cost less (owner, 26 Nov:
         // "900 for this price while 1000 is cheaper?!").

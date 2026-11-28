@@ -45,7 +45,24 @@ test('a plain glass: made, priced by quantity, ordered without approval, no prin
   assert.strictEqual((await call('POST', '/api/blanks', { productId: 'tshirt' })).status, 404);
   assert.strictEqual((await call('POST', '/api/blanks', { productId: glass.id, qty: 0 })).status, 400);
   assert.strictEqual((await call('POST', '/api/blanks', { productId: glass.id, qty: 21 })).status, 400);
-  assert.strictEqual((await call('POST', `/api/designs/${made.id}/quantity`, { qty: 5 })).status, 409);
+  // The cart's − / + (owner, 28 Nov): with the cart's key, changed in place, priced by quantity; 0 or 21 refused.
+  assert.match(made.designKey, /^[a-f0-9]{48}$/);
+  const key = { 'x-design-key': made.designKey };
+  const q5 = await call('POST', `/api/designs/${made.id}/quantity`, { qty: 5 }, key);
+  assert.strictEqual(q5.status, 200, await q5.clone().text());
+  const five = await q5.json();
+  assert.strictEqual(five.copied, false, 'changed in place');
+  assert.strictEqual(five.entry.price, unit * 5);
+  assert.strictEqual(five.entry.kind, 'blank');
+  assert.strictEqual(five.entry.qty, 5);
+  assert.deepStrictEqual(five.entry.sides, []);
+  assert.deepStrictEqual(five.count, { n: 5, step: 1, max: 20, unit: 'piece' });
+  assert.strictEqual((await call('POST', `/api/designs/${made.id}/quantity`, { qty: 0 }, key)).status, 400);
+  assert.strictEqual((await call('POST', `/api/designs/${made.id}/quantity`, { qty: 21 }, key)).status, 400);
+  // Back to 3 for the order below; the quote offers the − / +.
+  assert.strictEqual((await call('POST', `/api/designs/${made.id}/quantity`, { qty: 3 }, key)).status, 200);
+  const qc = await (await call('POST', '/api/cart/quote', { designIds: [made.id] })).json();
+  assert.deepStrictEqual(qc.items[0].count, { n: 3, step: 1, max: 20, unit: 'piece' });
   // QA 28 Nov: a printed design can't be made on a plain glass (it would be priced as the plain glass).
   const printed = await call('POST', '/api/designs', { productId: glass.id, color: glass.colors[0].id, size: glass.sizes[0].id, sides: { front: { editor: { objects: [] } } } });
   assert.strictEqual(printed.status, 400);
