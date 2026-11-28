@@ -27,6 +27,8 @@ module.exports = {
   title: 'طباعة الأقمشة بالمتر · Textile',
   subtitle: 'قماش مطبوع بالمتر، قماش تنجيد، ملايات، أغطية لحاف وستاير',
   short: 'طباعة الأقمشة',
+  areaLegend: 'بلاطة النقشة اللي بتتكرر',
+  areaLabel: 'مقاس البلاطة',
   products: ['fabric', 'upholstery', 'bedsheet', 'duvetcover', 'curtains'],
   coloursLabel: 'أنواع القماش',
   // The drawing and the table show the tile at the size the customer starts with (the data's side is always 30 cm).

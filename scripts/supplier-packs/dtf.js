@@ -43,7 +43,7 @@ const TEST_HTML = (brandName) => `
 <div style="position:relative;width:${u(20)};height:${u(25)};color:#000">
   <div style="position:absolute;inset:0;border:${u(0.05)} solid #000"></div>
   <div style="position:absolute;left:${u(0.6)};top:${u(0.4)};right:${u(0.6)};display:flex;justify-content:space-between;align-items:baseline">
-    <b style="font-size:${u(0.75)}">${brandName ? `${brandName} · ` : ''}DTF test</b><span style="font-size:${u(0.4)}">frame = 20.0 × 25.0 cm · 300 DPI · sRGB · not mirrored</span></div>
+    <b style="font-size:${u(0.75)}">${brandName ? `${brandName} · ` : ''}DTF test</b><span style="font-size:${u(0.4)}">frame = 20.0 × 25.0 cm · 300 DPI · sRGB</span></div>
 
   <div style="position:absolute;left:${u(0.6)};top:${u(1.9)};display:flex;gap:${u(0.2)}">
     ${SW.map(([c, n]) => `<div style="width:${u(1.7)};text-align:center;font-size:${u(0.3)}"><div style="height:${u(1.7)};background:${c}"></div>${n}</div>`).join('')}</div>
@@ -68,7 +68,7 @@ const TEST_HTML = (brandName) => `
   </div>
 
   <div style="position:absolute;left:${u(0.6)};top:${u(18.6)};display:flex;gap:${u(0.5)};align-items:flex-start">
-    <div style="width:${u(5)};height:${u(5)};border-radius:50%;background:radial-gradient(circle,#fff200,#f7941d 45%,#ed1c24 70%,#2e3192 85%,#2e319200)"></div>
+    <div style="width:${u(5)};height:${u(5)};border-radius:50%;background:radial-gradient(circle closest-side,#fff200,#f7941d 40%,#ed1c24 60%,#2e3192 80%,#2e319200)"></div>
     <div style="width:${u(5.6)};font-size:${u(0.3)};line-height:1.4">
       <b>Loose dots (do they stay on?)</b>
       ${[0.3, 0.5, 1, 2].map((d) => `<div style="display:flex;align-items:center;gap:${u(0.25)};height:${u(0.55)}"><span style="width:${u(1.2)}">${d} mm</span>${[0, 1, 2, 3, 4, 5].map(() => `<div style="width:${u(d / 10)};height:${u(d / 10)};border-radius:50%;background:#000"></div>`).join('')}</div>`).join('')}
@@ -178,10 +178,10 @@ module.exports = {
   ],
 
   test: {
-    wCm: 20, hCm: 25, white: false, html: TEST_HTML,
+    wCm: 20, hCm: 25, white: false, film: true, html: TEST_HTML,
     step: 'اطبعوا ملف التجربة المرفق على الفيلم واكبسوه على قطعة فاتحة وقطعة غامقة، وابعتوا لنا صورة واضحة للنتيجة (أو القطعة نفسها).',
     text:
-      `مع الملف ده مرفق ملف تجربة ${WH('20', '25')} (PNG شفاف ${L('300 DPI')}). الملف ده بالذات <b>مش معكوس وحوافه الناعمة زي ما هي</b>، عشان نشوف الـ RIP عندكم بيتعامل معاها إزاي: اعكسوه عندكم. ` +
+      `مع الملف ده مرفق ملف تجربة ${WH('20', '25')} (PNG شفاف ${L('300 DPI')}). مرفق منه نسختين: <b>ملف الفيلم</b> زي ما بنبعته في الشغل (معكوس وبحواف حادة)، و<b>الملف العادي</b> (مش معكوس وحوافه الناعمة زي ما هي) عشان نشوف الـ RIP عندكم بيتعامل معاها إزاي. اطبعوا اللي يناسب طريقتكم، ولو أمكن الاتنين. ` +
       'فيه ألوان أساسية، تدرّجات لحد الشفاف، خطوط رفيعة، نقط صغيرة منفصلة، فراغات رفيعة جوه مساحة سادة، كلام صغير عربي وإنجليزي، وأبيض على لون. ' +
       'ياريت يتكبس بالمقاس الفعلي على قطعة قطن بيضا وقطعة سودا (ولو متاح قطعة بوليستر)، وتبعتوا صورة للنتيجة في نور النهار ومعاها قياس الإطار بالمسطرة (المفروض العرض 20 سم والارتفاع 25 سم بالظبط)، وصورة تانية بعد غسلة لو أمكن.',
   },

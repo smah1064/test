@@ -60,14 +60,15 @@ function sideDrawing(side) {
   const inner = side.svg
     .replace(/^<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '')
     .replace(/\{\{C\}\}/g, '#f3f4f6').replace(/\{\{S\}\}/g, '#e2e5ea').replace(/\{\{L\}\}/g, '#9097a3');
+  const small = a.w < 80 || a.h < 80; // chest logos, pens: the numbers go outside the box
   const fz = a.w < 120 ? 20 : 26;
   const cx = a.x + a.w / 2;
   const cy = a.y + a.h / 2;
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="20 40 460 540" class="draw">${inner}
     ${z ? `<rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" fill="none" stroke="#6b7280" stroke-width="2" stroke-dasharray="7 6"/>` : ''}
     <rect x="${a.x}" y="${a.y}" width="${a.w}" height="${a.h}" fill="#e8590c" fill-opacity=".14" stroke="#e8590c" stroke-width="3"/>
-    <text x="${cx}" y="${a.y + fz + 4}" text-anchor="middle" font-size="${fz}" font-weight="700" fill="#b03d00" direction="ltr">↔ ${f.wCm}</text>
-    <text transform="translate(${a.x + fz + 2} ${cy}) rotate(-90)" text-anchor="middle" font-size="${fz}" font-weight="700" fill="#b03d00" direction="ltr">↕ ${f.hCm}</text>
+    <text x="${cx}" y="${small ? a.y - 8 : a.y + fz + 4}" text-anchor="middle" font-size="${fz}" font-weight="700" fill="#b03d00" direction="ltr">↔ ${f.wCm}</text>
+    <text transform="translate(${small ? a.x - 8 : a.x + fz + 2} ${cy}) rotate(-90)" text-anchor="middle" font-size="${fz}" font-weight="700" fill="#b03d00" direction="ltr">↕ ${f.hCm}</text>
   </svg>`;
 }
 async function photoUri(id) {
@@ -157,9 +158,11 @@ async function productBlock(p, pack) {
   for (const row of extra.rows || []) meta.push(row);
   const anyZone = sides.some(({ f }) => f.zone);
   const anyBleed = sides.some(({ f }) => f.bleedMm);
-  const head = ['الوجه', 'مقاس الطباعة', ...(anyBleed ? ['زيادة القص'] : []), 'دقة الملف', 'هامش الأمان', ...(anyZone ? ['مساحة تحريك التصميم'] : [])];
+  const anySafe = sides.some(({ f }) => f.safeMm);
+  const showDpi = pack.dpiColumn !== false;
+  const head = [pack.sideLabel || 'الوجه', pack.areaLabel || 'مقاس الطباعة', ...(anyBleed ? [pack.bleedLabel || 'زيادة القص'] : []), ...(showDpi ? ['دقة الملف'] : []), ...(anySafe ? ['هامش الأمان'] : []), ...(anyZone ? ['مساحة تحريك التصميم'] : [])];
   const body = sides.map(({ s, f }) => [
-    `<b>${esc(s.name.ar)}</b>`, `<b>${wh(f.wCm, f.hCm)}</b>`, ...(anyBleed ? [`${ltr(f.bleedMm)} مم`] : []), ltr(`${extra.dpi || f.dpi} DPI`), f.safeMm ? `${ltr(f.safeMm)} مم` : '-',
+    `<b>${esc(s.name.ar)}</b>`, `<b>${wh(f.wCm, f.hCm)}</b>`, ...(anyBleed ? [`${ltr(f.bleedMm)} مم`] : []), ...(showDpi ? [ltr(`${extra.dpi || f.dpi} DPI`)] : []), ...(anySafe ? [f.safeMm ? `${ltr(f.safeMm)} مم` : '-'] : []),
     ...(anyZone ? [f.zone ? `${wh(Math.round(f.zone.wCm), Math.round(f.zone.hCm))} تقريبًا` : 'مكان ثابت'] : []),
   ]);
   return `<div class="prod">
@@ -200,8 +203,8 @@ async function buildHtml(pack, opts) {
     ${pack.filesNotes ? `<div class="box tint">${pack.filesNotes.map((x) => `<p>${x}</p>`).join('')}</div>` : ''}
   </section>
 
-  <section class="sec"><h2>٢ · المنتجات ومقاسات الطباعة</h2>
-    <p class="legend"><b class="o">المستطيل البرتقالي</b> = مساحة الطباعة القياسية بالسنتيمتر (↔ العرض، ↕ الارتفاع). ${products.some((p) => p.sides.some((s) => s.moveZone)) ? '<b>الخط المنقّط</b> = أقصى مساحة العميل يقدر يحرّك التصميم جوّاها (مكان التصميم بيتكتب في بيانات الشغلانة). ' : ''}${pack.productsIntro || ''}</p>
+  <section class="sec"><h2>٢ · ${pack.sectionTitle || 'المنتجات ومقاسات الطباعة'}</h2>
+    <p class="legend"><b class="o">المستطيل البرتقالي</b> = ${pack.areaLegend || 'مساحة الطباعة القياسية'} بالسنتيمتر (↔ العرض، ↕ الارتفاع). ${products.some((p) => (pack.sidesOf ? pack.sidesOf(p) : p.sides).some((s) => s.moveZone)) ? '<b>الخط المنقّط</b> = أقصى مساحة العميل يقدر يحرّك التصميم جوّاها (مكان التصميم بيتكتب في بيانات الشغلانة). ' : ''}${pack.productsIntro || ''}</p>
     ${blocks.join('')}
   </section>
 
@@ -232,6 +235,7 @@ async function testPrint(browser, pack, opts) {
   const dir = opts.out;
   const base = `${pack.id}-test-${wCm}x${hCm}cm`;
   const out = [[`${base}.png`, await printfiles.finalizePrintPng(exact, 300)]];
+  if (pack.test.film) out.push([`${base}-dtf-film-mirrored.png`, await printfiles.dtfFilmPng(exact, 300)]); // as production sends it: crisp edges, mirrored
   if (pack.test.white) out.push([`${base}-white-underbase.png`, await printfiles.dtgUnderbase(exact, 300, 2)]);
   for (const [name, buf] of out) fs.writeFileSync(path.join(dir, name), buf);
   return out.map(([name]) => name);
