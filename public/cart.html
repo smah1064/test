@@ -241,6 +241,15 @@
         <p class="approve-status" id="approve-status" aria-live="polite"></p>
         <!-- Nothing ticked in the cart: nothing to order (the button is disabled with this word) -->
         <p class="sel-nothing" id="sel-nothing" role="status" hidden></p>
+        <!-- Clothing in the order: one tick that the sizes were checked (owner, 28 Nov: printed to order, prepaid) -->
+        <div class="proof-ok sg-cart" id="size-ok" hidden>
+          <p class="nudge-note" id="size-ok-nudge" role="alert" hidden><strong data-i18n="sg.cartNeed"></strong></p>
+          <p class="small muted" id="size-ok-list" style="margin:0"></p>
+          <div class="proof-ok-line">
+            <label class="approve-check" for="size-ok-box"><input type="checkbox" id="size-ok-box"><span data-i18n="sg.cartConfirm"></span></label>
+          </div>
+          <p class="small" id="size-ok-guides" style="margin:0"></p>
+        </div>
         <!-- The customer's own designs: one short tick right by "Place order"; the colours note behind "Details". (None for
              ready designs added as they are.) -->
         <div class="proof-ok" id="proof-ok" hidden>
@@ -251,15 +260,6 @@
             <button type="button" class="link-btn proof-ok-more" id="proof-ok-more" aria-expanded="false" aria-controls="proof-ok-note" data-i18n="checkout.proofOkMore"></button>
           </div>
           <div class="proof-ok-note" id="proof-ok-note" hidden></div>
-        </div>
-        <!-- Clothing in the order: one tick that the sizes were checked (owner, 28 Nov: printed to order, prepaid) -->
-        <div class="proof-ok sg-cart" id="size-ok" hidden>
-          <p class="nudge-note" id="size-ok-nudge" role="alert" hidden><strong data-i18n="sg.cartNeed"></strong></p>
-          <p class="small muted" id="size-ok-list" style="margin:0"></p>
-          <div class="proof-ok-line">
-            <label class="approve-check" for="size-ok-box"><input type="checkbox" id="size-ok-box"><span data-i18n="sg.cartConfirm"></span></label>
-          </div>
-          <p class="small" id="size-ok-guides" style="margin:0"></p>
         </div>
         <button class="btn btn-primary btn-lg btn-block" id="place-order" type="submit" data-i18n="checkout.place" aria-describedby="approve-status sel-nothing"></button>
         <!-- Paying in advance (src/payment-wording.js): the money-back guarantee, by the button -->
