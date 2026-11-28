@@ -44,6 +44,10 @@ test('phone: the Santa drawing gets Colour (whole drawing) and Change drawing', 
     await page.waitForFunction(() => window.__editor.canvas.getObjects().some((x) => x.type === 'group' && /^art:/.test(x.name || '')), null, { timeout: 30000 });
     const before = await art(page);
     assert.ok(before && before.src, 'the drawing remembers its art');
+    // QA 28 Nov: the drawing a design opens with hugs its pieces (its box was the whole quote's frame).
+    const hug = await page.evaluate(() => { const o = window.__editor.canvas.getObjects().find((x) => x.type === 'group' && /^art:/.test(x.name || '')); const r = o.getBoundingRect(true, true); return { trim: o.artTrim, w: r.width, h: r.height }; });
+    assert.ok(hug.trim, 'trimmed');
+    assert.ok(Math.abs(hug.w - (before.box.r - before.box.l)) <= 3 && Math.abs(hug.h - (before.box.b - before.box.t)) <= 3, JSON.stringify({ hug, box: before.box }));
     await page.evaluate(() => {
       const { canvas } = window.__editor;
       const o = canvas.getObjects().find((x) => x.type === 'group' && /^art:/.test(x.name || ''));

@@ -19,7 +19,7 @@
   const MAX_VECTOR_BYTES = 40 * 1024 * 1024;
   const HISTORY_LIMIT = 60;
   const SNAP_PX = 7;
-  const EXTRA_PROPS = ['name', 'selectable', 'evented', 'curve', 'mask', 'maskBorder', 'maskBorderColor', 'lockRatio', 'bgShape', 'textFx', 'fxBase', 'boosted', 'importSource', 'mergeFit', 'pdfSrc', 'printSrc', 'printPx', 'wordsFill', 'artSrc', 'artDark', 'artLight', 'artRecoloured', 'artColour', 'fieldSrc', 'fitFrom', 'fitAt', 'photoShare'];
+  const EXTRA_PROPS = ['name', 'selectable', 'evented', 'curve', 'mask', 'maskBorder', 'maskBorderColor', 'lockRatio', 'bgShape', 'textFx', 'fxBase', 'boosted', 'importSource', 'mergeFit', 'pdfSrc', 'printSrc', 'printPx', 'wordsFill', 'artSrc', 'artDark', 'artLight', 'artRecoloured', 'artColour', 'artTrim', 'fieldSrc', 'fitFrom', 'fitAt', 'photoShare'];
   const $ = (id) => document.getElementById(id);
   const { esc, money, toast, t, tr } = POD;
   const D = window.POD_DESIGN;
@@ -2008,6 +2008,9 @@
     const objs = await D.buildTemplate(sampled ? sampled.tpl : tpl, area(), inkFor(surfaceHex()), { inset: rects().sf });
     if (!objs.length) return;
     if (sampled) for (const o of objs) if (isText(o) && sampled.fieldSrc.has(o.text)) o.set({ fieldSrc: sampled.fieldSrc.get(o.text), placeholder: o.text });
+    // A ready design's drawing: its box hugs its pieces, not the whole quote's frame (QA 28 Nov: the Santa's handles
+    // went round the whole design and it turned round the design's middle). It stays exactly where it was.
+    for (const o of objs) if (o.type === 'group' && typeof o.artSrc === 'string') trimArt(o);
     st.silent = true;
     canvas.discardActiveObject();
     objs.forEach((o) => canvas.add(o));
@@ -4660,6 +4663,16 @@
     }
     return best && best.size > Math.min(box.w, box.h * aspect) * 0.2 ? best : null;
   }
+  /** A drawing group cut to its visible pieces, in place (marked, so its white/dark copy is cut the same way). */
+  function trimArt(g) {
+    if (!g || g.type !== 'group' || !g.addWithUpdate || !Array.isArray(g._objects)) return g;
+    for (const kid of g._objects.slice()) if (!inkBox(kid)) g.remove(kid);
+    if (!g._objects.length) return g;
+    g.addWithUpdate();
+    g.set({ artTrim: true });
+    g.setCoords();
+    return g;
+  }
   /** The drawing changed for another of its pack: its pieces fitted where the old one's pieces were (not over the
    *  words), at the same turn and colour. */
   async function swapArt(o, src, dark) {
@@ -4676,10 +4689,7 @@
     o.setPositionByOrigin(pivot, 'center', 'center');
     // Its box cut to its visible pieces (an SVG drawing's group is the size of the whole quote's frame, which would
     // reach outside the print area wherever the pieces are put).
-    if (n.type === 'group' && Array.isArray(n._objects) && n.addWithUpdate) {
-      for (const kid of n._objects.slice()) if (!inkBox(kid)) n.remove(kid);
-      n.addWithUpdate();
-    }
+    trimArt(n);
     n.set({ originX: 'center', originY: 'center', left: 0, top: 0, angle: 0, scaleX: 1, scaleY: 1, flipX: Boolean(o.flipX), flipY: Boolean(o.flipY), opacity: o.opacity == null ? 1 : o.opacity });
     const b = inkBox(n);
     if (!a || !b || !(b.w > 0) || !(b.h > 0)) return;
@@ -4738,6 +4748,8 @@
   async function artCopy(o, ink) {
     const n = D.artImage ? await D.artImage({ src: o.artSrc, dark: o.artDark }, ink) : null;
     if (!n || !n.width || !n.height) return null;
+    // (A drawing cut to its pieces: its other copy is cut the same way, so the two have the same box.)
+    if (o.artTrim) trimArt(n);
     const keep = {};
     for (const k of ['originX', 'originY', 'left', 'top', 'angle', 'flipX', 'flipY', 'skewX', 'skewY', 'opacity', 'visible', 'selectable', 'evented', 'lockRatio', 'name', 'lockMovementX', 'lockMovementY', 'lockRotation']) if (o[k] !== undefined) keep[k] = o[k];
     n.set({ ...keep, scaleX: ((o.scaleX || 1) * (o.width || n.width)) / n.width, scaleY: ((o.scaleY || 1) * (o.height || n.height)) / n.height });
