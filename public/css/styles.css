@@ -2074,3 +2074,10 @@ html[dir="rtl"] .hm-trust-guar a::after { transform: rotate(135deg); }
 .hm-gcard .hm-meta { margin-bottom: 8px; }
 .hm-gcard .hm-gstart { margin-top: auto; }
 /* (end of Home page, 27 Nov) */
+
+/* "Change drawing": the pack's other drawings (editor, owner 28 Nov). */
+.art-swap { display: flex; gap: 8px; }
+.art-swap-grid { flex-wrap: wrap; }
+.art-swap-btn { width: 64px; height: 64px; flex: none; padding: 4px; border: 1px solid var(--line, #d9dce1); border-radius: 10px; background: #f6f6f4; cursor: pointer; }
+.art-swap-btn img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.art-swap-btn:hover, .art-swap-btn:focus-visible { border-color: var(--accent, #6c4cf0); }
