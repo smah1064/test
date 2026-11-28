@@ -45,6 +45,34 @@ test('order page: plain glasses read as pieces, with no print side or proof', { 
       assert.deepStrictEqual(errors, []);
       await ctx.close();
     }
+    // QA 28 Nov: the dashboard's Queue said nothing about 3 glasses (the packer would send 1), showed a NaN print size
+    // and the stock note twice, with print-file tools.
+    for (const lang of ['en', 'ar']) {
+      const ctx = await browser.newContext({ viewport: { width: 1366, height: 900 } });
+      await ctx.addInitScript((l) => { try { localStorage.setItem('pod-lang', l); } catch (e) { /* ignore */ } }, lang);
+      const page = await ctx.newPage();
+      const errors = [];
+      page.on('pageerror', (e) => errors.push(String(e)));
+      await page.goto(`${srv.base}/admin`);
+      await page.fill('#password', 'secret');
+      await page.click('#login button[type=submit]');
+      await page.waitForSelector('#dash:not([hidden])');
+      await page.waitForSelector('.queue-row', { timeout: 20000 });
+      const row = page.locator('.queue-row').filter({ hasText: o.body.number ? String(o.body.number) : '' }).first();
+      const rowText = await row.textContent();
+      assert.match(rowText, lang === 'en' ? /3 pieces/ : /٣ قطع/, rowText);
+      assert.doesNotMatch(rowText, lang === 'en' ? /Front/ : /الأمام/, rowText);
+      await row.locator('[data-toggle-item]').click();
+      await page.waitForSelector('.queue-row.is-open', { timeout: 10000 });
+      const details = await page.evaluate(() => { const r = document.querySelector('.queue-row.is-open'); let n = r.nextElementSibling; return r.textContent + ' ' + (n ? n.textContent : ''); });
+      assert.doesNotMatch(details, /NaN|undefined/, details);
+      assert.match(details, lang === 'en' ? /Pieces to pack/ : /القطع المطلوب تجهيزها/, details);
+      const note = lang === 'en' ? 'Plain item from stock' : 'منتج سادة من المخزن';
+      assert.strictEqual(details.split(note).length - 1, 1, 'the stock note once');
+      assert.strictEqual(await page.$('.queue-row.is-open ~ * [data-download*="preview-pdf"], [data-back-open]'), null, 'no print-file tools');
+      assert.deepStrictEqual(errors, []);
+      await ctx.close();
+    }
   } finally {
     await browser.close();
     await srv.close();

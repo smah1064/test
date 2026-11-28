@@ -403,9 +403,11 @@
   function qtySummary(item) {
     return `<div class="qty-sum">${qtyGroups(item).map((g) => `<span class="qty-grp">${swatch(g.color)}<b>${esc(tr(g.color.name))}${tr(g.color.name) ? ':' : ''}</b>${g.lines.map((l) => `<span class="qty-chip">${esc(sizeName(l))}×<b>${esc(POD.num(Number(l.qty)))}</b></span>`).join('')}</span>`).join('')}</div>`;
   }
-  const piecesPill = (item) => (hasQty(item) ? ` <span class="qty-pieces">${esc(countText(item))}</span>` : '');
+  // Plain items (glasses from stock) keep their count in copies: shown big, so the packer sends them all (QA 28 Nov).
+  const plainCount = (item) => Math.max(1, Number(item.copies) || 1);
+  const piecesPill = (item) => (hasQty(item) ? ` <span class="qty-pieces">${esc(countText(item))}</span>` : item.kind === 'blank' ? ` <span class="qty-pieces">${esc(piecesText(plainCount(item)))}</span>` : '');
   /** "Black · M" for one piece, or nothing when the summary below lists the colours and sizes. */
-  const colourSizeText = (item) => (hasQty(item) ? [] : [tr(item.color.name), tr(item.size.label)]);
+  const colourSizeText = (item) => (hasQty(item) ? [] : [tr(item.color.name), tr(item.size.label), ...(item.kind === 'blank' ? [piecesText(plainCount(item))] : [])]);
   const anyDark = (item) => (qtyLines(item).length ? qtyLines(item).some((l) => l.color && isDark(l.color.hex)) : isDark(item.color.hex));
 
   /** One line the customer typed (Arabic, English or both): its own direction, so it is never scrambled. */
@@ -462,7 +464,7 @@
         <dt>${esc(t('admin.spec.order'))}</dt><dd>${esc(item.orderNumber)}${SEP()}${esc(t('admin.spec.itemOf', { i: item.position, n: item.of }))}</dd>
         <dt>${esc(t('admin.spec.product'))}</dt><dd>${esc(tr(item.productName))}</dd>
         ${hasQty(item) ? `<dt>${esc(t('adminQty.title'))}</dt><dd class="qty-dd">${qtyTable(item)}</dd>` : `<dt>${esc(t('admin.spec.colourSize'))}</dt><dd>${esc(tr(item.color.name))} <span class="dot" style="display:inline-block;vertical-align:middle;background:${esc(item.color.hex)}"></span>${SEP()}${esc(tr(item.size.label))}</dd>`}
-        ${item.kind === 'photoset' ? `<dt>${esc(t('fmt.photos-zip'))}</dt><dd>${esc(listed(t('admin.photoFiles', { n: counted('admin.photos', (item.photos || []).length), prints: counted('admin.prints', (item.photos || []).reduce((n, p) => n + p.copies, 0)) })))}${SEP()}${esc(t('admin.photoSpec'))}${item.sides[0] && item.sides[0].dpi && item.sides[0].dpi < 150 ? `<div class="small" style="color:var(--warn);margin-top:4px">⚠ ${esc(t('admin.photoLowRes'))}</div>` : ''}</dd>` : item.sides.map((s) => `<dt>${esc(t('admin.spec.print', { side: tr(s.name) }))}</dt><dd><bdi dir="ltr">${cm(s.widthIn)} × ${cm(s.heightIn)} cm (${s.widthIn} × ${s.heightIn} in)</bdi>${s.bleedIn ? ` <bdi>${esc(t('admin.bleed', { mm: String(Math.round(s.bleedIn * 25.4)) /* in 0-9 like the sizes and pixels beside it (QA 25 Nov: ٣ next to 20.3 and 300) */ }))}</bdi>` : ''}${SEP()}<bdi dir="ltr">${s.widthPx} × ${s.heightPx} px · ${s.dpi} DPI · sRGB</bdi>${s.offsetCm ? `<div class="placement-note">📍 ${esc(t('admin.placement', { v: placementText(s.offsetCm) }))}</div>` : ''}</dd>`).join('')}
+        ${item.kind === 'blank' ? `<dt>${esc(t('admin.plainQty'))}</dt><dd><strong class="qty-pieces">${esc(piecesText(plainCount(item)))}</strong></dd>` : item.kind === 'photoset' ? `<dt>${esc(t('fmt.photos-zip'))}</dt><dd>${esc(listed(t('admin.photoFiles', { n: counted('admin.photos', (item.photos || []).length), prints: counted('admin.prints', (item.photos || []).reduce((n, p) => n + p.copies, 0)) })))}${SEP()}${esc(t('admin.photoSpec'))}${item.sides[0] && item.sides[0].dpi && item.sides[0].dpi < 150 ? `<div class="small" style="color:var(--warn);margin-top:4px">⚠ ${esc(t('admin.photoLowRes'))}</div>` : ''}</dd>` : item.sides.map((s) => `<dt>${esc(t('admin.spec.print', { side: tr(s.name) }))}</dt><dd><bdi dir="ltr">${cm(s.widthIn)} × ${cm(s.heightIn)} cm (${s.widthIn} × ${s.heightIn} in)</bdi>${s.bleedIn ? ` <bdi>${esc(t('admin.bleed', { mm: String(Math.round(s.bleedIn * 25.4)) /* in 0-9 like the sizes and pixels beside it (QA 25 Nov: ٣ next to 20.3 and 300) */ }))}</bdi>` : ''}${SEP()}<bdi dir="ltr">${s.widthPx} × ${s.heightPx} px · ${s.dpi} DPI · sRGB</bdi>${s.offsetCm ? `<div class="placement-note">📍 ${esc(t('admin.placement', { v: placementText(s.offsetCm) }))}</div>` : ''}</dd>`).join('')}
         ${item.emb ? `<dt>${esc(t('admin.emb'))}</dt><dd>
           <div><strong>${esc(listed(t('admin.embSummary', { n: POD.num(item.emb.stitches), c: POD.plural('emb.threads', item.emb.colors.length), w: item.emb.widthMm, h: item.emb.heightMm })))}</strong></div>
           <ol class="emb-threads">${item.emb.colors.map((c) => `<li><span class="dot" style="display:inline-block;vertical-align:middle;background:${esc(c.hex)}"></span> ${esc(threadName(c))} <span class="muted">(<bdi dir="ltr">${esc(c.hex)}</bdi>${SEP()}${esc(POD.num(c.stitches))})</span></li>`).join('')}</ol>
@@ -537,7 +539,7 @@
         </div></div>`;
     }
     // A plain item (a glass from stock): nothing to print.
-    if (item.kind === 'blank') return `<div class="print-files-block small muted">${esc(t('process.blank'))}</div>`;
+    if (item.kind === 'blank') return '';
     if (item.kind === 'gangsheet') {
       return `
         <div class="print-files-block"><div class="print-files">
@@ -843,7 +845,7 @@
   /** The customer's design (all sides / book pages) as one PDF, to check or send them. */
   function previewFile(item) {
     const s = item.sides[0];
-    if (!s || !s.printUrl || !can('files')) return '';
+    if (!s || !s.printUrl || !can('files') || item.kind === 'blank') return '';
     return `
       <div class="print-files-block">
         <div class="small muted" style="font-weight:700;margin-bottom:6px">${esc(t('admin.customerPreview'))}</div>
@@ -887,7 +889,7 @@
   const backMsg = {};
   const backBusy = new Set();
   function backPanel(item) {
-    if (!can('review.work') || !['queued', 'printing'].includes(item.status)) return '';
+    if (!can('review.work') || !['queued', 'printing'].includes(item.status) || item.kind === 'blank') return '';
     const id = esc(item.id);
     const m = backMsg[item.id];
     if (!backOpen.has(item.id)) {
@@ -962,7 +964,7 @@
         <img src="${esc(item.sides[0].previewUrl)}" alt="" ${zoomAttr(item)}>
         <div>
           <strong>${esc(tr(item.productName))}</strong> ${pill(item.status)}${expressPill(item)}${samplePill(item)}${importBadge(item)}${piecesPill(item)}
-          <div class="muted small">${esc([item.orderNumber, t('admin.spec.itemOf', { i: item.position, n: item.of }), ...colourSizeText(item), item.sides.map((s) => tr(s.name)).join(' + ')].join(SEP()))}</div>
+          <div class="muted small">${esc([item.orderNumber, t('admin.spec.itemOf', { i: item.position, n: item.of }), ...colourSizeText(item), ...(item.kind === 'blank' ? [] : [item.sides.map((s) => tr(s.name)).join(' + ')])].join(SEP()))}</div>
           ${hasQty(item) ? qtySummary(item) : ''}
         </div>
         <div class="queue-actions">
