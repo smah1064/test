@@ -4902,6 +4902,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       if (!d || !fs.existsSync(store.designDir(d.id))) reason = 'filesGone';
       else if (d.kind !== 'gangsheet' && (!product || !product.colors.some((c) => c.id === d.color.id) || (d.kind === 'photoset' ? !d.photos.every((p) => product.sizes.some((z) => z.id === p.size.id)) : !product.sizes.some((z) => z.id === d.size.id)))) reason = 'productGone';
       else if (d.photoRemoved) reason = 'photoGone';
+      // (Paused, sold out or stopped now: said here, not first at checkout. QA 28 Nov.)
+      else if (product && d.kind !== 'gangsheet' && catalog.unavailable(product, { colorId: d.color && d.color.id, ...(d.kind === 'photoset' ? {} : { sizeId: d.size && d.size.id }) })) reason = 'productUnavailable';
       if (reason) {
         skipped.push({ position: i + 1, productName: it.productName, reason });
         return;

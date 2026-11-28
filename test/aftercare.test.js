@@ -133,6 +133,12 @@ test('tracking, shipping details, delivery, payment and order again', async () =
   const copied = fs.readFileSync(path.join(dataDir, 'files', oneAgain.items[0].designId, 'front-print.png'));
   assert.ok(copied.equals(fs.readFileSync(path.join(dataDir, 'files', ids[1], 'front-print.png'))));
   assert.strictEqual((await json('POST', `/api/orders/${order.id}/reorder?k=${order.key}`, { items: ['not-an-item'] })).status, 400);
+  // QA 28 Nov: a product paused since: skipped with its reason, not copied into the cart to fail at checkout.
+  assert.strictEqual((await admin('PUT', '/api/admin/catalog/tshirt', { status: 'hidden', hiddenReason: 'other' })).status, 200);
+  const paused = await (await json('POST', `/api/orders/${order.id}/reorder?k=${order.key}`)).json();
+  assert.strictEqual(paused.items.length, 0);
+  assert.ok(paused.skipped.length > 0 && paused.skipped.every((x) => x.reason === 'productUnavailable'), JSON.stringify(paused.skipped));
+  assert.strictEqual((await admin('PUT', '/api/admin/catalog/tshirt', { status: 'live' })).status, 200);
 });
 
 test('drafts kept on the account (open on another device)', async () => {
