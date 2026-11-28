@@ -209,6 +209,8 @@
           if (waiting) return waiting === 1 ? t('track.now.awaitingOne') : t('track.now.awaitingMany', { n: POD.num(waiting) });
           if (o.items.some((i) => i.status === 'changes_requested')) return t('track.now.changes');
           if (o.items.some((i) => i.status === 'review')) return t('track.now.review');
+          // Nothing printed in it (plain glasses only): no "printing starts soon" (QA 28 Nov).
+          if (step === 'placed' && o.items.length && o.items.every((i) => i.kind === 'blank')) return t('track.placed.hintStock');
         }
         return t('track.' + step + '.hint');
       }
@@ -279,7 +281,8 @@
       }
       function approvalHtml(item) {
         const a = item.approval;
-        if (!a || !a.at) return '';
+        // A plain item has no proof to approve (QA 28 Nov).
+        if (!a || !a.at || item.kind === 'blank') return '';
         // A new version waits for its own approval (or for changes): the old version's approval would mislead.
         if (item.status === 'awaiting_approval' || item.status === 'changes_requested') return '';
         if (item.status === 'review' && (item.approvals || []).some((h) => h && h.action === 'revised' && h.at > a.at)) return '';
@@ -356,14 +359,17 @@
               const breakdown = PODAftercare.showBreakdown(item);
               const names = PODAftercare.isNameList(item);
               const pieces = PODAftercare.pieces(item);
+              // Plain items: no print side, "3 pieces", and prepared rather than printed (QA 28 Nov).
+              const plain = item.kind === 'blank';
+              const label = plain && ['queued', 'printing'].includes(status) ? 'item.preparing' : 'item.' + status;
               return `
               <div class="cart-item">
                 ${pic ? `<img src="${esc(pic)}" alt="">` : '<span></span>'}
                 <div>
                   <h3>${POD.num(i + 1)}. ${esc(tr(item.productName))}</h3>
-                  <div class="meta">${breakdown ? '' : `${esc(tr(item.color.name))}${SEP()}${esc(tr(item.size.label))}${SEP()}`}${esc((item.sides || []).map((s) => tr(s.name)).join(' + '))}${names ? `${SEP()}<span class="cart-copies">${esc(namesText(pieces))}</span>` : ''}</div>
+                  <div class="meta">${breakdown ? '' : `${esc(tr(item.color.name))}${SEP()}${esc(tr(item.size.label))}${SEP()}`}${plain ? `<span class="cart-copies">${esc(PODAftercare.piecesText(pieces))}</span>` : esc((item.sides || []).map((s) => tr(s.name)).join(' + '))}${names ? `${SEP()}<span class="cart-copies">${esc(namesText(pieces))}</span>` : ''}</div>
                   ${breakdown ? PODAftercare.qtyHtml(item) : ''}
-                  <div class="status-label st-${esc(status)}" style="margin-top:10px">${esc(t('item.' + status))}</div>
+                  <div class="status-label st-${esc(status)}" style="margin-top:10px">${esc(t(label))}</div>
                   ${delivered ? '' : proofStateHtml(item)}
                   ${approvalHtml(item)}
                   <div class="status-steps">${STEPS.map((s, k) => `<div class="${k <= reached ? 'done' : ''}" title="${esc(t('item.' + s))}"></div>`).join('')}</div>

@@ -26,6 +26,9 @@
     'track.shipped': ['Shipped', 'تم الشحن'],
     'track.delivered': ['Delivered', 'تم التوصيل'],
     'track.placed.hint': ["We've got your order. Printing starts soon.", 'استلمنا طلبك، والطباعة هتبدأ قريب.'],
+    // An order of plain items only (nothing printed: QA 28 Nov).
+    'track.placed.hintStock': ["We've got your order. We're getting it ready.", 'استلمنا طلبك، وبنجهّزه.'],
+    'item.preparing': ['Being prepared', 'بيتجهّز'],
     'track.production.hint': ['Your items are being printed one by one.', 'منتجاتك بتتطبع واحدة واحدة.'],
     'track.printed.hint': ["Everything is printed. We're packing it for the courier.", 'كل حاجة اتطبعت، وبنغلّفها للمندوب.'],
     'track.shipped.hint': ['Your order is on its way to you.', 'طلبك في الطريق ليك.'],
@@ -205,6 +208,8 @@
     },
     /** Is this item a name list (each row one piece with its own name/number)? */
     isNameList(item) {
+      // Plain items (glasses sold unprinted) keep their count in copies: pieces, not names (QA 28 Nov).
+      if (item.kind === 'blank') return false;
       return Boolean(item.merge) || (!this.qtyGroups(item) && Number(item.copies) > 1);
     },
     /** Show the size/colour breakdown? Not for one plain piece, nor a name list all in one size. */
