@@ -2907,7 +2907,7 @@ const PRODUCTION = {
   tablenumbers: { process: 'paper', safeIn: 0.15, bleedIn: 0.08, model: { type: 'tent', depthIn: 0.03, radiusIn: 0.02, edge: '#f6f6f4', material: 'paper' } },
   placecards: { process: 'paper', safeIn: 0.1, bleedIn: 0.06, model: { type: 'tent', depthIn: 0.03, radiusIn: 0.02, edge: '#f6f6f4', material: 'paper' } },
   // CNC (router: carved or cut wood, MDF and acrylic) and UV (full colour on acrylic, crystal, wood, film).
-  calligraphy: { process: 'cnc', safeIn: 0.4, bleedIn: 0, model: { type: 'block', depthIn: 0.71, radiusIn: 99, material: 'laser' } },
+  calligraphy: { process: 'cnc', safeIn: 0.4, bleedIn: 0, model: { type: 'block', depthIn: 0.71, radiusIn: 99, material: 'laser', raised: 0.2 } },
   villasign: { process: 'cnc', safeIn: 0.6, bleedIn: 0, model: { type: 'block', depthIn: 0.71, radiusIn: 0.39, material: 'laser' } },
   acrylicnameplate: { process: 'uv', safeIn: 0.2, bleedIn: 0, model: { type: 'block', depthIn: 0.59, radiusIn: 0.04, material: 'plastic', clear: true } },
   woodnameplate: { process: 'cnc', safeIn: 0.2, bleedIn: 0, model: { type: 'block', depthIn: 0.79, radiusIn: 0.04, material: 'laser' } },

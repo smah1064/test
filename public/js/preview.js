@@ -187,6 +187,47 @@
     const view = { ...entry.side, svg: entry.side.wrap.view, overlay: null };
     return { ...entry, side: view, base: POD.mockupUrl(view, entry.hex || '#ffffff'), overlay: null, design: c, designScale: ds, rects: { ...entry.rects, trim, bleed: trim, u: entry.rects.u * k } };
   }
+  /**
+   * A design that stands up from the board (model.raised, e.g. the calligraphy panel): a shadow
+   * beside it and a lit / shaded rim, `lift` pixels high. Light from the top left, as in the mockups.
+   */
+  function raise(ctx, design, lift) {
+    const w = design.width;
+    const h = design.height;
+    const layer = (draw) => {
+      const c = document.createElement('canvas');
+      c.width = w;
+      c.height = h;
+      draw(c.getContext('2d'));
+      return c;
+    };
+    const d = Math.max(1, lift);
+    // The shadow alone (the design cut out of it), falling down and to the right.
+    const shadow = layer((x) => {
+      x.shadowColor = 'rgba(30, 18, 6, 0.55)';
+      x.shadowBlur = d * 0.7;
+      x.shadowOffsetX = d * 0.6;
+      x.shadowOffsetY = d * 0.8;
+      x.drawImage(design, 0, 0);
+      x.shadowColor = 'transparent';
+      x.globalCompositeOperation = 'destination-out';
+      x.drawImage(design, 0, 0);
+    });
+    // The rim: the design less itself moved by (dx, dy), filled with one colour.
+    const rim = (dx, dy, colour) => layer((x) => {
+      x.drawImage(design, 0, 0);
+      x.globalCompositeOperation = 'destination-out';
+      x.drawImage(design, dx, dy);
+      x.globalCompositeOperation = 'source-in';
+      x.fillStyle = colour;
+      x.fillRect(0, 0, w, h);
+    });
+    const e = Math.max(1, d * 0.3);
+    ctx.drawImage(shadow, 0, 0);
+    ctx.drawImage(rim(e, e, 'rgba(255, 246, 214, 0.75)'), 0, 0);
+    ctx.drawImage(rim(-e, -e, 'rgba(60, 38, 8, 0.5)'), 0, 0);
+  }
+
   async function renderRealistic(product, entry) {
     if (entry.side && entry.side.wrap) entry = wrapFront(product, entry);
     const [baseImg, overImg] = await Promise.all([loadImg(entry.base), entry.overlay ? loadImg(entry.overlay) : null]);
@@ -281,6 +322,7 @@
     // Laser-cut pieces (cake toppers, hanging decorations) are the product themselves, not printed on it:
     // shown whole, also where the drawing has nothing behind them.
     if (product.laser && product.laser.kind === 'cut') ctx.drawImage(designCv, 0, 0, Wd, Hd);
+    if (product.model.raised) raise(ctx, designCv, (entry.rects.u || 1) * S * product.model.raised);
     if (overImg) ctx.drawImage(overImg, 0, 0, Wd, Hd);
     out.pxPerIn = (entry.rects.u || 1) * S;
     const fa = entry.rects.trim; // where the print is (for "Zoom to the design")
