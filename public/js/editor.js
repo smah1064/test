@@ -19,7 +19,7 @@
   const MAX_VECTOR_BYTES = 40 * 1024 * 1024;
   const HISTORY_LIMIT = 60;
   const SNAP_PX = 7;
-  const EXTRA_PROPS = ['name', 'selectable', 'evented', 'curve', 'mask', 'maskBorder', 'maskBorderColor', 'lockRatio', 'bgShape', 'textFx', 'fxBase', 'boosted', 'importSource', 'mergeFit', 'pdfSrc', 'printSrc', 'printPx', 'wordsFill', 'artSrc', 'artDark', 'artLight', 'fieldSrc', 'fitFrom', 'fitAt', 'photoShare'];
+  const EXTRA_PROPS = ['name', 'selectable', 'evented', 'curve', 'mask', 'maskBorder', 'maskBorderColor', 'lockRatio', 'bgShape', 'textFx', 'fxBase', 'boosted', 'importSource', 'mergeFit', 'pdfSrc', 'printSrc', 'printPx', 'wordsFill', 'artSrc', 'artDark', 'artLight', 'artRecoloured', 'artColour', 'fieldSrc', 'fitFrom', 'fitAt', 'photoShare'];
   const $ = (id) => document.getElementById(id);
   const { esc, money, toast, t, tr } = POD;
   const D = window.POD_DESIGN;
@@ -3023,15 +3023,18 @@
     crop: elSvg('<path d="M6 2v14a2 2 0 0 0 2 2h14M2 6h14a2 2 0 0 1 2 2v14"/>'),
     shape: elSvg('<circle cx="12" cy="12" r="8"/><path d="M8 12h8"/>'),
     removebg: elSvg('<path d="M4 4h4M16 4h4M4 20h4M16 20h4M4 4v4M20 4v4M4 16v4M20 16v4"/><circle cx="12" cy="11" r="3"/><path d="M7 18c1-2.5 3-3.5 5-3.5s4 1 5 3.5"/>'),
+    swap: elSvg('<path d="M4 8h13l-3-3M20 16H7l3 3"/>'),
     more: elSvg('<circle cx="5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="19" cy="12" r="1.6" fill="currentColor"/>'),
   };
   function elItems(o) {
     if (isText(o)) return ['done', 'font', 'size', 'colour', 'fx', 'format', 'more'];
     if (o.type === 'image') return ['done', 'crop', 'shape', 'removebg', 'more'];
+    // A ready design's drawing (one colour): recolour it all at once, or change it for another of its pack (owner, 28 Nov).
+    if (o.type === 'group' && (canColourArt(o) || canSwapArt(o))) return ['done', ...(canColourArt(o) ? ['colour'] : []), ...(canSwapArt(o) ? ['swap'] : []), 'more'];
     if (o.type === 'activeSelection' || o.type === 'group' || isSticker(o) || laser()) return ['done', 'more'];
     return ['done', 'colour', 'more'];
   }
-  const EL_WORD = { font: 'el.font', size: 'el.size', colour: 'el.colour', fx: 'el.fx', format: 'el.format', crop: 'props.crop', shape: 'props.photoShape', removebg: 'el.removeBg', more: 'more.tool' };
+  const EL_WORD = { font: 'el.font', size: 'el.size', colour: 'el.colour', fx: 'el.fx', format: 'el.format', crop: 'props.crop', shape: 'props.photoShape', removebg: 'el.removeBg', swap: 'el.swapArt', more: 'more.tool' };
   function renderElBar() {
     const bar = $('el-bar');
     const strip = $('el-strip');
@@ -3074,7 +3077,7 @@
       const v = Math.round(o.fontSize);
       html = `<div class="strip-row strip-size"><input type="range" data-strip-size min="8" max="300" step="1" value="${v}" aria-label="${esc(t('props.size'))}"><div class="num-step" dir="ltr"><button type="button" class="btn btn-sm" data-strip-step="-2" aria-label="${esc(t('props.less'))}">${ICON.minus}</button><span class="strip-num" aria-live="polite">${esc(POD.num(v))}</span><button type="button" class="btn btn-sm" data-strip-step="2" aria-label="${esc(t('props.more'))}">${ICON.plus}</button></div></div>`;
     } else if (EL.tool === 'colour') {
-      const now = typeof o.fill === 'string' ? toHex(o.fill) : '';
+      const now = o.type === 'group' ? artColourOf(o) : typeof o.fill === 'string' ? toHex(o.fill) : '';
       html = `<div class="strip-scroll strip-dots">${PALETTE.map((c) => `<button type="button" class="pal${now === c ? ' active' : ''}" data-pal="fill" data-c="${c}" style="background:${c}" aria-label="${c}" aria-pressed="${now === c}"></button>`).join('')}<button type="button" class="strip-more" data-el="more-colours" aria-label="${esc(t('el.moreColours'))}">${ICON.plus}</button></div>`;
     } else if (EL.tool === 'fx') {
       const sample = D.ARABIC_RE.test(o.text) ? 'أبج' : 'Abc';
@@ -3082,11 +3085,14 @@
     } else if (EL.tool === 'format') {
       const b = o.fontWeight === 'bold' || Number(o.fontWeight) >= 600;
       html = `<div class="strip-row strip-format"><div class="btn-group">${['bold', 'italic', 'underline'].map((k) => { const on = k === 'bold' ? b : k === 'italic' ? o.fontStyle === 'italic' : o.underline; return `<button type="button" class="btn btn-sm${on ? ' active' : ''}" data-toggle="${k}" aria-pressed="${Boolean(on)}" aria-label="${esc(t('props.' + k))}">${{ bold: '<b>B</b>', italic: '<i>I</i>', underline: '<u>U</u>' }[k]}</button>`; }).join('')}</div><div class="btn-group" dir="ltr">${['left', 'center', 'right'].map((al) => `<button type="button" class="btn btn-sm${o.textAlign === al ? ' active' : ''}" data-align="${al}" aria-pressed="${o.textAlign === al}" aria-label="${esc(t('props.align' + al[0].toUpperCase() + al.slice(1)))}">${ICON['al' + al]}</button>`).join('')}</div></div>`;
+    } else if (EL.tool === 'swap') {
+      html = `<div class="strip-scroll art-swap" data-swap-list><span class="muted small">${esc(t('props.swapArtLoading'))}</span></div>`;
     } else if (EL.tool === 'shape') {
       html = `<div class="strip-scroll">${MASKS.map((m) => `<button type="button" class="mask-btn${(o.mask || 'none') === m ? ' active' : ''}" data-mask="${m}" aria-pressed="${(o.mask || 'none') === m}"><span class="mask-icon mask-${m}"></span><small>${esc(t('mask.' + m))}</small></button>`).join('')}</div>`;
     }
     strip.innerHTML = html;
     strip.hidden = !html;
+    fillSwapLists(strip, o);
     const cur = strip.querySelector('.active');
     if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest', inline: 'center' });
   }
@@ -3116,6 +3122,8 @@
     $('el-strip').addEventListener('click', (e) => {
       const o = active();
       if (!o) return;
+      const sw = e.target.closest('[data-swapart]');
+      if (sw) { swapArt(o, sw.dataset.swapart, sw.dataset.dark); return; }
       if (e.target.closest('[data-el="more-colours"]')) {
         EL.tool = null;
         openGroups.add('colours');
@@ -3497,6 +3505,9 @@
           <label class="check"><input type="checkbox" data-filter="sepia" ${fs.sepia ? 'checked' : ''}> ${esc(t('props.sepia'))}</label>
         </div>
         <button class="btn btn-sm" data-act="reset-adjust">${esc(t('props.reset'))}</button>`);
+    } else if (o.type === 'group' && (canColourArt(o) || canSwapArt(o))) {
+      if (canColourArt(o)) html += group('colours', t('grp.colours'), `<div class="field color-row"><input type="color" id="p-artfill" value="${esc(artColourOf(o) || '#000000')}" aria-label="${esc(t('props.colour'))}">${palette('fill')}</div><p class="muted small" style="margin:0">${esc(t('props.artColourHint'))}</p>`);
+      if (canSwapArt(o)) html += group('swapart', t('el.swapArt'), `<div class="art-swap art-swap-grid" data-swap-list><span class="muted small">${esc(t('props.swapArtLoading'))}</span></div>`);
     } else if (!sticker && o.type !== 'group') {
       html += group('colours', t(laser() ? 'laser.toneTitle' : 'grp.colours'), (laser() ? laserNote() : fillControls(o) + outlineControls(o, 30)) +
         (o.type === 'rect' ? `<div class="field"><label for="p-rx">${esc(t('props.radius'))}</label><input type="range" id="p-rx" min="0" max="${Math.round(Math.min(o.width, o.height) / 2)}" value="${numv(o.rx)}"></div>` : ''));
@@ -3505,6 +3516,7 @@
     html += sizeGroup(o);
     html += arrangeGroup(o);
     box.innerHTML = html;
+    fillSwapLists(box, o);
     if (image) updateQuality();
     syncSheetTitle();
     renderElBar();
@@ -3544,6 +3556,13 @@
   function setProp(propsToSet, { commitNow = false } = {}) {
     const o = active();
     if (!o) return;
+    // A one-colour drawing: every piece takes the colour (it counts as recoloured by hand from then on).
+    if (o.type === 'group' && 'fill' in propsToSet && Object.keys(propsToSet).length === 1 && canColourArt(o) && typeof propsToSet.fill === 'string') {
+      recolourArt(o, propsToSet.fill);
+      canvas.requestRenderAll();
+      commitNow ? commit() : scheduleCommit();
+      return;
+    }
     o.set(propsToSet);
     if ('text' in propsToSet) fixArabic(o);
     if (o.initDimensions) o.initDimensions();
@@ -4003,6 +4022,7 @@
       }
       case 'p-size': if (Number(v) >= 4) setProp({ fontSize: Number(v) }); break;
       case 'p-fill': if (!$('p-nofill').checked) setProp({ fill: v }); break;
+      case 'p-artfill': setProp({ fill: v }); break;
       case 'p-grad1': case 'p-grad2': {
         setProp({ fill: makeGradient($('p-grad1').value, $('p-grad2').value) });
         const prev = props.querySelector('.grad-preview');
@@ -4122,6 +4142,8 @@
       renderProps();
       return;
     }
+    const sw = e.target.closest('[data-swapart]');
+    if (sw) { await swapArt(o, sw.dataset.swapart, sw.dataset.dark); return; }
     const pal = e.target.closest('[data-pal]');
     if (pal) {
       const c = pal.dataset.c;
@@ -4536,9 +4558,71 @@
     if (Array.isArray(kids) && kids.length) return kids.flatMap(leafColours);
     return o ? [o.fill, o.strokeWidth ? o.stroke : null].filter((c) => typeof c === 'string' && c && c !== 'none' && c !== 'transparent') : [];
   }
+  /** Licensed artwork stays exactly as supplied: never recoloured or changed for other art (CLAUDE.md). */
+  const licensedArt = (o) => /licensed/i.test(`${o.artSrc || ''} ${o.artDark || ''} ${o.name || ''}`);
+  /** The one colour of a drawing ('' when it has several). */
+  function artColourOf(o) {
+    const set = new Set(leafColours(o).map((c) => { try { return '#' + new fabric.Color(c).toHex().toLowerCase(); } catch (e) { return String(c); } }));
+    return set.size === 1 ? [...set][0] : '';
+  }
+  /** A drawing (not a sticker, not on a laser product, not licensed) whose pieces share one colour. */
+  const canColourArt = (o) => Boolean(o) && o.type === 'group' && !isSticker(o) && !laser() && !licensedArt(o) && Boolean(artColourOf(o));
+  /** A ready design's drawing from the shop's own art, with its white copy: it can be changed for another of its pack. */
+  const canSwapArt = (o) => Boolean(o) && o.type === 'group' && !isSticker(o) && !laser() && !licensedArt(o) && /^\/img\/art\/[a-z0-9-]{1,40}\/[\w.-]{1,100}\.svg$/.test(String(o.artSrc || '')) && typeof o.artDark === 'string';
+  function recolourArt(o, c) {
+    const walk = (x) => {
+      const kids = x._objects || x.objects;
+      if (Array.isArray(kids) && kids.length) { kids.forEach(walk); return; }
+      const set = {};
+      if (typeof x.fill === 'string' && x.fill && x.fill !== 'none' && x.fill !== 'transparent') set.fill = c;
+      if (x.strokeWidth && typeof x.stroke === 'string' && x.stroke && x.stroke !== 'none' && x.stroke !== 'transparent') set.stroke = c;
+      x.set(set);
+      x.dirty = true;
+    };
+    walk(o);
+    o.set({ artRecoloured: true, artColour: c });
+    o.dirty = true;
+  }
+  const artLists = new Map();
+  /** The pack's other drawings as small pictures in each "Change drawing" list inside `root`. */
+  function fillSwapLists(root, o) {
+    const boxes = root ? root.querySelectorAll('[data-swap-list]') : [];
+    if (!boxes.length || !canSwapArt(o)) return;
+    const src = o.artSrc;
+    if (!artLists.has(src)) artLists.set(src, fetch('/api/art-similar?src=' + encodeURIComponent(src)).then((r) => (r.ok ? r.json() : { items: [] })).then((j) => j.items || []).catch(() => []));
+    artLists.get(src).then((items) => {
+      if (active() !== o) return;
+      const html = items.length
+        ? items.map((a) => `<button type="button" class="art-swap-btn" data-swapart="${esc(a.src)}" data-dark="${esc(a.dark)}" aria-label="${esc(t('el.swapArt'))}"><img src="${esc(a.src)}" alt="" loading="lazy"></button>`).join('')
+        : `<span class="muted small">${esc(t('props.swapArtNone'))}</span>`;
+      for (const b of boxes) if (b.isConnected) b.innerHTML = html;
+    });
+  }
+  /** The drawing changed for another of its pack: the same place, size (fitted), turn and colour. */
+  async function swapArt(o, src, dark) {
+    if (!canSwapArt(o) || !D.artImage) return;
+    const n = await D.artImage({ src, dark }, inkFor(surfaceHex()));
+    if (!n || !n.width || !n.height || canvas.getObjects().indexOf(o) < 0) return;
+    const w = (o.width || 1) * Math.abs(o.scaleX || 1);
+    const h = (o.height || 1) * Math.abs(o.scaleY || 1);
+    const k = Math.min(w / n.width, h / n.height);
+    const c = o.getCenterPoint();
+    n.set({ originX: 'center', originY: 'center', left: c.x, top: c.y, angle: o.angle || 0, flipX: Boolean(o.flipX), flipY: Boolean(o.flipY), opacity: o.opacity == null ? 1 : o.opacity, scaleX: k, scaleY: k });
+    if (o.artRecoloured && o.artColour) recolourArt(n, o.artColour);
+    n.setCoords();
+    const at = canvas.getObjects().indexOf(o);
+    canvas.remove(o);
+    canvas.insertAt(n, at, false);
+    canvas.setActiveObject(n);
+    canvas.requestRenderAll();
+    commit();
+    renderLayers();
+    renderProps();
+  }
   /** Still as made (not recoloured by hand): every colour in it dark (the normal copy) or light (the white copy). */
   function artAsMade(o) {
     if (o.type === 'image') return true;
+    if (o.artRecoloured) return false;
     return leafColours(o).every((c) => {
       let l;
       try { l = POD.luminance('#' + new fabric.Color(c).toHex()); } catch (e) { return false; }

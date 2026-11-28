@@ -908,6 +908,29 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       next(e);
     }
   });
+  // "Change drawing" in the editor: the other one-colour drawings of the same pack (each with its white copy), for a
+  // ready design's drawing. Never licensed art (official artwork stays as supplied). QA / owner, 28 Nov.
+  const artSiblings = new Map();
+  app.get('/api/art-similar', (req, res) => {
+    const m = /^\/img\/art\/([a-z0-9-]{1,40})\/([A-Za-z0-9_-][A-Za-z0-9_.-]{0,100})\.svg$/.exec(String(req.query.src || ''));
+    if (!m || /^licensed/.test(m[1])) throw new HttpError(404, 'notFound');
+    if (!artSiblings.has(m[1])) {
+      const dir = path.join(__dirname, '..', 'public', 'img', 'art', m[1]);
+      let files = [];
+      try { files = fs.readdirSync(dir).filter((f) => /^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,100}\.svg$/.test(f)); } catch (e) { files = []; }
+      const have = new Set(files);
+      const list = files.filter((f) => !/-white\.svg$/.test(f) && have.has(f.replace(/\.svg$/, '-white.svg')))
+        .sort().map((f) => ({ src: `/img/art/${m[1]}/${f}`, dark: `/img/art/${m[1]}/${f.replace(/\.svg$/, '-white.svg')}` }));
+      artSiblings.set(m[1], list);
+    }
+    // The same kind first (a drawing without words is offered drawings without words).
+    const own = m[2].replace(/-white$/, '');
+    const plain = /-nowords$/.test(own);
+    const all = artSiblings.get(m[1]).filter((a) => !a.src.endsWith(`/${own}.svg`));
+    const same = all.filter((a) => /-nowords\.svg$/.test(a.src) === plain);
+    res.set('Cache-Control', 'public, max-age=3600');
+    res.json({ items: same.slice(0, 60) });
+  });
   app.get('/img-w/:w/:dir/:file', (req, res, next) => sizedPhoto(req, res, next, SIZED_DIRS.has(req.params.dir) ? req.params.dir : null));
 
   // ---------- Catalog ----------
