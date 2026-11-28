@@ -298,5 +298,105 @@
   "w": 1000,
   "h": 1000,
   "role": "accent"
+ },
+ {
+  "id": "twolayer-corner",
+  "theme": "twolayer",
+  "desc": "Bold corner ornament: rounded L band with scroll curls, leaves and a dot (top-left; turn for the other corners), one colour, laser-cut safe",
+  "light": true,
+  "dark": true,
+  "w": 400,
+  "h": 400,
+  "role": "frame"
+ },
+ {
+  "id": "twolayer-vine",
+  "theme": "twolayer",
+  "desc": "Tall flowering vine: thick wavy stem, alternating leaves and three five-petal flowers, one colour, laser-cut safe",
+  "light": true,
+  "dark": true,
+  "w": 300,
+  "h": 1000,
+  "role": "frame"
+ },
+ {
+  "id": "twolayer-garland",
+  "theme": "twolayer",
+  "desc": "Floral garland: a five-petal flower in the middle of a double-swag stem with leaves, one colour, laser-cut safe",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 240,
+  "role": "accent"
+ },
+ {
+  "id": "twolayer-lantern",
+  "theme": "twolayer",
+  "desc": "Ramadan lantern (fanous) silhouette with a hanging ring and two window cut-outs, one colour, laser-cut safe",
+  "light": true,
+  "dark": true,
+  "w": 200,
+  "h": 360,
+  "role": "accent"
+ },
+ {
+  "id": "twolayer-lantern-hanging",
+  "theme": "twolayer",
+  "desc": "Ramadan lantern (fanous) hanging from a thick string, one colour, for one-piece laser-cut scenes",
+  "light": true,
+  "dark": true,
+  "w": 200,
+  "h": 560,
+  "role": "accent"
+ },
+ {
+  "id": "twolayer-frame-scene",
+  "theme": "twolayer",
+  "desc": "Cut-out scene frame: top bar, two side posts, a shelf and a thick base band, all one solid piece",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 1000,
+  "role": "frame"
+ },
+ {
+  "id": "twolayer-frame-base",
+  "theme": "twolayer",
+  "desc": "Cut-out base frame: a shelf on two short capped posts over a thick base band, one solid piece",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 500,
+  "role": "frame"
+ },
+ {
+  "id": "twolayer-crescent-frame",
+  "theme": "twolayer",
+  "desc": "Heavy crescent with two thick shelves reaching into its opening for names and a date, one solid piece",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 1000,
+  "role": "frame"
+ },
+ {
+  "id": "twolayer-heart-frame",
+  "theme": "twolayer",
+  "desc": "Thick heart outline with two shelves across it for names and a date, one solid piece",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 1000,
+  "role": "frame"
+ },
+ {
+  "id": "twolayer-rings-frame",
+  "theme": "twolayer",
+  "desc": "Two interlocked rings (one with a diamond) on a box frame with a shelf and a base band, one solid piece",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 1000,
+  "role": "frame"
  }
 ]

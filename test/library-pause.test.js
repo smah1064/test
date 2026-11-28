@@ -27,10 +27,11 @@ const withServer = async (opts, fn) => {
 };
 const shopIds = async (base) => new Set((await (await fetch(`${base}/api/library`)).json()).designs.map((d) => d.id));
 
-test('the starter designs: 155 drawn with real artwork, the rest only text, shapes and icons', () => {
+test('the starter designs: 176 drawn with real artwork, the rest only text, shapes and icons', () => {
   // (Not counting licensed collections: their own artwork, and a draft one isn't in the shop. src/licensed.js)
-  assert.strictEqual(SEED.filter((d) => usesArtwork(d) && !d.licensed).length, 155);
-  assert.strictEqual(SEED.length - SEED.filter(usesArtwork).length, 472); // (+ 8 for the engraved pen and wallet, 25 Nov; + 46 for the CNC and UV products, 27 Nov; + 8 for the UV DTF cup wraps, 28 Nov)
+  // (+ 21 two-layer wood pieces with our solid ornaments and frames, public/img/art/svg/twolayer-*.svg, 28 Nov.)
+  assert.strictEqual(SEED.filter((d) => usesArtwork(d) && !d.licensed).length, 176);
+  assert.strictEqual(SEED.length - SEED.filter(usesArtwork).length, 487); // (+ 8 for the engraved pen and wallet, 25 Nov; + 46 for the CNC and UV products, 27 Nov; + 8 for the UV DTF cup wraps, 28 Nov; + 6 two-layer wood pieces, 28 Nov; + 9 Ramadan lantern names, 28 Nov)
 });
 
 test('pause, delete and bring back one design, or many at once', async () => {

@@ -24,8 +24,11 @@ test('every laser template fits its own laser product', () => {
 test('every laser product has 4 to 6 templates, in Arabic and English', () => {
   // (The CNC products, also one-tone `laser` ones, have their own pack: test/library-cnc-uv.test.js.)
   const cnc = new Set(require('../src/library-packs/cnc-uv').designs.map((d) => d.product));
+  // (The two-layer wood pieces, 28 Nov, take theirs from src/library-packs/cnc-twolayer.js: the same rule.)
+  // (And the Ramadan lanterns from src/library-packs/lanterns.js.)
+  const twoLayer = [...require('../src/library-packs/cnc-twolayer').designs, ...require('../src/library-packs/lanterns').designs];
   for (const p of PRODUCTS.filter((x) => x.laser && !cnc.has(x.id))) {
-    const mine = designs.filter((d) => d.product === p.id);
+    const mine = [...designs, ...twoLayer].filter((d) => d.product === p.id);
     assert.ok(mine.length >= 4 && mine.length <= 7, `${p.id}: ${mine.length} templates`);
     const texts = mine.flatMap((d) => d.items.filter((i) => i.kind === 'text').map((i) => i.text));
     assert.ok(texts.some((t) => /[؀-ۿ]/.test(t)) && texts.some((t) => /[A-Za-z]/.test(t)), `${p.id}: needs Arabic and English`);

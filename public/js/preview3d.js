@@ -1217,6 +1217,8 @@ function laserLook(color, product) {
   // Pens: coated metal, or a wooden (bamboo) barrel.
   if (m.type === 'pen') return id === 'bamboo' || name.includes('bamboo') || name.includes('wood') ? 'wood' : 'metal';
   if (id === 'clear' || m.clear) return 'clear';
+  // The two-layer pieces' boards (src/products.js PAIR): plain or painted wood, whatever the colour.
+  if (color.board) return 'wood';
   if (id === 'slate') return 'slate';
   if (['gold', 'silver', 'rosegold'].includes(id)) return 'mirror';
   if (['natural', 'wood', 'walnut'].includes(id) || name.includes('wood')) return 'wood';
@@ -1395,6 +1397,14 @@ function laserBlock(look, mats, crop, w, h, m, renderer, color) {
       board.add(e);
     }
   }
+  return placeBoard(board, w, h, depth, m, renderer);
+}
+
+/**
+ * Where a board goes: in a wooden stand with a slot (`base: 'wood'`), on an easel (`easel`), or on the wall,
+ * hanging from a jute rope (`rope`) or with metal hooks along its bottom edge (`hooks`: how many).
+ */
+function placeBoard(board, w, h, depth, m, renderer) {
   const g = new THREE.Group();
   if (m.base === 'wood') {
     // A ready-made wooden stand with a slot; the acrylic stands in it.
@@ -1432,31 +1442,89 @@ function laserBlock(look, mats, crop, w, h, m, renderer, color) {
     g.add(board, ledge, lip);
   } else {
     g.add(board);
+    if (m.rope) g.add(jute(w, h, depth));
+    if (m.hooks) g.add(hooks(m.hooks, w, h, depth));
   }
   g.rotation.y = -0.3;
+  return g;
+}
+
+/** A jute rope from two screw eyes near the top of a round board up to a nail above it. */
+function jute(w, h, depth) {
+  const g = new THREE.Group();
+  const rope = new THREE.MeshStandardMaterial({ color: '#b39a6a', roughness: 0.95, metalness: 0 });
+  const metal = new THREE.MeshStandardMaterial({ color: '#9aa0a6', metalness: 0.9, roughness: 0.35 });
+  const nail = new THREE.Vector3(0, h / 2 + h * 0.42, -depth / 2);
+  const ropeR = Math.max(0.05, w * 0.006);
+  for (const s of [-1, 1]) {
+    // A point on the rim about 40° either side of the top.
+    const a = Math.PI / 2 - s * 0.7;
+    const end = new THREE.Vector3((Math.cos(a) * w) / 2 * 0.92, (Math.sin(a) * h) / 2 * 0.92, -depth / 2);
+    const eye = new THREE.Mesh(new THREE.TorusGeometry(ropeR * 2.2, ropeR * 0.5, 8, 20), metal);
+    eye.position.copy(end).setZ(-depth / 2 - ropeR);
+    eye.rotation.x = Math.PI / 2;
+    const len = end.distanceTo(nail);
+    const cord = new THREE.Mesh(new THREE.CylinderGeometry(ropeR, ropeR, len, 8), rope);
+    cord.position.copy(end).add(nail).multiplyScalar(0.5);
+    cord.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), nail.clone().sub(end).normalize());
+    g.add(eye, cord);
+  }
+  const head = new THREE.Mesh(new THREE.CylinderGeometry(ropeR * 2, ropeR * 2, ropeR * 2, 12), metal);
+  head.rotation.x = Math.PI / 2;
+  head.position.copy(nail);
+  g.add(head);
+  return g;
+}
+
+/** `n` black metal hooks along the bottom of a board: a short arm out from the face, then up. */
+function hooks(n, w, h, depth) {
+  const g = new THREE.Group();
+  const metal = new THREE.MeshStandardMaterial({ color: '#2b2c30', metalness: 0.6, roughness: 0.4 });
+  const R = Math.max(0.06, h * 0.025);
+  const reach = Math.max(0.5, h * 0.22);
+  for (let i = 0; i < n; i++) {
+    const x = -w * 0.4 + (w * 0.8 * i) / Math.max(1, n - 1);
+    const y = -h / 2 + h * 0.12;
+    const plate = new THREE.Mesh(new THREE.CylinderGeometry(R * 2.4, R * 2.4, R, 16), metal);
+    plate.rotation.x = Math.PI / 2;
+    plate.position.set(x, y, depth / 2 + R / 2);
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(R, R, reach, 10), metal);
+    arm.rotation.x = Math.PI / 2;
+    arm.position.set(x, y - R, depth / 2 + reach / 2);
+    const tip = new THREE.Mesh(new THREE.CylinderGeometry(R, R, reach * 0.45, 10), metal);
+    tip.position.set(x, y - R + reach * 0.2, depth / 2 + reach);
+    const end = new THREE.Mesh(new THREE.SphereGeometry(R * 1.2, 12, 8), metal);
+    end.position.set(x, y - R + reach * 0.43, depth / 2 + reach);
+    g.add(plate, arm, tip, end);
+  }
   return g;
 }
 
 /**
  * A board with the design as a second layer on top of it: the design's outline is traced
  * (as for cut pieces) and stands `m.raised` inches proud, in the ink colour (gold on the
- * calligraphy panel). If the outline can't be traced, the flat engraved board is shown.
+ * calligraphy panel; wood for colours with `inkFinish: 'wood'`, the two-layer pieces). If the
+ * outline can't be traced, the flat engraved board is shown.
  */
 async function raisedBlock(mats, crop, w, h, m, renderer, color) {
   const o = await designOutline(crop, w).catch(traceFailed);
   if (!o) return laserBlock('wood', mats, crop, w, h, { ...m, raised: 0 }, renderer, color);
   const r = Math.min(m.radiusIn != null ? m.radiusIn : 0.1, w / 2 - 0.001, h / 2 - 0.001);
   const depth = m.depthIn || 0.2;
-  const g = new THREE.Group();
-  g.add(cutSheet(boardShape(w, h, r), depth, mats));
+  const board = new THREE.Group();
+  board.add(cutSheet(boardShape(w, h, r), depth, mats));
   const ink = (color && color.ink) || '#c9a227';
-  const face = new THREE.MeshStandardMaterial({ color: ink, metalness: 0.7, roughness: 0.34, envMapIntensity: 1 });
-  const edge = new THREE.MeshStandardMaterial({ color: new THREE.Color(ink).multiplyScalar(0.78), metalness: 0.6, roughness: 0.45, envMapIntensity: 0.8 });
-  const top = extrudeShapes(solidShapes(o.list), m.raised, { face, edge });
+  let top;
+  if (color && color.inkFinish === 'wood') {
+    top = extrudeShapes(solidShapes(o.list), m.raised, laserMats('wood', ink, renderer, false));
+  } else {
+    const face = new THREE.MeshStandardMaterial({ color: ink, metalness: 0.7, roughness: 0.34, envMapIntensity: 1 });
+    const edge = new THREE.MeshStandardMaterial({ color: new THREE.Color(ink).multiplyScalar(0.78), metalness: 0.6, roughness: 0.45, envMapIntensity: 0.8 });
+    top = extrudeShapes(solidShapes(o.list), m.raised, { face, edge });
+  }
   top.position.z = depth / 2 + m.raised / 2;
-  g.add(top);
-  g.rotation.y = -0.3;
-  return g;
+  board.add(top);
+  return placeBoard(board, w, h, depth, m, renderer);
 }
 
 /** Things lying on a table are first seen from above and in front. */
@@ -2205,7 +2273,41 @@ async function laserCutout(mats, crop, w, h, m, renderer) {
     cord.position.set(top.x, top.y + ringR * 1.5 + len / 2, 0);
     g.add(ring, cord);
   }
+  if (m.stand) g.add(standBase(box, depth, m.candle, renderer));
   g.rotation.y = -0.3;
+  return g;
+}
+
+/**
+ * A slotted wooden base under a standing cut piece (the two-layer pieces' Ramadan scene and couple names), and with
+ * `candle` an LED tea light on it behind the piece, glowing warm.
+ */
+function standBase(box, depth, candle, renderer) {
+  const g = new THREE.Group();
+  const bw = box.maxX - box.minX;
+  const bl = bw * 0.92;
+  const bd = Math.max(2, bw * 0.22);
+  const bh = Math.max(0.6, bw * 0.07);
+  const wood = laserMats('wood', '#b98d5e', renderer, false);
+  const base = new THREE.Mesh(inchUV(new THREE.BoxGeometry(bl, bh, bd)), wood.face);
+  // The piece sits a little way down into the slot.
+  const sunk = Math.min(0.3, bh * 0.4);
+  base.position.set((box.minX + box.maxX) / 2, box.minY + sunk - bh / 2, -bd * 0.15);
+  g.add(base);
+  if (candle) {
+    const r = Math.max(0.55, bw * 0.06);
+    const ch = r * 0.7;
+    const cup = new THREE.Mesh(new THREE.CylinderGeometry(r, r, ch, 32), new THREE.MeshStandardMaterial({ color: '#e9ecef', metalness: 0.5, roughness: 0.35 }));
+    const y = base.position.y + bh / 2 + ch / 2;
+    const z = base.position.z - bd / 2 + r + 0.15;
+    cup.position.set(base.position.x, y, Math.min(z, -depth - r));
+    const flame = new THREE.Mesh(new THREE.SphereGeometry(r * 0.28, 16, 12), new THREE.MeshStandardMaterial({ color: '#ffd27a', emissive: '#ffb347', emissiveIntensity: 2.2 }));
+    flame.scale.set(1, 1.7, 1);
+    flame.position.set(cup.position.x, y + ch / 2 + r * 0.4, cup.position.z);
+    const glow = new THREE.PointLight('#ffb347', 2.5, bw * 1.5, 2);
+    glow.position.copy(flame.position);
+    g.add(cup, flame, glow);
+  }
   return g;
 }
 
@@ -2284,7 +2386,7 @@ function buildLaser(m, color, tex, renderer, product) {
   const t = tex[side.id];
   const { w, h, k } = printSize(side, t);
   const look = laserLook(color, product);
-  const painted = look === 'wood' && color.id === 'white';
+  const painted = look === 'wood' && (color.id === 'white' || color.board === 'painted');
   const crop = designCrop(t);
   if (m.type === 'puzzle') return laserPuzzle(color, crop, w, h, m, renderer);
   const mats = look === 'clear' ? null : laserMats(look, color.hex, renderer, painted);

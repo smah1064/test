@@ -12,6 +12,8 @@ const { SEED, FITS, CATEGORIES, Library, productsFor, noGeneralDesigns } = requi
 const { PRODUCTS } = require('../src/products');
 const laserPack = require('../src/library-packs/laser');
 const cncPack = require('../src/library-packs/cnc-uv');
+const twoLayerPack = require('../src/library-packs/cnc-twolayer');
+const lanternPack = require('../src/library-packs/lanterns');
 const wrapPack = require('../src/library-packs/uv-wraps');
 
 const byId = (id) => SEED.find((d) => d.id === id);
@@ -88,7 +90,8 @@ test('laser, CNC and UV designs keep their own product lists', () => {
 });
 
 test('no general design on fabric, photo prints, books, laser, CNC or UV products', () => {
-  const own = new Set([...laserPack.designs, ...cncPack.designs].map((d) => d.id));
+  // (The two-layer wood pieces, 28 Nov, have their own pack too: src/library-packs/cnc-twolayer.js.)
+  const own = new Set([...laserPack.designs, ...cncPack.designs, ...twoLayerPack.designs, ...lanternPack.designs].map((d) => d.id));
   // (The UV DTF cup wraps' own pack is drawn once for all four wraps: src/library-packs/uv-wraps.js.)
   const wraps = new Set(wrapPack.designs.map((d) => d.id));
   for (const p of PRODUCTS.filter((x) => !general(x))) {

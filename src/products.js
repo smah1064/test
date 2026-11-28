@@ -2802,6 +2802,289 @@ PRODUCTS.push(
   },
 );
 
+// ---------- Two-layer wood pieces (owner's go, 28 Nov 2026, CNC & Laser chat) ----------
+// A board with the customer's design cut as a second layer and glued on top (`model.raised`, as on the round
+// calligraphy board), or one cut piece standing in a slotted wooden base (`model.stand`). Each "colour" is a pair:
+// the board (`hex`) and the raised layer (`ink`); `inkFinish: 'wood'` shows that layer as wood in the 3D preview
+// (gold is shown as metal), and `board` says whether the board is plain or painted wood. The dashboard gives the
+// board's carving, the raised layer's cut lines and both in one LightBurn file, as for the calligraphy board.
+const PAINTED = new Set(['black', 'white', 'olive']);
+const PAIR = (id, en, ar, hex, ink, wood = true) => ({ id, name: t(en, ar), hex, ink, board: PAINTED.has(id) ? 'painted' : 'wood', ...(wood ? { inkFinish: 'wood' } : {}) });
+const LIGHT_WOOD = '#e8cf9f';
+const DARK_WOOD = '#5a3a22';
+const PANEL = { x: 140, y: 60, w: 220, h: 440, rx: 6 };
+const HANGER = { x: 100, y: 170, w: 300, h: 300, rx: 150 };
+const KEYS = { x: 50, y: 190, w: 400, h: 160, rx: 12 };
+const SCENE = { x: 75, y: 70, w: 350, h: 350 };
+const INVITE = { x: 145, y: 80, w: 210, h: 297, rx: 4 };
+// The jute rope a door hanger hangs from, and the hooks under a key holder (drawn over the design).
+const ROPE = '<path d="M250 40 L150 236 M250 40 L350 236" fill="none" stroke="#b39a6a" stroke-width="5" stroke-linecap="round"/><circle cx="250" cy="40" r="7" fill="#8d939b"/>';
+const HOOKS = (n, x0, x1, y) => Array.from({ length: n }, (_, i) => {
+  const x = x0 + ((x1 - x0) * i) / (n - 1);
+  return `<path d="M${x} ${y} v26 q0 14 -12 14 q-10 0 -10 -10" fill="none" stroke="#2b2c30" stroke-width="7" stroke-linecap="round"/>`;
+}).join('');
+// A slotted wooden base the cut piece stands in.
+const STAND_BASE = '<rect x="96" y="432" width="320" height="56" rx="6" fill="#000" opacity=".12"/><rect x="90" y="420" width="320" height="56" rx="6" fill="#d2ad7c" stroke="#a88456" stroke-width="3"/><rect x="90" y="420" width="320" height="10" fill="#e3c597"/>';
+PRODUCTS.push(
+  {
+    id: 'calligraphypanel',
+    category: 'home',
+    name: t('Tall Calligraphy Wall Panel', 'لوحة كاليجرافي طولية خشب'),
+    description: t('A tall wooden panel with Arabic calligraphy cut as a second layer and raised on top, with carved corner ornaments. A verse, a duaa or a family name for the living room, the entrance or a new home.', 'لوحة خشب طولية عليها خط عربي مقصوص طبقة تانية وبارز فوقها، وزخارف في الأركان. آية أو دعاء أو اسم العيلة للصالة أو المدخل أو بيت جديد.'),
+    basePrice: 1600,
+    colorLabel: t('Board + letters', 'اللوح + الكتابة'),
+    colors: [
+      PAIR('walnut', 'Walnut + light wood', 'خشب جوزي + خشب فاتح', '#6b4a2e', LIGHT_WOOD),
+      PAIR('black', 'Black wood + gold', 'خشب أسود + دهبي', '#26231f', '#d4af37', false),
+      PAIR('white', 'White wood + gold', 'خشب أبيض + دهبي', '#f2eee7', '#c9a227', false),
+      PAIR('natural', 'Natural oak + walnut', 'خشب أرو طبيعي + جوزي', '#d9b88a', DARK_WOOD),
+    ],
+    // (1:2, so the bigger one is the same shape.)
+    sizes: [
+      { id: '40x80', label: t('40 × 80 cm', '40 × 80 سم'), surcharge: 0 },
+      { id: '60x120', label: t('60 × 120 cm', '60 × 120 سم'), surcharge: 1200 },
+    ],
+    sides: [{
+      id: 'front',
+      name: FRONT,
+      svg: sv(WALL('#ece7df') + shadowRect(PANEL.x, PANEL.y, PANEL.w, PANEL.h, PANEL.rx) + `<rect x="${PANEL.x}" y="${PANEL.y}" width="${PANEL.w}" height="${PANEL.h}" rx="${PANEL.rx}" fill="{{C}}" stroke="{{L}}" stroke-width="3"/>` + GRAIN(PANEL.x, PANEL.y, PANEL.w, PANEL.h)),
+      printArea: { ...PANEL },
+      printWidthIn: cmIn(40),
+    }],
+    cardArt: '<path d="M200 140 q20 -30 40 0 M300 120 v190 q0 40 -50 40 q-50 0 -50 -40" fill="none" stroke="{{I}}" stroke-width="16" stroke-linecap="round"/><path d="M190 400 q60 -40 120 0" fill="none" stroke="{{I}}" stroke-width="10" stroke-linecap="round"/>',
+    laser: { kind: 'engrave', cut: 'rounded', radiusMm: 6 },
+  },
+  {
+    id: 'doorhanger',
+    category: 'home',
+    name: t('Round Door Hanger with a Name', 'علّاقة باب مدوّرة بالاسم'),
+    description: t('A round wooden sign for the front door on a jute rope: a greeting and your family name cut as a second layer and raised on the board. For a new home, Ramadan or Eid.', 'يافطة خشب مدوّرة لباب الشقة على حبل جوت: ترحيب واسم العيلة مقصوصين طبقة تانية وبارزين على اللوح. لبيت جديد أو رمضان أو العيد.'),
+    basePrice: 450,
+    colorLabel: t('Board + letters', 'اللوح + الكتابة'),
+    colors: [
+      PAIR('olive', 'Olive green + natural wood', 'أخضر زيتي + خشب طبيعي', '#5b6b3a', LIGHT_WOOD),
+      PAIR('black', 'Black + natural wood', 'أسود + خشب طبيعي', '#232326', LIGHT_WOOD),
+      PAIR('white', 'White + walnut', 'أبيض + جوزي', '#f4f1ec', DARK_WOOD),
+      PAIR('walnut', 'Walnut + light wood', 'جوزي + خشب فاتح', '#6b4a2e', LIGHT_WOOD),
+    ],
+    sizes: [
+      { id: '30', label: t('30 cm round', 'دايرة 30 سم'), surcharge: 0 },
+      { id: '40', label: t('40 cm round', 'دايرة 40 سم'), surcharge: 200 },
+    ],
+    sides: [{
+      id: 'front',
+      name: FRONT,
+      svg: sv(WALL('#f4f2ee') + '<rect x="40" y="0" width="420" height="600" fill="#ffffff" stroke="#e1ddd6" stroke-width="3"/>' + `<circle cx="256" cy="328" r="150" fill="#000" opacity=".12"/><circle cx="250" cy="320" r="150" fill="{{C}}" stroke="{{L}}" stroke-width="3"/>`),
+      overlay: sv(ROPE),
+      printArea: { ...HANGER },
+      printWidthIn: cmIn(30),
+    }],
+    cardArt: '<circle cx="250" cy="320" r="118" fill="none" stroke="{{I}}" stroke-width="6"/><path d="M175 320 q40 -50 75 0 t75 0" fill="none" stroke="{{I}}" stroke-width="14" stroke-linecap="round"/><rect x="200" y="365" width="100" height="10" rx="5" fill="{{I}}"/>',
+    laser: { kind: 'engrave', cut: 'rounded', radiusMm: 150 },
+  },
+  {
+    id: 'keyholder',
+    category: 'home',
+    name: t('Key Holder with a Family Name', 'علّاقة مفاتيح باسم العيلة'),
+    description: t('A wooden key holder for the entrance with five metal hooks: your family name and a small picture cut as a second layer and raised on the board. A practical gift for a new home or an engagement.', 'علّاقة مفاتيح خشب للمدخل بخمس شناكل معدن: اسم العيلة ورسمة صغيرة مقصوصين طبقة تانية وبارزين على اللوح. هدية عملية لبيت جديد أو خطوبة.'),
+    basePrice: 380,
+    colorLabel: t('Board + letters', 'اللوح + الكتابة'),
+    colors: [
+      PAIR('walnut', 'Walnut + light wood', 'خشب جوزي + خشب فاتح', '#6b4a2e', LIGHT_WOOD),
+      PAIR('natural', 'Natural wood + walnut', 'خشب طبيعي + جوزي', '#d9b88a', DARK_WOOD),
+      PAIR('black', 'Black + natural wood', 'أسود + خشب طبيعي', '#232326', LIGHT_WOOD),
+      PAIR('white', 'White + walnut', 'أبيض + جوزي', '#f4f1ec', DARK_WOOD),
+    ],
+    // (5:2, so the bigger one is the same shape; five hooks on both.)
+    sizes: [
+      { id: '30x12', label: t('30 × 12 cm, 5 hooks', '30 × 12 سم، 5 شناكل'), surcharge: 0 },
+      { id: '45x18', label: t('45 × 18 cm, 5 hooks', '45 × 18 سم، 5 شناكل'), surcharge: 170 },
+    ],
+    sides: [{
+      id: 'front',
+      name: FRONT,
+      svg: sv(WALL('#ece7df') + shadowRect(KEYS.x, KEYS.y, KEYS.w, KEYS.h, KEYS.rx) + `<rect x="${KEYS.x}" y="${KEYS.y}" width="${KEYS.w}" height="${KEYS.h}" rx="${KEYS.rx}" fill="{{C}}" stroke="{{L}}" stroke-width="3"/>` + GRAIN(KEYS.x, KEYS.y, KEYS.w, KEYS.h)),
+      overlay: sv(HOOKS(5, 100, 400, 340)),
+      printArea: { ...KEYS },
+      printWidthIn: cmIn(30),
+    }],
+    cardArt: '<path d="M110 270 l30 -26 l30 26 v34 h-60z" fill="none" stroke="{{I}}" stroke-width="8" stroke-linejoin="round"/><rect x="200" y="256" width="190" height="20" rx="10" fill="{{I}}"/><rect x="230" y="290" width="130" height="12" rx="6" fill="{{I}}"/>',
+    laser: { kind: 'engrave', cut: 'rounded', radiusMm: 10 },
+  },
+  {
+    id: 'ramadanlight',
+    category: 'laser',
+    name: t('Ramadan Tea-Light Scene with a Name', 'زينة رمضان مضيئة باسم العيلة'),
+    description: t('A Ramadan scene (mosque, crescent and lanterns) laser cut in one piece with your family name, standing in a slotted wooden base with an LED tea light behind it, so the light shines through the cut shapes.', 'منظر رمضان (جامع وهلال وفوانيس) مقصوص بالليزر قطعة واحدة باسم العيلة، واقف في قاعدة خشب ووراه شمعة LED، فالنور يعدّي من القص.'),
+    basePrice: 350,
+    colorLabel: t('Material', 'الخامة'),
+    colors: [
+      WOOD('wood', 'Natural wood', 'خشب طبيعي', '#d8b183', '#c99a66'),
+      WOOD('walnut', 'Walnut', 'خشب جوزي', '#7a5232', '#6b4a2e'),
+      { id: 'white', name: t('White wood', 'خشب أبيض'), hex: '#f2eee7', ink: '#f2eee7' },
+      { id: 'gold', name: t('Gold mirror acrylic', 'أكريليك مراية دهبي'), hex: '#d4af37', ink: '#d4af37' },
+    ],
+    sizes: [
+      { id: '25', label: t('25 cm wide, base + LED tea light', 'عرض 25 سم، قاعدة + شمعة LED'), surcharge: 0 },
+      { id: '35', label: t('35 cm wide, base + LED tea light', 'عرض 35 سم، قاعدة + شمعة LED'), surcharge: 150 },
+    ],
+    sides: [{
+      id: 'front',
+      name: FRONT,
+      svg: sv(WALL('#ece4d8') + STAND_BASE),
+      printArea: { ...SCENE },
+      printWidthIn: cmIn(25),
+    }],
+    cardArt: '<path d="M300 110 a110 110 0 1 0 60 200 a90 90 0 1 1 -60 -200z" fill="{{I}}"/><path d="M190 380 v-90 q35 -40 70 0 v90z M150 380 v-120 h16 v120z" fill="{{I}}"/><rect x="120" y="380" width="260" height="30" rx="4" fill="{{I}}"/>',
+    // One piece: the scene and the name are joined (the letters on the name bar are cut through, so the light shows them).
+    laser: { kind: 'cut', bridgeMm: 2.5, pieces: 'one' },
+  },
+  {
+    id: 'couplestand',
+    category: 'laser',
+    name: t('Couple Names Stand', 'ستاند أسماء العروسين'),
+    description: t('A crescent or heart frame with the two names and the date, laser cut in one piece and standing in a slotted wooden base. For an engagement, a wedding, katb kitab or an anniversary.', 'إطار هلال أو قلب فيه الاسمين والتاريخ، مقصوص بالليزر قطعة واحدة وواقف في قاعدة خشب. للخطوبة أو الفرح أو كتب الكتاب أو عيد الجواز.'),
+    basePrice: 450,
+    colorLabel: t('Material', 'الخامة'),
+    colors: [
+      WOOD('wood', 'Natural wood', 'خشب طبيعي', '#d8b183', '#c99a66'),
+      WOOD('walnut', 'Walnut', 'خشب جوزي', '#7a5232', '#6b4a2e'),
+      { id: 'white', name: t('White wood', 'خشب أبيض'), hex: '#f2eee7', ink: '#f2eee7' },
+      { id: 'gold', name: t('Gold mirror acrylic', 'أكريليك مراية دهبي'), hex: '#d4af37', ink: '#d4af37' },
+      { id: 'rosegold', name: t('Rose gold mirror acrylic', 'أكريليك مراية روز جولد'), hex: '#d8a08c', ink: '#cf8f7a' },
+    ],
+    sizes: [{ id: '30', label: t('30 cm, with its base', '30 سم، بالقاعدة'), surcharge: 0 }],
+    sides: [{
+      id: 'front',
+      name: FRONT,
+      svg: sv(DESK + STAND_BASE),
+      printArea: { ...SCENE },
+      printWidthIn: cmIn(30),
+    }],
+    cardArt: '<path d="M310 100 a130 130 0 1 0 70 230 a105 105 0 1 1 -70 -230z" fill="none" stroke="{{I}}" stroke-width="14"/><rect x="190" y="250" width="120" height="18" rx="9" fill="{{I}}"/><rect x="210" y="285" width="80" height="10" rx="5" fill="{{I}}"/>',
+    laser: { kind: 'cut', bridgeMm: 2.5, pieces: 'one' },
+  },
+  {
+    id: 'woodinvite',
+    category: 'laser',
+    name: t('Wooden Wedding Invitation', 'دعوة فرح خشب'),
+    description: t('A wooden invitation card, A5, with the names, the date and the place and a floral border cut as a second layer and raised on top. In packs for the guests, or one A4 keepsake for the couple.', 'كارت دعوة خشب مقاس A5، فيه الأسامي واليوم والمكان وبرواز ورد مقصوص طبقة تانية وبارز فوقه. باكيتات للمعازيم، أو تذكار واحد A4 للعروسين.'),
+    basePrice: 3500,
+    colorLabel: t('Card + raised layer', 'الكارت + الطبقة البارزة'),
+    colors: [
+      PAIR('maple', 'Light wood + walnut', 'خشب فاتح + جوزي', '#efe2c8', DARK_WOOD),
+      PAIR('walnut', 'Walnut + light wood', 'جوزي + خشب فاتح', '#6b4a2e', '#efe2c8'),
+      PAIR('white', 'White + gold', 'أبيض + دهبي', '#f6f3ee', '#c9a227', false),
+    ],
+    // 25, 50 or 100 A5 cards (140, 130 and 120 EGP a card), or one A4 keepsake (the same shape, scaled).
+    sizes: qty([
+      ['A5-25', '25 cards, A5', '25 كارت، A5', 0],
+      ['A5-50', '50 cards, A5', '50 كارت، A5', 3000],
+      ['A5-100', '100 cards, A5', '100 كارت، A5', 8500],
+      ['A4-1', '1 keepsake, A4', 'تذكار واحد، A4', -3050, true],
+    ]),
+    sides: [{
+      id: 'front',
+      name: FRONT,
+      svg: sv(DESK + shadowRect(INVITE.x, INVITE.y, INVITE.w, INVITE.h, INVITE.rx) + `<rect x="${INVITE.x}" y="${INVITE.y}" width="${INVITE.w}" height="${INVITE.h}" rx="${INVITE.rx}" fill="{{C}}" stroke="{{L}}" stroke-width="3"/>`),
+      printArea: { ...INVITE },
+      printWidthIn: cmIn(14.8),
+    }],
+    cardArt: '<rect x="190" y="150" width="120" height="12" rx="6" fill="{{I}}"/><path d="M170 230 q40 -40 80 0 t80 0" fill="none" stroke="{{I}}" stroke-width="12" stroke-linecap="round"/><rect x="200" y="280" width="100" height="10" rx="5" fill="{{I}}"/><path d="M335 100 q-20 60 0 120 t0 140" fill="none" stroke="{{I}}" stroke-width="8"/>',
+    laser: { kind: 'engrave', cut: 'rounded', radiusMm: 3 },
+  },
+);
+
+// ---------- Ramadan lanterns with a name (owner's request, 28 Nov 2026; CNC & Laser chat) ----------
+// Two wooden lanterns from the owner's reference picture: Family Fanous (a square lantern with geometric lattice and
+// a big plaque: crescent and star above the family name, one or two lines) and Arabesque Arch (a pointed arch with
+// floral arabesque cutouts and a small nameplate: one first name). The customer's text is engraved on the plaque;
+// the print area is the part of the plaque the name goes in (the crescent and star are part of the lantern).
+// DRAFTS: the price, the sizes and the stock are not confirmed, so they are not written here (basePrice 0, one size
+// without measurements, no stock) and the products are paused ("hidden") until the owner sets a price in
+// admin → Prices and shows them in admin → Products. A product without a price is never in the shop (catalog.visible).
+// printWidthIn (the plaque's name area) is a working estimate for the engraving file's scale: TO CONFIRM.
+// `nameplate.lines`: how many lines the name may take; with `fitText` the editor won't add a design to the cart while
+// any text runs past the plaque (main chat request, 28 Nov).
+const LANTERN_DRAFT = { status: 'hidden', hiddenReason: 'other', hiddenNote: 'Draft: set the price, size and stock, then show it in the shop' };
+const LANTERN_WOOD = [{ id: 'wood', name: t('Wood with warm LED light', 'خشب بإضاءة LED دافية'), hex: '#9c6a3a', ink: '#4a2a12' }];
+const LANTERN_SIZE = [{ id: 'std', label: t('Standard size', 'المقاس العادي'), surcharge: 0 }];
+const LANTERN_GLOW = '<radialGradient id="lg" cx="50%" cy="55%" r="60%"><stop offset="0" stop-color="#ffe7a3"/><stop offset="1" stop-color="#f0a83c"/></radialGradient>';
+// A strip of the lattice: eight-point stars outlined in wood over the glow.
+const latticeStars = (x0, y0, w, h, step) => {
+  let out = '';
+  for (let y = y0 + step / 2; y < y0 + h; y += step) {
+    for (let x = x0 + step / 2; x < x0 + w; x += step) {
+      const r = step * 0.42;
+      out += `<rect x="${x - r / 1.414}" y="${y - r / 1.414}" width="${r * 1.414}" height="${r * 1.414}" fill="none" stroke="#7a4a22" stroke-width="5"/><rect x="${x - r / 1.414}" y="${y - r / 1.414}" width="${r * 1.414}" height="${r * 1.414}" transform="rotate(45 ${x} ${y})" fill="none" stroke="#7a4a22" stroke-width="5"/>`;
+    }
+  }
+  return out;
+};
+const FANOUS_PLAQUE = 'M250 222 q22 0 30 18 q28 2 32 30 q20 14 12 44 v54 q8 30 -12 44 q-4 28 -32 30 q-8 22 -30 30 q-22 -8 -30 -30 q-28 -2 -32 -30 q-20 -14 -12 -44 v-54 q-8 -30 12 -44 q4 -28 32 -30 q8 -18 30 -18 z';
+const ARCH_PLAQUE = 'M250 336 q18 0 26 10 q30 0 34 18 q14 6 14 22 q0 16 -14 22 q-4 18 -34 18 q-8 10 -26 10 q-18 0 -26 -10 q-30 0 -34 -18 q-14 -6 -14 -22 q0 -16 14 -22 q4 -18 34 -18 q8 -10 26 -10 z';
+const FLORET = (x, y) => `<g fill="#6b4220"><path d="M${x} ${y - 9} q5 6 0 12 q-5 -6 0 -12z"/><path d="M${x - 14} ${y} q8 -5 12 0 q-4 5 -12 0z"/><path d="M${x + 14} ${y} q-8 -5 -12 0 q4 5 12 0z"/></g>`;
+PRODUCTS.push(
+  {
+    id: 'familyfanous',
+    category: 'laser',
+    name: t('Family Fanous', 'فانوس العيلة'),
+    description: t('A tall square wooden Ramadan lantern with geometric lattice panels, a pierced domed roof, a hanging ring and a warm LED light. On the front, a large wooden plaque with a crescent and star above your family name, engraved in Arabic or English on up to two lines.', 'فانوس رمضان خشب مربع وطويل بشبابيك هندسية وقبة مخرّمة وحلقة للتعليق وإضاءة LED دافية. في الواجهة لوحة خشب كبيرة عليها هلال ونجمة وتحتهم اسم العيلة محفور، عربي أو إنجليزي، على سطر أو سطرين.'),
+    basePrice: 0,
+    ...LANTERN_DRAFT,
+    colorLabel: t('Finish', 'التشطيب'),
+    colors: LANTERN_WOOD,
+    sizes: LANTERN_SIZE,
+    sides: [{
+      id: 'front',
+      name: t('Plaque', 'اللوحة'),
+      svg: sv('<defs>' + LANTERN_GLOW + '</defs>' + WALL('#f6e9da')
+        + '<circle cx="250" cy="52" r="17" fill="none" stroke="#7a4a22" stroke-width="8"/><rect x="242" y="66" width="16" height="18" fill="#7a4a22"/>'
+        + '<path d="M178 168 Q178 88 250 82 Q322 88 322 168 Z" fill="url(#lg)" stroke="#7a4a22" stroke-width="5"/>' + '<path d="M196 160 q10 -50 54 -62 q44 12 54 62" fill="none" stroke="#7a4a22" stroke-width="5"/>'
+        + '<rect x="160" y="164" width="180" height="16" rx="3" fill="#8a5a2b"/>'
+        + '<rect x="166" y="180" width="168" height="330" fill="url(#lg)"/>' + latticeStars(166, 180, 168, 330, 42)
+        + '<rect x="166" y="180" width="168" height="330" fill="none" stroke="#8a5a2b" stroke-width="10"/>'
+        + `<path d="${FANOUS_PLAQUE}" fill="#e7c48e" stroke="#a7773f" stroke-width="3"/>`
+        + '<path d="M236 248 a16 16 0 1 0 14 26 a12 12 0 1 1 -14 -26 z" fill="#5a3418"/><path d="M266 252 l3 7 7 1 -5 5 1 7 -6 -4 -6 4 1 -7 -5 -5 7 -1z" fill="#5a3418"/>'
+        + '<rect x="150" y="510" width="200" height="24" rx="3" fill="#8a5a2b"/><rect x="158" y="534" width="22" height="12" fill="#7a4a22"/><rect x="320" y="534" width="22" height="12" fill="#7a4a22"/>'),
+      printArea: { x: 195, y: 292, w: 110, h: 78 },
+      printWidthIn: cmIn(11),
+    }],
+    cardArt: '<rect x="200" y="300" width="100" height="16" rx="8" fill="{{I}}"/><rect x="215" y="330" width="70" height="12" rx="6" fill="{{I}}"/>',
+    laser: { kind: 'engrave', cut: null },
+    nameplate: { lines: 2, fitText: true },
+  },
+  {
+    id: 'arabesquelantern',
+    category: 'laser',
+    name: t('Arabesque Arch Lantern', 'فانوس الأرابيسك'),
+    description: t('A tall wooden Ramadan lantern with a pierced domed roof, a pointed arch around the front panel, floral arabesque cutouts and a warm LED light. A small nameplate in the middle of the arch carries one first name, engraved in Arabic or English.', 'فانوس رمضان خشب طويل بقبة مخرّمة وقوس مدبب حوالين الواجهة وزخارف أرابيسك ورد وإضاءة LED دافية. في نص القوس لوحة صغيرة محفور عليها اسم واحد، عربي أو إنجليزي.'),
+    basePrice: 0,
+    ...LANTERN_DRAFT,
+    colorLabel: t('Finish', 'التشطيب'),
+    colors: LANTERN_WOOD,
+    sizes: LANTERN_SIZE,
+    sides: [{
+      id: 'front',
+      name: t('Nameplate', 'لوحة الاسم'),
+      svg: sv('<defs>' + LANTERN_GLOW + '</defs>' + WALL('#f6e9da')
+        + '<circle cx="250" cy="58" r="17" fill="none" stroke="#7a4a22" stroke-width="8"/><rect x="238" y="72" width="24" height="14" fill="#7a4a22"/>'
+        + '<path d="M180 180 Q180 96 250 90 Q320 96 320 180 Z" fill="url(#lg)" stroke="#7a4a22" stroke-width="5"/>' + '<path d="M200 176 q4 -54 50 -70 q46 16 50 70 M226 176 q2 -48 24 -64 q22 16 24 64" fill="none" stroke="#7a4a22" stroke-width="5"/>'
+        + '<rect x="156" y="176" width="188" height="16" rx="3" fill="#8a5a2b"/>'
+        + '<rect x="164" y="192" width="172" height="332" fill="#8a5a2b"/>'
+        + '<path d="M188 520 V290 Q188 232 250 206 Q312 232 312 290 V520 Z" fill="#e2b878"/><path d="M198 520 V292 Q198 242 250 220 Q302 242 302 292 V520 Z" fill="url(#lg)"/>'
+        + '<g fill="none" stroke="#7a4a22" stroke-width="6">' + [260, 330, 400, 470].map((y) => `<path d="M206 ${y} q22 -30 44 0 t44 0"/><circle cx="228" cy="${y + 18}" r="9"/><circle cx="272" cy="${y + 18}" r="9"/>`).join('') + '</g>'
+        + `<path d="${ARCH_PLAQUE}" fill="#e7c48e" stroke="#a7773f" stroke-width="3"/>` + FLORET(250, 352) + FLORET(250, 420)
+        + '<rect x="150" y="520" width="200" height="24" rx="3" fill="#8a5a2b"/><rect x="158" y="544" width="22" height="10" fill="#7a4a22"/><rect x="320" y="544" width="22" height="10" fill="#7a4a22"/>'),
+      printArea: { x: 210, y: 370, w: 80, h: 32 },
+      printWidthIn: cmIn(8),
+    }],
+    cardArt: '<rect x="205" y="380" width="90" height="16" rx="8" fill="{{I}}"/>',
+    laser: { kind: 'engrave', cut: null },
+    nameplate: { lines: 1, fitText: true },
+  },
+);
+
 // ---------- UV DTF cup wraps and the plain glasses they go on (owner, 28 Nov 2026) ----------
 // The owner sells the printed UV DTF wrap (a decal on clear film, no background, stuck on cold) and the plain
 // glasses separately. Each wrap size is its own product, because each glass has its own shape and the editor
@@ -3065,6 +3348,16 @@ const PRODUCTION = {
   favourtags: { process: 'uv', safeIn: 0.1, bleedIn: 0, model: { type: 'block', depthIn: 0.12, radiusIn: 99, material: 'plastic', clear: true } },
   uvdtf: { process: 'uv', safeIn: 0.15, bleedIn: 0, model: { type: 'pad', depthIn: 0.02, radiusIn: 0.05, edge: '#eef1f4', material: 'plastic' } },
   eventletters: { process: 'cnc', safeIn: 0, bleedIn: 0, model: { type: 'cutout', depthIn: 0.79, material: 'laser' } },
+  // Two-layer wood pieces (28 Nov 2026): a board with the design raised on it, or a cut piece in a wooden base.
+  calligraphypanel: { process: 'cnc', safeIn: 0.5, bleedIn: 0, model: { type: 'block', depthIn: 0.71, radiusIn: 0.24, material: 'laser', raised: 0.2 } },
+  doorhanger: { process: 'cnc', safeIn: 0.4, bleedIn: 0, model: { type: 'block', depthIn: 0.24, radiusIn: 99, material: 'laser', raised: 0.12, rope: true } },
+  keyholder: { process: 'cnc', safeIn: 0.3, bleedIn: 0, model: { type: 'block', depthIn: 0.47, radiusIn: 0.4, material: 'laser', raised: 0.16, hooks: 5 } },
+  ramadanlight: { process: 'lasercut', safeIn: 0, bleedIn: 0, model: { type: 'cutout', depthIn: 0.16, material: 'laser', stand: true, candle: true } },
+  couplestand: { process: 'lasercut', safeIn: 0, bleedIn: 0, model: { type: 'cutout', depthIn: 0.16, material: 'laser', stand: true } },
+  woodinvite: { process: 'engrave', safeIn: 0.25, bleedIn: 0, model: { type: 'block', depthIn: 0.12, radiusIn: 0.12, material: 'laser', raised: 0.08, base: 'wood' } },
+  // The Ramadan lanterns (drafts): the plaque is engraved; the 3D view shows the engraved plaque.
+  familyfanous: { process: 'engrave', safeIn: 0.08, bleedIn: 0, model: { type: 'block', depthIn: 0.2, radiusIn: 0.3, material: 'laser' } },
+  arabesquelantern: { process: 'engrave', safeIn: 0.06, bleedIn: 0, model: { type: 'block', depthIn: 0.2, radiusIn: 0.3, material: 'laser' } },
   // UV DTF cup wraps (clear film, cut to each glass) and the plain glasses they go on: turned from each glass's profile.
   uvwrap16: { process: 'uv', safeIn: 0.118, bleedIn: 0, model: glassModel(GLASSES.can16) },
   uvwrap20: { process: 'uv', safeIn: 0.118, bleedIn: 0, model: glassModel(GLASSES.can20) },
@@ -3131,6 +3424,9 @@ const OCCASIONS = [
   ['engrplaque', 'gift wedding engagement graduation teacher'],
   ['engrtray', 'engagement wedding'],
   ['caketopper', 'birthday wedding engagement'],
+  ['couplestand', 'gift valentine wedding engagement'],
+  ['keyholder', 'gift wedding engagement'],
+  ['woodinvite', 'wedding engagement'],
   ['invitations', 'birthday wedding engagement baby'],
   ['greetingcard', 'birthday mom dad valentine wedding graduation baby'],
 ];
@@ -3275,6 +3571,11 @@ const SIZE_PRINT_SCALE = {
   glassaward: { 20: 20 / 15, 25: 25 / 15 },
   uvdtf: { A4: 21 / 14.8, A3: 29.7 / 14.8 },
   eventletters: { 90: 1.5 },
+  calligraphypanel: { '60x120': 1.5 },
+  doorhanger: { 40: 40 / 30 },
+  keyholder: { '45x18': 1.5 },
+  ramadanlight: { 35: 35 / 25 },
+  woodinvite: { 'A4-1': 21 / 14.8 },
   // Phone models are different sizes (back of the phone, w × h mm): iPhone 16 71.6 × 147.6 is the reference.
   phonecase: { iphone16pro: 1.006, iphone16promax: 1.094, galaxys25: 0.99, galaxya55: 1.086 },
 };

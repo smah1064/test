@@ -166,6 +166,38 @@ const FLAGGED = {
   'uvwrap-birthday': [['Omar', 'name'], ['7', 'age']],
   'uvwrap-birthday-ar': [['يا يوسف', 'name', 'يوسف']],
   'uvwrap-monogram': [['M', 'initial'], ['MARIAM', 'name']],
+  // The two-layer wood pieces (src/library-packs/cnc-twolayer.js, 28 Nov).
+  'cnc2-panel-alhamdulillah': [['عائلة محمود', 'family', 'محمود']],
+  'cnc2-panel-fadl-rabbi': [['الشريف', 'family']],
+  'cnc2-panel-family-en': [['HASSANS', 'family']],
+  'cnc2-hanger-ahlan': [['عائلة محمود', 'family', 'محمود']],
+  'cnc2-hanger-ramadan': [['عائلة أحمد', 'family', 'أحمد']],
+  'cnc2-hanger-mashallah': [['بيت عائلة الشريف', 'family', 'الشريف']],
+  'cnc2-hanger-welcome-en': [['THE HASSANS', 'family', 'HASSANS']],
+  'cnc2-keys-house-ar': [['بيت عائلة محمود', 'family', 'محمود']],
+  'cnc2-keys-home-en': [['THE HASSANS', 'family', 'HASSANS']],
+  'cnc2-keys-crescent-ar': [['عائلة الشريف', 'family', 'الشريف']],
+  'cnc2-light-mosque-frame': [['عائلة أحمد', 'family', 'أحمد']],
+  'cnc2-light-lanterns-family': [['عائلة أحمد', 'family', 'أحمد']],
+  'cnc2-light-kareem-en': [['THE AHMEDS', 'family', 'AHMEDS']],
+  'cnc2-couple-crescent': [['أحمد', 'his'], ['سارة', 'her']],
+  'cnc2-couple-heart': [['أحمد', 'his'], ['سارة', 'her']],
+  'cnc2-couple-rings': [['Ahmed & Sara', 'names']],
+  'cnc2-couple-rings-ar': [['محمد', 'his'], ['ليلى', 'her']],
+  'cnc2-invite-vine-ar': [['أحمد', 'his'], ['سارة', 'her']],
+  'cnc2-invite-garland-ar': [['محمد', 'his'], ['ليلى', 'her']],
+  'cnc2-invite-corners-ar': [['يوسف و مريم', 'names']],
+  'cnc2-invite-vine-en': [['Ahmed', 'his'], ['Sara', 'her']],
+  // The Ramadan lanterns (src/library-packs/lanterns.js, 28 Nov).
+  'lan-fanous-family-ar': [['حسن', 'family']],
+  'lan-fanous-family-ar-line': [['عائلة حسن', 'family', 'حسن']],
+  'lan-fanous-beit-ar': [['حسن', 'family']],
+  'lan-fanous-family-en': [['Hassan', 'family']],
+  'lan-fanous-the-en': [['The Hassans', 'family', 'Hassans']],
+  'lan-arch-name-ruqaa': [['لارا', 'name']],
+  'lan-arch-name-messiri': [['لارا', 'name']],
+  'lan-arch-name-en': [['Lara', 'name']],
+  'lan-arch-name-script': [['Lara', 'name']],
 };
 
 test('every flagged design really has its sample text, marked, and nothing else is marked', () => {
@@ -189,7 +221,7 @@ test('every flagged design really has its sample text, marked, and nothing else 
     }
   }
   assert.deepStrictEqual(problems, []);
-  assert.strictEqual(Object.keys(FLAGGED).length, 140); // (+ 6 pen and wallet designs with a name, 25 Nov; + 13 licensed birthday designs, 27 Nov; + 42 CNC and UV designs, 27 Nov; + 5 UV DTF cup wraps, 28 Nov)
+  assert.strictEqual(Object.keys(FLAGGED).length, 170); // (+ 6 pen and wallet designs with a name, 25 Nov; + 13 licensed birthday designs, 27 Nov; + 42 CNC and UV designs, 27 Nov; + 5 UV DTF cup wraps, 28 Nov; + 21 two-layer wood pieces, 28 Nov; + 9 Ramadan lantern names, 28 Nov)
 });
 
 test('the marks are well formed: a known kind, the name part inside the text once, never on {field} designs', () => {

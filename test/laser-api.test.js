@@ -57,8 +57,8 @@ const file = (id, format) => fetch(`${base}/api/admin/files/${id}/front?format=$
 test('every laser product has materials with an engraved tone, a laser kind and a laser process', () => {
   // (The CNC products, 27 Nov, use the same one-tone mode in their own categories, made by 'cnc'.)
   const laser = PRODUCTS.filter((p) => p.laser && p.process !== 'cnc');
-  assert.strictEqual(laser.length, 12); // (+ the engraved pen and wallet, 25 Nov)
-  assert.deepStrictEqual(PRODUCTS.filter((p) => p.laser && p.process === 'cnc').map((p) => p.id), ['calligraphy', 'villasign', 'woodnameplate', 'nameart', 'rehal', 'eventletters']);
+  assert.strictEqual(laser.length, 17); // (+ the engraved pen and wallet, 25 Nov; the Ramadan light, couple stand, wooden invitation and the two Ramadan lanterns, 28 Nov)
+  assert.deepStrictEqual(PRODUCTS.filter((p) => p.laser && p.process === 'cnc').map((p) => p.id), ['calligraphy', 'villasign', 'woodnameplate', 'nameart', 'rehal', 'eventletters', 'calligraphypanel', 'doorhanger', 'keyholder']);
   for (const p of PRODUCTS.filter((x) => x.laser)) {
     if (p.process !== 'cnc') assert.strictEqual(p.category, 'laser');
     assert.ok(['engrave', 'lasercut', 'cnc'].includes(p.process), p.id);

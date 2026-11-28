@@ -20,7 +20,10 @@ const texts = (d) => d.items.filter((i) => i.kind === 'text').map((i) => i.text)
 
 test('the 13 CNC and UV products exist and take only their own designs', () => {
   assert.deepStrictEqual(IDS.filter((id) => !product(id)), [], 'products missing from src/products.js');
-  assert.deepStrictEqual([...OWN_DESIGNS_ONLY].sort(), IDS.slice().sort());
+  // (The two-layer wood pieces, 28 Nov, take only their own designs too: test/library-cnc-twolayer.test.js.)
+  // (So do the Ramadan lanterns: src/library-packs/lanterns.js.)
+  const TWO_LAYER = ['calligraphypanel', 'doorhanger', 'keyholder', 'ramadanlight', 'couplestand', 'woodinvite', 'familyfanous', 'arabesquelantern'];
+  assert.deepStrictEqual([...OWN_DESIGNS_ONLY].filter((id) => !TWO_LAYER.includes(id)).sort(), IDS.slice().sort());
   for (const id of IDS) {
     const on = SEED.filter((d) => productsFor(d).includes(id));
     const foreign = on.filter((d) => !designs.includes(d) || d.product !== id);

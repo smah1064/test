@@ -38,6 +38,10 @@
     'tote:back': { ...P('tote-front'), rect: { cx: 502, top: 540, w: 420 }, warp: 'fabric', base: '#efe4cc' },
     'phonecase:back': { ...P('phonecase-back'), box: { x: 286, y: 199, w: 428, h: 851 }, fit: 'cover', warp: 'flat', keepDark: 0.4 },
     'mousepad:front': { ...P('mousepad-front'), box: { x: 102, y: 280, w: 796, h: 682 }, fit: 'cover', warp: 'flat' },
+    // The Ramadan lanterns (28 Nov 2026): the reference photos with the sample names taken off the plaque; the
+    // engraving goes on the clean plaque (Family Fanous: under the crescent and star; Arabesque: between its ornaments).
+    'familyfanous:front': { ...P('familyfanous-front'), rect: { cx: 595, top: 495, w: 190 }, warp: 'flat', base: '#9c6a3a' },
+    'arabesquelantern:front': { ...P('arabesquelantern-front'), rect: { cx: 570, top: 568, w: 200 }, warp: 'flat', base: '#9c6a3a' },
     'notebook:front': { ...P('notebook-front'), box: { x: 180, y: 154, w: 666, h: 939 }, fit: 'cover', warp: 'flat' },
     'polo:front': { ...P('polo-front'), rect: { cx: 658, top: 345, w: 122 }, warp: 'fabric' },
     'polo:back': { ...P('polo-back'), rect: { cx: 502, top: 272, w: 379 }, warp: 'fabric' },

@@ -512,6 +512,26 @@ Thirteen products made by partner workshops (in their own categories in `src/pro
 - Every size of a product has the same shape as its drawing, so where the sizes the owner listed were different shapes the bigger ones keep the first one's (villa sign 50 × 37.5, nameplates 25 × 8.75 and 25 × 7.5, shield 16 × 20 / 20 × 25 / 24 × 30 cm); the label says the real size.
 - Existing products: the acrylic photo plaque has two big sizes (29 × 40 and 43 × 60 cm with wall standoffs) and a thick 15 mm photo block priced per size; fridge magnets can have an acrylic face (about 60% on each pack).
 
+## Two-layer wood pieces (28 Nov)
+
+Six products (section "Two-layer wood pieces" in `src/products.js`; ready designs in `src/library-packs/cnc-twolayer.js`, only on these products; photos in `public/img/lifestyle/`). The customer's design is either cut as a second layer and glued raised on a board (`model.raised`, as on the round calligraphy board), or the whole design is one cut piece standing in a slotted wooden base (`model.stand`):
+
+- **Raised on a board**: tall calligraphy panel `calligraphypanel` (40 × 80 / 60 × 120 cm, 1,600 / 2,800 EGP), round door hanger on a jute rope `doorhanger` (30 / 40 cm, 450 / 650), key holder with five metal hooks `keyholder` (30 × 12 / 45 × 18 cm, 380 / 550), wooden wedding invitation `woodinvite` (25 / 50 / 100 A5 cards at 3,500 / 6,500 / 12,000, or one A4 keepsake at 450, on a wooden stand).
+- **One cut piece in a base**: Ramadan light `ramadanlight` (mosque, crescent and lanterns with the family name, LED tea light behind it; 25 / 35 cm, 350 / 500) and couple names stand `couplestand` (names and date in a crescent, heart or rings frame; 30 cm, 450). Both are cut as one piece (`laser.pieces: 'one'`, 2.5 mm bridge).
+- Each "colour" is a pair (`PAIR`): the board (`hex`, plain or painted wood: `board`) and the raised layer (`ink`; `inkFinish: 'wood'` for wood, otherwise gold shown as metal). The dashboard gives the raised layer's cut lines and one LightBurn file with both, as for the calligraphy board.
+- 3D preview (`public/js/preview3d.js`): `placeBoard` puts a board on a stand, an easel or the wall, with `jute` (the rope) and `hooks`; `standBase` is the cut pieces' base, with a glowing tea light for `model.candle`.
+- Tests: `test/twolayer-products.test.js`, `test/library-cnc-twolayer.test.js`, `test/e2e/twolayer-3d.e2e.js`.
+- Multi-layer wall art (3–5 coloured layers) is planned, not built: `docs/multilayer-plan.md`.
+
+## Ramadan lanterns (28 Nov, drafts)
+
+Family Fanous `familyfanous` (square lantern, big scalloped plaque: crescent and star above the family name, up to two lines) and Arabesque Arch `arabesquelantern` (pointed arch, small plaque: one first name). Section "Ramadan lanterns" in `src/products.js`; ready names in `src/library-packs/lanterns.js` (only on these two); gallery photos `public/img/lifestyle/<id>.webp` (crops of the owner's reference); live preview on the reference photo with the sample name taken off the plaque (`public/mockups/photos/<id>-front.webp`, `public/js/photo-mockups.js`).
+
+- **Drafts**: price, size and stock are not confirmed, so `basePrice` is 0, there is one size without measurements, no stock, and `status: 'hidden'`. A product without a price is never in the shop (`catalog.visible`). To publish: set the price (admin → Prices), then show it (admin → Products); a draft from the code keeps "live" once shown (`catalog.clean`).
+- `nameplate: { lines, fitText }`: how many lines the name may take, and the editor stops an order whose text runs past the plaque (main chat request, 28 Nov). On a ready design's page the name is fitted to its box as for every design.
+- The plaque's `printWidthIn` is a working estimate until the prototype drawings and the workshop confirm the plaque.
+- Tests: `test/ramadan-lanterns.test.js`, `test/e2e/ramadan-lanterns.e2e.js` (prices and shows them in a test shop, then an Arabic and an English name through the cart).
+
 ## UV DTF cup wraps and plain glasses (28 Nov)
 
 The owner sells the printed UV DTF wrap (full colour on clear film, no background, peel and stick, no heat) and the plain glasses separately. Section "UV DTF cup wraps" in `src/products.js`; prices are starting points to change in the dashboard.

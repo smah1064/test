@@ -313,7 +313,11 @@ const MERGE_FIELD = /\{[^{}]+\}/;
 const hasNameFields = (d) => (d.items || []).some((i) => i.kind === 'text' && MERGE_FIELD.test(i.text || ''));
 // The CNC and UV products (27 Nov 2026) take only the designs drawn for their own shape and material
 // (src/library-packs/cnc-uv.js): no T-shirt slogan on a villa sign, no shop logo on an honour shield.
-const OWN_DESIGNS_ONLY = new Set(['calligraphy', 'villasign', 'acrylicnameplate', 'woodnameplate', 'shield', 'quranbox', 'nameart', 'rehal', 'glassaward', 'qrstand', 'favourtags', 'uvdtf', 'eventletters']);
+const OWN_DESIGNS_ONLY = new Set(['calligraphy', 'villasign', 'acrylicnameplate', 'woodnameplate', 'shield', 'quranbox', 'nameart', 'rehal', 'glassaward', 'qrstand', 'favourtags', 'uvdtf', 'eventletters',
+  // The two-layer wood pieces (28 Nov 2026, src/library-packs/cnc-twolayer.js).
+  'calligraphypanel', 'doorhanger', 'keyholder', 'ramadanlight', 'couplestand', 'woodinvite',
+  // The Ramadan lanterns (28 Nov 2026, src/library-packs/lanterns.js).
+  'familyfanous', 'arabesquelantern']);
 // The UV DTF cup wraps (28 Nov 2026) too: their own pack (src/library-packs/uv-wraps.js), drawn for a band round a glass.
 const WRAP_DESIGNS_ONLY = new Set(['uvwrap16', 'uvwrap20', 'uvwraptumbler', 'uvwraptaper']);
 const ownOnly = (id) => OWN_DESIGNS_ONLY.has(id) || WRAP_DESIGNS_ONLY.has(id);

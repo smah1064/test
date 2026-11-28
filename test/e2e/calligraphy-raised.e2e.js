@@ -55,8 +55,8 @@ test('the calligraphy board is 5 mm raised in the product data', async () => {
   const { products } = await (await fetch(`${srv.base}/api/products`)).json();
   const p = products.find((x) => x.id === 'calligraphy');
   assert.ok(Math.abs(p.model.raised * 25.4 - 5) < 0.2, `raised ${p.model.raised} in`);
-  // Only this product for now: the other boards stay engraved flat.
-  assert.deepStrictEqual(products.filter((x) => x.model && x.model.raised).map((x) => x.id), ['calligraphy']);
+  // This one and the two-layer wood pieces (28 Nov: test/e2e/twolayer-3d.e2e.js); the other boards stay engraved flat.
+  assert.deepStrictEqual(products.filter((x) => x.model && x.model.raised).map((x) => x.id).sort(), ['calligraphy', 'calligraphypanel', 'doorhanger', 'keyholder', 'woodinvite']);
 });
 
 test('realistic view: the raised design has a shadow and a rim; 3D view opens without errors', async () => {

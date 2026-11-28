@@ -164,7 +164,8 @@ test('built-in prices are unchanged: small packs as written', async () => {
   assert.deepStrictEqual([booklets['8-1'], booklets['8-10'], booklets['8-25'], booklets['8-50'], booklets['32-10']], [90, 360, 560, 900, 960]);
   // Every small pack is marked, and only those.
   const marked = PRODUCTS.flatMap((p) => p.sizes.filter((z) => z.smallPack).map((z) => `${p.id}/${z.id}`));
-  assert.strictEqual(marked.length, 27, marked.join(' '));
+  // (+ the wooden invitation's one A4 keepsake, 28 Nov.)
+  assert.strictEqual(marked.length, 28, marked.join(' '));
   for (const id of ['postcards', 'foldedcards', 'giftvouchers', 'bookmarks', 'brochures', 'menus', 'folders', 'booklets']) {
     assert.ok(byId(id).sizes.some((z) => z.smallPack), `${id} has small packs`);
   }

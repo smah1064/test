@@ -250,6 +250,8 @@ const pauseOver = (p) => Boolean(p && p.status === 'hidden' && p.showAgainOn && 
 function visible(p) {
   if (!p) return false;
   if (p.status && p.status !== 'live' && !pauseOver(p)) return false;
+  // A draft whose price isn't set yet (basePrice 0: the Ramadan lanterns, 28 Nov) is never sold, even if shown by mistake.
+  if (!(p.basePrice > 0)) return false;
   if (typeof p.stock === 'number' && p.stock <= 0) return false;
   const colors = p.colors.filter((c) => !out(c));
   const sizes = p.sizes.filter((z) => !out(z));
@@ -359,6 +361,8 @@ function clean(p, body, { categories = [], prev = null } = {}) {
     if (!STATUSES.includes(b.status)) return bad('status');
     // Measured drinkware is shown in the shop only once the owner has checked its dimensions.
     if (b.status === 'live' && drink && !drink.checkedAt) return bad('status', 'photoProductNotChecked');
+    // (A product written as a draft, `status: 'hidden'` in src/products.js, keeps 'live' in its edit once shown.)
+    if (b.status === 'live' && own && own.status && own.status !== 'live') out.status = 'live';
     if (b.status !== 'live') {
       out.status = b.status;
       if (b.hiddenReason != null && b.hiddenReason !== '') {

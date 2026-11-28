@@ -796,5 +796,61 @@
       "en": "Two plain tapered glass cups, one with water and mint",
       "ar": "كوبايتين إزاز سادة مسحوبين، واحدة فيها مية ونعناع"
     }
+  },
+  "familyfanous": {
+    "file": "/img/lifestyle/familyfanous.webp",
+    "alt": {
+      "en": "Square wooden Ramadan lantern with geometric lattice, a domed roof and a family-name plaque under a crescent and star, glowing warm",
+      "ar": "فانوس رمضان خشب مربع بشبابيك هندسية وقبة، وعليه لوحة باسم العيلة تحت هلال ونجمة، منور بإضاءة دافية"
+    }
+  },
+  "arabesquelantern": {
+    "file": "/img/lifestyle/arabesquelantern.webp",
+    "alt": {
+      "en": "Tall wooden Ramadan lantern with a pointed arch, floral arabesque cutouts and a small engraved nameplate, glowing warm",
+      "ar": "فانوس رمضان خشب طويل بقوس مدبب وزخارف أرابيسك، وفي النص لوحة صغيرة محفور عليها الاسم، منور بإضاءة دافية"
+    }
+  },
+  "calligraphypanel": {
+    "file": "/img/lifestyle/calligraphypanel.webp",
+    "alt": {
+      "en": "Tall walnut panel with raised light-wood Alhamdulillah calligraphy and corner ornaments in a living room",
+      "ar": "لوحة خشب جوزي طولية عليها الحمد لله بخشب فاتح بارز وزخارف في الأركان في الصالة"
+    }
+  },
+  "doorhanger": {
+    "file": "/img/lifestyle/doorhanger.webp",
+    "alt": {
+      "en": "Round olive-green door hanger on a jute rope with raised wooden Ahlan wa Sahlan and the family name",
+      "ar": "علّاقة باب مدوّرة خضرا على حبل جوت عليها أهلاً وسهلاً واسم العيلة بخشب بارز"
+    }
+  },
+  "keyholder": {
+    "file": "/img/lifestyle/keyholder.webp",
+    "alt": {
+      "en": "Walnut key holder with a raised light-wood family name and five black hooks in an entrance",
+      "ar": "علّاقة مفاتيح خشب جوزي عليها اسم العيلة بخشب فاتح بارز وخمس شناكل سودا في المدخل"
+    }
+  },
+  "ramadanlight": {
+    "file": "/img/lifestyle/ramadanlight.webp",
+    "alt": {
+      "en": "Laser-cut wooden Ramadan scene with a mosque, crescent and lanterns, glowing from a tea light behind it",
+      "ar": "منظر رمضان خشب مقصوص ليزر بجامع وهلال وفوانيس، منور من شمعة وراه"
+    }
+  },
+  "couplestand": {
+    "file": "/img/lifestyle/couplestand.webp",
+    "alt": {
+      "en": "Laser-cut wooden crescent with the couple's names and date, standing in a wooden base",
+      "ar": "هلال خشب مقصوص ليزر فيه أسامي العروسين والتاريخ، واقف على قاعدة خشب"
+    }
+  },
+  "woodinvite": {
+    "file": "/img/lifestyle/woodinvite.webp",
+    "alt": {
+      "en": "Light wooden wedding invitation with engraved names and a raised walnut rose vine",
+      "ar": "دعوة فرح خشب فاتح محفور عليها الأسامي وفرع ورد جوزي بارز"
+    }
   }
 }
