@@ -4593,26 +4593,106 @@
     artLists.get(src).then((items) => {
       if (active() !== o) return;
       const html = items.length
-        ? items.map((a) => `<button type="button" class="art-swap-btn" data-swapart="${esc(a.src)}" data-dark="${esc(a.dark)}" aria-label="${esc(t('el.swapArt'))}"><img src="${esc(a.src)}" alt="" loading="lazy"></button>`).join('')
+        ? items.map((a) => `<button type="button" class="art-swap-btn" data-swapart="${esc(a.src)}" data-dark="${esc(a.dark)}" aria-label="${esc(t('el.swapArt'))}"><img src="/api/art-thumb?src=${encodeURIComponent(a.src)}" alt="" loading="lazy"></button>`).join('')
         : `<span class="muted small">${esc(t('props.swapArtNone'))}</span>`;
       for (const b of boxes) if (b.isConnected) b.innerHTML = html;
     });
   }
-  /** The drawing changed for another of its pack: the same place, size (fitted), turn and colour. */
+  /** The box round a drawing's visible pieces (canvas units, unturned), not its whole frame: a pack's drawing carries
+   *  the quote's full frame, its pieces where that quote's words were (QA 28 Nov). */
+  function inkBox(o) {
+    const pts = [];
+    const walk = (x) => {
+      const kids = x._objects || x.objects;
+      if (Array.isArray(kids) && kids.length) { kids.forEach(walk); return; }
+      // (Only pieces that show: an invisible frame rectangle is not part of the drawing.)
+      const paint = (c) => typeof c === 'string' && c && c !== 'none' && c !== 'transparent' && !/^rgba\([^)]*,\s*0(\.0+)?\)$/.test(c);
+      if (x.visible === false || x.opacity === 0 || !(paint(x.fill) || (x.strokeWidth && paint(x.stroke)))) return;
+      const d = x._getNonTransformedDimensions();
+      const m = x.calcTransformMatrix();
+      for (const [a, b] of [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]]) pts.push(fabric.util.transformPoint(new fabric.Point(a * d.x, b * d.y), m));
+    };
+    walk(o);
+    if (!pts.length) return null;
+    const xs = pts.map((q) => q.x);
+    const ys = pts.map((q) => q.y);
+    const l = Math.min(...xs);
+    const t0 = Math.min(...ys);
+    return { cx: (l + Math.max(...xs)) / 2, cy: (t0 + Math.max(...ys)) / 2, w: Math.max(...xs) - l, h: Math.max(...ys) - t0 };
+  }
+  /** Where a changed drawing can go without covering the other things on this side: the old drawing's box if nothing
+   *  else is in it, else the clear rectangle of the print area where a drawing of this shape (w/h) shows biggest. */
+  function clearSpot(o, box, aspect) {
+    const area = rects().safe;
+    const others = canvas.getObjects().filter((x) => x !== o && !x.excludeFromExport && x.visible !== false).map((x) => x.getBoundingRect(true, true));
+    const hit = (r) => others.some((q) => q.left < r.x + r.w && q.left + q.width > r.x && q.top < r.y + r.h && q.top + q.height > r.y);
+    const own = { x: box.cx - box.w / 2, y: box.cy - box.h / 2, w: box.w, h: box.h };
+    if (!hit(own)) return { cx: box.cx, cy: box.cy, w: box.w, h: box.h };
+    const N = 24;
+    const cw = area.w / N;
+    const ch = area.h / N;
+    const free = [];
+    for (let j = 0; j < N; j++) {
+      free.push([]);
+      for (let i = 0; i < N; i++) free[j].push(!hit({ x: area.x + i * cw - cw * 0.25, y: area.y + j * ch - ch * 0.25, w: cw * 1.5, h: ch * 1.5 }));
+    }
+    let best = null;
+    for (let j0 = 0; j0 < N; j0++) {
+      for (let i0 = 0; i0 < N; i0++) {
+        if (!free[j0][i0]) continue;
+        let maxI = N;
+        for (let j1 = j0; j1 < N && free[j1][i0]; j1++) {
+          let i1 = i0;
+          while (i1 + 1 < maxI && free[j1][i1 + 1]) i1++;
+          maxI = i1 + 1;
+          const w = (i1 - i0 + 1) * cw;
+          const h = (j1 - j0 + 1) * ch;
+          const size = Math.min(w, h * aspect); // the drawing's width when fitted
+          if (!best || size > best.size) best = { size, cx: area.x + i0 * cw + w / 2, cy: area.y + j0 * ch + h / 2, w, h };
+        }
+      }
+    }
+    return best && best.size > Math.min(box.w, box.h * aspect) * 0.2 ? best : null;
+  }
+  /** The drawing changed for another of its pack: its pieces fitted where the old one's pieces were (not over the
+   *  words), at the same turn and colour. */
   async function swapArt(o, src, dark) {
     if (!canSwapArt(o) || !D.artImage) return;
     const n = await D.artImage({ src, dark }, inkFor(surfaceHex()));
     if (!n || !n.width || !n.height || canvas.getObjects().indexOf(o) < 0) return;
-    const w = (o.width || 1) * Math.abs(o.scaleX || 1);
-    const h = (o.height || 1) * Math.abs(o.scaleY || 1);
-    const k = Math.min(w / n.width, h / n.height);
-    const c = o.getCenterPoint();
-    n.set({ originX: 'center', originY: 'center', left: c.x, top: c.y, angle: o.angle || 0, flipX: Boolean(o.flipX), flipY: Boolean(o.flipY), opacity: o.opacity == null ? 1 : o.opacity, scaleX: k, scaleY: k });
+    // The old drawing's pieces, measured unturned about its centre.
+    const pivot = o.getCenterPoint();
+    const angle = o.angle || 0;
+    o.set({ angle: 0 });
+    o.setPositionByOrigin(pivot, 'center', 'center');
+    const a = inkBox(o);
+    o.set({ angle });
+    o.setPositionByOrigin(pivot, 'center', 'center');
+    // Its box cut to its visible pieces (an SVG drawing's group is the size of the whole quote's frame, which would
+    // reach outside the print area wherever the pieces are put).
+    if (n.type === 'group' && Array.isArray(n._objects) && n.addWithUpdate) {
+      for (const kid of n._objects.slice()) if (!inkBox(kid)) n.remove(kid);
+      n.addWithUpdate();
+    }
+    n.set({ originX: 'center', originY: 'center', left: 0, top: 0, angle: 0, scaleX: 1, scaleY: 1, flipX: Boolean(o.flipX), flipY: Boolean(o.flipY), opacity: o.opacity == null ? 1 : o.opacity });
+    const b = inkBox(n);
+    if (!a || !b || !(b.w > 0) || !(b.h > 0)) return;
+    // Never bigger than the old drawing's pieces; placed in the old pieces' box when that is clear of the words, else in
+    // the biggest clear space of the print area (a pack's drawing is spread round its own quote's words, so another
+    // one put in the same box sat on the words: QA 28 Nov).
+    const kMax = Math.min(a.w / b.w, a.h / b.h);
+    const spot = angle ? null : clearSpot(o, a, b.w / b.h);
+    const k = spot ? Math.min(kMax, spot.w / b.w, spot.h / b.h) : kMax;
+    const target = spot ? { cx: spot.cx, cy: spot.cy } : a;
+    // Its pieces' centre on the target's centre, then the whole thing turned round the old drawing's centre.
+    const c = new fabric.Point(target.cx - b.cx * k, target.cy - b.cy * k);
+    const at = angle ? fabric.util.rotatePoint(c, pivot, fabric.util.degreesToRadians(angle)) : c;
+    n.set({ scaleX: k, scaleY: k, left: at.x, top: at.y, angle });
     if (o.artRecoloured && o.artColour) recolourArt(n, o.artColour);
     n.setCoords();
-    const at = canvas.getObjects().indexOf(o);
+    const idx = canvas.getObjects().indexOf(o);
     canvas.remove(o);
-    canvas.insertAt(n, at, false);
+    canvas.insertAt(n, idx, false);
     canvas.setActiveObject(n);
     canvas.requestRenderAll();
     commit();

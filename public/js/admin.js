@@ -475,6 +475,7 @@
           ${processesOf(item).length > 1
     ? `<div class="method-both"><strong>${esc(methodBoth(processesOf(item)))}</strong></div>${processesOf(item).map((p) => `<div class="method-step">${esc(t('process.' + p))}</div>`).join('')}`
     : esc(t(item.kind === 'photoset' ? 'process.photo' : item.kind === 'book' ? 'process.book' : 'process.' + item.process))}
+          ${(item.sides || []).some((sd) => sd.fan) ? `<div class="small" style="color:var(--warn);margin-top:4px"><strong>${esc(t('process.fan'))}</strong></div>` : ''}
           ${processesOf(item).includes('dtg') && anyDark(item) ? `<div class="small" style="color:var(--warn);margin-top:4px">${esc(t('admin.darkHint'))}</div>` : ''}
           ${item.filmBatch ? `<div><span class="pill printed">${esc(t('admin.onFilm', { id: item.filmBatch.id }))}</span></div>` : ''}
         </dd>` : ''}
@@ -564,8 +565,9 @@
       <div class="print-files-block">
         <div class="small muted" style="font-weight:700;margin-bottom:6px">${esc(t('admin.files', { side: tr(s.name) }))}</div>
         <div class="print-files">
-          ${formats.map((f) => `<button class="btn btn-sm ${f === rec ? 'btn-primary' : ''}" data-download="${esc(s.printUrl)}?format=${f}">⬇ ${esc(t('fmt.' + f))}${f === rec ? ` <span class="rec">· ${esc(t('admin.recommended'))}</span>` : ''}</button>`).join('')}
+          ${formats.filter((f) => !s.fan || /^fan-/.test(f)).map((f) => `<button class="btn btn-sm ${f === rec ? 'btn-primary' : ''}" data-download="${esc(s.printUrl)}?format=${f}">⬇ ${esc(t('fmt.' + f))}${f === rec ? ` <span class="rec">· ${esc(t('admin.recommended'))}</span>` : ''}</button>`).join('')}
         </div>
+        ${s.fan ? `<details class="small" style="margin-top:6px"><summary>${esc(t('admin.flatFiles'))}</summary><div class="print-files" style="margin-top:6px">${formats.filter((f) => !/^fan-/.test(f)).map((f) => `<button class="btn btn-sm" data-download="${esc(s.printUrl)}?format=${f}">⬇ ${esc(t('fmt.' + f))}</button>`).join('')}</div></details>` : ''}
       </div>`;
   }
 
@@ -2908,7 +2910,7 @@
       [t('rv.product'), esc(tr((proof.product && proof.product.name) || item.productName))],
       hasQty(item) ? [t('adminQty.title'), qtySummary(item)] : [t('rv.colourSize'), `${color.hex ? `<span class="qty-dot" style="background:${esc(color.hex)}"></span>` : ''}${esc(tr(color.name))}${SEP()}${esc(tr(size.label))}`],
       procs.length > 1 ? [t('rv.method'), `<strong>${esc(methodBoth(procs))}</strong>${procs.filter((p) => hasStr('process.' + p)).map((p) => `<div class="method-step">${esc(t('process.' + p))}</div>`).join('')}`]
-        : process && hasStr('process.' + process) ? [t('rv.method'), esc(t('process.' + process))] : null,
+        : process && hasStr('process.' + process) ? [t('rv.method'), esc(t('process.' + process)) + ((item.sides || []).some((sd) => sd.fan) ? `<div class="small" style="color:var(--warn)"><strong>${esc(t('process.fan'))}</strong></div>` : '')] : null,
     ].filter(Boolean);
     return `
       <div class="rv-detail">

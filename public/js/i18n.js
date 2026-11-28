@@ -1612,6 +1612,8 @@ window.POD_STRINGS = {
   'process.dtg': ['Direct-to-garment (DTG). Use the transparent PNG; on dark garments print the white underbase first.', 'طباعة مباشرة على القماش (DTG). استخدم ملف PNG الشفاف؛ وعلى القطع الغامقة اطبع طبقة الأبيض أولًا.'],
   'process.dtf': ['DTF transfer. Print the mirrored film file, or add the item to a shared DTF film.', 'نقل حراري DTF. اطبع ملف الفيلم المعكوس، أو أضف القطعة إلى فيلم DTF مشترك.'],
   'process.sublimation': ['Sublimation. Print the mirrored PNG on transfer paper.', 'طباعة بالتسامي. اطبع ملف PNG المعكوس على ورق النقل.'],
+  'process.fan': ['This cup narrows: print the Fan PDF (true size) or the fan PNG. The flat files print as a rectangle and won\'t line up on the cup.', 'الكوباية دي بتضيق: اطبع ملف المروحة PDF (بالمقاس الحقيقي) أو PNG المروحة. الملفات المسطحة بتتطبع مستطيل ومش هتظبط على الكوباية.'],
+  'admin.flatFiles': ['Flat files (not for this cup: they print as a rectangle)', 'ملفات مسطحة (مش للكوباية دي: بتتطبع مستطيل)'],
   'process.uv': ['UV printing. Use the print-ready PDF (or the transparent PNG).', 'طباعة UV. استخدم ملف PDF الجاهز (أو PNG الشفاف).'],
   'process.engrave': ['CO2 laser engraving. Open the LightBurn file: the engraving is the image layer, red lines (if any) are cut lines.', 'حفر ليزر CO2. افتح ملف LightBurn: الحفر هو طبقة الصورة، والخطوط الحمرا (لو فيه) خطوط قص.'],
   'process.cnc': ['CNC routing at the workshop. Open the LightBurn SVG: the carving is the image layer, red lines are cut lines (the board outline or the cut-out letters); import it into the router\'s CAM software.', 'حفر وقص CNC في الورشة. افتح ملف LightBurn SVG: الحفر هو طبقة الصورة، والخطوط الحمرا خطوط القص (حدود اللوح أو الحروف المقصوصة)؛ استورده في برنامج الراوتر.'],

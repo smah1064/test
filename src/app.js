@@ -911,26 +911,65 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   // "Change drawing" in the editor: the other one-colour drawings of the same pack (each with its white copy), for a
   // ready design's drawing. Never licensed art (official artwork stays as supplied). QA / owner, 28 Nov.
   const artSiblings = new Map();
-  app.get('/api/art-similar', (req, res) => {
+  /** How compact a drawing is: the share of its pieces' box that is ink, and that box's share of the frame. */
+  async function artShape(file) {
+    const { data, info } = await sharp()(file, { density: 48 }).resize(200, 200, { fit: 'inside' }).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    let n = 0; let x0 = Infinity; let y0 = Infinity; let x1 = -1; let y1 = -1;
+    for (let y = 0; y < info.height; y++) {
+      for (let x = 0; x < info.width; x++) {
+        if (data[(y * info.width + x) * 4 + 3] <= 40) continue;
+        n++;
+        if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
+    }
+    if (!n) return { fill: 0, box: 0 };
+    const bw = x1 - x0 + 1; const bh = y1 - y0 + 1;
+    return { fill: n / (bw * bh), box: (bw * bh) / (info.width * info.height) };
+  }
+  app.get('/api/art-similar', asyncRoute(async (req, res) => {
     const m = /^\/img\/art\/([a-z0-9-]{1,40})\/([A-Za-z0-9_-][A-Za-z0-9_.-]{0,100})\.svg$/.exec(String(req.query.src || ''));
     if (!m || /^licensed/.test(m[1])) throw new HttpError(404, 'notFound');
     if (!artSiblings.has(m[1])) {
-      const dir = path.join(__dirname, '..', 'public', 'img', 'art', m[1]);
-      let files = [];
-      try { files = fs.readdirSync(dir).filter((f) => /^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,100}\.svg$/.test(f)); } catch (e) { files = []; }
-      const have = new Set(files);
-      const list = files.filter((f) => !/-white\.svg$/.test(f) && have.has(f.replace(/\.svg$/, '-white.svg')))
-        .sort().map((f) => ({ src: `/img/art/${m[1]}/${f}`, dark: `/img/art/${m[1]}/${f.replace(/\.svg$/, '-white.svg')}` }));
-      artSiblings.set(m[1], list);
+      artSiblings.set(m[1], (async () => {
+        const dir = path.join(__dirname, '..', 'public', 'img', 'art', m[1]);
+        let files = [];
+        try { files = fs.readdirSync(dir).filter((f) => /^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,100}\.svg$/.test(f)); } catch (e) { files = []; }
+        const have = new Set(files);
+        const out = [];
+        for (const f of files.filter((x) => !/-white\.svg$/.test(x) && have.has(x.replace(/\.svg$/, '-white.svg'))).sort()) {
+          // Only drawings that stand alone (one compact picture): a quote's decorations spread round its own words
+          // land on the other quote's words (QA 28 Nov).
+          const shape = await artShape(path.join(dir, f)).catch(() => null);
+          if (!shape || shape.fill < 0.2 || shape.box > 0.45) continue;
+          out.push({ src: `/img/art/${m[1]}/${f}`, dark: `/img/art/${m[1]}/${f.replace(/\.svg$/, '-white.svg')}` });
+        }
+        return out;
+      })().catch(() => []));
     }
     // The same kind first (a drawing without words is offered drawings without words).
     const own = m[2].replace(/-white$/, '');
     const plain = /-nowords$/.test(own);
-    const all = artSiblings.get(m[1]).filter((a) => !a.src.endsWith(`/${own}.svg`));
+    const all = (await artSiblings.get(m[1])).filter((a) => !a.src.endsWith(`/${own}.svg`));
     const same = all.filter((a) => /-nowords\.svg$/.test(a.src) === plain);
     res.set('Cache-Control', 'public, max-age=3600');
     res.json({ items: same.slice(0, 60) });
-  });
+  }));
+  // Its small picture, cut to the drawing's pieces (the file carries the whole quote's frame, mostly empty).
+  const artThumbs = new Map();
+  app.get('/api/art-thumb', asyncRoute(async (req, res) => {
+    const m = /^\/img\/art\/([a-z0-9-]{1,40})\/([A-Za-z0-9_-][A-Za-z0-9_.-]{0,100})\.svg$/.exec(String(req.query.src || ''));
+    if (!m || /^licensed/.test(m[1])) throw new HttpError(404, 'notFound');
+    const file = path.join(__dirname, '..', 'public', 'img', 'art', m[1], `${m[2]}.svg`);
+    if (!fs.existsSync(file)) throw new HttpError(404, 'notFound');
+    if (!artThumbs.has(file)) {
+      if (artThumbs.size > 400) artThumbs.clear();
+      artThumbs.set(file, sharp()(file, { density: 96 }).resize(480, 480, { fit: 'inside' }).trim().resize(128, 128, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } }).webp({ quality: 80 }).toBuffer().catch(() => null));
+    }
+    const buf = await artThumbs.get(file);
+    if (!buf) throw new HttpError(404, 'notFound');
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.type('image/webp').send(buf);
+  }));
   app.get('/img-w/:w/:dir/:file', (req, res, next) => sizedPhoto(req, res, next, SIZED_DIRS.has(req.params.dir) ? req.params.dir : null));
 
   // ---------- Catalog ----------
