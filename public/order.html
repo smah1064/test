@@ -126,6 +126,8 @@
         production: '<path d="M7 9V3h10v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M7 14h10v7H7z"/>',
         printed: '<path d="M20 7 9 18l-5-5"/>',
         shipped: '<path d="M2 6h12v10H2zM14 10h4l4 4v2h-8"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/>',
+        // (A box: plain items are packed, not printed.)
+        preparing: '<path d="M3 8l9-5 9 5v8l-9 5-9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/>',
         delivered: '<path d="M3 10 12 3l9 7v11H3z"/><path d="m8.5 14.5 2.5 2.5 4.5-5"/>',
       };
       let order = null;
@@ -182,8 +184,16 @@
         if (o.status === 'delivered') cur = 4;
         return list.map((s, i) => ({ ...s, done: i <= cur, current: i === cur }));
       }
+      /** Nothing printed in the order (plain glasses only): its steps have no printing (QA 28 Nov). */
+      const allPlain = (o) => o.items.length > 0 && o.items.every((i) => i.kind === 'blank');
       function timelineHtml(o) {
-        const list = steps(o);
+        let list = steps(o);
+        const plainOrder = allPlain(o);
+        if (plainOrder) {
+          // Placed → Being prepared → Shipped → Delivered ("Printed" folded into "Being prepared").
+          const printed = list.find((s) => s.step === 'printed');
+          list = list.filter((s) => s.step !== 'printed').map((s) => (s.step === 'production' && printed.current ? { ...s, current: true } : s));
+        }
         const cur = list.find((s) => s.current);
         return `
           <section class="card track-card" aria-labelledby="track-h">
@@ -191,9 +201,9 @@
             <ol class="track">
               ${list.map((s, i) => `
               <li class="${s.done ? 'done' : ''}${s.current ? ' current' : ''}${list[i + 1] && list[i + 1].done ? ' lead' : ''}"${s.current ? ' aria-current="step"' : ''}>
-                <span class="track-dot"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[s.step]}</svg></span>
+                <span class="track-dot"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[plainOrder && s.step === 'production' ? 'preparing' : s.step]}</svg></span>
                 <span class="track-text">
-                  <span class="track-lbl">${esc(t('track.' + s.step))}</span>
+                  <span class="track-lbl">${esc(t(plainOrder && s.step === 'production' ? 'track.preparing' : 'track.' + s.step))}</span>
                   <span class="track-when">${s.at ? esc(POD.date(s.at)) : s.done ? '' : s.step === 'delivered' && dueDay(o) ? esc(t('track.expected', { date: POD.day(dueDay(o)) })) : esc(t('track.pending'))}</span>
                 </span>
               </li>`).join('')}
@@ -211,6 +221,7 @@
           if (o.items.some((i) => i.status === 'review')) return t('track.now.review');
           // Nothing printed in it (plain glasses only): no "printing starts soon" (QA 28 Nov).
           if (step === 'placed' && o.items.length && o.items.every((i) => i.kind === 'blank')) return t('track.placed.hintStock');
+          if (step === 'production' && o.items.length && o.items.every((i) => i.kind === 'blank')) return t('track.preparing.hint');
         }
         return t('track.' + step + '.hint');
       }
@@ -353,7 +364,9 @@
           <div class="card order-items" style="margin-top:16px">
             ${o.items.map((item, i) => {
               const status = delivered ? 'delivered' : item.status;
-              const reached = STEPS.indexOf(status);
+              // (A plain item's bar has no printing step: queued or "printing" is being prepared, then ready. QA 28 Nov.)
+              const itemSteps = item.kind === 'blank' ? ['queued', 'printed', 'shipped', 'delivered'] : STEPS;
+              const reached = itemSteps.indexOf(item.kind === 'blank' && status === 'printing' ? 'queued' : status);
               const pic = item.sides && item.sides[0] && item.sides[0].previewUrl;
               // One design in several sizes / colours / quantities, or a name list.
               const breakdown = PODAftercare.showBreakdown(item);
@@ -361,7 +374,7 @@
               const pieces = PODAftercare.pieces(item);
               // Plain items: no print side, "3 pieces", and prepared rather than printed (QA 28 Nov).
               const plain = item.kind === 'blank';
-              const label = plain && ['queued', 'printing'].includes(status) ? 'item.preparing' : 'item.' + status;
+              const label = plain && ['queued', 'printing'].includes(status) ? 'item.preparing' : plain && status === 'printed' ? 'item.ready' : 'item.' + status;
               return `
               <div class="cart-item">
                 ${pic ? `<img src="${esc(pic)}" alt="">` : '<span></span>'}
@@ -372,7 +385,7 @@
                   <div class="status-label st-${esc(status)}" style="margin-top:10px">${esc(t(label))}</div>
                   ${delivered ? '' : proofStateHtml(item)}
                   ${approvalHtml(item)}
-                  <div class="status-steps">${STEPS.map((s, k) => `<div class="${k <= reached ? 'done' : ''}" title="${esc(t('item.' + s))}"></div>`).join('')}</div>
+                  <div class="status-steps">${itemSteps.map((s, k) => `<div class="${k <= reached ? 'done' : ''}" title="${esc(t(plain && s === 'queued' ? 'item.preparing' : plain && s === 'printed' ? 'item.ready' : 'item.' + s))}"></div>`).join('')}</div>
                   ${o.items.length > 1 && !team ? `<button class="btn btn-sm reo-one" type="button" data-act="reorder-item" data-item="${esc(item.id)}"${reo.busy ? ' disabled' : ''}>${esc(t('track.reorderItem'))}</button>` : ''}
                 </div>
                 <div class="price">${money$ ? `${esc(money(item.price))}${pieces > 1 && item.unitPrice && POD.packCopies(item.quantities) == null ? `<div class="qty-each">${esc(t('qty.each', { price: money(item.unitPrice) }))}</div>` : ''}` : ''}</div>

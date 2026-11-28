@@ -60,6 +60,12 @@ test('order page: plain glasses read as pieces, with no print side or proof', { 
       await page.waitForSelector('.order-items .cart-item', { timeout: 30000 });
       const item = await page.textContent('.order-items .cart-item');
       const now = await page.textContent('.track-hint').catch(() => '');
+      // QA 28 Nov: the tracker of a plain-only order has no printing steps (4 steps, "Being prepared").
+      const track = await page.$$eval('.track .track-lbl', (els) => els.map((e) => e.textContent));
+      assert.strictEqual(track.length, 4, track.join(' | '));
+      assert.ok(!track.some((x) => /Printed|In production|تمت الطباعة|قيد التنفيذ/.test(x)), track.join(' | '));
+      assert.ok(track.some((x) => /Being prepared|بيتجهّز/.test(x)), track.join(' | '));
+      assert.strictEqual(await page.locator('.order-items .cart-item .status-steps > div').count(), 4, 'the item bar has 4 steps');
       if (lang === 'en') {
         assert.match(item, /3 pieces/, item);
         assert.doesNotMatch(item, /names|Front|approved/i, item);

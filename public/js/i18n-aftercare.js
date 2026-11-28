@@ -29,6 +29,9 @@
     // An order of plain items only (nothing printed: QA 28 Nov).
     'track.placed.hintStock': ["We've got your order. We're getting it ready.", 'استلمنا طلبك، وبنجهّزه.'],
     'item.preparing': ['Being prepared', 'بيتجهّز'],
+    'item.ready': ['Ready to ship', 'جاهز للشحن'],
+    'track.preparing': ['Being prepared', 'بيتجهّز'],
+    'track.preparing.hint': ['We’re getting your items ready to ship.', 'بنجهّز طلبك للشحن.'],
     'track.production.hint': ['Your items are being printed one by one.', 'منتجاتك بتتطبع واحدة واحدة.'],
     'track.printed.hint': ["Everything is printed. We're packing it for the courier.", 'كل حاجة اتطبعت، وبنغلّفها للمندوب.'],
     'track.shipped.hint': ['Your order is on its way to you.', 'طلبك في الطريق ليك.'],
