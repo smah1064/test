@@ -203,6 +203,7 @@ test.after(() => {
   server.close();
   fs.rmSync(dataDir, { recursive: true, force: true });
 });
+const madeWraps = {};
 const post = (url, body) => fetch(`${base}${url}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
 test('the shop lists all eight with their flags, links and print sides', async () => {
@@ -238,5 +239,34 @@ test('a wrap design with "stick it on for me" is priced on the server and keeps 
     assert.strictEqual(done.price, WRAPS[id] + 40, `${id}: wrap + applying`);
     const stored = app.locals.store.getDesign(created.id);
     assert.strictEqual(Boolean(stored.sides[0].fan), id === 'uvwraptaper', `${id}: fan kept with the design`);
+    madeWraps[id] = created.id;
   }
+});
+
+// QA 28 Nov: "stick it on for me" was ordered with no glass, or with a glass of another size.
+test('a wrap to be stuck on needs a glass of its size in the same order, one glass per wrap', async () => {
+  const wrap = madeWraps.uvwrap16;
+  assert.ok(wrap, 'made above');
+  const customer = { name: 'Mona', phone: '01011112222', governorate: 'cairo', city: 'Nasr City', address: '3 Street 9' };
+  const blank = async (productId, qty = 1) => (await (await post('/api/blanks', { productId, qty })).json()).id;
+  const quote = async (ids) => (await (await post('/api/cart/quote', { designIds: ids })).json());
+  // Alone: the cart says so on the wrap, and the order is refused.
+  let q = await quote([wrap]);
+  assert.strictEqual(q.items[0].unavailable, 'wrapNeedsGlass');
+  assert.match(q.items[0].unavailableText, /16 oz/);
+  let o = await post('/api/orders', { customer, designIds: [wrap], expectedTotal: 0 });
+  assert.strictEqual(o.status, 409);
+  // With a glass of another size: still refused.
+  const taper = await blank('glasstaper');
+  q = await quote([wrap, taper]);
+  assert.strictEqual(q.items[0].unavailable, 'wrapNeedsGlass');
+  assert.ok(!q.items[1].unavailable, 'the glass itself is fine');
+  o = await post('/api/orders', { customer, designIds: [wrap, taper], expectedTotal: 0 });
+  assert.strictEqual(o.status, 409);
+  // With its own glass: fine, and ordered.
+  const can = await blank('glasscan16');
+  q = await quote([wrap, can]);
+  assert.ok(!q.items.some((i) => i.unavailable), JSON.stringify(q.items));
+  o = await post('/api/orders', { customer, designIds: [wrap, can], expectedTotal: q.total });
+  assert.strictEqual(o.status, 201, await o.clone().text());
 });

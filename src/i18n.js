@@ -238,6 +238,8 @@ const MESSAGES = {
   gangTooLong: { en: 'The sheet would be longer than 5 m. Split it into two orders.', ar: 'الشيت هيبقى أطول من 5 متر. قسّمه على طلبين.' },
   gangMissingFile: { en: 'A design file did not finish uploading', ar: 'فيه ملف تصميم ماترفعش كامل' },
   // Product manager (admin → Products) and what the shop says about it.
+  // A wrap with "stick it on for me" and no glass of its size (one glass per wrap) in the same order (QA 28 Nov).
+  wrapNeedsGlass: { en: 'To have the wrap stuck on, add a {glass} to this order too (one glass for each wrap), or choose "I will apply it myself".', ar: 'علشان نلزق الستيكر، ضيف {glass} لنفس الأوردر (كوباية لكل ستيكر)، أو اختار «هلزقها بنفسي».' },
   productUnavailable: { en: '{name} is not available right now. Remove it from the cart or choose another product.', ar: '{name} مش متاح دلوقتي. شيله من السلة أو اختار منتج تاني.' },
   // Archived in admin → Products ("stop selling"): not coming back; the shop offers similar products.
   productRetired: { en: '{name} is no longer sold. Remove it from your cart or put your design on a similar product.', ar: '{name} مبقاش بيتباع. شيله من السلة أو حط تصميمك على منتج شبهه.' },

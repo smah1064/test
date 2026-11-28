@@ -3563,6 +3563,27 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
     }
     return null;
   };
+  /**
+   * Wraps ordered with "stick it on for me" (option apply) need a plain glass of their size in the same order, one
+   * glass per wrap (QA 28 Nov: +40 paid for sticking a wrap on a glass that wasn't there, or didn't fit).
+   * Returns Map designId -> the glass product, for each wrap that has none left, in the order given.
+   */
+  const wrapsWithoutGlass = (designs) => {
+    const have = new Map();
+    for (const d of designs) if (d && d.kind === 'blank') have.set(d.productId, (have.get(d.productId) || 0) + (d.copies || 1));
+    const short = new Map();
+    for (const d of designs) {
+      if (!d || d.kind === 'blank' || !d.options || !d.options.apply || d.options.apply.id !== 'apply') continue;
+      const p = getProduct(d.productId);
+      const glass = p && p.pair && getProduct(p.pair);
+      if (!glass || !glass.blank) continue;
+      const n = copiesOf(d);
+      const left = have.get(glass.id) || 0;
+      have.set(glass.id, Math.max(0, left - n));
+      if (left < n) short.set(d.id, glass);
+    }
+    return short;
+  };
   /** Pieces of a design that come out of the product's counted stock. */
   /**
    * What a design takes from counted stock: [{ pid, combo, n }] (combo "colorId|sizeId" when the
@@ -4064,6 +4085,14 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       const count = price === null || why ? null : cartCount(d);
       return { designId: String(id).slice(0, 40), price, gone: price === null, ...(count ? { count } : {}), ...(d && d.orderId ? { ordered: true } : {}), ...(why ? { unavailable: why, unavailableText: format(why, { name: p ? p.name[langOf(req)] || p.name.en : '' }, langOf(req)) } : {}) };
     });
+    // A wrap to be stuck on with no glass of its size among these items: said on the wrap (QA 28 Nov).
+    const noGlass = wrapsWithoutGlass(items.filter((i) => !i.gone && !i.unavailable).map((i) => store.getDesign(i.designId)));
+    for (const i of items) {
+      const glass = noGlass.get(i.designId);
+      if (!glass) continue;
+      i.unavailable = 'wrapNeedsGlass';
+      i.unavailableText = format('wrapNeedsGlass', { glass: glass.name[langOf(req)] || glass.name.en }, langOf(req));
+    }
     // Counted stock: the cart says so before checkout when it asks for more pieces than are left.
     // In cart order: the pieces that still fit what's left go through; only the items past it are flagged
     // (three shirts with two left: the third one, not all three).
@@ -4342,6 +4371,11 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       }
       return d;
     });
+    const noGlass = wrapsWithoutGlass(designs);
+    if (noGlass.size) {
+      const [designId, glass] = [...noGlass][0];
+      throw new HttpError(409, 'wrapNeedsGlass', { glass: glass.name[langOf(req)] || glass.name.en, designId });
+    }
     // Counted stock (admin → Products): enough left for every piece.
     const wanted = addNeeds(designs);
     for (const x of wanted.values()) {
