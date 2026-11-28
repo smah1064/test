@@ -1,0 +1,159 @@
+/* The view-only page (/view): a booklet to flip through or a product's sides, with nothing to buy or approve. */
+
+/* The header: the logo and the language button only. */
+.vw-header .lang-toggle { min-height: 40px; padding-inline: 12px; }
+
+.vw-main { padding-top: 14px; padding-bottom: 8px; }
+.vw-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.vw-loading { min-height: 50vh; display: grid; place-items: center; }
+
+/* 404 / 410 and "couldn't open it" */
+.vw-card { margin: 40px auto; max-width: 560px; }
+.vw-card h1 { font-size: 24px; margin: 0 0 8px; }
+.vw-card p { margin: 0 0 20px; line-height: 1.6; }
+.vw-card-icon { color: var(--accent); margin: 0 auto 14px; }
+
+/* The name, and "Shared to view only" */
+.vw-head { text-align: center; margin: 0 0 12px; }
+.vw-head h1 { font-size: clamp(20px, 3vw, 26px); margin: 0 0 4px; overflow-wrap: anywhere; }
+.vw-sub { margin: 0; font-size: 14px; display: inline-flex; align-items: center; gap: 6px; }
+.vw-sub svg { flex: none; }
+
+/* A product's sides: tabs over the picture. */
+.vw-tabs { width: fit-content; max-width: 100%; margin: 0 auto 12px; overflow-x: auto; scrollbar-width: none; }
+.vw-tabs::-webkit-scrollbar { display: none; }
+.vw-tabs .side-tab { min-height: 44px; padding: 8px 18px; font-size: 15px; justify-content: center; }
+
+/* ---------- The picture ---------- */
+/* As big as the screen allows under the header, the name and the buttons, never wider than the screen; it keeps its
+   shape from the start (no jump when it arrives). Sideways swipes turn the page; pinch-zoom still works. */
+.vw-stage {
+  --vw-maxh: max(260px, calc(100vh - 236px));
+  display: flex; justify-content: center; position: relative;
+  touch-action: pan-y pinch-zoom; user-select: none; -webkit-user-select: none;
+}
+@supports (height: 100svh) { .vw-stage { --vw-maxh: max(260px, calc(100svh - 236px)); } }
+.vw-zoomed .vw-stage { touch-action: auto; }
+/* (The cover alone is shifted to the middle by a quarter of the open book: its empty half must not make the page
+   scroll sideways. Tester 2, 26 Nov.) */
+.vw-view { width: 100%; display: flex; justify-content: center; overflow-x: clip; }
+
+.vw-frame {
+  position: relative; width: min(100%, calc(var(--vw-maxh) * var(--ar, .75)));
+  background: #eef0f3; border-radius: 6px; overflow: hidden;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, .08), 0 10px 30px rgba(16, 24, 40, .14);
+}
+.vw-body [data-kind="sides"] .vw-frame { border-radius: 12px; }
+.vw-img { width: 100%; height: 100%; object-fit: contain; display: block; -webkit-user-drag: none; }
+.vw-frame.vw-anim .vw-img { animation: vw-enter .26s ease-out; }
+@keyframes vw-enter { from { opacity: .3; transform: translateX(var(--vw-from, 0)); } }
+
+/* A picture that didn't load: say so (a tap asks for it again). */
+.vw-failed { cursor: pointer; }
+.vw-failed .vw-img { visibility: hidden; }
+.vw-failed::after {
+  content: attr(data-msg); position: absolute; inset: 0; display: grid; place-items: center; padding: 16px;
+  text-align: center; font-size: 14px; line-height: 1.6; color: var(--ink-2); background: #f1f3f6;
+}
+
+/* An open booklet on a computer: two pages round the spine; the cover and back cover alone in the middle. */
+.vw-book {
+  position: relative; display: flex; direction: ltr; perspective: 4000px;
+  width: min(100%, 1180px, calc(var(--vw-maxh) * var(--ar, .7) * 2));
+  transition: transform .5s cubic-bezier(.45, .05, .25, 1);
+}
+.vw-book[data-shift="right"] { transform: translateX(-25%); }
+.vw-book[data-shift="left"] { transform: translateX(25%); }
+.vw-slot { position: relative; flex: 1 1 50%; min-width: 0; }
+.vw-slot:not(.vw-empty) { cursor: pointer; }
+.vw-paper, .vw-face { position: absolute; inset: 0; background: #fff; overflow: hidden; }
+.vw-paper { box-shadow: 0 1px 2px rgba(16, 24, 40, .08), 0 10px 28px rgba(16, 24, 40, .16); }
+.vw-left .vw-paper { border-radius: 5px 0 0 5px; }
+.vw-right .vw-paper { border-radius: 0 5px 5px 0; }
+.vw-book:not(.vw-open) .vw-paper { border-radius: 5px; }
+/* The fold: a soft shadow on each page next to the spine. */
+.vw-open .vw-paper::after { content: ""; position: absolute; top: 0; bottom: 0; width: 8%; pointer-events: none; }
+.vw-open .vw-left .vw-paper::after { right: 0; background: linear-gradient(to left, rgba(0, 0, 0, .13), rgba(0, 0, 0, 0)); }
+.vw-open .vw-right .vw-paper::after { left: 0; background: linear-gradient(to right, rgba(0, 0, 0, .13), rgba(0, 0, 0, 0)); }
+.vw-spine { position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; transform: translateX(-1px); background: rgba(0, 0, 0, .1); pointer-events: none; display: none; }
+.vw-open .vw-spine { display: block; }
+/* The page being turned. */
+.vw-leaf { position: absolute; top: 0; bottom: 0; width: 50%; transform-style: preserve-3d; transition: transform .6s cubic-bezier(.45, .05, .25, 1); z-index: 3; pointer-events: none; }
+.vw-leaf.vw-from-right { left: 50%; transform-origin: left center; }
+.vw-leaf.vw-from-left { left: 0; transform-origin: right center; }
+.vw-leaf.vw-from-right.vw-turned { transform: rotateY(-180deg); }
+.vw-leaf.vw-from-left.vw-turned { transform: rotateY(180deg); }
+.vw-face { backface-visibility: hidden; -webkit-backface-visibility: hidden; box-shadow: 0 6px 22px rgba(0, 0, 0, .18); }
+.vw-back { transform: rotateY(180deg); }
+
+/* ---------- Previous / "Page 3 of 16" / Next ---------- */
+.vw-bar { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 14px auto 0; }
+.vw-nav {
+  flex: none; width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; padding: 0;
+  border: 1px solid var(--line); background: #fff; color: var(--ink); cursor: pointer; box-shadow: var(--shadow);
+  transition: background .15s, opacity .15s;
+}
+.vw-nav:hover:not(:disabled) { background: #f6f7f9; }
+#vw-next { background: var(--ink); border-color: var(--ink); color: #fff; }
+#vw-next:hover:not(:disabled) { background: #2a2f3a; }
+.vw-nav:disabled { opacity: .3; cursor: default; box-shadow: none; }
+.vw-bar[dir="rtl"] .vw-nav svg { transform: scaleX(-1); }
+.vw-count { margin: 0; min-width: 10em; text-align: center; font-weight: 700; font-size: 15px; font-variant-numeric: tabular-nums; unicode-bidi: isolate; }
+
+/* ---------- The pages, small (to jump) ---------- */
+.vw-thumbs { display: flex; gap: 8px; overflow-x: auto; overscroll-behavior-x: contain; padding: 6px 4px 10px; margin: 10px 0 0; scrollbar-width: thin; }
+/* (centred while they fit; from the first one when they don't) */
+.vw-thumbs > :first-child { margin-inline-start: auto; }
+.vw-thumbs > :last-child { margin-inline-end: auto; }
+.vw-thumb {
+  flex: none; position: relative; height: 66px; width: auto; padding: 0; border: 2px solid transparent; border-radius: 7px;
+  background: #e9ecf0; cursor: pointer; overflow: hidden; box-shadow: 0 1px 2px rgba(16, 24, 40, .1);
+}
+.vw-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.vw-thumb img:not([src]), .vw-thumb img.vw-thumb-failed { visibility: hidden; }
+.vw-thumb.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 4px 10px rgba(16, 24, 40, .18); }
+.vw-thumb-n {
+  position: absolute; bottom: 3px; left: 50%; transform: translateX(-50%); min-width: 18px; padding: 0 5px;
+  border-radius: 9px; background: rgba(255, 255, 255, .92); color: var(--ink); font-size: 11px; font-weight: 700; line-height: 17px; text-align: center;
+}
+.vw-thumb.active .vw-thumb-n { background: var(--ink); color: #fff; }
+
+/* ---------- The end: "Make your own" ---------- */
+.vw-end { max-width: 520px; margin: 18px auto 0; padding: 20px 18px; text-align: center; }
+.vw-end p { margin: 0 0 14px; line-height: 1.6; }
+.vw-end .vw-end-title { font-weight: 800; font-size: 18px; color: var(--ink); margin-bottom: 4px; }
+.vw-end .btn { max-width: 100%; white-space: normal; }
+/* On a computer, beside the back cover: in the open booklet's empty half. */
+.vw-slot > .vw-end { position: absolute; top: 50%; left: 5%; right: 5%; transform: translateY(-50%); margin: 0; max-width: none; padding: 24px 16px; cursor: auto; user-select: text; -webkit-user-select: text; direction: ltr; }
+html[dir="rtl"] .vw-slot > .vw-end { direction: rtl; }
+.vw-slot > .vw-end .btn { padding-inline: 14px; font-size: 15px; }
+
+/* In the footer, all along. */
+.vw-foot { margin-top: 16px; }
+.vw-foot-make {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px; border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, .35); text-decoration: none; font-size: 14px;
+}
+.vw-foot-make:hover { background: rgba(255, 255, 255, .08); }
+.vw-foot-sep { opacity: .6; }
+
+/* Keyboard focus shows. */
+.vw-body .btn:focus-visible, .vw-nav:focus-visible, .vw-thumb:focus-visible, .vw-tabs .side-tab:focus-visible, .vw-body .brand:focus-visible {
+  outline: 3px solid var(--accent); outline-offset: 2px;
+}
+.vw-foot-make:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+
+@media (max-width: 600px) {
+  .vw-main { padding-inline: 16px; padding-top: 10px; }
+  .vw-head { margin-bottom: 10px; }
+  .vw-stage { --vw-maxh: max(240px, calc(100vh - 228px)); }
+  @supports (height: 100svh) { .vw-stage { --vw-maxh: max(240px, calc(100svh - 228px)); } }
+  .vw-bar { gap: 10px; margin-top: 12px; }
+  .vw-count { min-width: 0; flex: 1 1 auto; max-width: 13em; font-size: 14.5px; }
+  .site-footer { margin-top: 32px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vw-frame.vw-anim .vw-img { animation: none; }
+  .vw-book, .vw-leaf, .vw-nav { transition: none; }
+}

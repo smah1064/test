@@ -1,0 +1,30 @@
+{
+  "name": "print-on-demand",
+  "version": "1.0.0",
+  "description": "Print-on-demand storefront with a drag-and-drop product design editor. Every item is printed one at a time.",
+  "main": "server.js",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test test/*.test.js",
+    "test:e2e": "node --test test/e2e/*.e2e.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.12.0",
+    "@google/genai": "^3.6.1",
+    "@iconify-json/fluent-emoji-flat": "^1.2.6",
+    "@iconify-json/lucide": "^1.2.158",
+    "@iconify-json/mdi": "^1.2.3",
+    "@iconify-json/ph": "^1.2.2",
+    "@iconify-json/tabler": "^1.2.46",
+    "@okathira/ghostpdl-wasm": "^1.1.0",
+    "express": "^4.21.2",
+    "onnxruntime-node": "^1.31.1",
+    "pdfkit": "^0.21.0",
+    "sharp": "^0.35.5"
+  }
+}

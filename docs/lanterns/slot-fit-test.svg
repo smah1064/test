@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="420mm" height="105.21mm" viewBox="0 0 420 105.21">
+<title>Slot-fit test (cut this first) – PROTOTYPE</title>
+<rect x="0" y="0" width="420" height="105.21" fill="#ffffff"/>
+<g id="NOTES" fill="#666666" font-family="Arial, 'Noto Sans Arabic', sans-serif">
+<rect x="3" y="3" width="414" height="49.21" fill="#fff6f6" stroke="#c00000" stroke-width="0.4"/>
+<text x="8" y="10" font-size="7" font-weight="bold" fill="#555555">Slot-fit test (cut this first)</text>
+<text x="8" y="20.15" font-size="4.2" font-weight="bold" fill="#c00000">PROTOTYPE – not for production until the workshop confirms material thickness, joint fit and LED dimensions</text>
+<text x="410" y="26.24" font-size="4.6" font-weight="bold" fill="#c00000" direction="rtl" text-anchor="start" unicode-bidi="embed">نموذج أولي – ليس للإنتاج قبل تأكيد الورشة لسُمك الخامة وتركيب الوصلات ومقاس الـ LED</text>
+<text x="8" y="32.91" font-size="3.6"  fill="#555555">Cut in the sheet you will use. Push the tab into each slot: pick the narrowest slot the tab enters by hand with light friction, and use that number as --slot.</text>
+<text x="8" y="38.13" font-size="3.6"  fill="#555555">The finger pair checks the kerf: the fingers should press together by hand. Too loose → raise --kerf by 0.05; too tight → lower it.</text>
+<text x="8" y="43.35" font-size="3.6"  fill="#555555">Parameters: thickness 3 mm · slot 3.1 mm · kerf 0.15 mm · min web 3 mm · LED 40 × 20 mm (pocket Ø41)</text>
+<text x="8" y="48.57" font-size="3.2"  fill="#555555">Scale 1:1, units mm. Layers: CUT red #ff0000 0.1 mm · ENGRAVE black fill · SCORE blue · NOTES grey (do not output). Regenerate: node scripts/lantern-drawings.js --thickness 3 --slot 3.1 --kerf 0.15</text>
+<text x="7" y="66.61" font-size="3.4">Slot strip: slot widths 2.8 … 3.4 mm (length 10.5) · 110 × 30</text>
+<text x="279.25" y="66.61" font-size="3.4">Matching tab (10 mm): try it in each slot · 30 × 22</text>
+<text x="133.5" y="66.61" font-size="3.4">Finger pair A (kerf-compensated) · 40 × 30</text>
+<text x="224.9" y="66.61" font-size="3.4">Finger pair B · 40 × 30</text>
+
+</g>
+<g id="ENGRAVE" fill="#000000" stroke="none" fill-rule="nonzero">
+
+</g>
+<g id="SCORE" fill="none" stroke="#0000ff" stroke-width="0.1">
+<path d="M15.8 88.21L18.55 88.21"/>
+<path d="M18.55 88.21L18.55 90.71"/>
+<path d="M15.8 90.71L18.55 90.71"/>
+<path d="M15.8 90.71L15.8 93.21"/>
+<path d="M15.8 93.21L18.55 93.21"/>
+<path d="M20.05 93.21L20.65 93.21"/>
+<path d="M21.8 88.21L24.55 88.21"/>
+<path d="M24.55 88.21L24.55 90.71"/>
+<path d="M24.55 90.71L24.55 93.21"/>
+<path d="M21.8 93.21L24.55 93.21"/>
+<path d="M21.8 90.71L21.8 93.21"/>
+<path d="M21.8 88.21L21.8 90.71"/>
+<path d="M21.8 90.71L24.55 90.71"/>
+<path d="M29.8 88.21L32.55 88.21"/>
+<path d="M32.55 88.21L32.55 90.71"/>
+<path d="M29.8 90.71L32.55 90.71"/>
+<path d="M29.8 90.71L29.8 93.21"/>
+<path d="M29.8 93.21L32.55 93.21"/>
+<path d="M34.05 93.21L34.65 93.21"/>
+<path d="M35.8 88.21L38.55 88.21"/>
+<path d="M38.55 88.21L38.55 90.71"/>
+<path d="M38.55 90.71L38.55 93.21"/>
+<path d="M35.8 93.21L38.55 93.21"/>
+<path d="M35.8 88.21L35.8 90.71"/>
+<path d="M35.8 90.71L38.55 90.71"/>
+<path d="M43.8 88.21L46.55 88.21"/>
+<path d="M46.55 88.21L46.55 90.71"/>
+<path d="M43.8 90.71L46.55 90.71"/>
+<path d="M46.55 90.71L46.55 93.21"/>
+<path d="M43.8 93.21L46.55 93.21"/>
+<path d="M48.05 93.21L48.65 93.21"/>
+<path d="M49.8 88.21L52.55 88.21"/>
+<path d="M52.55 88.21L52.55 90.71"/>
+<path d="M52.55 90.71L52.55 93.21"/>
+<path d="M49.8 93.21L52.55 93.21"/>
+<path d="M49.8 90.71L49.8 93.21"/>
+<path d="M49.8 88.21L49.8 90.71"/>
+<path d="M57.8 88.21L60.55 88.21"/>
+<path d="M60.55 88.21L60.55 90.71"/>
+<path d="M57.8 90.71L60.55 90.71"/>
+<path d="M60.55 90.71L60.55 93.21"/>
+<path d="M57.8 93.21L60.55 93.21"/>
+<path d="M62.05 93.21L62.65 93.21"/>
+<path d="M66.55 88.21L66.55 90.71"/>
+<path d="M66.55 90.71L66.55 93.21"/>
+<path d="M71.8 88.21L74.55 88.21"/>
+<path d="M74.55 88.21L74.55 90.71"/>
+<path d="M71.8 90.71L74.55 90.71"/>
+<path d="M74.55 90.71L74.55 93.21"/>
+<path d="M71.8 93.21L74.55 93.21"/>
+<path d="M76.05 93.21L76.65 93.21"/>
+<path d="M77.8 88.21L80.55 88.21"/>
+<path d="M80.55 88.21L80.55 90.71"/>
+<path d="M77.8 90.71L80.55 90.71"/>
+<path d="M77.8 90.71L77.8 93.21"/>
+<path d="M77.8 93.21L80.55 93.21"/>
+<path d="M85.8 88.21L88.55 88.21"/>
+<path d="M88.55 88.21L88.55 90.71"/>
+<path d="M85.8 90.71L88.55 90.71"/>
+<path d="M88.55 90.71L88.55 93.21"/>
+<path d="M85.8 93.21L88.55 93.21"/>
+<path d="M90.05 93.21L90.65 93.21"/>
+<path d="M91.8 88.21L94.55 88.21"/>
+<path d="M94.55 88.21L94.55 90.71"/>
+<path d="M91.8 90.71L94.55 90.71"/>
+<path d="M94.55 90.71L94.55 93.21"/>
+<path d="M91.8 93.21L94.55 93.21"/>
+<path d="M99.8 88.21L102.55 88.21"/>
+<path d="M102.55 88.21L102.55 90.71"/>
+<path d="M99.8 90.71L102.55 90.71"/>
+<path d="M102.55 90.71L102.55 93.21"/>
+<path d="M99.8 93.21L102.55 93.21"/>
+<path d="M104.05 93.21L104.65 93.21"/>
+<path d="M105.8 88.21L105.8 90.71"/>
+<path d="M105.8 90.71L108.55 90.71"/>
+<path d="M108.55 88.21L108.55 90.71"/>
+<path d="M108.55 90.71L108.55 93.21"/>
+</g>
+<g id="CUT" fill="none" stroke="#ff0000" stroke-width="0.1">
+<g class="part" id="part-slot-strip" data-bbox="7 68.21 110 30"><path d="M115 68.21L115.347 68.24L115.684 68.331L116 68.478L116.286 68.678L116.532 68.924L116.732 69.21L116.879 69.526L116.97 69.863L117 70.21L117 96.21L116.97 96.557L116.879 96.894L116.732 97.21L116.532 97.496L116.286 97.742L116 97.942L115.684 98.089L115.347 98.18L115 98.21L9 98.21L8.653 98.18L8.316 98.089L8 97.942L7.714 97.742L7.468 97.496L7.268 97.21L7.121 96.894L7.03 96.557L7 96.21L7 70.21L7.03 69.863L7.121 69.526L7.268 69.21L7.468 68.924L7.714 68.678L8 68.478L8.316 68.331L8.653 68.24L9 68.21Z"/><path class="slot" d="M18.6 74.21L21.4 74.21L21.4 84.71L18.6 84.71Z"/><path class="slot" d="M32.55 74.21L35.45 74.21L35.45 84.71L32.55 84.71Z"/><path class="slot" d="M46.5 74.21L49.5 74.21L49.5 84.71L46.5 84.71Z"/><path class="slot" d="M60.45 74.21L63.55 74.21L63.55 84.71L60.45 84.71Z"/><path class="slot" d="M74.4 74.21L77.6 74.21L77.6 84.71L74.4 84.71Z"/><path class="slot" d="M88.35 74.21L91.65 74.21L91.65 84.71L88.35 84.71Z"/><path class="slot" d="M102.3 74.21L105.7 74.21L105.7 84.71L102.3 84.71Z"/></g>
+<g class="part" id="part-slot-tab" data-bbox="279.25 68.21 30 22"><path d="M279.25 68.21L309.25 68.21L309.25 82.21L299.25 82.21L299.25 90.21L289.25 90.21L289.25 82.21L279.25 82.21Z"/><path d="M296.75 74.21L296.732 74.506L296.68 74.797L296.594 75.081L296.474 75.352L296.324 75.607L296.144 75.842L295.937 76.055L295.707 76.241L295.457 76.399L295.19 76.527L294.909 76.622L294.619 76.683L294.324 76.709L294.028 76.7L293.735 76.656L293.449 76.578L293.175 76.467L292.915 76.324L292.675 76.151L292.456 75.951L292.263 75.727L292.097 75.481L291.962 75.218L291.859 74.94L291.789 74.652L291.754 74.358L291.754 74.062L291.789 73.768L291.859 73.48L291.962 73.202L292.097 72.939L292.263 72.693L292.456 72.469L292.675 72.269L292.915 72.096L293.175 71.953L293.449 71.842L293.735 71.764L294.028 71.72L294.324 71.711L294.619 71.737L294.909 71.798L295.19 71.893L295.457 72.021L295.707 72.179L295.937 72.365L296.144 72.578L296.324 72.813L296.474 73.068L296.594 73.339L296.68 73.623L296.732 73.914Z"/></g>
+<g class="part" id="part-finger-a" data-bbox="133.5 68.21 40 30"><path d="M133.5 68.21L173.5 68.21L173.5 78.285L170.5 78.285L170.5 88.135L173.5 88.135L173.5 98.21L133.5 98.21L133.5 88.135L136.5 88.135L136.5 78.285L133.5 78.285Z"/></g>
+<g class="part" id="part-finger-b" data-bbox="224.9 68.21 40 30"><path d="M227.9 68.21L261.9 68.21L261.9 78.135L264.9 78.135L264.9 88.285L261.9 88.285L261.9 98.21L227.9 98.21L227.9 88.285L224.9 88.285L224.9 78.135L227.9 78.135Z"/></g>
+</g>
+</svg>

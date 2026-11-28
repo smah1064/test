@@ -1,0 +1,516 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>إبداع · ebda3</title>
+  <link rel="icon" href="/favicon.svg?v=ebda3" type="image/svg+xml">
+  <link rel="icon" href="/favicon.ico?v=ebda3" sizes="any">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=ebda3">
+  <link rel="manifest" href="/site.webmanifest?v=ebda3">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="إبداع">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="theme-color" content="#FAFAF7">
+  <meta name="description" content="إبداع: اطبع تصميمك على تيشيرتات، مجات، كروت، هدايا وأكتر. قطعة واحدة أو كمية، وتوصيل لكل مصر.">
+  <meta property="og:site_name" content="إبداع · ebda3">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="إبداع · ebda3">
+  <meta property="og:description" content="اطبع تصميمك على تيشيرتات، مجات، كروت، هدايا وأكتر. قطعة واحدة أو كمية، وتوصيل لكل مصر.">
+  <meta property="og:image" content="https://ebda3.me/img/og-ebda3.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <script>(function(){var l;try{l=localStorage.getItem('pod-lang')}catch(e){}l=l==='en'?'en':'ar';var d=document.documentElement;d.lang=l;d.dir=l==='ar'?'rtl':'ltr'})()</script>
+  <!-- Editor redesign stage 4: the phone tools just above the price bar. Off until checked on real Android phones (on
+       23 Nov some drew the page behind their own navigation bar and hid a bottom tool row): ?tools=bottom turns it on
+       on this phone, ?tools=top turns it off. -->
+  <script>(function(){try{var q=new URLSearchParams(location.search).get('tools');if(q==='bottom')localStorage.setItem('pod-tools-bottom','1');if(q==='top')localStorage.removeItem('pod-tools-bottom');if(localStorage.getItem('pod-tools-bottom')==='1')document.documentElement.classList.add('tools-bottom')}catch(e){}})()</script>
+  <link rel="stylesheet" href="/fonts/fonts.css">
+  <link rel="stylesheet" href="/css/styles.css">
+  <script>
+    // Height of the screen area the page can really use. Phones report the
+    // address bar differently while loading, so take the smallest reading and
+    // measure again after load and on every resize (not while typing: the
+    // on-screen keyboard must not shrink the editor).
+    (function () {
+      var d = document.documentElement;
+      function h() {
+        var a = document.activeElement;
+        if (a && (a.tagName === 'TEXTAREA' || a.tagName === 'INPUT')) return;
+        var v = window.visualViewport ? window.visualViewport.height * window.visualViewport.scale : window.innerHeight;
+        var px = Math.floor(Math.min(window.innerHeight, v || window.innerHeight));
+        d.style.setProperty('--app-h', px + 'px');
+      }
+      h();
+      window.addEventListener('resize', h);
+      window.addEventListener('pageshow', h);
+      window.addEventListener('load', function () { h(); setTimeout(h, 300); setTimeout(h, 1200); });
+      window.addEventListener('orientationchange', function () { setTimeout(h, 300); });
+      if (window.visualViewport) window.visualViewport.addEventListener('resize', h);
+    })();
+  </script>
+  <script type="importmap">{ "imports": { "three": "/vendor/three/three.module.min.js" } }</script>
+</head>
+<body class="editor-page" data-title-key="editor.pageTitle">
+  <header class="site-header">
+    <div class="container inner" style="max-width: none;">
+      <a class="brand" href="/" aria-label="إبداع · ebda3"><img class="brand-logo brand-ar" data-logo-lang="ar" data-logo-src="/img/logo-ar-header.svg" alt="إبداع" width="61" height="40"><img class="brand-logo brand-en" data-logo-lang="en" data-logo-src="/img/logo-en-header.svg" alt="ebda3" width="98" height="40"></a><script>(function(){var l=document.documentElement.lang==='en'?'en':'ar';document.querySelectorAll('.brand img[data-logo-src]').forEach(function(i){if(i.getAttribute('data-logo-lang')===l)i.src=i.getAttribute('data-logo-src')})})()</script>
+      <nav>
+        <a href="/#products" data-i18n="nav.products"></a>
+        <a class="cart-link" href="/cart"><span data-i18n="nav.cart"></span> <span class="badge" data-cart-count hidden>0</span></a>
+        <button class="btn btn-sm lang-toggle" data-lang-toggle data-i18n="lang.other"></button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Phones (editor redesign, stage 2): one slim bar instead of the site header. The product button opens the
+       product sheet; cart, account, products and language are in the ⋯ menu. -->
+  <div class="ed-top" id="ed-top">
+    <a class="ed-logo" href="/" data-i18n-aria="brand"><img src="/img/logo-mark-header.svg" width="34" height="34" alt=""></a>
+    <span class="ed-desk ed-name"><b id="ed-dname"></b></span>
+    <span class="ed-saved" id="ed-saved" role="status" hidden><i aria-hidden="true"></i><span id="ed-saved-text"></span></span>
+    <span class="ed-desk ed-hist" id="ed-hist"></span>
+    <span class="ed-desk ed-spacer"></span>
+    <span class="ed-desk ed-acts" id="ed-acts"></span>
+    <span class="ed-desk ed-links"><a href="/account" class="ed-link"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg><span data-i18n="nav.account"></span></a><a href="/cart" class="ed-link"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.5L21 8H6"/><circle cx="10" cy="20" r="1.3"/><circle cx="17" cy="20" r="1.3"/></svg><span data-i18n="nav.cart"></span><span class="badge" data-cart-count hidden>0</span></a><button type="button" class="btn btn-sm" data-lang-toggle data-i18n="lang.other"></button></span>
+    <button type="button" class="ed-prod" id="ed-prod" data-sheet="product" data-i18n-title="sheet.product">
+      <span class="ed-prod-dot" id="ed-prod-dot" aria-hidden="true"></span>
+      <span class="ed-prod-txt"><b id="ed-prod-name"></b><small id="ed-prod-sub"></small></span>
+      <svg class="ed-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+    </button>
+    <button type="button" class="ed-more" id="ed-more" aria-haspopup="true" aria-expanded="false" aria-controls="ed-menu" data-i18n-aria="ed.menu">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+      <span class="badge" data-cart-count hidden>0</span>
+    </button>
+    <div class="ed-menu" id="ed-menu" hidden>
+      <a href="/cart"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.5L21 8H6"/><circle cx="10" cy="20" r="1.3"/><circle cx="17" cy="20" r="1.3"/></svg><span data-i18n="nav.cart"></span><span class="badge" data-cart-count hidden>0</span></a>
+      <a href="/account"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg><span data-i18n="nav.account"></span></a>
+      <a href="/#products"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 7h12l-1 13H7z"/><path d="M9 7a3 3 0 0 1 6 0"/></svg><span data-i18n="nav.products"></span></a>
+      <button type="button" data-lang-toggle><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/></svg><span data-i18n="lang.other"></span></button>
+      <button type="button" class="ed-sep" data-proxy="share-open"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg><span data-i18n="ed.shareMine"></span></button>
+      <button type="button" data-proxy="zoom-print"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg><span data-i18n="ed.zoomPrint"></span></button>
+      <button type="button" data-proxy="preview-toggle" id="ed-guides"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span data-i18n="bar.preview"></span></button>
+      <button type="button" id="ed-save"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4z"/></svg><span><span data-i18n="ed.saveMine"></span><small data-i18n="ed.saveMineNote"></small></span></button>
+      <button type="button" class="ed-danger" data-proxy="clear-side"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg><span data-i18n="bar.clear"></span></button>
+    </div>
+  </div>
+
+  <main>
+    <div class="editor">
+      <!-- Tools -->
+      <aside class="tools">
+        <button class="tool" data-flyout="templates" data-i18n-title="tool.templates.title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg><span data-i18n="tool.templates"></span>
+        </button>
+        <button class="tool" data-flyout="text" data-i18n-title="tool.text.title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6V4h16v2M12 4v16M9 20h6"/></svg><span data-i18n="tool.text"></span>
+        </button>
+        <button class="tool" data-flyout="upload" data-i18n-title="tool.image.title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg><span data-i18n="tool.image"></span>
+        </button>
+        <button class="tool" data-flyout="shapes" data-i18n-title="tool.shapes.title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><circle cx="8" cy="8" r="5"/><path d="M13 13h8v8h-8z"/></svg><span data-i18n="tool.shapes"></span>
+        </button>
+        <button class="tool tool-names" id="tool-names" data-i18n-title="merge.toolTitle" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h6M7 13h10M7 17h8"/><path d="M17 8.5h.01"/></svg><span data-i18n="merge.tool"></span>
+        </button>
+        <button class="tool tool-lib" data-flyout="library" data-i18n-title="lib.toolTitle">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/><path d="M8 10.5h5M10.5 8v5"/></svg><span data-i18n="lib.tool"></span>
+        </button>
+        <button class="tool" data-flyout="stickers" data-i18n-title="tool.stickers.title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.5 3H6a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h7l8-8V6.5"/><path d="M21 13h-5a3 3 0 0 0-3 3v5"/><path d="M8 10h.01M14 10h.01M8.5 14.5s1.2 1.5 3.5 1.5"/></svg><span data-i18n="tool.stickers"></span>
+        </button>
+        <button class="tool tool-ai" data-flyout="ai" data-i18n-title="ai.toolTitle">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8zM5 15l.6 1.4L7 17l-1.4.6L5 19l-.6-1.4L3 17l1.4-.6z"/></svg><span data-i18n="ai.tool"></span>
+        </button>
+        <button class="tool tool-layers desk-only" data-flyout="layers" data-i18n-title="more.layersNote">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/></svg><span data-i18n="more.layers"></span>
+        </button>
+        <button class="tool tool-more mobile-only" data-flyout="more" data-i18n-title="more.title">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="6" cy="6" r="1.8"/><circle cx="12" cy="6" r="1.8"/><circle cx="18" cy="6" r="1.8"/><circle cx="6" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="18" cy="12" r="1.8"/><circle cx="6" cy="18" r="1.8"/><circle cx="12" cy="18" r="1.8"/><circle cx="18" cy="18" r="1.8"/></svg><span data-i18n="more.tool"></span>
+        </button>
+        <button class="tool mobile-only" data-sheet="product" data-i18n-title="tool.product">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M8 3 4 6l2 4 2-1v12h8V9l2 1 2-4-4-3c-.5 1.5-2 2.5-4 2.5S8.5 4.5 8 3z"/></svg><span data-i18n="tool.product"></span>
+        </button>
+      </aside>
+
+      <!-- Phones (editor redesign stage 6): the selected element's own tools, in place of the tool row, and one short
+           strip for the setting chosen (font, size, colour, style, format, a photo's shape). -->
+      <div class="el-bar" id="el-bar" role="toolbar" hidden></div>
+      <div class="el-strip" id="el-strip" hidden></div>
+
+      <!-- Canvas -->
+      <section class="stage-wrap">
+        <!-- A text preset nobody changed yet («نصك هنا»): it would print as it is (public/js/editor.js). -->
+        <div class="sample-note" id="sample-note" role="status" hidden></div>
+        <div class="stage-bar">
+          <button class="btn btn-sm page-nav" id="page-prev" type="button" hidden data-i18n-title="ed.pagePrev" data-i18n-aria="ed.pagePrev"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+          <div class="side-tabs" id="side-tabs" role="tablist"></div>
+          <button class="btn btn-sm page-nav" id="page-next" type="button" hidden data-i18n-title="ed.pageNext" data-i18n-aria="ed.pageNext"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button>
+          <button class="check-chip ok" id="check-chip"></button>
+          <div class="side-tabs method-pill" id="method-pill" role="group" hidden></div>
+          <div class="spacer"></div>
+          <div class="zoom-group">
+            <button id="zoom-out" data-i18n-title="bar.zoomOut" data-i18n-aria="bar.zoomOut">−</button>
+            <span id="zoom-label">100%</span>
+            <button id="zoom-in" data-i18n-title="bar.zoomIn" data-i18n-aria="bar.zoomIn">+</button>
+            <button id="zoom-fit" data-i18n-title="bar.zoomFit" data-i18n-aria="bar.zoomFit"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></button>
+            <button id="zoom-print" data-i18n-title="bar.zoomPrint" data-i18n-aria="bar.zoomPrint"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.8-4.8M10.5 7.5v6M7.5 10.5h6"/></svg></button>
+          </div>
+          <button class="btn btn-sm btn-icon" id="undo" data-toast-clear data-i18n-title="bar.undo" data-i18n-aria="bar.undo">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg>
+          </button>
+          <button class="btn btn-sm btn-icon" id="redo" data-toast-clear data-i18n-title="bar.redo" data-i18n-aria="bar.redo">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/></svg>
+          </button>
+          <button class="btn btn-sm btn-dark" id="preview-open" data-toast-clear data-i18n-title="pv.open">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2 3 7v10l9 5 9-5V7z"/><path d="M3 7l9 5 9-5M12 12v10"/></svg><span class="btn-label" data-i18n="pv.open"></span>
+          </button>
+          <button class="btn btn-sm" id="share-open" data-i18n-title="share.buttonTitle">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg><span class="btn-label" data-i18n="share.button"></span>
+          </button>
+          <button class="btn btn-sm" id="preview-toggle" data-i18n-title="bar.preview.title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span class="btn-label" data-i18n="bar.preview"></span>
+          </button>
+          <button class="btn btn-sm btn-danger" id="clear-side" data-i18n-title="bar.clear.title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg><span class="btn-label" data-i18n="bar.clear"></span>
+          </button>
+        </div>
+        <div class="stage" id="stage">
+          <canvas id="design-canvas"></canvas>
+        </div>
+        <!-- Zoomed in: the whole item, with the part on screen marked (click or drag to move there). -->
+        <div class="overview" id="overview" hidden>
+          <div class="overview-pic" id="overview-pic"><canvas id="overview-canvas"></canvas><span class="overview-view" id="overview-view"></span></div>
+          <button type="button" class="overview-all" id="overview-all" data-i18n="bar.wholeItem"></button>
+        </div>
+        <div class="stage-hint" id="stage-hint" data-i18n="editor.hint" hidden></div>
+        <button type="button" class="start-here" id="start-here" hidden><span class="start-plus" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span><b data-i18n="ed.start"></b><small data-i18n="ed.startNote"></small></button>
+        <div class="float-bar" id="float-bar" role="toolbar" hidden></div>
+
+        <!-- Computer (editor redesign stage 7): the chosen element's settings in a panel docked beside the tools, so the
+             right-hand column always shows the product and the order. -->
+        <div class="props-dock" id="props-dock" hidden></div>
+        <div class="flyout flyout-layers" id="flyout-layers" hidden>
+          <div class="fly-head"><h4 data-i18n="more.layers"></h4><button class="fly-close" data-i18n-aria="bar.close">✕</button></div>
+          <div id="layers-dock"></div>
+          <button type="button" class="btn btn-sm btn-block btn-danger dock-clear" data-proxy-clear><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg><span data-i18n="bar.clear"></span></button>
+          <p class="muted small" data-i18n="ed.clearNote"></p>
+        </div>
+        <div class="flyout flyout-more" id="flyout-more" hidden>
+          <div class="fly-head"><h4 data-i18n="more.title"></h4><button class="fly-close" data-i18n-aria="bar.close">✕</button></div>
+          <div class="more-list">
+            <button type="button" class="more-row" data-more="ai" hidden><span class="more-ic" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg></span><span class="more-txt"><b data-i18n="more.ai"></b><small data-i18n="more.aiNote"></small></span><svg class="more-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
+            <button type="button" class="more-row" data-more="shapes"><span class="more-ic" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5"/><path d="M13 13h8v8h-8z"/></svg></span><span class="more-txt"><b data-i18n="more.shapes"></b><small data-i18n="more.shapesNote"></small></span><svg class="more-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
+            <button type="button" class="more-row" data-more="library"><span class="more-ic" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/><path d="M8 10.5h5M10.5 8v5"/></svg></span><span class="more-txt"><b data-i18n="more.library"></b><small data-i18n="more.libraryNote"></small></span><svg class="more-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
+            <button type="button" class="more-row" data-more="names" hidden><span class="more-ic" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h6M7 13h10M7 17h8"/></svg></span><span class="more-txt"><b data-i18n="more.names"></b><small data-i18n="more.namesNote"></small></span><svg class="more-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
+            <button type="button" class="more-row" data-more="layers"><span class="more-ic" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/></svg></span><span class="more-txt"><b data-i18n="more.layers"></b><small data-i18n="more.layersNote"></small></span><svg class="more-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
+            <button type="button" class="more-row" data-more="place" hidden><span class="more-ic" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h18M8 7l4-4 4 4M8 17l4 4 4-4"/></svg></span><span class="more-txt"><b data-i18n="more.place"></b><small data-i18n="more.placeNote"></small></span><svg class="more-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
+          </div>
+        </div>
+        <div class="flyout" id="flyout-templates" hidden>
+          <div class="fly-head"><h4 data-i18n="fly.templates"></h4><button class="fly-close" data-i18n-aria="bar.close">✕</button></div>
+          <p class="muted small" style="margin-top:0" data-i18n="fly.templates.hint"></p>
+          <input type="search" id="tpl-q" class="tpl-q" autocomplete="off" data-i18n-placeholder="tpl.search">
+          <div class="tpl-cats" id="tpl-cats" role="tablist"></div>
+          <p class="muted small" id="tpl-status" hidden></p>
+          <div class="template-grid" id="template-grid"></div>
+        </div>
+        <div class="flyout" id="flyout-text" hidden>
+          <div class="fly-head"><h4 data-i18n="fly.text"></h4><button class="fly-close" data-i18n-aria="bar.close">✕</button></div>
+          <div id="text-presets"></div>
+        </div>
+        <div class="flyout" id="flyout-upload" hidden>
+          <div class="fly-head"><h4 data-i18n="fly.upload"></h4><button class="fly-close" data-i18n-aria="bar.close">✕</button></div>
+          <label class="dropzone" id="dropzone" for="file-input">
+            <span data-i18n-html="fly.upload.drop"></span><br>
+            <span class="muted small" data-i18n="fly.upload.types"></span>
+          </label>
+          <input type="file" id="file-input" multiple accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,.png,.jpg,.jpeg,.webp,.gif,.svg,.pdf,.ai,.eps,application/pdf,application/postscript,application/illustrator" hidden>
+          <label class="check auto-bg"><input type="checkbox" id="auto-bg"> <span><strong data-i18n="fly.upload.autoBg"></strong><br><span class="muted small" data-i18n="fly.upload.autoBgHint"></span></span></label>
+          <p class="muted small" style="line-height:1.5;margin-bottom:0;" data-i18n="fly.upload.tip"></p>
+          <div class="imp">
+            <h5 data-i18n="imp.title"></h5>
+            <form class="imp-row" id="imp-form" novalidate>
+              <input type="url" id="imp-url" dir="ltr" maxlength="2000" autocomplete="off" data-i18n-placeholder="imp.placeholder">
+              <button class="btn btn-sm btn-primary" type="submit" data-i18n="imp.go"></button>
+            </form>
+            <p class="muted small imp-hint" data-i18n="imp.hint"></p>
+            <div class="imp-results" id="imp-results"></div>
+          </div>
+        </div>
+        <div class="flyout flyout-lib" id="flyout-library" hidden>
+          <div class="fly-head"><h4 data-i18n="lib.title"></h4><button class="fly-close" data-i18n-aria="bar.close">✕</button></div>
+          <input type="search" id="lib-q" class="lib-q" autocomplete="off" maxlength="80" data-i18n-placeholder="lib.placeholder">
+          <div class="chips lib-types" id="lib-types">
+            <button class="chip active" data-ltype="all" data-i18n="lib.all"></button>
+            <button class="chip" data-ltype="sticker" data-i18n="lib.stickers"></button>
+            <button class="chip" data-ltype="icon" data-i18n="lib.icons"></button>
+            <button class="chip" data-ltype="template" data-i18n="lib.templates"></button>
+          </div>
+          <div id="lib-recent-box" hidden><div class="small muted lib-sub" data-i18n="lib.recent"></div><div class="lib-grid" id="lib-recent"></div></div>
+          <div class="small muted lib-sub" id="lib-status"></div>
+          <div class="lib-grid" id="lib-grid"></div>
+          <button class="btn btn-sm btn-block" type="button" id="lib-more" hidden data-i18n="lib.more"></button>
+          <p class="muted small lib-credits" data-i18n="lib.credits"></p>
+        </div>
+        <div class="flyout" id="flyout-stickers" hidden>
+          <div class="fly-head"><h4 data-i18n="fly.stickers"></h4><button class="fly-close" data-i18n-aria="bar.close">✕</button></div>
+          <div class="cat-chips small-chips" id="sticker-cats"></div>
+          <div class="sticker-grid" id="sticker-grid"></div>
+        </div>
+        <div class="flyout" id="flyout-ai" hidden>
+          <div class="fly-head"><h4 data-i18n="ai.title"></h4><button class="fly-close" data-i18n-aria="bar.close">✕</button></div>
+          <p class="notice" id="ai-off" hidden data-i18n="ai.off"></p>
+          <div id="ai-on">
+            <div class="ai-tabs" role="tablist">
+              <button type="button" class="active" data-ai-tab="slogan" data-i18n="ai.tabSlogan"></button>
+              <button type="button" data-ai-tab="logo" data-i18n="ai.tabLogo"></button>
+            </div>
+            <form id="ai-slogan-form">
+              <div class="field"><label for="ai-about" data-i18n="ai.about"></label><textarea id="ai-about" rows="2" maxlength="300" data-i18n-placeholder="ai.aboutPh" dir="auto"></textarea></div>
+              <div class="field"><label data-i18n="ai.tone"></label><div class="ai-chips" data-ai-pick="tone">
+                <button type="button" class="chip active" data-v="funny" data-i18n="ai.tone.funny"></button>
+                <button type="button" class="chip" data-v="sweet" data-i18n="ai.tone.sweet"></button>
+                <button type="button" class="chip" data-v="proud" data-i18n="ai.tone.proud"></button>
+                <button type="button" class="chip" data-v="romantic" data-i18n="ai.tone.romantic"></button>
+                <button type="button" class="chip" data-v="motivational" data-i18n="ai.tone.motivational"></button>
+              </div></div>
+              <div class="field"><label data-i18n="ai.lang"></label><div class="ai-chips" data-ai-pick="lang">
+                <button type="button" class="chip active" data-v="ar" data-i18n="ai.lang.ar"></button>
+                <button type="button" class="chip" data-v="en" data-i18n="ai.lang.en"></button>
+                <button type="button" class="chip" data-v="both" data-i18n="ai.lang.both"></button>
+              </div></div>
+              <button class="btn btn-primary btn-block" type="submit" id="ai-slogan-go" data-i18n="ai.write"></button>
+            </form>
+            <form id="ai-logo-form" hidden>
+              <div class="field"><label for="ai-name" data-i18n="ai.name"></label><input type="text" id="ai-name" maxlength="40" data-i18n-placeholder="ai.namePh" dir="auto"></div>
+              <div class="field"><label for="ai-tagline" data-i18n="ai.tagline"></label><input type="text" id="ai-tagline" maxlength="60" dir="auto"></div>
+              <div class="field"><label data-i18n="ai.style"></label><div class="ai-chips" data-ai-pick="style">
+                <button type="button" class="chip active" data-v="modern" data-i18n="ai.style.modern"></button>
+                <button type="button" class="chip" data-v="classic" data-i18n="ai.style.classic"></button>
+                <button type="button" class="chip" data-v="playful" data-i18n="ai.style.playful"></button>
+                <button type="button" class="chip" data-v="sporty" data-i18n="ai.style.sporty"></button>
+                <button type="button" class="chip" data-v="elegant" data-i18n="ai.style.elegant"></button>
+                <button type="button" class="chip" data-v="calligraphy" data-i18n="ai.style.calligraphy"></button>
+              </div></div>
+              <button class="btn btn-primary btn-block" type="submit" id="ai-logo-go" data-i18n="ai.design"></button>
+            </form>
+            <div id="ai-results"></div>
+            <p class="ai-note" id="ai-left"></p>
+          </div>
+        </div>
+        <div class="flyout" id="flyout-shapes" hidden>
+          <div class="fly-head"><h4 data-i18n="fly.shapes"></h4><button class="fly-close" data-i18n-aria="bar.close">✕</button></div>
+          <div class="shape-grid" id="shape-grid"></div>
+          <button class="btn btn-block btn-sm" id="fill-area" style="margin-top:12px;" data-i18n="fly.fillArea"></button>
+        </div>
+      </section>
+
+      <!-- Product + properties -->
+      <aside class="panel">
+        <div class="sheet-head"><strong id="sheet-title"></strong><button id="sheet-close" class="fly-close" data-i18n-aria="bar.close">✕</button></div>
+        <div class="panel-scroll">
+          <section class="panel-section" id="sec-product">
+            <div class="field">
+              <label for="product-select" data-i18n="panel.product"></label>
+              <select id="product-select"></select>
+            </div>
+            <div class="field">
+              <label><span id="color-label" data-i18n="panel.colour"></span> <span id="color-name" class="muted"></span></label>
+              <div class="swatches" id="swatches"></div>
+            </div>
+            <div class="field" style="margin-bottom:0">
+              <div class="label-line"><label data-i18n="panel.size"></label><span class="size-note" id="size-note"></span><span id="size-guide-link"></span></div>
+              <div class="chips" id="sizes"></div>
+            </div>
+            <div id="prod-options"></div>
+            <div class="field qty-field" id="qty-field"></div>
+            <div class="field method-field" id="method-field" hidden>
+              <label data-i18n="emb.title"></label>
+              <div class="chips" id="method-chips"></div>
+              <p class="muted small" id="method-note" style="margin:6px 0 0;line-height:1.5"></p>
+            </div>
+            <div class="field pattern-field" id="pattern-field" hidden>
+              <label data-i18n="pat.title"></label>
+              <div class="small muted pat-label" data-i18n="pat.repeat"></div>
+              <div class="chips" id="pat-repeats"></div>
+              <div class="small muted pat-label" data-i18n="pat.tile"></div>
+              <div class="chips" id="pat-tiles"></div>
+              <canvas class="pat-preview" id="pat-preview" width="600" height="720" data-i18n-aria="pat.previewAlt"></canvas>
+              <p class="muted small" style="margin:6px 0 0;line-height:1.5" data-i18n="pat.help"></p>
+            </div>
+            <div class="field place-field" id="place-field" hidden>
+              <label id="place-title" data-i18n="area.title"></label>
+              <div class="place-row">
+                <span class="small" id="place-info"></span>
+                <div class="place-btns">
+                  <button class="btn btn-sm" type="button" data-nudge="0,-1" data-i18n-aria="area.up">↑</button>
+                  <button class="btn btn-sm" type="button" data-nudge="0,1" data-i18n-aria="area.down">↓</button>
+                  <button class="btn btn-sm" type="button" data-nudge="-1,0" data-i18n-aria="area.toLeft">←</button>
+                  <button class="btn btn-sm" type="button" data-nudge="1,0" data-i18n-aria="area.toRight">→</button>
+                  <button class="btn btn-sm" type="button" id="place-reset" data-i18n="area.reset"></button>
+                </div>
+              </div>
+              <p class="muted small" style="margin:6px 0 0;line-height:1.5" data-i18n="area.help"></p>
+            </div>
+          </section>
+
+          <section class="panel-section merge-section" id="sec-merge" hidden>
+            <h3 data-i18n="merge.title"></h3>
+            <p class="muted small" style="margin:0 0 10px;line-height:1.5" data-i18n="merge.help"></p>
+            <div id="merge-body"></div>
+            <input type="file" id="merge-file" accept=".xlsx,.csv,.tsv,.txt,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
+          </section>
+
+          <section class="panel-section" id="sec-check">
+            <h3 data-i18n="check.title"></h3>
+            <ul class="check-legend" id="check-legend"></ul>
+            <ul class="check-list" id="check-list"></ul>
+          </section>
+
+          <section class="panel-section" id="sec-props">
+            <h3 id="props-title"></h3>
+            <div id="props"></div>
+          </section>
+
+          <section class="panel-section" id="sec-layers">
+            <h3 data-i18n="panel.layers"></h3>
+            <ul class="layers" id="layers"></ul>
+          </section>
+        </div>
+        <div class="panel-foot" data-toast-above>
+          <div class="price-line">
+            <div>
+              <div class="amount" id="price"></div>
+              <div class="price-note" id="price-note"></div>
+              <button type="button" class="qty-chip" id="qty-chip" hidden></button>
+              <button type="button" class="buy-sum" id="buy-sum" data-i18n-title="sheet.product"></button>
+            </div>
+            <div class="price-note text-end" data-i18n-html="panel.oneOff"></div>
+          </div>
+          <div class="foot-actions">
+            <button class="btn btn-lg mobile-only" id="preview-open-m" data-i18n-title="pv.open">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2 3 7v10l9 5 9-5V7z"/><path d="M3 7l9 5 9-5M12 12v10"/></svg><span data-i18n="draft.preview"></span>
+            </button>
+            <button class="btn btn-lg" id="save-draft" data-i18n="draft.save" data-i18n-title="draft.saveTitle"></button>
+            <button class="btn btn-primary btn-lg" id="add-to-cart"></button>
+          </div>
+          <!-- Paying in advance (src/payment-wording.js): the money-back guarantee, under Add to cart -->
+          <a class="guar-line" data-prepay-only data-prepay-i18n="guar.add" data-prepay-href="/guarantee" hidden></a>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <div class="share-dialog" id="share-dialog" hidden>
+    <div class="box" role="dialog" aria-modal="true" aria-labelledby="share-dialog-title">
+      <div class="head"><h3 id="share-dialog-title" data-i18n="share.dialogTitle"></h3><button class="fly-close" id="share-close" data-i18n-aria="bar.close">✕</button></div>
+      <!-- View only (several pages or sides): to flip through, no replies; it follows the latest save. -->
+      <div class="view-share" id="view-share" hidden>
+        <h4 class="view-share-title" data-i18n="viewShare.title"></h4>
+        <p class="muted small" style="margin:0" data-i18n="viewShare.text"></p>
+        <div class="share-link-row"><input type="text" id="view-url" readonly><button class="btn btn-sm" id="view-copy" data-i18n="share.copy"></button></div>
+        <div class="share-actions">
+          <a class="btn btn-whatsapp" id="view-wa" target="_blank" rel="noopener" data-i18n="share.whatsapp"></a>
+          <a class="btn" id="view-mail" data-i18n="viewShare.email"></a>
+          <a class="btn" id="view-open" target="_blank" rel="noopener" data-i18n="viewShare.open"></a>
+        </div>
+        <button type="button" class="btn btn-sm btn-block" id="view-ask" data-i18n="viewShare.ask"></button>
+      </div>
+      <div id="opinion-share">
+      <p class="muted small" style="margin:0" data-i18n="share.dialogText"></p>
+      <div class="share-link-row"><input type="text" id="share-url" readonly><button class="btn btn-sm" id="share-copy" data-i18n="share.copy"></button></div>
+      <div class="share-actions">
+        <a class="btn btn-whatsapp" id="share-wa" target="_blank" rel="noopener" data-i18n="share.whatsapp"></a>
+        <button class="btn" id="share-native" data-i18n="share.more"></button>
+      </div>
+      <h3 class="share-replies-title" data-i18n="share.replies"></h3>
+      <ul class="share-replies" id="share-dialog-replies"></ul>
+      <button class="btn btn-sm btn-block" id="share-refresh" data-i18n="share.refresh"></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="pv-modal" id="pv" hidden>
+    <div class="pv-box" role="dialog" aria-modal="true" aria-labelledby="pv-title">
+      <div class="pv-head">
+        <h3 id="pv-title" data-i18n="pv.title"></h3>
+        <div class="side-tabs pv-tabs">
+          <button class="side-tab" data-pv-tab="real" data-i18n="pv.realistic"></button>
+          <button class="side-tab" data-pv-tab="model" data-i18n="pv.model" hidden></button>
+          <button class="side-tab" data-pv-tab="flip" data-i18n="pv.flip" hidden></button>
+          <button class="side-tab" data-pv-tab="3d" data-i18n="pv.3d"></button>
+          <button class="side-tab" data-pv-tab="proof" data-i18n="pv.proof"></button>
+        </div>
+        <button class="fly-close" id="pv-close" data-i18n-aria="bar.close">✕</button>
+      </div>
+      <div class="side-tabs pv-sides" id="pv-sides" hidden></div>
+      <div class="side-tabs pv-sides" id="pv-models" hidden></div>
+      <div class="pv-body" id="pv-body"></div>
+      <div class="pv-foot">
+        <span class="muted small" id="pv-hint"></span>
+        <label class="check" id="pv-spin-wrap"><input type="checkbox" id="pv-spin" checked> <span data-i18n="pv.spin"></span></label>
+        <button class="btn btn-sm" id="pv-download" data-i18n="pv.download"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Imported pictures: the customer confirms the rights before adding to the cart -->
+  <div class="pv-modal" id="rights" hidden>
+    <div class="card rights-box" role="dialog" aria-modal="true" aria-labelledby="rights-title">
+      <h3 id="rights-title" data-i18n="rights.title"></h3>
+      <p class="small" style="line-height:1.7" data-i18n="rights.text"></p>
+      <label class="check"><input type="checkbox" id="rights-check"> <span data-i18n="rights.check"></span></label>
+      <div class="row" style="justify-content:flex-end;gap:8px;margin-top:14px">
+        <button class="btn" type="button" id="rights-cancel" data-i18n="houses.cancel"></button>
+        <button class="btn btn-primary" type="button" id="rights-ok" disabled data-i18n="rights.continue"></button>
+      </div>
+      <a class="small muted" href="/rights" target="_blank" rel="noopener" data-i18n="rights.policy"></a>
+    </div>
+  </div>
+  <div class="pv-modal" id="size-ask" hidden>
+    <div class="card rights-box" role="dialog" aria-modal="true" aria-labelledby="size-ask-title">
+      <h3 id="size-ask-title"></h3>
+      <p class="small muted" id="size-ask-note" style="line-height:1.6"></p>
+      <div class="chips" id="size-ask-chips" style="margin:10px 0 6px"></div>
+      <p class="small" id="size-ask-guide" style="margin:0 0 6px"></p>
+      <p class="small muted size-ask-extra" id="size-ask-extra"></p>
+      <div class="row size-ask-foot"><button class="btn" type="button" id="size-ask-cancel" data-i18n="houses.cancel"></button><button class="btn btn-primary" type="button" id="size-ask-ok" disabled></button></div>
+    </div>
+  </div>
+  <!-- The shop's own edit (from the dashboard's Review tab): what changed, then to the customer or to print. -->
+  <div class="pv-modal" id="shop-edit-ask" hidden>
+    <div class="card rights-box" role="dialog" aria-modal="true" aria-labelledby="shop-edit-title">
+      <h3 id="shop-edit-title" data-i18n="shopEdit.title"></h3>
+      <p class="small muted" id="shop-edit-help" style="line-height:1.6"></p>
+      <label class="small" for="shop-edit-note"><b data-i18n="shopEdit.noteLabel"></b></label>
+      <textarea id="shop-edit-note" rows="3" maxlength="1000" dir="auto" style="width:100%;margin-top:4px"></textarea>
+      <p class="small" id="shop-edit-msg" role="alert" style="color:var(--danger,#b42318);margin:6px 0 0" hidden></p>
+      <div class="row" style="flex-wrap:wrap;gap:8px;margin-top:12px;justify-content:flex-end">
+        <button class="btn" type="button" id="shop-edit-cancel" data-i18n="houses.cancel"></button>
+        <button class="btn" type="button" id="shop-edit-print"></button>
+        <button class="btn btn-primary" type="button" id="shop-edit-send" data-i18n="shopEdit.send"></button>
+      </div>
+    </div>
+  </div>
+  <!-- Takes the focus for a moment when Text is tapped on a phone, so the keyboard opens from the tap (stage 5). -->
+  <input type="text" id="type-catch" class="type-catch" aria-hidden="true" tabindex="-1" autocomplete="off">
+  <div class="overlay-busy" id="busy" hidden><div><div class="spinner"></div><span id="busy-text"></span><div class="captcha-box" id="link-cap"></div></div></div>
+
+  <script src="/vendor/fabric-5.3.0.min.js"></script>
+  <script src="/js/i18n.js"></script>
+  <script src="/js/common.js"></script>
+  <script src="/js/fabric-ext.js"></script>
+  <script src="/js/bidi-caret.js"></script>
+  <script src="/js/templates.js"></script>
+  <script src="/js/stickers.js"></script>
+  <script src="/js/photo-mockups.js"></script>
+  <script src="/js/preview.js"></script>
+  <script src="/js/i18n-size-guide.js"></script>
+  <script src="/js/size-guide.js"></script>
+  <script src="/js/editor.js"></script>
+</body>
+</html>

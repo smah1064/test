@@ -1,0 +1,287 @@
+/* Sticker & clipart library. Original vector drawings, 100 x 100 each. */
+(function () {
+  'use strict';
+
+  const HEART = 'M50 88 C20 66 0 48 0 28 C0 12 12 0 27 0 C37 0 45 5 50 14 C55 5 63 0 73 0 C88 0 100 12 100 28 C100 48 80 66 50 88 Z';
+  const STAR5 = 'M50 4 L61 37 L96 37 L68 58 L78 92 L50 72 L22 92 L32 58 L4 37 L39 37 Z';
+  const face = (inner) => `<circle cx="50" cy="50" r="44" fill="#ffd43b"/><circle cx="50" cy="50" r="44" fill="none" stroke="#f59f00" stroke-width="3"/>${inner}`;
+  const INK = '#5c3d0e';
+
+  const CATEGORIES = [
+    { id: 'egypt', name: { en: 'Egypt', ar: 'مصر' } },
+    { id: 'ramadan', name: { en: 'Ramadan', ar: 'رمضان' } },
+    { id: 'football', name: { en: 'Football', ar: 'كورة' } },
+    { id: 'love', name: { en: 'Love', ar: 'حب' } },
+    { id: 'birthday', name: { en: 'Birthday', ar: 'عيد ميلاد' } },
+    { id: 'fun', name: { en: 'Fun', ar: 'مرح' } },
+    { id: 'eid', name: { en: 'Eid', ar: 'العيد' } },
+    { id: 'grad', name: { en: 'Graduation', ar: 'تخرج' } },
+    { id: 'wedding', name: { en: 'Wedding', ar: 'فرح' } },
+    { id: 'sports', name: { en: 'Sports', ar: 'رياضة' } },
+    { id: 'nature', name: { en: 'Nature', ar: 'طبيعة' } },
+  ];
+
+  const S = (id, cat, en, ar, body) => ({ id, cat, name: { en, ar }, svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">${body}</svg>` });
+
+  const STICKERS = [
+    // ---------- Egypt ----------
+    S('pyramids', 'egypt', 'Pyramids', 'الأهرامات',
+      '<circle cx="76" cy="24" r="11" fill="#f6b73c"/>' +
+      '<path d="M6 84 L40 28 L74 84 Z" fill="#e0b36a"/><path d="M40 28 L74 84 L54 84 Z" fill="#c99a4f"/>' +
+      '<path d="M50 84 L72 48 L96 84 Z" fill="#e8c27f"/><path d="M72 48 L96 84 L80 84 Z" fill="#cfa45c"/>' +
+      '<rect x="2" y="83" width="96" height="7" rx="3.5" fill="#d9b277"/>'),
+    S('palm', 'egypt', 'Palm tree', 'نخلة',
+      '<ellipse cx="50" cy="92" rx="28" ry="5" fill="#e0b36a"/>' +
+      '<path d="M50 92 Q45 66 52 38" stroke="#8b5a2b" stroke-width="8" fill="none" stroke-linecap="round"/>' +
+      '<path d="M45 80 h9 M45 68 h9 M47 56 h8" stroke="#6b4423" stroke-width="2.5" stroke-linecap="round"/>' +
+      '<path d="M52 38 Q30 18 8 32 Q30 28 52 40 Z" fill="#2f9e44"/><path d="M52 38 Q74 18 94 32 Q72 28 52 40 Z" fill="#2f9e44"/>' +
+      '<path d="M52 38 Q36 10 16 12 Q36 20 51 40 Z" fill="#37b24d"/><path d="M52 38 Q68 10 88 12 Q68 20 53 40 Z" fill="#37b24d"/>' +
+      '<path d="M52 38 Q44 50 30 64 Q46 54 54 40 Z" fill="#2b8a3e"/><path d="M52 38 Q62 52 76 62 Q60 54 50 40 Z" fill="#2b8a3e"/>' +
+      '<circle cx="47" cy="42" r="4" fill="#8b5a2b"/><circle cx="55" cy="43" r="4" fill="#8b5a2b"/>'),
+    S('ankh', 'egypt', 'Ankh', 'مفتاح الحياة',
+      '<ellipse cx="50" cy="28" rx="14" ry="19" fill="none" stroke="#e0a526" stroke-width="9"/>' +
+      '<path d="M22 52 H78 M50 47 V94" stroke="#e0a526" stroke-width="10" stroke-linecap="round"/>'),
+    S('eye', 'egypt', 'Ancient eye', 'العين الفرعونية',
+      '<path d="M14 27 Q50 6 88 25" stroke="#1b3a6b" stroke-width="6" fill="none" stroke-linecap="round"/>' +
+      '<path d="M8 46 Q50 16 92 46 Q50 70 8 46 Z" fill="#fff" stroke="#1b3a6b" stroke-width="5" stroke-linejoin="round"/>' +
+      '<circle cx="50" cy="44" r="12" fill="#1b3a6b"/><circle cx="54" cy="40" r="3.5" fill="#fff"/>' +
+      '<path d="M42 64 L37 84 Q35 93 45 91" stroke="#1b3a6b" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>' +
+      '<path d="M60 62 Q72 80 86 72" stroke="#1b3a6b" stroke-width="5" fill="none" stroke-linecap="round"/>' +
+      '<path d="M92 46 L98 44" stroke="#1b3a6b" stroke-width="5" stroke-linecap="round"/>'),
+    S('lotus', 'egypt', 'Lotus', 'زهرة اللوتس',
+      '<path d="M50 84 Q32 60 50 22 Q68 60 50 84 Z" fill="#f783ac"/>' +
+      '<path d="M50 84 Q20 72 16 40 Q42 50 50 84 Z" fill="#faa2c1"/><path d="M50 84 Q80 72 84 40 Q58 50 50 84 Z" fill="#faa2c1"/>' +
+      '<path d="M50 84 Q14 84 4 64 Q34 62 50 84 Z" fill="#fcc2d7"/><path d="M50 84 Q86 84 96 64 Q66 62 50 84 Z" fill="#fcc2d7"/>' +
+      '<path d="M20 90 Q50 82 80 90" stroke="#1c7ed6" stroke-width="4" fill="none" stroke-linecap="round"/>'),
+    S('sun', 'egypt', 'Sun', 'شمس',
+      '<g stroke="#f59f00" stroke-width="6" stroke-linecap="round"><path d="M50 4 V16 M50 84 V96 M4 50 H16 M84 50 H96 M17 17 L26 26 M74 74 L83 83 M83 17 L74 26 M26 74 L17 83"/></g>' +
+      '<circle cx="50" cy="50" r="26" fill="#fcc419"/>'),
+
+    // ---------- Ramadan ----------
+    S('fanous', 'ramadan', 'Fanous lantern', 'فانوس',
+      '<circle cx="50" cy="8" r="5" fill="none" stroke="#b7791f" stroke-width="3"/>' +
+      '<path d="M36 26 L50 12 L64 26 Z" fill="#d69e2e"/><rect x="32" y="25" width="36" height="7" rx="2" fill="#b7791f"/>' +
+      '<path d="M32 32 L68 32 L74 52 L68 74 L32 74 L26 52 Z" fill="#d69e2e"/>' +
+      '<path d="M36 36 L47 36 L47 70 L36 70 L31 52 Z" fill="#e8590c"/><path d="M53 36 L64 36 L69 52 L64 70 L53 70 Z" fill="#2b8a3e"/>' +
+      '<circle cx="50" cy="53" r="6" fill="#fff3bf"/>' +
+      '<rect x="34" y="74" width="32" height="7" rx="2" fill="#b7791f"/><path d="M40 81 L60 81 L54 91 L46 91 Z" fill="#d69e2e"/>'),
+    S('crescent', 'ramadan', 'Crescent & star', 'هلال ونجمة',
+      '<path d="M58 6 A44 44 0 1 0 58 94 A56 56 0 0 1 58 6 Z" fill="#e0a526"/>' +
+      `<path d="${STAR5}" fill="#e0a526" transform="translate(56 28) scale(0.32)"/>`),
+    S('mosque', 'ramadan', 'Mosque', 'مسجد',
+      '<rect x="82" y="30" width="9" height="62" fill="#1971c2"/><path d="M80 30 L86.5 14 L93 30 Z" fill="#1864ab"/>' +
+      '<path d="M30 58 Q30 32 50 26 Q70 32 70 58 Z" fill="#1971c2"/><path d="M50 26 V16" stroke="#e0a526" stroke-width="3"/>' +
+      '<path d="M52 8 A5 5 0 1 0 52 18 A6.5 6.5 0 0 1 52 8 Z" fill="#e0a526"/>' +
+      '<rect x="14" y="56" width="68" height="36" fill="#228be6"/>' +
+      '<path d="M40 92 V76 Q40 68 48 68 Q56 68 56 76 V92 Z" fill="#0b3d78"/>' +
+      '<path d="M20 72 Q20 66 25 66 Q30 66 30 72 V80 H20 Z M66 72 Q66 66 71 66 Q76 66 76 72 V80 H66 Z" fill="#0b3d78"/>'),
+    S('stars', 'ramadan', 'Stars', 'نجوم',
+      `<path d="${STAR5}" fill="#fcc419" transform="translate(4 10) scale(0.55)"/>` +
+      `<path d="${STAR5}" fill="#e0a526" transform="translate(56 4) scale(0.4)"/>` +
+      `<path d="${STAR5}" fill="#ffe066" transform="translate(58 56) scale(0.36)"/>`),
+
+    // ---------- Football ----------
+    S('ball', 'football', 'Football', 'كورة',
+      '<circle cx="50" cy="50" r="45" fill="#fff" stroke="#212529" stroke-width="4"/>' +
+      '<path d="M50 35 L64.3 45.4 L58.8 62.1 L41.2 62.1 L35.7 45.4 Z" fill="#212529"/>' +
+      '<g stroke="#212529" stroke-width="3" fill="none"><path d="M50 35 V18 M64.3 45.4 L80.4 40.1 M58.8 62.1 L68.8 75.8 M41.2 62.1 L31.2 75.8 M35.7 45.4 L19.6 40.1"/></g>' +
+      '<g fill="#212529"><path d="M43 7 L57 7 L58 18 L50 22 L42 18 Z"/><path d="M90 38 L94 52 L86 56 L80 48 L82 38 Z"/><path d="M78 86 L66 92 L62 82 L68 75 L78 78 Z"/><path d="M22 86 L34 92 L38 82 L32 75 L22 78 Z"/><path d="M10 38 L6 52 L14 56 L20 48 L18 38 Z"/></g>'),
+    S('trophy', 'football', 'Trophy', 'كأس',
+      '<path d="M26 14 H74 V36 Q74 62 50 64 Q26 62 26 36 Z" fill="#fcc419"/>' +
+      '<path d="M26 20 H12 Q12 44 30 46 M74 20 H88 Q88 44 70 46" stroke="#f59f00" stroke-width="6" fill="none"/>' +
+      '<rect x="44" y="62" width="12" height="14" fill="#f59f00"/><rect x="30" y="76" width="40" height="8" rx="2" fill="#f59f00"/><rect x="24" y="84" width="52" height="10" rx="3" fill="#e67700"/>' +
+      `<path d="${STAR5}" fill="#fff3bf" transform="translate(39 24) scale(0.22)"/>`),
+    S('jersey', 'football', 'Jersey', 'تيشيرت فريق',
+      '<path d="M30 10 L42 6 Q50 14 58 6 L70 10 L94 26 L84 44 L74 38 V94 H26 V38 L16 44 L6 26 Z" fill="#e03131" stroke="#a51111" stroke-width="3" stroke-linejoin="round"/>' +
+      '<path d="M42 6 Q50 18 58 6" fill="none" stroke="#fff" stroke-width="4"/>' +
+      '<rect x="44" y="40" width="12" height="54" fill="#fff"/>'),
+    S('medal', 'football', 'Medal', 'ميدالية',
+      '<path d="M30 4 H44 L56 40 H42 Z" fill="#1c7ed6"/><path d="M70 4 H56 L44 40 H58 Z" fill="#e03131"/>' +
+      '<circle cx="50" cy="64" r="28" fill="#fcc419" stroke="#f59f00" stroke-width="5"/>' +
+      `<path d="${STAR5}" fill="#f59f00" transform="translate(35 49) scale(0.3)"/>`),
+
+    // ---------- Love ----------
+    S('heart', 'love', 'Heart', 'قلب',
+      `<path d="${HEART}" fill="#e03131" transform="translate(0 6)"/>` +
+      '<path d="M24 18 Q12 22 12 36" stroke="#fff" stroke-width="6" stroke-linecap="round" fill="none" opacity=".55"/>'),
+    S('hearts', 'love', 'Two hearts', 'قلبين',
+      `<path d="${HEART}" fill="#f783ac" transform="translate(42 34) scale(0.56)"/>` +
+      `<path d="${HEART}" fill="#e03131" transform="translate(4 10) scale(0.68)"/>`),
+    S('heart-arrow', 'love', 'Heart & arrow', 'قلب وسهم',
+      '<path d="M8 82 L92 18" stroke="#8d6e63" stroke-width="5" stroke-linecap="round"/>' +
+      `<path d="${HEART}" fill="#e03131" transform="translate(18 18) scale(0.64)"/>` +
+      '<path d="M92 18 L78 18 L86 30 Z" fill="#495057"/><path d="M8 82 L4 72 M8 82 L18 86 M14 78 L10 68 M14 78 L24 82" stroke="#e03131" stroke-width="4" stroke-linecap="round"/>'),
+    S('rose', 'love', 'Rose', 'وردة',
+      '<path d="M50 54 Q48 76 52 96" stroke="#2f9e44" stroke-width="5" fill="none" stroke-linecap="round"/>' +
+      '<path d="M50 74 Q30 64 22 76 Q36 84 50 76 Z" fill="#37b24d"/><path d="M51 84 Q70 74 78 86 Q64 92 51 86 Z" fill="#37b24d"/>' +
+      '<path d="M26 30 Q26 8 50 10 Q74 8 74 30 Q74 56 50 58 Q26 56 26 30 Z" fill="#e03131"/>' +
+      '<path d="M50 20 Q62 22 60 34 Q58 44 46 42 Q38 38 42 30 Q46 26 52 30" stroke="#a51111" stroke-width="3.5" fill="none" stroke-linecap="round"/>'),
+    S('letter', 'love', 'Love letter', 'جواب حب',
+      '<rect x="8" y="24" width="84" height="56" rx="6" fill="#fff" stroke="#e64980" stroke-width="4"/>' +
+      '<path d="M10 28 L50 58 L90 28" fill="none" stroke="#e64980" stroke-width="4" stroke-linejoin="round"/>' +
+      `<path d="${HEART}" fill="#e03131" transform="translate(39 46) scale(0.22)"/>`),
+
+    // ---------- Birthday ----------
+    S('cake', 'birthday', 'Cake', 'تورتة',
+      '<g stroke="#fff" stroke-width="0"><rect x="34" y="18" width="5" height="18" fill="#4dabf7"/><rect x="48" y="14" width="5" height="22" fill="#ffd43b"/><rect x="62" y="18" width="5" height="18" fill="#69db7c"/></g>' +
+      '<path d="M36.5 10 Q33 14 36.5 17 Q40 14 36.5 10 Z M50.5 6 Q47 10 50.5 13 Q54 10 50.5 6 Z M64.5 10 Q61 14 64.5 17 Q68 14 64.5 10 Z" fill="#ff922b"/>' +
+      '<rect x="24" y="36" width="52" height="24" rx="5" fill="#fcc2d7"/>' +
+      '<rect x="14" y="58" width="72" height="30" rx="5" fill="#f783ac"/>' +
+      '<path d="M14 62 Q14 58 18 58 H82 Q86 58 86 62 V68 Q81 74 76 68 Q71 74 66 68 Q61 74 56 68 Q51 74 46 68 Q41 74 36 68 Q31 74 26 68 Q21 74 14 68 Z" fill="#fff"/>' +
+      '<rect x="8" y="86" width="84" height="6" rx="3" fill="#ced4da"/>'),
+    S('balloons', 'birthday', 'Balloons', 'بالونات',
+      '<path d="M30 48 Q38 70 50 96 M70 44 Q62 70 50 96 M50 40 V96" stroke="#868e96" stroke-width="1.5" fill="none"/>' +
+      '<ellipse cx="28" cy="32" rx="18" ry="22" fill="#ff6b6b"/><ellipse cx="72" cy="30" rx="18" ry="22" fill="#4dabf7"/><ellipse cx="50" cy="24" rx="18" ry="22" fill="#ffd43b"/>' +
+      '<path d="M22 22 Q20 16 25 13 M66 20 Q64 14 69 11 M44 14 Q42 8 47 5" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" opacity=".7"/>'),
+    S('gift', 'birthday', 'Gift', 'هدية',
+      '<rect x="16" y="44" width="68" height="48" rx="4" fill="#4dabf7"/><rect x="12" y="34" width="76" height="14" rx="3" fill="#339af0"/>' +
+      '<rect x="45" y="34" width="10" height="58" fill="#ff6b6b"/>' +
+      '<path d="M50 34 C38 16 20 20 28 30 C33 37 44 36 50 34 Z M50 34 C62 16 80 20 72 30 C67 37 56 36 50 34 Z" fill="#ff6b6b"/>'),
+    S('party-hat', 'birthday', 'Party hat', 'طرطور',
+      '<path d="M50 12 L80 88 H20 Z" fill="#845ef7"/>' +
+      '<path d="M41 35 L59 35 L63 46 L37 46 Z M31 60 L69 60 L73 71 L27 71 Z" fill="#fcc419"/>' +
+      '<path d="M18 88 L24 80 L30 88 L36 80 L42 88 L48 80 L54 88 L60 80 L66 88 L72 80 L78 88 L82 92 H18 Z" fill="#ff6b6b"/>' +
+      '<circle cx="50" cy="10" r="8" fill="#ff6b6b"/>'),
+    S('confetti', 'birthday', 'Confetti', 'زينة',
+      '<rect x="10" y="14" width="8" height="16" rx="2" fill="#ff6b6b" transform="rotate(-20 14 22)"/><rect x="70" y="10" width="8" height="16" rx="2" fill="#4dabf7" transform="rotate(25 74 18)"/>' +
+      '<rect x="44" y="40" width="8" height="16" rx="2" fill="#ffd43b" transform="rotate(40 48 48)"/><rect x="18" y="66" width="8" height="16" rx="2" fill="#69db7c" transform="rotate(-35 22 74)"/>' +
+      '<rect x="76" y="64" width="8" height="16" rx="2" fill="#845ef7" transform="rotate(15 80 72)"/>' +
+      '<circle cx="36" cy="22" r="5" fill="#69db7c"/><circle cx="84" cy="42" r="5" fill="#ff922b"/><circle cx="14" cy="46" r="5" fill="#845ef7"/><circle cx="56" cy="84" r="5" fill="#ff6b6b"/><circle cx="60" cy="18" r="4" fill="#f783ac"/>' +
+      '<path d="M28 44 Q34 38 40 44 T52 44" stroke="#f783ac" stroke-width="4" fill="none" stroke-linecap="round"/><path d="M60 58 Q66 52 72 58 T84 58" stroke="#4dabf7" stroke-width="4" fill="none" stroke-linecap="round"/>'),
+
+    // ---------- Fun ----------
+    S('smile', 'fun', 'Smile', 'ابتسامة',
+      face(`<ellipse cx="35" cy="40" rx="5" ry="8" fill="${INK}"/><ellipse cx="65" cy="40" rx="5" ry="8" fill="${INK}"/><path d="M28 58 Q50 80 72 58" fill="none" stroke="${INK}" stroke-width="6" stroke-linecap="round"/>`)),
+    S('laugh', 'fun', 'Laughing', 'ضحك',
+      face(`<path d="M26 42 Q34 32 42 42 M58 42 Q66 32 74 42" stroke="${INK}" stroke-width="5" fill="none" stroke-linecap="round"/><path d="M24 54 H76 Q74 84 50 84 Q26 84 24 54 Z" fill="${INK}"/><path d="M36 74 Q50 64 64 74 Q60 83 50 83 Q40 83 36 74 Z" fill="#ff6b6b"/><path d="M18 46 Q12 56 18 60 Q24 56 18 46 Z M82 46 Q76 56 82 60 Q88 56 82 46 Z" fill="#74c0fc"/>`)),
+    S('love-eyes', 'fun', 'Heart eyes', 'عيون قلوب',
+      face(`<path d="${HEART}" fill="#e03131" transform="translate(23 28) scale(0.2)"/><path d="${HEART}" fill="#e03131" transform="translate(57 28) scale(0.2)"/><path d="M28 60 Q50 82 72 60" fill="none" stroke="${INK}" stroke-width="6" stroke-linecap="round"/>`)),
+    S('cool', 'fun', 'Cool', 'روش',
+      face(`<path d="M16 36 H84 V42 Q82 56 67 56 Q55 56 53 44 H47 Q45 56 33 56 Q18 56 16 42 Z" fill="#212529"/><path d="M24 40 L32 40" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity=".6"/><path d="M36 70 Q54 80 68 64" fill="none" stroke="${INK}" stroke-width="5" stroke-linecap="round"/>`)),
+    S('wink', 'fun', 'Wink', 'غمزة',
+      face(`<ellipse cx="35" cy="40" rx="5" ry="8" fill="${INK}"/><path d="M58 42 Q66 36 74 42" stroke="${INK}" stroke-width="5" fill="none" stroke-linecap="round"/><path d="M28 58 Q50 80 72 58" fill="none" stroke="${INK}" stroke-width="6" stroke-linecap="round"/><path d="M52 70 Q56 82 64 74" fill="#ff6b6b"/>`)),
+    S('crown', 'fun', 'Crown', 'تاج',
+      '<path d="M14 74 L8 28 L32 50 L50 18 L68 50 L92 28 L86 74 Z" fill="#fcc419" stroke="#f59f00" stroke-width="3" stroke-linejoin="round"/>' +
+      '<rect x="12" y="72" width="76" height="12" rx="3" fill="#f59f00"/>' +
+      '<circle cx="8" cy="26" r="5" fill="#f59f00"/><circle cx="50" cy="15" r="5" fill="#f59f00"/><circle cx="92" cy="26" r="5" fill="#f59f00"/>' +
+      '<circle cx="30" cy="78" r="3.5" fill="#e03131"/><circle cx="50" cy="78" r="3.5" fill="#1c7ed6"/><circle cx="70" cy="78" r="3.5" fill="#2f9e44"/>'),
+    S('bolt', 'fun', 'Lightning', 'برق',
+      '<path d="M58 4 L18 56 H46 L38 96 L82 40 H54 Z" fill="#fcc419" stroke="#f59f00" stroke-width="3" stroke-linejoin="round"/>'),
+    S('flame', 'fun', 'Flame', 'نار',
+      '<path d="M50 96 C24 96 14 76 20 58 C25 44 36 40 34 20 C48 28 54 42 50 52 C56 46 58 38 56 28 C72 40 86 58 80 74 C77 88 66 96 50 96 Z" fill="#ff6b35"/>' +
+      '<path d="M50 94 C38 94 32 84 36 74 C39 66 46 64 46 56 C54 62 58 70 56 76 C60 74 62 70 62 66 C68 74 68 84 64 88 C60 92 56 94 50 94 Z" fill="#ffd43b"/>'),
+    S('music', 'fun', 'Music', 'موسيقى',
+      '<path d="M36 22 L80 10 V22 L36 34 Z" fill="#7048e8"/><path d="M38 24 V76 M78 14 V66" stroke="#7048e8" stroke-width="7"/>' +
+      '<ellipse cx="27" cy="78" rx="13" ry="10" fill="#7048e8"/><ellipse cx="67" cy="68" rx="13" ry="10" fill="#7048e8"/>'),
+    S('coffee', 'fun', 'Coffee', 'قهوة',
+      '<path d="M34 30 Q28 22 34 14 Q40 6 34 0 M52 30 Q46 22 52 14 Q58 6 52 0" stroke="#adb5bd" stroke-width="4" fill="none" stroke-linecap="round"/>' +
+      '<path d="M70 46 Q88 46 88 58 Q88 70 70 70" fill="none" stroke="#8d6e63" stroke-width="7"/>' +
+      '<path d="M16 38 H72 V60 Q72 84 44 84 Q16 84 16 60 Z" fill="#8d6e63"/><ellipse cx="46" cy="88" rx="36" ry="6" fill="#6d4c41"/>' +
+      `<path d="${HEART}" fill="#fff" opacity=".85" transform="translate(36 50) scale(0.2)"/>`),
+    S('paw', 'fun', 'Paw print', 'أثر قدم قطة',
+      '<g fill="#495057"><ellipse cx="50" cy="68" rx="22" ry="18"/><ellipse cx="22" cy="44" rx="9" ry="12" transform="rotate(-20 22 44)"/><ellipse cx="40" cy="28" rx="9" ry="12"/><ellipse cx="60" cy="28" rx="9" ry="12"/><ellipse cx="78" cy="44" rx="9" ry="12" transform="rotate(20 78 44)"/></g>'),
+    S('sparkle', 'fun', 'Sparkle', 'لمعة',
+      '<path d="M44 6 Q50 40 82 46 Q50 52 44 88 Q38 52 6 46 Q38 40 44 6 Z" fill="#fcc419"/>' +
+      '<path d="M80 62 Q82 74 94 76 Q82 78 80 90 Q78 78 66 76 Q78 74 80 62 Z" fill="#ffe066"/>'),
+    S('speech', 'fun', 'Speech bubble', 'فقاعة كلام',
+      '<path d="M14 14 H86 Q94 14 94 22 V62 Q94 70 86 70 H40 L20 90 L24 70 H14 Q6 70 6 62 V22 Q6 14 14 14 Z" fill="#fff" stroke="#212529" stroke-width="4" stroke-linejoin="round"/>'),
+    // ---------- Eid ----------
+    S('eid-lantern', 'eid', 'Eid lantern', 'فانوس العيد',
+      '<path d="M50 4 v10" stroke="#8d6e1f" stroke-width="3" stroke-linecap="round"/><circle cx="50" cy="6" r="4" fill="none" stroke="#8d6e1f" stroke-width="3"/>' +
+      '<path d="M34 18 h32 l-4 8 h-24z" fill="#e0a526"/><path d="M30 26 h40 l6 34 -10 22 h-32 l-10 -22z" fill="#1c7ed6"/>' +
+      '<path d="M38 30 h24 l4 28 -8 18 h-16 l-8 -18z" fill="#ffd43b"/><path d="M50 34 v38 M42 52 h16" stroke="#e0a526" stroke-width="2.5"/>' +
+      '<path d="M36 82 h28 l-4 8 h-20z" fill="#e0a526"/>'),
+    S('eid-sheep', 'eid', 'Sheep', 'خروف العيد',
+      '<ellipse cx="52" cy="58" rx="32" ry="22" fill="#f8f9fa" stroke="#ced4da" stroke-width="2"/>' +
+      '<circle cx="30" cy="48" r="10" fill="#f8f9fa" stroke="#ced4da" stroke-width="2"/><circle cx="46" cy="40" r="11" fill="#f8f9fa" stroke="#ced4da" stroke-width="2"/><circle cx="64" cy="40" r="11" fill="#f8f9fa" stroke="#ced4da" stroke-width="2"/><circle cx="78" cy="50" r="10" fill="#f8f9fa" stroke="#ced4da" stroke-width="2"/>' +
+      '<ellipse cx="22" cy="56" rx="11" ry="13" fill="#495057"/><circle cx="18" cy="53" r="2" fill="#fff"/><path d="M14 46 q-8 -2 -8 6" stroke="#495057" stroke-width="4" fill="none" stroke-linecap="round"/>' +
+      '<rect x="34" y="74" width="6" height="16" rx="3" fill="#495057"/><rect x="66" y="74" width="6" height="16" rx="3" fill="#495057"/>'),
+    S('eid-badge', 'eid', 'Eid Mubarak badge', 'عيد مبارك',
+      '<path d="M50 4 l9 9 13 -2 3 12 12 6 -5 12 5 12 -12 6 -3 12 -13 -2 -9 9 -9 -9 -13 2 -3 -12 -12 -6 5 -12 -5 -12 12 -6 3 -12 13 2z" fill="#2f9e44"/>' +
+      '<circle cx="50" cy="50" r="30" fill="#fff"/><path d="M58 32 a18 18 0 1 0 0 36 a14 14 0 1 1 0 -36z" fill="#e0a526"/><path d="M66 40 l2 5 5 0 -4 3 2 5 -5 -3 -4 3 1 -5 -4 -3 5 0z" fill="#e0a526"/>'),
+    S('dates', 'eid', 'Dates', 'تمر',
+      '<ellipse cx="50" cy="80" rx="40" ry="10" fill="#c49a6c"/><ellipse cx="50" cy="76" rx="38" ry="8" fill="#e8d3b0"/>' +
+      '<ellipse cx="32" cy="66" rx="10" ry="15" fill="#6d3b1e" transform="rotate(-25 32 66)"/><ellipse cx="52" cy="62" rx="10" ry="16" fill="#7f4524"/><ellipse cx="71" cy="66" rx="10" ry="15" fill="#5c3219" transform="rotate(25 71 66)"/>' +
+      '<path d="M48 52 q4 4 2 12" stroke="#a0643a" stroke-width="2" fill="none"/>'),
+    // ---------- Graduation ----------
+    S('grad-cap', 'grad', 'Graduation cap', 'قبعة التخرج',
+      '<path d="M50 18 L94 38 L50 58 L6 38 Z" fill="#16181d"/><path d="M26 48 v18 q24 16 48 0 v-18 l-24 11z" fill="#2b2f3a"/>' +
+      '<path d="M50 38 L82 46 v22" stroke="#fcc419" stroke-width="3" fill="none"/><path d="M78 68 h8 l-1 14 h-6z" fill="#fcc419"/>'),
+    S('diploma', 'grad', 'Diploma', 'شهادة',
+      '<rect x="10" y="30" width="80" height="40" rx="20" fill="#fff4e6" stroke="#d9a35b" stroke-width="3"/><circle cx="22" cy="50" r="12" fill="#f1d3a6" stroke="#d9a35b" stroke-width="3"/>' +
+      '<path d="M40 30 v40 M48 30 v40" stroke="#e03131" stroke-width="5"/><path d="M44 70 l-6 20 6 -5 6 5 -6 -20" fill="#e03131"/>'),
+    S('books', 'grad', 'Books', 'كتب',
+      '<rect x="12" y="66" width="76" height="16" rx="3" fill="#1c7ed6"/><rect x="18" y="50" width="66" height="16" rx="3" fill="#e03131"/><rect x="14" y="34" width="70" height="16" rx="3" fill="#2f9e44"/>' +
+      '<path d="M20 70 h60 M24 54 h52 M20 38 h56" stroke="#fff" stroke-width="2" opacity=".7"/><path d="M60 8 l6 14 -12 0z" fill="#fcc419"/><path d="M60 22 v12" stroke="#e8590c" stroke-width="6"/>'),
+    S('star-student', 'grad', 'Star student', 'طالب متميز',
+      '<path d="' + STAR5 + '" fill="#fcc419" stroke="#e8590c" stroke-width="3" stroke-linejoin="round"/><circle cx="40" cy="48" r="3.5" fill="#5c3d0e"/><circle cx="60" cy="48" r="3.5" fill="#5c3d0e"/><path d="M40 60 q10 8 20 0" stroke="#5c3d0e" stroke-width="3" fill="none" stroke-linecap="round"/>'),
+    S('pencil', 'grad', 'Pencil', 'قلم رصاص',
+      '<path d="M18 82 L26 62 L72 16 L84 28 L38 74 Z" fill="#fcc419"/><path d="M72 16 L84 28 L90 22 Q92 14 84 10 L78 10 Z" fill="#f783ac"/><path d="M18 82 L26 62 L38 74 Z" fill="#f1d3a6"/><path d="M18 82 l3 -8 5 5z" fill="#343a40"/><path d="M30 66 L76 20" stroke="#e8590c" stroke-width="2"/>'),
+    // ---------- Wedding ----------
+    S('rings', 'wedding', 'Rings', 'دبل',
+      '<circle cx="38" cy="58" r="22" fill="none" stroke="#e0a526" stroke-width="8"/><circle cx="62" cy="58" r="22" fill="none" stroke="#ced4da" stroke-width="8"/>' +
+      '<path d="M62 22 l8 -10 h-16z" fill="#a5d8ff" stroke="#74c0fc" stroke-width="2"/><path d="M58 30 h8" stroke="#ced4da" stroke-width="4"/>'),
+    S('dove', 'wedding', 'Dove', 'حمامة',
+      '<path d="M16 58 Q30 30 58 40 Q72 20 92 22 Q80 34 78 46 Q70 74 40 76 Q24 76 16 58 Z" fill="#f8f9fa" stroke="#adb5bd" stroke-width="2.5"/>' +
+      '<path d="M40 50 Q54 30 72 40" stroke="#adb5bd" stroke-width="2.5" fill="none"/><circle cx="28" cy="56" r="2.5" fill="#343a40"/><path d="M16 58 l-8 3 8 2" fill="#f59f00"/><path d="M62 70 q6 6 14 4 M50 74 q4 8 10 8" stroke="#2f9e44" stroke-width="3" fill="none" stroke-linecap="round"/>'),
+    S('bouquet', 'wedding', 'Bouquet', 'بوكيه ورد',
+      '<path d="M38 60 L50 96 L62 60 Z" fill="#69db7c"/><path d="M40 70 h20" stroke="#fff" stroke-width="4"/>' +
+      '<circle cx="34" cy="40" r="13" fill="#f783ac"/><circle cx="66" cy="40" r="13" fill="#f783ac"/><circle cx="50" cy="28" r="14" fill="#e64980"/><circle cx="50" cy="52" r="12" fill="#fff0f6"/>' +
+      '<circle cx="34" cy="40" r="5" fill="#fff0f6"/><circle cx="66" cy="40" r="5" fill="#fff0f6"/><circle cx="50" cy="28" r="5" fill="#ffdeeb"/>'),
+    S('love-birds', 'wedding', 'Two hearts', 'قلبين',
+      '<path d="' + HEART + '" fill="#e03131" transform="translate(8 18) scale(.55)"/><path d="' + HEART + '" fill="#f783ac" transform="translate(40 30) scale(.55)"/>' +
+      '<path d="M10 90 q40 -20 80 -6" stroke="#e0a526" stroke-width="3" fill="none" stroke-dasharray="4 4"/>'),
+    // ---------- Sports ----------
+    S('basketball', 'sports', 'Basketball', 'كرة سلة',
+      '<circle cx="50" cy="50" r="42" fill="#f76707"/><path d="M8 50 h84 M50 8 v84" stroke="#3b1d0a" stroke-width="3"/>' +
+      '<path d="M22 20 q18 30 0 60 M78 20 q-18 30 0 60" stroke="#3b1d0a" stroke-width="3" fill="none"/>'),
+    S('dumbbell', 'sports', 'Dumbbell', 'دمبل',
+      '<rect x="26" y="45" width="48" height="10" rx="4" fill="#868e96"/><rect x="8" y="30" width="10" height="40" rx="3" fill="#343a40"/><rect x="18" y="24" width="10" height="52" rx="3" fill="#495057"/>' +
+      '<rect x="82" y="30" width="10" height="40" rx="3" fill="#343a40"/><rect x="72" y="24" width="10" height="52" rx="3" fill="#495057"/>'),
+    S('whistle', 'sports', 'Whistle', 'صفارة',
+      '<circle cx="42" cy="58" r="26" fill="#fcc419" stroke="#e8590c" stroke-width="3"/><rect x="42" y="32" width="46" height="18" rx="5" fill="#fcc419" stroke="#e8590c" stroke-width="3"/>' +
+      '<circle cx="42" cy="58" r="9" fill="#e8590c"/><path d="M16 52 q-10 -20 6 -36" stroke="#1c7ed6" stroke-width="4" fill="none" stroke-linecap="round"/>'),
+    S('sneaker', 'sports', 'Sneaker', 'حذاء رياضي',
+      '<path d="M8 66 Q8 42 24 38 L40 34 Q48 50 64 52 L86 58 Q94 62 92 74 H10 Z" fill="#1c7ed6"/><path d="M8 74 H92 Q92 82 84 82 H14 Q8 82 8 74 Z" fill="#f8f9fa" stroke="#ced4da" stroke-width="2"/>' +
+      '<path d="M40 42 l8 -4 M44 48 l8 -4 M50 52 l8 -3" stroke="#fff" stroke-width="3" stroke-linecap="round"/><path d="M60 62 q12 -2 24 4" stroke="#fcc419" stroke-width="4" fill="none" stroke-linecap="round"/>'),
+    S('number-1', 'sports', 'Number one', 'رقم ١',
+      '<circle cx="50" cy="50" r="42" fill="#fcc419" stroke="#e8590c" stroke-width="4"/><path d="M44 30 l12 -6 v52" stroke="#16181d" stroke-width="10" fill="none" stroke-linecap="round" stroke-linejoin="round"/>'),
+    // ---------- Nature ----------
+    S('flower', 'nature', 'Flower', 'وردة',
+      '<g fill="#f783ac"><circle cx="50" cy="26" r="16"/><circle cx="74" cy="44" r="16"/><circle cx="64" cy="72" r="16"/><circle cx="36" cy="72" r="16"/><circle cx="26" cy="44" r="16"/></g><circle cx="50" cy="52" r="13" fill="#fcc419"/>'),
+    S('leaf', 'nature', 'Leaf', 'ورقة شجر',
+      '<path d="M14 86 Q10 20 86 14 Q90 80 14 86 Z" fill="#40c057"/><path d="M14 86 Q46 54 76 24" stroke="#2b8a3e" stroke-width="3" fill="none"/><path d="M40 60 l-6 -14 M54 46 l-4 -16 M40 60 l16 2 M54 46 l14 2" stroke="#2b8a3e" stroke-width="2"/>'),
+    S('cactus', 'nature', 'Cactus', 'صبار',
+      '<path d="M30 88 h40 l-4 -14 h-32z" fill="#e8590c"/><rect x="42" y="18" width="16" height="58" rx="8" fill="#40c057"/><path d="M42 54 h-10 a6 6 0 0 1 -6 -6 v-14" stroke="#40c057" stroke-width="10" fill="none" stroke-linecap="round"/>' +
+      '<path d="M58 46 h10 a6 6 0 0 0 6 -6 v-10" stroke="#40c057" stroke-width="10" fill="none" stroke-linecap="round"/><circle cx="50" cy="16" r="5" fill="#f783ac"/>'),
+    S('butterfly', 'nature', 'Butterfly', 'فراشة',
+      '<path d="M50 50 Q20 8 10 34 Q6 54 50 50 Z" fill="#748ffc"/><path d="M50 50 Q80 8 90 34 Q94 54 50 50 Z" fill="#748ffc"/><path d="M50 52 Q24 86 16 66 Q14 56 50 52 Z" fill="#f783ac"/><path d="M50 52 Q76 86 84 66 Q86 56 50 52 Z" fill="#f783ac"/>' +
+      '<rect x="47" y="30" width="6" height="40" rx="3" fill="#343a40"/><path d="M50 32 q-6 -14 -12 -16 M50 32 q6 -14 12 -16" stroke="#343a40" stroke-width="2.5" fill="none" stroke-linecap="round"/>'),
+    S('rainbow', 'nature', 'Rainbow', 'قوس قزح',
+      '<path d="M8 76 a42 42 0 0 1 84 0" stroke="#e03131" stroke-width="8" fill="none"/><path d="M16 76 a34 34 0 0 1 68 0" stroke="#fcc419" stroke-width="8" fill="none"/><path d="M24 76 a26 26 0 0 1 52 0" stroke="#40c057" stroke-width="8" fill="none"/><path d="M32 76 a18 18 0 0 1 36 0" stroke="#1c7ed6" stroke-width="8" fill="none"/>' +
+      '<ellipse cx="18" cy="80" rx="14" ry="8" fill="#fff" stroke="#dee2e6" stroke-width="2"/><ellipse cx="82" cy="80" rx="14" ry="8" fill="#fff" stroke="#dee2e6" stroke-width="2"/>'),
+    S('cat', 'nature', 'Cat', 'قطة',
+      '<path d="M22 40 L18 10 L40 26 Q50 22 60 26 L82 10 L78 40 Q86 56 78 72 Q66 90 50 90 Q34 90 22 72 Q14 56 22 40 Z" fill="#fd7e14"/>' +
+      '<ellipse cx="38" cy="54" rx="5" ry="7" fill="#212529"/><ellipse cx="62" cy="54" rx="5" ry="7" fill="#212529"/><path d="M46 66 l4 4 4 -4z" fill="#f783ac"/>' +
+      '<path d="M50 70 q-6 8 -12 4 M50 70 q6 8 12 4 M30 64 h-16 M30 68 l-14 4 M70 64 h16 M70 68 l14 4" stroke="#212529" stroke-width="2" fill="none" stroke-linecap="round"/>'),
+  ];
+
+  const urlCache = new Map();
+  function thumbUrl(sticker) {
+    if (!urlCache.has(sticker.id)) urlCache.set(sticker.id, 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(sticker.svg));
+    return urlCache.get(sticker.id);
+  }
+
+  /** Turn a sticker into a vector fabric object. */
+  function makeSticker(sticker) {
+    return new Promise((resolve) => {
+      fabric.loadSVGFromString(sticker.svg, (objects, options) => {
+        const obj = fabric.util.groupSVGElements(objects, options);
+        obj.set({ name: 'sticker:' + sticker.id });
+        resolve(obj);
+      });
+    });
+  }
+
+  window.POD_STICKERS = { CATEGORIES, STICKERS, thumbUrl, makeSticker };
+})();

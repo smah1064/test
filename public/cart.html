@@ -1,0 +1,2241 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>إبداع · ebda3</title>
+  <link rel="icon" href="/favicon.svg?v=ebda3" type="image/svg+xml">
+  <link rel="icon" href="/favicon.ico?v=ebda3" sizes="any">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=ebda3">
+  <link rel="manifest" href="/site.webmanifest?v=ebda3">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="إبداع">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="theme-color" content="#FAFAF7">
+  <meta name="description" content="إبداع: اطبع تصميمك على تيشيرتات، مجات، كروت، هدايا وأكتر. قطعة واحدة أو كمية، وتوصيل لكل مصر.">
+  <meta property="og:site_name" content="إبداع · ebda3">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="إبداع · ebda3">
+  <meta property="og:description" content="اطبع تصميمك على تيشيرتات، مجات، كروت، هدايا وأكتر. قطعة واحدة أو كمية، وتوصيل لكل مصر.">
+  <meta property="og:image" content="https://ebda3.me/img/og-ebda3.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <script>(function(){var l;try{l=localStorage.getItem('pod-lang')}catch(e){}l=l==='en'?'en':'ar';var d=document.documentElement;d.lang=l;d.dir=l==='ar'?'rtl':'ltr'})()</script>
+  <link rel="stylesheet" href="/fonts/fonts.css">
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/quantities.css">
+  <link rel="stylesheet" href="/css/proof.css">
+  <style>
+    /* A long name list never widens the page: the proof keeps to its column, long cells wrap. */
+    .cart-entry, .cart-proof, .cart-proof-inner > *, .proof > *, .proof-names { min-width: 0; }
+    .cart-proof-inner, .proof { grid-template-columns: minmax(0, 1fr); }
+    .proof-table td { white-space: normal; overflow-wrap: anywhere; min-width: 4.5em; }
+    .proof-table td:first-child { white-space: nowrap; min-width: 0; }
+    /* "e.g. EID20" as written (the code itself is typed in capitals). */
+    #coupon::placeholder { text-transform: none; }
+    /* Checkout: errors at the field */
+    .field-err { color: var(--bad); font-size: 13px; font-weight: 600; margin: 5px 0 0; line-height: 1.45; }
+    #checkout [aria-invalid="true"] { border-color: var(--bad); }
+    .field-hint { margin: 4px 0 0; font-size: 12.5px; color: var(--ink-3); line-height: 1.45; }
+    .sample-date { margin: 0; font-size: 13px; font-weight: 700; color: var(--ink-2); }
+    /* Photo prints: prints per size, and the photos the check flagged */
+    .proof-spec > .photo-sizes-row { grid-column: 1 / -1; }
+    .photo-sizes { display: grid; gap: 2px; }
+    .photo-size b { font-weight: 700; color: var(--ink-2); }
+    .proof-spec .photo-sizes { font-weight: 600; }
+    .proof-spec .photo-size b { color: var(--ink); }
+    .photo-flags { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; margin: 8px 0 0; padding: 0; }
+    .photo-flags li { display: grid; gap: 2px; justify-items: center; font-size: 12px; font-weight: 700; }
+    .photo-flags img { width: 60px; height: 60px; object-fit: cover; border-radius: 6px; border: 1px solid #f3d79b; background: #fff; }
+    .photo-flags-hint { margin: 6px 0 0; font-size: 12.5px; }
+    /* Checkout UX (owner, 26 Nov, 8:31 pm review) */
+    /* The one tick for the customer's own designs, right by "Place order"; the colours note behind "Details" */
+    .proof-ok { display: grid; gap: 8px; margin: 0 0 10px; }
+    .proof-ok[hidden], .proof-ok-note[hidden], #coupon-field[hidden], .coupon-open[hidden] { display: none; }
+    .proof-ok-line { display: flex; align-items: center; gap: 0 10px; flex-wrap: wrap; }
+    .proof-ok-line .approve-check { flex: 1 1 200px; min-height: 44px; align-items: center; }
+    .proof-ok-line .approve-check input { width: 22px; height: 22px; margin: 0; }
+    .proof-ok-more { min-height: 44px; padding: 0 4px; font-size: 13.5px; font-weight: 700; }
+    .proof-ok.nudge { padding: 10px 12px; border-radius: 12px; outline: 3px solid #f59e0b; box-shadow: 0 0 0 7px rgba(245, 158, 11, .2); background: #fffdf7; }
+    .sample-box { padding-top: 10px; }
+    /* Delivery: two big cards, each whole card a tap target, its full price at the end */
+    .delivery-pick .dlv-opt { align-items: center; gap: 10px; min-height: 56px; padding: 12px 14px; margin-bottom: 8px; border-radius: 12px; font-size: 14.5px; box-sizing: border-box; }
+    .delivery-pick .dlv-opt input { width: 22px; height: 22px; margin: 0; flex: none; }
+    .delivery-pick .dlv-opt:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .delivery-pick .dlv-fee { font-size: 16px; font-weight: 800; color: var(--ink); }
+    /* Coupon: "Have a discount code?" until the field is wanted */
+    .coupon-open { display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; font-weight: 700; }
+    .coupon-box .coupon-msg:empty { min-height: 0; margin: 0; }
+    /* The mobile number's example: light, and plainly an example */
+    #phone::placeholder { color: #8d94a0; opacity: 1; }
+    .device-orders { margin-top: 16px; padding: 16px 18px; }
+    .device-orders h2 { font-size: 17px; margin: 0 0 4px; }
+    .device-orders ul { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
+    .device-orders li { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+    /* Phones: the total and the way to the order form stay at the bottom */
+    .cart-bar, .cart-bar[hidden] { display: none; }
+    @media (max-width: 960px) {
+      .cart-bar:not([hidden]) { position: fixed; inset-inline: 0; bottom: 0; z-index: 60; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 16px calc(8px + env(safe-area-inset-bottom)); background: #fff; border-top: 1px solid var(--line); box-shadow: 0 -4px 14px rgba(20, 24, 33, .08); }
+      .cart-bar-total { display: grid; line-height: 1.25; min-width: 0; }
+      .cart-bar-total strong { font-size: 17px; }
+      body.has-cart-bar { padding-bottom: 64px; }
+      body.has-cart-bar #toast-root { bottom: calc(76px + env(safe-area-inset-bottom)); }
+    }
+    /* An item: its price next to its name; "Edit design", "Remove" and a "⋯" menu (Another copy, Save for later) */
+    #items .cart-item { grid-template-columns: 110px minmax(0, 1fr); }
+    .item-head { display: flex; align-items: baseline; justify-content: space-between; gap: 2px 12px; flex-wrap: wrap; margin-bottom: 4px; }
+    .item-head h3 { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+    .item-head .price { margin-inline-start: auto; text-align: end; white-space: nowrap; }
+    #items .cart-item .actions { align-items: center; }
+    .more-wrap { position: relative; }
+    .more-btn { position: relative; min-width: 36px; padding-inline: 6px; font-weight: 800; letter-spacing: 1px; }
+    .more-btn::after { content: ''; position: absolute; inset: -6px -4px; } /* a 44px tap target */
+    .more-menu { position: absolute; top: calc(100% + 6px); inset-inline-end: 0; z-index: 30; display: grid; min-width: 180px; padding: 6px; background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 28px rgba(20, 24, 33, .14); }
+    .more-menu[hidden] { display: none; }
+    .more-menu.flip { inset-inline-end: auto; inset-inline-start: 0; }
+    .more-item { display: flex; align-items: center; min-height: 44px; padding: 0 12px; border: 0; border-radius: 8px; background: none; color: var(--ink); font: inherit; font-size: 14px; font-weight: 600; text-align: start; text-decoration: none; cursor: pointer; white-space: nowrap; }
+    .more-item:hover, .more-item:focus-visible { background: #f3f4f7; }
+    .more-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    @media (max-width: 640px) {
+      #items .cart-item { grid-template-columns: 80px minmax(0, 1fr); gap: 12px; }
+      #items .cart-item .actions .btn-sm:not(.more-btn) { padding-inline: 9px; }
+    }
+    /* A proof not approved yet: a short card, the whole proof one tap away */
+    .proof-short { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 12px; align-items: center; }
+    .proof-short-pic { width: 72px; height: 72px; object-fit: contain; background: #f1f3f6; border-radius: 10px; }
+    .proof-short-text { display: grid; gap: 2px; min-width: 0; justify-items: start; }
+    .proof-short-st { margin: 0; font-size: 14.5px; font-weight: 800; color: var(--ok); }
+    .proof-short-spec { margin: 0; font-size: 13px; color: var(--ink-3); line-height: 1.5; }
+    .proof-more { font-size: 14px; font-weight: 700; padding: 8px 0; min-height: 36px; text-align: start; justify-self: start; }
+    /* "Place order" pressed too early: the tick by it, outlined (.proof-ok.nudge), with a note */
+    .nudge-note { display: grid; gap: 2px; margin: 0; padding: 10px 12px; border: 1px solid #f8d28a; border-radius: 10px; background: #fff4dc; color: #7a4a00; font-size: 13.5px; line-height: 1.5; }
+    .nudge-note strong { font-size: 15px; color: #6b3d00; }
+    /* Free shipping: what is left, with a bar (filling from the start side), or "ships free" */
+    .free-ship { margin: 8px 0 0; }
+    .free-ship p { margin: 0; }
+    .free-msg { font-size: 13.5px; color: var(--ink-2); line-height: 1.5; }
+    .free-msg b { color: var(--accent); }
+    .free-bar { height: 8px; margin: 6px 0 2px; border-radius: 999px; background: #eceef2; overflow: hidden; }
+    .free-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
+    .free-more { display: inline-block; padding: 6px 0; font-size: 13.5px; font-weight: 700; color: var(--accent); }
+    .free-done { font-size: 14px; font-weight: 700; color: var(--ok); }
+    /* My saved designs, under the items: one line that opens in place */
+    #items + .saved-box { margin-top: 12px; }
+    .saved-box.saved-compact { padding: 14px 16px; }
+    .saved-line { display: flex; align-items: center; justify-content: space-between; gap: 10px 12px; }
+    .saved-line-text { min-width: 0; }
+    .saved-line .saved-title { margin: 0; }
+    .saved-sum { margin: 2px 0 0; overflow-wrap: anywhere; }
+    .saved-open { flex: none; min-height: 40px; }
+    .saved-list { margin-top: 10px; }
+    /* "Removed from your cart. Undo" */
+    .toast-undo { display: flex; align-items: center; gap: 14px; white-space: nowrap; }
+    .toast-undo button { background: none; border: 0; padding: 6px 4px; margin: -6px -4px; color: #fff; font: inherit; font-weight: 800; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+    .toast-undo button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; border-radius: 4px; }
+  </style>
+</head>
+<body data-title-key="cart.pageTitle">
+  <header class="site-header">
+    <div class="container inner">
+      <a class="brand" href="/" aria-label="إبداع · ebda3"><img class="brand-logo brand-ar" data-logo-lang="ar" data-logo-src="/img/logo-ar-header.svg" alt="إبداع" width="61" height="40"><img class="brand-logo brand-en" data-logo-lang="en" data-logo-src="/img/logo-en-header.svg" alt="ebda3" width="98" height="40"></a><script>(function(){var l=document.documentElement.lang==='en'?'en':'ar';document.querySelectorAll('.brand img[data-logo-src]').forEach(function(i){if(i.getAttribute('data-logo-lang')===l)i.src=i.getAttribute('data-logo-src')})})()</script>
+      <nav>
+        <a href="/#products" data-i18n="nav.products"></a>
+        <a href="/designs"><span class="nav-long" data-i18n="nav.designs"></span><span class="nav-short" data-i18n="nav.designsShort"></span></a>
+        <a href="/photos"><span class="nav-long" data-i18n="nav.photos"></span><span class="nav-short" data-i18n="nav.photosShort"></span></a>
+        <a class="nav-books" href="/?cat=kids#products"><span class="nav-long" data-i18n="nav.books"></span><span class="nav-short" data-i18n="nav.booksShort"></span></a>
+        <button type="button" class="site-search-btn" data-site-search aria-expanded="false" aria-controls="site-search" aria-label="دوّر" data-i18n-aria="search.open"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
+        <a class="cart-link" href="/cart"><span data-i18n="nav.cart"></span> <span class="badge" data-cart-count hidden>0</span></a>
+        <button class="btn btn-sm lang-toggle" data-lang-toggle data-i18n="lang.other"></button>
+      </nav>
+    </div>
+    <nav class="nav-chips" data-i18n-aria="nav.sections">
+      <a href="/#products" data-chip="products" data-i18n="nav.products"></a>
+      <a href="/designs" data-chip="designs" data-i18n="nav.designs"></a>
+      <a href="/photos" data-chip="photos" data-i18n="nav.photos"></a>
+      <a class="nav-books" href="/?cat=kids#products" data-chip="books" data-i18n="nav.books"></a>
+      <a href="/product?id=tshirt" data-chip="tshirt" data-i18n="nav.tshirts"></a>
+      <a href="/product?id=mug" data-chip="mug" data-i18n="nav.mugs"></a>
+    </nav>
+    <div class="site-search" id="site-search" hidden>
+      <form class="container site-search-form" role="search" action="/" autocomplete="off" data-i18n-aria="search.label">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input type="search" name="q" maxlength="60" enterkeyhint="search" autocomplete="off" data-i18n-placeholder="search.placeholder" data-i18n-aria="search.label">
+        <button type="button" class="site-search-close" data-site-search-close data-i18n-aria="search.close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      </form>
+      <div class="container site-search-results">
+        <ul class="site-search-list" data-i18n-aria="search.suggestions" hidden></ul>
+        <p class="site-search-none" role="status" data-i18n="search.none" hidden></p>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="page-head"><h1 data-i18n="cart.title"></h1></div>
+    <!-- No connection (or the site busy): "Try again", not an empty-looking cart -->
+    <div id="net-box" class="card empty" hidden></div>
+
+    <div id="empty" class="card empty" hidden>
+      <h2 data-i18n="cart.emptyTitle"></h2>
+      <p class="muted" data-i18n="cart.emptyText"></p>
+      <a class="btn btn-primary" href="/#products" data-i18n="home.start"></a>
+    </div>
+    <div id="device-orders"></div>
+
+    <div class="cart-layout" id="cart-layout" hidden>
+      <div>
+        <div class="card" id="items"></div>
+        <!-- The robot check for a new view-only link made from the cart's Share (invisible to people; a box only if Cloudflare asks) -->
+        <div class="captcha-box" id="cap-share"></div>
+        <!-- My saved designs: ones kept out of this order and ones not finished yet (public/js/saved-designs.js).
+             Under the items as one short line that opens in place; with an empty cart it moves above, open. -->
+        <section class="card saved-box" id="saved" hidden></section>
+        <p class="muted small" style="margin-top:12px" id="cart-note" data-i18n-html="cart.note"></p>
+      </div>
+
+      <form class="card summary" id="checkout" novalidate>
+        <h2 style="font-size:18px" data-i18n="checkout.title"></h2>
+        <p class="small acct-note" id="acct-note"></p>
+        <div class="field"><label for="name" data-i18n="checkout.name"></label><input type="text" id="name" name="name" autocomplete="name" minlength="2" maxlength="120" dir="auto" required></div>
+        <div class="field"><label for="phone" data-i18n="checkout.phone"></label><input type="tel" id="phone" name="phone" autocomplete="tel" maxlength="30" inputmode="tel" dir="ltr" data-i18n-placeholder="checkout.phonePh" required></div>
+        <div class="field"><label for="email" data-i18n="checkout.email"></label><input type="email" id="email" name="email" autocomplete="email" maxlength="200" dir="ltr" aria-describedby="email-why"><p class="field-hint" id="email-why" data-i18n="checkout.emailWhy"></p></div>
+        <div class="field grid-2">
+          <div><label for="governorate" data-i18n="checkout.governorate"></label><select id="governorate" name="governorate" required></select></div>
+          <div><label for="city" data-i18n="checkout.city"></label><input type="text" id="city" name="city" autocomplete="address-level2" maxlength="100" dir="auto" required></div>
+        </div>
+        <div class="field"><label for="address" data-i18n="checkout.address"></label><textarea id="address" name="address" rows="2" maxlength="300" autocomplete="street-address" dir="auto" data-i18n-placeholder="checkout.addressPh" required></textarea></div>
+        <div class="field"><label for="notes" data-i18n="checkout.notes"></label><input type="text" id="notes" name="notes" maxlength="500" dir="auto"></div>
+
+        <div class="coupon-box">
+          <!-- "Have a discount code?": one small link that opens the field (kept open with a code in use or a word about one) -->
+          <button type="button" class="link-btn coupon-open" id="coupon-open" aria-expanded="false" aria-controls="coupon-field" data-i18n="coupon.open"></button>
+          <div id="coupon-field" hidden>
+          <label for="coupon" class="small" style="font-weight:700" data-i18n="coupon.label"></label>
+          <div class="coupon-row">
+            <input type="text" id="coupon" maxlength="24" dir="ltr" autocomplete="off" autocapitalize="characters" data-i18n-placeholder="coupon.placeholder">
+            <button class="btn btn-sm" type="button" id="coupon-apply" data-i18n="coupon.apply"></button>
+          </div>
+          </div>
+          <p class="small coupon-msg" id="coupon-msg"></p>
+        </div>
+        <fieldset class="delivery-pick">
+          <legend data-i18n="delivery.title"></legend>
+          <label class="dlv-opt"><input type="radio" name="delivery" value="standard" checked>
+            <span class="dlv-main"><strong data-i18n="delivery.standard"></strong> · <span data-i18n="delivery.standardText"></span><span class="dlv-by small" id="dlv-by-standard"></span></span>
+            <span class="dlv-fee" id="dlv-fee-standard"></span></label>
+          <label class="dlv-opt"><input type="radio" name="delivery" value="express">
+            <span class="dlv-main"><strong data-i18n="delivery.express"></strong> · <span data-i18n="delivery.expressText"></span><span class="dlv-by small" id="dlv-by-express"></span></span>
+            <span class="dlv-fee" id="dlv-fee-express"></span></label>
+          <p class="muted small dlv-days" data-i18n="delivery.days"></p>
+        </fieldset>
+        <div class="line"><span><span data-i18n="checkout.subtotal"></span> <span class="muted small" id="sel-count"></span></span><span id="subtotal"></span></div>
+        <div class="line discount-line" id="discount-line" hidden><span><span data-i18n="coupon.discount"></span> <bdi id="coupon-code" dir="ltr"></bdi> <span class="muted small" id="coupon-auto" data-i18n="coupon.autoTag" hidden></span> <button type="button" class="link-btn small" id="coupon-remove" data-i18n="coupon.remove"></button></span><span id="discount"></span></div>
+        <div class="line"><span data-i18n="checkout.shipping"></span><span id="shipping"></span></div>
+        <div class="line" id="express-line" hidden><span data-i18n="delivery.expressFee"></span><span id="express-fee"></span></div>
+        <div class="line total"><span data-i18n="checkout.total"></span><span id="total"></span></div>
+        <!-- Free shipping: how much is left (with a bar), or that the order ships free -->
+        <div class="free-ship" id="free-note" hidden></div>
+        <div class="pay-box"><strong data-i18n="checkout.cod"></strong><span data-i18n="checkout.codText"></span><span class="pay-methods" data-prepay-only data-prepay-i18n="pay.methods" hidden></span></div>
+        <div class="captcha-box" id="cap-order"></div>
+        <p class="approve-status" id="approve-status" aria-live="polite"></p>
+        <!-- Nothing ticked in the cart: nothing to order (the button is disabled with this word) -->
+        <p class="sel-nothing" id="sel-nothing" role="status" hidden></p>
+        <!-- Clothing in the order: one tick that the sizes were checked (owner, 28 Nov: printed to order, prepaid) -->
+        <div class="proof-ok sg-cart" id="size-ok" hidden>
+          <p class="nudge-note" id="size-ok-nudge" role="alert" hidden><strong data-i18n="sg.cartNeed"></strong></p>
+          <p class="small muted" id="size-ok-list" style="margin:0"></p>
+          <div class="proof-ok-line">
+            <label class="approve-check" for="size-ok-box"><input type="checkbox" id="size-ok-box"><span data-i18n="sg.cartConfirm"></span></label>
+          </div>
+          <p class="small" id="size-ok-guides" style="margin:0"></p>
+        </div>
+        <!-- The customer's own designs: one short tick right by "Place order"; the colours note behind "Details". (None for
+             ready designs added as they are.) -->
+        <div class="proof-ok" id="proof-ok" hidden>
+          <p class="nudge-note" id="proof-ok-nudge" role="alert" hidden><strong data-i18n="cart.tickFirst"></strong><span data-i18n="checkout.proofOkFirst"></span></p>
+          <p class="approve-changed" id="proof-ok-changed" role="alert" data-i18n="proof.changed" hidden></p>
+          <div class="proof-ok-line">
+            <label class="approve-check" for="proof-ok-box"><input type="checkbox" id="proof-ok-box" aria-describedby="proof-ok-note"><span data-i18n="checkout.proofOk"></span></label>
+            <button type="button" class="link-btn proof-ok-more" id="proof-ok-more" aria-expanded="false" aria-controls="proof-ok-note" data-i18n="checkout.proofOkMore"></button>
+          </div>
+          <div class="proof-ok-note" id="proof-ok-note" hidden></div>
+        </div>
+        <button class="btn btn-primary btn-lg btn-block" id="place-order" type="submit" data-i18n="checkout.place" aria-describedby="approve-status sel-nothing"></button>
+        <!-- Paying in advance (src/payment-wording.js): the money-back guarantee, by the button -->
+        <a class="guar-badge" data-prepay-only data-prepay-href="/guarantee" hidden><strong data-prepay-only data-prepay-i18n="guar.badge" hidden></strong> <span data-prepay-only data-prepay-i18n="guar.badgeText" hidden></span></a>
+      </form>
+    </div>
+  </main>
+
+  <!-- Phones: the total and the way to the order form, always at hand on a long cart -->
+  <div class="cart-bar" id="cart-bar" hidden>
+    <div class="cart-bar-total"><span class="small muted"><span data-i18n="checkout.total"></span> <span id="bar-count"></span></span><strong id="bar-total"></strong></div>
+    <button class="btn btn-primary" type="button" id="bar-go" data-i18n="cart.barGo"></button>
+  </div>
+
+  <footer class="site-footer"><div class="container" data-i18n="footer"></div></footer>
+
+  <script src="/js/i18n.js"></script>
+  <script src="/js/i18n-aftercare.js"></script>
+  <script src="/js/i18n-quantities.js"></script>
+  <script src="/js/i18n-proof.js"></script>
+  <script src="/js/i18n-cart.js"></script>
+  <script src="/js/common.js"></script>
+  <script src="/js/site-search.js"></script>
+  <script src="/js/proof-ui.js"></script>
+  <script src="/js/i18n-size-guide.js"></script>
+  <script src="/js/size-guide.js"></script>
+  <script src="/js/saved-designs.js"></script>
+  <script>
+    (async () => {
+      const { money, esc, t, tr } = POD;
+      // ---------- No connection ----------
+      // What the page needs didn't come (no signal, or the site busy): "No connection" and "Try again" in `box`, in the
+      // page's language, until it does. A "not found" from the site is not a connection problem: thrown as it is.
+      const noConnection = (e) => !(e && e.status) || e.status >= 500;
+      async function loadOrRetry(box, load) {
+        let last = null;
+        for (;;) {
+          try {
+            const out = await load();
+            box.hidden = true;
+            box.innerHTML = '';
+            return out;
+          } catch (e) {
+            if (!noConnection(e)) throw e;
+            // The same failure again although the site answers now (a product list kept from before): the page again.
+            if (e === last) {
+              location.reload();
+              return new Promise(() => {});
+            }
+            await tryAgain(box, Boolean(last));
+            last = e;
+          }
+        }
+      }
+      /** "No connection" with "Try again" in `box`; resolves once it is tapped and the site answers. */
+      function tryAgain(box, focus) {
+        return new Promise((resolve) => {
+          const paint = () => {
+            box.innerHTML = `<h2>${esc(t('net.title'))}</h2><p class="muted">${esc(t('net.text'))}</p><button type="button" class="btn btn-primary" data-net-retry>${esc(t('net.retry'))}</button>`;
+          };
+          let busy = false;
+          const click = async (e) => {
+            if (busy || !e.target.closest('[data-net-retry]')) return;
+            busy = true;
+            const back = await fetch('/api/products', { method: 'HEAD', cache: 'no-store' }).then((r) => r.ok, () => false);
+            busy = false;
+            if (!back) {
+              POD.toast(t('net.still'), 'error');
+              return;
+            }
+            box.removeEventListener('click', click);
+            document.removeEventListener('pod:langchange', paint);
+            box.innerHTML = '<div class="spinner"></div>';
+            resolve();
+          };
+          paint();
+          box.setAttribute('role', 'alert');
+          box.hidden = false;
+          box.addEventListener('click', click);
+          document.addEventListener('pod:langchange', paint);
+          if (focus) box.querySelector('[data-net-retry]').focus();
+        });
+      }
+
+      let shop;
+      try {
+        shop = await loadOrRetry(document.getElementById('net-box'), () => POD.loadCatalog());
+      } catch (e) {
+        POD.toast(e.message, 'error');
+        return;
+      }
+      const { pricing, governorates, delivery: deliveryInfo, products = [] } = shop;
+      // Delivery speed (standard 5 business days, express 2 for a fee), kept for this visit.
+      let delivery = 'standard';
+      try { delivery = sessionStorage.getItem('pod-delivery') === 'express' ? 'express' : 'standard'; } catch (e) { /* private mode */ }
+      const expressFee = () => (quote && quote.deliveryOptions ? quote.deliveryOptions.find((d) => d.speed === 'express').fee : (deliveryInfo ? deliveryInfo.expressFee : 0));
+      const came = new URLSearchParams(location.search);
+      if (came.get('added') || came.get('updated')) {
+        POD.toast(t(came.get('updated') ? 'cart.updated' : 'cart.added'));
+        history.replaceState(null, '', '/cart');
+      }
+
+      function renderGovernorates() {
+        const sel = document.getElementById('governorate');
+        const current = sel.value;
+        sel.innerHTML = `<option value="">${esc(t('checkout.choose'))}</option>` +
+          governorates.map((g) => `<option value="${g.id}">${esc(tr(g.name))}</option>`).join('');
+        sel.value = current;
+      }
+
+      // One artwork in several colours / sizes: quantities = [{ color, size, qty, unitPrice }].
+      const qtyLines = (item) => (Array.isArray(item.quantities) ? item.quantities.filter((l) => l && Number(l.qty) > 0) : []);
+      const piecesText = (n) => t('qty.pieces.' + (n === 1 ? 'one' : n === 2 ? 'two' : n % 100 >= 3 && n % 100 <= 10 ? 'few' : 'many'), { n: POD.num(n) });
+      function qtyGroups(lines) {
+        const groups = new Map();
+        for (const l of lines) {
+          const c = l.color || {};
+          const key = c.id || tr(c.name) || '';
+          if (!groups.has(key)) groups.set(key, { color: c, lines: [] });
+          groups.get(key).lines.push(l);
+        }
+        return [...groups.values()];
+      }
+      /** Black: S×2 · M×5 / White: M×2 (one line per colour). */
+      function qtyBreakdown(lines) {
+        return `<div class="qty-break" aria-label="${esc(t('qty.breakdown'))}">${qtyGroups(lines).map((g) => `
+          <div class="qty-line">${g.color.hex ? `<span class="qty-dot" style="background:${esc(g.color.hex)}"></span>` : ''}${tr(g.color.name) ? `<span class="qty-cname">${esc(tr(g.color.name))}:</span>` : ''}
+            ${g.lines.map((l) => `<span class="qty-chip">${l.size && tr(l.size.label) ? `${esc(tr(l.size.label))}×` : '×'}<b>${esc(POD.num(Number(l.qty)))}</b></span>`).join('')}
+          </div>`).join('')}</div>`;
+      }
+      // Arabic: "·" next to Arabic-Indic digits reads as the zero "٠" («أبيض · ٣٢٥ مل»), so the parts of a line
+      // are separated with the Arabic comma there, as on the order page. English keeps the dot.
+      const SEP = () => (POD.lang === 'ar' ? '، ' : ' · ');
+      // ---------- Photo prints: what is printed in each size ----------
+      const countKey = (n) => (n === 1 ? 'one' : n === 2 ? 'two' : n % 100 >= 3 && n % 100 <= 10 ? 'few' : 'many');
+      const counted = (base, n) => t(`${base}.${countKey(n)}`, { n: POD.num(n) });
+      const photoProduct = () => products.find((p) => p.id === 'photoprints') || null;
+      /** The border chosen for the set (the product's first choice when none was kept). */
+      function photoBorder(proof) {
+        const chosen = proof.options && proof.options.border;
+        if (chosen && chosen.name) return tr(chosen.name);
+        const p = photoProduct();
+        const opt = p && (p.options || []).find((o) => o.id === 'border');
+        return opt && opt.choices[0] ? tr(opt.choices[0].name) : '';
+      }
+      /** [{ size, photos, prints, sum }] in the shop's size order; sums only when they add up to the item's price. */
+      function photoSizes(proof, item) {
+        const p = photoProduct();
+        const order = p ? p.sizes.map((z) => z.id) : [];
+        const groups = new Map();
+        for (const ph of proof.photos || []) {
+          const id = ph.size && ph.size.id;
+          if (!groups.has(id)) groups.set(id, { size: ph.size || {}, photos: 0, prints: 0 });
+          const g = groups.get(id);
+          g.photos += 1;
+          g.prints += Number(ph.copies) || 1;
+        }
+        const list = [...groups.values()].sort((a, b) => order.indexOf(a.size.id) - order.indexOf(b.size.id));
+        if (p && item) {
+          const optPrice = (sizeId) => (p.options || []).reduce((sum, o) => {
+            const chosen = proof.options && proof.options[o.id];
+            const c = chosen && o.choices.find((x) => x.id === chosen.id);
+            return sum + (!c ? 0 : typeof c.price === 'number' ? c.price : (c.price && c.price[sizeId]) || 0);
+          }, 0);
+          for (const g of list) {
+            const z = p.sizes.find((x) => x.id === g.size.id);
+            g.sum = z ? Math.round((Number(p.basePrice) + (Number(z.surcharge) || 0) + optPrice(z.id)) * g.prints * 100) / 100 : null;
+          }
+          const total = list.reduce((n, g) => n + (g.sum || 0), 0);
+          if (list.some((g) => g.sum == null) || Math.abs(total - item.price) > 0.009) list.forEach((g) => { g.sum = null; });
+        }
+        return list;
+      }
+      /** "10 × 15 cm: 25 photos · 29 prints · EGP 435", one line per size. */
+      const photoSizesHtml = (list) => `<span class="photo-sizes">${list.map((g) => `<span class="photo-size"><b><bdi>${esc(tr(g.size.label))}</bdi></b>: ${esc(counted('cart.photos', g.photos))}${SEP()}${esc(counted('cart.prints', g.prints))}${g.sum != null ? `${SEP()}${esc(money(g.sum))}` : ''}</span>`).join('')}</span>`;
+      /** The photo set's proof: sizes instead of one "size", plural warnings, the flagged photos shown by number. */
+      function photoProofHtml(proof, item) {
+        const checks = ((proof.preflight && proof.preflight.checks) || []).map((c) => (c && c.id === 'photoLowRes' ? { ...c, id: 'photoLowRes.' + countKey(Number(c.params && c.params.count) || 0) } : c));
+        const tpl = document.createElement('template');
+        tpl.innerHTML = PODProof.html({ ...proof, version: null, size: {}, quantities: null, copies: 1, preflight: { ...(proof.preflight || { status: 'pass' }), checks } });
+        const dl = tpl.content.querySelector('.proof-spec');
+        if (dl) {
+          const row = (label, html, cls) => Object.assign(document.createElement('div'), { className: cls || '', innerHTML: `<dt>${esc(label)}</dt><dd>${html}</dd>` });
+          const prints = (proof.photos || []).reduce((n, ph) => n + (Number(ph.copies) || 1), 0);
+          const after = dl.children[1] || null;
+          const border = photoBorder(proof);
+          const rows = [
+            border ? row(t('cart.photoBorder'), esc(border)) : null,
+            row(t('cart.photoSizes'), `${photoSizesHtml(photoSizes(proof, item))}<span class="muted small">${esc(counted('cart.photos', (proof.photos || []).length))}${SEP()}${esc(counted('cart.prints', prints))}</span>`, 'photo-sizes-row'),
+          ].filter(Boolean);
+          for (const r of rows.reverse()) dl.insertBefore(r, after ? after.nextSibling : null);
+        }
+        // The low-resolution photos, small and numbered like on the photos page.
+        const low = checks.find((c) => c && /^photoLowRes/.test(c.id));
+        const warn = tpl.content.querySelector('.pf-warn > div, .pf-fail > div');
+        if (low && warn) {
+          const nums = String((low.params && low.params.photos) || '').split(/\s*,\s*/).map(Number).filter(Boolean);
+          const shown = nums.map((n) => (proof.photos || []).find((ph) => ph.n === n)).filter((ph) => ph && ph.url).slice(0, 12);
+          if (shown.length) {
+            warn.insertAdjacentHTML('beforeend', `<ul class="photo-flags">${shown.map((ph) => `<li><img src="${esc(ph.url)}" alt="${esc(t('proof.photoNo', { n: POD.num(ph.n) }))}" loading="lazy"><span>${esc(POD.num(ph.n))}</span></li>`).join('')}</ul><p class="photo-flags-hint">${esc(t('proof.photoNoHint'))}</p>`);
+          }
+        }
+        return tpl.innerHTML;
+      }
+      const photoNote = () => `<p class="proof-screen-note"><svg class="pf-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg><span>${esc(t('proof.photoNote'))}</span></p>`;
+
+      function itemMeta(item) {
+        // Photo prints: the paper and border, then the prints per size once the proof (with every photo) is here.
+        if (item.productId === 'photoprints') {
+          const proof = proofOf(item.designId);
+          if (!proof || !Array.isArray(proof.photos)) return `${esc(tr(item.colorName))}${SEP()}${esc(tr(item.sizeLabel))}`;
+          const border = photoBorder(proof);
+          return `${esc(tr(item.colorName))}${border ? `${SEP()}${esc(border)}` : ''}${photoSizesHtml(photoSizes(proof, item))}`;
+        }
+        // A plain item (kind 'blank', sold without printing): colour, size, how many, and "no printing".
+        if (item.kind === 'blank') {
+          const n = Math.max(1, Number(item.qty || item.copies) || 1);
+          return `${esc(tr(item.colorName))}${SEP()}${esc(tr(item.sizeLabel))}${n > 1 ? `${SEP()}<span class="qty-pieces">${esc(piecesText(n))}</span>` : ''}<br>${esc(t('cartSel.plain'))}`;
+        }
+        const lines = qtyLines(item);
+        const isNames = Boolean(item.merge) || (!lines.length && item.copies > 1);
+        const names = isNames ? (item.merge && item.merge.count) || item.copies : 0;
+        const pieces = Math.max(1, Number(item.copies) || lines.reduce((n, l) => n + Number(l.qty), 0) || 1);
+        const one = lines.length === 1 ? lines[0] : null;
+        const printed = esc(t('cart.printed', { sides: item.sides.map(tr).join(' + ') }));
+        // Packs (100 cards × 2 + 1000 cards): the copies, never "3 pieces" (QA 25 Nov).
+        const copies = !isNames && pieces > 1 ? POD.packCopies(lines) : null;
+        const badge = names > 1 ? `<span class="cart-copies">${esc(t(names % 100 >= 3 && names % 100 <= 10 ? 'cart.copies.few' : 'cart.copies', { n: POD.num(names) }))}</span>`
+          : copies != null ? `<span class="qty-pieces">${esc(POD.plural(POD.packWord(lines), copies))}</span>`
+            : !isNames && pieces > 1 ? `<span class="qty-pieces">${esc(piecesText(pieces))}</span>` : '';
+        if (lines.length > 1) return `${badge}${qtyBreakdown(lines)}${printed}`;
+        const color = one && one.color ? one.color.name : item.colorName;
+        const size = one && one.size ? one.size.label : item.sizeLabel;
+        return `${esc(tr(color))}${SEP()}${esc(tr(size))}${badge ? SEP() + badge : ''}<br>${printed}`;
+      }
+      /** The price for all pieces; with one price per piece, that price under it. */
+      function itemPrice(item) {
+        const lines = qtyLines(item);
+        const pieces = Math.max(1, Number(item.copies) || lines.reduce((n, l) => n + Number(l.qty), 0) || 1);
+        const units = new Set(lines.map((l) => l.unitPrice).filter((u) => u != null));
+        // (Packs: no price "each": a pack holds many copies.)
+        const each = pieces > 1 && units.size <= 1 && POD.packCopies(lines) == null ? ` <span class="qty-each">${esc(t('qty.each', { price: money(Math.round(item.price / pieces * 100) / 100) }))}</span>` : '';
+        return esc(money(item.price)) + each;
+      }
+
+      // ---------- Proofs: every item is checked and approved before the order can be placed ----------
+      // designId -> { state: 'loading' | 'ok' | 'error', proof, error }
+      const proofs = new Map();
+      // designId -> { hash, ok, sample }: what the customer ticked, against which proof.
+      const approvals = new Map();
+      // Designs whose proof changed after the customer had approved it.
+      const changed = new Set();
+      // Approved proofs fold to one line; the ones the customer opened again stay open.
+      const expanded = new Set();
+      const APPROVALS_KEY = 'pod-proof-ok';
+      try {
+        const saved = JSON.parse(sessionStorage.getItem(APPROVALS_KEY) || '{}');
+        for (const [id, a] of Object.entries(saved)) if (a && a.hash) approvals.set(id, { hash: a.hash, ok: Boolean(a.ok), sample: Boolean(a.sample) });
+      } catch (e) { /* nothing remembered */ }
+      const saveApprovals = () => {
+        try { sessionStorage.setItem(APPROVALS_KEY, JSON.stringify(Object.fromEntries(approvals))); } catch (e) { /* private mode */ }
+      };
+      let placing = false;
+      // Items the shop can't make right now (hidden or sold-out product, colour or size: admin → Products),
+      // from its last prices: designId -> the shop's message. They block the order until removed or saved for later.
+      let blocked = new Map();
+      let savedBlocked = new Map();
+      // Of those, ones whose product isn't in the shop: designId -> { similar } a link to similar products for one
+      // the shop stopped selling, or { backOn } the day a paused one comes back.
+      let outOfShop = new Map();
+      const blockedIn = (cart) => cart.filter((it) => blocked.has(it.designId));
+
+      // ---------- Which items go in this order (owner, 28 Nov: "like Amazon") ----------
+      // Every item is ticked, new ones too; an item the customer unticks stays in the cart exactly as it is (its
+      // number, keys, proof) and is left out of the sums and of the order. Only the unticked ones are remembered, by
+      // designId, on this device (the cart follows the customer's account; the ticks stay with the device).
+      const OFF_KEY = 'pod-cart-off';
+      let off = new Set();
+      function readOff() {
+        try {
+          const v = JSON.parse(localStorage.getItem(OFF_KEY) || '[]');
+          off = new Set(Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []);
+        } catch (e) {
+          off = new Set();
+        }
+      }
+      readOff();
+      const saveOff = () => {
+        try { if (off.size) localStorage.setItem(OFF_KEY, JSON.stringify([...off])); else localStorage.removeItem(OFF_KEY); } catch (e) { /* private mode: for this visit */ }
+      };
+      const isOn = (id) => !off.has(id);
+      /** The items ticked for this order, in cart order. */
+      const chosenIn = (cart) => cart.filter((it) => isOn(it.designId));
+      const chosen = () => chosenIn(POD.getCart());
+      /** Unticks kept for items no longer in the cart are forgotten (one saved for later comes back ticked). */
+      function pruneOff(cart) {
+        const ids = new Set(cart.map((it) => it.designId));
+        let dropped = false;
+        for (const id of [...off]) if (!ids.has(id)) { off.delete(id); dropped = true; }
+        if (dropped) saveOff();
+      }
+      /** Tick or untick items (one, or all): the sums and the shop's prices follow. */
+      function setOn(ids, on) {
+        for (const id of ids) if (on) off.delete(id); else off.add(id);
+        saveOff();
+        render();
+        refreshPrices().then(render);
+      }
+      const itemsWord = (n) => counted('cartSel.items', n);
+      /** "Place order (2 items)": what will be ordered. */
+      const placeLabel = () => { const n = chosen().length; return n ? t('cartSel.place', { items: itemsWord(n) }) : t('checkout.place'); };
+
+      const proofOf = (id) => { const p = proofs.get(id); return p && p.state === 'ok' ? p.proof : null; };
+      /** A ready design added as it is (the shop's own, unchanged): nothing to tick (owner, 26 Nov). */
+      const isReady = (id) => Boolean(proofOf(id) && proofOf(id).ready);
+      function isApproved(id) {
+        if (POD.getCart().some((it) => it.designId === id && it.kind === 'blank')) return true;
+        const proof = proofOf(id);
+        if (proof && proof.ready) return true;
+        const a = approvals.get(id);
+        return Boolean(proof && a && a.ok && a.hash === proof.proofHash);
+      }
+      async function loadProof(id, { force = false } = {}) {
+        const cur = proofs.get(id);
+        if (cur && !force && cur.state !== 'error') return cur.promise;
+        const entry = { state: 'loading' };
+        // (A name list's first names only with its key, kept with the cart item.)
+        const item = [...POD.getCart(), ...(POD.getSaved ? POD.getSaved() : [])].find((it) => it && it.designId === id);
+        const listKey = item && typeof item.listKey === 'string' ? { 'x-list-key': item.listKey } : {};
+        entry.promise = POD.api('/api/designs/' + encodeURIComponent(id) + '/proof', { headers: listKey }).then((proof) => {
+          Object.assign(entry, { state: 'ok', proof });
+          const a = approvals.get(id);
+          // Approved an older version: ask again.
+          if (a && a.ok && a.hash !== proof.proofHash) {
+            approvals.delete(id);
+            changed.add(id);
+            saveApprovals();
+          }
+        }, (err) => Object.assign(entry, { state: 'error', error: err.message }));
+        // Keep showing the proof already on screen while a newer one loads.
+        if (!force || !cur || cur.state !== 'ok') proofs.set(id, entry);
+        await entry.promise;
+        proofs.set(id, entry);
+        paintProof(id);
+        updateApproval();
+        return entry.promise;
+      }
+      // "Place order" was pressed before the tick next to it (it is outlined, with "Tick this first", until ticked).
+      let nudged = false;
+      /** "White، 325 ml، Sublimation": the proof's colour and size (or its pieces), and how it is printed. */
+      function proofSpecLine(proof) {
+        const lines = Array.isArray(proof.quantities) ? proof.quantities.filter((l) => l && Number(l.qty) > 0) : [];
+        const parts = [];
+        if (lines.length > 1) {
+          const copies = POD.packCopies(lines);
+          parts.push(copies != null ? POD.plural(POD.packWord(lines), copies) : piecesText(PODProof.pieces(proof)));
+        } else {
+          const one = lines[0];
+          const color = (one && one.color) || proof.color || {};
+          const size = (one && one.size) || proof.size || {};
+          if (tr(color.name)) parts.push(tr(color.name));
+          if (tr(size.label)) parts.push(tr(size.label));
+        }
+        // (The same ways of printing as the full proof lists.)
+        const procs = [...new Set([proof.method === 'embroidery' ? 'embroidery' : proof.process, ...(proof.sides || []).map((s) => s.process)].filter(Boolean))]
+          .map((p) => 'proof.process.' + p).filter((k) => t(k) !== k);
+        if (procs.length) parts.push(procs.map((k) => t(k)).join(' + '));
+        return parts.map(esc).join(SEP());
+      }
+      /** An unapproved proof, short: picture, the checks' verdict (a warning or problem in full), spec line, "See proof details". */
+      function shortProofHtml(proof, item, i) {
+        const pf = proof.preflight || {};
+        const status = ['warn', 'fail'].includes(pf.status) ? pf.status : 'pass';
+        const plain = status === 'pass' && !(proof.review && proof.review.needed);
+        const spec = proofSpecLine(proof);
+        return `
+              <div class="proof-short">
+                <img class="proof-short-pic" src="${esc(item.previewUrl)}" alt="" loading="lazy">
+                <div class="proof-short-text">
+                  ${plain ? `<p class="proof-short-st">✓ ${esc(t('proof.st.pass'))}</p>` : ''}
+                  ${spec ? `<p class="proof-short-spec">${spec}</p>` : ''}
+                  <button class="link-btn proof-toggle proof-more" type="button" id="tog-${i}" data-proof-toggle="${esc(item.designId)}" aria-expanded="false">${esc(t('cart.proofDetails'))}</button>
+                </div>
+              </div>
+              ${plain ? '' : PODProof.checksHtml(proof)}`;
+      }
+      function proofSlot(item, i) {
+        // A plain item (kind 'blank'): nothing printed, so no proof to look at (QA 28 Nov).
+        if (item.kind === 'blank') return '';
+        const id = item.designId;
+        const st = proofs.get(id);
+        const ok = isApproved(id);
+        // (A ready design is "Ready design", not "Approved": the customer ticked nothing.)
+        const head = `<h3 class="cart-proof-title" id="proof-h-${i}"><span>${esc(t('proof.title'))} · ${esc(tr(item.productName))}</span><span class="cart-proof-ok">✓ ${esc(t(isReady(id) ? 'proof.readyDesign' : 'proof.approved'))}</span></h3>`;
+        let body;
+        if (!st || st.state === 'loading') {
+          body = `<div class="cart-proof-state" role="status"><div class="spinner"></div>${esc(t('proof.loading'))}</div>`;
+        } else if (st.state === 'error') {
+          body = `<div class="cart-proof-state" role="alert"><p>${esc(t('proof.loadFailed'))} ${esc(st.error || '')}</p><button class="btn btn-sm" type="button" data-proof-retry="${esc(id)}">${esc(t('proof.retry'))}</button></div>`;
+        } else {
+          const proof = st.proof;
+          const a = approvals.get(id);
+          const sample = Boolean(a && a.sample);
+          const photos = Array.isArray(proof.photos);
+          const sampleBy = sample && quote && quote.delivery && quote.delivery.sampleDays ? quote.delivery.by : null;
+          // "Print one sample first" (more than one piece) stays with its item: a wish, not the approval. The approval
+          // itself is one short line next to "Place order" (owner, 26 Nov), with the colours note behind "Details".
+          const sampleBox = PODProof.pieces(proof) > 1 && !photos ? `
+              <div class="approve-box sample-box">
+                <label class="approve-check sample" for="sample-${i}"><input type="checkbox" id="sample-${i}" data-sample="${esc(id)}"${sample ? ' checked' : ''}><span>${esc(t('proof.sample'))}</span></label>
+                ${sampleBy ? `<p class="sample-date" role="status">${esc(t('cart.sampleDate', { date: POD.day(sampleBy) }))}</p>` : ''}
+              </div>` : '';
+          const changedNote = changed.has(id) ? `<p class="approve-changed" role="alert">${esc(t('proof.changed'))}</p>` : '';
+          if (!photos && !expanded.has(id)) {
+            // A short card (picture, the checks' verdict, colour · size · printing), the whole proof one tap away.
+            // A warning or a problem is never folded away: its box is shown here in full.
+            body = `
+              ${changedNote}
+              ${shortProofHtml(proof, item, i)}
+              ${sampleBox}`;
+          } else {
+            body = `
+              ${changedNote}
+              ${!photos ? `<button class="link-btn proof-toggle proof-more" type="button" id="tog-${i}" data-proof-toggle="${esc(id)}" aria-expanded="true">${esc(t('cart.proofDetailsHide'))}</button>` : ''}
+              ${photos ? photoProofHtml(proof, cartItemOf(id)) : PODProof.html(proof)}
+              ${sampleBox}`;
+          }
+        }
+        return `<section class="cart-proof${ok ? ' ok' : ''}" data-proof-for="${esc(id)}" data-index="${i}" aria-labelledby="proof-h-${i}"><div class="cart-proof-inner">${head}${body}</div></section>`;
+      }
+      const cartItemOf = (id) => POD.getCart().find((it) => it.designId === id) || null;
+      const slotOf = (id) => [...document.querySelectorAll('[data-proof-for]')].find((el) => el.dataset.proofFor === id) || null;
+      /** Redraw one item's proof (after it loads) without touching the rest of the page. */
+      function paintProof(id) {
+        const cart = POD.getCart();
+        const i = cart.findIndex((it) => it.designId === id);
+        const slot = slotOf(id);
+        if (i < 0 || !slot) return;
+        const focused = document.activeElement && slot.contains(document.activeElement) ? document.activeElement.id : null;
+        slot.outerHTML = proofSlot(cart[i], i);
+        // A photo set's line shows its sizes once the proof (with every photo) is here.
+        const meta = [...document.querySelectorAll('[data-meta-for]')].find((el) => el.dataset.metaFor === id);
+        if (meta) meta.innerHTML = itemMeta(cart[i]);
+        if (focused && document.getElementById(focused)) document.getElementById(focused).focus({ preventScroll: true });
+      }
+      /** The items whose proof is here and is the customer's own (not a ready design): the ones the tick approves. */
+      // (Plain items, kind 'blank', have nothing printed to approve.)
+      const ownLoaded = (cart) => cart.filter((it) => it.kind !== 'blank' && !blocked.has(it.designId) && proofOf(it.designId) && !isReady(it.designId));
+      /** The order is placed only once every item's current proof is approved: ready designs as they are, the customer's
+          own with the one tick next to "Place order" ("Place order" always looks ready: pressed too early, it points to
+          the tick). It is truly disabled only while an order is being placed. */
+      function updateApproval() {
+        const cart = chosen();
+        const stuck = blockedIn(cart);
+        const orderable = cart.filter((it) => !blocked.has(it.designId));
+        const failed = orderable.some((it) => (proofs.get(it.designId) || {}).state === 'error');
+        const btn = document.getElementById('place-order');
+        if (!placing) btn.disabled = false;
+        // Nothing ticked: nothing to order (said by the button).
+        const none = POD.getCart().length > 0 && !cart.length;
+        if (!placing && none) btn.disabled = true;
+        const nothing = document.getElementById('sel-nothing');
+        nothing.hidden = !none;
+        nothing.textContent = none ? t('cartSel.nothing') : '';
+        if (!placing) btn.textContent = placeLabel();
+        const status = document.getElementById('approve-status');
+        status.classList.toggle('blocked', stuck.length > 0);
+        status.innerHTML = stuck.length
+          ? `${esc(stuck.length === 1 ? t('checkout.blockedOne') : t('checkout.blockedMany', { n: POD.num(stuck.length) }))} <button type="button" class="link-btn" data-next-blocked>${esc(t('checkout.blockedGo'))}</button>`
+          : failed ? `${esc(t('proof.loadFailed'))} <button type="button" class="link-btn" data-next-proof>${esc(t('checkout.approveGo'))}</button>` : '';
+        document.querySelectorAll('[data-proof-for]').forEach((el) => {
+          const ok = isApproved(el.dataset.proofFor);
+          el.classList.toggle('ok', ok);
+          if (ok) el.classList.remove('needs');
+        });
+        // The one tick for the customer's own designs, next to "Place order" (none for ready designs only).
+        const own = ownLoaded(cart);
+        const all = own.length > 0 && own.every((it) => isApproved(it.designId));
+        if (all) nudged = false;
+        document.getElementById('proof-ok').hidden = !own.length;
+        document.getElementById('proof-ok-box').checked = all;
+        renderSizeOk(cart);
+        document.getElementById('proof-ok').classList.toggle('nudge', nudged);
+        document.getElementById('proof-ok-nudge').hidden = !nudged;
+        document.getElementById('proof-ok-changed').hidden = !own.some((it) => changed.has(it.designId));
+        // "Details": the colours on screen and on paper (photo prints: on photo paper; kids books: no editor view).
+        const photos = own.some((it) => Array.isArray(proofOf(it.designId).photos));
+        const prints = own.filter((it) => !Array.isArray(proofOf(it.designId).photos));
+        const note = (prints.length ? PODProof.screenNote({ printColours: prints.some((it) => !proofOf(it.designId).pages) }) : '') + (photos ? photoNote() : '');
+        const box = document.getElementById('proof-ok-note');
+        if (box.innerHTML !== note) box.innerHTML = note;
+      }
+      /** The tick next to "Place order", shown and focused. */
+      function goToTick() {
+        const box = document.getElementById('proof-ok');
+        if (box.hidden) return;
+        box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        document.getElementById('proof-ok-box').focus({ preventScroll: true });
+      }
+      /** The first item that can't be ordered now: shown, with its buttons at hand. */
+      function goToBlocked() {
+        const it = blockedIn(chosen())[0];
+        const el = it && [...document.querySelectorAll('[data-entry-for]')].find((x) => x.dataset.entryFor === it.designId);
+        if (!el) return false;
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const b = el.querySelector('[data-later]');
+        if (b) b.focus({ preventScroll: true });
+        return true;
+      }
+      // ---------- Clothing sizes: one tick before ordering (owner, 28 Nov: printed to order and prepaid) ----------
+      /** The ticked clothing with a size guide: [{ item, product }]. */
+      const sizedIn = (cart) => (shop ? cart.filter((it) => it.kind !== 'blank' && !blocked.has(it.designId)).map((it) => ({ item: it, product: shop.products.find((p) => p.id === it.productId) })).filter((x) => x.product && x.product.sizeGuide) : []);
+      /** What was ticked: the items and their sizes then (a size or item changed since asks again). */
+      const sizeSig = (list) => list.map(({ item }) => `${item.designId}:${JSON.stringify(item.quantities ? item.quantities.map((l) => l.size && l.size.id) : tr(item.sizeLabel))}`).sort().join('|');
+      let sizeTicked = null;
+      let sizeNudged = false;
+      const sizesOf = (item) => {
+        if (Array.isArray(item.quantities) && item.quantities.length) return [...new Set(item.quantities.map((l) => tr(l.size && l.size.label)))].join(POD.lang === 'ar' ? '، ' : ', ');
+        return tr(item.sizeLabel);
+      };
+      function renderSizeOk(cart) {
+        const box = document.getElementById('size-ok');
+        if (!box) return;
+        const list = sizedIn(cart);
+        box.hidden = !list.length;
+        if (!list.length) return;
+        const sep = POD.lang === 'ar' ? '، ' : ' · ';
+        document.getElementById('size-ok-list').textContent = t('sg.cartSizes', { list: list.map(({ item, product }) => `${tr(product.name)}: ${sizesOf(item)}`).join(sep) });
+        // One "Size guide" per product (with its name when there are several).
+        const products = [...new Map(list.map(({ product }) => [product.id, product])).values()];
+        document.getElementById('size-ok-guides').innerHTML = products.map((p) => `${PODSizeGuide.link(p)}${products.length > 1 ? ` <span class="muted">${esc(tr(p.name))}</span>` : ''}`).join(' &nbsp; ');
+        const ok = sizeTicked === sizeSig(list);
+        document.getElementById('size-ok-box').checked = ok;
+        if (ok) sizeNudged = false;
+        box.classList.toggle('nudge', sizeNudged);
+        document.getElementById('size-ok-nudge').hidden = !sizeNudged;
+      }
+      const sizesConfirmed = () => { const list = sizedIn(chosen()); return !list.length || sizeTicked === sizeSig(list); };
+      if (window.PODSizeGuide) PODSizeGuide.wire(document.body, (id) => (shop ? shop.products.find((p) => p.id === id) : null));
+      /** "Place order" pressed before the tick: the tick, right there, outlined with "Tick this first", and focused. */
+      function nudgeProof() {
+        const next = chosen().find((it) => !blocked.has(it.designId) && !isApproved(it.designId));
+        if (!next || !proofOf(next.designId)) return goToNextProof(); // (still loading, or failed: its own message)
+        nudged = true;
+        updateApproval();
+        goToTick();
+      }
+      /** The first proof not approved: one that didn't load (its "Try again"), else the tick. */
+      function goToNextProof() {
+        const next = chosen().find((it) => !blocked.has(it.designId) && !isApproved(it.designId));
+        if (!next) return;
+        if (proofOf(next.designId)) return goToTick();
+        const slot = slotOf(next.designId);
+        if (!slot) return;
+        slot.classList.add('needs');
+        slot.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        const retry = slot.querySelector('[data-proof-retry]');
+        if (retry) retry.focus({ preventScroll: true });
+      }
+      /** "My saved designs" under the cart (also when the cart itself is empty): kept out of this order, or not finished yet. */
+      function renderSaved() {
+        // Right under the cart's items, as one line that opens in place; with an empty cart, the whole list where the cart was.
+        const box = document.getElementById('saved');
+        const full = POD.getCart().length > 0;
+        const home = document.getElementById(full ? 'items' : 'device-orders');
+        if (home.nextElementSibling !== box) home.after(box);
+        PODSaved.render(box, {
+          compact: full,
+          meta: itemMeta,
+          price: itemPrice,
+          unavailable: (it) => savedBlocked.get(it.designId) || '',
+          onToCart: () => {
+            render();
+            refreshPrices().then(render);
+            document.getElementById('items').scrollIntoView({ behavior: 'smooth', block: 'start' });
+          },
+          onChange: render,
+        });
+      }
+      /** Saved items: today's prices, and ones that were ordered or are gone dropped. */
+      async function refreshSaved() {
+        const saved = POD.getSaved();
+        if (!saved.length) return;
+        let q;
+        try {
+          q = await POD.api('/api/cart/quote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ designIds: saved.map((i) => i.designId) }) });
+        } catch (e) {
+          return;
+        }
+        let changed = false;
+        const before = JSON.stringify([...savedBlocked]);
+        savedBlocked = new Map();
+        const keep = saved.filter((item, i) => {
+          const r = q.items[i];
+          if (!r || r.designId !== item.designId) return true;
+          if (r.gone) { changed = true; return false; }
+          if (r.unavailable) savedBlocked.set(item.designId, r.unavailableText || t('cart.blocked'));
+          if (r.price !== item.price) { item.price = r.price; changed = true; }
+          return true;
+        });
+        if (changed) POD.setSaved(keep);
+        if (changed || before !== JSON.stringify([...savedBlocked])) renderSaved();
+      }
+
+      // ---------- How many, changed here (owner, 26 Nov): − / + on one artwork in one colour and size ----------
+      // designId -> { n, step, max, unit } from the shop's prices (none: several sizes / colours, name lists, books and
+      // photo sets, changed in the editor). Packs count copies, in steps of the smallest pack.
+      const counts = new Map();
+      // designId -> the number on screen while it is being typed or sent.
+      const qtyDraft = new Map();
+      // designId -> { text, take? } a word under the counter (a pack chosen for less, a cheaper pack, a refusal).
+      const qtyNotes = new Map();
+      const QTY_MINUS = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg>';
+      const QTY_PLUS = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
+      const qtyMin = (c) => (c.unit === 'piece' ? 1 : c.step);
+      /** Digits as typed (Arabic ones too) to a number of the counter's steps, kept between its least and most. */
+      function qtyClamp(c, v) {
+        const n = qtyNumber(v);
+        if (n == null) return qtyMin(c);
+        return Math.min(Math.floor(c.max / c.step) * c.step, Math.max(qtyMin(c), Math.ceil(n / c.step) * c.step));
+      }
+      /** The number typed (Arabic and Persian digits; a decimal mark is one: "2.5" is 2, not 25. QA 26 Nov), or null for none. */
+      function qtyNumber(v) {
+        // (A comma groups thousands, as the box itself writes "1,000" (and "١٬٠٠٠"): read as a decimal mark, "2,000"
+        // became 2. Only "." and "٫" end the whole number. Tester 2, 26 Nov.)
+        const text = String(v).replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d))
+          .replace(/[,٬،\s]/g, '').replace(/٫/g, '.').replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1');
+        const n = Math.floor(Number(text));
+        return text && Number.isFinite(n) && n >= 1 ? n : null;
+      }
+      /** A typed number, or the one before the customer started typing when the box was emptied, or says 0 or "abc"
+       *  (10,000 cards became the least, 100: tester 1, 26 Nov). */
+      const qtyTyped = (id, v) => (qtyNumber(v) == null ? qtyBefore.get(id) : qtyClamp(counts.get(id), v));
+      // designId -> the number in the box when the customer started typing in it.
+      const qtyBefore = new Map();
+      function qtyBox(item, i) {
+        const c = counts.get(item.designId);
+        if (!c || blocked.has(item.designId)) return '';
+        const n = qtyDraft.has(item.designId) ? qtyDraft.get(item.designId) : c.n;
+        // A word from the last change, else the shop's lasting tip: a few more copies that cost less (owner, 26 Nov:
+        // "900 for this price while 1000 is cheaper?!").
+        const word = (x) => POD.plural(c.unit === 'packPiece' ? 'qty.unitPieces' : 'qty.copies', x);
+        // (Both when both: packs just taken for less AND more copies costing less still. QA 26 Nov: the tip was hidden.)
+        const tip = c.cheaper && !qtyDraft.has(item.designId)
+          ? { text: t('cart.qtyCheaper', { copies: word(c.cheaper.copies), price: money(c.cheaper.price) }), take: c.cheaper.copies } : null;
+        // (A note is written in the page's language when drawn; the shop's refusal only in the language it came in.
+        // Tester 1, 26 Nov: "Cheaper as 2 × 10 cards…" stayed English after switching to Arabic.)
+        const notes = [qtyNotes.get(item.designId), tip].filter((x) => x && (!x.lang || x.lang === POD.lang));
+        const label = t(c.unit === 'copy' ? 'cart.qtyCopies' : c.unit === 'packPiece' ? 'cart.qtyPieces' : 'cart.qty');
+        return `
+              <div class="cart-qty" data-qty-for="${esc(item.designId)}">
+                <span class="cart-qty-label" id="qty-l-${i}">${esc(label)}</span>
+                <div class="qty-step" dir="ltr" role="group" aria-labelledby="qty-l-${i}">
+                  <button type="button" class="btn btn-sm" id="qty-less-${i}" data-qstep="-1" data-qid="${esc(item.designId)}" aria-label="${esc(t('props.less'))}"${n <= qtyMin(c) ? ' disabled' : ''}>${QTY_MINUS}</button>
+                  <input class="qty-n" id="qty-n-${i}" data-qin="${esc(item.designId)}" type="text" inputmode="numeric" autocomplete="off" value="${esc(POD.num(n))}" aria-labelledby="qty-l-${i}">
+                  <button type="button" class="btn btn-sm" id="qty-more-${i}" data-qstep="1" data-qid="${esc(item.designId)}" aria-label="${esc(t('props.more'))}"${n + c.step > c.max ? ' disabled' : ''}>${QTY_PLUS}</button>
+                </div>
+                ${notes.map((note) => `<p class="cart-qty-note${note.error ? ' bad' : ''}" role="${note.error ? 'alert' : 'status'}">${esc(note.say ? note.say() : note.text)}${note.take ? ` <button type="button" class="link-btn" data-qtake="${esc(item.designId)}" data-qn="${note.take}">${esc(t('cart.qtyTake', { copies: POD.plural(c.unit === 'packPiece' ? 'qty.unitPieces' : 'qty.copies', note.take) }))}</button>` : ''}</p>`).join('')}
+              </div>`;
+      }
+      /** The counter's number on screen and its − / + (without drawing the whole cart again, so typing goes on). */
+      function paintQty(id) {
+        const c = counts.get(id);
+        const box = document.querySelector(`[data-qty-for="${CSS.escape(id)}"]`);
+        if (!c || !box) return;
+        const n = qtyDraft.has(id) ? qtyDraft.get(id) : c.n;
+        const field = box.querySelector('[data-qin]');
+        if (field && document.activeElement !== field) field.value = POD.num(n);
+        box.querySelector('[data-qstep="-1"]').disabled = n <= qtyMin(c);
+        box.querySelector('[data-qstep="1"]').disabled = n + c.step > c.max;
+      }
+      // One change at a time (a change can make a new design: the next one goes to it); the last number wins.
+      let qtyChain = Promise.resolve();
+      const qtyTimers = new Map();
+      // designId -> the design that took its place (a copy made at the new number).
+      const qtyMoved = new Map();
+      const qtyNow = (id) => { while (qtyMoved.has(id)) id = qtyMoved.get(id); return id; };
+      function queueQty(id, wait) {
+        clearTimeout(qtyTimers.get(id));
+        qtyTimers.set(id, setTimeout(() => { qtyTimers.delete(id); qtyChain = qtyChain.then(() => sendQty(id)); }, wait));
+      }
+      /** Changes still waiting or on their way: sent now, and waited for (before the order is placed). */
+      async function flushQty() {
+        for (const [id, timer] of [...qtyTimers]) {
+          clearTimeout(timer);
+          qtyTimers.delete(id);
+          qtyChain = qtyChain.then(() => sendQty(id));
+        }
+        await qtyChain;
+      }
+      async function sendQty(firstId) {
+        const id = qtyNow(firstId);
+        const c = counts.get(id);
+        const n = qtyDraft.get(id);
+        const item = POD.getCart().find((it) => it.designId === id);
+        if (!c || n == null || !item) { qtyDraft.delete(id); return; }
+        if (n === c.n) { qtyDraft.delete(id); paintQty(id); return; }
+        const box = document.querySelector(`[data-qty-for="${CSS.escape(id)}"]`);
+        if (box) box.setAttribute('aria-busy', 'true');
+        let res;
+        try {
+          res = await POD.api(`/api/designs/${encodeURIComponent(id)}/quantity`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(typeof item.designKey === 'string' ? { 'x-design-key': item.designKey } : {}) },
+            body: JSON.stringify(c.unit === 'piece' ? { qty: n } : { copies: n }),
+          });
+        } catch (err) {
+          qtyDraft.delete(id);
+          qtyNotes.set(id, { text: err.message, error: true, lang: err.lang || POD.lang });
+          render();
+          return;
+        }
+        const cart = POD.getCart();
+        const at = cart.findIndex((it) => it.designId === id);
+        // (Removed or ordered meanwhile: nothing to change here.)
+        if (at < 0) { qtyDraft.delete(id); return; }
+        const old = cart[at];
+        const entry = { ...res.entry, addedAt: old.addedAt || res.entry.addedAt, ...(old.view ? { view: old.view } : {}), ...(!res.entry.designKey && old.designKey ? { designKey: old.designKey } : {}) };
+        const nid = entry.designId;
+        cart[at] = entry;
+        if (nid !== id) {
+          // A copy at the new number: it takes the item's place, with its tick (the same artwork and proof).
+          qtyMoved.set(id, nid);
+          if (approvals.has(id)) { approvals.set(nid, approvals.get(id)); approvals.delete(id); saveApprovals(); }
+          // (Unticked, it stays unticked.)
+          if (off.delete(id)) { off.add(nid); saveOff(); }
+          if (expanded.delete(id)) expanded.add(nid);
+          if (openMenu === id) openMenu = null;
+          counts.delete(id);
+          qtyNotes.delete(id);
+          // (Typed again meanwhile: that number goes to the new design.)
+          if (qtyDraft.has(id) && qtyDraft.get(id) !== n) qtyDraft.set(nid, qtyDraft.get(id));
+          qtyDraft.delete(id);
+          if (qtyTimers.has(id)) { clearTimeout(qtyTimers.get(id)); qtyTimers.delete(id); queueQty(nid, 0); }
+        } else if (qtyDraft.get(id) === n) qtyDraft.delete(id);
+        if (res.count) counts.set(nid, res.count);
+        // Packs taken for less: said (the lasting tip about more copies comes with the counter itself).
+        const packs = Array.isArray(res.switched) ? res.switched : res.switched ? [res.switched] : [];
+        if (packs.length) qtyNotes.set(nid, { say: () => t('cart.qtyPack', { pack: packs.map((x) => `${POD.num(x.qty)} × ${tr(x.label)}`).join(' + ') }) });
+        else qtyNotes.delete(nid);
+        POD.setCart(cart);
+        // The proof shows the pieces: asked again (a copy's proof loads as the cart is drawn).
+        if (nid === id) loadProof(id, { force: true });
+        render();
+        await refreshPrices();
+        render();
+      }
+      document.getElementById('items').addEventListener('click', (e) => {
+        const b = e.target.closest('[data-qstep]');
+        const take = e.target.closest('[data-qtake]');
+        if (!b && !take) return;
+        const id = (b || take).dataset.qid || take.dataset.qtake;
+        const c = counts.get(id);
+        if (!c) return;
+        const cur = qtyDraft.has(id) ? qtyDraft.get(id) : c.n;
+        const n = take ? qtyClamp(c, take.dataset.qn) : qtyClamp(c, cur + Number(b.dataset.qstep) * c.step);
+        if (take) qtyNotes.delete(id);
+        qtyDraft.set(id, n);
+        const field = document.querySelector(`[data-qin="${CSS.escape(id)}"]`);
+        if (field) field.value = POD.num(n);
+        paintQty(id);
+        // A few quick presses make one change.
+        queueQty(id, take ? 0 : 450);
+      });
+      // Typed: sent when the customer leaves the box or presses Enter.
+      document.getElementById('items').addEventListener('focusin', (e) => {
+        const id = e.target.dataset && e.target.dataset.qin;
+        if (id && counts.has(id)) qtyBefore.set(id, qtyDraft.has(id) ? qtyDraft.get(id) : counts.get(id).n);
+      });
+      document.getElementById('items').addEventListener('input', (e) => {
+        const id = e.target.dataset && e.target.dataset.qin;
+        if (!id || !counts.has(id)) return;
+        if (!qtyBefore.has(id)) qtyBefore.set(id, qtyDraft.has(id) ? qtyDraft.get(id) : counts.get(id).n);
+        const n = qtyTyped(id, e.target.value);
+        if (n === counts.get(id).n) qtyDraft.delete(id); else qtyDraft.set(id, n);
+      });
+      document.getElementById('items').addEventListener('change', (e) => {
+        const id = e.target.dataset && e.target.dataset.qin;
+        if (!id || !counts.has(id)) return;
+        const typed = qtyTyped(id, e.target.value);
+        const n = typed == null ? counts.get(id).n : typed;
+        qtyBefore.delete(id);
+        qtyDraft.set(id, n);
+        e.target.value = POD.num(n);
+        paintQty(id);
+        queueQty(id, 0);
+      });
+      document.getElementById('items').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && e.target.dataset && e.target.dataset.qin) { e.preventDefault(); e.target.blur(); }
+      });
+
+      /**
+       * "Edit design" and "Remove" on the item; "Another copy" and "Save for later" in its "⋯" menu (only what applies;
+       * no menu when nothing does). An item the shop can't make now keeps "Save for later" in sight: it is the way on.
+       */
+      function itemActions(item, i) {
+        // (A plain item, kind 'blank', has no editor: its colour, size and number are chosen on its page.)
+        const editable = item.productId !== 'dtfsheet' && item.productId !== 'photoprints' && item.kind !== 'blank';
+        const edit = !editable ? '' : item.bookId
+          ? `<a class="btn btn-sm" href="/book?b=${encodeURIComponent(item.bookId)}&cart=${i}">${esc(t('cart.edit'))}</a>`
+          : `<a class="btn btn-sm" href="/editor?design=${encodeURIComponent(item.designId)}&cart=${i}">${esc(t('cart.edit'))}</a>`;
+        const later = `<button class="btn btn-sm" type="button" data-later="${esc(item.designId)}">${esc(t('cart.saveLater'))}</button>`;
+        const stuck = blocked.has(item.designId);
+        const menu = [
+          editable && !item.bookId ? `<a class="more-item" href="/editor?design=${encodeURIComponent(item.designId)}">${esc(t('cart.duplicate'))}</a>` : '',
+          stuck ? '' : `<button class="more-item" type="button" data-later="${esc(item.designId)}">${esc(t('cart.saveLater'))}</button>`,
+        ].filter(Boolean);
+        const open = openMenu === item.designId && menu.length > 0;
+        // Share its picture (an item with no picture has nothing to share).
+        const share = item.previewUrl ? `<button class="btn btn-sm share-btn" type="button" id="share-${i}" data-share="${esc(item.designId)}" aria-label="${esc(t('cartShare.label', { product: tr(item.productName) }))}">${SHARE_ICON}<span>${esc(t('cartShare.button'))}</span></button>` : '';
+        return `
+              <div class="actions">
+                ${edit}
+                ${stuck ? later : ''}
+                <button class="btn btn-sm btn-danger" type="button" id="rm-${i}" data-remove="${i}">${esc(t('cart.remove'))}</button>
+                ${share}
+                ${menu.length ? `<div class="more-wrap">
+                  <button class="btn btn-sm more-btn" type="button" id="more-${i}" data-more="${esc(item.designId)}" aria-label="${esc(t('cart.more'))}" aria-haspopup="true" aria-expanded="${open}" aria-controls="more-menu-${i}"><span aria-hidden="true">⋯</span></button>
+                  <div class="more-menu" id="more-menu-${i}"${open ? '' : ' hidden'}>${menu.join('')}</div>
+                </div>` : ''}
+              </div>`;
+      }
+      const SHARE_ICON = '<svg class="share-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg>';
+      // The item whose "⋯" menu is open (kept open when the cart is drawn again, e.g. today's prices arriving).
+      let openMenu = null;
+      /** Open one item's "⋯" menu (null: close it); `focus` the first choice, or back on the "⋯" button when closing. */
+      function setMenu(id, { focus = false } = {}) {
+        const was = openMenu;
+        openMenu = id;
+        document.querySelectorAll('[data-more]').forEach((b) => {
+          const on = b.dataset.more === id;
+          b.setAttribute('aria-expanded', String(on));
+          const menu = document.getElementById(b.getAttribute('aria-controls'));
+          if (!menu) return;
+          menu.hidden = !on;
+          menu.classList.remove('flip');
+          if (on) {
+            // Kept on the screen: opens towards the other side when it would stick out.
+            const r = menu.getBoundingClientRect();
+            if (r.left < 8 || r.right > document.documentElement.clientWidth - 8) menu.classList.add('flip');
+            if (focus) { const first = menu.querySelector('.more-item'); if (first) first.focus(); }
+          } else if (focus && b.dataset.more === was) b.focus();
+        });
+      }
+      document.addEventListener('click', (e) => {
+        if (openMenu && !e.target.closest('.more-wrap')) setMenu(null);
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape' || !openMenu) return;
+        const inside = document.activeElement && document.activeElement.closest && document.activeElement.closest('.more-wrap');
+        setMenu(null, { focus: Boolean(inside) });
+      });
+      // Tabbing out of an open menu closes it.
+      document.getElementById('items').addEventListener('focusout', (e) => {
+        const wrap = e.target.closest && e.target.closest('.more-wrap');
+        if (wrap && openMenu && e.relatedTarget && !wrap.contains(e.relatedTarget)) setMenu(null);
+      });
+
+      // ---------- Share an item's picture (owner, 28 Nov: "share button to share preview to someone") ----------
+      // Phones: the picture(s) themselves through the phone's share sheet, with a short line. Where pictures can't be
+      // shared: a view-only link (the shop's /view page: pictures only, no prices, keys, order or customer details),
+      // shared or copied. An item that page can't show (one side only, books, photo sets, sheets, plain items): its
+      // picture saved to the device, to send from there.
+      const shareCache = new Map(); // designId -> { key, files, promise }
+      const VIEW_ID_RE = /^[A-Za-z0-9_-]{12}$/;
+      const VIEW_KEY_RE = /^[A-Za-z0-9_-]{32}$/;
+      // The link on show under an item (when it couldn't be shared or copied by itself): { id, url }.
+      let shownLink = null;
+      const shareCap = POD.captcha(document.getElementById('cap-share'));
+      /** The pictures to share: every printed side's preview (up to 4), else the item's own picture. */
+      function sharePicUrls(item) {
+        const proof = proofOf(item.designId);
+        const sides = proof && Array.isArray(proof.sides) ? proof.sides.map((sd) => sd.previewUrl || sd.artworkUrl).filter(Boolean) : [];
+        return sides.length > 1 ? sides.slice(0, 4) : item.previewUrl ? [item.previewUrl] : [];
+      }
+      /** The pictures as files (fetched once, ahead of the tap where possible: a phone shares only right after it). */
+      function shareFilesOf(item) {
+        const urls = sharePicUrls(item);
+        const key = urls.join('\n');
+        let c = shareCache.get(item.designId);
+        if (c && c.key === key) return c;
+        const base = `ebda3-${String(item.productId || 'design').replace(/[^a-z0-9-]/gi, '').slice(0, 30) || 'design'}`;
+        c = { key, files: null };
+        c.promise = Promise.all(urls.map(async (url, n) => {
+          const r = await fetch(url);
+          if (!r.ok) throw new Error(String(r.status));
+          const blob = await r.blob();
+          const type = /^image\/(png|jpeg|webp)$/.test(blob.type) ? blob.type : 'image/png';
+          return new File([blob], `${base}${urls.length > 1 ? `-${n + 1}` : ''}.${type === 'image/jpeg' ? 'jpg' : type.split('/')[1]}`, { type });
+        })).then((files) => { c.files = files; return files; });
+        c.promise.catch(() => { if (shareCache.get(item.designId) === c) shareCache.delete(item.designId); });
+        shareCache.set(item.designId, c);
+        return c;
+      }
+      /** Can the view page show this item? (As the shop's own rule: two sides or more, or a booklet; not a book.) */
+      function viewableItem(item) {
+        if (item.kind || item.bookId || item.productId === 'photoprints' || item.productId === 'dtfsheet') return false;
+        const p = products.find((x) => x.id === item.productId);
+        return Boolean(p) && p.kind !== 'book' && (Boolean(p.paged) || (p.sides || []).length >= 2);
+      }
+      /** A picture as the data URL the view link takes (PNG or JPEG under its size limit). */
+      async function dataUrlOf(blob) {
+        if (/^image\/(png|jpeg)$/.test(blob.type) && blob.size < 2.3e6) {
+          return new Promise((resolve, reject) => {
+            const fr = new FileReader();
+            fr.onload = () => resolve(fr.result);
+            fr.onerror = () => reject(fr.error);
+            fr.readAsDataURL(blob);
+          });
+        }
+        const bmp = await createImageBitmap(blob);
+        const k = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(bmp.width * k));
+        c.height = Math.max(1, Math.round(bmp.height * k));
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, c.width, c.height);
+        ctx.drawImage(bmp, 0, 0, c.width, c.height);
+        return c.toDataURL('image/jpeg', 0.88);
+      }
+      /** The item's view-only link id: the one it has (made in the editor, still there), else a new one kept with it. */
+      async function viewLinkOf(item) {
+        const v = item.view;
+        if (v && VIEW_ID_RE.test(v.id || '') && VIEW_KEY_RE.test(v.key || '')) {
+          try {
+            await POD.api('/api/views/' + encodeURIComponent(v.id));
+            return v.id;
+          } catch (e) {
+            if (![404, 410].includes(e.status)) throw e; // (gone or expired: a new one below)
+          }
+        }
+        if (!proofOf(item.designId)) await loadProof(item.designId);
+        const proof = proofOf(item.designId);
+        const p = products.find((x) => x.id === item.productId);
+        const ids = new Set(p.sides.map((sd) => sd.id));
+        const sides = (proof ? proof.sides || [] : []).filter((sd) => ids.has(sd.id) && (sd.previewUrl || sd.artworkUrl));
+        if (!sides.length) return null;
+        const pages = await Promise.all(sides.map(async (sd) => {
+          const r = await fetch(sd.previewUrl || sd.artworkUrl);
+          if (!r.ok) throw new Error(String(r.status));
+          return { side: sd.id, image: await dataUrlOf(await r.blob()) };
+        }));
+        // The robot check for a new link (as the editor's): invisible to people; signed-in customers aren't asked.
+        let tok = null;
+        try { tok = await shareCap.token(); } catch (e) { if (e && e.code === 'captchaLoad') throw e; }
+        const made = await POD.api('/api/views', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ productId: p.id, options: {}, pages, ...(tok ? { captchaToken: tok } : {}) }),
+        }).finally(() => shareCap.reset());
+        // Kept with the item, as the editor keeps it: saving the design again updates what the link shows.
+        const cart = POD.getCart();
+        const at = cart.findIndex((it) => it.designId === item.designId);
+        if (at >= 0 && VIEW_ID_RE.test(made.id || '')) {
+          cart[at] = { ...cart[at], view: { id: made.id, key: made.key } };
+          POD.setCart(cart);
+        }
+        return made.id;
+      }
+      /** Copy text; false when the browser won't. */
+      async function copyText(text) {
+        try {
+          await navigator.clipboard.writeText(text);
+          return true;
+        } catch (e) {
+          return false;
+        }
+      }
+      /** The link through the share sheet, else copied ("Link copied"), else shown under the item to copy by hand. */
+      async function shareLink(item, url, title, text) {
+        if (navigator.share) {
+          try {
+            await navigator.share({ title, text, url });
+            return;
+          } catch (e) {
+            if (e && e.name === 'AbortError') return; // (closed by the customer)
+          }
+        }
+        shownLink = { id: item.designId, url };
+        if (await copyText(url)) POD.toast(t('cartShare.copied'));
+        render();
+        const box = document.querySelector('[data-share-url]');
+        if (box) box.focus();
+      }
+      /** The pictures saved to the device (to send from the photos or a chat). */
+      function savePictures(files) {
+        for (const f of files) {
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(f);
+          a.download = f.name;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+        }
+        POD.toast(t('cartShare.saved'));
+      }
+      let sharing = false;
+      async function shareItem(id) {
+        const item = POD.getCart().find((it) => it.designId === id);
+        if (!item || sharing) return;
+        sharing = true;
+        const busy = (on) => { const b = document.querySelector(`[data-share="${CSS.escape(id)}"]`); if (b) { if (on) b.setAttribute('aria-busy', 'true'); else b.removeAttribute('aria-busy'); } };
+        busy(true);
+        const product = tr(item.productName);
+        const text = t('cartShare.text', { product });
+        try {
+          const c = shareFilesOf(item);
+          const ready = Boolean(c.files);
+          if (navigator.share && navigator.canShare) {
+            const files = c.files || await c.promise.catch(() => null);
+            let can = false;
+            try { can = Boolean(files && files.length && navigator.canShare({ files })); } catch (e) { can = false; }
+            if (can) {
+              try {
+                await navigator.share({ files, title: product, text });
+                return;
+              } catch (e) {
+                if (e && e.name === 'AbortError') return;
+                // (The pictures took too long for the phone to count it as the tap: they are ready for the next one.)
+                if (e && e.name === 'NotAllowedError' && !ready) { POD.toast(t('cartShare.again')); return; }
+              }
+            }
+          }
+          if (viewableItem(item)) {
+            const viewId = await viewLinkOf(item);
+            if (viewId) {
+              await shareLink(item, `${location.origin}/view?id=${encodeURIComponent(viewId)}`, product, text);
+              return;
+            }
+          }
+          savePictures(c.files || await c.promise);
+        } catch (e) {
+          POD.toast(e && e.status && e.message ? e.message : t('cartShare.failed'), 'error');
+        } finally {
+          sharing = false;
+          busy(false);
+        }
+      }
+      // The pictures start loading as the finger touches the button (or it gets the keyboard's focus).
+      const warmShare = (e) => {
+        const b = e.target.closest && e.target.closest('[data-share]');
+        const item = b && POD.getCart().find((it) => it.designId === b.dataset.share);
+        if (item) shareFilesOf(item).promise.catch(() => {});
+      };
+      document.getElementById('items').addEventListener('pointerdown', warmShare);
+      document.getElementById('items').addEventListener('focusin', warmShare);
+      document.getElementById('items').addEventListener('click', async (e) => {
+        const b = e.target.closest('[data-share]');
+        if (b) return shareItem(b.dataset.share);
+        if (e.target.closest('[data-share-close]')) {
+          const back = shownLink && document.querySelector(`[data-share="${CSS.escape(shownLink.id)}"]`);
+          shownLink = null;
+          render();
+          const again = back && document.getElementById(back.id);
+          if (again) again.focus();
+          return;
+        }
+        if (e.target.closest('[data-share-copy]') && shownLink) {
+          const field = document.querySelector('[data-share-url]');
+          if (field) field.select();
+          let ok = await copyText(shownLink.url);
+          if (!ok) { try { ok = document.execCommand('copy'); } catch (err) { ok = false; } }
+          if (ok) POD.toast(t('cartShare.copied'));
+        }
+      });
+      /** The link under its item, to copy by hand. */
+      const linkBox = (item, i) => (shownLink && shownLink.id === item.designId ? `
+              <div class="share-link" role="group" aria-labelledby="sl-h-${i}">
+                <p class="share-link-title" id="sl-h-${i}">${esc(t('cartShare.linkTitle'))}</p>
+                <div class="share-link-row">
+                  <input type="text" id="sl-${i}" data-share-url readonly dir="ltr" value="${esc(shownLink.url)}" aria-labelledby="sl-h-${i}">
+                  <button type="button" class="btn btn-sm" id="sl-copy-${i}" data-share-copy>${esc(t('cartShare.copy'))}</button>
+                  <button type="button" class="link-btn share-link-close" id="sl-close-${i}" data-share-close>${esc(t('cartShare.close'))}</button>
+                </div>
+              </div>` : '');
+
+      function render() {
+        renderSaved();
+        const cart = POD.getCart();
+        pruneOff(cart);
+        const picked = chosenIn(cart);
+        const focused = document.activeElement && document.activeElement.closest && document.activeElement.closest('#items') ? document.activeElement.id : null;
+        document.getElementById('empty').hidden = cart.length > 0;
+        // The note about editing quantities and duplicating designs doesn't apply to photo sets or kids books
+        // (QA 26 Nov), nor does the editor's "Print colours" view (the books' proofs leave it out).
+        document.getElementById('cart-note').hidden = cart.length > 0 && cart.every((it) => it.productId === 'photoprints' || it.bookId);
+        document.getElementById('cart-layout').hidden = cart.length === 0;
+        // An empty cart: the orders placed from this device, to find them again.
+        document.getElementById('device-orders').innerHTML = cart.length ? '' : PODAftercare.deviceOrdersHtml();
+        // The tick on each item, and "Deselect all" / "Select all" above them (owner, 28 Nov).
+        const allOn = picked.length === cart.length;
+        const selBar = cart.length ? `
+          <div class="sel-bar">
+            <span class="sel-sum" id="sel-sum">${esc(t('cartSel.chosen', { chosen: POD.num(picked.length), total: POD.num(cart.length) }))}</span>
+            <button type="button" class="link-btn sel-all" id="sel-all" data-sel-all="${allOn ? 'off' : 'on'}">${esc(t(allOn ? 'cartSel.deselectAll' : 'cartSel.selectAll'))}</button>
+          </div>` : '';
+        document.getElementById('items').innerHTML = selBar + cart.map((item, i) => `
+          <div class="cart-entry${blocked.has(item.designId) ? ' is-blocked' : ''}${isOn(item.designId) ? '' : ' is-off'}" data-entry-for="${esc(item.designId)}">
+          <div class="cart-item">
+            <div class="cart-pic">
+              <img src="${esc(item.previewUrl)}" alt="${esc(t('cart.preview', { product: tr(item.productName) }))}">
+              <label class="sel-check" for="sel-${i}"><input type="checkbox" id="sel-${i}" data-sel="${esc(item.designId)}"${isOn(item.designId) ? ' checked' : ''}><span class="visually-hidden">${esc(t('cartSel.pick', { product: tr(item.productName) }))}</span></label>
+            </div>
+            <div>
+              <div class="item-head"><h3>${esc(tr(item.productName))}${blocked.has(item.designId) ? ` <span class="saved-state blocked">${esc(t('cart.blocked'))}</span>` : ''}</h3><div class="price">${itemPrice(item)}</div></div>
+              <div class="meta" data-meta-for="${esc(item.designId)}">${itemMeta(item)}</div>
+              ${isOn(item.designId) ? '' : `<p class="sel-off-note">${esc(t('cartSel.off'))}</p>`}
+              ${qtyBox(item, i)}
+              ${blocked.has(item.designId) ? `<div class="cart-unavail" role="alert"><strong>${esc(blocked.get(item.designId))}</strong> ${(outOfShop.get(item.designId) || {}).similar
+    ? `<a class="cart-similar" href="${esc(outOfShop.get(item.designId).similar)}">${esc(POD.similarLabel(outOfShop.get(item.designId).similar))}</a>`
+    : `<span>${(outOfShop.get(item.designId) || {}).backOn ? `${esc(t('avail.backOnLong', { date: POD.backOnDay(outOfShop.get(item.designId).backOn) }))} ` : ''}${esc(t(cart.some((x) => !blocked.has(x.designId)) ? 'cart.blockedHint' : 'cart.blockedHintOnly'))}</span>`}</div>` : ''}
+              ${itemActions(item, i)}
+              ${linkBox(item, i)}
+            </div>
+          </div>
+          ${blocked.has(item.designId) ? '' : proofSlot(item, i)}
+          </div>`).join('');
+        if (openMenu) setMenu(cart.some((it) => it.designId === openMenu) ? openMenu : null);
+        if (focused && document.getElementById(focused)) document.getElementById(focused).focus();
+        for (const item of cart) if (!proofs.has(item.designId) && !blocked.has(item.designId)) loadProof(item.designId);
+        updateApproval();
+        // Only what can be ordered counts, as in the shop's own sums: an item it can't make now (the shop's
+        // last answer) is left out of the subtotal, free shipping and the total until it is back, removed or saved for later.
+        const orderable = picked.filter((it) => !blocked.has(it.designId));
+        const subtotal = Math.round(orderable.reduce((s, i) => s + i.price, 0) * 100) / 100;
+        const freeOver = quote ? quote.freeShippingOver : pricing.freeShippingOver;
+        // The code in use, or an automatic offer the shop applied as the best value (owner, 26 Nov).
+        const applied = quote && quote.coupon && (couponCode || quote.coupon.auto) ? quote.coupon : null;
+        const discount = applied ? applied.discount : 0;
+        // The shop's own numbers when its answer is for exactly this cart (same items, same coupon);
+        // until then the same rule as the shop's: free shipping goes by the subtotal before any discount.
+        const fresh = quoteFits(picked) && Boolean(quote.coupon) === Boolean(applied);
+        // (Nothing that can be ordered: no shipping either.)
+        const baseShipping = fresh && typeof quote.baseShipping === 'number' ? quote.baseShipping
+          : !orderable.length || (applied && applied.freeShipping) || subtotal >= freeOver ? 0 : (quote ? quote.shippingFlat : pricing.shipping);
+        const expressNow = delivery === 'express' && orderable.length ? expressFee() : 0;
+        const shipping = Math.round((baseShipping + expressNow) * 100) / 100;
+        render.total = fresh && typeof quote.total === 'number' && quote.delivery && quote.delivery.speed === delivery
+          ? quote.total : Math.round((subtotal - discount + shipping) * 100) / 100;
+        document.querySelectorAll('input[name="delivery"]').forEach((r) => { r.checked = r.value === delivery; });
+        // Each option's whole delivery price (owner, 26 Nov: "Shipping + EGP 100" didn't say express is EGP 175):
+        // standard is the shipping fee (free over the free-shipping amount), express that plus its own fee.
+        document.getElementById('dlv-fee-standard').textContent = !orderable.length ? '' : baseShipping ? money(baseShipping) : t('delivery.feeFree');
+        document.getElementById('dlv-fee-express').textContent = !orderable.length ? '' : money(Math.round((baseShipping + expressFee()) * 100) / 100);
+        for (const opt of (quote && quote.deliveryOptions) || []) {
+          const el = document.getElementById('dlv-by-' + opt.speed);
+          if (el) el.textContent = t('delivery.by', { date: POD.day(opt.by) });
+        }
+        document.getElementById('discount-line').hidden = !applied;
+        document.getElementById('coupon-code').textContent = applied ? applied.code : '';
+        // (An automatic offer: said as one, and nothing to take off: it is the best the cart can have.)
+        document.getElementById('coupon-auto').hidden = !(applied && applied.auto);
+        document.getElementById('coupon-remove').hidden = Boolean(applied && applied.auto);
+        document.getElementById('discount').textContent = applied ? (applied.freeShipping && !discount ? t('coupon.freeShipping') : '-' + money(discount)) : '';
+        const msg = document.getElementById('coupon-msg');
+        // A code the shop refused: its reason stays under the field (with the code) until the customer changes it.
+        const refusal = couponRefusal();
+        const refused = refusal ? refusalText(refusal) : '';
+        msg.textContent = refused || (applied ? t(applied.auto ? 'coupon.autoApplied' : 'coupon.applied') : '');
+        // (A code that saves less than the offer already applied: said, not as a mistake.)
+        const beaten = Boolean(refusal && refusal.beaten);
+        msg.classList.toggle('bad', Boolean(refused) && !beaten);
+        markCoupon(Boolean(refused) && !beaten);
+        // The field folds into "Have a discount code?" until it is asked for, a code is in use or there is a word about one.
+        showCouponField(couponOpen || Boolean(couponCode) || Boolean(refused) || Boolean(couponNote && couponNote.code));
+        document.getElementById('subtotal').textContent = money(subtotal);
+        document.getElementById('sel-count').textContent = t('cartSel.count', { items: itemsWord(picked.length) });
+        document.getElementById('bar-count').textContent = t('cartSel.count', { items: itemsWord(picked.length) });
+        // (Nothing that can be ordered: no "free" shipping to show.)
+        document.getElementById('shipping').textContent = !orderable.length ? t('cart.nothingToShip') : baseShipping ? money(baseShipping) : t('free');
+        document.getElementById('express-line').hidden = !expressNow;
+        document.getElementById('express-fee').textContent = expressNow ? money(expressNow) : '';
+        document.getElementById('bar-total').textContent = money(render.total);
+        updateBar();
+        document.getElementById('total').textContent = money(render.total);
+        renderFreeShip(orderable.length > 0, subtotal, freeOver, baseShipping);
+      }
+      /** Free shipping: "EGP 1,250 more for free shipping 🚚" with a bar and "Add another item", or "✓ Your order ships free". */
+      function renderFreeShip(any, subtotal, freeOver, baseShipping) {
+        const box = document.getElementById('free-note');
+        const over = Number(freeOver) || 0;
+        const left = Math.round((over - subtotal) * 100) / 100;
+        if (!any) {
+          // Nothing that can be ordered: no shipping to speak of.
+          box.hidden = true;
+          box.innerHTML = '';
+        } else if (!baseShipping) {
+          box.hidden = false;
+          box.innerHTML = `<p class="free-done">${esc(t('cart.freeDone'))}</p>`;
+        } else if (over > 0 && left > 0) {
+          const share = Math.max(0, Math.min(100, (subtotal / over) * 100));
+          const MARK = '\u0001';
+          const text = t('cart.freeLeft', { amount: money(left) });
+          box.hidden = false;
+          box.innerHTML = `
+            <p class="free-msg">${esc(t('cart.freeLeft', { amount: MARK })).replace(MARK, `<b>${esc(money(left))}</b>`)}</p>
+            <div class="free-bar" role="progressbar" aria-label="${esc(t('cart.freeBar'))}" aria-valuemin="0" aria-valuemax="${over}" aria-valuenow="${Math.min(subtotal, over)}" aria-valuetext="${esc(text)}"><span style="width:${share.toFixed(1)}%"></span></div>
+            <a class="free-more" href="/#products">${esc(t('cart.freeMore'))}</a>`;
+        } else {
+          // Shipping charged although the subtotal reaches the free-shipping amount (the shop's own answer): its rule as it is.
+          box.hidden = !over;
+          box.innerHTML = over ? `<p class="muted small">${esc(t('checkout.freeOver', { price: money(over) }))}</p>` : '';
+        }
+      }
+
+      // Today's prices from the shop (the cart keeps the price from when an item was added).
+      let quote = null;
+      /** Is the shop's last answer about exactly these items (at the prices the cart shows)? */
+      const quoteFits = (cart) => Boolean(quote && Array.isArray(quote.items) && quote.items.length === cart.length
+        && quote.items.every((q, i) => q && q.designId === cart[i].designId && q.price === cart[i].price));
+      /** Pieces of a cart item, like the shop counts them (copies, or the colour/size lines). */
+      const piecesOf = (item) => {
+        const proof = proofOf(item.designId);
+        return proof ? PODProof.pieces(proof) : Math.max(1, Number(item.copies) || qtyLines(item).reduce((n, l) => n + Number(l.qty), 0) || 1);
+      };
+      /** "Print one sample first" counts only for items still in the cart with more than one piece. */
+      const wantsSample = (cart) => cart.some((it) => { const a = approvals.get(it.designId); return Boolean(a && a.sample) && piecesOf(it) > 1; });
+      /** Ticks kept for items no longer in the cart are forgotten. */
+      function forgetRemoved(cart) {
+        const ids = new Set(cart.map((it) => it.designId));
+        let dropped = false;
+        for (const id of [...approvals.keys()]) if (!ids.has(id)) { approvals.delete(id); dropped = true; }
+        if (dropped) saveApprovals();
+      }
+      // The coupon code the customer typed (kept for this visit).
+      let couponCode = '';
+      try { couponCode = sessionStorage.getItem('pod-coupon') || ''; } catch (e) { couponCode = ''; }
+      // A code the shop refused, shown at the coupon field: { code (as typed), msg (its reason), lang (of msg) }.
+      let couponNote = null;
+      // The shop gives its reasons in the page's language. After a language switch a refusal is asked for
+      // again, once per wording (a refused code counts towards the shop's limit on coupon tries):
+      // "CODE\ntext" -> { ar, en }.
+      const couponWords = new Map();
+      /** The refusal shown at the coupon field: the code in use refused by today's prices (applied), or a code the shop refused. */
+      function couponRefusal() {
+        if (couponCode && quote && quote.couponError) return { code: couponCode, msg: quote.couponError, lang: quote.lang, applied: true, beaten: Boolean(quote.couponBeaten) };
+        return !couponCode && couponNote && couponNote.msg ? couponNote : null;
+      }
+      const wordsFor = (r) => couponWords.get(`${r.code}\n${r.msg}`) || {};
+      /** A refusal in the page's language (in the shop's first words until it has been asked again; the page's own by its key). */
+      const refusalText = (r) => (r.key ? t(r.key) : r.lang === POD.lang ? r.msg : wordsFor(r)[POD.lang] || r.msg);
+      const needsWords = (r) => Boolean(r) && !r.key && r.lang !== POD.lang && !wordsFor(r)[POD.lang];
+      /** The same refusal in two languages: each wording finds the other. */
+      function learnWords(code, a, b) {
+        if (!a || !b || !b.msg || a.lang === b.lang) return;
+        const both = { ...wordsFor({ code, msg: a.msg }), [a.lang]: a.msg, [b.lang]: b.msg };
+        couponWords.set(`${code}\n${a.msg}`, both);
+        couponWords.set(`${code}\n${b.msg}`, both);
+      }
+      /** A refused code (not in use) in the page's language: the shop is asked about that code with the cart as it is. */
+      async function rewordNote() {
+        const note = couponNote;
+        const lang = POD.lang;
+        const cart = chosen();
+        if (!note || !note.msg || !needsWords(note) || !cart.length) return;
+        let q;
+        try {
+          q = await POD.api('/api/cart/quote', quoteRequest(cart, note.code));
+        } catch (e) {
+          return; // offline, or too many tries: the reason stays in the words it has
+        }
+        if (couponNote !== note) return; // another code typed meanwhile
+        if (q && q.couponError) learnWords(note.code, note, { msg: q.couponError, lang });
+        else couponNote = { ...note, msg: '' }; // the shop takes it now: no reason left to show (the code stays in the field)
+        render();
+      }
+      /** The code in use, or the one the shop refused, in the field (left alone otherwise: what the customer is typing stays). */
+      function showCode() {
+        const el = document.getElementById('coupon');
+        if (document.activeElement !== el) el.value = couponCode || (couponNote ? couponNote.code : '');
+      }
+      function markCoupon(bad) {
+        const el = document.getElementById('coupon');
+        if (bad) { el.setAttribute('aria-invalid', 'true'); el.setAttribute('aria-describedby', 'coupon-msg'); } else { el.removeAttribute('aria-invalid'); el.removeAttribute('aria-describedby'); }
+      }
+      const setCoupon = (code) => {
+        couponCode = code;
+        try { if (code) sessionStorage.setItem('pod-coupon', code); else sessionStorage.removeItem('pod-coupon'); } catch (e) { /* private mode */ }
+      };
+      /** The question for the shop's prices of these items, with this coupon code. */
+      const quoteRequest = (cart, code) => ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ designIds: cart.map((i) => i.designId), couponCode: code, delivery, sample: wantsSample(cart), phone: (document.getElementById('phone') || {}).value || undefined }) });
+      let quoteFailed = null; // why the last price check got no answer (no connection, too many tries…)
+      async function refreshPrices({ announce = false } = {}) {
+        const cart = POD.getCart();
+        forgetRemoved(cart);
+        quoteFailed = null;
+        if (!cart.length) { quote = null; return; }
+        // The shop's sums (coupon, shipping, total) are for the ticked items only; the unticked ones are asked about on
+        // their own (today's price, gone, can't be made now, their − / +), without a coupon.
+        const picked = chosenIn(cart);
+        const rest = cart.filter((it) => !isOn(it.designId));
+        // The shop answers in the page's language: kept with its answer (see couponRefusal).
+        const lang = POD.lang;
+        let restQuote = null;
+        try {
+          const asks = [
+            picked.length ? POD.api('/api/cart/quote', quoteRequest(picked, couponCode)) : Promise.resolve(null),
+            rest.length ? POD.api('/api/cart/quote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ designIds: rest.map((i) => i.designId), delivery }) }).catch(() => null) : Promise.resolve(null),
+          ];
+          [quote, restQuote] = await Promise.all(asks);
+          if (quote) quote.lang = lang;
+        } catch (e) {
+          quote = null;
+          quoteFailed = e || new Error('');
+          // Too many coupon tries from here: the code comes off (its reason stays at the field) and the prices are
+          // asked again without it, so the automatic offer and the shop's own total come back; kept, every price
+          // check failed and the order was sent with the cart's own sum (tester 2, 26 Nov).
+          if (couponCode && e && e.status === 429) {
+            couponNote = { code: couponCode, msg: e.message || t('msg.network'), lang: e.lang || lang };
+            setCoupon('');
+            return refreshPrices({ announce });
+          }
+          return;
+        }
+        const gone = [];
+        let ordered = false;
+        let changed = false;
+        let synced = false;
+        // Each item's answer, from whichever question it was in.
+        const answers = [...((quote && quote.items) || []), ...((restQuote && restQuote.items) || [])].filter(Boolean);
+        const answerOf = (id) => answers.find((q) => q.designId === id) || null;
+        const keep = cart.filter((item) => {
+          const q = answerOf(item.designId);
+          if (!q) return true;
+          // Already ordered (the answer to that order got lost, or another tab ordered it): not in the cart any more.
+          if (q.gone && (q.ordered || q.orderedIn)) { ordered = true; return false; }
+          if (q.gone) { gone.push(tr(item.productName)); return false; }
+          if (q.price !== item.price) { item.price = q.price; changed = true; }
+          // Newer servers may also send the pieces; they are the ones that will be ordered.
+          if (Array.isArray(q.quantities) && JSON.stringify(q.quantities) !== JSON.stringify(item.quantities || null)) { item.quantities = q.quantities; synced = true; }
+          if (q.copies != null && (q.copies || 1) !== (item.copies || 1)) { item.copies = q.copies; synced = true; }
+          if (q.count) counts.set(item.designId, q.count); else counts.delete(item.designId);
+          return true;
+        });
+        // Hidden or sold out since it was added: the shop's message on the item (cleared when it is back).
+        // (An unticked item the shop wasn't asked about just now keeps what it had.)
+        const before = blocked;
+        blocked = new Map(answers.filter((q) => q.unavailable && keep.some((it) => it.designId === q.designId))
+          .map((q) => [q.designId, q.unavailableText || t('cart.blocked')]));
+        for (const it of keep) if (!answerOf(it.designId) && before.has(it.designId)) blocked.set(it.designId, before.get(it.designId));
+        // The product isn't in the shop: no longer sold, "See similar products" (the shop on that kind of
+        // product); paused with a day to come back, that day.
+        const nowOut = new Map();
+        const out = keep.filter((it) => answers.some((q) => q.designId === it.designId && ['productRetired', 'productUnavailable'].includes(q.unavailable)));
+        if (out.length) {
+          const shop = await POD.loadCatalog().catch(() => null);
+          await Promise.all(out.map(async (it) => {
+            const info = await POD.productState(it.productId);
+            if (info.state === 'retired') nowOut.set(it.designId, { similar: POD.similarHref(shop, info) });
+            else if (info.backOn) nowOut.set(it.designId, { backOn: info.backOn });
+          }));
+        }
+        outOfShop = nowOut;
+        if (gone.length || changed || synced || ordered) POD.setCart(keep);
+        if (ordered) {
+          // Ordered from this tab (its answer got lost): that order, found by this tab's one-time key.
+          if (await showPlacedOrder()) return;
+          POD.toast(t('cart.alreadyOrdered'));
+        }
+        if (gone.length) POD.toast(t('cart.gone', { list: gone.join(POD.lang === 'ar' ? '، ' : ', ') }), 'error');
+        else if (changed && announce) POD.toast(t('cart.pricesUpdated'));
+        if (gone.length) return refreshPrices();
+      }
+
+      /** What the customer ticked for one design (its "ok" or its sample wish), against its current proof. */
+      function setApproval(id, what, on) {
+        const proof = proofOf(id);
+        if (!proof) return;
+        const a = approvals.get(id) && approvals.get(id).hash === proof.proofHash ? approvals.get(id) : { hash: proof.proofHash, ok: false, sample: false };
+        a[what] = on;
+        approvals.set(id, a);
+      }
+      // An item's tick: in this order or not (it stays in the cart either way).
+      document.getElementById('items').addEventListener('change', (e) => {
+        const id = e.target.dataset && e.target.dataset.sel;
+        if (id) setOn([id], e.target.checked);
+      });
+      // "Deselect all items" / "Select all items".
+      document.getElementById('items').addEventListener('click', (e) => {
+        const all = e.target.closest('[data-sel-all]');
+        if (all) setOn(POD.getCart().map((it) => it.designId), all.dataset.selAll === 'on');
+      });
+      // "Print one sample first", on its item.
+      document.getElementById('items').addEventListener('change', (e) => {
+        const id = e.target.dataset && e.target.dataset.sample;
+        if (!id || !proofOf(id)) return;
+        setApproval(id, 'sample', e.target.checked);
+        saveApprovals();
+        updateApproval();
+        // A sample first moves the expected day: ask the shop again right away.
+        refreshPrices().then(render);
+      });
+      // The one tick next to "Place order": every one of the customer's own designs, as its proof is now.
+      document.getElementById('size-ok-box').addEventListener('change', (e) => {
+        sizeTicked = e.target.checked ? sizeSig(sizedIn(chosen())) : null;
+        updateApproval();
+      });
+      document.getElementById('proof-ok-box').addEventListener('change', (e) => {
+        const own = ownLoaded(POD.getCart());
+        const seen = e.target.checked ? own.filter((it) => changed.delete(it.designId)) : [];
+        for (const it of own) setApproval(it.designId, 'ok', e.target.checked);
+        saveApprovals();
+        updateApproval();
+        // ("This design changed" goes from the items once the new proofs are approved.)
+        for (const it of seen) paintProof(it.designId);
+      });
+      // "Details": the note about colours on screen and on paper.
+      document.getElementById('proof-ok-more').addEventListener('click', (e) => {
+        const note = document.getElementById('proof-ok-note');
+        note.hidden = !note.hidden;
+        e.currentTarget.setAttribute('aria-expanded', String(!note.hidden));
+      });
+      document.getElementById('checkout').addEventListener('click', (e) => {
+        if (e.target.closest('[data-next-proof]')) goToNextProof();
+        if (e.target.closest('[data-next-blocked]')) goToBlocked();
+      });
+      document.getElementById('items').addEventListener('click', (e) => {
+        const more = e.target.closest('[data-more]');
+        if (more) {
+          setMenu(openMenu === more.dataset.more ? null : more.dataset.more, { focus: e.detail === 0 });
+          return;
+        }
+        if (e.target.closest('.more-item')) openMenu = null;
+        const tog = e.target.closest('[data-proof-toggle]');
+        if (tog) {
+          const id = tog.dataset.proofToggle;
+          if (expanded.has(id)) expanded.delete(id); else expanded.add(id);
+          const togId = tog.id;
+          paintProof(id);
+          const again = document.getElementById(togId);
+          if (again) again.focus({ preventScroll: !expanded.has(id) });
+          if (!expanded.has(id)) { const slot = slotOf(id); if (slot && slot.getBoundingClientRect().top < 70) slot.scrollIntoView({ block: 'start' }); }
+          return;
+        }
+        const retry = e.target.closest('[data-proof-retry]');
+        if (retry) { loadProof(retry.dataset.proofRetry, { force: true }); paintProof(retry.dataset.proofRetry); return; }
+        // Save for later / back to the cart: what is ordered (and its price, coupon and shipping) changes.
+        const later = e.target.closest('[data-later]');
+        if (later) {
+          POD.moveItem(later.dataset.later, true);
+          POD.toast(t('cart.savedToast'));
+          render();
+          refreshPrices().then(render);
+          return;
+        }
+        const btn = e.target.closest('[data-remove]');
+        if (!btn) return;
+        const cart = POD.getCart();
+        const at = Number(btn.dataset.remove);
+        const [gone] = cart.splice(at, 1);
+        if (!gone) return;
+        const approval = approvals.get(gone.designId);
+        const wasOff = off.has(gone.designId);
+        POD.setCart(cart);
+        render();
+        // The coupon and shipping depend on what is left: ask the shop again.
+        refreshPrices().then(render);
+        // (A key press on Remove: the keyboard goes on at "Undo".)
+        undoRemove(gone, at, approval, e.detail === 0, wasOff);
+      });
+
+      // ---------- Removed by mistake: "Undo" puts it back where it was, for a few seconds ----------
+      const UNDO_MS = 7000;
+      function toastRoot() {
+        // (The same box as POD.toast's messages: read out by screen readers.)
+        let root = document.getElementById('toast-root');
+        if (!root) {
+          root = document.createElement('div');
+          root.id = 'toast-root';
+          root.setAttribute('role', 'status');
+          root.setAttribute('aria-live', 'polite');
+          document.body.appendChild(root);
+        }
+        return root;
+      }
+      function undoRemove(item, at, approval, focus, wasOff) {
+        const el = document.createElement('div');
+        el.className = 'toast toast-undo';
+        const paint = () => { el.innerHTML = `<span>${esc(t('cart.removed'))}</span><button type="button">${esc(t('cart.undo'))}</button>`; };
+        paint();
+        document.addEventListener('pod:langchange', paint);
+        toastRoot().appendChild(el);
+        /** The toast goes; the keyboard (when it was on "Undo") goes on in the cart at that place. */
+        const close = (to) => {
+          clearTimeout(timer);
+          document.removeEventListener('pod:langchange', paint);
+          const had = el.contains(document.activeElement);
+          el.remove();
+          if (!had) return;
+          const entries = [...document.querySelectorAll('[data-entry-for]')];
+          const near = to || entries[Math.min(at, entries.length - 1)];
+          const target = (near && near.querySelector('[data-remove]')) || document.querySelector('#empty a');
+          if (target) target.focus();
+        };
+        const timer = setTimeout(() => close(), UNDO_MS);
+        el.addEventListener('click', (e) => {
+          if (!e.target.closest('button')) return;
+          // Back in the cart (signed in: synced to the account like any change), at the place it had,
+          // with its proof's tick. (Already back from another tab or device: left as it is.)
+          if (![...POD.getCart(), ...POD.getSaved()].some((it) => it.designId === item.designId)) {
+            const cart = POD.getCart();
+            cart.splice(Math.min(at, cart.length), 0, item);
+            POD.setCart(cart);
+            if (approval) {
+              approvals.set(item.designId, approval);
+              saveApprovals();
+            }
+            // (Unticked before, unticked again.)
+            if (wasOff) { off.add(item.designId); saveOff(); }
+            render();
+            refreshPrices().then(render);
+          }
+          close([...document.querySelectorAll('[data-entry-for]')].find((x) => x.dataset.entryFor === item.designId));
+        });
+        if (focus) el.querySelector('button').focus();
+      }
+
+      const form = document.getElementById('checkout');
+      // ---------- Field errors: shown under the field, which is scrolled to and focused ----------
+      const FIELDS = ['name', 'phone', 'email', 'governorate', 'city', 'address'].map((id) => document.getElementById(id));
+      const SERVER_FIELD = { badPhone: 'phone', badEmail: 'email', badGovernorate: 'governorate' };
+      // The same refusals in this page's words (to show them again in the other language).
+      const SERVER_TEXT = { badPhone: 'checkout.badPhone', badEmail: 'checkout.badEmail', badGovernorate: 'checkout.needGov' };
+      const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      /** The same check as the shop's: an Egyptian mobile, Arabic digits and +20 allowed. */
+      function egyptMobile(input) {
+        let v = String(input || '').replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 0x660)).replace(/[\u06f0-\u06f9]/g, (d) => String(d.charCodeAt(0) - 0x6f0));
+        v = v.replace(/[\s\-().\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff\u061c\u00a0\u2010-\u2015\u2212]/g, '');
+        if (v.startsWith('+20')) v = '0' + v.slice(3);
+        else if (v.startsWith('0020')) v = '0' + v.slice(4);
+        if (/^001[0125]\d{8}$/.test(v)) v = v.slice(1);
+        else if (/^20 ?1/.test(v) && v.length === 12) v = '0' + v.slice(2);
+        return /^01[0125]\d{8}$/.test(v);
+      }
+      function fieldProblem(el) {
+        const v = el.value.trim();
+        if (el.required && !v) return el.id === 'governorate' ? t('checkout.needGov') : t('checkout.needField', { field: (el.labels[0] && el.labels[0].textContent) || '' });
+        if (el.id === 'phone' && !egyptMobile(v)) return t('checkout.badPhone');
+        if (el.id === 'email' && v && !EMAIL_RE.test(v)) return t('checkout.badEmail');
+        return '';
+      }
+      function setFieldError(el, msg, code) {
+        const errId = 'err-' + el.id;
+        if (msg && code) el.dataset.errCode = code; else delete el.dataset.errCode;
+        let p = document.getElementById(errId);
+        if (el.dataset.desc == null) el.dataset.desc = el.getAttribute('aria-describedby') || '';
+        if (!msg) {
+          if (p) p.remove();
+          el.removeAttribute('aria-invalid');
+          if (el.dataset.desc) el.setAttribute('aria-describedby', el.dataset.desc); else el.removeAttribute('aria-describedby');
+          return;
+        }
+        if (!p) {
+          p = Object.assign(document.createElement('p'), { id: errId, className: 'field-err' });
+          el.insertAdjacentElement('afterend', p);
+        }
+        p.textContent = msg;
+        el.setAttribute('aria-invalid', 'true');
+        el.setAttribute('aria-describedby', [errId, el.dataset.desc].filter(Boolean).join(' '));
+      }
+      /** Mark every field with a problem; the first one is returned. */
+      function checkFields() {
+        let first = null;
+        for (const el of FIELDS) {
+          const msg = fieldProblem(el);
+          setFieldError(el, msg);
+          if (msg && !first) first = el;
+        }
+        return first;
+      }
+      function goToField(el) {
+        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        el.focus({ preventScroll: true });
+      }
+      // A corrected field loses its error as soon as it is right (it never gains one while typing).
+      form.addEventListener('input', (e) => { const el = e.target; if (el.getAttribute && el.getAttribute('aria-invalid') && FIELDS.includes(el) && !fieldProblem(el)) setFieldError(el, ''); });
+      form.addEventListener('change', (e) => { const el = e.target; if (el.getAttribute && el.getAttribute('aria-invalid') && FIELDS.includes(el)) setFieldError(el, fieldProblem(el)); });
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        // The shop's refusals come in the language they were asked in.
+        const askedIn = POD.lang;
+        if (placing) return;
+        // As the phones' bar: items that can't be ordered now, then proofs left to approve, then the form's fields.
+        // (Nothing ticked: nothing to order. The button says so.)
+        if (!chosen().length) return updateApproval();
+        if (blockedIn(chosen()).length) {
+          goToBlocked();
+          return POD.toast(blocked.get(blockedIn(chosen())[0].designId), 'error');
+        }
+        if (!chosen().every((it) => isApproved(it.designId))) return nudgeProof();
+        if (!sizesConfirmed()) {
+          sizeNudged = true;
+          updateApproval();
+          const sb = document.getElementById('size-ok');
+          sb.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          document.getElementById('size-ok-box').focus({ preventScroll: true });
+          return;
+        }
+        const bad = checkFields();
+        if (bad) return goToField(bad);
+        const btn = document.getElementById('place-order');
+        placing = true;
+        btn.disabled = true;
+        btn.textContent = t('checkout.placing');
+        try {
+          // A number just changed in the cart: sent before anything else (the price then shown is the one to pay).
+          const seenTotal = render.total;
+          await flushQty();
+          // (The customer's own new quantity changed the total: said as that, not as "prices updated". QA 26 Nov.)
+          if (Math.abs(render.total - seenTotal) > 0.009) throw Object.assign(new Error(t('cart.qtyTotalChanged')), { code: 'priceChanged' });
+          // An earlier try may have reached the shop although its answer got lost: show that order.
+          if (await showPlacedOrder()) return;
+          const customer = Object.fromEntries(new FormData(form));
+          delete customer.delivery;
+          const captchaToken = await orderCaptcha.token();
+          // Check prices again right before ordering: the customer must see what they will pay.
+          const before = render.total;
+          const codeBefore = couponCode;
+          await refreshPrices();
+          // The coupon no longer works (e.g. this phone already used it): say why, with the price without it, and order nothing.
+          // (A code that only saves less than the automatic offer doesn't stop the order: the offer is applied.)
+          if (codeBefore && quote && quote.couponError && !quote.couponBeaten) throw Object.assign(new Error(quote.couponError), { code: 'couponRefused', lang: quote.lang });
+          render();
+          if (!POD.getCart().length) throw new Error(t('cart.emptyTitle'));
+          if (!chosen().length) throw new Error(t('cartSel.nothing'));
+          // Sold out or hidden while the customer was filling in the form.
+          const stuckNow = blockedIn(chosen());
+          if (stuckNow.length) throw Object.assign(new Error(blocked.get(stuckNow[0].designId)), { code: 'itemUnavailable' });
+          if (Math.abs(render.total - before) > 0.009) throw Object.assign(new Error(t('cart.pricesUpdated')), { code: 'priceChanged' });
+          // Only the ticked items are ordered; the others stay in the cart as they are.
+          const cartNow = chosen();
+          // Each item's approval, against the exact proof the customer saw (and whether they want a sample first).
+          const approvalsBody = Object.fromEntries(cartNow.map((it) => {
+            const a = approvals.get(it.designId);
+            return [it.designId, { proofHash: proofOf(it.designId).proofHash, ...(a && a.sample && PODProof.pieces(proofOf(it.designId)) > 1 ? { sample: true } : {}) }];
+          }));
+          const order = await POD.api('/api/orders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ customer, designIds: cartNow.map((i) => i.designId), expectedTotal: render.total, delivery, orderKey: orderKey(), approvals: approvalsBody, ...(captchaToken ? { captchaToken } : {}), ...(quote && quote.coupon && couponCode ? { couponCode } : {}) }),
+          });
+          goToOrder(order);
+        } catch (err) {
+          orderCaptcha.reset();
+          // The shop answered (a wrong phone, a changed price…): that try placed nothing, so its key is done.
+          if (!err.network) { try { sessionStorage.removeItem('pod-order-key'); } catch (e) { /* private mode */ } }
+          // The coupon was refused (here or by the shop): its reason goes at the coupon field and the code comes off,
+          // so the total shown is the one without it; the customer sees why before ordering again.
+          const couponRefused = /^coupon/.test(err.code || '') && (couponCode || err.code === 'couponRefused');
+          if (couponRefused) {
+            couponNote = { code: couponCode || (couponNote && couponNote.code) || '', msg: err.message, lang: err.lang || askedIn };
+            setCoupon('');
+            showCode();
+            rewordNote(); // the language was switched meanwhile
+          }
+          // A product, colour, size or side the shop stopped selling, or fewer pieces left than ordered (409):
+          // the shop's message is shown and the cart asks for today's prices, which mark the items concerned.
+          const unavailable = /Unavailable$/.test(err.code || '') || err.code === 'notEnoughStock';
+          if (err.code === 'priceChanged' || err.code === 'designGone' || err.code === 'designOrdered' || unavailable || /^coupon/.test(err.code || '')) {
+            await refreshPrices();
+            render();
+          }
+          placing = false;
+          btn.textContent = placeLabel();
+          if (err.code === 'proofChanged' || err.code === 'approvalRequired') {
+            // Fetch every proof again: the ones that changed lose their approval and are shown anew.
+            await Promise.all(chosen().map((it) => loadProof(it.designId, { force: true })));
+            render();
+            goToNextProof();
+            POD.toast(err.code === 'proofChanged' ? t('proof.changed') : err.message || t('checkout.approvalRequired'), 'error');
+            return;
+          }
+          // A field the shop refused (the phone, the email…): the message goes under that field.
+          const field = SERVER_FIELD[err.code] && document.getElementById(SERVER_FIELD[err.code]);
+          if (field) {
+            setFieldError(field, err.message, err.code);
+            goToField(field);
+          } else {
+            POD.toast(err.message, 'error');
+            if (couponRefused) document.querySelector('.coupon-box').scrollIntoView({ block: 'center', behavior: 'smooth' });
+            else if (unavailable) goToBlocked();
+          }
+          // Also above the order button (a toast goes away): the shop's own words.
+          if (unavailable && !blockedIn(chosen()).length) {
+            const status = document.getElementById('approve-status');
+            updateApproval();
+            status.classList.add('blocked');
+            status.textContent = err.message;
+            return;
+          }
+          updateApproval();
+        }
+      });
+
+      // ---------- What the customer typed in the order form, kept for this visit ----------
+      // (Like the coupon, delivery and ticks: "Edit design" and Back, or a reload, keep it. Only in this tab, and only
+      // for the same signed-in customer, or guest; it goes once the order is placed.)
+      const DETAILS_KEY = 'pod-checkout';
+      const DETAIL_FIELDS = ['name', 'phone', 'email', 'governorate', 'city', 'address', 'notes'];
+      const whoIsIn = () => { try { const v = localStorage.getItem('pod-acct'); return v && v !== '1' ? v : ''; } catch (e) { return ''; } };
+      function saveDetails() {
+        const fields = Object.fromEntries(DETAIL_FIELDS.map((id) => [id, document.getElementById(id).value]));
+        try {
+          if (Object.values(fields).some((v) => v.trim())) sessionStorage.setItem(DETAILS_KEY, JSON.stringify({ acct: whoIsIn(), fields }));
+          else sessionStorage.removeItem(DETAILS_KEY);
+        } catch (e) { /* private mode */ }
+      }
+      function restoreDetails() {
+        let kept = null;
+        try { kept = JSON.parse(sessionStorage.getItem(DETAILS_KEY) || 'null'); } catch (e) { kept = null; }
+        if (!kept || typeof kept.fields !== 'object' || !kept.fields) return;
+        // Someone else signed in (or out) since: not theirs to see.
+        if (kept.acct !== whoIsIn()) {
+          try { sessionStorage.removeItem(DETAILS_KEY); } catch (e) { /* private mode */ }
+          return;
+        }
+        for (const id of DETAIL_FIELDS) {
+          const el = document.getElementById(id);
+          const v = kept.fields[id];
+          if (typeof v !== 'string' || !v || el.value) continue;
+          if (el.tagName === 'SELECT' && ![...el.options].some((o) => o.value === v)) continue;
+          el.value = v;
+        }
+      }
+      form.addEventListener('input', (e) => { if (DETAIL_FIELDS.includes(e.target.id)) saveDetails(); });
+      form.addEventListener('change', (e) => { if (DETAIL_FIELDS.includes(e.target.id)) saveDetails(); });
+
+      // ---------- The order's one-time key (see /api/orders/by-key) ----------
+      const KEY = 'pod-order-key';
+      function orderKey() {
+        let k = null;
+        try { k = sessionStorage.getItem(KEY); } catch (e) { k = null; }
+        if (!k) {
+          k = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`);
+          try { sessionStorage.setItem(KEY, k); } catch (e) { /* private mode: no retry check */ }
+        }
+        return k;
+      }
+      function goToOrder(order) {
+        // Kept on this device: a guest's way back to the order (account page, empty cart).
+        PODAftercare.rememberOrder(order);
+        const ordered = new Set((order.items || []).map((i) => i.designId));
+        // Only what was ordered leaves the cart: the unticked items stay, with their ticks and approvals.
+        POD.setCart(POD.getCart().filter((it) => !ordered.has(it.designId)));
+        try { sessionStorage.removeItem(KEY); sessionStorage.removeItem(DETAILS_KEY); } catch (e) { /* private mode */ }
+        for (const id of ordered) approvals.delete(id);
+        saveApprovals();
+        location.href = POD.orderPath('order', order.id, order.key) + '&new=1';
+      }
+      async function showPlacedOrder() {
+        let k = null;
+        try { k = sessionStorage.getItem(KEY); } catch (e) { k = null; }
+        if (!k) return false;
+        try {
+          const order = await POD.api('/api/orders/by-key/' + encodeURIComponent(k));
+          if (!order) return false; // not placed: carry on
+          goToOrder(order);
+          return true;
+        } catch (e) {
+          return false; // still offline: carry on
+        }
+      }
+
+      // CAPTCHA: checked silently while the customer fills in the form (a box only if Cloudflare asks).
+      const orderCaptcha = POD.captcha(document.getElementById('cap-order'));
+      form.addEventListener('focusin', () => orderCaptcha.prepare(), { once: true });
+      document.querySelectorAll('input[name="delivery"]').forEach((r) => r.addEventListener('change', () => {
+        if (!r.checked) return;
+        delivery = r.value === 'express' ? 'express' : 'standard';
+        try { sessionStorage.setItem('pod-delivery', delivery); } catch (e) { /* private mode */ }
+        render();
+        refreshPrices().then(render);
+      }));
+
+      // Coupon: apply / remove.
+      // The code as the shop keeps it (as src/coupons.js normCode): Arabic (٠-٩, ۰-۹) and full-width digits and
+      // letters typed on a phone are the English ones, so "EID٢٠" shows and is kept as "EID20".
+      const couponOf = (s) => String(s || '')
+        .replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+        .replace(/[\u06f0-\u06f9]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+        .replace(/[\uff01-\uff5e]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0))
+        .replace(/[\u061c\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, '')
+        .trim().toUpperCase().replace(/\s+/g, '');
+      // The shop's codes are English letters and digits (src/coupons.js): a code with Arabic (or other) letters, such
+      // as "عيد20", is told so here in the page's words, without asking the shop (it isn't counted as a wrong try).
+      const notLatin = (code) => /\p{L}/u.test(code.replace(/[A-Z]/g, ''));
+      const applyCoupon = async () => {
+        if (document.getElementById('coupon-apply').disabled) return; // (Enter pressed while the shop answers)
+        const code = couponOf(document.getElementById('coupon').value);
+        couponNote = null;
+        if (notLatin(code)) {
+          const had = couponCode;
+          setCoupon('');
+          couponNote = { code, key: 'coupon.latinOnly', msg: t('coupon.latinOnly'), lang: POD.lang };
+          document.getElementById('coupon').blur();
+          if (had) await refreshPrices(); // the code in use before comes off, as with any refused code
+          render();
+          showCode();
+          return;
+        }
+        setCoupon(code);
+        document.getElementById('coupon').blur();
+        // (Busy while the shop answers; no answer at all is said, as when placing the order. QA 25 Nov.)
+        const btn = document.getElementById('coupon-apply');
+        btn.disabled = true;
+        btn.setAttribute('aria-busy', 'true');
+        try {
+          await refreshPrices();
+        } finally {
+          btn.disabled = false;
+          btn.removeAttribute('aria-busy');
+        }
+        if (code && !quote && quoteFailed) {
+          const e = quoteFailed;
+          POD.toast(e.status && e.status < 500 && e.message ? e.message : t('msg.network'), 'error');
+        }
+        // (A code that only saves less than the automatic offer stays typed in: if that offer turns out not to be
+        // for this phone, e.g. once per customer, the customer's own code is what the order gets. Tester 1, 26 Nov.)
+        if (code && quote && quote.couponError && !quote.couponBeaten) {
+          couponNote = { code, msg: quote.couponError, lang: quote.lang };
+          setCoupon('');
+        }
+        render();
+        showCode();
+        rewordNote(); // the language was switched while the shop was answering
+      };
+      // "Have a discount code?" opens the field (and, once open, it stays open on this page: a code taken off leaves
+      // the field there for another one).
+      let couponOpen = false;
+      function showCouponField(open) {
+        if (open) couponOpen = true;
+        const link = document.getElementById('coupon-open');
+        document.getElementById('coupon-field').hidden = !open;
+        link.hidden = open;
+        link.setAttribute('aria-expanded', String(open));
+      }
+      document.getElementById('coupon-open').addEventListener('click', () => {
+        couponOpen = true;
+        showCouponField(true);
+        document.getElementById('coupon').focus();
+      });
+      document.getElementById('coupon-apply').addEventListener('click', applyCoupon);
+      document.getElementById('coupon').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); applyCoupon(); } });
+      // Typing another code: the old refusal goes.
+      document.getElementById('coupon').addEventListener('input', () => {
+        if (!couponNote) return;
+        couponNote = null;
+        const msg = document.getElementById('coupon-msg');
+        msg.textContent = '';
+        msg.classList.remove('bad');
+        markCoupon(false);
+      });
+      // The phone typed in: the shop's offers can depend on it (an offer once per customer), so the prices are asked
+      // again for that phone when a coupon or an offer is in play (tester 1, 26 Nov).
+      let quotedPhone = '';
+      document.getElementById('phone').addEventListener('change', async (e) => {
+        const phone = e.target.value.trim();
+        if (!egyptMobile(phone) || phone === quotedPhone) return;
+        if (!couponCode && !(quote && quote.coupon)) return;
+        quotedPhone = phone;
+        await refreshPrices();
+        render();
+      });
+      document.getElementById('coupon-remove').addEventListener('click', async () => {
+        couponNote = null;
+        setCoupon('');
+        document.getElementById('coupon').value = '';
+        await refreshPrices();
+        render();
+      });
+
+      // Signed-in customers: their details are filled in and the order is saved to their account.
+      // undefined until the shop answers; then the signed-in customer, or null for a guest.
+      let acctMe;
+      function renderAcctNote() {
+        if (acctMe === undefined) return;
+        const note = document.getElementById('acct-note');
+        if (!acctMe) note.innerHTML = `${esc(t('acct.checkoutGuest'))} <a href="/account?next=cart">${esc(t('acct.signIn'))}</a>`;
+        else note.textContent = t('acct.checkoutAs', { name: acctMe.name });
+      }
+      async function prefillAccount() {
+        let me = null;
+        try { me = (await POD.api('/api/account')).customer; } catch (e) { me = null; }
+        acctMe = me || null;
+        renderAcctNote();
+        if (!me) return;
+        const fill = (id, v) => { const el = document.getElementById(id); if (el && !el.value && v) el.value = v; };
+        fill('name', me.name);
+        fill('phone', me.phone);
+        fill('email', me.email);
+        if (me.address) {
+          fill('governorate', me.address.governorate);
+          fill('city', me.address.city);
+          fill('address', me.address.address);
+          fill('notes', me.address.notes);
+        }
+      }
+
+      // ---------- Phones: the slim bar at the bottom (total + the way to the order form) ----------
+      const bar = document.getElementById('cart-bar');
+      let formInView = false;
+      function updateBar() {
+        const show = POD.getCart().length > 0 && !formInView;
+        bar.hidden = !show;
+        document.body.classList.toggle('has-cart-bar', show && getComputedStyle(bar).display !== 'none');
+      }
+      if ('IntersectionObserver' in window) {
+        new IntersectionObserver((entries) => {
+          formInView = entries.some((en) => en.isIntersecting);
+          updateBar();
+        }).observe(form);
+      }
+      window.addEventListener('resize', updateBar);
+      document.getElementById('bar-go').addEventListener('click', () => {
+        // Items that can't be ordered now come first, then proofs that didn't load; then the first empty field, then the
+        // tick next to the order button, else the button.
+        // (Nothing ticked: the ticks, to choose what to order.)
+        if (!chosen().length) {
+          const all = document.getElementById('sel-all');
+          if (all) { all.scrollIntoView({ behavior: 'smooth', block: 'center' }); all.focus({ preventScroll: true }); }
+          return;
+        }
+        if (blockedIn(chosen()).length) return goToBlocked();
+        if (!chosen().every((it) => isApproved(it.designId) || proofOf(it.designId))) return goToNextProof();
+        const empty = FIELDS.find((el) => el.required && !el.value.trim());
+        if (empty) return goToField(empty);
+        if (!chosen().every((it) => isApproved(it.designId))) return goToTick();
+        const btn = document.getElementById('place-order');
+        btn.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        btn.focus({ preventScroll: true });
+      });
+
+      renderGovernorates();
+      restoreDetails();
+      showCode();
+      render();
+      prefillAccount();
+      refreshSaved();
+      // An order placed from this tab whose answer never arrived: go to it instead of showing its items as gone.
+      if (!(await showPlacedOrder())) refreshPrices({ announce: true }).then(render);
+      document.addEventListener('pod:langchange', () => {
+        renderGovernorates();
+        render();
+        renderAcctNote();
+        // The shop's messages in the new language: about items it can't make now, and a coupon code it refused
+        // (the code in use is asked with today's prices; one refused before, on its own).
+        const refusal = couponRefusal();
+        const reword = refusal && refusal.applied && needsWords(refusal);
+        if (blocked.size || reword) {
+          refreshPrices().then(() => {
+            const now = couponRefusal();
+            if (reword && now && now.code === refusal.code) learnWords(refusal.code, refusal, now);
+            render();
+          });
+        }
+        rewordNote();
+        if (savedBlocked.size) refreshSaved();
+        // Errors under the fields, in the new language (the shop's own refusals by their code).
+        for (const el of FIELDS) {
+          if (el.getAttribute('aria-invalid') !== 'true') continue;
+          const again = fieldProblem(el) || (SERVER_TEXT[el.dataset.errCode] ? t(SERVER_TEXT[el.dataset.errCode]) : '');
+          if (again) setFieldError(el, again);
+        }
+      });
+      // The cart changed in another tab (an order placed there, an item added).
+      window.addEventListener('storage', (e) => {
+        if (e.key === 'pod-cart-v2') refreshPrices().then(render);
+        // (Ticked or unticked in another tab.)
+        if (e.key === OFF_KEY) { readOff(); render(); refreshPrices().then(render); }
+      });
+      // The account's cart arrived (items added on another device, or removed there).
+      document.addEventListener('pod:cartsynced', () => refreshPrices().then(render).then(refreshSaved));
+    })();
+  </script>
+</body>
+</html>

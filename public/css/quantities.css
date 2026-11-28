@@ -1,0 +1,61 @@
+/* One artwork in several colours / sizes / quantities: cart, invoice and admin views. */
+
+.qty-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, .22); flex: none; vertical-align: middle; }
+.qty-chip { display: inline-block; white-space: nowrap; unicode-bidi: isolate; }
+.qty-pieces { display: inline-block; background: #eef4ff; color: #2b4a8b; border-radius: 6px; padding: 1px 7px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+
+/* ---------- Cart ---------- */
+.qty-break { display: grid; gap: 4px; margin: 6px 0 4px; }
+.qty-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: 13px; color: var(--ink-2); line-height: 1.5; }
+.qty-line .qty-cname { font-weight: 700; color: var(--ink); margin-inline-end: 2px; }
+.qty-line .qty-chip { background: #f1f3f6; border-radius: 6px; padding: 0 7px; font-size: 12.5px; }
+.qty-line .qty-chip b { font-weight: 800; color: var(--ink); }
+.cart-item .price .qty-each { display: block; font-size: 12px; font-weight: 500; color: var(--ink-3); white-space: nowrap; }
+
+/* ---------- Invoice: one sub-row per colour/size line ---------- */
+.inv-table tr.qty-has-sub > td { border-bottom: 0; padding-bottom: 6px; }
+.inv-table tr.inv-sub > td { padding-top: 3px; padding-bottom: 3px; border-bottom: 0; font-size: 12.5px; color: var(--ink-2); }
+.inv-table tr.inv-sub.last > td { border-bottom: 1px solid var(--line); padding-bottom: 10px; }
+.inv-table tr.inv-sub .qty-sub-item { display: flex; align-items: center; gap: 6px; padding-inline-start: 10px; border-inline-start: 2px solid var(--line); }
+.inv-table tr.inv-sub .qty-sub-ph { display: none; color: var(--ink-3); white-space: nowrap; }
+@media screen and (max-width: 560px) {
+  .inv-table tr.inv-sub .qty-sub-item { flex-wrap: wrap; }
+  .inv-table tr.inv-sub .qty-sub-ph { display: inline; }
+}
+@media print {
+  .qty-dot { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .inv-table tr.inv-sub { break-inside: avoid; page-break-inside: avoid; }
+}
+
+/* ---------- Admin: what blanks to take off the shelf ---------- */
+.qty-prod { border: 2px solid var(--ink); border-radius: 10px; overflow: hidden; max-width: 560px; background: #fff; }
+.qty-prod table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.qty-prod th { background: var(--ink); color: #fff; font-size: 12px; font-weight: 700; padding: 6px 10px; text-align: start; white-space: nowrap; }
+.qty-prod td { padding: 8px 10px; border-top: 1px solid var(--line); vertical-align: middle; }
+.qty-prod .qty-color { white-space: nowrap; font-weight: 700; }
+.qty-prod .qty-color .qty-dot { width: 18px; height: 18px; margin-inline-end: 6px; }
+.qty-prod .qty-sizes { display: flex; flex-wrap: wrap; gap: 6px; }
+.qty-prod .qty-size { display: inline-flex; align-items: stretch; border: 1px solid #c9ced8; border-radius: 7px; overflow: hidden; font-weight: 700; white-space: nowrap; unicode-bidi: isolate; }
+.qty-prod .qty-size span { padding: 2px 8px; background: #f1f3f6; color: var(--ink-2); }
+.qty-prod .qty-size b { padding: 2px 9px; font-size: 16px; color: var(--ink); }
+.qty-prod .qty-n { text-align: end; font-size: 18px; font-weight: 800; white-space: nowrap; }
+.qty-prod th.qty-n { font-size: 12px; }
+.qty-prod tfoot td { background: #f1f3f6; font-weight: 800; border-top: 2px solid var(--ink); }
+.qty-prod tfoot .qty-n { font-size: 20px; }
+.spec dd .qty-prod { margin-top: 2px; }
+.qty-names-note { margin-top: 6px; font-size: 13px; color: var(--ink-2); font-weight: 600; }
+
+/* Short form in queue rows and the orders table */
+.qty-sum { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 4px; font-size: 13px; }
+.qty-sum .qty-grp { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.qty-sum .qty-grp > b { color: var(--ink); }
+.qty-sum .qty-chip { background: #f1f3f6; border-radius: 6px; padding: 0 6px; color: var(--ink-2); font-weight: 600; }
+.qty-sum .qty-chip b { color: var(--ink); font-weight: 800; }
+.qty-orders { display: grid; gap: 6px; margin-top: 6px; }
+.qty-orders .qty-oi { font-size: 12.5px; line-height: 1.45; }
+.qty-orders .qty-oi > strong { font-size: 12.5px; }
+/* Phones: the table takes the full width under its label. */
+@media (max-width: 640px) {
+  .spec dd.qty-dd { grid-column: 1 / -1; }
+  .qty-prod th, .qty-prod td { padding-inline: 7px; }
+}

@@ -1,0 +1,402 @@
+[
+ {
+  "id": "optical-hypnotic-spiral",
+  "theme": "optical",
+  "desc": "Black and white hypnotic two-arm spiral disc with hot-pink rim",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 1000,
+  "role": "hero"
+ },
+ {
+  "id": "optical-bulge-checker",
+  "theme": "optical",
+  "desc": "Checkerboard warped into a 3D bulging sphere, rounded square block",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 1000,
+  "role": "hero"
+ },
+ {
+  "id": "optical-impossible-triangle",
+  "theme": "optical",
+  "desc": "Penrose impossible triangle in yellow, coral and blue with dark outline",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 1000,
+  "role": "hero"
+ },
+ {
+  "id": "optical-wave-rings",
+  "theme": "optical",
+  "desc": "Op-art concentric wavy rings, indigo on white disc",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 1000,
+  "role": "hero"
+ },
+ {
+  "id": "optical-hex-tunnel",
+  "theme": "optical",
+  "desc": "Hexagon grid pulled into a deep tunnel, orange and purple disc",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 1000,
+  "role": "hero"
+ },
+ {
+  "id": "gaming-pixel-hero",
+  "theme": "gaming",
+  "desc": "Original 8-bit pixel hero with raised sword, red cape and gold headband",
+  "light": true,
+  "dark": true,
+  "w": 880,
+  "h": 960,
+  "role": "hero"
+ },
+ {
+  "id": "gaming-pixel-hearts",
+  "theme": "gaming",
+  "desc": "Pixel-art health bar: two full hearts and one half heart",
+  "light": true,
+  "dark": true,
+  "w": 980,
+  "h": 280,
+  "role": "accent"
+ },
+ {
+  "id": "gaming-neon-controller",
+  "theme": "gaming",
+  "desc": "Original retro game controller with cyan/magenta neon outline",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 760,
+  "role": "hero"
+ },
+ {
+  "id": "gaming-pixel-landscape",
+  "theme": "gaming",
+  "desc": "Pixel-art dusk landscape with mountains, snow caps and setting sun (filled block)",
+  "light": true,
+  "dark": true,
+  "w": 960,
+  "h": 600,
+  "role": "hero"
+ },
+ {
+  "id": "gaming-synthwave-sunset",
+  "theme": "gaming",
+  "desc": "Synthwave neon grid sunset with sliced sun and mountains (rounded block)",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 760,
+  "role": "hero"
+ },
+ {
+  "id": "vintage-70s-sunset-badge",
+  "theme": "vintage",
+  "desc": "1970s retro sunset badge: sun over five mustard-orange-brown stripes in a circle",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 1000,
+  "role": "badge"
+ },
+ {
+  "id": "vintage-groovy-wave-band",
+  "theme": "vintage",
+  "desc": "Groovy 70s wavy band of five parallel stripes (brown, rust, orange, mustard, teal); tiles horizontally",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 460,
+  "role": "accent"
+ },
+ {
+  "id": "vintage-art-deco-frame",
+  "theme": "vintage",
+  "desc": "1920s Art Deco gold line frame with stepped corners and fan ornaments; empty centre for text",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 760,
+  "role": "frame"
+ },
+ {
+  "id": "vintage-starburst-badge",
+  "theme": "vintage",
+  "desc": "Vintage 30-point starburst sale-style badge in mustard with brown double ring; centre left empty for text",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 1000,
+  "role": "badge"
+ },
+ {
+  "id": "music-vinyl-record",
+  "theme": "music",
+  "desc": "Vinyl record with grooves, shine and a red/yellow/blue label",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 1000,
+  "role": "hero"
+ },
+ {
+  "id": "music-equalizer",
+  "theme": "music",
+  "desc": "LED-style sound equaliser bars fading cyan to magenta",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 640,
+  "role": "accent"
+ },
+ {
+  "id": "music-headphones-mic",
+  "theme": "music",
+  "desc": "Bold headphones with boom mic, pink/yellow/cyan sticker style (podcast / beats emblem)",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 1000,
+  "role": "hero"
+ },
+ {
+  "id": "music-notes-ribbon",
+  "theme": "music",
+  "desc": "Flowing gradient staff ribbon with colourful music notes",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 700,
+  "role": "accent"
+ },
+ {
+  "id": "luxury-monogram-laurel-frame",
+  "theme": "luxury",
+  "desc": "Gold double-ring monogram frame with laurel branches and star jewel; empty centre for initials",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 940,
+  "role": "frame"
+ },
+ {
+  "id": "luxury-bauhaus-panel",
+  "theme": "luxury",
+  "desc": "Abstract Bauhaus geometric panel: charcoal and beige blocks, semicircles, triangle, terracotta accents (filled panel)",
+  "light": true,
+  "dark": true,
+  "w": 800,
+  "h": 1000,
+  "role": "hero"
+ },
+ {
+  "id": "luxury-fine-laurel-wreath",
+  "theme": "luxury",
+  "desc": "Fine-line open laurel wreath in champagne gold (outline leaves with veins)",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 940,
+  "role": "frame"
+ },
+ {
+  "id": "luxury-crescent-star",
+  "theme": "luxury",
+  "desc": "Minimal gold line crescent with an eight-point (Islamic) star",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 1000,
+  "role": "accent"
+ },
+ {
+  "id": "workout-lightning-bolt",
+  "theme": "workout",
+  "desc": "Bold yellow lightning bolt with orange motion/speed lines",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 1000,
+  "role": "hero"
+ },
+ {
+  "id": "workout-kettlebell",
+  "theme": "workout",
+  "desc": "Bold orange kettlebell icon with dark plate (room for a weight number)",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 1000,
+  "role": "hero"
+ },
+ {
+  "id": "workout-running-shoe",
+  "theme": "workout",
+  "desc": "Stylised running shoe in motion with speed lines (cyan, pink, yellow)",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 800,
+  "role": "hero"
+ },
+ {
+  "id": "uplifting-hand-drawn-sun",
+  "theme": "uplifting",
+  "desc": "Hand-drawn wobbly sun with long and short curved rays",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 1000,
+  "role": "hero"
+ },
+ {
+  "id": "uplifting-hearts-stars-cluster",
+  "theme": "uplifting",
+  "desc": "Cluster of pink hearts, sparkles, stars and dots",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 1000,
+  "role": "accent"
+ },
+ {
+  "id": "uplifting-boho-rainbow",
+  "theme": "uplifting",
+  "desc": "Boho rainbow arch in muted terracotta, peach, mustard, sage and rose with two little clouds",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 600,
+  "role": "hero"
+ },
+ {
+  "id": "trends-chat-bubbles",
+  "theme": "trends",
+  "desc": "Stack of empty pastel chat bubbles (one typing-dots, one heart) with dark outline",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 980,
+  "role": "frame"
+ },
+ {
+  "id": "trends-y2k-sticker-set",
+  "theme": "trends",
+  "desc": "Y2K sticker-bomb set: chrome sparkles, iridescent star and heart, chrome lightning, winking smiley",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 1000,
+  "role": "accent"
+ },
+ {
+  "id": "twolayer-corner",
+  "theme": "twolayer",
+  "desc": "Bold corner ornament: rounded L band with scroll curls, leaves and a dot (top-left; turn for the other corners), one colour, laser-cut safe",
+  "light": true,
+  "dark": true,
+  "w": 400,
+  "h": 400,
+  "role": "frame"
+ },
+ {
+  "id": "twolayer-vine",
+  "theme": "twolayer",
+  "desc": "Tall flowering vine: thick wavy stem, alternating leaves and three five-petal flowers, one colour, laser-cut safe",
+  "light": true,
+  "dark": true,
+  "w": 300,
+  "h": 1000,
+  "role": "frame"
+ },
+ {
+  "id": "twolayer-garland",
+  "theme": "twolayer",
+  "desc": "Floral garland: a five-petal flower in the middle of a double-swag stem with leaves, one colour, laser-cut safe",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 240,
+  "role": "accent"
+ },
+ {
+  "id": "twolayer-lantern",
+  "theme": "twolayer",
+  "desc": "Ramadan lantern (fanous) silhouette with a hanging ring and two window cut-outs, one colour, laser-cut safe",
+  "light": true,
+  "dark": true,
+  "w": 200,
+  "h": 360,
+  "role": "accent"
+ },
+ {
+  "id": "twolayer-lantern-hanging",
+  "theme": "twolayer",
+  "desc": "Ramadan lantern (fanous) hanging from a thick string, one colour, for one-piece laser-cut scenes",
+  "light": true,
+  "dark": true,
+  "w": 200,
+  "h": 560,
+  "role": "accent"
+ },
+ {
+  "id": "twolayer-frame-scene",
+  "theme": "twolayer",
+  "desc": "Cut-out scene frame: top bar, two side posts, a shelf and a thick base band, all one solid piece",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 1000,
+  "role": "frame"
+ },
+ {
+  "id": "twolayer-frame-base",
+  "theme": "twolayer",
+  "desc": "Cut-out base frame: a shelf on two short capped posts over a thick base band, one solid piece",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 500,
+  "role": "frame"
+ },
+ {
+  "id": "twolayer-crescent-frame",
+  "theme": "twolayer",
+  "desc": "Heavy crescent with two thick shelves reaching into its opening for names and a date, one solid piece",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 1000,
+  "role": "frame"
+ },
+ {
+  "id": "twolayer-heart-frame",
+  "theme": "twolayer",
+  "desc": "Thick heart outline with two shelves across it for names and a date, one solid piece",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 1000,
+  "role": "frame"
+ },
+ {
+  "id": "twolayer-rings-frame",
+  "theme": "twolayer",
+  "desc": "Two interlocked rings (one with a diamond) on a box frame with a shelf and a base band, one solid piece",
+  "light": true,
+  "dark": true,
+  "w": 1000,
+  "h": 1000,
+  "role": "frame"
+ }
+]

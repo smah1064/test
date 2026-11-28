@@ -1,0 +1,592 @@
+/* Personalised book page: answer the questions, add a photo and crop the
+ * face, flip through every page of the real book, add it to the cart. Pages
+ * are drawn on the server, so the preview is exactly what gets printed. */
+(async () => {
+  const { t, tr, esc, money } = POD;
+  const $ = (id) => document.getElementById(id);
+  const params = new URLSearchParams(location.search);
+  const catalog = await POD.loadCatalog();
+  let book;
+  try {
+    book = await POD.api('/api/books/' + encodeURIComponent(params.get('b') || 'space-hero'));
+  } catch (e) {
+    $('bk-missing').hidden = false;
+    return;
+  }
+  const product = catalog.products.find((p) => p.kind === 'book' && p.book === book.id);
+  if (!product) {
+    // Not in the shop, as on the product page: paused or sold out ("back soon", or the day it's back), or
+    // stopped selling (similar products to pick instead). The shop says which (common.js: productState).
+    const info = await POD.productState(book.product);
+    const box = $('bk-missing');
+    box.classList.add('unavail-box');
+    const show = () => POD.showUnavailable(box, info, catalog);
+    show();
+    document.addEventListener('pod:langchange', show);
+    return;
+  }
+  $('bk').hidden = false;
+  // Every kids' book (story, colouring): one tap to the other.
+  const allBooks = catalog.products.filter((p) => p.kind === 'book');
+  function renderBookTabs() {
+    $('bk-books').hidden = allBooks.length < 2;
+    $('bk-books').innerHTML = allBooks.map((p) => `<a class="side-tab ${p.book === book.id ? 'active' : ''}" href="/book?b=${encodeURIComponent(p.book)}"${p.book === book.id ? ' aria-current="page"' : ''}>${esc(tr(p.name))}</a>`).join('');
+  }
+  renderBookTabs();
+  document.addEventListener('pod:langchange', renderBookTabs);
+
+  // ---------- Covers (the product's sizes) ----------
+  // A cover sold out in admin → Products is shown crossed out with "Sold out" and can't be picked, as the editor shows a
+  // sold-out size (the same catalogue data: soldOut on the size, or the colour in that size at 0 in stock: POD.sizeOk).
+  // QA 26 Nov: it was a normal choice and the order went through.
+  const colorId = ((product.colors || [])[0] || {}).id;
+  const coverOk = (s) => Boolean(s) && POD.sizeOk(product, colorId, s);
+  const firstCover = () => product.sizes.find(coverOk) || product.sizes[0];
+
+  // ---------- State ----------
+  const KEY = 'pod-book-' + book.id;
+  const saved = (() => { try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { return {}; } })();
+  const state = {
+    answers: saved.answers || {},
+    lang: 'en', // books are printed in English
+    size: product.sizes.find((s) => s.id === saved.size) || firstCover(),
+    face: null, // data URL of the cropped face, when a new photo was chosen
+    hasPhoto: false, // the server already has a photo for this book
+    design: null, // { id, editToken, version, pages, ... }
+    page: 0,
+    aiConsent: !!saved.aiConsent,
+    dirty: true,
+    adding: false, // "Add to cart" is at work (the button waits)
+    added: false, // this book was put in the cart and the page left for the cart
+    cartIndex: params.has('cart') ? Number(params.get('cart')) : null,
+  };
+  const remember = () => {
+    try { localStorage.setItem(KEY, JSON.stringify({ answers: state.answers, lang: state.lang, size: state.size.id, aiConsent: state.aiConsent })); } catch (e) { /* private mode */ }
+  };
+
+  // Re-open a book that is already in the cart.
+  if (state.cartIndex !== null) {
+    const item = POD.getCart()[state.cartIndex];
+    if (item && item.bookId === book.id && item.editToken) {
+      try {
+        const d = await POD.api('/api/books/designs/' + encodeURIComponent(item.designId), { headers: { 'x-edit-token': item.editToken } });
+        state.design = { ...d, editToken: item.editToken };
+        state.answers = d.answers;
+        state.aiConsent = !!d.aiConsent;
+        state.size = product.sizes.find((s) => s.id === d.size.id) || state.size;
+        state.hasPhoto = true;
+        state.dirty = false;
+      } catch (e) {
+        state.cartIndex = null;
+      }
+    } else state.cartIndex = null;
+  }
+  // The cover chosen before (last time on this page, or the book opened from the cart) sold out since: the first
+  // cover left is picked, and the page says so (shown once the page is drawn). A book opened from the cart is then
+  // saved again with it ("Update my book").
+  let coverMoved = null;
+  if (!coverOk(state.size)) {
+    const to = firstCover();
+    if (to && to !== state.size) {
+      coverMoved = { from: state.size, to };
+      state.size = to;
+      if (state.design) state.dirty = true;
+    }
+  }
+
+  // ---------- Form ----------
+  const today = new Date().toISOString().slice(0, 10);
+  // The books are printed in English: right-to-left letters (Arabic…) can't go in. Said once, as a hint above the
+  // questions (QA 25 Nov: a red box said it too, before anything was typed); an error only on a field that has
+  // such letters, as it is typed, and all of them at once when making the book.
+  const RTL_RE = /[\u0590-\u08ff\ufb1d-\ufdff\ufe70-\ufeff]/;
+  // Symbols the story uses itself: a dedication can't print them (they are left out).
+  const NO_PRINT = /[{}[\]|]/;
+  function markLatin(el) {
+    if (!el || !el.dataset || !el.dataset.q || !/^(INPUT|TEXTAREA)$/.test(el.tagName) || el.type === 'date') return false;
+    const bad = RTL_RE.test(el.value || '');
+    const field = el.closest('.field');
+    let note = field && field.querySelector('.bk-latin-note');
+    if (bad && field && !note) {
+      note = document.createElement('p');
+      note.className = 'bk-latin-note';
+      note.setAttribute('role', 'alert');
+      note.style.cssText = 'margin:4px 0 0;color:var(--bad);font-size:13px;font-weight:600';
+      note.textContent = t('book.latinNote');
+      field.appendChild(note);
+    } else if (!bad && note) note.remove();
+    el.setAttribute('aria-invalid', bad ? 'true' : 'false');
+    el.style.borderColor = bad ? 'var(--bad)' : '';
+    return bad;
+  }
+  /** Fields with right-to-left letters, as [question, element]. */
+  const latinProblems = () => book.questions
+    .filter((q) => q.type !== 'choice' && q.type !== 'date' && RTL_RE.test(String(state.answers[q.id] || '')))
+    .map((q) => [q, document.querySelector(`#bk-questions [data-q="${q.id}"]`)]);
+  function renderForm() {
+    $('bk-title').textContent = tr(book.title).replace('{name}', () => state.answers.name || t('book.yourChild'));
+    $('bk-blurb').textContent = tr(book.blurb);
+    $('bk-questions').innerHTML = book.questions.map((q) => {
+      const v = state.answers[q.id] || '';
+      const label = `<label for="q-${q.id}">${esc(tr(q.label))}</label>`;
+      if (q.type === 'choice') {
+        // (A group named by its question, each choice saying whether it is the one picked, for screen readers. Tester 1, 26 Nov.)
+        return `<div class="field"><label id="q-${q.id}-label">${esc(tr(q.label))}</label><div class="chips ${q.options[0].picture ? 'bk-pics' : ''}" data-choice="${q.id}" role="group" aria-labelledby="q-${q.id}-label">
+          ${q.options.map((o) => `<button type="button" class="chip ${o.id === v ? 'active' : ''}" data-q="${q.id}" data-v="${esc(o.id)}" aria-pressed="${o.id === v}">${o.picture ? `<img src="${esc(o.picture)}" alt="">` : ''}<span>${esc(tr(o.label))}</span></button>`).join('')}
+        </div></div>`;
+      }
+      if (q.type === 'textarea') {
+        // (Symbols the book can't print are said, not silently left out. Owner, 26 Nov.)
+        return `<div class="field">${label}<textarea id="q-${q.id}" data-q="${q.id}" maxlength="${q.max}" rows="3" dir="auto" placeholder="${esc(t('book.dedicationHint'))}" aria-describedby="q-${q.id}-sym">${esc(v)}</textarea><p class="muted small bk-sym-note" id="q-${q.id}-sym"${NO_PRINT.test(v) ? '' : ' hidden'}>${esc(t('book.symbolsOut'))}</p></div>`;
+      }
+      const type = q.type === 'date' ? 'date' : 'text';
+      return `<div class="field">${label}<input id="q-${q.id}" data-q="${q.id}" type="${type}" ${type === 'date' ? `max="${today}" min="${esc(q.min || '1900-01-01')}"` : `maxlength="${q.max || 40}" dir="auto" aria-describedby="bk-en-hint"`} value="${esc(v)}" placeholder="${q.placeholder ? esc(tr(q.placeholder)) : ''}"></div>`;
+    }).join('');
+    $('bk-questions').insertAdjacentHTML('afterbegin', `<p class="muted small bk-en-hint" id="bk-en-hint" style="margin:0 0 10px">${esc(t('book.englishHint'))}</p>`);
+    $('bk-questions').querySelectorAll('input[data-q], textarea[data-q]').forEach(markLatin);
+    $('bk-sizes').innerHTML = product.sizes.map((s) => {
+      if (!coverOk(s)) {
+        const why = t('book.coverSoldOut', { cover: tr(s.label) });
+        return `<button type="button" class="chip sold-out" aria-disabled="true" data-sold-size="${esc(s.id)}" title="${esc(why)}" aria-label="${esc(`${tr(s.label)}: ${t('soldOut')}`)}"><span class="sold-label">${esc(tr(s.label))}</span> <span class="sold-tag">${esc(t('soldOut'))}</span></button>`;
+      }
+      const on = s.id === state.size.id;
+      return `<button type="button" class="chip ${on ? 'active' : ''}" data-size="${esc(s.id)}" aria-pressed="${on}">${esc(tr(s.label))}${POD.sizeNote(product, s) ? ` <span style="opacity:.7">${esc(POD.sizeNote(product, s))}</span>` : ''}</button>`;
+    }).join('');
+    $('bk-price').textContent = money(product.basePrice + state.size.surcharge);
+    document.title = `${tr(product.name)} · ${t('brand')}`;
+    renderButtons();
+  }
+  function renderButtons() {
+    $('bk-make').textContent = t(state.design ? (state.dirty ? 'book.update' : 'book.updated') : 'book.make');
+    $('bk-make').disabled = !!state.design && !state.dirty;
+    $('bk-add').disabled = !state.design || !!state.adding;
+    $('bk-add').textContent = t(state.cartIndex !== null ? 'cart.update' : 'design.add');
+    $('bk-photo-empty').hidden = !!(state.face || state.hasPhoto);
+    $('bk-photo-saved').hidden = !state.hasPhoto || !!state.face;
+  }
+  const changed = () => {
+    state.dirty = true;
+    remember();
+    renderButtons();
+    $('bk-title').textContent = tr(book.title).replace('{name}', () => state.answers.name || t('book.yourChild'));
+  };
+
+  $('bk-questions').addEventListener('input', (e) => {
+    const q = e.target.dataset.q;
+    if (!q || e.target.tagName === 'BUTTON') return;
+    state.answers[q] = e.target.value;
+    const sym = document.getElementById(`q-${q}-sym`);
+    if (sym) sym.hidden = !NO_PRINT.test(e.target.value);
+    markLatin(e.target);
+    changed();
+  });
+  $('bk-questions').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-q]');
+    if (!b) return;
+    state.answers[b.dataset.q] = b.dataset.v;
+    b.parentElement.querySelectorAll('button').forEach((x) => { x.classList.toggle('active', x === b); x.setAttribute('aria-pressed', String(x === b)); });
+    changed();
+  });
+  $('bk-sizes').addEventListener('click', (e) => {
+    const sold = e.target.closest('[data-sold-size]');
+    if (sold) return POD.toast(sold.title);
+    const b = e.target.closest('[data-size]');
+    if (!b || b.dataset.size === state.size.id) return;
+    state.size = product.sizes.find((s) => s.id === b.dataset.size);
+    renderForm();
+    changed();
+  });
+
+  // ---------- AI drawing (optional, needs the parent's consent) ----------
+  $('bk-ai').hidden = !book.ai;
+  $('bk-ai-ok').checked = state.aiConsent;
+  $('bk-ai-ok').addEventListener('change', (e) => {
+    state.aiConsent = e.target.checked;
+    changed();
+  });
+
+  // ---------- Photo: crop the face into the oval ----------
+  const cv = $('bk-canvas');
+  const ctx = cv.getContext('2d');
+  const crop = { img: null, zoom: 1, x: 0, y: 0 }; // x/y: image position of the oval's centre
+  const OVAL_RY = 0.42;
+  const OVAL_RX = OVAL_RY * 0.8;
+  function base() { return Math.min(crop.img.naturalWidth, crop.img.naturalHeight); }
+  function drawCrop() {
+    if (!crop.img) return;
+    const S = cv.width;
+    const span = base() / crop.zoom; // image pixels across the circle
+    const k = S / span;
+    ctx.fillStyle = '#e9ecf1';
+    ctx.fillRect(0, 0, S, S);
+    ctx.drawImage(crop.img, S / 2 - crop.x * k, S / 2 - crop.y * k, crop.img.naturalWidth * k, crop.img.naturalHeight * k);
+    // Dim everything outside the face oval (hairline to chin).
+    ctx.save();
+    ctx.fillStyle = 'rgba(20,24,33,.55)';
+    ctx.beginPath();
+    ctx.rect(0, 0, S, S);
+    ctx.ellipse(S / 2, S / 2, S * OVAL_RX, S * OVAL_RY, 0, 0, Math.PI * 2, true);
+    ctx.fill('evenodd');
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 4;
+    ctx.setLineDash([12, 8]);
+    ctx.beginPath();
+    ctx.ellipse(S / 2, S / 2, S * OVAL_RX, S * OVAL_RY, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    // Eye line guide.
+    ctx.setLineDash([6, 8]);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(S * (0.5 - OVAL_RX * 0.8), S * (0.5 - OVAL_RY * 0.12));
+    ctx.lineTo(S * (0.5 + OVAL_RX * 0.8), S * (0.5 - OVAL_RY * 0.12));
+    ctx.stroke();
+    ctx.restore();
+    renderLowRes();
+  }
+  /**
+   * "May print blurry", as the photo prints page warns: the face in the oval has fewer of the photo's own pixels per
+   * printed inch than the book needs (book.photo: the tallest the face prints, and the lowest pixels per inch that
+   * still look sharp). A small photo (QA 26 Nov: 60 x 40 px) or a small face zoomed in. Never blocks: the customer
+   * keeps it ("Use this one anyway") or picks another photo.
+   */
+  const photoNeeds = book.photo || {};
+  function faceDpi() {
+    if (!crop.img || !photoNeeds.printIn) return null;
+    return ((base() / crop.zoom) * OVAL_RY * 2) / photoNeeds.printIn; // photo pixels from the hairline to the chin
+  }
+  function renderLowRes() {
+    const dpi = state.face ? faceDpi() : null;
+    $('bk-lowres').hidden = !(dpi !== null && dpi < (photoNeeds.lowDpi || 100) && !crop.lowResOk);
+  }
+  $('bk-lowres-ok').addEventListener('click', () => {
+    crop.lowResOk = true;
+    renderLowRes();
+    $('bk-zoom').focus();
+  });
+  function clampCrop() {
+    const half = base() / crop.zoom / 2;
+    crop.x = Math.min(Math.max(crop.x, half), crop.img.naturalWidth - half);
+    crop.y = Math.min(Math.max(crop.y, half), crop.img.naturalHeight - half);
+  }
+  /** The face oval's bounding box, 4:5, as a 720 x 900 JPEG. */
+  function exportFace() {
+    const out = document.createElement('canvas');
+    out.width = 720;
+    out.height = 900;
+    const span = base() / crop.zoom; // image pixels across the square view
+    const h = span * OVAL_RY * 2;
+    const w = span * OVAL_RX * 2;
+    const g = out.getContext('2d');
+    // A cut-out photo (transparent around the person) gets white behind it: a JPEG has no see-through, it was black (QA 26 Nov).
+    g.fillStyle = '#ffffff';
+    g.fillRect(0, 0, 720, 900);
+    g.drawImage(crop.img, crop.x - w / 2, crop.y - h / 2, w, h, 0, 0, 720, 900);
+    return out.toDataURL('image/jpeg', 0.9);
+  }
+  $('bk-file').addEventListener('change', (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return POD.toast(t('book.badPhoto'), 'error');
+    // (Too big is said as that: a 30 MB JPG was told "choose a JPG or PNG". QA 26 Nov.)
+    if (file.size > 25e6) return POD.toast(t('book.photoTooBig'), 'error');
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      crop.img = img;
+      crop.zoom = 2;
+      crop.x = img.naturalWidth / 2;
+      crop.y = img.naturalHeight * 0.4;
+      crop.lowResOk = false; // (a new photo: said again if it is small too)
+      $('bk-zoom').value = crop.zoom;
+      clampCrop();
+      $('bk-crop').hidden = false;
+      state.face = 'pending';
+      drawCrop();
+      changed();
+    };
+    img.onerror = () => POD.toast(t('book.badPhoto'), 'error');
+    img.src = url;
+  });
+  $('bk-zoom').addEventListener('input', (e) => {
+    crop.zoom = Number(e.target.value);
+    clampCrop();
+    drawCrop();
+    changed();
+  });
+  let drag = null;
+  cv.addEventListener('pointerdown', (e) => {
+    if (!crop.img) return;
+    cv.setPointerCapture(e.pointerId);
+    drag = { x: e.clientX, y: e.clientY, cx: crop.x, cy: crop.y };
+  });
+  cv.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const k = (base() / crop.zoom) / cv.getBoundingClientRect().width;
+    crop.x = drag.cx - (e.clientX - drag.x) * k;
+    crop.y = drag.cy - (e.clientY - drag.y) * k;
+    clampCrop();
+    drawCrop();
+  });
+  const endDrag = () => {
+    if (drag) changed();
+    drag = null;
+  };
+  cv.addEventListener('pointerup', endDrag);
+  cv.addEventListener('pointercancel', endDrag);
+
+  // ---------- Pages ----------
+  function pageUrl(n) {
+    if (state.design) return `/api/books/designs/${state.design.id}/pages/${n}.jpg?v=${state.design.version}`;
+    return `/api/books/${book.id}/sample/${n}.jpg?lang=${state.lang}`;
+  }
+  function showPage(n) {
+    state.page = Math.max(0, Math.min(book.pages - 1, n));
+    const img = $('bk-img');
+    const url = pageUrl(state.page);
+    if (img.getAttribute('src') !== url) {
+      $('bk-spin').hidden = false;
+      img.style.opacity = '.4';
+      img.onload = img.onerror = () => { $('bk-spin').hidden = true; img.style.opacity = ''; };
+      img.src = url;
+    }
+    img.alt = pageLabel(state.page);
+    $('bk-count').textContent = t('book.pageOf', { n: POD.num(state.page + 1), total: POD.num(book.pages) });
+    $('bk-prev').disabled = state.page === 0;
+    $('bk-next').disabled = state.page === book.pages - 1;
+    // The thumbnails' labels follow the language too (a language switch calls showPage, not renderThumbs).
+    const thumbs = document.querySelectorAll('#bk-thumbs button');
+    thumbs.forEach((b, i) => {
+      b.classList.toggle('active', i === state.page);
+      b.setAttribute('aria-label', pageLabel(i));
+    });
+    // The page's thumbnail stays in sight in the strip (phones: it scrolled out of view after a few page
+    // flips, QA 25 Nov). Only the strip scrolls sideways, never the page itself.
+    const strip = $('bk-thumbs');
+    const thumb = thumbs[state.page];
+    if (thumb && strip.scrollWidth > strip.clientWidth) {
+      const s = strip.getBoundingClientRect();
+      const r = thumb.getBoundingClientRect();
+      // (To the middle of the strip, where its scroll snapping puts a thumbnail: scrolled just into sight, the
+      // snapping pulled it back and the picked one stuck out past the edge, its frame cut. Tester 1, 26 Nov.)
+      const out = r.left < s.left + 2 || r.right > s.right - 2;
+      const dx = out ? (r.left + r.width / 2) - (s.left + s.width / 2) : 0;
+      if (dx) strip.scrollBy({ left: dx, behavior: 'smooth' });
+    }
+    $('bk-sample').hidden = !!state.design;
+  }
+  /** "Page 3 of the book" / "صفحة ٣ من الكتاب": page i (from 0) in the language on screen. */
+  function pageLabel(i) {
+    return t('book.pageAlt', { n: POD.num(i + 1) });
+  }
+  function renderThumbs() {
+    $('bk-thumbs').innerHTML = Array.from({ length: book.pages }, (_, i) => `<button type="button" data-page="${i}" aria-label="${esc(pageLabel(i))}"><img loading="lazy" alt="" src="${pageUrl(i)}"></button>`).join('');
+    showPage(state.page);
+  }
+  $('bk-prev').addEventListener('click', () => showPage(state.page - 1));
+  $('bk-next').addEventListener('click', () => showPage(state.page + 1));
+  $('bk-thumbs').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-page]');
+    if (b) showPage(Number(b.dataset.page));
+  });
+  // Swipe between pages on phones.
+  let touchX = null;
+  $('bk-img').addEventListener('touchstart', (e) => { touchX = e.touches[0].clientX; }, { passive: true });
+  $('bk-img').addEventListener('touchend', (e) => {
+    if (touchX === null) return;
+    const dx = e.changedTouches[0].clientX - touchX;
+    touchX = null;
+    if (Math.abs(dx) < 40) return;
+    const forward = document.dir === 'rtl' ? dx > 0 : dx < 0;
+    showPage(state.page + (forward ? 1 : -1));
+  });
+
+  // ---------- Make / update the book ----------
+  const busy = (on, text) => {
+    $('busy').hidden = !on;
+    if (text) $('busy-text').textContent = text;
+  };
+  /** The first thing still missing: { q } (a question), { photo: true }, or null. */
+  function missing() {
+    for (const q of book.questions) {
+      if (q.required && !String(state.answers[q.id] || '').trim()) return { q };
+    }
+    if (!state.face && !state.hasPhoto) return { photo: true };
+    return null;
+  }
+  function dateProblem() {
+    for (const q of book.questions) {
+      const v = q.type === 'date' ? String(state.answers[q.id] || '') : '';
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) continue;
+      const min = q.min || '1900-01-01';
+      if (v < min) return { q, message: t('book.dateTooOld', { field: tr(q.label), year: Number(min.slice(0, 4)) }) };
+      if (v > new Date().toISOString().slice(0, 10)) return { q, message: t('book.dateFuture', { field: tr(q.label) }) };
+    }
+    return null;
+  }
+  // One save at a time: Enter or Space on the focused button (or a phone's "Go" key) while the book was being
+  // made started it again, and three presses made three books (QA 25 Nov). A press while a save is running
+  // gets that same save (so "Add to cart" pressed meanwhile waits for it, then adds the book).
+  let making = null;
+  function make() {
+    if (!making) making = makeNow().finally(() => { making = null; });
+    return making;
+  }
+  async function makeNow() {
+    const rtl = latinProblems();
+    if (rtl.length) {
+      rtl.forEach(([, el]) => markLatin(el));
+      // One field: "this box", not "these" (QA 25 Nov).
+      POD.toast(rtl.length === 1
+        ? t('book.latinField', { field: tr(rtl[0][0].label) })
+        : t('book.latinFields', { fields: rtl.map(([q]) => tr(q.label)).join(POD.lang === 'ar' ? '، ' : ', ') }), 'error');
+      const first = rtl[0][1];
+      if (first) {
+        first.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        first.focus({ preventScroll: true });
+      }
+      return false;
+    }
+    // The date box lets any year be typed: too early or not come yet, said as such.
+    const bad = dateProblem();
+    if (bad) {
+      POD.toast(bad.message, 'error');
+      const el = document.querySelector(`#bk-questions [data-q="${bad.q.id}"]`);
+      if (el) {
+        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        el.focus({ preventScroll: true });
+      }
+      return false;
+    }
+    const miss = missing();
+    if (miss) {
+      // A choice (boy or girl, a date) is picked and the photo added, not typed (QA 25 Nov: "please type: Boy or
+      // girl", "please type: Child's photo"); the page goes to the photo box too when it's the photo.
+      const { q } = miss;
+      POD.toast(miss.photo ? t('book.missingPhoto') : t(q.type === 'choice' || q.type === 'date' ? 'book.missingChoice' : 'book.missing', { field: tr(q.label) }), 'error');
+      const el = miss.photo ? $('bk-photo-empty').closest('.field') : document.querySelector(`#bk-questions [data-q="${q.id}"]`);
+      if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      return false;
+    }
+    busy(true, t(book.ai && state.aiConsent && (state.face || !state.design) ? 'book.drawing' : 'book.making'));
+    try {
+      const body = { answers: state.answers, lang: state.lang, size: state.size.id, aiConsent: !!(book.ai && state.aiConsent) };
+      if (state.face) body.face = exportFace();
+      let d;
+      if (!state.design) {
+        d = await POD.api(`/api/books/${book.id}/designs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        state.design = d;
+      } else {
+        d = await POD.api(`/api/books/designs/${state.design.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'x-edit-token': state.design.editToken }, body: JSON.stringify(body) });
+        state.design = { ...d, editToken: state.design.editToken };
+      }
+      state.face = null;
+      state.hasPhoto = true;
+      state.dirty = false;
+      // Opened from the cart: the saved book changed, so the cart line follows (cover, price, picture).
+      const cart = POD.getCart();
+      const line = state.cartIndex !== null ? cart[state.cartIndex] : cart.find((c) => c.designId === d.id);
+      if (line && line.designId === d.id) {
+        Object.assign(line, { sizeLabel: d.size.label, price: d.price, previewUrl: d.previewUrl });
+        POD.setCart(cart);
+      }
+      if (book.ai && state.aiConsent && d.cartoon === 'failed') POD.toast(t('book.cartoonFailed'));
+      if (book.ai && state.aiConsent && d.cartoon === 'limit') POD.toast(t('book.cartoonLimit'));
+      $('bk-crop').hidden = true;
+      renderButtons();
+      renderThumbs();
+      showPage(state.page);
+      // (Below the sticky header, however tall it is: 109px on a phone hid the child's name on the cover. QA 26 Nov.)
+      const header = document.querySelector('header.site-header, .site-header, header');
+      const below = (header && getComputedStyle(header).position.match(/sticky|fixed/) ? header.getBoundingClientRect().height : 0) + 12;
+      if (matchMedia('(max-width: 900px)').matches) window.scrollTo({ top: $('bk-img').getBoundingClientRect().top + window.scrollY - Math.max(80, below), behavior: 'smooth' });
+      return true;
+    } catch (e) {
+      POD.toast(e.message, 'error');
+      return false;
+    } finally {
+      busy(false);
+    }
+  }
+  $('bk-make').addEventListener('click', make);
+  // One book per tap: a second tap (double click, slow phone) while the first is still adding does
+  // nothing, and a book already in the cart is updated where it is, never put in twice (checkout refuses
+  // the same design twice).
+  $('bk-add').addEventListener('click', async () => {
+    if (state.adding) return;
+    state.adding = true;
+    renderButtons();
+    let leaving = false;
+    try {
+      if (state.dirty && !(await make())) return;
+      leaving = addToCart();
+    } finally {
+      if (!leaving) {
+        state.adding = false;
+        renderButtons();
+      }
+    }
+  });
+  // Back to this page from the cart (the browser kept it as it was): the button works again.
+  window.addEventListener('pageshow', (e) => {
+    if (!e.persisted) return;
+    if (state.added) startNewBook();
+    else if (state.adding) {
+      state.adding = false;
+      renderButtons();
+    }
+  });
+  /**
+   * The book went into the cart and the browser brought the page back as it was (phone Back): that book is
+   * in the cart now, so this page starts a new one, as a fresh visit does (the answers stay as a start; a new
+   * photo is needed). It kept editing the book in the cart before, so a brother's book replaced the first one
+   * and the cart ended with one book (QA 25 Nov).
+   */
+  function startNewBook() {
+    Object.assign(state, { design: null, face: null, hasPhoto: false, dirty: true, adding: false, added: false, cartIndex: null, page: 0 });
+    crop.img = null;
+    $('bk-crop').hidden = true;
+    // (Opened from the cart: a reload must not open that book again either.)
+    if (params.has('cart')) {
+      params.delete('cart');
+      try { history.replaceState(history.state, '', location.pathname + (params.toString() ? `?${params}` : '') + location.hash); } catch (err) { /* keep the address */ }
+    }
+    renderForm();
+    renderThumbs();
+    POD.toast(t('book.inCart'));
+  }
+  function addToCart() {
+    const d = state.design;
+    const cart = POD.getCart();
+    const item = {
+      designId: d.id,
+      bookId: book.id,
+      editToken: d.editToken,
+      productId: d.productId,
+      productName: d.productName,
+      colorName: d.color.name,
+      sizeLabel: d.size.label,
+      sides: d.sides.map((s) => s.name),
+      price: d.price,
+      previewUrl: d.previewUrl,
+      addedAt: new Date().toISOString(),
+    };
+    // The line of this very book wherever it is now (opened from the cart, or added a moment ago).
+    const at = cart.findIndex((c) => c.designId === d.id);
+    if (at >= 0) cart[at] = item;
+    else cart.unshift(item); // (the newest on top of the cart: owner, 27 Nov)
+    // The browser refused to keep the cart (storage blocked): stay here, the message says so.
+    if (POD.setCart(cart) === false) return false;
+    state.added = true; // (the next visit to this page, even by Back, is a new book)
+    location.href = '/cart?added=1';
+    return true;
+  }
+
+  renderForm();
+  renderThumbs();
+  if (coverMoved) {
+    if (state.cartIndex === null) remember(); // (said once: the next visit starts on the cover left)
+    POD.toast(t('book.coverMoved', { cover: tr(coverMoved.from.label), to: tr(coverMoved.to.label) }));
+  }
+  document.addEventListener('pod:langchange', () => { renderForm(); showPage(state.page); });
+})();

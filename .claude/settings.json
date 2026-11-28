@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Hostinger_Connector__search"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__Hostinger_Connector__execute",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/hostinger-readonly.js\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

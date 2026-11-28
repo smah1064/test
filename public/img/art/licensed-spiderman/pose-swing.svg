@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+<!-- PLACEHOLDER for licensed artwork slot "pose-swing". Replace this file with the approved artwork (same name, or change the file in src/library-packs/licensed-spiderman.js). -->
+<rect x="8" y="8" width="784" height="584" rx="24" fill="#eef0f4" stroke="#8a93a3" stroke-width="8" stroke-dasharray="28 18"/>
+<path d="M40 40L760 560M760 40L40 560" stroke="#d5d9e1" stroke-width="6"/>
+<text x="400" y="286.6" font-family="Arial, sans-serif" font-weight="700" font-size="67" fill="#5b6475" text-anchor="middle">CHARACTER POSE 3</text>
+<text x="400" y="363.65" font-family="Arial, sans-serif" font-size="47" fill="#5b6475" text-anchor="middle">PLACEHOLDER · Swinging</text>
+</svg>

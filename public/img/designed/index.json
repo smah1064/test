@@ -1,0 +1,414 @@
+{
+ "tshirt": {
+  "file": "/img/designed/tshirt.webp",
+  "design": "mesh-fady"
+ },
+ "hoodie": {
+  "file": "/img/designed/hoodie.webp",
+  "design": "fa-eid-adha-mubarak"
+ },
+ "mug": {
+  "file": "/img/designed/mug.webp",
+  "design": "pp-sch-best-teacher-f"
+ },
+ "invitations": {
+  "file": "/img/designed/invitations.webp",
+  "design": "ce-first-birthday"
+ },
+ "stickersheet": {
+  "file": "/img/designed/stickersheet.webp",
+  "design": "hb-kit-en"
+ },
+ "bizcards": {
+  "file": "/img/designed/bizcards.webp",
+  "design": "cd-team-ar"
+ },
+ "kidstee": {
+  "file": "/img/designed/kidstee.webp",
+  "design": "ce-big-sister"
+ },
+ "sweatshirt": {
+  "file": "/img/designed/sweatshirt.webp",
+  "design": "fa-eid-outfit"
+ },
+ "cap": {
+  "file": "/img/designed/cap.webp",
+  "design": "ev-sahran"
+ },
+ "cushion": {
+  "file": "/img/designed/cushion.webp",
+  "design": "ev-leilet-emte7an"
+ },
+ "poster": {
+  "file": "/img/designed/poster.webp",
+  "design": "ahlan-ramadan"
+ },
+ "bottle": {
+  "file": "/img/designed/bottle.webp",
+  "design": "wd-dream-plan-do"
+ },
+ "tote": {
+  "file": "/img/designed/tote.webp",
+  "design": "hb-summer-vibes"
+ },
+ "phonecase": {
+  "file": "/img/designed/phonecase.webp",
+  "design": "ga3an"
+ },
+ "mousepad": {
+  "file": "/img/designed/mousepad.webp",
+  "design": "ev-leilet-emte7an"
+ },
+ "notebook": {
+  "file": "/img/designed/notebook.webp",
+  "design": "pp-biz-event-crew"
+ },
+ "polo": {
+  "file": "/img/designed/polo.webp",
+  "design": "hb-kora-hayaty-neon"
+ },
+ "oversized": {
+  "file": "/img/designed/oversized.webp",
+  "design": "wd-love-yourself"
+ },
+ "ziphoodie": {
+  "file": "/img/designed/ziphoodie.webp",
+  "design": "wd-habibti"
+ },
+ "denim": {
+  "file": "/img/designed/denim.webp",
+  "design": "wd-adha-w-oddod"
+ },
+ "apron": {
+  "file": "/img/designed/apron.webp",
+  "design": "fa-eid-fam-kid"
+ },
+ "onesie": {
+  "file": "/img/designed/onesie.webp",
+  "design": "ce-welcome-baby"
+ },
+ "kidshoodie": {
+  "file": "/img/designed/kidshoodie.webp",
+  "design": "hb-basketball"
+ },
+ "shorts": {
+  "file": "/img/designed/shorts.webp",
+  "design": "hb-basketball"
+ },
+ "jersey": {
+  "file": "/img/designed/jersey.webp",
+  "design": "captain"
+ },
+ "magicmug": {
+  "file": "/img/designed/magicmug.webp",
+  "design": "hb-net-fasal"
+ },
+ "couplemugs": {
+  "file": "/img/designed/couplemugs.webp",
+  "design": "ba7ebak"
+ },
+ "tumbler": {
+  "file": "/img/designed/tumbler.webp",
+  "design": "kammel"
+ },
+ "coasters": {
+  "file": "/img/designed/coasters.webp",
+  "design": "hb-level-up"
+ },
+ "tablecloth": {
+  "file": "/img/designed/tablecloth.webp",
+  "design": "ramadan-fanous"
+ },
+ "prayermat": {
+  "file": "/img/designed/prayermat.webp",
+  "design": "set-el-7abayeb"
+ },
+ "eidenvelopes": {
+  "file": "/img/designed/eidenvelopes.webp",
+  "design": "eid-mubarak"
+ },
+ "greetingcard": {
+  "file": "/img/designed/greetingcard.webp",
+  "design": "3eed-milad"
+ },
+ "plaque": {
+  "file": "/img/designed/plaque.webp",
+  "design": "ba7ebak"
+ },
+ "sign": {
+  "file": "/img/designed/sign.webp",
+  "design": "ce-welcome-baby"
+ },
+ "keychain": {
+  "file": "/img/designed/keychain.webp",
+  "design": "wd-reda"
+ },
+ "namelabels": {
+  "file": "/img/designed/namelabels.webp",
+  "design": "pp-kids-princess-name"
+ },
+ "lunchbag": {
+  "file": "/img/designed/lunchbag.webp",
+  "design": "ev-3asaby-ga3an"
+ },
+ "pencilcase": {
+  "file": "/img/designed/pencilcase.webp",
+  "design": "hb-sahran"
+ },
+ "flyers": {
+  "file": "/img/designed/flyers.webp",
+  "design": "fa-eid-kahk"
+ },
+ "letterhead": {
+  "file": "/img/designed/letterhead.webp",
+  "design": "pp-biz-pharmacy"
+ },
+ "logostickers": {
+  "file": "/img/designed/logostickers.webp",
+  "design": "ce-bday-queen"
+ },
+ "rollup": {
+  "file": "/img/designed/rollup.webp",
+  "design": "pp-biz-cafe"
+ },
+ "paperbags": {
+  "file": "/img/designed/paperbags.webp",
+  "design": "ramadan-wanas"
+ },
+ "invoicebook": {
+  "file": "/img/designed/invoicebook.webp",
+  "design": "pp-biz-bakery"
+ },
+ "idcards": {
+  "file": "/img/designed/idcards.webp",
+  "design": "pp-biz-conference"
+ },
+ "certificates": {
+  "file": "/img/designed/certificates.webp",
+  "design": "pp-sch-cat-homework"
+ },
+ "canvas": {
+  "file": "/img/designed/canvas.webp",
+  "design": "wd-be-my-valentine"
+ },
+ "engrplaque": {
+  "file": "/img/designed/engrplaque.webp",
+  "design": "lz-plaque-wedding-ar"
+ },
+ "engrcoasters": {
+  "file": "/img/designed/engrcoasters.webp",
+  "design": "lz-coaster-couple-ar"
+ },
+ "engrtray": {
+  "file": "/img/designed/engrtray.webp",
+  "design": "lz-tray-names-ar"
+ },
+ "engrframe": {
+  "file": "/img/designed/engrframe.webp",
+  "design": "lz-frame-names-ar"
+ },
+ "engrcardholder": {
+  "file": "/img/designed/engrcardholder.webp",
+  "design": "lz-card-monogram-en"
+ },
+ "caketopper": {
+  "file": "/img/designed/caketopper.webp",
+  "design": "lz-topper-happy-bday-en"
+ },
+ "weddingsign": {
+  "file": "/img/designed/weddingsign.webp",
+  "design": "lz-sign-welcome-en"
+ },
+ "doorsign": {
+  "file": "/img/designed/doorsign.webp",
+  "design": "lz-door-family-ar"
+ },
+ "ramadandecor": {
+  "file": "/img/designed/ramadandecor.webp",
+  "design": "lz-ramadan-kareem-crescent"
+ },
+ "namepuzzle": {
+  "file": "/img/designed/namepuzzle.webp",
+  "design": "lz-puzzle-laila-en"
+ },
+ "postcards": {
+  "file": "/img/designed/postcards.webp",
+  "design": "st-maximal-more"
+ },
+ "foldedcards": {
+  "file": "/img/designed/foldedcards.webp",
+  "design": "ce-bday-family"
+ },
+ "brochures": {
+  "file": "/img/designed/brochures.webp",
+  "design": "pp-biz-conference"
+ },
+ "menus": {
+  "file": "/img/designed/menus.webp",
+  "design": "pp-biz-barber"
+ },
+ "notepads": {
+  "file": "/img/designed/notepads.webp",
+  "design": "pp-sch-cat-homework"
+ },
+ "folders": {
+  "file": "/img/designed/folders.webp",
+  "design": "pp-biz-salon"
+ },
+ "booklets": {
+  "file": "/img/designed/booklets.webp",
+  "design": "pp-biz-conference"
+ },
+ "labels": {
+  "file": "/img/designed/labels.webp",
+  "design": "pp-biz-restaurant"
+ },
+ "windowstickers": {
+  "file": "/img/designed/windowstickers.webp",
+  "design": "pp-biz-pharmacy"
+ },
+ "calendar": {
+  "file": "/img/designed/calendar.webp",
+  "design": "pp-biz-barber"
+ },
+ "deskcalendar": {
+  "file": "/img/designed/deskcalendar.webp",
+  "design": "pp-biz-barber"
+ },
+ "photobook": {
+  "file": "/img/designed/photobook.webp",
+  "design": "pp-kids-little-dreamer"
+ },
+ "magnets": {
+  "file": "/img/designed/magnets.webp",
+  "design": "mat2la2sh"
+ },
+ "tablenumbers": {
+  "file": "/img/designed/tablenumbers.webp",
+  "design": "birthday-squad"
+ },
+ "deskmat": {
+  "file": "/img/designed/deskmat.webp",
+  "design": "plain"
+ },
+ "dlenvelopes": {
+  "file": "/img/designed/dlenvelopes.webp",
+  "design": "plain"
+ },
+ "storybook": {
+  "file": "/img/designed/storybook.webp",
+  "design": "book-cover"
+ },
+ "coloringbook": {
+  "file": "/img/designed/coloringbook.webp",
+  "design": "book-cover"
+ },
+ "photoprints": {
+  "file": "/img/designed/photoprints.webp",
+  "design": "photos"
+ },
+ "canvaswide": {
+  "file": "/img/designed/canvaswide.webp",
+  "design": "ramadan-fanous"
+ },
+ "fabric": {
+  "file": "/img/designed/fabric.webp",
+  "design": "pattern"
+ },
+ "upholstery": {
+  "file": "/img/designed/upholstery.webp",
+  "design": "pattern"
+ },
+ "bedsheet": {
+  "file": "/img/designed/bedsheet.webp",
+  "design": "pattern"
+ },
+ "duvetcover": {
+  "file": "/img/designed/duvetcover.webp",
+  "design": "pattern"
+ },
+ "curtains": {
+  "file": "/img/designed/curtains.webp",
+  "design": "pattern"
+ },
+ "giftvouchers": {
+  "file": "/img/designed/giftvouchers.webp",
+  "design": "plain"
+ },
+ "bookmarks": {
+  "file": "/img/designed/bookmarks.webp",
+  "design": "plain"
+ },
+ "wrappingpaper": {
+  "file": "/img/designed/wrappingpaper.webp",
+  "design": "pattern"
+ },
+ "banners": {
+  "file": "/img/designed/banners.webp",
+  "design": "plain"
+ },
+ "placecards": {
+  "file": "/img/designed/placecards.webp",
+  "design": "plain"
+ },
+ "engrpen": {
+  "file": "/img/designed/engrpen.webp",
+  "design": "lz-pen-name-ar"
+ },
+ "engrwallet": {
+  "file": "/img/designed/engrwallet.webp",
+  "design": "lz-wallet-monogram"
+ },
+ "calligraphy": {
+  "file": "/img/designed/calligraphy.webp",
+  "design": "cnc-cal-bismillah"
+ },
+ "villasign": {
+  "file": "/img/designed/villasign.webp",
+  "design": "cnc-villa-family-ar"
+ },
+ "acrylicnameplate": {
+  "file": "/img/designed/acrylicnameplate.webp",
+  "design": "cnc-acr-name-ar"
+ },
+ "woodnameplate": {
+  "file": "/img/designed/woodnameplate.webp",
+  "design": "cnc-wood-name-ar"
+ },
+ "shield": {
+  "file": "/img/designed/shield.webp",
+  "design": "cnc-shield-school-ar"
+ },
+ "quranbox": {
+  "file": "/img/designed/quranbox.webp",
+  "design": "cnc-qbox-ramadan"
+ },
+ "nameart": {
+  "file": "/img/designed/nameart.webp",
+  "design": "cnc-name-nour-ar"
+ },
+ "rehal": {
+  "file": "/img/designed/rehal.webp",
+  "design": "cnc-rehal-name-ar"
+ },
+ "glassaward": {
+  "file": "/img/designed/glassaward.webp",
+  "design": "cnc-glass-employee-ar"
+ },
+ "qrstand": {
+  "file": "/img/designed/qrstand.webp",
+  "design": "cnc-qr-menu-ar"
+ },
+ "favourtags": {
+  "file": "/img/designed/favourtags.webp",
+  "design": "cnc-tag-wedding-initials"
+ },
+ "uvdtf": {
+  "file": "/img/designed/uvdtf.webp",
+  "design": "cnc-dtf-school-ar"
+ },
+ "eventletters": {
+  "file": "/img/designed/eventletters.webp",
+  "design": "cnc-letters-sm-en"
+ }
+}

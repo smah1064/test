@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>إبداع · ebda3</title>
+  <link rel="icon" href="/favicon.svg?v=ebda3" type="image/svg+xml">
+  <link rel="icon" href="/favicon.ico?v=ebda3" sizes="any">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=ebda3">
+  <link rel="manifest" href="/site.webmanifest?v=ebda3">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="إبداع">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="theme-color" content="#FAFAF7">
+  <script>(function(){var l;try{l=localStorage.getItem('pod-lang')}catch(e){}l=l==='en'?'en':'ar';var d=document.documentElement;d.lang=l;d.dir=l==='ar'?'rtl':'ltr'})()</script>
+  <link rel="stylesheet" href="/fonts/fonts.css">
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/review.css">
+  <link rel="stylesheet" href="/css/admin-products.css">
+  <link rel="stylesheet" href="/css/admin-photo-product.css">
+  <link rel="stylesheet" href="/css/admin-library.css">
+  <link rel="stylesheet" href="/css/admin-uploads.css">
+  <link rel="stylesheet" href="/css/admin-preview.css">
+  <link rel="stylesheet" href="/css/admin-rights.css">
+  <link rel="stylesheet" href="/css/admin-roles.css">
+  <link rel="stylesheet" href="/css/admin-order-filters.css">
+  <style>
+    /* Orders: shipping, delivery and payment */
+    .pill.delivered { background: #138a4a; color: #fff; }
+    .pill.pay-paid { background: #e3f5ea; color: var(--ok); }
+    .pill.pay-pending { background: #eef1f6; color: var(--ink-2); }
+    .order-state { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; }
+    .order-state .ship-note { flex-basis: 100%; font-size: 12px; color: var(--ink-3); }
+    .ship-toggle { margin-top: 8px; white-space: nowrap; }
+    .ship-toggle[aria-expanded="true"] { border-color: var(--accent); background: var(--accent-soft); }
+    tr.ship-row > td { background: #fafbfc; padding: 12px; }
+    .ship-box { display: grid; gap: 14px; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius); background: #fff; }
+    .ship-head { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
+    .ship-head h3 { margin: 0; font-size: 16px; }
+    .ship-head .ship-links { margin-inline-start: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+    .ship-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+    .ship-steps li { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font-size: 13px; min-width: 0; }
+    .ship-steps li b { display: block; font-size: 13px; }
+    .ship-steps li span { color: var(--ink-3); font-size: 12px; }
+    .ship-steps li.done { border-color: #b7e2c8; background: #f1faf4; }
+    .ship-steps li.done span { color: var(--ok); }
+    .ship-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    .ship-fields .field { margin: 0; min-width: 0; }
+    .ship-fields input { width: 100%; }
+    .ship-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .ship-pay { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; padding-top: 12px; border-top: 1px solid var(--line); }
+    .ship-msg { font-size: 13px; font-weight: 600; }
+    .ship-msg.ok { color: var(--ok); }
+    .ship-msg.bad { color: var(--bad); }
+    /* Embroidery with a printed side: both ways it's made, each with its instructions. */
+    .method-step { margin-top: 4px; }
+    /* Number boxes ([data-num]) with something that isn't a number in them. An empty box that must be filled (an
+       expense's amount) only once the admin tried to send it, not red from the start or after an expense is added. */
+    #dash input[data-num]:not([required]):invalid, #dash input[data-num][required]:user-invalid { border-color: var(--bad); }
+    @media (max-width: 960px) { .ship-fields { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 700px) {
+      #tab-orders .orders-card { overflow: visible !important; background: transparent; border: 0; box-shadow: none; }
+      #tab-orders table.orders, #tab-orders table.orders tbody, #tab-orders table.orders tr, #tab-orders table.orders td { display: block; width: 100%; }
+      #tab-orders table.orders thead { display: none; }
+      #tab-orders table.orders tr.order-row { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); margin-top: 10px; padding: 4px 0; }
+      #tab-orders table.orders tr.order-row > td { border: 0; padding: 6px 14px; }
+      #tab-orders table.orders tr.order-row > td[data-label]::before { content: attr(data-label); display: block; font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 2px; }
+      #tab-orders table.orders tr.ship-row > td { padding: 0; background: transparent; border: 0; }
+      #tab-orders table.orders tr.ship-row .ship-box { border-top: 0; border-radius: 0 0 var(--radius) var(--radius); margin-top: -8px; }
+      #tab-orders table.orders tr.order-row.open { border-radius: var(--radius) var(--radius) 0 0; }
+      .ship-steps { grid-template-columns: 1fr 1fr; }
+      .ship-fields { grid-template-columns: 1fr; }
+      .ship-actions .btn { flex: 1 1 auto; }
+      .ship-head .ship-links { margin-inline-start: 0; }
+    }
+  </style>
+</head>
+<body data-title-key="admin.pageTitle">
+  <header class="site-header">
+    <div class="container inner">
+      <a class="brand" href="/" aria-label="إبداع · ebda3"><img class="brand-logo brand-ar" data-logo-lang="ar" data-logo-src="/img/logo-ar-header.svg" alt="إبداع" width="61" height="40"><img class="brand-logo brand-en" data-logo-lang="en" data-logo-src="/img/logo-en-header.svg" alt="ebda3" width="98" height="40"></a><script>(function(){var l=document.documentElement.lang==='en'?'en':'ar';document.querySelectorAll('.brand img[data-logo-src]').forEach(function(i){if(i.getAttribute('data-logo-lang')===l)i.src=i.getAttribute('data-logo-src')})})()</script>
+      <span class="muted small" data-i18n="admin.production"></span>
+      <nav>
+        <button class="btn btn-sm lang-toggle" data-lang-toggle data-i18n="lang.other"></button>
+        <details class="me-menu" id="me-menu" hidden>
+          <summary class="btn btn-sm" id="me-btn" data-i18n-title="me.menu"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg><span class="pm-who" id="admin-who"></span></summary>
+          <div class="card me-pop">
+            <p class="small me-who" id="me-who"></p>
+            <button class="btn btn-sm btn-block" type="button" id="me-pw" hidden data-i18n="me.changePw"></button>
+          </div>
+        </details>
+        <button class="btn btn-sm" id="logout" hidden data-i18n="admin.signOut"></button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <form class="card login" id="login" hidden>
+      <h2 id="login-title" data-i18n="login.title"></h2>
+      <p class="muted small" id="login-text" data-i18n="login.text"></p>
+      <div class="field" id="username-field"><label for="username" data-i18n="login.username"></label><input type="text" id="username" autocomplete="username" dir="ltr" autocapitalize="off" spellcheck="false" maxlength="30" aria-describedby="login-hint"><p class="muted small login-hint" id="login-hint" data-i18n="login.hint"></p></div>
+      <div class="field"><label for="password" data-i18n="admin.password"></label><input type="password" id="password" autocomplete="current-password" dir="ltr" required></div>
+      <button class="btn btn-dark btn-block" type="submit" data-i18n="admin.signIn"></button>
+    </form>
+
+    <form class="card login" id="setup" hidden novalidate>
+      <h2 data-i18n="setup.title"></h2>
+      <p class="muted small" data-i18n="setup.text"></p>
+      <div class="field"><label for="setup-pw" data-i18n="setup.pw"></label><input type="password" id="setup-pw" autocomplete="new-password" dir="ltr" minlength="10" maxlength="200" required></div>
+      <div class="field"><label for="setup-pw2" data-i18n="setup.again"></label><input type="password" id="setup-pw2" autocomplete="new-password" dir="ltr" minlength="10" maxlength="200" required></div>
+      <p class="ro-err" id="setup-err" role="alert" hidden></p>
+      <button class="btn btn-dark btn-block" type="submit" data-i18n="setup.save"></button>
+    </form>
+    <div class="card login" id="setup-done" hidden>
+      <h2 data-i18n="setup.title"></h2>
+      <p class="ro-ok" id="setup-done-text" role="status"></p>
+      <a class="btn btn-dark btn-block" href="/admin" id="setup-go" data-i18n="setup.signIn"></a>
+    </div>
+
+    <div id="dash" hidden>
+      <p class="notice me-emergency" id="emergency-bar" role="note" hidden data-i18n="me.emergency"></p>
+      <p class="notice" id="weak-pw" hidden data-i18n="admin.weakPw" style="margin:0 0 12px"></p>
+      <div class="page-head" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <h1 style="margin:0" id="dash-title" data-i18n="admin.queueTitle"></h1>
+        <div class="tabs" style="margin:0;margin-inline-start:auto">
+          <button class="btn btn-sm active" data-tab="queue" data-i18n="admin.tabQueue"></button>
+          <button class="btn btn-sm rv-tab" data-tab="review"><span data-i18n="rv.tab"></span><span class="rv-count" id="rv-count" hidden></span></button>
+          <button class="btn btn-sm" data-tab="orders" data-i18n="admin.tabOrders"></button>
+          <button class="btn btn-sm" data-tab="film" data-i18n="admin.tabFilm"></button>
+          <button class="btn btn-sm" data-tab="library" data-i18n="lib.tab"></button>
+          <button class="btn btn-sm" data-tab="houses" data-i18n="houses.tab"></button>
+          <button class="btn btn-sm" data-tab="accounts" data-i18n="acc.tab"></button>
+          <button class="btn btn-sm" data-tab="coupons" data-i18n="cp.tab"></button>
+          <button class="btn btn-sm" data-tab="customers" data-i18n="cu.tab"></button>
+          <button class="btn btn-sm" data-tab="products" data-i18n="pm.tab"></button>
+          <button class="btn btn-sm" data-tab="preview" data-i18n="pv.tab"></button>
+          <button class="btn btn-sm rv-tab" data-tab="rights"><span data-i18n="tk.tab"></span><span class="rv-count" id="tk-count" hidden></span></button>
+          <button class="btn btn-sm" data-tab="staff" hidden data-i18n="staff.tab"></button>
+          <button class="btn btn-sm rv-tab" data-tab="approvals" hidden><span data-i18n="ap.tab" id="ap-tab-label"></span><span class="rv-count ap-count" id="ap-count" hidden></span></button>
+          <button class="btn btn-sm" data-tab="activity" hidden data-i18n="act.tab"></button>
+          <button class="btn btn-sm" data-tab="backup" hidden data-i18n="bk.tab"></button>
+        </div>
+      </div>
+
+      <section id="tab-queue">
+        <div class="stats" id="stats"></div>
+        <div id="rv-queue-note"></div>
+        <h2 style="font-size:18px" data-i18n="admin.onPress"></h2>
+        <div id="current"></div>
+        <h2 style="font-size:18px;margin-top:28px" data-i18n="admin.upNext"></h2>
+        <div class="queue-list" id="up-next"></div>
+        <h2 style="font-size:18px;margin-top:28px" data-i18n="admin.toShip"></h2>
+        <div class="queue-list" id="to-ship"></div>
+      </section>
+
+      <section id="tab-review" hidden>
+        <div class="card rv-intro">
+          <h2 data-i18n="rv.title"></h2>
+          <p class="muted small" data-i18n="rv.help"></p>
+          <p class="rv-screen-note small" data-i18n="rv.screenNote"></p>
+        </div>
+        <div class="rv-list" id="rv-list"></div>
+      </section>
+
+      <section id="tab-film" hidden>
+        <div class="card" style="padding:18px;margin-bottom:14px">
+          <h2 style="font-size:18px;margin-bottom:6px" data-i18n="admin.filmTitle"></h2>
+          <p class="muted small" style="margin:0 0 12px;line-height:1.6" data-i18n="admin.filmText"></p>
+          <div class="row" style="flex-wrap:wrap">
+            <button class="btn btn-primary shrink" id="film-build" data-i18n="admin.filmBuild"></button>
+            <span class="small" id="film-msg" style="color:var(--ok);font-weight:600"></span>
+          </div>
+        </div>
+        <div class="queue-list" id="film-list"></div>
+      </section>
+
+      <section id="tab-library" hidden>
+        <div id="lib-up"></div>
+        <div class="card rd-rule" id="lib-rule" hidden>
+          <label class="rd-switch">
+            <input type="checkbox" id="lib-limit" role="switch">
+            <span class="rd-switch-ui" aria-hidden="true"></span>
+            <span class="rd-switch-text"><b data-i18n="rd.rule"></b><span class="muted small" data-i18n="rd.ruleHelp"></span><span class="small rd-rule-now" id="lib-rule-now"></span></span>
+          </label>
+        </div>
+        <form class="card lib-add" id="lib-add">
+          <h2 style="font-size:16px;margin:0 0 4px" data-i18n="lib.addTitle"></h2>
+          <p class="muted small" style="margin:0 0 10px;line-height:1.6" data-i18n="lib.addHelp"></p>
+          <div class="lib-form">
+            <div class="field"><label for="lib-share" data-i18n="lib.share"></label><input type="url" id="lib-share" dir="ltr" placeholder="https://…/s/…" required></div>
+            <div class="field"><label for="lib-name-ar" data-i18n="lib.nameAr"></label><input type="text" id="lib-name-ar" maxlength="60" dir="rtl"></div>
+            <div class="field"><label for="lib-name-en" data-i18n="lib.nameEn"></label><input type="text" id="lib-name-en" maxlength="60" dir="ltr"></div>
+            <div class="field"><label for="lib-cat" data-i18n="lib.category"></label><select id="lib-cat"></select></div>
+          </div>
+          <div class="row" style="flex-wrap:wrap;gap:10px;align-items:center">
+            <button class="btn btn-primary shrink" type="submit" data-i18n="lib.add"></button>
+            <a class="btn shrink" href="/designs" target="_blank" rel="noopener" data-i18n="lib.viewShop"></a>
+            <span class="small" id="lib-msg"></span>
+          </div>
+        </form>
+        <div class="card rd-top">
+          <h2 class="rd-h" data-i18n="rd.listTitle"></h2>
+          <p class="muted small rd-help" data-i18n="rd.listHelp"></p>
+          <div class="chips rd-chips" id="lib-chips" role="group" data-i18n-aria="rd.filter"></div>
+          <div class="rd-tools">
+            <input type="search" id="lib-q" autocomplete="off" maxlength="60" data-i18n-placeholder="rd.search" data-i18n-aria="rd.search">
+            <select id="lib-fcat" data-i18n-aria="rd.category"></select>
+            <select id="lib-fart" data-i18n-aria="rd.art"><option value="" data-i18n="rd.art.any"></option><option value="yes" data-i18n="rd.art.yes"></option><option value="no" data-i18n="rd.art.no"></option></select>
+            <select id="lib-sort" data-i18n-aria="rd.sort"><option value="new" data-i18n="rd.sort.new"></option><option value="old" data-i18n="rd.sort.old"></option><option value="name" data-i18n="rd.sort.name"></option></select>
+          </div>
+        </div>
+        <div class="rd-shown">
+          <p class="muted small rd-count" id="lib-count" aria-live="polite"></p>
+          <div class="rd-shown-acts" id="lib-all"></div>
+        </div>
+        <div class="rd-list" id="lib-list"></div>
+        <div class="rd-bar" id="lib-bar" hidden></div>
+      </section>
+
+      <section id="tab-houses" hidden>
+        <p class="notice" id="houses-email-off" hidden data-i18n="houses.emailOff" style="margin:0 0 12px"></p>
+        <form class="card house-form" id="house-form">
+          <h2 style="font-size:16px;margin:0 0 4px" id="house-form-title" data-i18n="houses.addTitle"></h2>
+          <p class="muted small" style="margin:0 0 10px;line-height:1.6" data-i18n="houses.addHelp"></p>
+          <input type="hidden" id="house-id">
+          <div class="lib-form">
+            <div class="field"><label for="house-name" data-i18n="houses.name"></label><input type="text" id="house-name" dir="auto" maxlength="80" required></div>
+            <div class="field"><label for="house-email" data-i18n="houses.email"></label><input type="email" id="house-email" maxlength="120" dir="ltr" placeholder="name@example.com"></div>
+            <div class="field"><label for="house-wa" data-i18n="houses.whatsapp"></label><input type="tel" id="house-wa" maxlength="24" dir="ltr" placeholder="01012345678"></div>
+            <div class="field"><label for="house-prefer" data-i18n="houses.prefer"></label><select id="house-prefer"><option value="email" data-i18n="houses.byEmail"></option><option value="whatsapp" data-i18n="houses.byWhatsApp"></option></select></div>
+          </div>
+          <div class="field"><label for="house-notes" data-i18n="houses.notes"></label><input type="text" id="house-notes" dir="auto" maxlength="300"></div>
+          <div class="row" style="flex-wrap:wrap;gap:10px;align-items:center">
+            <button class="btn btn-primary shrink" type="submit" id="house-save" data-i18n="houses.save"></button>
+            <button class="btn shrink" type="button" id="house-cancel" hidden data-i18n="houses.cancel"></button>
+            <span class="small" id="house-msg"></span>
+          </div>
+        </form>
+        <div class="queue-list" id="house-list"></div>
+        <div class="card" style="padding:18px;margin-top:18px">
+          <h2 style="font-size:16px;margin:0 0 4px" data-i18n="houses.mapTitle"></h2>
+          <p class="muted small" style="margin:0 0 12px;line-height:1.6" data-i18n="houses.mapHelp"></p>
+          <div id="house-map"></div>
+        </div>
+      </section>
+
+      <section id="tab-accounts" hidden>
+        <div class="tabs acc-subtabs">
+          <button class="btn btn-sm active" data-acc-view="overview" data-i18n="acc.overview"></button>
+          <button class="btn btn-sm" data-acc-view="prices" data-i18n="acc.prices"></button>
+          <button class="btn btn-sm" data-acc-view="expenses" data-i18n="acc.expenses"></button>
+        </div>
+
+        <div id="acc-overview">
+          <div class="card acc-period">
+            <div class="chips" id="acc-periods"></div>
+            <div class="acc-custom" id="acc-custom" hidden>
+              <label class="small"><span data-i18n="acc.from"></span> <input type="date" id="acc-from"></label>
+              <label class="small"><span data-i18n="acc.to"></span> <input type="date" id="acc-to"></label>
+            </div>
+            <p class="notice small acc-range-msg" id="acc-range-msg" role="alert" hidden><span data-i18n="acc.rangeBackwards"></span> <button class="btn btn-sm" type="button" id="acc-range-swap" data-i18n="acc.swapDates"></button></p>
+            <button class="btn btn-sm" id="acc-csv" data-i18n="acc.csv"></button>
+          </div>
+          <p class="notice" id="acc-missing" hidden style="margin:0 0 12px"></p>
+          <div class="stats acc-stats" id="acc-stats"></div>
+          <div class="card acc-ship">
+            <label for="acc-ship-cost"><strong data-i18n="acc.shipCost"></strong><br><span class="muted small" data-i18n="acc.shipCostHelp"></span></label>
+            <div class="row" style="gap:8px;flex:0 0 auto"><input type="text" inputmode="decimal" autocomplete="off" id="acc-ship-cost" data-num data-need data-min="0" style="width:120px" dir="ltr"><button class="btn btn-sm" id="acc-ship-save" data-i18n="houses.save"></button></div>
+          </div>
+          <h2 class="acc-h" data-i18n="acc.byProduct"></h2>
+          <div class="card" style="overflow-x:auto"><table class="orders acc-table" id="acc-products"></table></div>
+          <h2 class="acc-h" data-i18n="acc.ordersTitle"></h2>
+          <p class="muted small" data-i18n="acc.ordersHelp" style="margin:-4px 0 10px"></p>
+          <div class="card" style="overflow-x:auto"><table class="orders acc-table" id="acc-orders"></table></div>
+        </div>
+
+        <div id="acc-prices" hidden>
+          <p class="muted small" id="acc-prices-help" style="line-height:1.7;margin:0 0 12px" data-i18n="acc.pricesHelp"></p>
+          <div id="acc-price-list"></div>
+        </div>
+
+        <div id="acc-expenses" hidden>
+          <form class="card acc-exp-form" id="acc-exp-form">
+            <h2 style="font-size:16px;margin:0 0 10px" data-i18n="acc.addExpense"></h2>
+            <div class="lib-form">
+              <div class="field"><label for="exp-date" data-i18n="acc.date"></label><input type="date" id="exp-date" required></div>
+              <div class="field"><label for="exp-cat" data-i18n="acc.category"></label><select id="exp-cat"></select></div>
+              <div class="field"><label for="exp-desc" data-i18n="acc.description"></label><input type="text" id="exp-desc" dir="auto" maxlength="200"></div>
+              <div class="field"><label for="exp-amount" data-i18n="acc.amount"></label><input type="text" inputmode="decimal" autocomplete="off" id="exp-amount" data-num data-min="0.01" required dir="ltr"></div>
+            </div>
+            <div class="row" style="gap:10px;align-items:center"><button class="btn btn-primary shrink" type="submit" data-i18n="acc.add"></button><span class="small" id="exp-msg"></span></div>
+          </form>
+          <p class="muted small" id="acc-exp-period" style="margin:14px 0 8px"></p>
+          <div class="card" style="overflow-x:auto"><table class="orders acc-table" id="acc-exp-list"></table></div>
+        </div>
+      </section>
+
+      <section id="tab-preview" hidden></section>
+
+      <section id="tab-rights" hidden></section>
+
+      <section id="tab-staff" hidden></section>
+
+      <section id="tab-approvals" hidden></section>
+
+      <section id="tab-activity" hidden></section>
+      <section id="tab-backup" hidden></section>
+
+      <section id="tab-coupons" hidden>
+        <form class="card house-form" id="cp-form">
+          <h2 style="font-size:16px;margin:0 0 4px" id="cp-form-title" data-i18n="cp.addTitle"></h2>
+          <p class="muted small" style="margin:0 0 10px;line-height:1.6" data-i18n="cp.help"></p>
+          <input type="hidden" id="cp-id">
+          <div class="lib-form">
+            <div class="field"><label for="cp-code" data-i18n="cp.code"></label><input type="text" id="cp-code" maxlength="24" dir="ltr" required style="text-transform:uppercase" placeholder="EID20"></div>
+            <div class="field"><label for="cp-type" data-i18n="cp.type"></label><select id="cp-type"><option value="percent" data-i18n="cp.percent"></option><option value="fixed" data-i18n="cp.fixed"></option><option value="freeship" data-i18n="cp.freeship"></option></select></div>
+            <div class="field" id="cp-value-f"><label for="cp-value" data-i18n="cp.value"></label><input type="text" inputmode="decimal" autocomplete="off" id="cp-value" data-num data-min="0.01" dir="ltr"></div>
+            <div class="field" id="cp-max-f"><label for="cp-max" data-i18n="cp.maxDiscount"></label><input type="text" inputmode="decimal" autocomplete="off" id="cp-max" data-num data-min="0" dir="ltr"></div>
+            <div class="field"><label for="cp-min" data-i18n="cp.minOrder"></label><input type="text" inputmode="decimal" autocomplete="off" id="cp-min" data-num data-min="0" dir="ltr"></div>
+            <div class="field"><label for="cp-uses" data-i18n="cp.maxUses"></label><input type="text" inputmode="numeric" autocomplete="off" id="cp-uses" data-num data-min="1" data-whole dir="ltr"></div>
+            <div class="field"><label for="cp-per" data-i18n="cp.perCustomer"></label><input type="text" inputmode="numeric" autocomplete="off" id="cp-per" data-num data-min="1" data-whole dir="ltr"></div>
+            <div class="field"><label for="cp-start" data-i18n="cp.startsOn"></label><input type="date" id="cp-start"></div>
+            <div class="field"><label for="cp-end" data-i18n="cp.endsOn"></label><input type="date" id="cp-end"></div>
+          </div>
+          <div class="field"><label data-i18n="cp.appliesTo"></label><div class="chip-row" id="cp-cats"></div><p class="muted small" style="margin:6px 0 0" data-i18n="cp.appliesHelp"></p></div>
+          <div class="field"><label for="cp-note" data-i18n="cp.note"></label><input type="text" id="cp-note" dir="auto" maxlength="200"></div>
+          <label class="check" style="margin-bottom:10px"><input type="checkbox" id="cp-active" checked> <span data-i18n="cp.active"></span></label>
+          <label class="check" style="margin-bottom:4px"><input type="checkbox" id="cp-auto"> <span data-i18n="cp.auto"></span></label>
+          <p class="muted small" style="margin:0 0 10px" data-i18n="cp.autoHelp"></p>
+          <div class="row" style="flex-wrap:wrap;gap:10px;align-items:center">
+            <button class="btn btn-primary shrink" type="submit" data-i18n="houses.save"></button>
+            <button class="btn shrink" type="button" id="cp-cancel" hidden data-i18n="houses.cancel"></button>
+            <span class="small" id="cp-msg"></span>
+          </div>
+        </form>
+        <div class="queue-list" id="cp-list"></div>
+      </section>
+
+      <section id="tab-customers" hidden>
+        <div class="card" style="padding:16px;margin-bottom:12px">
+          <h2 style="font-size:16px;margin:0 0 4px" data-i18n="cu.title"></h2>
+          <p class="muted small" id="cu-help" style="margin:0 0 10px;line-height:1.6" data-i18n="cu.help"></p>
+          <input type="search" id="cu-q" autocomplete="off" maxlength="80" data-i18n-placeholder="cu.search" style="max-width:360px">
+          <span class="small muted" id="cu-count" style="margin-inline-start:10px"></span>
+        </div>
+        <div class="queue-list" id="cu-list"></div>
+      </section>
+
+      <section id="tab-products" hidden>
+        <div id="pm-root"></div>
+      </section>
+
+      <section id="tab-orders" hidden>
+        <div class="card notify-card" id="notify-card">
+          <div class="notify-head">
+            <h2 style="font-size:16px;margin:0" data-i18n="notify.title"></h2>
+            <button class="btn btn-sm" id="notify-test" data-i18n="notify.test"></button>
+          </div>
+          <div class="notify-list" id="notify-status"></div>
+          <p class="muted small" id="notify-msg" style="margin:6px 0 0"></p>
+        </div>
+        <div id="order-filters"></div>
+        <div class="card orders-card" style="overflow-x:auto">
+          <table class="orders">
+            <thead><tr><th data-i18n="admin.col.order"></th><th data-i18n="admin.col.customer"></th><th data-i18n="admin.col.items"></th><th data-i18n="admin.col.total" id="orders-total-col"></th><th data-i18n="admin.col.status"></th><th data-i18n="notify.col"></th></tr></thead>
+            <tbody id="orders"></tbody>
+          </table>
+          <datalist id="ship-couriers"></datalist>
+        </div>
+        <div id="orders-more" hidden></div>
+      </section>
+    </div>
+  </main>
+
+  <script src="/js/i18n.js"></script>
+  <script src="/js/i18n-admin-shipping.js"></script>
+  <script src="/js/i18n-review.js"></script>
+  <script src="/js/i18n-admin-products.js"></script>
+  <script src="/js/i18n-admin-photo-product.js"></script>
+  <script src="/js/i18n-admin-library.js"></script>
+  <script src="/js/i18n-admin-preview.js"></script>
+  <script src="/js/i18n-admin-uploads.js"></script>
+  <script src="/js/i18n-admin-rights.js"></script>
+  <script src="/js/i18n-admin-threads.js"></script>
+  <script src="/js/i18n-admin-more.js"></script>
+  <script src="/js/i18n-admin-roles.js"></script>
+  <script src="/js/i18n-admin-backup.js"></script>
+  <script src="/js/common.js"></script>
+  <script src="/js/admin-roles.js"></script>
+  <script src="/js/pack-prices.js"></script>
+  <script src="/js/drinkware-geom.js"></script>
+  <script src="/js/calib-card-layout.js"></script>
+  <script src="/js/calib-detect.js"></script>
+  <script src="/js/drinkware-measure.js"></script>
+  <script src="/js/admin-photo-product.js"></script>
+  <script src="/js/admin-products.js"></script>
+  <script src="/js/admin-preview.js"></script>
+  <script src="/js/admin-uploads.js"></script>
+  <script src="/js/admin-rights.js"></script>
+  <script src="/js/admin-staff.js"></script>
+  <script src="/js/admin-approvals.js"></script>
+  <script src="/js/admin-activity.js"></script>
+  <script src="/js/admin-backup.js"></script>
+  <script src="/js/admin-order-filters.js"></script>
+  <script src="/js/admin.js"></script>
+</body>
+</html>

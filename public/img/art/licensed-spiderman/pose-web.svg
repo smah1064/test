@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800" viewBox="0 0 600 800">
+<!-- PLACEHOLDER for licensed artwork slot "pose-web". Replace this file with the approved artwork (same name, or change the file in src/library-packs/licensed-spiderman.js). -->
+<rect x="8" y="8" width="584" height="784" rx="24" fill="#eef0f4" stroke="#8a93a3" stroke-width="8" stroke-dasharray="28 18"/>
+<path d="M40 40L560 760M560 40L40 760" stroke="#d5d9e1" stroke-width="6"/>
+<text x="300" y="386.6" font-family="Arial, sans-serif" font-weight="700" font-size="67" fill="#5b6475" text-anchor="middle">CHARACTER POSE 2</text>
+<text x="300" y="463.65" font-family="Arial, sans-serif" font-size="47" fill="#5b6475" text-anchor="middle">PLACEHOLDER · Web-shooting</text>
+</svg>

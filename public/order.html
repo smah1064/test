@@ -1,0 +1,699 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>إبداع · ebda3</title>
+  <link rel="icon" href="/favicon.svg?v=ebda3" type="image/svg+xml">
+  <link rel="icon" href="/favicon.ico?v=ebda3" sizes="any">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=ebda3">
+  <link rel="manifest" href="/site.webmanifest?v=ebda3">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="إبداع">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="theme-color" content="#FAFAF7">
+  <meta name="description" content="إبداع: اطبع تصميمك على تيشيرتات، مجات، كروت، هدايا وأكتر. قطعة واحدة أو كمية، وتوصيل لكل مصر.">
+  <meta property="og:site_name" content="إبداع · ebda3">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="إبداع · ebda3">
+  <meta property="og:description" content="اطبع تصميمك على تيشيرتات، مجات، كروت، هدايا وأكتر. قطعة واحدة أو كمية، وتوصيل لكل مصر.">
+  <meta property="og:image" content="https://ebda3.me/img/og-ebda3.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <script>(function(){var l;try{l=localStorage.getItem('pod-lang')}catch(e){}l=l==='en'?'en':'ar';var d=document.documentElement;d.lang=l;d.dir=l==='ar'?'rtl':'ltr'})()</script>
+  <link rel="stylesheet" href="/fonts/fonts.css">
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/aftercare.css">
+  <link rel="stylesheet" href="/css/proof.css">
+  <style>
+    /* Just ordered: the delivery day and the way back to this page come first. */
+    .placed { margin-bottom: 16px; padding: 16px 18px; border-color: #9fd6b6; background: #f6fbf8; }
+    .placed h2 { font-size: 19px; margin: 0 0 6px; }
+    /* "Save your orders" (a guest's order kept on a new account): under the order, one line that opens on a tap. */
+    .acct-offer { margin: 16px 0; padding: 0; }
+    .acct-offer h2 { font-size: 16px; margin: 0; }
+    .acct-offer-open { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 52px; padding: 12px 18px; border: 0; border-radius: inherit; background: none; color: var(--ink); font: inherit; font-weight: 800; text-align: start; cursor: pointer; }
+    .acct-offer-open:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .acct-offer-chev { flex: none; width: 9px; height: 9px; border-right: 2.5px solid currentColor; border-bottom: 2.5px solid currentColor; transform: translateY(-2px) rotate(45deg); }
+    .acct-offer-open[aria-expanded="true"] .acct-offer-chev { transform: translateY(2px) rotate(-135deg); }
+    #acct-offer-body { padding: 0 18px 16px; }
+    #acct-offer-body[hidden] { display: none; }
+    .acct-offer > .acct-offer-ok { padding: 16px 18px; }
+    /* Just ordered: the order's number and total first, in the thank-you box. */
+    .placed .placed-sum { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 14px; margin: 0 0 4px; font-size: 16px; }
+    .placed .placed-sum strong { font-size: 18px; }
+    .placed .placed-sum b { font-size: 18px; }
+    .acct-offer p { margin: 0 0 10px; line-height: 1.6; }
+    .acct-offer form { display: grid; gap: 6px; }
+    .acct-offer label { font-size: 14px; font-weight: 700; }
+    .acct-offer input { width: 100%; box-sizing: border-box; }
+    .acct-offer input[readonly] { background: #f6f7f9; }
+    .acct-offer-err { color: #b42318; font-size: 14px; min-height: 0; margin: 0; }
+    .acct-offer-err:empty { display: none; }
+    .acct-offer-ok { margin: 0; font-weight: 700; color: #15803d; }
+    .placed p { margin: 6px 0 0; line-height: 1.55; }
+    .placed-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .placed-actions .btn { flex: 1 1 220px; }
+    .dlv-top { margin: 8px 0 0; font-size: 16px; font-weight: 700; color: var(--ink); }
+    .placed .dlv-top { font-size: 17px; }
+  </style>
+</head>
+<body data-title-key="order.pageTitle">
+  <header class="site-header">
+    <div class="container inner">
+      <a class="brand" href="/" aria-label="إبداع · ebda3"><img class="brand-logo brand-ar" data-logo-lang="ar" data-logo-src="/img/logo-ar-header.svg" alt="إبداع" width="61" height="40"><img class="brand-logo brand-en" data-logo-lang="en" data-logo-src="/img/logo-en-header.svg" alt="ebda3" width="98" height="40"></a><script>(function(){var l=document.documentElement.lang==='en'?'en':'ar';document.querySelectorAll('.brand img[data-logo-src]').forEach(function(i){if(i.getAttribute('data-logo-lang')===l)i.src=i.getAttribute('data-logo-src')})})()</script>
+      <nav>
+        <a href="/#products" data-i18n="nav.products"></a>
+        <a href="/designs"><span class="nav-long" data-i18n="nav.designs"></span><span class="nav-short" data-i18n="nav.designsShort"></span></a>
+        <a href="/photos"><span class="nav-long" data-i18n="nav.photos"></span><span class="nav-short" data-i18n="nav.photosShort"></span></a>
+        <a class="nav-books" href="/?cat=kids#products"><span class="nav-long" data-i18n="nav.books"></span><span class="nav-short" data-i18n="nav.booksShort"></span></a>
+        <button type="button" class="site-search-btn" data-site-search aria-expanded="false" aria-controls="site-search" aria-label="دوّر" data-i18n-aria="search.open"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
+        <a class="cart-link" href="/cart"><span data-i18n="nav.cart"></span> <span class="badge" data-cart-count hidden>0</span></a>
+        <button class="btn btn-sm lang-toggle" data-lang-toggle data-i18n="lang.other"></button>
+      </nav>
+    </div>
+    <nav class="nav-chips" data-i18n-aria="nav.sections">
+      <a href="/#products" data-chip="products" data-i18n="nav.products"></a>
+      <a href="/designs" data-chip="designs" data-i18n="nav.designs"></a>
+      <a href="/photos" data-chip="photos" data-i18n="nav.photos"></a>
+      <a class="nav-books" href="/?cat=kids#products" data-chip="books" data-i18n="nav.books"></a>
+      <a href="/product?id=tshirt" data-chip="tshirt" data-i18n="nav.tshirts"></a>
+      <a href="/product?id=mug" data-chip="mug" data-i18n="nav.mugs"></a>
+    </nav>
+    <div class="site-search" id="site-search" hidden>
+      <form class="container site-search-form" role="search" action="/" autocomplete="off" data-i18n-aria="search.label">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input type="search" name="q" maxlength="60" enterkeyhint="search" autocomplete="off" data-i18n-placeholder="search.placeholder" data-i18n-aria="search.label">
+        <button type="button" class="site-search-close" data-site-search-close data-i18n-aria="search.close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      </form>
+      <div class="container site-search-results">
+        <ul class="site-search-list" data-i18n-aria="search.suggestions" hidden></ul>
+        <p class="site-search-none" role="status" data-i18n="search.none" hidden></p>
+      </div>
+    </div>
+  </header>
+
+  <main class="container" style="max-width: 820px;">
+    <div id="content"><div class="empty"><div class="spinner"></div></div></div>
+  </main>
+
+  <footer class="site-footer"><div class="container" data-i18n="footer"></div></footer>
+
+  <script src="/js/i18n.js"></script>
+  <script src="/js/i18n-aftercare.js"></script>
+  <script src="/js/i18n-proof.js"></script>
+  <script src="/js/common.js"></script>
+  <script src="/js/site-search.js"></script>
+  <script>
+    (async () => {
+      const { money, esc, t, tr } = POD;
+      const params = new URLSearchParams(location.search);
+      let remembered = false;
+      const content = document.getElementById('content');
+      const orderId = params.get('id') || '';
+      // The team's view (from the dashboard: a link that works for 30 minutes), or the customer's page and its key.
+      const team = /^[A-Za-z0-9_-]{20,600}\.[A-Za-z0-9_-]{43}$/.test(params.get('team') || '') ? params.get('team') : '';
+      let key = team ? '' : POD.orderKey(orderId, params.get('k'));
+      // Amounts on screen: the customer always; the team only when their role has them.
+      const showMoney = () => !(order && order.team && !order.team.amounts);
+      // Per-item print steps; the last one fills when the whole order is delivered.
+      const STEPS = ['queued', 'printing', 'printed', 'shipped', 'delivered'];
+      const TRACK = ['placed', 'production', 'printed', 'shipped', 'delivered'];
+      const ICONS = {
+        placed: '<path d="M6 2h9l5 5v15H6z"/><path d="M9 12h8M9 16h6"/>',
+        production: '<path d="M7 9V3h10v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M7 14h10v7H7z"/>',
+        printed: '<path d="M20 7 9 18l-5-5"/>',
+        shipped: '<path d="M2 6h12v10H2zM14 10h4l4 4v2h-8"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/>',
+        // (A box: plain items are packed, not printed.)
+        preparing: '<path d="M3 8l9-5 9 5v8l-9 5-9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/>',
+        delivered: '<path d="M3 10 12 3l9 7v11H3z"/><path d="m8.5 14.5 2.5 2.5 4.5-5"/>',
+      };
+      let order = null;
+      let error = null;
+      // "Order again" state, kept across the auto-refresh re-renders.
+      const reo = { busy: false, added: 0, skipped: null, error: null };
+      // Only some items again: the list being ticked (item ids), or null when it isn't open.
+      let picking = null;
+      // The shop's details (its WhatsApp number): asked again with the order while they couldn't load.
+      let shop = null;
+      const shopWa = () => (shop && shop.contact && shop.contact.whatsapp) || '';
+      // Arabic: "·" next to Arabic-Indic digits reads as the zero "٠" ("٥:٠٧ ص · …"), so items with numbers are
+      // separated with the Arabic comma there. English keeps the dot.
+      const SEP = () => (POD.lang === 'ar' ? '، ' : ' · ');
+      const listed = (s) => (POD.lang === 'ar' ? String(s).replace(/ · /g, '، ') : String(s));
+      /** "3 names": Arabic takes the plural for 3–10 («٣ أسماء»), the singular otherwise («١١ اسم»). */
+      const namesText = (n) => t(n % 100 >= 3 && n % 100 <= 10 ? 'cart.copies.few' : 'cart.copies', { n: POD.num(n) });
+      /** A WhatsApp chat with the shop, the order details already typed. */
+      function whatsappLink(o) {
+        const A = PODAftercare;
+        const items = o.items.map((it, i) => {
+          const parts = [tr(it.productName)];
+          if (A.showBreakdown(it)) parts.push(A.qtyText(it));
+          else parts.push(tr(it.color.name), tr(it.size.label));
+          if (A.isNameList(it)) parts.push(namesText(A.pieces(it)));
+          else if (A.pieces(it) > 1) parts.push(A.piecesText(A.pieces(it)));
+          return `${POD.num(i + 1)}. ${parts.join(SEP())}`;
+        }).join('\n');
+        const text = t('order.waMessage', { n: POD.orderNo(o.number), items, total: money(o.total), name: o.customer.name });
+        return `https://wa.me/${shopWa()}?text=${encodeURIComponent(text)}`;
+      }
+      /** When the order was placed, for the line under its number: "25 November 2026 at 10:18" / "٢٥ نوفمبر ٢٠٢٦ في ١٠:١٨ ص"
+       *  (no comma inside, where the Arabic line's own commas part what it says). */
+      const placedOn = (iso) => new Date(iso).toLocaleString(POD.lang === 'ar' ? 'ar-EG' : 'en-GB', { dateStyle: 'long', timeStyle: 'short' });
+      /** 'YYYY-MM-DD' as a calendar day (no time-zone shift). */
+      function day(ymd) {
+        const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(ymd || '');
+        if (!m) return '';
+        return new Date(+m[1], m[2] - 1, +m[3]).toLocaleDateString(POD.lang === 'ar' ? 'ar-EG' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+      }
+      /** The day the order is expected: the courier's (set when it ships) once there is one, else the day promised at checkout. */
+      const dueDay = (o) => (o.shipment && /^\d{4}-\d{2}-\d{2}$/.test(o.shipment.eta || '') ? o.shipment.eta : (o.delivery && o.delivery.by) || null);
+      /** The five tracking steps with their times; worked out from the status when the server sends none. */
+      function steps(o) {
+        let list = Array.isArray(o.timeline) && o.timeline.length ? TRACK.map((step) => ({ step, at: (o.timeline.find((s) => s.step === step) || {}).at || null })) : null;
+        let cur;
+        if (list) {
+          cur = list.reduce((m, s, i) => (s.at ? i : m), 0);
+        } else {
+          const printed = o.items.length && o.items.every((i) => ['printed', 'shipped'].includes(i.status));
+          cur = { received: 0, in_production: printed ? 2 : 1, shipped: 3, delivered: 4 }[o.status] || 0;
+          list = TRACK.map((step, i) => ({ step, at: i === 0 ? o.createdAt : null }));
+        }
+        if (o.status === 'delivered') cur = 4;
+        return list.map((s, i) => ({ ...s, done: i <= cur, current: i === cur }));
+      }
+      /** Nothing printed in the order (plain glasses only): its steps have no printing (QA 28 Nov). */
+      const allPlain = (o) => o.items.length > 0 && o.items.every((i) => i.kind === 'blank');
+      function timelineHtml(o) {
+        let list = steps(o);
+        const plainOrder = allPlain(o);
+        if (plainOrder) {
+          // Placed → Being prepared → Shipped → Delivered ("Printed" folded into "Being prepared").
+          const printed = list.find((s) => s.step === 'printed');
+          list = list.filter((s) => s.step !== 'printed').map((s) => (s.step === 'production' && printed.current ? { ...s, current: true } : s));
+        }
+        const cur = list.find((s) => s.current);
+        return `
+          <section class="card track-card" aria-labelledby="track-h">
+            <h2 id="track-h">${esc(t('track.title'))}</h2>
+            <ol class="track">
+              ${list.map((s, i) => `
+              <li class="${s.done ? 'done' : ''}${s.current ? ' current' : ''}${list[i + 1] && list[i + 1].done ? ' lead' : ''}"${s.current ? ' aria-current="step"' : ''}>
+                <span class="track-dot"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[plainOrder && s.step === 'production' ? 'preparing' : s.step]}</svg></span>
+                <span class="track-text">
+                  <span class="track-lbl">${esc(t(plainOrder && s.step === 'production' ? 'track.preparing' : 'track.' + s.step))}</span>
+                  <span class="track-when">${s.at ? esc(POD.date(s.at)) : s.done ? '' : s.step === 'delivered' && dueDay(o) ? esc(t('track.expected', { date: POD.day(dueDay(o)) })) : esc(t('track.pending'))}</span>
+                </span>
+              </li>`).join('')}
+            </ol>
+            ${cur ? `<p class="track-hint"><strong>${esc(t('track.now'))}:</strong> ${esc(nowText(o, cur.step))}</p>` : ''}
+            ${shipmentHtml(o)}
+          </section>`;
+      }
+      /** The "Now:" line: what the order waits for while items are checked or wait for the customer's approval. */
+      function nowText(o, step) {
+        if (['placed', 'production'].includes(step) && o.status !== 'delivered') {
+          const waiting = o.items.filter((i) => i.status === 'awaiting_approval').length;
+          if (waiting) return waiting === 1 ? t('track.now.awaitingOne') : t('track.now.awaitingMany', { n: POD.num(waiting) });
+          if (o.items.some((i) => i.status === 'changes_requested')) return t('track.now.changes');
+          if (o.items.some((i) => i.status === 'review')) return t('track.now.review');
+          // Nothing printed in it (plain glasses only): no "printing starts soon" (QA 28 Nov).
+          if (step === 'placed' && o.items.length && o.items.every((i) => i.kind === 'blank')) return t('track.placed.hintStock');
+          if (step === 'production' && o.items.length && o.items.every((i) => i.kind === 'blank')) return t('track.preparing.hint');
+        }
+        return t('track.' + step + '.hint');
+      }
+      function shipmentHtml(o) {
+        const s = o.shipment;
+        if (!s || !(s.courier || s.trackingNumber || s.trackingUrl || s.eta || s.deliveredAt)) return '';
+        const url = s.trackingUrl && /^https?:\/\//i.test(s.trackingUrl) ? s.trackingUrl : null;
+        const delivered = o.status === 'delivered' || s.deliveredAt;
+        const rows = [
+          s.courier && [t('track.courier'), `<bdi>${esc(s.courier)}</bdi>`],
+          s.trackingNumber && [t('track.number'), `<span class="ship-num"><code dir="ltr">${esc(s.trackingNumber)}</code><button class="btn btn-sm" type="button" data-act="copy">${esc(t('track.copy'))}</button></span>`],
+          delivered && s.deliveredAt ? [t('track.deliveredOn'), esc(POD.date(s.deliveredAt))] : null,
+          !delivered && s.eta && day(s.eta) ? [t('track.eta'), `<strong>${esc(day(s.eta))}</strong>`] : null,
+        ].filter(Boolean);
+        return `
+          <div class="ship-box">
+            <h3>${esc(t('track.shipment'))}</h3>
+            ${rows.length ? `<dl>${rows.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${v}</dd></div>`).join('')}</dl>` : ''}
+            ${url ? `<a class="btn btn-sm btn-dark" href="${esc(url)}" target="_blank" rel="noopener">${esc(t('track.link'))} <span aria-hidden="true">↗</span></a>` : ''}
+          </div>`;
+      }
+      function reorderNotice() {
+        if (reo.error) return `<p class="notice reo-notice reo-bad" role="alert">${esc(reo.error)}</p>`;
+        if (!reo.skipped) return '';
+        return `
+          <div class="notice reo-notice${reo.added ? '' : ' reo-bad'}" role="status">
+            <p>${esc(reo.added ? POD.plural('track.reorderPartial', reo.added) : t('track.reorderNone'))}</p>
+            <ul>${PODAftercare.skippedLines(reo.skipped).map((l) => `<li>${esc(l)}</li>`).join('')}</ul>
+            ${reo.added ? `<a class="btn btn-sm btn-primary" href="/cart?added=1">${esc(t('track.goCart'))}</a>` : ''}
+          </div>`;
+      }
+
+      // Items the shop checks first, or that wait for the customer's OK on a new proof.
+      const REVIEW_STATES = ['review', 'awaiting_approval', 'changes_requested'];
+      /** The newest note about changes: the shop's request or the customer's own. */
+      function changesNote(item) {
+        const hist = Array.isArray(item.approvals) ? item.approvals : [];
+        for (let k = hist.length - 1; k >= 0; k--) {
+          const h = hist[k];
+          if (h && (h.action === 'changes' || h.action === 'rejected')) return h.note ? { note: h.note, mine: h.by === 'customer' } : null;
+        }
+        return item.review && item.review.note ? { note: item.review.note, mine: false } : null;
+      }
+      function proofStateHtml(item) {
+        if (!REVIEW_STATES.includes(item.status)) return '';
+        let body = '';
+        if (item.status === 'review') {
+          body = `<p>${esc(t('item.reviewHint'))}</p>`;
+        } else if (item.status === 'awaiting_approval') {
+          const url = item.proofUrl || item.proofLink;
+          const link = typeof url === 'string' && /^\/proof\?t=[\w-]+$/.test(url) ? url : null;
+          // (The proof page's "back to my order" then works on any phone: the link carries the order's key.)
+          body = `<p>${esc(t('item.awaitingHint'))}</p>${team ? '' : link ? `<a class="btn btn-sm btn-primary" href="${esc(link + (key ? `&k=${encodeURIComponent(key)}` : ''))}">${esc(t('item.openProof'))}</a>` : `<p>${esc(t('item.awaitingLinkSent'))}</p>`}`;
+        } else {
+          const n = changesNote(item);
+          // Editor-made items: the customer can make the change and send the new version themselves.
+          const editable = !team && item.kind === 'product' && /^[0-9a-f-]{36}$/i.test(item.designId || '');
+          const edit = editable ? `<p>${esc(t('item.editHint'))}</p><a class="btn btn-sm btn-primary" href="/editor?design=${encodeURIComponent(item.designId)}&revise=${encodeURIComponent(order.id + '.' + item.id)}${key ? `&k=${encodeURIComponent(key)}` : ''}">${esc(t('item.editResend'))}</a>` : '';
+          body = `${n ? `<p><strong>${esc(t(n.mine ? 'item.yourNote' : 'item.shopNote', { note: '\u2063' })).replace('\u2063', () => `<bdi>${esc(n.note)}</bdi>`)}</strong></p>` : ''}${edit}<p class="${editable ? 'muted small' : ''}">${esc(t(editable ? 'item.changesOrWait' : 'item.changesHint'))}</p>`;
+        }
+        return `<div class="item-proof-state ${item.status}">${body}</div>`;
+      }
+      /** The order's status as the customer reads it: "Waiting for you" while an item needs their answer
+       *  (the shop still counts the order as being checked). */
+      function shownStatus(o) {
+        if (o.status === 'in_review' && o.items.some((i) => i.status === 'awaiting_approval' || i.status === 'changes_requested')) return 'waiting_you';
+        return o.status;
+      }
+      function approvalHtml(item) {
+        const a = item.approval;
+        // A plain item has no proof to approve (QA 28 Nov).
+        if (!a || !a.at || item.kind === 'blank') return '';
+        // A new version waits for its own approval (or for changes): the old version's approval would mislead.
+        if (item.status === 'awaiting_approval' || item.status === 'changes_requested') return '';
+        if (item.status === 'review' && (item.approvals || []).some((h) => h && h.action === 'revised' && h.at > a.at)) return '';
+        // (The shop's own edit printed without asking: approved by the shop, not "you approved it". QA 25 Nov.)
+        return `<div class="item-approved"><span>✓ ${esc(t(a.via === 'shop-edit' ? 'item.approvedByShop' : 'item.approvedOn', { date: POD.date(a.at), v: POD.num(a.version || 1) }))}</span>${a.sample ? `<span class="item-sample">${esc(t('item.sampleFirst'))}</span>` : ''}</div>`;
+      }
+
+      function render() {
+        if (error && error.offline) {
+          // No signal, or the site busy: not "order not found". "Try again" (it is also tried again every 30 seconds).
+          content.innerHTML = `<div class="card empty" role="alert" style="margin:40px auto;max-width:560px"><h2>${esc(t('net.title'))}</h2><p class="muted">${esc(t('net.text'))}</p><button class="btn btn-primary" type="button" data-act="retry">${esc(t('net.retry'))}</button></div>`;
+          return;
+        }
+        if (error && error.code === 'orderLinkNeeded') {
+          // The order's number without its key (a forwarded or typed link): where the customer finds the right one.
+          content.innerHTML = `<div class="card empty" role="alert" style="margin:40px auto;max-width:560px"><h2>${esc(t('order.linkNeededTitle'))}</h2><p class="muted">${esc(error.message)}</p><div class="row" style="justify-content:center;gap:8px;flex-wrap:wrap"><a class="btn btn-primary" href="/account">${esc(t('order.toAccount'))}</a><a class="btn" href="/">${esc(t('order.back'))}</a></div></div>`;
+          return;
+        }
+        if (error && team && error.status === 401) {
+          content.innerHTML = `<div class="card empty" role="alert" style="margin:40px auto;max-width:560px"><h2>${esc(t('team.overTitle'))}</h2><p class="muted">${esc(error.message)}</p><a class="btn btn-primary" href="/admin">${esc(t('team.toAdmin'))}</a></div>`;
+          return;
+        }
+        if (error) {
+          // A missing order: the heading already says so; other refusals show their message.
+          content.innerHTML = `<div class="card empty" style="margin:40px auto;max-width:560px"><h2>${esc(t('order.notFound'))}</h2>${error.status === 404 ? '' : `<p class="muted">${esc(error.message)}</p>`}<a class="btn" href="/">${esc(t('order.back'))}</a></div>`;
+          return;
+        }
+        const o = order;
+        // The name and city as the customer typed them (Arabic, English or both): each in its own direction, so they are never scrambled.
+        const place = [o.customer.city ? `<bdi>${esc(o.customer.city)}</bdi>` : '', esc(tr(o.customer.governorate))].filter(Boolean).join(POD.lang === 'ar' ? '، ' : ', ');
+        const deliverTo = esc(t('order.deliverTo', { name: '\u2063', place: '\u2064' }))
+          .replace('\u2063', () => `<bdi>${esc(o.customer.name)}</bdi>`)
+          .replace('\u2064', () => place);
+        const delivered = o.status === 'delivered' || Boolean(o.shipment && o.shipment.deliveredAt);
+        // The promised day (express or standard), shown at the top until the order is delivered.
+        const arrives = o.delivery && dueDay(o) && !delivered
+          ? `<p class="dlv-top">🚚 ${esc(t('delivery.line', { speed: t(o.delivery.speed === 'express' ? 'delivery.express' : 'delivery.standard'), date: POD.day(dueDay(o)) }))}</p>` : '';
+        const isNew = !team && Boolean(params.get('new'));
+        const money$ = showMoney();
+        content.innerHTML = `
+          ${team ? teamBanner(o) : ''}
+          <div class="page-head">
+            ${isNew ? `
+            <section class="card placed" aria-labelledby="placed-h">
+              <h2 id="placed-h">${esc(t('order.placedTitle'))}</h2>
+              <p class="placed-sum"><strong>${esc(t('order.title', { n: POD.orderNo(o.number) }))}</strong>${money$ ? `<span>${esc(t('checkout.total'))}: <b>${esc(money(o.total))}</b></span>` : ''}</p>
+              ${arrives}
+              <p>${esc(t('order.keepLink'))}</p>
+              <div class="placed-actions">
+                <a class="btn btn-whatsapp" target="_blank" rel="noopener" href="${esc(selfWhatsapp(o))}">${esc(t('order.sendWa'))}</a>
+                <button class="btn" type="button" data-act="copy-link">${esc(t('order.copyLink'))}</button>
+              </div>
+              <p class="muted small">${esc(t('order.emailWhy'))}</p>
+            </section>` : ''}
+            <h1>${esc(t('order.title', { n: POD.orderNo(o.number) }))}</h1>
+            <p class="muted">${esc(listed(POD.plural('order.meta', o.items.length, { status: t('order.' + shownStatus(o)), date: placedOn(o.createdAt) })))}</p>
+            ${isNew ? '' : arrives}
+            ${team ? (money$ ? `<div class="order-actions"><a class="btn" href="/invoice?id=${encodeURIComponent(o.id)}&team=${encodeURIComponent(team)}">${esc(t('track.invoice'))}</a></div>` : '') : `
+            <div class="order-actions">
+              <a class="btn" href="${esc(POD.orderPath('invoice', o.id, key))}">${esc(t('track.invoice'))}</a>
+              <button class="btn" type="button" data-act="reorder" aria-expanded="${picking ? 'true' : 'false'}"${reo.busy ? ' disabled' : ''}>${esc(t(reo.busy ? 'track.reordering' : 'track.reorder'))}</button>
+              <span class="muted small">${esc(t('track.reorderNote'))}</span>
+            </div>
+            ${picking ? pickHtml(o) : ''}
+            ${reorderNotice()}`}
+          </div>
+          ${timelineHtml(o)}
+          <div class="card order-items" style="margin-top:16px">
+            ${o.items.map((item, i) => {
+              const status = delivered ? 'delivered' : item.status;
+              // (A plain item's bar has no printing step: queued or "printing" is being prepared, then ready. QA 28 Nov.)
+              const itemSteps = item.kind === 'blank' ? ['queued', 'printed', 'shipped', 'delivered'] : STEPS;
+              const reached = itemSteps.indexOf(item.kind === 'blank' && status === 'printing' ? 'queued' : status);
+              const pic = item.sides && item.sides[0] && item.sides[0].previewUrl;
+              // One design in several sizes / colours / quantities, or a name list.
+              const breakdown = PODAftercare.showBreakdown(item);
+              const names = PODAftercare.isNameList(item);
+              const pieces = PODAftercare.pieces(item);
+              // Plain items: no print side, "3 pieces", and prepared rather than printed (QA 28 Nov).
+              const plain = item.kind === 'blank';
+              const label = plain && ['queued', 'printing'].includes(status) ? 'item.preparing' : plain && status === 'printed' ? 'item.ready' : 'item.' + status;
+              return `
+              <div class="cart-item">
+                ${pic ? `<img src="${esc(pic)}" alt="">` : '<span></span>'}
+                <div>
+                  <h3>${POD.num(i + 1)}. ${esc(tr(item.productName))}</h3>
+                  <div class="meta">${breakdown ? '' : `${esc(tr(item.color.name))}${SEP()}${esc(tr(item.size.label))}${SEP()}`}${plain ? `<span class="cart-copies">${esc(PODAftercare.piecesText(pieces))}</span>` : esc((item.sides || []).map((s) => tr(s.name)).join(' + '))}${names ? `${SEP()}<span class="cart-copies">${esc(namesText(pieces))}</span>` : ''}</div>
+                  ${breakdown ? PODAftercare.qtyHtml(item) : ''}
+                  <div class="status-label st-${esc(status)}" style="margin-top:10px">${esc(t(label))}</div>
+                  ${delivered ? '' : proofStateHtml(item)}
+                  ${approvalHtml(item)}
+                  <div class="status-steps">${itemSteps.map((s, k) => `<div class="${k <= reached ? 'done' : ''}" title="${esc(t(plain && s === 'queued' ? 'item.preparing' : plain && s === 'printed' ? 'item.ready' : 'item.' + s))}"></div>`).join('')}</div>
+                  ${o.items.length > 1 && !team ? `<button class="btn btn-sm reo-one" type="button" data-act="reorder-item" data-item="${esc(item.id)}"${reo.busy ? ' disabled' : ''}>${esc(t('track.reorderItem'))}</button>` : ''}
+                </div>
+                <div class="price">${money$ ? `${esc(money(item.price))}${pieces > 1 && item.unitPrice && POD.packCopies(item.quantities) == null ? `<div class="qty-each">${esc(t('qty.each', { price: money(item.unitPrice) }))}</div>` : ''}` : ''}</div>
+              </div>`;
+            }).join('')}
+          </div>
+          <div class="card summary" style="margin-top:16px;position:static">
+            ${money$ ? `
+            <div class="line"><span>${esc(t('checkout.subtotal'))}</span><span>${esc(money(o.subtotal))}</span></div>
+            ${o.discount || o.coupon ? `<div class="line discount-line"><span>${esc(t('coupon.discount'))} <bdi dir="ltr">${esc(o.coupon || '')}</bdi></span><span>${o.discount ? '-' + esc(money(o.discount)) : esc(t('coupon.freeShipping'))}</span></div>` : ''}
+            ${shippingLines(o)}
+            <div class="line total"><span>${esc(t('checkout.total'))}</span><span>${esc(money(o.total))}</span></div>` : ''}
+            ${o.delivery && dueDay(o) && !delivered ? `<p class="dlv-expected">🚚 ${esc(t('delivery.line', { speed: t(o.delivery.speed === 'express' ? 'delivery.express' : 'delivery.standard'), date: POD.day(dueDay(o)) }))}</p>` : ''}
+            ${money$ && o.payment && o.payment.method === 'cod' && o.payment.status !== 'paid' && !delivered ? `<div class="pay-box${POD.payment.prepayOnly ? ' pay-box-ok' : ''}"><strong>${esc(t('order.payCod', { amount: money(o.total) }))}</strong><span>${esc(t('checkout.codText'))}</span></div>` : ''}
+            <p class="muted small" style="margin-bottom:0;overflow-wrap:anywhere">${deliverTo}</p>
+          </div>
+          ${POD.payment.prepayOnly && !team ? guaranteeHtml(o) : ''}
+          ${!team && (o.accountOffer || offerDone) ? '<div id="acct-offer-slot"></div>' : ''}
+          ${shopWa() && !team ? `<div class="order-wa"><p>${esc(t('order.waText'))}</p><a class="btn btn-whatsapp" id="order-wa" target="_blank" rel="noopener" href="${esc(whatsappLink(o))}">${esc(t('order.waButton'))}</a></div>` : ''}`;
+        placeOffer(o);
+      }
+
+      // ---------- The money-back guarantee (paying in advance only: src/payment-wording.js; owner's decision, 26 Nov) ----------
+      // How to use it: a photo and the order number on WhatsApp or by email, within 7 days of delivery.
+      function guaranteeHtml(o) {
+        return `<div class="card guar-card">
+            <strong>🛡️ ${esc(t('guar.badge'))}</strong>
+            <p>${esc(t('guar.orderText', { n: POD.orderNo(o.number) }))}</p>
+            <a href="/guarantee">${esc(t('guar.more'))}</a>
+          </div>`;
+      }
+
+      // ---------- "Save your orders": a guest's order kept on a new account (owner's OK, UX item 8, 26 Nov) ----------
+      // The mobile and name come from the order; only a password is typed. The card is one element kept across the
+      // 30-second refresh (put back in its place each time), so what is being typed stays, and so does the focus.
+      let offerEl = null;
+      let offerDone = false;
+      function offerHtml(o) {
+        if (offerDone) {
+          return `<p class="acct-offer-ok" role="status">${esc(t('offer.done'))} <a href="/account">${esc(t('offer.toAccount'))}</a></p>`;
+        }
+        // One line under the order until tapped; then why, and the password to choose (owner, 26 Nov).
+        return `<h2 id="acct-offer-h"><button type="button" class="acct-offer-open" id="acct-offer-open" aria-expanded="false" aria-controls="acct-offer-body"><span>${esc(t('offer.title'))}</span><span class="acct-offer-chev" aria-hidden="true"></span></button></h2>
+          <div id="acct-offer-body" hidden>
+          <p>${esc(t('offer.text'))}</p>
+          <form id="acct-offer-form" novalidate>
+            <label for="offer-phone">${esc(t('checkout.phone'))}</label>
+            <input id="offer-phone" type="tel" dir="ltr" value="${esc(POD.lang === 'ar' ? POD.arabicDigits(o.accountOffer.phone) : o.accountOffer.phone)}" readonly>
+            <label for="offer-pass">${esc(t('offer.password'))}</label>
+            <input id="offer-pass" type="password" autocomplete="new-password" minlength="8" required aria-describedby="offer-err">
+            <p class="acct-offer-err" id="offer-err" role="alert"></p>
+            <button class="btn btn-primary btn-block" type="submit">${esc(t('offer.save'))}</button>
+          </form>
+          </div>`;
+      }
+      /** "Save your orders" opened (true) or folded to its one line. */
+      function openOffer(el, open) {
+        const btn = el.querySelector('#acct-offer-open');
+        const body = el.querySelector('#acct-offer-body');
+        if (!btn || !body) return;
+        body.hidden = !open;
+        btn.setAttribute('aria-expanded', String(open));
+      }
+      document.addEventListener('click', (e) => {
+        const btn = e.target.closest && e.target.closest('#acct-offer-open');
+        if (!btn || !offerEl) return;
+        const open = btn.getAttribute('aria-expanded') !== 'true';
+        openOffer(offerEl, open);
+        if (open) offerEl.querySelector('#offer-pass').focus();
+      });
+      function placeOffer(o) {
+        const slot = document.getElementById('acct-offer-slot');
+        if (!slot) return;
+        const lang = POD.lang;
+        if (!offerEl || offerEl.dataset.lang !== lang || (offerDone && !offerEl.querySelector('.acct-offer-ok'))) {
+          const typed = offerEl && offerEl.querySelector('#offer-pass') ? offerEl.querySelector('#offer-pass').value : '';
+          const wasOpen = Boolean(offerEl && offerEl.querySelector('#acct-offer-open[aria-expanded="true"]'));
+          offerEl = document.createElement('section');
+          offerEl.className = 'card acct-offer';
+          offerEl.setAttribute('aria-labelledby', 'acct-offer-h');
+          offerEl.dataset.lang = lang;
+          offerEl.innerHTML = offerHtml(o);
+          const pass = offerEl.querySelector('#offer-pass');
+          if (pass) pass.value = typed;
+          // (A language switch keeps it open, as what is typed is kept.)
+          openOffer(offerEl, wasOpen || Boolean(typed));
+        }
+        const focused = offerEl.contains(document.activeElement) ? document.activeElement : null;
+        slot.replaceWith(offerEl);
+        if (focused && document.activeElement !== focused) focused.focus();
+      }
+      document.addEventListener('submit', async (e) => {
+        if (e.target.id !== 'acct-offer-form') return;
+        e.preventDefault();
+        const form = e.target;
+        const pass = form.querySelector('#offer-pass');
+        const err = form.querySelector('#offer-err');
+        const btn = form.querySelector('button[type="submit"]');
+        err.textContent = '';
+        if (pass.value.length < 8) { err.textContent = t('acct.passwordShort'); pass.focus(); return; }
+        btn.disabled = true;
+        try {
+          await POD.api('/api/orders/' + encodeURIComponent(orderId) + '/account', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...POD.orderHeaders(key) },
+            body: JSON.stringify({ password: pass.value }),
+          });
+          offerDone = true;
+          render();
+          const ok = document.querySelector('.acct-offer-ok');
+          if (ok) { ok.tabIndex = -1; ok.focus(); }
+        } catch (ex) {
+          err.textContent = ex.message;
+          btn.disabled = false;
+        }
+      });
+
+      /** Shipping, then the express fee on its own line. */
+      function shippingLines(o) {
+        const fee = o.delivery && o.delivery.speed === 'express' ? Number(o.delivery.fee) || 0 : 0;
+        const base = Math.max(0, Math.round(((Number(o.shipping) || 0) - fee) * 100) / 100);
+        return `<div class="line"><span>${esc(t('checkout.shipping'))}</span><span>${base ? esc(money(base)) : esc(t('free'))}</span></div>
+          ${fee ? `<div class="line"><span>${esc(t('delivery.expressFee'))}</span><span>${esc(money(fee))}</span></div>` : ''}`;
+      }
+      const pageLink = (o) => `${location.origin}${POD.orderPath('order', o.id, key)}`;
+      /** The team's view: what it is, until when it works, and (owners) the customer's own link to pass on. */
+      function teamBanner(o) {
+        const until = o.team && o.team.expiresAt ? new Date(o.team.expiresAt).toLocaleTimeString(POD.lang === 'ar' ? 'ar-EG' : 'en-GB', { hour: 'numeric', minute: '2-digit', timeZone: 'Africa/Cairo' }) : '';
+        return `
+          <div class="notice team-view" role="status" style="margin:16px 0">
+            <p style="margin:0"><strong>${esc(t('team.banner'))}</strong>${o.team && !o.team.amounts ? ` ${esc(t('team.noAmounts'))}` : ''}${until ? ` ${esc(t('team.until', { time: until }))}` : ''}</p>
+            ${o.customerLink ? `<button class="btn btn-sm" type="button" data-act="copy-customer" style="margin-top:8px">${esc(t('team.copyCustomer'))}</button>` : ''}
+          </div>`;
+      }
+      async function copyCustomerLink() {
+        const link = order && order.customerLink;
+        if (!link) return;
+        try {
+          await navigator.clipboard.writeText(/^https?:/.test(link) ? link : location.origin + link);
+          POD.toast(t('team.customerCopied'));
+        } catch (e) {
+          POD.toast(t('order.linkCopyFailed'));
+        }
+      }
+      /** WhatsApp with the order link typed in: the customer picks their own chat ("Message yourself"). */
+      const selfWhatsapp = (o) => `https://wa.me/?text=${encodeURIComponent(t('order.waSelf', { n: POD.orderNo(o.number), link: pageLink(o) }))}`;
+      async function copyLink() {
+        try {
+          await navigator.clipboard.writeText(pageLink(order));
+          POD.toast(t('order.linkCopied'));
+        } catch (e) {
+          POD.toast(t('order.linkCopyFailed'));
+        }
+      }
+      /** "Which items do you want again?": every item ticked to start with. */
+      function pickHtml(o) {
+        const n = picking.size;
+        return `
+          <div class="card reo-pick" role="group" aria-labelledby="reo-pick-title">
+            <h3 id="reo-pick-title">${esc(t('track.reorderPick'))}</h3>
+            <ul>${o.items.map((item, i) => `
+              <li><label><input type="checkbox" data-pick="${esc(item.id)}"${picking.has(item.id) ? ' checked' : ''}>
+                <span>${POD.num(i + 1)}. <bdi>${esc(PODAftercare.pickText(item))}</bdi></span></label></li>`).join('')}</ul>
+            ${n ? '' : `<p class="muted small" role="status">${esc(t('track.reorderPickNone'))}</p>`}
+            <div class="row">
+              <button class="btn btn-primary" type="button" data-act="reorder-picked"${n ? '' : ' disabled'}>${esc(t('track.reorderAdd', { n: POD.num(n) }))}</button>
+              <button class="btn" type="button" data-act="reorder-cancel">${esc(t('track.reorderCancel'))}</button>
+            </div>
+          </div>`;
+      }
+      async function reorder(itemIds) {
+        if (reo.busy || !order || team) return;
+        // Several items: first the list to tick (unless a single item's own button was used).
+        if (!itemIds && order.items.length > 1 && !picking) {
+          picking = new Set(order.items.map((it) => it.id));
+          render();
+          const first = content.querySelector('[data-pick]');
+          if (first) first.focus();
+          return;
+        }
+        picking = null;
+        Object.assign(reo, { busy: true, added: 0, skipped: null, error: null });
+        render();
+        try {
+          const r = await PODAftercare.reorder(order.id, itemIds && itemIds.length < order.items.length ? itemIds : undefined, key);
+          if (r.added && !r.skipped.length) {
+            location.href = '/cart?added=1';
+            return;
+          }
+          Object.assign(reo, { added: r.added, skipped: r.skipped });
+        } catch (e) {
+          reo.error = e.message;
+        }
+        reo.busy = false;
+        render();
+      }
+      async function copyNumber(btn) {
+        const n = order.shipment.trackingNumber;
+        try {
+          await navigator.clipboard.writeText(n);
+          POD.toast(t('track.copied'));
+        } catch (e) {
+          // No clipboard access (http, old browser): select the number for a manual copy.
+          const code = btn.parentElement.querySelector('code');
+          const range = document.createRange();
+          range.selectNodeContents(code);
+          getSelection().removeAllRanges();
+          getSelection().addRange(range);
+          POD.toast(t('track.copyFailed'));
+        }
+      }
+      // A preview whose file is gone: keep the grey box, not a broken-image icon.
+      content.addEventListener('error', (e) => { if (e.target.tagName === 'IMG') e.target.src = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 1 1%22/%3E'; }, true);
+      content.addEventListener('change', (e) => {
+        const box = e.target.closest('[data-pick]');
+        if (!box || !picking) return;
+        if (box.checked) picking.add(box.dataset.pick);
+        else picking.delete(box.dataset.pick);
+        // (Only the count and the button change: the ticks stay under the finger.)
+        const add = content.querySelector('[data-act="reorder-picked"]');
+        if (add) {
+          add.textContent = t('track.reorderAdd', { n: POD.num(picking.size) });
+          add.disabled = !picking.size;
+        }
+      });
+      content.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-act]');
+        if (!b) return;
+        if (b.dataset.act === 'reorder') {
+          if (picking) { picking = null; render(); } else reorder();
+        }
+        if (b.dataset.act === 'reorder-item') reorder([b.dataset.item]);
+        if (b.dataset.act === 'reorder-picked' && picking && picking.size) reorder([...picking]);
+        if (b.dataset.act === 'reorder-cancel') {
+          picking = null;
+          render();
+          const back = content.querySelector('[data-act="reorder"]');
+          if (back) back.focus();
+        }
+        if (b.dataset.act === 'copy') copyNumber(b);
+        if (b.dataset.act === 'copy-link') copyLink();
+        if (b.dataset.act === 'copy-customer') copyCustomerLink();
+        if (b.dataset.act === 'retry') retry();
+      });
+      let retrying = false;
+      async function retry() {
+        if (retrying) return;
+        retrying = true;
+        await load();
+        retrying = false;
+        // Still no connection: said, and the keyboard stays on "Try again".
+        if (error && error.offline) {
+          POD.toast(t('net.still'), 'error');
+          const b = content.querySelector('[data-act="retry"]');
+          if (b) b.focus();
+        }
+      }
+
+      async function load() {
+        if (!shop) shop = await POD.loadCatalog().catch(() => null);
+        try {
+          order = team
+            ? await POD.api('/api/orders/' + encodeURIComponent(orderId) + '/team', { headers: { 'x-team-view': team } })
+            : await POD.api('/api/orders/' + encodeURIComponent(orderId), { headers: POD.orderHeaders(key) });
+          error = null;
+          // Cash on delivery or paid in advance: the page's payment wording (src/payment-wording.js).
+          if (order.shop) POD.payment.set(order.shop.payment);
+          if (!team && order.key && order.key !== key) key = order.key;
+          // The link in the address bar carries the key (copied from there, it still opens the order).
+          if (!team && key && new URLSearchParams(location.search).get('k') !== key) {
+            const u = new URL(location.href);
+            u.searchParams.set('k', key);
+            history.replaceState(null, '', u.toString());
+          }
+          // Just placed here: remembered on this device (the cart does it too; this covers every way in).
+          // (Read from the address as it is now, not as the page opened: the 30-second refresh said "sent" again every
+          // time. QA 25 Nov.)
+          const nowParams = new URLSearchParams(location.search);
+          if (!team && nowParams.get('new') && !remembered) { remembered = true; PODAftercare.rememberOrder(order); }
+          // Back from the editor with a new version of an item.
+          if (nowParams.get('revised')) {
+            POD.toast(t('item.revisedSent'));
+            const u = new URL(location.href);
+            u.searchParams.delete('revised');
+            history.replaceState(null, '', u.toString());
+          }
+        } catch (e) {
+          // A failed refresh (weak signal) keeps showing the order already loaded (not an ended team link).
+          if (order && e.status !== 404 && !(team && e.status === 401)) return;
+          if (team && e.status === 401) order = null;
+          const stillOffline = Boolean(error && error.offline);
+          error = { status: e.status, code: e.code, message: e.message, offline: !e.status || e.status >= 500 };
+          // Refused (no key, or an ended team link): asking again every 30 seconds changes nothing, and the
+          // message would be read out again each time.
+          if (e.code === 'orderLinkNeeded' || (team && e.status === 401)) clearInterval(poll);
+          // (Still no connection: the message on screen stays as it is, not read out again every 30 seconds.)
+          if (stillOffline && error.offline) return;
+        }
+        render();
+      }
+      const poll = setInterval(load, 30000);
+      await load();
+      // (The site's own message about a refusal comes in the language it was asked in: asked again in the new one.)
+      document.addEventListener('pod:langchange', () => {
+        if (!order && error && error.status && error.status !== 404) load();
+        else render();
+      });
+    })();
+  </script>
+</body>
+</html>

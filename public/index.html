@@ -1,0 +1,900 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>إبداع · ebda3</title>
+  <link rel="icon" href="/favicon.svg?v=ebda3" type="image/svg+xml">
+  <link rel="icon" href="/favicon.ico?v=ebda3" sizes="any">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=ebda3">
+  <link rel="manifest" href="/site.webmanifest?v=ebda3">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="إبداع">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="theme-color" content="#FAFAF7">
+  <meta name="description" content="إبداع: اطبع تصميمك على تيشيرتات، مجات، كروت، هدايا وأكتر. قطعة واحدة أو كمية، وتوصيل لكل مصر.">
+  <meta property="og:site_name" content="إبداع · ebda3">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="إبداع · ebda3">
+  <meta property="og:description" content="اطبع تصميمك على تيشيرتات، مجات، كروت، هدايا وأكتر. قطعة واحدة أو كمية، وتوصيل لكل مصر.">
+  <meta property="og:image" content="https://ebda3.me/img/og-ebda3.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <script>(function(){var l;try{l=localStorage.getItem('pod-lang')}catch(e){}l=l==='en'?'en':'ar';var d=document.documentElement;d.lang=l;d.dir=l==='ar'?'rtl':'ltr'})()</script>
+  <link rel="stylesheet" href="/fonts/fonts.css">
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body data-title-key="home.pageTitle">
+  <header class="site-header">
+    <div class="container inner">
+      <a class="brand" href="/" aria-label="إبداع · ebda3"><img class="brand-logo brand-ar" data-logo-lang="ar" data-logo-src="/img/logo-ar-header.svg" alt="إبداع" width="61" height="40"><img class="brand-logo brand-en" data-logo-lang="en" data-logo-src="/img/logo-en-header.svg" alt="ebda3" width="98" height="40"></a><script>(function(){var l=document.documentElement.lang==='en'?'en':'ar';document.querySelectorAll('.brand img[data-logo-src]').forEach(function(i){if(i.getAttribute('data-logo-lang')===l)i.src=i.getAttribute('data-logo-src')})})()</script>
+      <nav>
+        <a href="/#products" data-i18n="nav.products"></a>
+        <a href="/designs"><span class="nav-long" data-i18n="nav.designs"></span><span class="nav-short" data-i18n="nav.designsShort"></span></a>
+        <a href="/photos"><span class="nav-long" data-i18n="nav.photos"></span><span class="nav-short" data-i18n="nav.photosShort"></span></a>
+        <a class="nav-books" href="/?cat=kids#products"><span class="nav-long" data-i18n="nav.books"></span><span class="nav-short" data-i18n="nav.booksShort"></span></a>
+        <button type="button" class="site-search-btn" data-site-search aria-expanded="false" aria-controls="site-search" aria-label="دوّر" data-i18n-aria="search.open"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
+        <a class="cart-link" href="/cart"><span data-i18n="nav.cart"></span> <span class="badge" data-cart-count hidden>0</span></a>
+        <button class="btn btn-sm lang-toggle" data-lang-toggle data-i18n="lang.other"></button>
+      </nav>
+    </div>
+    <nav class="nav-chips" data-i18n-aria="nav.sections">
+      <a href="/#products" data-chip="products" data-i18n="nav.products"></a>
+      <a href="/designs" data-chip="designs" data-i18n="nav.designs"></a>
+      <a href="/photos" data-chip="photos" data-i18n="nav.photos"></a>
+      <a class="nav-books" href="/?cat=kids#products" data-chip="books" data-i18n="nav.books"></a>
+      <a href="/product?id=tshirt" data-chip="tshirt" data-i18n="nav.tshirts"></a>
+      <a href="/product?id=mug" data-chip="mug" data-i18n="nav.mugs"></a>
+    </nav>
+    <div class="site-search" id="site-search" hidden>
+      <form class="container site-search-form" role="search" action="/" autocomplete="off" data-i18n-aria="search.label">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input type="search" name="q" maxlength="60" enterkeyhint="search" autocomplete="off" data-i18n-placeholder="search.placeholder" data-i18n-aria="search.label">
+        <button type="button" class="site-search-close" data-site-search-close data-i18n-aria="search.close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      </form>
+      <div class="container site-search-results">
+        <ul class="site-search-list" data-i18n-aria="search.suggestions" hidden></ul>
+        <p class="site-search-none" role="status" data-i18n="search.none" hidden></p>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- Hero: big lifestyle picture on a soft gradient, the line and two buttons. -->
+    <section class="hm-hero">
+      <div class="hm-hero-text">
+        <p class="hm-kicker" data-i18n="hm.kicker"></p>
+        <h1 data-i18n-html="hm.title"></h1>
+        <p class="hm-lead" data-i18n="hm.lead"></p>
+        <div class="hm-hero-cta">
+          <a class="btn btn-primary btn-lg" href="#products" data-i18n="hm.shopAll"></a>
+          <a class="btn btn-lg hm-btn-ghost" href="/designs" data-i18n="hm.readyDesigns"></a>
+        </div>
+        <p class="hm-delivery" data-i18n="delivery.note"></p>
+      </div>
+      <div class="hm-hero-art" id="hero-art" aria-hidden="true"></div>
+    </section>
+
+    <!-- Why order here, right under the banner (owner's OK, UX item B, 26 Nov). These four while the shop takes cash
+         on delivery (today); from launch (paying in advance only, src/payment-wording.js) the four under them instead. -->
+    <ul class="hm-trust" aria-label="" data-i18n-aria="hm.trustLabel" data-prepay-hide>
+      <li><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7z"/><circle cx="7" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/></svg><span><strong data-i18n="hm.trust.deliveryT"></strong><small data-i18n="hm.trust.deliveryS"></small></span></li>
+      <li><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span><strong data-i18n="hm.trust.proofT"></strong><small data-i18n="hm.trust.proofS"></small></span></li>
+      <li><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M11 9l2-1.5V16"/></svg><span><strong data-i18n="hm.trust.oneT"></strong><small data-i18n="hm.trust.oneS"></small></span></li>
+      <li><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><span><strong data-i18n="hm.trust.payT"></strong><small data-i18n="hm.trust.payS"></small></span></li>
+    </ul>
+    <!-- From launch (owner's OK, UX item 1, 27 Nov): pay in advance (the ways to pay), the 7-day guarantee (its page),
+         the real delivery days (filled from the shop's settings) and the proof. Hidden and empty until then. -->
+    <ul class="hm-trust hm-trust-prepay" aria-label="" data-i18n-aria="hm.trustLabel" data-prepay-only hidden>
+      <li><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19M6.5 15h4"/></svg><span><strong data-prepay-only data-prepay-i18n="hm.trust2.payT" hidden></strong><small data-prepay-only data-prepay-i18n="hm.trust2.payS" hidden></small></span></li>
+      <li class="hm-trust-guar"><a data-prepay-only data-prepay-href="/guarantee" hidden><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7.5 3v5.5c0 4.6-3.2 8.2-7.5 9.5-4.3-1.3-7.5-4.9-7.5-9.5V6z"/><path d="M8.8 12.2l2.2 2.2 4.3-4.4"/></svg><span><strong data-prepay-only data-prepay-i18n="hm.trust2.guarT" hidden></strong><small data-prepay-only data-prepay-i18n="hm.trust2.guarS" hidden></small></span></a></li>
+      <li><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7z"/><circle cx="7" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/></svg><span><strong data-prepay-only data-trust-days="title" hidden></strong><small data-prepay-only data-trust-days="text" hidden></small></span></li>
+      <li><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span><strong data-prepay-only data-prepay-i18n="hm.trust2.proofT" hidden></strong><small data-prepay-only data-prepay-i18n="hm.trust2.proofS" hidden></small></span></li>
+    </ul>
+
+    <!-- How it works, right after the points (owner's OK, UX item 5, 27 Nov; compact on phones). -->
+    <section class="hm-how" aria-labelledby="hm-how-title">
+      <h2 id="hm-how-title" data-i18n="hm.howTitle"></h2>
+      <div class="hm-steps">
+        <div class="hm-step"><span class="hm-num">1</span><h3 data-i18n="home.step1.title"></h3><p data-i18n="home.step1.text"></p></div>
+        <div class="hm-step"><span class="hm-num">2</span><h3 data-i18n="home.step2.title"></h3><p data-i18n="home.step2.text"></p></div>
+        <div class="hm-step"><span class="hm-num">3</span><h3 data-i18n="home.step3.title"></h3><p data-i18n="home.step3.text"></p></div>
+      </div>
+    </section>
+
+    <!-- Three picture tiles -->
+    <section class="hm-tiles" id="hm-tiles" aria-label="" data-i18n-aria="hm.tilesLabel"></section>
+
+    <!-- New and best sellers, then rows by theme (filled from the catalogue). -->
+    <div id="hm-rows"></div>
+
+    <!-- Why order here (today; from launch the points under the banner say it, so this box is not shown) -->
+    <section class="hm-benefits" aria-label="" data-i18n-aria="hm.whyLabel" data-prepay-hide>
+      <div class="hm-benefit"><span class="hm-ico" aria-hidden="true">⚡</span><div><strong data-i18n="hm.b1.title"></strong><p data-i18n="hm.b1.text"></p></div></div>
+      <div class="hm-benefit"><span class="hm-ico" aria-hidden="true">✅</span><div><strong data-i18n="hm.b2.title"></strong><p data-i18n="hm.b2.text"></p></div></div>
+      <div class="hm-benefit"><span class="hm-ico" aria-hidden="true">💵</span><div><strong data-i18n="hm.b3.title"></strong><p data-i18n="hm.b3.text"></p></div></div>
+      <div class="hm-benefit"><span class="hm-ico" aria-hidden="true">🧾</span><div><strong data-i18n="hm.b4.title"></strong><p data-i18n="hm.b4.text"></p></div></div>
+    </section>
+
+    <section id="products">
+      <div class="section-title">
+        <h2 id="hm-all-title" data-i18n="hm.allTitle"></h2>
+        <span class="hm-price-note" data-i18n="home.priceNote"></span>
+      </div>
+      <form class="design-search home-search" id="home-search" role="search" autocomplete="off">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input type="search" id="home-q" enterkeyhint="search" maxlength="60" data-i18n-placeholder="home.search" data-i18n-aria="home.searchLabel">
+      </form>
+      <!-- No connection (or the site busy): "Try again" (below) -->
+      <div id="home-net" class="card empty" hidden></div>
+      <div class="cat-chips" id="cats"></div>
+      <p class="muted small home-count" id="home-count" aria-live="polite"></p>
+      <div class="product-grid" id="product-grid"></div>
+    </section>
+
+    <section class="hm-faq" aria-labelledby="hm-faq-title">
+      <h2 id="hm-faq-title" data-i18n="hm.faqTitle"></h2>
+      <details><summary data-i18n="hm.q1"></summary><p data-i18n="hm.a1"></p></details>
+      <details><summary data-i18n="hm.q2"></summary><p data-i18n="hm.a2"></p></details>
+      <details><summary data-i18n="hm.q3"></summary><p data-i18n="hm.a3"></p></details>
+      <details><summary data-i18n="hm.q4"></summary><p data-i18n="hm.a4"></p></details>
+      <details><summary data-i18n="hm.q5"></summary><p data-i18n="hm.a5"></p></details>
+      <details><summary data-i18n="hm.q6"></summary><p data-i18n="hm.a6"></p></details>
+    </section>
+  </main>
+
+  <footer class="site-footer"><div class="container" data-i18n="footer"></div></footer>
+
+  <script src="/js/i18n.js"></script>
+  <script src="/js/common.js"></script>
+  <script src="/js/site-search.js"></script>
+  <script>
+    (async () => {
+      const { t, tr, esc, money } = POD;
+      const grid = document.getElementById('product-grid');
+      // ?cat=kids (the "Kids' books" menu): the shop opens on that category.
+      let cat = new URLSearchParams(location.search).get('cat') || 'all';
+      // Search (?q=): product names, descriptions and categories, both languages.
+      let q = (new URLSearchParams(location.search).get('q') || '').slice(0, 60);
+      // "All products" starts with the first 8; "Show all" shows the rest (kept for Back). A search shows everything it
+      // finds (owner's OK, UX item D, 26 Nov).
+      const FIRST = 8;
+      let showAll = Boolean(history.state && typeof history.state === 'object' && history.state.homeAll);
+      // The "how it works" step numbers in the page's digits (also while the products can't load).
+      const stepNums = () => document.querySelectorAll('.hm-num').forEach((el, i) => { el.textContent = POD.num(i + 1); });
+      stepNums();
+      document.addEventListener('pod:langchange', stepNums);
+
+      // ---------- Back to the same place ----------
+      // Back from a product (or wherever the page led): the same place on the page. The browser can't put it back
+      // itself: the rows and "All products" are drawn once the products have come, after it has tried (it kept the FAQ
+      // in view while the cards came in above it). So, as the product page does for its ready designs, the place is
+      // kept in this history entry when a link is followed: where the page was, and the card (or row) the link is in
+      // and its height on the screen, so the place holds even if what is above it is a little taller or shorter by then.
+      // The search and the category are in the address. (QA 26 Nov.)
+      const back = (history.state && typeof history.state === 'object' && history.state.home) || null;
+      document.addEventListener('click', (e) => {
+        const a = e.target.closest('a[href]');
+        if (!a) return;
+        const card = a.closest('[data-place]');
+        const home = { y: Math.round(window.scrollY), ...(card ? { place: card.dataset.place, top: Math.round(card.getBoundingClientRect().top) } : {}) };
+        try { history.replaceState({ ...(history.state && typeof history.state === 'object' ? history.state : {}), home }, ''); } catch (err) { /* not kept */ }
+      });
+      /** Once the cards are drawn: back to the card that was followed, at the same height, else to the same scroll. */
+      function backToPlace() {
+        if (!back || !(back.y > 0)) return;
+        if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+        requestAnimationFrame(() => {
+          const card = typeof back.place === 'string' && [...document.querySelectorAll('[data-place]')].find((el) => el.dataset.place === back.place);
+          const y = card && Number.isFinite(back.top) ? window.scrollY + card.getBoundingClientRect().top - back.top : back.y;
+          window.scrollTo(0, Math.max(0, Math.min(Math.round(y), document.documentElement.scrollHeight)));
+        });
+      }
+
+      // ---------- No connection ----------
+      // What the page needs didn't come (no signal, or the site busy): "No connection" and "Try again" in `box`, in the
+      // page's language, until it does. A "not found" from the site is not a connection problem: thrown as it is.
+      const noConnection = (e) => !(e && e.status) || e.status >= 500;
+      async function loadOrRetry(box, load) {
+        let last = null;
+        for (;;) {
+          try {
+            const out = await load();
+            box.hidden = true;
+            box.innerHTML = '';
+            return out;
+          } catch (e) {
+            if (!noConnection(e)) throw e;
+            // The same failure again although the site answers now (a product list kept from before): the page again.
+            if (e === last) {
+              location.reload();
+              return new Promise(() => {});
+            }
+            await tryAgain(box, Boolean(last));
+            last = e;
+          }
+        }
+      }
+      /** "No connection" with "Try again" in `box`; resolves once it is tapped and the site answers. */
+      function tryAgain(box, focus) {
+        return new Promise((resolve) => {
+          const paint = () => {
+            box.innerHTML = `<h2>${esc(t('net.title'))}</h2><p class="muted">${esc(t('net.text'))}</p><button type="button" class="btn btn-primary" data-net-retry>${esc(t('net.retry'))}</button>`;
+          };
+          let busy = false;
+          const click = async (e) => {
+            if (busy || !e.target.closest('[data-net-retry]')) return;
+            busy = true;
+            const back = await fetch('/api/products', { method: 'HEAD', cache: 'no-store' }).then((r) => r.ok, () => false);
+            busy = false;
+            if (!back) {
+              POD.toast(t('net.still'), 'error');
+              return;
+            }
+            box.removeEventListener('click', click);
+            document.removeEventListener('pod:langchange', paint);
+            box.innerHTML = '<div class="spinner"></div>';
+            resolve();
+          };
+          paint();
+          box.setAttribute('role', 'alert');
+          box.hidden = false;
+          box.addEventListener('click', click);
+          document.addEventListener('pod:langchange', paint);
+          if (focus) box.querySelector('[data-net-retry]').focus();
+        });
+      }
+
+      // (Without the products there is nothing to search: the box comes back with them.)
+      const searchForm = document.getElementById('home-search');
+      let catalog;
+      try {
+        catalog = await loadOrRetry(document.getElementById('home-net'), () => POD.loadCatalog().catch((e) => {
+          searchForm.hidden = true;
+          throw e;
+        }));
+      } catch (e) {
+        grid.innerHTML = `<p class="muted">${esc(e.message)}</p>`;
+        return;
+      }
+      searchForm.hidden = false;
+      const { products, categories } = catalog;
+      // Words people use for products that their names don't have (typed both ways).
+      const ALIASES = {
+        tshirt: 'tee t-shirt tshirt shirt تي شيرت تيشرت تشيرت', kidstee: 'tee t-shirt kids اطفال تيشرت', polo: 'tee shirt تيشرت', oversized: 'tee shirt تيشرت', jersey: 'football soccer shirt تيشرت فانلة كرة كورة جرسيه جيرسي',
+        hoodie: 'hoody sweater هودى', ziphoodie: 'hoody zip jacket هودى جاكيت', kidshoodie: 'hoody هودى اطفال', sweatshirt: 'sweater سويت شيرت بلوفر',
+        cap: 'hat قبعة طاقية', mug: 'cup coffee tea كوب كوباية مق', magicmug: 'cup كوب مق', couplemugs: 'cup كوب مق', tumbler: 'cup travel mug كوب',
+        cushion: 'pillow مخدة وسادة', poster: 'frame picture صورة برواز', bottle: 'water flask زجاجة ازازة', tote: 'bag شنطة', phonecase: 'cover iphone samsung كفر',
+        notebook: 'كراسة دفتر', mousepad: 'mouse pad', deskmat: 'mouse pad', keychain: 'key ring keyring key chain ميداليه ميدالية مفاتيح سلسلة مفاتيح', stickersheet: 'stickers ستيكر لزق',
+        flyers: 'flyer flier leaflet فلاير منشورات',
+        bizcards: 'business cards visit كارت فيزيت', canvas: 'painting wall art لوحة', canvaswide: 'painting wall art لوحة', photoprints: 'photos pictures صور',
+        storybook: 'kids book story كتاب قصة اطفال', coloringbook: 'kids book coloring تلوين اطفال', caketopper: 'cake topper تورتة', namepuzzle: 'puzzle بازل',
+        engrpen: 'pen pens ballpoint قلم اقلام أقلام قلم جاف', engrwallet: 'wallet purse محفظة محفظه محافظ',
+        calendar: 'calendar نتيجه نتيجة تقويم نتيجة حيطة', deskcalendar: 'calendar نتيجه نتيجة تقويم مكتب', labels: 'label sticker ليبل استيكر لاصق', banners: 'banner بانر يافطة فليكس لافتة',
+        menus: 'menu منيو قايمة طعام مطعم كافيه', brochures: 'brochure flyer leaflet بروشور مطوية', booklets: 'catalog catalogue booklet كتالوج كتيب', folders: 'folder فولدر ملف',
+        notepads: 'notepad pad بلوك نوت مفكرة', postcards: 'postcard thank you card بوستكارد كارت شكر', giftvouchers: 'voucher gift card كوبون قسيمة جيفت كارد',
+        magnets: 'magnet fridge مغناطيس مغنطيس تلاجة ثلاجة', wrappingpaper: 'gift wrap ورق هدايا تغليف', windowstickers: 'window decal vinyl ستيكر فاترينة زجاج',
+        photobook: 'album photo book البوم صور', tablenumbers: 'wedding table number ارقام ترابيزات فرح', placecards: 'wedding place name card كروت اسامي فرح معازيم', bookmarks: 'bookmark فاصل كتاب', invoicebook: 'invoice receipt فاتورة فاتوره فواتير ايصال إيصال', letterhead: 'letter head ليتر هيد ليترهيد ورق مراسلات',
+        calligraphy: 'calligraphy islamic arabic art خط عربي كاليجرافي كاليجرافى تابلوه خشب', nameart: 'name art calligraphy wall decor اسم بالخط العربي اسم كاليجرافي ديكور اسم',
+        villasign: 'villa house home gate sign number فيلا بيت بوابة رقم البيت اسم العيلة', eventletters: 'giant big letters numbers photo booth حروف كبيرة ارقام كبيرة حروف عملاقة ركن تصوير',
+        acrylicnameplate: 'nameplate name plate desk sign office اسم مكتب نيم بليت بلوك اكريليك', woodnameplate: 'nameplate name plate desk sign office wood اسم مكتب نيم بليت خشب',
+        shield: 'shield award trophy honour honor درع دروع تكريم تذكاري', glassaward: 'crystal glass award trophy درع كريستال زجاج دروع تكريم',
+        quranbox: 'quran koran box mushaf قران قرآن مصحف صندوق علبة مصحف', rehal: 'quran koran stand holder rehal rahl رحل حامل مصحف قران قرآن',
+        qrstand: 'qr code menu table stand wifi ستاند منيو كود كيو ار باركود ترابيزة', favourtags: 'favor favour tags giveaways توزيعات تاج تاجات سبوع',
+        uvdtf: 'uv dtf transfer rub on stickers ستيكر ستيكرز يو في دي تي اف نقل',
+        uvwrap16: 'uv dtf wrap decal cup glass can libbey tumbler sticker ستيكر لف كوباية كوبايه ازاز كانز يو في دي تي اف', uvwrap20: 'uv dtf wrap decal cup glass can libbey tumbler sticker ستيكر لف كوباية كوبايه ازاز كانز يو في دي تي اف',
+        uvwraptumbler: 'uv dtf wrap decal cup glass tumbler sticker ستيكر لف تمبلر كوباية ازاز يو في دي تي اف', uvwraptaper: 'uv dtf wrap decal cup glass tapered sticker ستيكر لف كوباية كوبايه ازاز مسحوبة يو في دي تي اف',
+        glasscan16: 'glass can cup libbey bamboo lid straw plain blank كوباية كوبايه ازاز كانز سادة شفاطة', glasscan20: 'glass can cup libbey bamboo lid straw plain blank كوباية كوبايه ازاز كانز سادة شفاطة',
+        glasstumbler20: 'glass tumbler cup lid straw plain blank تمبلر كوباية ازاز سادة شفاطة', glasstaper: 'glass cup tapered plain blank كوباية كوبايه ازاز سادة مسحوبة',
+      };
+      // search-kit:start (the same lines are in public/index.html and public/js/designs.js; test/search-kit.test.js checks both)
+      // Forgiving search: what the typed words find, plus plurals (hoodies, تيشيرتات), one word or two (t-shirt, tshirt),
+      // both spellings of تيشيرت, and the shop's words for the same thing in either language (mug, مج, كوباية).
+      const SEARCH = (() => {
+        // Ignore case, Arabic short vowels and tatweel (U+064B-U+065F stops before the Arabic-Indic digits U+0660-U+0669),
+        // the alef / yaa / taa marbuta spellings, and Arabic-Indic / Persian digits (100 typed in Arabic digits finds 100).
+        const norm = (s) => String(s || '').toLowerCase()
+          .replace(/[\u064B-\u065F\u0670\u0640]/g, '')
+          .replace(/[أإآٱ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/ؤ/g, 'و').replace(/ئ/g, 'ي')
+          .replace(/[٠-٩]/g, (c) => String(c.charCodeAt(0) - 0x0660))
+          .replace(/[۰-۹]/g, (c) => String(c.charCodeAt(0) - 0x06F0))
+          .replace(/[^\p{L}\p{N}]+/gu, ' ')
+          // ("بابا نويل" is Santa, not dad: one word of its own, so a Father's Day search doesn't list Christmas. QA 25 Nov.)
+          .replace(/(^| )بابا نويل(?= |$)/g, '$1santa')
+          .trim();
+        // Spelt with or without the long ي (تيشرت / تيشيرت).
+        const loose = (s) => s.replace(/ي/g, '').replace(/ +/g, ' ');
+        // The same thing said other ways, in both languages (two words keep their space; plurals are found anyway).
+        const SAME = {
+          tshirt: 'tshirt, t shirt, tee, tee shirt, shirt, تيشيرت, تي شيرت, تشيرت, قميص, قمصان',
+          hoodie: 'hoodie, hoody, هودي',
+          sweatshirt: 'sweatshirt, sweat shirt, سويتشيرت, سويت شيرت',
+          cap: 'cap, hat, كاب, كاسكيت, قبعة, طاقية',
+          mug: 'mug, cup, مج, مجات, مجين, ماج, كوب, كوباية, فنجان, فناجين',
+          bag: 'bag, شنطة, شنط, كيس, اكياس',
+          card: 'card, كارت, كروت, كارد, بطاقة',
+          bizcard: 'business card, visit card, visiting card, بيزنس كارد, بيزنس كارت, بزنس كارد, بزنس كارت, كارت بيزنس, كارت بزنس, كروت بيزنس, كروت بزنس, كارت شخصي, كروت شخصية, كارت فيزيت',
+          // (One word alone, as the English "business": everything for a business.)
+          business: 'business, بيزنس, بزنس',
+          catalog: 'catalog, catalogue, كتالوج, كاتلوج, كاتالوج, كتلوج',
+          invitation: 'invitation, invite, دعوة',
+          wedding: 'wedding, فرح, أفراح, زفاف, زواج, جواز',
+          // (كرة as well as كورة, soccer as well as football, Egypt in English too, invoice and letterhead in Arabic. QA 26 Nov.)
+          football: 'football, soccer, كورة, كرة, كرة القدم, كرة قدم',
+          egypt: 'egypt, egyptian, مصر, مصري, مصرية',
+          poster: 'poster, بوستر',
+          notebook: 'notebook, note book, نوت بوك, نوتبوك, كشكول, كشاكيل',
+          calendar: 'calendar, نتيجة, تقويم, نتايج',
+          sticker: 'sticker, ستيكر, استيكر',
+          pillow: 'pillow, cushion, pillowcase, pillow case, cushion cover, كوشن, مخدة, خدادية, وسادة, كيس مخدة',
+          // (Not كانفاس or canvas alone: the tote bag and the pencil case are canvas too.)
+          canvasprint: 'canvas print, wall canvas, لوحة كانفاس, تابلوه, تابلو',
+          photobook: 'photo book, photobook, photo album, فوتو بوك, فوتوبوك, البوم صور',
+          idcard: 'id card, id badge, name badge, badge, بادج, كارنيه',
+          phonecase: 'phone case, phone cover, mobile case, mobile cover, جراب, جراب موبايل, كفر موبايل',
+          christmas: 'christmas, xmas, كريسماس',
+          santa: 'santa, santa claus, سانتا, سانتا كلوز',
+          // (Arabic as found as English: هدية / هدايا / gift, قهوة / coffee, شاي / tea. QA 25 Nov.)
+          gift: 'gift, gifts, present, هدية, هدايا, هديه',
+          coffee: 'coffee, قهوة, قهوه, نسكافيه',
+          tea: 'tea, شاي, شاى',
+          birthday: 'birthday, bday, عيد ميلاد, اعياد ميلاد',
+          dog: 'dog, puppy, كلب, كلاب',
+          cat: 'cat, kitten, قطة, قطط',
+          kids: 'kids, kid, children, child, اطفال, طفل, ولاد, اولاد',
+          // ("Mother's Day" is searched as "mother day": the 's is left out below.)
+          mom: 'mom, mum, mommy, mummy, mama, mother, mother day, mothers day, ماما, الام, امي, عيد الام',
+          dad: 'dad, daddy, papa, father, father day, fathers day, بابا, الاب, ابويا, عيد الاب',
+          // (Valentine's Day, Teacher's Day, a new baby and the prayer mat (مصلية), in either language. QA 25 Nov.)
+          valentine: 'valentine, valentines, valentine day, عيد الحب, عيد حب, فالنتاين, فلانتين',
+          teacher: 'teacher, teachers day, teacher day, معلم, المعلم, عيد المعلم, مدرس, يوم المعلم',
+          baby: 'baby, newborn, new baby, بيبي, نونو, مولود, سبوع',
+          // (Graduation and engagement gifts, in either language: the products' occasions, src/products.js. UX item 4, 27 Nov.)
+          graduation: 'graduation, graduate, تخرج, حفلة تخرج',
+          engagement: 'engagement, engaged, خطوبة',
+          prayermat: 'prayer mat, prayer rug, سجادة صلاة, مصلية, مصلاية',
+        };
+        const sameAs = new Map();
+        for (const [k, list] of Object.entries(SAME)) for (const w of list.split(',')) sameAs.set(norm(w), k);
+        /** A word and what else it may be written as: the singular of a plural (hoodies, boxes, puppies, wolves,
+            تيشيرتات, مدرسين, ستيكرز) and a word without its taa marbuta (شنطة → شنط finds شنط ورق). */
+        function forms(w) {
+          const out = [w];
+          if (/^[a-z]+$/.test(w) && w.length > 3) {
+            if (w.length > 4 && w.endsWith('ies')) out.push(w.slice(0, -3) + 'y');
+            if (w.length > 4 && w.endsWith('ves')) out.push(w.slice(0, -3) + 'f', w.slice(0, -3) + 'fe');
+            if (/(s|x|z|ch|sh)es$/.test(w)) out.push(w.slice(0, -2));
+            if (/[^siu]s$/.test(w)) out.push(w.slice(0, -1));
+          } else if (/^[\u0621-\u064A]+$/.test(w)) {
+            if (w.endsWith('ات') && w.length >= 5) out.push(w.slice(0, -2), w.slice(0, -2) + 'ه');
+            if ((w.endsWith('ين') || w.endsWith('ون')) && w.length >= 6) out.push(w.slice(0, -2));
+            if (w.endsWith('ز') && w.length >= 5) out.push(w.slice(0, -1));
+            if (w.endsWith('ه') && w.length >= 4) out.push(w.slice(0, -1));
+          }
+          return [...new Set(out)];
+        }
+        // The word after "the" / "for the" / "with the" / "and the" in front (التيشيرتات, للأفراح), when 3 letters or more
+        // are left; after "the" / "for the", 2 are enough (الأم, للأب); "for" alone before an alef with 3 left (لأمي).
+        // A word of 2 is only looked for with its article (للأب: الأب, as the shop's words list it): أب alone is also the
+        // "up" of ليفل أب and ستارت أب. One of the shop's words of 2 (مج, الأم, الأب) also after "with the" / "and the"
+        // (بالمج, والأب; not بالون or والده), and مج, a word of the shop alone, also without its article: المج, للمج, والمج
+        // and بالمج find what مج finds.
+        const article = (w) => {
+          const m = /^(?:وال|بال|لل|ال)([ء-ي]{3,})$|^(?:لل|ال)([ء-ي]{2})$|^ل(ا[ء-ي]{2,})$|^(?:وال|بال)([ء-ي]{2})$/.exec(w);
+          if (!m) return '';
+          return m[4] ? (sameAs.has(m[4]) || sameAs.has(`ال${m[4]}`) ? m[4] : '') : m[1] || m[2] || m[3];
+        };
+        const bare = (w) => { const c = article(w); return !c ? [w] : c.length === 2 ? [w, `ال${c}`, ...(sameAs.has(c) ? [c] : [])] : [w, c]; };
+        const allForms = (w) => [...new Set(bare(w).flatMap(forms))];
+        const conceptsOf = (w) => [...new Set(allForms(w).map((f) => sameAs.get(f)).filter(Boolean))];
+        /** Two words that name one thing: "t shirt", "business cards", "بيزنس كارد". */
+        function pairConcepts(a, b) {
+          const out = new Set();
+          for (const x of allForms(a)) {
+            for (const y of forms(b)) {
+              for (const k of [`${x} ${y}`, x + y]) if (sameAs.has(k)) out.add(sameAs.get(k));
+            }
+          }
+          return [...out];
+        }
+        /** A text to search in: its words (as before), the other forms of its words, and the things they name.
+            looseAnywhere: a typed word without its ي is looked for anywhere, however short (as the home page always
+            did); otherwise at the start of a word and with three letters or more, so تيشرت finds تيشيرت but رسم does
+            not find كريسماس (كرسماس) and في does not find every ف. */
+        function index(text, looseAnywhere) {
+          const ws = norm(text).split(' ').filter(Boolean);
+          const extra = new Set();
+          const concepts = new Set();
+          ws.forEach((w, i) => {
+            for (const f of allForms(w)) if (f !== w) extra.add(f);
+            for (const c of conceptsOf(w)) concepts.add(c);
+            if (i + 1 < ws.length) for (const c of pairConcepts(w, ws[i + 1])) concepts.add(c);
+          });
+          const all = ` ${ws.join(' ')} ${[...extra].join(' ')} `;
+          return { text: all, loose: loose(all), concepts, looseAnywhere: Boolean(looseAnywhere) };
+        }
+        /** The words of a search: each as typed, its other forms and what it names; two words that name one thing
+            ("t shirts", "بيزنس كارد") also count as one. */
+        function query(q) {
+          // (A lone "s" is the English 's: "mother's day" is "mother day".)
+          const ws = norm(q).split(' ').filter((w, i) => w && !(w === 's' && i > 0));
+          const one = (w) => ({ word: w, forms: allForms(w).filter((f) => f !== w), concepts: conceptsOf(w) });
+          const terms = [];
+          for (let i = 0; i < ws.length; i++) {
+            const both = i + 1 < ws.length ? pairConcepts(ws[i], ws[i + 1]) : [];
+            if (both.length) {
+              terms.push({ word: '', forms: forms(ws[i] + ws[i + 1]), concepts: both, or: [one(ws[i]), one(ws[i + 1])] });
+              i++;
+            } else terms.push(one(ws[i]));
+          }
+          return terms;
+        }
+        // A word as typed is found anywhere in a word, as before (with start: at the start of one, to rank names).
+        // Its other forms only as whole words ("dogs" → dog, not dogma; "cars" → car, not card), or by what it names.
+        // An Arabic word of three letters (most Arabic words are built on three) inside a longer word is another word:
+        // it counts at the start of a word only, and without its ي not at all, on both pages (كيس is not the كس of
+        // اكسسوارات, ليل not the لل of للأعمال). One or two letters are a word still being typed: found as before.
+        // The same rule for a word of two or three letters after its article (الأم, للأب, لأمي): that word after an article
+        // (or none, for three letters) at the start of a word; one of the shop's words (الأم, الأب) as a whole word.
+        // الأم is not in الامتحانات, للأب not in للأبد, الأب not in الأبعاد, لأمي (without its ي, لام) not in لاما.
+        function hasShort(h, word, core, whole) {
+          const end = whole || (core.length === 2 && (sameAs.has(core) || sameAs.has(`ال${core}`))) ? ' ' : '';
+          const lc = loose(core);
+          return ['', 'ال', 'لل', 'بال', 'وال'].some((p) => [word, core].some((w) => (p || w.length > 2) && h.text.includes(` ${p}${w}${end}`))
+            || (lc.length > 2 && h.loose.includes(` ${p}${lc}${end}`)));
+        }
+        // start 'word': the words as whole words only (or another form, or what they name), to rank names: a mug (مج,
+        // the same as كوب) before كوبونات, the cap (كاب) before للكابلز, whose words only start with what was typed.
+        function has(h, term, start) {
+          const whole = start === 'word';
+          const core = article(term.word);
+          if (core && core.length <= 3) {
+            if (hasShort(h, term.word, core, whole)) return true;
+            return term.forms.some((f) => h.text.includes(` ${f} `)) || term.concepts.some((c) => h.concepts.has(c));
+          }
+          const short = term.word.length === 3 && /^[ء-ي]+$/.test(term.word);
+          const at = start || short ? ' ' : '';
+          const end = whole ? ' ' : '';
+          const lw = loose(term.word);
+          const looseHit = h.looseAnywhere && !short && !whole ? h.loose.includes(at + lw) : lw.length > 2 && h.loose.includes(` ${lw}${end}`);
+          if (term.word && (h.text.includes(at + term.word + end) || looseHit)) return true;
+          if (term.forms.some((f) => h.text.includes(` ${f} `) || h.loose.includes(` ${loose(f)} `))) return true;
+          return term.concepts.some((c) => h.concepts.has(c)) || Boolean(term.or && term.or.every((x) => has(h, x, start)));
+        }
+        /** Every word of the search is in the indexed text. */
+        const match = (h, terms, start) => terms.every((term) => has(h, term, start));
+        return { norm, loose, forms, index, query, match };
+      })();
+      // search-kit:end
+      const { norm, loose } = SEARCH;
+      const catName = (id) => (categories.find((c) => c.id === id) || {}).name || {};
+      // A product's sizes and quantities, by id and in both languages: "tshirt xl", "A5 flyers", "كروت شخصية 100", "مج 11oz".
+      // (Not "One size" / "مقاس واحد": "size", "one" or "واحد" alone would list every bag and cap.)
+      const sizeWords = (p) => (p.sizes || []).filter((z) => z.id !== 'one').flatMap((z) => [z.id, z.label && z.label.en, z.label && z.label.ar]).filter(Boolean).join(' ');
+      // Its colours in both languages: "white t-shirt", "هودي اسود", "مج ابيض" list the products that come in that colour.
+      // Only the colour's name, not the note after it: the magic mug is black "(turns white when hot)", not a white mug.
+      // With the other ways people say a colour (QA 26 Nov): the feminine (شنطة سوداء / سودا, تيشرت بيضا, حمرا, خضرا,
+      // زرقا, صفرا), gray for grey and رصاصي for رمادي, beige for the shop's Sand (بيج), ذهبي for دهبي, بمبي / بينك for
+      // pink, burgundy for maroon (both نبيتي).
+      const COLOR_SAME = ['أسود سوداء سودا', 'أبيض بيضاء بيضا', 'أحمر حمراء حمرا', 'أخضر خضراء خضرا', 'أزرق زرقاء زرقا', 'أصفر صفراء صفرا',
+        'grey gray رمادي رصاصي', 'sand beige بيج', 'دهبي ذهبي', 'pink وردي بمبي بينك', 'maroon burgundy نبيتي'];
+      // One way only: a navy product is found by "blue" (a blue one isn't found by "navy").
+      const COLOR_ALSO = [['navy كحلي', 'blue أزرق زرقاء زرقا ازرق dark غامق']];
+      const colorWords = (p) => {
+        const names = (p.colors || []).flatMap((c) => [c.name && c.name.en, c.name && c.name.ar]).filter(Boolean).map((n) => n.split(/[(:,،]/)[0]).join(' ');
+        const ws = ` ${norm(names)} `;
+        // (Navy is a blue: "blue t-shirt", "تيشرت ازرق", "dark blue hoodie" find the navy ones too. QA 26 Nov.)
+        const also = COLOR_ALSO.filter(([from]) => norm(from).split(' ').some((w) => ws.includes(` ${w} `))).map(([, add]) => add);
+        return [names, ...COLOR_SAME.filter((g) => norm(g).split(' ').some((w) => ws.includes(` ${w} `))), ...also].join(' ');
+      };
+      const hay = new Map(products.map((p) => {
+        const name = `${p.name.en} ${p.name.ar}`;
+        const text = [p.id, name, catName(p.category).en, catName(p.category).ar, ALIASES[p.id] || ALIASES[POD.assetId(p)] || '', sizeWords(p)].join(' ');
+        const named = SEARCH.index(name, true);
+        // (true: everything the shop's search found before is still found.) The description on its own (see inText), and
+        // the name also as it is spelt, without the forgiving ي (see rank).
+        // Its occasions (src/products.js, OCCASIONS: gift, birthday, mom…), as whole words or what they name, so "tea" is
+        // not the "teacher" of a mug and "men" not the "engagement" of a cushion.
+        return [p.id, { all: SEARCH.index(text, true), about: SEARCH.index([p.description && p.description.en, p.description && p.description.ar].join(' '), true), name: ` ${norm(name)} `, named, spelt: { ...named, loose: '' }, sized: SEARCH.index(sizeWords(p), true), colored: SEARCH.index(colorWords(p)), occasion: SEARCH.index((p.occasions || []).join(' ')) }];
+      }));
+      // The search, on product text only: markup typed into the box ("<b>") is not a word.
+      const typed = () => q.replace(/<[^<>]*>/g, ' ');
+      // Its words as typed (names with them come first), and with their other forms (what finds the products).
+      const terms = () => norm(typed()).split(' ').filter(Boolean);
+      // One of the product's colours: a whole word, as typed or in another form ("whites", "الأبيض"), and spelt as it is
+      // (not without its ي), so "mat" is not the matte cards, "black" not the blackout curtains, ورد not pink (وردي).
+      const isColor = (h, term) => [term.word, ...term.forms].some((f) => f && h.colored.text.includes(` ${f} `));
+      // A year with a calendar ("calendar 2027", "نتيجة 2027"): the calendars are made for any year (QA 26 Nov).
+      const forYear = (h, term) => /^20\d\d$/.test(term.word) && h.all.concepts.has('calendar');
+      // The product's text: its id, names, category, the shop's words for it and its sizes, as before; in its description
+      // (sentences) an English word counts from the start of a word ("print": printed), not inside another: "hat" is not
+      // the "that" of the envelopes, the puzzle and the wallet, "sign" not "design", "pen" not "opens", "tee" not "steel"
+      // (QA 26 Nov). Arabic as before (و, ب, ف join the word after them). Two words that may name one thing ("business
+      // cards") also count each in either place, as when they were one text.
+      const inText = (h, term) => SEARCH.match(h.all, [term]) || SEARCH.match(h.about, [term], /[a-z]/.test(term.word || term.or[0].word) || undefined)
+        || Boolean(term.or && term.or.every((x) => inText(h, x)));
+      // Every word is in the product's text, is one of its colours, is a year for a calendar, or is one of its occasions
+      // («هدية عيد ميلاد», "birthday gift": the mug, the T-shirt, the cushion…).
+      const isOccasion = (h, term) => SEARCH.match(h.occasion, [term], 'word');
+      const found = (p, qs) => { const h = hay.get(p.id); return qs.every((term) => inText(h, term) || isColor(h, term) || forYear(h, term) || isOccasion(h, term)); };
+
+      // Real product photos, recoloured on the server (small cached WebP);
+      // the drawn mockup is the fallback if a picture can't load.
+      // A photo the product manager uploaded comes first (POD.productPicture).
+      const thumbUrl = (p, color) => POD.productPicture(p, color);
+      document.addEventListener('error', (e) => {
+        const img = e.target;
+        if (!(img instanceof HTMLImageElement) || !img.dataset.pid || img.dataset.fallback) return;
+        const p = products.find((x) => x.id === img.dataset.pid);
+        const c = p && p.colors.find((x) => x.id === img.dataset.color);
+        if (!c) return;
+        img.dataset.fallback = '1';
+        img.src = POD.thumbFallback(p, c);
+      }, true);
+      // Designs the shopper saved in the editor: shown on their product card.
+      const drafts = {};
+      for (const d of await POD.drafts.all()) {
+        if (d && d.productId) drafts[d.productId] = { ...d, url: d.preview instanceof Blob ? URL.createObjectURL(d.preview) : null };
+      }
+      const savedParam = new URLSearchParams(location.search).get('saved');
+      if (savedParam) {
+        POD.toast(t('draft.saved'));
+        history.replaceState(null, '', '/#products');
+      }
+      function thumbImg(p, color, eager) {
+        return `<img alt="" ${eager ? '' : 'loading="lazy" '}decoding="async" class="photo-thumb" data-pid="${esc(p.id)}" data-color="${esc(color.id)}" src="${thumbUrl(p, color)}">`;
+      }
+
+      // ---------- Lifestyle photos (each product printed with a design, styled) ----------
+      // public/img/lifestyle/index.json: { productId: { file, alt } }; products without one keep their studio photo.
+      let life = {};
+      // public/img/designed/index.json: each product printed with a ready design, on light grey (scripts/render-designed.js).
+      let designed = {};
+      const loadJson = async (url) => {
+        try {
+          const r = await fetch(url, { cache: 'no-cache' });
+          return r.ok ? await r.json() : {};
+        } catch (e) {
+          return {};
+        }
+      };
+      [life, designed] = await Promise.all([loadJson('/img/lifestyle/index.json'), loadJson('/img/designed/index.json')]);
+      const byId = (id) => products.find((p) => p.id === id);
+      // Pictures kept per product id (lifestyle, designed): products made from another one use that one's.
+      const lifeOf = (p) => life[POD.assetId(p)];
+      const designedOf = (p) => designed[POD.assetId(p)];
+      const hrefOf = (p) => (p.kind === 'book' ? `/book?b=${encodeURIComponent(p.book)}` : p.kind === 'photoset' ? '/photos' : `/product?id=${encodeURIComponent(p.id)}`);
+      // The shop's photos at about the size they are shown (owner's OK, UX item D, 26 Nov): the server makes smaller
+      // copies (/img-w/, src/app.js); the browser picks one by the screen's size and sharpness. Sizes per place:
+      const SIZES = {
+        card: '(max-width: 600px) 46vw, (max-width: 1100px) 30vw, 260px', // the rows and "All products"
+        tile: '(max-width: 600px) 92vw, 33vw', // the three picture tiles
+        hero: '(max-width: 900px) 92vw, 50vw',
+      };
+      const sizedOk = (file) => /^\/img\/(lifestyle|designed)\/[A-Za-z0-9_-][A-Za-z0-9_.-]*\.(webp|jpe?g|png)$/i.test(String(file || ''));
+      const sizedUrl = (file, w) => `/img-w/${w}/${file.slice(5)}`;
+      /** src (and srcset when the photo can be sized) for one of the shop's photos. */
+      const photoSrc = (file, where) => (sizedOk(file)
+        ? `src="${esc(sizedUrl(file, 480))}" srcset="${[320, 480, 800, 1200].map((w) => `${esc(sizedUrl(file, w))} ${w}w`).join(', ')}" sizes="${SIZES[where] || SIZES.card}"`
+        : `src="${esc(file)}"`);
+      /** The card picture: a saved draft, else the manager's photo, else the lifestyle photo, else the product photo. */
+      function cardPicture(p, eager) {
+        const d = drafts[p.id];
+        if (d && d.url) return `<img alt="" src="${d.url}"><span class="saved-badge">${esc(t('draft.badge'))}</span>`;
+        if (p.mainPhoto) return thumbImg(p, POD.firstPick(p.colors), eager);
+        const l = lifeOf(p);
+        if (l && l.file) return `<img class="hm-life" alt="${esc(tr(l.alt) || tr(p.name))}" ${eager ? '' : 'loading="lazy" '}decoding="async" ${photoSrc(l.file, 'card')}>`;
+        const g = designedOf(p);
+        if (g && g.file) return `<img class="hm-designed" alt="${esc(tr(p.name))}" ${eager ? '' : 'loading="lazy" '}decoding="async" ${photoSrc(g.file, 'card')}>`;
+        return thumbImg(p, POD.firstPick(p.colors), eager);
+      }
+      /** "From 250 EGP" and, for products sold in quantities, the smallest pack ("A5 × 100"). */
+      // (Arabic pages show the label in Arabic digits, ٠-٩: they count as digits too.)
+      function priceLine(p) {
+        const first = p.sizes && p.sizes[0];
+        const label = first ? tr(first.label) : '';
+        const pack = label && /[\d٠-٩۰-۹]/.test(label) && !['apparel'].includes(p.category) && /×|x\b|[\d٠-٩۰-۹]{2,}/i.test(label) ? label : '';
+        return `<span class="hm-price">${esc(t('home.from', { price: money(POD.fromPrice(p)) }))}</span>${pack ? `<span class="hm-pack" dir="auto">${esc(pack)}</span>` : ''}`;
+      }
+
+      // ---------- Rows: new and best sellers, then by theme ----------
+      // Ids that don't exist (yet) are skipped, so a row only shows what the shop sells.
+      const BEST = ['tshirt', 'mug', 'bizcards', 'stickersheet', 'hoodie', 'cushion', 'invitations', 'tote'];
+      const NEW = ['uvwrap16', 'calligraphy', 'nameart', 'acrylicnameplate', 'shield', 'quranbox', 'qrstand', 'eventletters', 'villasign', 'engrpen', 'engrwallet', 'menus', 'calendar', 'labels', 'postcards', 'photobook', 'magnets', 'wrappingpaper', 'brochures', 'engrplaque', 'caketopper'];
+      // Five rows, on phones and computers alike (owner's OK, UX item 5, 27 Nov: a shorter home page). The home,
+      // weddings & occasions and laser rows are not on the home page any more; their products are in "All products",
+      // its categories and the search.
+      const ROWS = [
+        { key: 'fresh', ids: [...NEW.slice(0, 4), ...BEST.slice(0, 6)], badge: (id) => (NEW.includes(id) || (byId(id) || {}).base ? 'new' : 'best') },
+        { key: 'wear', ids: ['tshirt', 'hoodie', 'sweatshirt', 'oversized', 'polo', 'kidstee', 'cap', 'tote', 'apron'], link: '/?cat=apparel#products' },
+        { key: 'gifts', ids: ['magicmug', 'couplemugs', 'photobook', 'nameart', 'calligraphy', 'quranbox', 'rehal', 'engrframe', 'engrwallet', 'engrpen', 'keychain', 'namepuzzle', 'tumbler', 'uvwrap16', 'uvwrap20', 'uvwraptumbler', 'uvwraptaper', 'glasscan16', 'glasstumbler20', 'prayermat', 'wrappingpaper'], link: '/?cat=occasions#products' },
+        { key: 'cards', ids: ['invitations', 'greetingcard', 'postcards', 'foldedcards', 'giftvouchers', 'bookmarks', 'eidenvelopes', 'certificates'], link: '/?cat=occasions#products' },
+        { key: 'biz', ids: ['bizcards', 'flyers', 'brochures', 'menus', 'labels', 'letterhead', 'logostickers', 'paperbags', 'booklets', 'rollup', 'banners', 'windowstickers', 'idcards', 'notepads', 'folders', 'giftvouchers', 'acrylicnameplate', 'woodnameplate', 'shield', 'glassaward', 'qrstand'], link: '/?cat=business#products' },
+      ];
+      // Products the manager made from another one show in that one's rows, right after it.
+      for (const row of ROWS) row.ids = row.ids.flatMap((id) => [id, ...products.filter((p) => p.base === id).map((p) => p.id)]);
+      /** All products: the lifestyle photo (the product printed and styled), as in the rows above. */
+      function gridPicture(p) {
+        const d = drafts[p.id];
+        if (d && d.url) return `<img alt="" src="${d.url}"><span class="saved-badge">${esc(t('draft.badge'))}</span>`;
+        if (p.mainPhoto) return thumbImg(p, POD.firstPick(p.colors));
+        const l = lifeOf(p);
+        if (l && l.file) return `<img class="hm-life" alt="${esc(tr(l.alt) || tr(p.name))}" loading="lazy" decoding="async" ${photoSrc(l.file, 'card')}>`;
+        const g = designedOf(p);
+        if (g && g.file) return `<img class="hm-designed" alt="${esc(tr(p.name))}" loading="lazy" decoding="async" ${photoSrc(g.file, 'card')}>`;
+        return thumbImg(p, POD.firstPick(p.colors));
+      }
+      // (Plain products sold without printing, `blank`, have no editor: their own page, with "Add to cart".)
+      const editorHref = (p) => (p.kind === 'book' ? `/book?b=${encodeURIComponent(p.book)}` : p.kind === 'photoset' ? '/photos' : p.blank ? `/product?id=${encodeURIComponent(p.id)}` : `/editor?product=${encodeURIComponent(p.id)}`);
+      function rowCard(p, badge) {
+        return `<a class="hm-card" href="${hrefOf(p)}">
+          <div class="hm-pic">${cardPicture(p)}${badge ? `<span class="hm-badge hm-badge-${badge}">${esc(t('hm.badge.' + badge))}</span>` : ''}</div>
+          <h3>${esc(tr(p.name))}</h3>
+          <div class="hm-meta">${priceLine(p)}</div>
+        </a>`;
+      }
+      function renderRows() {
+        document.getElementById('hm-rows').innerHTML = ROWS.map((row) => {
+          const list = [...new Set(row.ids)].map(byId).filter(Boolean);
+          if (list.length < 3) return '';
+          return `<section class="hm-section" aria-labelledby="hm-row-${row.key}" data-place="row:${row.key}">
+            <div class="hm-head">
+              <div><h2 id="hm-row-${row.key}">${esc(t(`hm.row.${row.key}`))}</h2><p class="muted">${esc(t(`hm.row.${row.key}.sub`))}</p></div>
+              <div class="hm-head-end">
+                ${row.link ? `<a class="hm-more" href="${row.link}">${esc(t('hm.seeAll'))}</a>` : ''}
+                <button type="button" class="hm-arrow" data-scroll="-1" aria-label="${esc(t('hm.prev'))}">‹</button><button type="button" class="hm-arrow" data-scroll="1" aria-label="${esc(t('hm.next'))}">›</button>
+              </div>
+            </div>
+            <div class="hm-row">${list.map((p) => rowCard(p, row.badge ? row.badge(p.id) : null)).join('')}</div>
+          </section>`;
+        }).join('');
+      }
+      // Arrows: one screenful along the row (in reading direction).
+      document.getElementById('hm-rows').addEventListener('click', (e) => {
+        const b = e.target.closest('[data-scroll]');
+        if (!b) return;
+        const row = b.closest('.hm-section').querySelector('.hm-row');
+        const dir = getComputedStyle(row).direction === 'rtl' ? -1 : 1;
+        row.scrollBy({ left: Number(b.dataset.scroll) * dir * row.clientWidth * 0.9, behavior: 'smooth' });
+      });
+
+      // ---------- Three picture tiles ----------
+      function renderTiles() {
+        // The shop's own pictures (hero-2, hero-3) first; else a product the shop sells now (hidden ones are not in the list).
+        const pic = (key, ids, cat) => {
+          const l = life[key];
+          if (l && l.file) return `<img alt="" loading="lazy" decoding="async" ${photoSrc(l.file, 'tile')}>`;
+          const p = ids.map(byId).find(Boolean) || products.find((x) => x.category === cat && !x.kind);
+          if (!p) return '';
+          const pl = !p.mainPhoto && lifeOf(p);
+          return pl && pl.file ? `<img alt="" loading="lazy" decoding="async" ${photoSrc(pl.file, 'tile')}>` : thumbImg(p, POD.firstPick(p.colors));
+        };
+        const has = (c) => products.some((p) => p.category === c);
+        const tiles = [
+          has('occasions') && { key: 'gifts', img: pic('hero-2', ['mug', 'magicmug', 'couplemugs'], 'occasions'), href: '/?cat=occasions#products' },
+          has('business') && { key: 'biz', img: pic('hero-3', ['bizcards', 'flyers'], 'business'), href: '/?cat=business#products' },
+          { key: 'designs', img: pic('', ['tshirt', 'hoodie', 'mug', ...products.filter((p) => !p.kind).map((p) => p.id)]), href: '/designs' },
+        ].filter(Boolean);
+        document.getElementById('hm-tiles').innerHTML = tiles.map((x) => `<a class="hm-tile" href="${x.href}">
+          <div class="hm-tile-pic">${x.img}</div>
+          <div class="hm-tile-body"><h3>${esc(t(`hm.tile.${x.key}`))}</h3><span class="hm-tile-link">${esc(t(`hm.tile.${x.key}.cta`))} <span aria-hidden="true">←</span></span></div>
+        </a>`).join('');
+      }
+
+      // ---------- The points under the banner, from launch ----------
+      // The delivery point says the shop's real days (its settings, as at checkout): "in 2 days: express, or 5 days
+      // standard". Only while paying in advance (today's four points show otherwise).
+      const days = catalog.delivery || {};
+      function paintTrust() {
+        const on = POD.payment.prepayOnly && days.expressDays > 0 && days.standardDays > 0;
+        document.querySelectorAll('[data-trust-days]').forEach((el) => {
+          el.textContent = !on ? '' : el.dataset.trustDays === 'title'
+            ? t('hm.trust2.deliveryT', { days: POD.plural('hm.days', days.expressDays) })
+            : t('hm.trust2.deliveryS', { days: POD.plural('hm.days', days.standardDays) });
+        });
+      }
+
+      // ---------- Categories ----------
+      // On phones (820px and less) one row that is swiped (styles.css, "Home page, 27 Nov"): a fade at its end edge
+      // while there is more to see, and the chosen category scrolled into view.
+      const catsRow = document.getElementById('cats');
+      function catsFade() {
+        const more = catsRow.scrollWidth - catsRow.clientWidth - Math.abs(catsRow.scrollLeft);
+        catsRow.classList.toggle('cats-more', more > 2);
+      }
+      catsRow.addEventListener('scroll', catsFade, { passive: true });
+      window.addEventListener('resize', catsFade);
+      /** The chosen chip into view, along the row only (the page itself doesn't move). */
+      function catsShowActive() {
+        const a = catsRow.querySelector('.chip.active');
+        if (!a || catsRow.scrollWidth <= catsRow.clientWidth) return;
+        const r = catsRow.getBoundingClientRect();
+        const c = a.getBoundingClientRect();
+        const rtl = getComputedStyle(catsRow).direction === 'rtl';
+        // (In view and clear of the fade at the end edge: left in Arabic, right in English.)
+        if (c.left >= r.left + (rtl ? 48 : 0) && c.right <= r.right - (rtl ? 0 : 48)) return;
+        catsRow.scrollLeft += c.left + c.width / 2 - (r.left + r.width / 2);
+      }
+
+      function render() {
+        renderRows();
+        renderTiles();
+        paintTrust();
+        // Only categories with something in them (hidden products are not in the list).
+        const used = categories.filter((c) => products.some((p) => p.category === c.id));
+        if (cat !== 'all' && !used.some((c) => c.id === cat)) cat = 'all';
+        document.getElementById('cats').innerHTML = [{ id: 'all', name: null }, ...used]
+          .map((c) => `<button class="chip ${c.id === cat ? 'active' : ''}" data-cat="${c.id}">${esc(c.name ? tr(c.name) : t('cat.all'))}</button>`)
+          .join('');
+        // The heading says what is listed: "All products", or the chosen category's name (owner's OK, UX item 2).
+        document.getElementById('hm-all-title').textContent = cat === 'all' ? t('hm.allTitle') : tr(catName(cat));
+        catsShowActive();
+        catsFade();
+        const ts = terms();
+        const qs = SEARCH.query(typed());
+        // A search with nothing to look for (only symbols, like "$&") matches nothing, not everything.
+        const searching = Boolean(q.trim());
+        let list = products.filter((p) => (cat === 'all' || p.category === cat) && (!searching || (ts.length && found(p, qs))));
+        // Products whose name matches come first: names with the words as whole words, in another form or language
+        // ("hoodies", "مجات", كوب: the mugs), then names with a word that only starts with them (كوبونات after the
+        // mugs, للكابلز after the cap; at the start of a word, so "tshirt" puts T-shirts before the Sweatshirt), then
+        // names spelt another way (a whole word without its ي too: كتيب is not the كتب of فواصل كتب, so the booklets come
+        // before the bookmarks; QA 26 Nov), then the rest (description, category). A size, a colour or a year typed with
+        // the product ("tshirt xl", "white t-shirt", "calendar 2027") is not looked for in the name, so the T-shirts still
+        // come before the Sweatshirt. (A colour only when another word is left: in "card 100" the calendar, in "Matte card"
+        // with 100 calendars, is not a card by name.)
+        // Not by name: a gift search («هدية عيد ميلاد», "birthday gift", "هدايا عيد الأم") lists the products with all its
+        // words among their occasions first (4; one with a word in its name before the others: «هدية مولود», the baby onesie),
+        // the best gifts first (their order in src/products.js: the mugs, the T-shirt, the cushion…), then the rest (5); any
+        // other search lists what has the words in its own text first (5: «عيد ميلاد», the invitations), then what only its
+        // occasions find (6, in the same order). (Owner's OK, UX item 4, 27 Nov.)
+        const byOccasion = (h, tq) => (tq.some((term) => term.concepts.includes('gift')) ? (!SEARCH.match(h.occasion, tq, 'word') ? 5 : tq.some((term) => SEARCH.match(h.named, [term], 'word')) ? 4 : 4.5) : tq.every((term) => inText(h, term) || isColor(h, term) || forYear(h, term)) ? 5 : 6);
+        const rank = (p) => { const h = hay.get(p.id); const tz = ts.filter((w) => ts.length < 2 || !SEARCH.match(h.sized, SEARCH.query(w))); const tc = tz.filter((w) => !SEARCH.query(w).every((term) => isColor(h, term) || forYear(h, term))); const tw = tc.length ? tc : tz; const tq = tw.length === ts.length ? qs : SEARCH.query(tw.join(' ')); return SEARCH.match(h.spelt, tq, 'word') ? 0 : tw.every((w) => h.name.includes(` ${w}`)) ? 1 : SEARCH.match(h.named, tq, 'word') || tw.every((w) => loose(h.name).includes(` ${loose(w)}`)) ? 2 : SEARCH.match(h.named, tq, true) ? 3 : byOccasion(h, tq); };
+        if (ts.length) list = list.map((p, i) => [rank(p), i, p]).sort((x, y) => x[0] - y[0] || (x[0] > 3 && x[0] !== 5 ? (x[2].occasionRank || 99) - (y[2].occasionRank || 99) : 0) || x[1] - y[1]).map((x) => x[2]);
+        document.getElementById('home-count').textContent = searching && list.length ? POD.plural('home.found', list.length, { q: q.trim() }) : '';
+        // A search that finds nothing: «جرّب دول:» under the message, the top best sellers (the same cards), then a few
+        // ready designs and the link to all of them (owner's OK, UX item 4, 27 Nov).
+        let before = '';
+        let after = '';
+        if (!list.length) {
+          const qq = q.trim();
+          const tries = qq ? BEST.map(byId).filter(Boolean).slice(0, 4) : [];
+          const empty = `<div class="card empty home-empty">
+            <h3>${qq ? esc(t('home.noMatch', { q: '\u0000' })).replace('\u0000', `<bdi>${esc(qq)}</bdi>`) : esc(t('home.noMatchCat'))}</h3>
+            <p class="muted">${esc(t(tries.length ? 'home.noMatchTry' : 'home.noMatchHint'))}</p>
+            <div class="design-empty-actions">
+              ${qq ? `<button type="button" class="btn btn-primary" data-clear-q>${esc(t('designs.clearSearch'))}</button>` : ''}
+              ${cat !== 'all' ? `<button type="button" class="btn" data-all-cats>${esc(t('designs.allCats'))}</button>` : ''}
+              ${qq ? `<a class="btn" href="/designs?q=${encodeURIComponent(qq)}">${esc(t('home.searchDesigns', { q: qq }))}</a>` : ''}
+            </div>
+          </div>`;
+          if (!tries.length) {
+            grid.innerHTML = empty;
+            return;
+          }
+          before = `${empty}<h3 class="home-try-title">${esc(t('search.try'))}</h3>`;
+          after = `<div class="home-try-designs"><div class="home-try-box"></div>
+            <a class="btn home-try-all" href="/designs">${esc(t('search.allDesigns'))} <span aria-hidden="true">${document.documentElement.dir === 'rtl' ? '←' : '→'}</span></a></div>`;
+          list = tries;
+          showTryDesigns();
+        }
+        // Catalogue cards: the product with a design on, the name, the price, "Start designing" and "Details".
+        const total = list.length;
+        if (!searching && !showAll && total > FIRST + 2) list = list.slice(0, FIRST);
+        grid.innerHTML = before + list.map((p) => `
+          <div class="hm-gcard" data-place="${esc(p.id)}">
+            <a class="hm-gpic" href="${hrefOf(p)}" tabindex="-1" aria-hidden="true">${gridPicture(p)}</a>
+            <h3><a href="${hrefOf(p)}">${esc(tr(p.name))}</a></h3>
+            <div class="hm-meta">${priceLine(p)}</div>
+            <a class="btn btn-primary hm-gstart" href="${editorHref(p)}">${esc(t(p.kind || p.blank ? 'hm.open' : 'home.start'))}</a>
+            <a class="btn hm-gdetails" href="${hrefOf(p)}">${esc(t('hm.details'))}</a>
+          </div>`).join('') + (list.length < total ? `
+          <div class="hm-showall">
+            <button type="button" class="btn btn-lg" data-show-all>${esc(t('home.showAll', { n: POD.num(total) }))}</button>
+            <span class="muted small">${esc(t('home.showing', { n: POD.num(list.length), total: POD.num(total) }))}</span>
+          </div>` : '') + after;
+      }
+      /** The ready designs under "Try these" (the shop's pictures of them, the header search's list: site-search.js). */
+      function showTryDesigns() {
+        const tries = POD.searchTries;
+        if (!tries) return;
+        tries.readyDesigns(4).then((ds) => {
+          const box = grid.querySelector('.home-try-box');
+          if (!box || !ds.length) return;
+          box.innerHTML = `<h3 class="home-try-title">${esc(t('search.tryDesigns'))}</h3>
+            <div class="home-try-grid">${ds.map((d) => `<a class="card product-card design-card" href="${esc(d.href)}" data-place="try:${esc(d.id)}">
+              <div class="thumb"><img alt="" loading="lazy" decoding="async" src="${esc(tries.sizedPic(d.file, 480))}"></div>
+              <div class="body"><h3 dir="auto">${esc(tr(d.name))}</h3></div>
+            </a>`).join('')}</div>`;
+        });
+      }
+      document.getElementById('cats').addEventListener('click', (e) => {
+        const b = e.target.closest('[data-cat]');
+        if (!b) return;
+        cat = b.dataset.cat;
+        saveUrl();
+        render();
+      });
+      // ---------- Search ----------
+      const qInput = document.getElementById('home-q');
+      qInput.value = q;
+      function saveUrl() {
+        const u = new URL(location.href);
+        if (q.trim()) u.searchParams.set('q', q.trim()); else u.searchParams.delete('q');
+        if (cat !== 'all') u.searchParams.set('cat', cat); else u.searchParams.delete('cat');
+        history.replaceState(history.state, '', u.pathname + u.search + u.hash);
+      }
+      let typing = null;
+      qInput.addEventListener('input', () => {
+        clearTimeout(typing);
+        typing = setTimeout(() => {
+          q = qInput.value.slice(0, 60);
+          if (q.trim()) cat = 'all'; // a search looks in every category
+          saveUrl();
+          render();
+        }, 200);
+      });
+      document.getElementById('home-search').addEventListener('submit', (e) => {
+        e.preventDefault();
+        clearTimeout(typing);
+        q = qInput.value.slice(0, 60);
+        if (q.trim()) cat = 'all';
+        saveUrl();
+        render();
+        qInput.blur(); // closes the phone keyboard so the results show
+      });
+      grid.addEventListener('click', (e) => {
+        if (e.target.closest('[data-show-all]')) {
+          showAll = true;
+          try { history.replaceState({ ...(history.state && typeof history.state === 'object' ? history.state : {}), homeAll: true }, ''); } catch (err) { /* not kept */ }
+          render();
+          // On to the first of the products that just came in.
+          const next = grid.querySelectorAll('.hm-gcard h3 a')[FIRST];
+          if (next) next.focus({ preventScroll: true });
+          return;
+        }
+        if (e.target.closest('[data-clear-q]')) {
+          q = '';
+          qInput.value = '';
+          saveUrl();
+          render();
+          qInput.focus();
+        } else if (e.target.closest('[data-all-cats]')) {
+          cat = 'all';
+          saveUrl();
+          render();
+        }
+      });
+      // Coming back to the page: the browser may refill the box; the address is what counts.
+      window.addEventListener('pageshow', () => { qInput.value = q; });
+
+      // (A product the shop doesn't sell now is left out; another one takes its place.)
+      const pick = (id, colorId) => {
+        const p = products.find((x) => x.id === id);
+        if (!p) return '';
+        const c = p.colors.find((x) => x.id === colorId && POD.canPick(x)) || POD.firstPick(p.colors);
+        return thumbImg(p, c, true);
+      };
+      const trio = () => {
+        const out = [pick('tshirt', 'navy'), pick('hoodie', 'cream'), pick('mug', 'white')].filter(Boolean);
+        for (const p of products) {
+          if (out.length >= 3) break;
+          if (!p.kind && !['tshirt', 'hoodie', 'mug'].includes(p.id)) out.push(thumbImg(p, POD.firstPick(p.colors), true));
+        }
+        return out.join('');
+      };
+      // The hero: the big lifestyle picture of many printed products; until there is one, three product photos.
+      const hero = document.getElementById('hero-art');
+      hero.innerHTML = life['hero-1'] && life['hero-1'].file
+        ? `<img class="hm-hero-photo" alt="" ${photoSrc(life['hero-1'].file, 'hero')} fetchpriority="high">`
+        : `<div class="hm-hero-trio">${trio()}</div>`;
+
+      render();
+      backToPlace();
+      document.addEventListener('pod:langchange', render);
+    })();
+  </script>
+</body>
+</html>
