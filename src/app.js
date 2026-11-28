@@ -586,7 +586,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   const signinLimiter = new security.SharedLimiter(path.join(dataDir, '.signin-limits.json'));
   const auth = new security.AdminAuth(adminPassword, { dataDir, store, limiter: signinLimiter });
   const LIMITS = { ...DEFAULT_LIMITS, ...limits };
-  const memoryLimiter = new security.RateLimiter();
+  // Per-visitor limits (orders, designs, coupon codes…): kept across restarts (the host stops the app after 5
+  // quiet minutes; security review 28 Nov), in a file of hashed keys.
+  const memoryLimiter = new security.PersistentRateLimiter(path.join(dataDir, '.rate-limits.json'));
   const SHARED_LIMITS = new Set(['accountLogin', 'accountLoginId']);
   const limiterFor = (key) => (SHARED_LIMITS.has(String(key).split(':')[0]) ? signinLimiter : memoryLimiter);
   const limiter = { check: (k, r) => limiterFor(k).check(k, r), hit: (k, r) => limiterFor(k).hit(k, r) };

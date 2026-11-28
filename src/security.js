@@ -101,6 +101,96 @@ class RateLimiter {
   }
 }
 
+/**
+ * RateLimiter whose counts survive a restart (security review 28 Nov: the host stops the app after 5 quiet
+ * minutes, and the per-visitor limits — orders, designs, wrong coupon codes — started again from zero). Counted in
+ * memory as before; a snapshot is saved to a file in the data folder a moment after a count (and when the app stops)
+ * and read back when it starts. Keys are stored hashed (no IP addresses in the file); counts older than a day are
+ * dropped; another copy's snapshot is merged in, not overwritten. If the file can't be used, it just counts in memory.
+ */
+const PERSISTENT = new Set();
+process.once('exit', () => { for (const l of PERSISTENT) if (l.timer) l.save(); });
+class PersistentRateLimiter extends RateLimiter {
+  constructor(file, { delayMs = 2000 } = {}) {
+    super();
+    this.file = file;
+    this.delayMs = delayMs;
+    this.timer = null;
+    for (const [k, list] of Object.entries(this.readFile())) this.hits.set(k, list);
+    PERSISTENT.add(this);
+  }
+  key(k) {
+    return sha256(String(k)).toString('base64url').slice(0, 22);
+  }
+  readFile() {
+    try {
+      const d = JSON.parse(fs.readFileSync(this.file, 'utf8'));
+      if (!d || typeof d !== 'object' || Array.isArray(d)) return {};
+      const now = Date.now();
+      const out = {};
+      for (const [k, list] of Object.entries(d)) {
+        const keep = Array.isArray(list) ? list.filter((tm) => typeof tm === 'number' && tm <= now && now - tm < 24 * 3600e3) : [];
+        if (keep.length) out[k] = keep;
+      }
+      return out;
+    } catch (e) {
+      return {};
+    }
+  }
+  check(key, rules) {
+    return super.check(this.key(key), rules);
+  }
+  hit(key, rules) {
+    // (The parent's own check, on the hashed key: this.check would hash it again.)
+    const k = this.key(key);
+    const r = RateLimiter.prototype.check.call(this, k, rules);
+    if (typeof r === 'number') return r;
+    r.list.push(r.now);
+    this.hits.set(k, r.list);
+    if (this.hits.size > 20000) this.prune(Math.max(...rules.map((x) => x.ms)));
+    this.later();
+    return 0;
+  }
+  clear(key) {
+    super.clear(this.key(key));
+    this.later();
+  }
+  later() {
+    if (this.timer) return;
+    this.timer = setTimeout(() => { this.timer = null; this.save(); }, this.delayMs);
+    if (this.timer.unref) this.timer.unref();
+  }
+  /** Writes the counts (merged with another copy's), atomically; never throws. */
+  save() {
+    if (this.timer) { clearTimeout(this.timer); this.timer = null; }
+    try {
+      const now = Date.now();
+      const data = this.readFile();
+      for (const [k, list] of this.hits) {
+        // (Each moment as many times as either copy counted it: two tries in the same millisecond are two tries.)
+        const count = new Map();
+        for (const src of [data[k] || [], list]) {
+          const here = new Map();
+          for (const tm of src) here.set(tm, (here.get(tm) || 0) + 1);
+          for (const [tm, n] of here) count.set(tm, Math.max(count.get(tm) || 0, n));
+        }
+        const merged = [...count].flatMap(([tm, n]) => Array(n).fill(tm)).filter((tm) => now - tm < 24 * 3600e3).sort((a, b) => a - b);
+        if (merged.length) data[k] = merged.slice(-500);
+      }
+      const keys = Object.keys(data);
+      if (keys.length > 20000) {
+        keys.sort((a, b) => data[a][data[a].length - 1] - data[b][data[b].length - 1]);
+        for (const k of keys.slice(0, keys.length - 20000)) delete data[k];
+      }
+      const tmp = `${this.file}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
+      fs.writeFileSync(tmp, JSON.stringify(data));
+      fs.renameSync(tmp, this.file);
+    } catch (e) {
+      // (Disk full, no permission: the counts stay in memory.)
+    }
+  }
+}
+
 const SLEEP = new Int32Array(new SharedArrayBuffer(4));
 
 /**
@@ -749,4 +839,4 @@ function cleanup({ store, sharesDir, designDays = 30, uploadingHours = 24, share
   return { designs, shares };
 }
 
-module.exports = { pageCsp, inlineScriptHashes, securityHeaders, RateLimiter, SharedLimiter, AdminAuth, weakPassword, bearer, sanitizeSvg, cleanup };
+module.exports = { pageCsp, inlineScriptHashes, securityHeaders, RateLimiter, PersistentRateLimiter, SharedLimiter, AdminAuth, weakPassword, bearer, sanitizeSvg, cleanup };
