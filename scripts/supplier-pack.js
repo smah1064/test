@@ -169,7 +169,7 @@ async function productBlock(p, pack) {
   const anyBleed = sides.some(({ f }) => f.bleedMm);
   const anySafe = sides.some(({ f }) => f.safeMm);
   const showDpi = pack.dpiColumn !== false;
-  const head = [pack.sideLabel || 'الوجه', pack.areaLabel || 'مقاس الطباعة', ...(anyBleed ? [pack.bleedLabel || 'زيادة القص'] : []), ...(showDpi ? ['دقة الملف'] : []), ...(anySafe ? ['هامش الأمان'] : []), ...(anyZone ? ['مساحة تحريك التصميم'] : [])];
+  const head = [pack.sideLabel || 'الوجه', pack.areaLabel || 'مقاس الطباعة', ...(anyBleed ? [pack.bleedLabel || 'زيادة القص'] : []), ...(showDpi ? [pack.dpiLabel || 'دقة الملف'] : []), ...(anySafe ? ['هامش الأمان'] : []), ...(anyZone ? ['مساحة تحريك التصميم'] : [])];
   const body = sides.map(({ s, f }) => [
     `<b>${esc(s.name.ar)}</b>`, `<b>${wh(f.wCm, f.hCm)}</b>`, ...(anyBleed ? [`${ltr(f.bleedMm)} مم`] : []), ...(showDpi ? [extra.noFile ? '-' : ltr(`${extra.dpi || f.dpi} DPI`)] : []), ...(anySafe ? [f.safeMm ? `${ltr(f.safeMm)} مم` : '-'] : []),
     ...(anyZone ? [f.zone ? `${wh(Math.round(f.zone.wCm), Math.round(f.zone.hCm))} تقريبًا` : 'مكان ثابت'] : []),

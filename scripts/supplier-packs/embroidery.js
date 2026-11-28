@@ -34,6 +34,8 @@ module.exports = {
   title: 'التطريز',
   subtitle: 'شعار أو كلام مطرّز على التيشيرتات، البولو، الهوديز، الكابات، الشنط والمرايل',
   short: 'التطريز',
+  sizesWord: 'مساحات التطريز',
+  jobSize: 'مساحة التطريز بالسنتيمتر',
   products: IDS,
   covers: (p) => Boolean(p.embroidery),
   /** One drawing per product: the embroidery area on the side it is stitched on. */
