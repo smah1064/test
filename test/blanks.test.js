@@ -43,6 +43,10 @@ test('a plain glass: made, priced by quantity, ordered without approval, no prin
   assert.strictEqual((await call('POST', '/api/blanks', { productId: glass.id, qty: 0 })).status, 400);
   assert.strictEqual((await call('POST', '/api/blanks', { productId: glass.id, qty: 21 })).status, 400);
   assert.strictEqual((await call('POST', `/api/designs/${made.id}/quantity`, { qty: 5 })).status, 409);
+  // QA 28 Nov: a printed design can't be made on a plain glass (it would be priced as the plain glass).
+  const printed = await call('POST', '/api/designs', { productId: glass.id, color: glass.colors[0].id, size: glass.sizes[0].id, sides: { front: { editor: { objects: [] } } } });
+  assert.strictEqual(printed.status, 400);
+  assert.strictEqual((await printed.json()).error, 'Unknown product');
   // Ordered with no approval asked (requireApproval is on), straight to the queue.
   const q = await (await call('POST', '/api/cart/quote', { designIds: [made.id] })).json();
   const o = await call('POST', '/api/orders', { customer: { name: 'Mona', phone: '01011112222', governorate: 'cairo', city: 'Nasr City', address: '3 Street 9' }, designIds: [made.id], expectedTotal: q.total });

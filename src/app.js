@@ -1966,8 +1966,9 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   }, express.json({ limit: '60mb' }), (req, res) => {
     const { productId, color, size, sides } = req.body || {};
     const product = getProduct(productId);
-    // Photo prints are ordered on the photos page (POST /api/photosets).
-    if (!product || product.kind === 'photoset') throw new HttpError(400, 'unknownProduct');
+    // Photo prints are ordered on the photos page (POST /api/photosets); plain items, sold without printing, only
+    // through POST /api/blanks (QA 28 Nov: a printed design on a plain glass was priced as the plain glass).
+    if (!product || product.kind === 'photoset' || product.blank) throw new HttpError(400, 'unknownProduct');
     const colorDef = product.colors.find((c) => c.id === color);
     if (!colorDef) throw new HttpError(400, 'unknownColor');
     const sizeDef = product.sizes.find((s) => s.id === size);
@@ -3553,6 +3554,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       return why === 'sizeUnavailable' ? 'bookCoverUnavailable' : why;
     }
     if (d.kind === 'photoset') return catalog.unavailable(product, { colorId: d.color && d.color.id });
+    // A plain item is only ever a 'blank' design; anything printed on it (made before the check above) can't be ordered.
+    if (product.blank && d.kind !== 'blank') return 'productUnavailable';
     const lines = d.quantities && d.quantities.length ? d.quantities : [{ color: d.color, size: d.size }];
     for (const l of lines) {
       const why = catalog.unavailable(product, { colorId: l.color && l.color.id, sizeId: l.size && l.size.id, sideIds: (d.sides || []).map((sd) => sd.id).filter((id) => id !== EMB) });
