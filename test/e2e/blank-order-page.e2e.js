@@ -14,6 +14,25 @@ test('order page: plain glasses read as pieces, with no print side or proof', { 
       const r = await fetch(srv.base + url, { method, headers: { 'Content-Type': 'application/json', 'x-lang': 'en' }, body: body === undefined ? undefined : JSON.stringify(body) });
       return { status: r.status, body: await r.json() };
     };
+    // QA 28 Nov: in the cart, a plain glass had a proof box saying its print file was missing, and needed the tick.
+    {
+      const ctx = await newContext(browser);
+      await ctx.addInitScript(() => { try { localStorage.setItem('pod-lang', 'en'); } catch (e) { /* ignore */ } });
+      const page = await ctx.newPage();
+      const errors = [];
+      page.on('pageerror', (e) => errors.push(String(e)));
+      await page.goto(`${srv.base}/product?id=glasstaper`, { waitUntil: 'load' });
+      await page.waitForSelector('#pp-blank-add');
+      await Promise.all([page.waitForURL(/\/cart/), page.click('#pp-blank-add')]);
+      await page.waitForSelector('.cart-item', { timeout: 20000 });
+      await page.waitForTimeout(1500);
+      const text = await page.textContent('main');
+      assert.doesNotMatch(text, /print file is missing|could not be read/i, text);
+      assert.strictEqual(await page.$('.cart-proof-title'), null, 'no proof box for a plain glass');
+      assert.ok(await page.isHidden('#proof-ok'), 'nothing to tick');
+      assert.deepStrictEqual(errors, []);
+      await ctx.close();
+    }
     const { products } = (await api('GET', '/api/products')).body;
     const glass = products.find((p) => p.blank);
     assert.ok(glass, 'a plain glass');

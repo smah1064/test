@@ -565,6 +565,7 @@
       /** A ready design added as it is (the shop's own, unchanged): nothing to tick (owner, 26 Nov). */
       const isReady = (id) => Boolean(proofOf(id) && proofOf(id).ready);
       function isApproved(id) {
+        if (POD.getCart().some((it) => it.designId === id && it.kind === 'blank')) return true;
         const proof = proofOf(id);
         if (proof && proof.ready) return true;
         const a = approvals.get(id);
@@ -635,6 +636,8 @@
               ${plain ? '' : PODProof.checksHtml(proof)}`;
       }
       function proofSlot(item, i) {
+        // A plain item (kind 'blank'): nothing printed, so no proof to look at (QA 28 Nov).
+        if (item.kind === 'blank') return '';
         const id = item.designId;
         const st = proofs.get(id);
         const ok = isApproved(id);
@@ -692,7 +695,8 @@
         if (focused && document.getElementById(focused)) document.getElementById(focused).focus({ preventScroll: true });
       }
       /** The items whose proof is here and is the customer's own (not a ready design): the ones the tick approves. */
-      const ownLoaded = (cart) => cart.filter((it) => !blocked.has(it.designId) && proofOf(it.designId) && !isReady(it.designId));
+      // (Plain items, kind 'blank', have nothing printed to approve.)
+      const ownLoaded = (cart) => cart.filter((it) => it.kind !== 'blank' && !blocked.has(it.designId) && proofOf(it.designId) && !isReady(it.designId));
       /** The order is placed only once every item's current proof is approved: ready designs as they are, the customer's
           own with the one tick next to "Place order" ("Place order" always looks ready: pressed too early, it points to
           the tick). It is truly disabled only while an order is being placed. */

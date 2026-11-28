@@ -1077,7 +1077,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
       d.preflight = { status: low.length ? 'warn' : 'pass', checks: low.length ? [{ id: 'photoLowRes', level: 'warn', params: { count: low.length, photos: low.map((p) => p.n).join(', ') } }] : [], at: new Date().toISOString() };
       return d.preflight;
     }
-    if (!mod || d.kind === 'book' || d.kind === 'gangsheet') {
+    // (A plain item, kind 'blank', has nothing to print: no print file to check. QA 28 Nov.)
+    if (!mod || d.kind === 'book' || d.kind === 'gangsheet' || d.kind === 'blank') {
       d.preflight = { status: 'pass', checks: [], at: new Date().toISOString() };
       return d.preflight;
     }
@@ -1121,6 +1122,8 @@ function createApp({ dataDir, adminPassword, limits = {}, cleanupEvery = 6 * 360
   /** The proof as the customer and the shop see it (see the shared contract). */
   async function proofFor(d, item = null) {
     const product = getProduct(d.productId);
+    // Plain items made before their check was skipped kept a "print file missing" fail: checked again (QA 28 Nov).
+    if (d.kind === 'blank' && d.preflight && d.preflight.status !== 'pass') d.preflight = null;
     if (!d.preflight && d.kind !== 'book') {
       await runPreflight(d);
       store.save();

@@ -36,6 +36,9 @@ test('a plain glass: made, priced by quantity, ordered without approval, no prin
   const made = await r.json();
   assert.strictEqual(made.price, unit * 3);
   assert.strictEqual(made.qty, 3);
+  // Nothing to print, so nothing to check: its proof passes (QA 28 Nov: "print file missing" in the cart).
+  const proof = await (await call('GET', `/api/designs/${made.id}/proof`)).json();
+  assert.strictEqual(proof.preflight.status, 'pass', JSON.stringify(proof.preflight));
   // Its picture is there.
   assert.strictEqual((await fetch(base + made.previewUrl)).status, 200);
   // Not for a printed product, nor a silly quantity; the cart's − / + is not for it.
