@@ -5,8 +5,9 @@
  * print size, margins, colours, sizes: read from src/products.js, so it always matches the site),
  * the files the dashboard produces for it, and the questions the printer should answer.
  *
- *   NODE_PATH=$(npm root -g) node scripts/supplier-pack.js <method | all> [--brand <id>] [--contact "name · phone"] [--no-prices]
+ *   NODE_PATH=$(npm root -g) node scripts/supplier-pack.js <method | all> [--brand <id>] [--contact "name · phone"] [--prices]
  *
+ * Prices are not asked for unless --prices is given (owner, 28 Nov 2026: he discusses price himself).
  * Owner, 28 Nov 2026: the packs carry the Arabic ebda3 logo but do not say who we are (no "about us", no
  * description of the website). A brand is scripts/supplier-packs/brands/<id>.json: { "name": { "ar", "en" },
  * "logo": "path from the json's folder (svg/png)", "site": "example.com", "contact": "..." }, all optional.
@@ -145,19 +146,20 @@ function question(q, n) {
 
 async function productBlock(p, pack) {
   const photo = await photoUri(p.id);
-  const sides = p.sides.map((s) => ({ s, f: sideFacts(s) }));
+  const sides = (pack.sidesOf ? pack.sidesOf(p) : p.sides).map((s) => ({ s, f: sideFacts(s) }));
   const sizes = p.sizes.filter((z) => z.id !== 'one').map((z) => (z.label && z.label.ar) || z.id);
   const extra = (pack.productNotes && pack.productNotes[p.id]) || {};
   const meta = [
     ['الخامة', esc(extra.material || p.description.ar)],
-    ['ألوان القطعة', `<span class="chips">${p.colors.map((c) => `<span><i style="background:${c.hex}"></i>${esc(c.name.ar)}</span>`).join('')}</span>`],
-    ...(sizes.length ? [['المقاسات', `<span class="chips">${sizes.map((z) => `<span${/[\u0600-\u06ff]/.test(z) ? '' : ' dir="ltr"'}>${esc(z)}</span>`).join('')}</span>`]] : []),
+    [pack.coloursLabel || 'ألوان القطعة', `<span class="chips">${p.colors.map((c) => `<span><i style="background:${c.hex}"></i>${esc(c.name.ar)}</span>`).join('')}</span>`],
+    ...(sizes.length && !extra.hideSizes ? [[extra.sizesLabel || 'المقاسات', `<span class="chips">${sizes.map((z) => `<span${/[\u0600-\u06ff]/.test(z) ? '' : ' dir="ltr"'}>${esc(z)}</span>`).join('')}</span>`]] : []),
   ];
+  for (const row of extra.rows || []) meta.push(row);
   const anyZone = sides.some(({ f }) => f.zone);
   const anyBleed = sides.some(({ f }) => f.bleedMm);
   const head = ['الوجه', 'مقاس الطباعة', ...(anyBleed ? ['زيادة القص'] : []), 'دقة الملف', 'هامش الأمان', ...(anyZone ? ['مساحة تحريك التصميم'] : [])];
   const body = sides.map(({ s, f }) => [
-    `<b>${esc(s.name.ar)}</b>`, `<b>${wh(f.wCm, f.hCm)}</b>`, ...(anyBleed ? [`${ltr(f.bleedMm)} مم`] : []), ltr(`${f.dpi} DPI`), f.safeMm ? `${ltr(f.safeMm)} مم` : '-',
+    `<b>${esc(s.name.ar)}</b>`, `<b>${wh(f.wCm, f.hCm)}</b>`, ...(anyBleed ? [`${ltr(f.bleedMm)} مم`] : []), ltr(`${extra.dpi || f.dpi} DPI`), f.safeMm ? `${ltr(f.safeMm)} مم` : '-',
     ...(anyZone ? [f.zone ? `${wh(Math.round(f.zone.wCm), Math.round(f.zone.hCm))} تقريبًا` : 'مكان ثابت'] : []),
   ]);
   return `<div class="prod">
@@ -175,7 +177,7 @@ async function productBlock(p, pack) {
 async function buildHtml(pack, opts) {
   const products = pack.products.map((id) => PRODUCTS.find((p) => p.id === id)).filter(Boolean);
   const brand = opts.brand;
-  const general = require(path.join(PACKS, 'general.js'))(opts);
+  const general = require(path.join(PACKS, 'general.js'))(opts, pack);
   const contact = opts.contact || brand.contact;
   let n = 0;
   const qs = (list) => list.map((q) => question(q, ++n)).join('');
@@ -241,7 +243,7 @@ async function testPrint(browser, pack, opts) {
   const which = args.find((a) => !a.startsWith('--'));
   const flag = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : ''; };
   const all = fs.readdirSync(PACKS).filter((f) => f.endsWith('.js') && f !== 'general.js').map((f) => f.slice(0, -3));
-  if (!which || (which !== 'all' && !all.includes(which))) throw new Error(`usage: supplier-pack.js <${all.join(' | ')} | all> [--contact "..."] [--no-prices]`);
+  if (!which || (which !== 'all' && !all.includes(which))) throw new Error(`usage: supplier-pack.js <${all.join(' | ')} | all> [--brand id] [--contact "..."] [--prices]`);
   const brandId = flag('--brand') || 'ebda3';
   const brandDir = path.join(PACKS, 'brands');
   const brand = { name: {}, ...(brandId ? JSON.parse(fs.readFileSync(path.join(brandDir, `${brandId}.json`), 'utf8')) : {}) };
@@ -253,7 +255,7 @@ async function testPrint(browser, pack, opts) {
     brand.logoUri = `data:${type};base64,${fs.readFileSync(f).toString('base64')}`;
   }
   const out = path.join(OUT, brandId);
-  const opts = { brand, out, contact: flag('--contact'), prices: !args.includes('--no-prices'), date: new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' }) };
+  const opts = { brand, out, contact: flag('--contact'), prices: args.includes('--prices'), date: new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' }) };
   const { chromium } = require('playwright');
   const browser = await chromium.launch();
   try {
