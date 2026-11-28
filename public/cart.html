@@ -252,6 +252,15 @@
           </div>
           <div class="proof-ok-note" id="proof-ok-note" hidden></div>
         </div>
+        <!-- Clothing in the order: one tick that the sizes were checked (owner, 28 Nov: printed to order, prepaid) -->
+        <div class="proof-ok sg-cart" id="size-ok" hidden>
+          <p class="nudge-note" id="size-ok-nudge" role="alert" hidden><strong data-i18n="sg.cartNeed"></strong></p>
+          <p class="small muted" id="size-ok-list" style="margin:0"></p>
+          <div class="proof-ok-line">
+            <label class="approve-check" for="size-ok-box"><input type="checkbox" id="size-ok-box"><span data-i18n="sg.cartConfirm"></span></label>
+          </div>
+          <p class="small" id="size-ok-guides" style="margin:0"></p>
+        </div>
         <button class="btn btn-primary btn-lg btn-block" id="place-order" type="submit" data-i18n="checkout.place" aria-describedby="approve-status sel-nothing"></button>
         <!-- Paying in advance (src/payment-wording.js): the money-back guarantee, by the button -->
         <a class="guar-badge" data-prepay-only data-prepay-href="/guarantee" hidden><strong data-prepay-only data-prepay-i18n="guar.badge" hidden></strong> <span data-prepay-only data-prepay-i18n="guar.badgeText" hidden></span></a>
@@ -275,6 +284,8 @@
   <script src="/js/common.js"></script>
   <script src="/js/site-search.js"></script>
   <script src="/js/proof-ui.js"></script>
+  <script src="/js/i18n-size-guide.js"></script>
+  <script src="/js/size-guide.js"></script>
   <script src="/js/saved-designs.js"></script>
   <script>
     (async () => {
@@ -730,6 +741,7 @@
         if (all) nudged = false;
         document.getElementById('proof-ok').hidden = !own.length;
         document.getElementById('proof-ok-box').checked = all;
+        renderSizeOk(cart);
         document.getElementById('proof-ok').classList.toggle('nudge', nudged);
         document.getElementById('proof-ok-nudge').hidden = !nudged;
         document.getElementById('proof-ok-changed').hidden = !own.some((it) => changed.has(it.designId));
@@ -757,6 +769,36 @@
         if (b) b.focus({ preventScroll: true });
         return true;
       }
+      // ---------- Clothing sizes: one tick before ordering (owner, 28 Nov: printed to order and prepaid) ----------
+      /** The ticked clothing with a size guide: [{ item, product }]. */
+      const sizedIn = (cart) => (shop ? cart.filter((it) => it.kind !== 'blank' && !blocked.has(it.designId)).map((it) => ({ item: it, product: shop.products.find((p) => p.id === it.productId) })).filter((x) => x.product && x.product.sizeGuide) : []);
+      /** What was ticked: the items and their sizes then (a size or item changed since asks again). */
+      const sizeSig = (list) => list.map(({ item }) => `${item.designId}:${JSON.stringify(item.quantities ? item.quantities.map((l) => l.size && l.size.id) : tr(item.sizeLabel))}`).sort().join('|');
+      let sizeTicked = null;
+      let sizeNudged = false;
+      const sizesOf = (item) => {
+        if (Array.isArray(item.quantities) && item.quantities.length) return [...new Set(item.quantities.map((l) => tr(l.size && l.size.label)))].join(POD.lang === 'ar' ? '، ' : ', ');
+        return tr(item.sizeLabel);
+      };
+      function renderSizeOk(cart) {
+        const box = document.getElementById('size-ok');
+        if (!box) return;
+        const list = sizedIn(cart);
+        box.hidden = !list.length;
+        if (!list.length) return;
+        const sep = POD.lang === 'ar' ? '، ' : ' · ';
+        document.getElementById('size-ok-list').textContent = t('sg.cartSizes', { list: list.map(({ item, product }) => `${tr(product.name)}: ${sizesOf(item)}`).join(sep) });
+        // One "Size guide" per product (with its name when there are several).
+        const products = [...new Map(list.map(({ product }) => [product.id, product])).values()];
+        document.getElementById('size-ok-guides').innerHTML = products.map((p) => `${PODSizeGuide.link(p)}${products.length > 1 ? ` <span class="muted">${esc(tr(p.name))}</span>` : ''}`).join(' &nbsp; ');
+        const ok = sizeTicked === sizeSig(list);
+        document.getElementById('size-ok-box').checked = ok;
+        if (ok) sizeNudged = false;
+        box.classList.toggle('nudge', sizeNudged);
+        document.getElementById('size-ok-nudge').hidden = !sizeNudged;
+      }
+      const sizesConfirmed = () => { const list = sizedIn(chosen()); return !list.length || sizeTicked === sizeSig(list); };
+      if (window.PODSizeGuide) PODSizeGuide.wire(document.body, (id) => (shop ? shop.products.find((p) => p.id === id) : null));
       /** "Place order" pressed before the tick: the tick, right there, outlined with "Tick this first", and focused. */
       function nudgeProof() {
         const next = chosen().find((it) => !blocked.has(it.designId) && !isApproved(it.designId));
@@ -1613,6 +1655,10 @@
         refreshPrices().then(render);
       });
       // The one tick next to "Place order": every one of the customer's own designs, as its proof is now.
+      document.getElementById('size-ok-box').addEventListener('change', (e) => {
+        sizeTicked = e.target.checked ? sizeSig(sizedIn(chosen())) : null;
+        updateApproval();
+      });
       document.getElementById('proof-ok-box').addEventListener('change', (e) => {
         const own = ownLoaded(POD.getCart());
         const seen = e.target.checked ? own.filter((it) => changed.delete(it.designId)) : [];
@@ -1807,6 +1853,14 @@
           return POD.toast(blocked.get(blockedIn(chosen())[0].designId), 'error');
         }
         if (!chosen().every((it) => isApproved(it.designId))) return nudgeProof();
+        if (!sizesConfirmed()) {
+          sizeNudged = true;
+          updateApproval();
+          const sb = document.getElementById('size-ok');
+          sb.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          document.getElementById('size-ok-box').focus({ preventScroll: true });
+          return;
+        }
         const bad = checkFields();
         if (bad) return goToField(bad);
         const btn = document.getElementById('place-order');

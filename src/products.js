@@ -3523,6 +3523,15 @@ for (const p of PRODUCTS) {
   if (p.sizes.every((sz) => sz.chestCm)) p.photoChestCm = PHOTO_CHEST[p.id] || 52;
 }
 
+// Size guides for the clothing (src/size-guide.js): measurements, fit note and the size finder's bands.
+{
+  const { guideFor } = require('./size-guide');
+  for (const p of PRODUCTS) {
+    const g = guideFor(p);
+    if (g) p.sizeGuide = g;
+  }
+}
+
 // Name lists (variable data): one design, a spreadsheet of names, one printed copy per row.
 // Garments too: team kits with each player's name and number (a Size column gives each row its size).
 // Business cards: one pack (100, 250… cards) per row, each with its person's name, position, phone, email…

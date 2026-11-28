@@ -73,6 +73,8 @@
     return;
   }
   const product = catalog.products.find((p) => p.id === params.get('id'));
+  // "Size guide" opens the measurements and the size finder (the size itself is chosen in the editor).
+  if (window.PODSizeGuide) PODSizeGuide.wire(document.body, (id) => (product && product.id === id ? product : null));
   if (product && product.kind === 'book') {
     location.replace(`/book?b=${encodeURIComponent(product.book)}`);
     return;
@@ -231,6 +233,8 @@
     const lone = product.sizes.length === 1 && (!POD.sizeOk(product, color.id, product.sizes[0]) || POD.comboFew(product, color.id, product.sizes[0].id));
     $('pp-sizes').innerHTML = product.sizes.length > 1 ? esc(t('pp.sizes', { list: '\u0000' })).replace('\u0000', sizeList)
       : lone ? sizeList : '';
+    // The clothing's size guide (owner, 28 Nov: prepaid and printed to order, so the size must be right).
+    if (window.PODSizeGuide) $('pp-size-guide').innerHTML = PODSizeGuide.link(product);
     // A few pieces left (stock counted by the shop).
     $('pp-few').hidden = !product.fewLeft;
     $('pp-few').textContent = product.fewLeft ? t('pp.fewLeft', { n: POD.num(product.fewLeft) }) : '';

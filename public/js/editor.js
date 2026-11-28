@@ -4425,6 +4425,8 @@
       const askSize = p.category === 'apparel' && p.sizes.length > 1 && !st.sizePicked;
       return `<button class="chip ${s.id === st.sizeId && !askSize ? 'active' : ''}${out ? ' sold-out' : ''}" data-size="${s.id}"${out ? ' aria-disabled="true"' : ''}>${esc(tr(s.label))}${out ? ` <span class="sold-tag">${esc(tEd('ed.soldOut'))}</span>` : !extras.includes(s) && POD.sizeNote(st.product, s) ? ` <span style="opacity:.7">${esc(POD.sizeNote(st.product, s))}</span>` : ''}</button>`;
     }).join('');
+    // The clothing's size guide (owner, 28 Nov: prepaid and printed to order, so the size must be right).
+    if (window.PODSizeGuide && $('size-guide-link')) $('size-guide-link').innerHTML = PODSizeGuide.link(p);
     // Print or embroidery (garments, caps, totes, aprons).
     $('method-field').hidden = !p.embroidery;
     $('method-pill').hidden = !p.embroidery || !MOBILE.matches;
@@ -7402,11 +7404,24 @@
     $('size-ask-chips').innerHTML = p.sizes.filter((z) => sizeOk(p, st.colorId, z)).map((z) => `<button type="button" class="chip" data-ask-size="${esc(z.id)}" aria-pressed="false">${esc(tr(z.label))}${!extras.includes(z) && POD.sizeNote(p, z) ? ` <span style="opacity:.7">${esc(POD.sizeNote(p, z))}</span>` : ''}</button>`).join('');
     $('size-ask-extra').textContent = extras.map((x) => t('size.extra', { size: tr(x.label), price: money(x.surcharge) })).join(POD.lang === 'ar' ? '، ' : ', ');
     $('size-ask-extra').hidden = !extras.length;
+    if (window.PODSizeGuide && $('size-ask-guide')) $('size-ask-guide').innerHTML = PODSizeGuide.link(p);
     $('size-ask-ok').textContent = t(st.editingCartIndex !== null ? 'cart.update' : 'cart.add');
     $('size-ask-ok').disabled = true;
     box.hidden = false;
     const first = box.querySelector('[data-ask-size]');
     if (first) first.focus();
+  }
+  // "Size guide": the measurements and the size finder; "Choose M" picks that size here (in the size question when it
+  // is open, else in the product panel).
+  if (window.PODSizeGuide) {
+    PODSizeGuide.wire(document.body, (id) => (st.product && st.product.id === id ? st.product : null), () => ({
+      current: st.sizePicked || !(st.product.category === 'apparel' && st.product.sizes.length > 1) ? st.sizeId : null,
+      onPick: (id) => {
+        const ask = $('size-ask') && !$('size-ask').hidden ? $('size-ask-chips').querySelector(`[data-ask-size="${CSS.escape(id)}"]`) : null;
+        const chip = ask || $('sizes').querySelector(`[data-size="${CSS.escape(id)}"]`);
+        if (chip) chip.click();
+      },
+    }));
   }
   if ($('size-ask')) {
     $('size-ask').addEventListener('click', async (e) => {

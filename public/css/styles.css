@@ -2118,3 +2118,28 @@ html[dir="rtl"] .hm-trust-guar a::after { transform: rotate(135deg); }
 .share-link-close { min-height: 40px; padding: 0 4px; font-weight: 700; }
 #cap-share:empty { display: none; }
 /* (end of Cart: ticking and Share) */
+
+/* ---------- Size guide (public/js/size-guide.js; owner, 28 Nov) ---------- */
+.sg-link { font-size: 14px; }
+.sg-box { background: var(--card); border-radius: 18px; width: min(640px, 100%); max-height: min(860px, 100%); display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,.3); }
+.sg-head { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.sg-head h3 { margin: 0; font-size: 17px; flex: 1; min-width: 0; }
+.sg-body { padding: 14px 16px 18px; overflow-y: auto; }
+.sg-fit { margin: 0 0 10px; line-height: 1.6; }
+.sg-table-wrap { overflow-x: auto; }
+.sg-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.sg-table th, .sg-table td { padding: 7px 8px; border-bottom: 1px solid var(--line); text-align: center; white-space: nowrap; }
+.sg-table thead th, .sg-table tr:first-child th { background: var(--bg); }
+.sg-table tr.sg-current th, .sg-table tr.sg-current td { background: var(--accent-soft); font-weight: 700; }
+.sg-table tr.sg-hint th, .sg-table tr.sg-hint td { outline: 2px solid var(--accent); outline-offset: -2px; }
+.sg-how { margin: 8px 0 12px; }
+.sg-how summary { cursor: pointer; }
+.sg-how ul { margin: 6px 0 0; padding-inline-start: 20px; line-height: 1.7; }
+.sg-finder { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin: 10px 0; }
+.sg-finder h4 { margin: 0 0 8px; font-size: 15px; }
+.sg-fields { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.sg-fields label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.sg-fields input { width: 110px; }
+.sg-result { margin: 8px 0 0; min-height: 1.4em; }
+.sg-note { margin: 8px 0 0; padding: 8px 10px; border-radius: 10px; background: var(--accent-soft); line-height: 1.6; }
+.sg-cart { margin: 10px 0; }
